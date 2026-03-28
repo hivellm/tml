@@ -527,7 +527,7 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             }
             msg += "?";
         }
-        error(msg, span);
+        error(msg, span, "T207");
     }
 
     if (segments.size() == 2) {

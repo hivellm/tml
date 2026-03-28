@@ -129,7 +129,7 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 // Verify the behavior exists
                 auto behavior_def = env_.lookup_behavior(behavior_name);
                 if (!behavior_def) {
-                    error("Unknown behavior '" + behavior_name + "' in dyn type", t.span);
+                    error("Unknown behavior '" + behavior_name + "' in dyn type", t.span, "T200");
                     return make_unit();
                 }
 
@@ -142,7 +142,7 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                                   "' has generic type parameters. "
                                   "Generic methods require monomorphization which is incompatible "
                                   "with dynamic dispatch.",
-                              t.span);
+                              t.span, "T201");
                         return make_unit();
                     }
                 }
@@ -175,7 +175,7 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 // Verify the behavior exists
                 auto behavior_def = env_.lookup_behavior(behavior_name);
                 if (!behavior_def) {
-                    error("Unknown behavior '" + behavior_name + "' in impl type", t.span);
+                    error("Unknown behavior '" + behavior_name + "' in impl type", t.span, "T200");
                     return make_unit();
                 }
 
