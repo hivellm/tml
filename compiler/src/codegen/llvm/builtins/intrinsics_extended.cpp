@@ -1030,8 +1030,15 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
         std::string field_name = "";
         if (!type_name.empty() && has_index) {
             auto it = struct_fields_.find(type_name);
-            if (it != struct_fields_.end() && index < it->second.size()) {
-                field_name = it->second[index].name;
+            if (it != struct_fields_.end()) {
+                if (index < it->second.size()) {
+                    field_name = it->second[index].name;
+                } else {
+                    report_error("field_name: index " + std::to_string(index) +
+                                     " is out of bounds for type '" + type_name + "' with " +
+                                     std::to_string(it->second.size()) + " field(s)",
+                                 call.span, "R001");
+                }
             }
         }
 
@@ -1085,16 +1092,23 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
         uint64_t type_id = 0;
         if (!type_name.empty() && has_index) {
             auto it = struct_fields_.find(type_name);
-            if (it != struct_fields_.end() && index < it->second.size()) {
-                const auto& field = it->second[index];
-                if (field.semantic_type) {
-                    // Compute FNV-1a hash of the mangled type name
-                    std::string mangled = mangle_type(field.semantic_type);
-                    type_id = 14695981039346656037ULL;
-                    for (char c : mangled) {
-                        type_id ^= static_cast<uint64_t>(c);
-                        type_id *= 1099511628211ULL;
+            if (it != struct_fields_.end()) {
+                if (index < it->second.size()) {
+                    const auto& field = it->second[index];
+                    if (field.semantic_type) {
+                        // Compute FNV-1a hash of the mangled type name
+                        std::string mangled = mangle_type(field.semantic_type);
+                        type_id = 14695981039346656037ULL;
+                        for (char c : mangled) {
+                            type_id ^= static_cast<uint64_t>(c);
+                            type_id *= 1099511628211ULL;
+                        }
                     }
+                } else {
+                    report_error("field_type_id: index " + std::to_string(index) +
+                                     " is out of bounds for type '" + type_name + "' with " +
+                                     std::to_string(it->second.size()) + " field(s)",
+                                 call.span, "R001");
                 }
             }
         }
@@ -1239,6 +1253,17 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
                 if (!comptime_loop_var_.empty() && ident.name == comptime_loop_var_) {
                     index = static_cast<size_t>(comptime_loop_value_);
                 }
+            }
+        }
+
+        // Validate index at compile time
+        if (!type_name.empty()) {
+            auto it = struct_fields_.find(type_name);
+            if (it != struct_fields_.end() && index >= it->second.size()) {
+                report_error("field_offset: index " + std::to_string(index) +
+                                 " is out of bounds for type '" + type_name + "' with " +
+                                 std::to_string(it->second.size()) + " field(s)",
+                             call.span, "R001");
             }
         }
 

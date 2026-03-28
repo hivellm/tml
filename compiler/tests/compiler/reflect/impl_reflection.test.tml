@@ -1,0 +1,52 @@
+// Implementation Reflection Tests
+// Tests impl_count and impl_name intrinsics
+use test
+use std::collections::List
+
+type Color {
+    r: I32,
+    g: I32,
+    b: I32
+}
+
+impl Display for Color {
+    pub func to_string(this) -> Str {
+        return "Color"
+    }
+}
+
+impl Debug for Color {
+    pub func debug_string(this) -> Str {
+        return "Color{...}"
+    }
+}
+
+type Empty {}
+
+@test
+func test_impl_count_with_impls() -> I32 {
+    let ic: I64 = impl_count[Color]()
+    assert_eq(ic, 2, "Color implements Display and Debug")
+    return 0
+}
+
+@test
+func test_impl_name_display() -> I32 {
+    let name: Str = impl_name[Color](0)
+    assert_eq(name, "Display", "Color impl 0 is Display")
+    return 0
+}
+
+@test
+func test_impl_name_debug() -> I32 {
+    let name: Str = impl_name[Color](1)
+    assert_eq(name, "Debug", "Color impl 1 is Debug")
+    return 0
+}
+
+@test
+func test_impl_count_no_impls() -> I32 {
+    let ic: I64 = impl_count[Empty]()
+    assert_eq(ic, 0, "Empty has no behavior implementations")
+    return 0
+}

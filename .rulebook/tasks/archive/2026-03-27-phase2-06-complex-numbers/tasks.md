@@ -1,6 +1,6 @@
 # Tasks: Complex — Complex Number Arithmetic
 
-**Status**: Phase 1 Complete (14/15)
+**Status**: Complete (15/15)
 **Priority**: LOW
 **Phase**: 2 — Stdlib Completeness
 
@@ -19,7 +19,7 @@
 - [x] 1.11 `norm(this) -> F64` — squared magnitude
 - [x] 1.12 `scale(this, factor) -> Complex`, `approx_eq`, `zero`, `one`, `i`
 - [x] 1.13 Tests: 7 tests (new, add, mul, abs, conj, from_polar, zero/one)
-- [ ] 1.14 Update `std/math/mod.tml` to export — added to math.tml directly
+- [x] 1.14 Update `std/math/mod.tml` to export — Complex is in math.tml, `use std::math::Complex` works
 - [x] 1.15 Verified with math test suite
 
 Note: Implemented with F64 fields (not generic T) to avoid codegen issues with generic trait bounds.

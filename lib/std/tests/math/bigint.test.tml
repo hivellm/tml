@@ -1,0 +1,235 @@
+use test
+use std::bigint::BigInt
+
+@test
+func test_bigint_zero() -> I32 {
+    let z = BigInt::zero()
+    assert(z.is_zero(), "zero is zero")
+    assert_eq(z.to_string(), "0", "zero to_string")
+    return 0
+}
+
+@test
+func test_bigint_one() -> I32 {
+    let o = BigInt::one()
+    assert(not o.is_zero(), "one is not zero")
+    assert_eq(o.to_string(), "1", "one to_string")
+    return 0
+}
+
+@test
+func test_bigint_from_i64() -> I32 {
+    assert_eq(BigInt::from_i64(42).to_string(), "42", "42")
+    assert_eq(BigInt::from_i64(-123).to_string(), "-123", "-123")
+    assert_eq(BigInt::from_i64(0).to_string(), "0", "0")
+    assert_eq(BigInt::from_i64(1000000000).to_string(), "1000000000", "10^9")
+    assert_eq(BigInt::from_i64(9999999999).to_string(), "9999999999", "9*10^9+...")
+    return 0
+}
+
+@test
+func test_bigint_add_simple() -> I32 {
+    let a = BigInt::from_i64(100)
+    let b = BigInt::from_i64(200)
+    assert_eq(a.add(b).to_string(), "300", "100+200=300")
+    return 0
+}
+
+@test
+func test_bigint_add_carry() -> I32 {
+    let a = BigInt::from_i64(999999999)
+    let b = BigInt::from_i64(1)
+    assert_eq(a.add(b).to_string(), "1000000000", "carry across limb")
+    return 0
+}
+
+@test
+func test_bigint_sub() -> I32 {
+    let a = BigInt::from_i64(200)
+    let b = BigInt::from_i64(100)
+    assert_eq(a.sub(b).to_string(), "100", "200-100=100")
+    assert_eq(b.sub(a).to_string(), "-100", "100-200=-100")
+    return 0
+}
+
+@test
+func test_bigint_mul() -> I32 {
+    let a = BigInt::from_i64(12345)
+    let b = BigInt::from_i64(67890)
+    assert_eq(a.mul(b).to_string(), "838102050", "12345*67890")
+    return 0
+}
+
+@test
+func test_bigint_mul_negative() -> I32 {
+    let a = BigInt::from_i64(-3)
+    let b = BigInt::from_i64(7)
+    assert_eq(a.mul(b).to_string(), "-21", "-3*7=-21")
+    let c = BigInt::from_i64(-5)
+    let d = BigInt::from_i64(-6)
+    assert_eq(c.mul(d).to_string(), "30", "-5*-6=30")
+    return 0
+}
+
+@test
+func test_bigint_div_rem() -> I32 {
+    let a = BigInt::from_i64(100)
+    let b = BigInt::from_i64(7)
+    assert_eq(a.div(b).to_string(), "14", "100/7=14")
+    assert_eq(a.rem(b).to_string(), "2", "100%7=2")
+    return 0
+}
+
+@test
+func test_bigint_from_str() -> I32 {
+    let a = BigInt::from_str("123456789012345678901234567890")
+    assert_eq(a.to_string(), "123456789012345678901234567890", "from_str big")
+    assert_eq(BigInt::from_str("-42").to_string(), "-42", "from_str negative")
+    assert_eq(BigInt::from_str("0").to_string(), "0", "from_str zero")
+    return 0
+}
+
+@test
+func test_bigint_big_mul() -> I32 {
+    let a = BigInt::from_str("999999999999999999")
+    let b = BigInt::from_str("999999999999999999")
+    assert_eq(a.mul(b).to_string(), "999999999999999998000000000000000001", "big mul")
+    return 0
+}
+
+@test
+func test_bigint_neg() -> I32 {
+    assert_eq(BigInt::from_i64(5).neg().to_string(), "-5", "neg 5")
+    assert_eq(BigInt::from_i64(-3).neg().to_string(), "3", "neg -3")
+    assert_eq(BigInt::zero().neg().to_string(), "0", "neg 0")
+    return 0
+}
+
+// Phase 2 tests
+
+@test
+func test_bigint_cmp() -> I32 {
+    let a = BigInt::from_i64(42)
+    let b = BigInt::from_i64(100)
+    assert(a.lt(ref b), "42 < 100")
+    assert(b.gt(ref a), "100 > 42")
+    assert(a.le(ref a), "42 <= 42")
+    assert(a.ge(ref a), "42 >= 42")
+    return 0
+}
+
+@test
+func test_bigint_to_i64() -> I32 {
+    let a = BigInt::from_i64(12345)
+    let val = a.to_i64()
+    when val {
+        Just(v) => { assert_eq(v, 12345, "to_i64") },
+        Nothing => { assert(false, "should not be Nothing") },
+    }
+    return 0
+}
+
+@test
+func test_bigint_to_hex() -> I32 {
+    assert_eq(BigInt::from_i64(255).to_hex(), "0xff", "255 = 0xff")
+    assert_eq(BigInt::from_i64(256).to_hex(), "0x100", "256 = 0x100")
+    assert_eq(BigInt::from_i64(0).to_hex(), "0x0", "0 = 0x0")
+    return 0
+}
+
+@test
+func test_bigint_pow() -> I32 {
+    let two = BigInt::from_i64(2)
+    assert_eq(two.pow(10).to_string(), "1024", "2^10 = 1024")
+    assert_eq(two.pow(0).to_string(), "1", "2^0 = 1")
+    assert_eq(two.pow(32).to_string(), "4294967296", "2^32")
+    return 0
+}
+
+@test
+func test_bigint_gcd() -> I32 {
+    let a = BigInt::from_i64(48)
+    let b = BigInt::from_i64(18)
+    assert_eq(a.gcd(b).to_string(), "6", "gcd(48,18) = 6")
+    return 0
+}
+
+// Phase 3 tests
+
+@test
+func test_bigint_mod_pow() -> I32 {
+    let b = BigInt::from_i64(2)
+    let e = BigInt::from_i64(10)
+    let m = BigInt::from_i64(1000)
+    assert_eq(b.mod_pow(e, m).to_string(), "24", "2^10 mod 1000 = 24")
+    return 0
+}
+
+@test
+func test_bigint_mod_inverse() -> I32 {
+    let inv = BigInt::from_i64(3).mod_inverse(BigInt::from_i64(7))
+    when inv {
+        Just(v) => { assert_eq(v.to_string(), "5", "3^-1 mod 7 = 5") },
+        Nothing => { assert(false, "inverse should exist") },
+    }
+    return 0
+}
+
+@test
+func test_bigint_primality() -> I32 {
+    assert(BigInt::from_i64(2).is_probably_prime(8), "2 is prime")
+    assert(BigInt::from_i64(17).is_probably_prime(8), "17 is prime")
+    assert(not BigInt::from_i64(15).is_probably_prime(8), "15 not prime")
+    assert(BigInt::from_i64(97).is_probably_prime(8), "97 is prime")
+    assert(not BigInt::from_i64(1).is_probably_prime(8), "1 not prime")
+    return 0
+}
+
+@test
+func test_bigint_bit_length() -> I32 {
+    assert_eq(BigInt::from_i64(255).bit_length(), 8, "255 = 8 bits")
+    assert_eq(BigInt::from_i64(256).bit_length(), 9, "256 = 9 bits")
+    assert_eq(BigInt::from_i64(0).bit_length(), 0, "0 = 0 bits")
+    return 0
+}
+
+@test
+func test_bigint_shifts() -> I32 {
+    assert_eq(BigInt::one().shift_left(4).to_string(), "16", "1 << 4 = 16")
+    assert_eq(BigInt::from_i64(255).shift_right(4).to_string(), "15", "255 >> 4 = 15")
+    return 0
+}
+
+@test
+func test_bigint_bitand() -> I32 {
+    let a = BigInt::from_i64(12)
+    let b = BigInt::from_i64(10)
+    assert_eq(a.bitand(b).to_string(), "8", "12 & 10 = 8")
+    return 0
+}
+
+@test
+func test_bigint_bitor() -> I32 {
+    let a = BigInt::from_i64(12)
+    let b = BigInt::from_i64(10)
+    assert_eq(a.bitor(b).to_string(), "14", "12 | 10 = 14")
+    return 0
+}
+
+@test
+func test_bigint_bitxor() -> I32 {
+    let a = BigInt::from_i64(12)
+    let b = BigInt::from_i64(10)
+    assert_eq(a.bitxor(b).to_string(), "6", "12 ^ 10 = 6")
+    return 0
+}
+
+@test
+func test_bigint_from_seed() -> I32 {
+    let r = BigInt::from_seed(42, 9)
+    assert(not r.is_zero(), "from_seed should not be zero")
+    // Deterministic: same seed = same result
+    let r2 = BigInt::from_seed(42, 9)
+    assert_eq(r.to_string(), r2.to_string(), "same seed = same result")
+    return 0
+}

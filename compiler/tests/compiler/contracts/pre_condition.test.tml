@@ -1,0 +1,51 @@
+// Pre-condition contract tests — passing cases
+use test
+
+func positive_only(x: I64) -> I64
+pre: x > 0
+{
+    return x * 2
+}
+
+func in_range(x: I64, lo: I64, hi: I64) -> I64
+pre: x >= lo
+pre: x <= hi
+{
+    return x
+}
+
+func divide(a: I64, b: I64) -> I64
+pre: b != 0
+{
+    return a / b
+}
+
+@test
+func test_pre_condition_passes() -> I32 {
+    let result = positive_only(5)
+    assert_eq(result, 10, "5*2=10")
+    return 0
+}
+
+@test
+func test_multiple_pre_conditions() -> I32 {
+    let result = in_range(5, 1, 10)
+    assert_eq(result, 5, "5 is in range [1,10]")
+    return 0
+}
+
+@test
+func test_divide_with_pre() -> I32 {
+    let result = divide(10, 2)
+    assert_eq(result, 5, "10/2=5")
+    return 0
+}
+
+@test
+func test_pre_boundary() -> I32 {
+    let result = in_range(1, 1, 10)
+    assert_eq(result, 1, "boundary: lo=1")
+    let result2 = in_range(10, 1, 10)
+    assert_eq(result2, 10, "boundary: hi=10")
+    return 0
+}

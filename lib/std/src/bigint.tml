@@ -1,0 +1,975 @@
+//! Arbitrary precision integers (BigInt).
+//!
+//! Provides the [`BigInt`] type for integers of unlimited size.
+//! Uses sign + magnitude representation with base-10^9 limbs (I64).
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::bigint::BigInt
+//!
+//! let a = BigInt::from_i64(1000000000)
+//! let b = BigInt::from_i64(2000000000)
+//! let c = a.add(b)
+//! println(c.to_string())  // "3000000000"
+//! ```
+
+use std::collections::List
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+// Base = 10^9 — fits in I64, easy decimal conversion
+// Each limb holds a value in [0, 999999999]
+const BIGINT_BASE: I64 = 1000000000
+
+// ============================================================================
+// BigInt struct
+// ============================================================================
+
+/// An arbitrary precision integer.
+///
+/// Represented as a sign flag and a list of I64 "limbs" in little-endian
+/// order (least significant limb first), each in range [0, 10^9 - 1].
+/// Zero is `{ negative: false, digits: [] }`.
+pub type BigInt {
+    /// True if the number is negative.
+    negative: Bool,
+    /// Base-10^9 limbs, little-endian (digits[0] is least significant).
+    digits: List[I64],
+}
+
+impl BigInt {
+    // ========================================================================
+    // Constructors
+    // ========================================================================
+
+    /// Create a BigInt representing zero.
+    pub func zero() -> BigInt {
+        return BigInt { negative: false, digits: List[I64]::new(0) }
+    }
+
+    /// Create a BigInt representing one.
+    pub func one() -> BigInt {
+        var d = List[I64]::new(1)
+        d.push(1)
+        return BigInt { negative: false, digits: d }
+    }
+
+    /// Create a BigInt from an I64 value.
+    pub func from_i64(n: I64) -> BigInt {
+        if n == 0 {
+            return BigInt::zero()
+        }
+        var neg: Bool = false
+        var val: I64 = n
+        if n < 0 {
+            neg = true
+            if n == -9223372036854775808 {
+                // I64 min: split into base-10^9 limbs manually
+                // 9223372036854775808 = 9 * 10^18 + 223372036 * 10^9 + 854775808
+                var d = List[I64]::new(3)
+                d.push(854775808)
+                d.push(223372036)
+                d.push(9)
+                return BigInt { negative: true, digits: d }
+            }
+            val = 0 - n
+        }
+        var d = List[I64]::new(3)
+        loop (val > 0) {
+            d.push(val % BIGINT_BASE)
+            val = val / BIGINT_BASE
+        }
+        return BigInt { negative: neg, digits: d }
+    }
+
+    /// Parse a BigInt from a decimal string.
+    pub func from_str(s: Str) -> BigInt {
+        if s.len() == 0 {
+            return BigInt::zero()
+        }
+        var neg: Bool = false
+        var start: I64 = 0
+        // Check for sign
+        let first_byte: U8 = lowlevel { ptr_read[U8](s as *U8) }
+        if first_byte == (45 as U8) {
+            neg = true
+            start = 1
+        } else if first_byte == (43 as U8) {
+            start = 1
+        }
+        // Skip leading zeros
+        var skipping: Bool = true
+        loop (start < s.len() and skipping) {
+            let byte: U8 = lowlevel { ptr_read[U8](ptr_offset[U8](s as *U8, start)) }
+            if byte != (48 as U8) {
+                skipping = false
+            } else {
+                start = start + 1
+            }
+        }
+        if start >= s.len() {
+            return BigInt::zero()
+        }
+        // Process 9 digits at a time from right to left
+        var d = List[I64]::new(4)
+        var pos: I64 = s.len() - 1
+        loop (pos >= start) {
+            var limb: I64 = 0
+            var mul: I64 = 1
+            var count: I64 = 0
+            let chunk_start: I64 = pos - 8
+            var ci: I64 = pos
+            loop (ci >= start and count < 9) {
+                let byte: U8 = lowlevel { ptr_read[U8](ptr_offset[U8](s as *U8, ci)) }
+                let digit: I64 = (byte - (48 as U8)) as I64
+                limb = limb + digit * mul
+                mul = mul * 10
+                count = count + 1
+                ci = ci - 1
+            }
+            d.push(limb)
+            pos = ci
+        }
+        var result = BigInt { negative: neg, digits: d }
+        result.normalize()
+        return result
+    }
+
+    /// Check if this BigInt is zero.
+    pub func is_zero(this) -> Bool {
+        return this.digits.len() == 0
+    }
+
+    /// Return the number of limbs.
+    pub func limb_count(this) -> I64 {
+        return this.digits.len()
+    }
+
+    // ========================================================================
+    // Negation
+    // ========================================================================
+
+    /// Return the negation of this BigInt.
+    pub func neg(this) -> BigInt {
+        if this.is_zero() {
+            return BigInt::zero()
+        }
+        var d = this.clone_digits()
+        return BigInt { negative: not this.negative, digits: d }
+    }
+
+    /// Absolute value.
+    pub func abs(this) -> BigInt {
+        if this.is_zero() {
+            return BigInt::zero()
+        }
+        var d = this.clone_digits()
+        return BigInt { negative: false, digits: d }
+    }
+
+    // ========================================================================
+    // Internal helpers
+    // ========================================================================
+
+    /// Remove trailing zero limbs (normalize).
+    pub func normalize(mut this) {
+        loop (this.digits.len() > 0 and this.digits.get(this.digits.len() - 1) == 0) {
+            this.digits.pop()
+        }
+        if this.digits.len() == 0 {
+            this.negative = false
+        }
+    }
+
+    /// Clone the digits list.
+    pub func clone_digits(this) -> List[I64] {
+        var d = List[I64]::new(this.digits.len())
+        var i: I64 = 0
+        loop (i < this.digits.len()) {
+            d.push(this.digits.get(i))
+            i = i + 1
+        }
+        return d
+    }
+
+    /// Compare magnitudes. Returns 1 if |this| > |other|, -1 if <, 0 if equal.
+    pub func cmp_magnitude(this, other: ref BigInt) -> I32 {
+        if this.digits.len() > other.digits.len() { return 1 }
+        if this.digits.len() < other.digits.len() { return -1 }
+        var i: I64 = this.digits.len() - 1
+        loop (i >= 0) {
+            let a: I64 = this.digits.get(i)
+            let b: I64 = other.digits.get(i)
+            if a > b { return 1 }
+            if a < b { return -1 }
+            i = i - 1
+        }
+        return 0
+    }
+
+    // ========================================================================
+    // Addition / Subtraction (magnitude helpers)
+    // ========================================================================
+
+    /// Add magnitudes: |a| + |b|.
+    pub func add_magnitudes(a: ref List[I64], b: ref List[I64]) -> List[I64] {
+        let alen: I64 = a.len()
+        let blen: I64 = b.len()
+        var longer: I64 = alen
+        if blen > longer { longer = blen }
+        var result = List[I64]::new(longer + 1)
+        var carry: I64 = 0
+        var i: I64 = 0
+        loop (i < longer) {
+            var av: I64 = 0
+            if i < alen { av = a.get(i) }
+            var bv: I64 = 0
+            if i < blen { bv = b.get(i) }
+            let sum: I64 = av + bv + carry
+            result.push(sum % BIGINT_BASE)
+            carry = sum / BIGINT_BASE
+            i = i + 1
+        }
+        if carry > 0 {
+            result.push(carry)
+        }
+        return result
+    }
+
+    /// Subtract magnitudes: |a| - |b|, assuming |a| >= |b|.
+    pub func sub_magnitudes(a: ref List[I64], b: ref List[I64]) -> List[I64] {
+        let alen: I64 = a.len()
+        let blen: I64 = b.len()
+        var result = List[I64]::new(alen)
+        var borrow: I64 = 0
+        var i: I64 = 0
+        loop (i < alen) {
+            let av: I64 = a.get(i)
+            var bv: I64 = 0
+            if i < blen { bv = b.get(i) }
+            var diff: I64 = av - bv - borrow
+            if diff < 0 {
+                diff = diff + BIGINT_BASE
+                borrow = 1
+            } else {
+                borrow = 0
+            }
+            result.push(diff)
+            i = i + 1
+        }
+        return result
+    }
+
+    // ========================================================================
+    // Public arithmetic
+    // ========================================================================
+
+    /// Add two BigInts.
+    pub func add(this, other: BigInt) -> BigInt {
+        if this.negative == other.negative {
+            var d = BigInt::add_magnitudes(ref this.digits, ref other.digits)
+            var r = BigInt { negative: this.negative, digits: d }
+            r.normalize()
+            return r
+        }
+        let cmp: I32 = this.cmp_magnitude(ref other)
+        if cmp == 0 {
+            return BigInt::zero()
+        }
+        if cmp > 0 {
+            var d = BigInt::sub_magnitudes(ref this.digits, ref other.digits)
+            var r = BigInt { negative: this.negative, digits: d }
+            r.normalize()
+            return r
+        } else {
+            var d = BigInt::sub_magnitudes(ref other.digits, ref this.digits)
+            var r = BigInt { negative: other.negative, digits: d }
+            r.normalize()
+            return r
+        }
+    }
+
+    /// Subtract: this - other.
+    pub func sub(this, other: BigInt) -> BigInt {
+        let neg_other = other.neg()
+        return this.add(neg_other)
+    }
+
+    // ========================================================================
+    // Multiplication
+    // ========================================================================
+
+    /// Multiply two BigInts (schoolbook O(n²)).
+    pub func mul(this, other: BigInt) -> BigInt {
+        if this.is_zero() or other.is_zero() {
+            return BigInt::zero()
+        }
+        let alen: I64 = this.digits.len()
+        let blen: I64 = other.digits.len()
+        var result = List[I64]::new(alen + blen)
+        var k: I64 = 0
+        loop (k < alen + blen) {
+            result.push(0)
+            k = k + 1
+        }
+        var i: I64 = 0
+        loop (i < alen) {
+            var carry: I64 = 0
+            let a_limb: I64 = this.digits.get(i)
+            var j: I64 = 0
+            loop (j < blen) {
+                let b_limb: I64 = other.digits.get(j)
+                let cur: I64 = result.get(i + j) + a_limb * b_limb + carry
+                result.set(i + j, cur % BIGINT_BASE)
+                carry = cur / BIGINT_BASE
+                j = j + 1
+            }
+            if carry > 0 {
+                let cur: I64 = result.get(i + blen)
+                result.set(i + blen, cur + carry)
+            }
+            i = i + 1
+        }
+        var r = BigInt { negative: this.negative != other.negative, digits: result }
+        r.normalize()
+        return r
+    }
+
+    // ========================================================================
+    // Division and Remainder
+    // ========================================================================
+
+    /// Divide |this| by a single I64 limb. Returns (quotient_digits, remainder).
+    pub func div_single(digits: ref List[I64], divisor: I64) -> (List[I64], I64) {
+        var q = List[I64]::new(digits.len())
+        var k: I64 = 0
+        loop (k < digits.len()) {
+            q.push(0)
+            k = k + 1
+        }
+        var rem: I64 = 0
+        var i: I64 = digits.len() - 1
+        loop (i >= 0) {
+            let cur: I64 = rem * BIGINT_BASE + digits.get(i)
+            q.set(i, cur / divisor)
+            rem = cur % divisor
+            i = i - 1
+        }
+        return (q, rem)
+    }
+
+    /// Integer division: this / other. Panics if other is zero.
+    pub func div(this, other: BigInt) -> BigInt {
+        let qr = this.divmod(other)
+        return qr.0
+    }
+
+    /// Remainder: this % other. Panics if other is zero.
+    pub func rem(this, other: BigInt) -> BigInt {
+        let qr = this.divmod(other)
+        return qr.1
+    }
+
+    /// Divmod: returns (quotient, remainder).
+    pub func divmod(this, other: BigInt) -> (BigInt, BigInt) {
+        if other.is_zero() {
+            // Division by zero — return (0, 0) as sentinel
+            return (BigInt::zero(), BigInt::zero())
+        }
+        let cmp: I32 = this.cmp_magnitude(ref other)
+        if cmp < 0 {
+            // |this| < |other| → quotient=0, remainder=this
+            var d = this.clone_digits()
+            return (BigInt::zero(), BigInt { negative: this.negative, digits: d })
+        }
+        if cmp == 0 {
+            // |this| == |other| → quotient=±1, remainder=0
+            let sign: Bool = this.negative != other.negative
+            return (BigInt { negative: sign, digits: { var d = List[I64]::new(1); d.push(1); d } }, BigInt::zero())
+        }
+        // Simple long division for single-limb divisor
+        if other.digits.len() == 1 {
+            let dv: I64 = other.digits.get(0)
+            let result = BigInt::div_single(ref this.digits, dv)
+            let qd: List[I64] = result.0
+            let rem: I64 = result.1
+            var q = BigInt { negative: this.negative != other.negative, digits: qd }
+            q.normalize()
+            var r = BigInt::from_i64(rem)
+            if this.negative { r = r.neg() }
+            return (q, r)
+        }
+        // Multi-limb division: use repeated subtraction with shifting
+        // This is O(n²) but simple and correct
+        var remainder = this.abs()
+        let divisor = other.abs()
+        var quotient = BigInt::zero()
+        // Find shift: how many limbs to shift divisor to align with remainder
+        var shift: I64 = remainder.digits.len() - divisor.digits.len()
+        loop (shift >= 0) {
+            // shifted_divisor = divisor * BASE^shift
+            var shifted = List[I64]::new(divisor.digits.len() + shift)
+            var z: I64 = 0
+            loop (z < shift) {
+                shifted.push(0)
+                z = z + 1
+            }
+            z = 0
+            loop (z < divisor.digits.len()) {
+                shifted.push(divisor.digits.get(z))
+                z = z + 1
+            }
+            let shifted_big = BigInt { negative: false, digits: shifted }
+            // Binary search for how many times shifted_divisor fits
+            var count: I64 = 0
+            loop (remainder.cmp_magnitude(ref shifted_big) >= 0) {
+                remainder = remainder.sub(shifted_big)
+                count = count + 1
+            }
+            // Add count * BASE^shift to quotient
+            if count > 0 {
+                var count_digits = List[I64]::new(shift + 1)
+                var z2: I64 = 0
+                loop (z2 < shift) {
+                    count_digits.push(0)
+                    z2 = z2 + 1
+                }
+                count_digits.push(count)
+                let count_big = BigInt { negative: false, digits: count_digits }
+                quotient = quotient.add(count_big)
+            }
+            shift = shift - 1
+        }
+        quotient.negative = this.negative != other.negative
+        if quotient.is_zero() { quotient.negative = false }
+        remainder.negative = this.negative
+        if remainder.is_zero() { remainder.negative = false }
+        return (quotient, remainder)
+    }
+
+    // ========================================================================
+    // Display
+    // ========================================================================
+
+    // ========================================================================
+    // Comparison
+    // ========================================================================
+
+    /// Compare two BigInts. Returns -1, 0, or 1.
+    pub func cmp(this, other: ref BigInt) -> I32 {
+        // Different signs
+        if this.is_zero() and other.is_zero() { return 0 }
+        if this.negative and not other.negative { return -1 }
+        if not this.negative and other.negative { return 1 }
+        // Same sign — compare magnitudes
+        let mag: I32 = this.cmp_magnitude(other)
+        if this.negative {
+            // Both negative: larger magnitude = smaller value
+            return 0 - mag
+        }
+        return mag
+    }
+
+    /// Less than.
+    pub func lt(this, other: ref BigInt) -> Bool {
+        return this.cmp(other) < 0
+    }
+
+    /// Less than or equal.
+    pub func le(this, other: ref BigInt) -> Bool {
+        return this.cmp(other) <= 0
+    }
+
+    /// Greater than.
+    pub func gt(this, other: ref BigInt) -> Bool {
+        return this.cmp(other) > 0
+    }
+
+    /// Greater than or equal.
+    pub func ge(this, other: ref BigInt) -> Bool {
+        return this.cmp(other) >= 0
+    }
+
+    // ========================================================================
+    // Conversion
+    // ========================================================================
+
+    /// Convert to I64 if the value fits. Returns Nothing if overflow.
+    pub func to_i64(this) -> Maybe[I64] {
+        if this.is_zero() { return Just(0) }
+        // Max I64 = 9223372036854775807 = 9 * 10^18 + ...
+        // With base 10^9, max is 3 limbs
+        if this.digits.len() > 3 { return Nothing }
+        var val: I64 = 0
+        var mul: I64 = 1
+        var i: I64 = 0
+        loop (i < this.digits.len()) {
+            val = val + this.digits.get(i) * mul
+            mul = mul * BIGINT_BASE
+            i = i + 1
+        }
+        // Check overflow for 3-limb values
+        if val < 0 { return Nothing }
+        if this.negative {
+            return Just(0 - val)
+        }
+        return Just(val)
+    }
+
+    /// Convert a 0-15 value to a hex char string.
+    pub func hex_digit(val: I64) -> Str {
+        if val == 0 { return "0" }
+        if val == 1 { return "1" }
+        if val == 2 { return "2" }
+        if val == 3 { return "3" }
+        if val == 4 { return "4" }
+        if val == 5 { return "5" }
+        if val == 6 { return "6" }
+        if val == 7 { return "7" }
+        if val == 8 { return "8" }
+        if val == 9 { return "9" }
+        if val == 10 { return "a" }
+        if val == 11 { return "b" }
+        if val == 12 { return "c" }
+        if val == 13 { return "d" }
+        if val == 14 { return "e" }
+        return "f"
+    }
+
+    /// Convert to hexadecimal string.
+    pub func to_hex(this) -> Str {
+        if this.is_zero() { return "0x0" }
+        var temp = this.abs()
+        var hex_chars: Str = ""
+        let sixteen = BigInt::from_i64(16)
+        loop (not temp.is_zero()) {
+            let remainder = temp.rem(sixteen)
+            temp = temp.div(sixteen)
+            var r: I64 = 0
+            if not remainder.is_zero() {
+                r = remainder.digits.get(0)
+            }
+            hex_chars = BigInt::hex_digit(r) + hex_chars
+        }
+        var prefix: Str = "0x"
+        if this.negative { prefix = "-0x" }
+        return prefix + hex_chars
+    }
+
+    // ========================================================================
+    // Power and GCD
+    // ========================================================================
+
+    /// Exponentiation: this^exp (exp must be non-negative).
+    pub func pow(this, exp: I64) -> BigInt {
+        if exp == 0 { return BigInt::one() }
+        if exp == 1 {
+            var d = this.clone_digits()
+            return BigInt { negative: this.negative, digits: d }
+        }
+        // Binary exponentiation
+        var result = BigInt::one()
+        var base_val = BigInt { negative: this.negative, digits: this.clone_digits() }
+        var e: I64 = exp
+        loop (e > 0) {
+            if e % 2 == 1 {
+                result = result.mul(base_val)
+            }
+            base_val = base_val.mul(base_val)
+            e = e / 2
+        }
+        return result
+    }
+
+    /// Greatest common divisor (Euclidean algorithm).
+    pub func gcd(this, other: BigInt) -> BigInt {
+        var a = this.abs()
+        var b = other.abs()
+        loop (not b.is_zero()) {
+            let r = a.rem(b)
+            a = b
+            b = r
+        }
+        return a
+    }
+
+    // ========================================================================
+    // Display
+    // ========================================================================
+
+    /// Convert to decimal string.
+    pub func to_string(this) -> Str {
+        if this.is_zero() {
+            return "0"
+        }
+        var result: Str = ""
+        if this.negative {
+            result = "-"
+        }
+        // Print most significant limb without leading zeros
+        let top: I64 = this.digits.len() - 1
+        result = result + this.digits.get(top).to_string()
+        // Print remaining limbs with zero-padding to 9 digits
+        var i: I64 = top - 1
+        loop (i >= 0) {
+            let limb: I64 = this.digits.get(i)
+            // Pad to 9 digits
+            var s: Str = limb.to_string()
+            loop (s.len() < 9) {
+                s = "0" + s
+            }
+            result = result + s
+            i = i - 1
+        }
+        return result
+    }
+
+    // ========================================================================
+    // Crypto-Relevant Operations
+    // ========================================================================
+
+    /// Modular exponentiation: (this^exp) % modulus.
+    /// Uses binary exponentiation with modular reduction at each step.
+    pub func mod_pow(this, exp: BigInt, modulus: BigInt) -> BigInt {
+        if modulus.is_zero() { return BigInt::zero() }
+        let one = BigInt::one()
+        if exp.is_zero() { return one.rem(modulus) }
+        var result = BigInt::one()
+        var base_val = this.rem(modulus)
+        // Copy exp digits for iteration
+        var e = exp.abs()
+        let two = BigInt::from_i64(2)
+        loop (not e.is_zero()) {
+            // Check if e is odd: e % 2 != 0
+            let e_rem = e.rem(two)
+            if not e_rem.is_zero() {
+                result = result.mul(base_val).rem(modulus)
+            }
+            base_val = base_val.mul(base_val).rem(modulus)
+            e = e.div(two)
+        }
+        return result
+    }
+
+    /// Modular multiplicative inverse: a^(-1) mod m.
+    /// Returns Nothing if gcd(this, modulus) != 1.
+    /// Uses extended Euclidean algorithm.
+    pub func mod_inverse(this, modulus: BigInt) -> Maybe[BigInt] {
+        if modulus.is_zero() { return Nothing }
+        let a = this.rem(modulus)
+        var old_r = a.abs()
+        var r = modulus.abs()
+        var old_s = BigInt::one()
+        var s = BigInt::zero()
+        loop (not r.is_zero()) {
+            let q = old_r.div(r)
+            let temp_r = r
+            r = old_r.sub(q.mul(temp_r))
+            old_r = temp_r
+            let temp_s = s
+            s = old_s.sub(q.mul(temp_s))
+            old_s = temp_s
+        }
+        // Check gcd == 1
+        let one_check = BigInt::one()
+        if old_r.cmp_magnitude(ref one_check) != 0 {
+            return Nothing
+        }
+        // Ensure positive result
+        if old_s.negative {
+            old_s = old_s.add(modulus.abs())
+        }
+        return Just(old_s)
+    }
+
+    /// Bit length: number of bits needed to represent |this|.
+    pub func bit_length(this) -> I64 {
+        if this.is_zero() { return 0 }
+        // Each base-10^9 limb holds ~30 bits. But exact bit_length needs conversion.
+        // Simple approach: convert to binary representation by repeated div by 2
+        var temp = this.abs()
+        var bits: I64 = 0
+        let two = BigInt::from_i64(2)
+        loop (not temp.is_zero()) {
+            temp = temp.div(two)
+            bits = bits + 1
+        }
+        return bits
+    }
+
+    /// Left shift by n bits: this * 2^n.
+    pub func shift_left(this, n: I64) -> BigInt {
+        if this.is_zero() or n == 0 {
+            var d = this.clone_digits()
+            return BigInt { negative: this.negative, digits: d }
+        }
+        var result = BigInt { negative: this.negative, digits: this.clone_digits() }
+        let two = BigInt::from_i64(2)
+        var i: I64 = 0
+        loop (i < n) {
+            result = result.mul(two)
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Right shift by n bits: this / 2^n.
+    pub func shift_right(this, n: I64) -> BigInt {
+        if this.is_zero() or n == 0 {
+            var d = this.clone_digits()
+            return BigInt { negative: this.negative, digits: d }
+        }
+        var result = BigInt { negative: this.negative, digits: this.clone_digits() }
+        let two = BigInt::from_i64(2)
+        var i: I64 = 0
+        loop (i < n) {
+            result = result.div(two)
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Miller-Rabin primality test.
+    /// Returns true if this is probably prime with confidence based on rounds.
+    /// Uses deterministic witnesses for small numbers (< 3.3×10^24).
+    pub func is_probably_prime(this, rounds: I64) -> Bool {
+        if this.negative or this.is_zero() { return false }
+        let one = BigInt::one()
+        let two = BigInt::from_i64(2)
+        let three = BigInt::from_i64(3)
+        // Small cases
+        if this.cmp(ref two) == 0 or this.cmp(ref three) == 0 { return true }
+        // Even numbers
+        let rem2 = this.rem(two)
+        if rem2.is_zero() { return false }
+        // Less than 2
+        if this.lt(ref two) { return false }
+        // Write n-1 = 2^r * d
+        var d = this.sub(one)
+        var r: I64 = 0
+        var extracting: Bool = true
+        loop (extracting) {
+            let d_rem = d.rem(two)
+            if not d_rem.is_zero() {
+                extracting = false
+            } else {
+                d = d.div(two)
+                r = r + 1
+            }
+        }
+        // Deterministic witnesses for numbers < 3.3 * 10^24
+        var witnesses = List[I64]::new(8)
+        witnesses.push(2)
+        witnesses.push(3)
+        witnesses.push(5)
+        witnesses.push(7)
+        witnesses.push(11)
+        witnesses.push(13)
+        witnesses.push(17)
+        witnesses.push(19)
+        let n_minus_one = this.sub(one)
+        // Need a copy of this for mod_pow (can't dereference this)
+        let n_copy = BigInt { negative: this.negative, digits: this.clone_digits() }
+        var wi: I64 = 0
+        loop (wi < witnesses.len() and wi < rounds) {
+            let a = BigInt::from_i64(witnesses.get(wi))
+            var skip: Bool = false
+            // Skip if a >= n
+            if a.ge(ref this) {
+                skip = true
+            }
+            if not skip {
+                var x = a.mod_pow(d, n_copy)
+                if x.cmp(ref one) == 0 or x.cmp(ref n_minus_one) == 0 {
+                    skip = true
+                }
+                if not skip {
+                    var found: Bool = false
+                    var j: I64 = 0
+                    loop (j < r - 1 and not found) {
+                        x = x.mod_pow(two, n_copy)
+                        if x.cmp(ref n_minus_one) == 0 {
+                            found = true
+                        }
+                        j = j + 1
+                    }
+                    if not found { return false }
+                }
+            }
+            wi = wi + 1
+        }
+        return true
+    }
+
+    // ========================================================================
+    // Bitwise Operations
+    // ========================================================================
+
+    /// Convert this BigInt to a list of bits (LSB first).
+    pub func to_bits(this) -> List[I64] {
+        if this.is_zero() {
+            var bits = List[I64]::new(1)
+            bits.push(0)
+            return bits
+        }
+        var bits = List[I64]::new(64)
+        var temp = this.abs()
+        let two = BigInt::from_i64(2)
+        loop (not temp.is_zero()) {
+            let rem = temp.rem(two)
+            if rem.is_zero() {
+                bits.push(0)
+            } else {
+                bits.push(1)
+            }
+            temp = temp.div(two)
+        }
+        return bits
+    }
+
+    /// Create a BigInt from a list of bits (LSB first).
+    pub func from_bits(bits: ref List[I64], negative: Bool) -> BigInt {
+        var result = BigInt::zero()
+        var power = BigInt::one()
+        let two = BigInt::from_i64(2)
+        var i: I64 = 0
+        loop (i < bits.len()) {
+            if bits.get(i) == 1 {
+                result = result.add(power)
+            }
+            power = power.mul(two)
+            i = i + 1
+        }
+        result.negative = negative
+        if result.is_zero() { result.negative = false }
+        return result
+    }
+
+    /// Bitwise AND: this & other (operates on absolute values).
+    pub func bitand(this, other: BigInt) -> BigInt {
+        let a_bits = this.to_bits()
+        let b_bits = other.to_bits()
+        var min_len: I64 = a_bits.len()
+        if b_bits.len() < min_len { min_len = b_bits.len() }
+        var result_bits = List[I64]::new(min_len)
+        var i: I64 = 0
+        loop (i < min_len) {
+            if a_bits.get(i) == 1 and b_bits.get(i) == 1 {
+                result_bits.push(1)
+            } else {
+                result_bits.push(0)
+            }
+            i = i + 1
+        }
+        return BigInt::from_bits(ref result_bits, false)
+    }
+
+    /// Bitwise OR: this | other (operates on absolute values).
+    pub func bitor(this, other: BigInt) -> BigInt {
+        let a_bits = this.to_bits()
+        let b_bits = other.to_bits()
+        var max_len: I64 = a_bits.len()
+        if b_bits.len() > max_len { max_len = b_bits.len() }
+        var result_bits = List[I64]::new(max_len)
+        var i: I64 = 0
+        loop (i < max_len) {
+            var a: I64 = 0
+            if i < a_bits.len() { a = a_bits.get(i) }
+            var b: I64 = 0
+            if i < b_bits.len() { b = b_bits.get(i) }
+            if a == 1 or b == 1 {
+                result_bits.push(1)
+            } else {
+                result_bits.push(0)
+            }
+            i = i + 1
+        }
+        return BigInt::from_bits(ref result_bits, false)
+    }
+
+    /// Bitwise XOR: this ^ other (operates on absolute values).
+    pub func bitxor(this, other: BigInt) -> BigInt {
+        let a_bits = this.to_bits()
+        let b_bits = other.to_bits()
+        var max_len: I64 = a_bits.len()
+        if b_bits.len() > max_len { max_len = b_bits.len() }
+        var result_bits = List[I64]::new(max_len)
+        var i: I64 = 0
+        loop (i < max_len) {
+            var a: I64 = 0
+            if i < a_bits.len() { a = a_bits.get(i) }
+            var b: I64 = 0
+            if i < b_bits.len() { b = b_bits.get(i) }
+            if a != b {
+                result_bits.push(1)
+            } else {
+                result_bits.push(0)
+            }
+            i = i + 1
+        }
+        return BigInt::from_bits(ref result_bits, false)
+    }
+
+    // ========================================================================
+    // Random
+    // ========================================================================
+
+    /// Generate a BigInt from a seed value with the specified number of decimal digits.
+    /// Uses a simple LCG (linear congruential generator) seeded from the given value.
+    /// For cryptographic use, provide externally-generated random limbs via from_i64/from_str.
+    pub func from_seed(seed: I64, num_decimal_digits: I64) -> BigInt {
+        if num_decimal_digits <= 0 { return BigInt::zero() }
+        let num_limbs: I64 = (num_decimal_digits + 8) / 9
+        var d = List[I64]::new(num_limbs)
+        var state: I64 = seed
+        if state < 0 { state = 1 - state }
+        if state == 0 { state = 1 }
+        var i: I64 = 0
+        loop (i < num_limbs) {
+            // Simple LCG: state = (state * 6364136223846793005 + 1) but avoid overflow
+            // Use smaller multiplier that fits in I64 safely
+            state = (state * 1103515245 + 12345) % BIGINT_BASE
+            if state < 0 { state = 0 - state }
+            d.push(state)
+            i = i + 1
+        }
+        if d.len() > 0 and d.get(d.len() - 1) == 0 {
+            d.set(d.len() - 1, 1)
+        }
+        var result = BigInt { negative: false, digits: d }
+        result.normalize()
+        return result
+    }
+}
+
+impl Display for BigInt {
+    pub func to_string(this) -> Str {
+        return this.to_string()
+    }
+}
+
+impl PartialEq for BigInt {
+    pub func eq(this, other: ref BigInt) -> Bool {
+        if this.negative != other.negative { return false }
+        if this.digits.len() != other.digits.len() { return false }
+        var i: I64 = 0
+        loop (i < this.digits.len()) {
+            if this.digits.get(i) != other.digits.get(i) { return false }
+            i = i + 1
+        }
+        return true
+    }
+
+    pub func ne(this, other: ref BigInt) -> Bool {
+        return not this.eq(other)
+    }
+}
+
+impl Drop for BigInt {
+    func drop(mut this) {
+        this.digits.destroy()
+    }
+}

@@ -832,6 +832,23 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         // Push drop scope for function body - variables here need drop at return
         push_drop_scope();
 
+        // Emit pre-condition assertions
+        for (const auto& contract : func.contracts) {
+            if (contract.is_pre) {
+                std::string cond = gen_expr(*contract.condition);
+                // cond is i1 (Bool). Branch: if false, panic
+                std::string pass_label = fresh_label("pre_pass");
+                std::string fail_label = fresh_label("pre_fail");
+                emit_line("  br i1 " + cond + ", label %" + pass_label + ", label %" + fail_label);
+                emit_line(fail_label + ":");
+                std::string msg = "contract violation: pre-condition failed in '" + func.name + "'";
+                std::string msg_const = add_string_literal(msg);
+                emit_line("  call void @panic(ptr " + msg_const + ")");
+                emit_line("  unreachable");
+                emit_line(pass_label + ":");
+            }
+        }
+
         for (const auto& stmt : func.body->stmts) {
             if (block_terminated_) {
                 // Block already terminated, skip remaining statements

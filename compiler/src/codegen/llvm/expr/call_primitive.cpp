@@ -283,6 +283,39 @@ auto LLVMIRGen::gen_call_primitive_or_intrinsic(const parser::CallExpr& call,
                 last_expr_type_ = "ptr";
                 return add_string_literal(name);
             }
+
+            // impl_count[T]() -> I64
+            // Returns the number of behaviors/interfaces that type T implements
+            if (iname == "impl_count") {
+                std::string type_name = extract_type();
+                size_t count = 0;
+                if (!type_name.empty()) {
+                    auto impls = env_.get_behavior_impls(type_name);
+                    count = impls.size();
+                }
+                last_expr_type_ = "i64";
+                return std::to_string(count);
+            }
+
+            // impl_name[T](index) -> Str
+            // Returns the name of the behavior/interface at the given index
+            if (iname == "impl_name") {
+                std::string type_name = extract_type();
+                size_t idx = extract_index();
+                std::string name;
+                if (!type_name.empty()) {
+                    auto impls = env_.get_behavior_impls(type_name);
+                    if (idx < impls.size()) {
+                        name = impls[idx];
+                    }
+                }
+                if (name.empty()) {
+                    last_expr_type_ = "ptr";
+                    return "null";
+                }
+                last_expr_type_ = "ptr";
+                return add_string_literal(name);
+            }
         }
     }
 

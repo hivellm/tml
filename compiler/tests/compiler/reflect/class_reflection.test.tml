@@ -93,3 +93,22 @@ func test_is_virtual_get_name() -> I32 {
     assert(not v, "get_name is NOT virtual")
     return 0
 }
+
+@test
+func test_is_override_base() -> I32 {
+    // Base class methods are NOT overrides
+    let o: Bool = is_override[Animal](0)
+    assert(not o, "Animal.speak is NOT an override (it's the base)")
+    return 0
+}
+
+@test
+func test_is_static_method() -> I32 {
+    // Instance methods are NOT static
+    let s0: Bool = is_static_method[Animal](0)
+    assert(not s0, "Animal.speak is not static")
+    let s1: Bool = is_static_method[Animal](1)
+    assert(not s1, "Animal.get_name is not static")
+    return 0
+}
+

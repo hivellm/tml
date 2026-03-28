@@ -261,6 +261,25 @@ void file_rewind(TmlFile* file) {
     }
 }
 
+// Seek with whence: 0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END
+// Returns new absolute position, or -1 on error
+int64_t file_seek_from(TmlFile* file, int64_t offset, int32_t whence) {
+    if (!file || !file->is_open)
+        return -1;
+    int c_whence = SEEK_SET;
+    if (whence == 1)
+        c_whence = SEEK_CUR;
+    else if (whence == 2)
+        c_whence = SEEK_END;
+    if (fseek((FILE*)file->handle, (long)offset, c_whence) != 0)
+        return -1;
+    long pos = ftell((FILE*)file->handle);
+    if (pos < 0)
+        return -1;
+    file->position = (int64_t)pos;
+    return file->position;
+}
+
 // ============================================================================
 // Path Operations
 // ============================================================================

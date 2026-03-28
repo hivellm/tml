@@ -910,6 +910,34 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
         bind_pattern(*p.pattern, param_type);
     }
 
+    // Type-check contract clauses (pre/post conditions)
+    for (const auto& contract : func.contracts) {
+        if (!contract.is_pre && contract.result_binding.has_value()) {
+            // Post-condition with result binding: bind the result variable
+            env_.push_scope();
+            auto ret_type = func.return_type ? resolve_type(**func.return_type) : make_unit();
+            env_.current_scope()->define(*contract.result_binding, ret_type, false, contract.span);
+            auto cond_type = check_expr(*contract.condition);
+            if (!cond_type->is<PrimitiveType>() ||
+                cond_type->as<PrimitiveType>().kind != PrimitiveKind::Bool) {
+                error("Post-condition expression must return Bool, got " +
+                          type_to_string(cond_type),
+                      contract.span, "T090");
+            }
+            env_.pop_scope();
+        } else {
+            // Pre-condition or post-condition without result binding
+            auto cond_type = check_expr(*contract.condition);
+            if (!cond_type->is<PrimitiveType>() ||
+                cond_type->as<PrimitiveType>().kind != PrimitiveKind::Bool) {
+                error(std::string(contract.is_pre ? "Pre" : "Post") +
+                          "-condition expression must return Bool, got " +
+                          type_to_string(cond_type),
+                      contract.span, "T090");
+            }
+        }
+    }
+
     if (func.body) {
         auto body_type = check_block(*func.body);
 

@@ -1,0 +1,130 @@
+use test
+use std::collections::Trie
+
+@test
+func test_trie_new_empty() -> I32 {
+    let t = Trie[I64]::new()
+    assert_eq(t.len(), 0, "new trie is empty")
+    assert(t.is_empty(), "is_empty")
+    return 0
+}
+
+@test
+func test_trie_insert_get() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("hello", 1)
+    t.insert("world", 2)
+    assert_eq(t.len(), 2, "2 keys")
+    let v = t.get("hello")
+    when v {
+        Just(val) => { assert_eq(val, 1, "hello=1") },
+        Nothing => { assert(false, "should find hello") },
+    }
+    let v2 = t.get("world")
+    when v2 {
+        Just(val) => { assert_eq(val, 2, "world=2") },
+        Nothing => { assert(false, "should find world") },
+    }
+    return 0
+}
+
+@test
+func test_trie_contains() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("abc", 1)
+    assert(t.contains("abc"), "contains abc")
+    assert(not t.contains("ab"), "not contains ab (prefix)")
+    assert(not t.contains("abcd"), "not contains abcd (longer)")
+    assert(not t.contains("xyz"), "not contains xyz")
+    return 0
+}
+
+@test
+func test_trie_overwrite() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("key", 10)
+    t.insert("key", 20)
+    assert_eq(t.len(), 1, "still 1 key after overwrite")
+    let v = t.get("key")
+    when v {
+        Just(val) => { assert_eq(val, 20, "overwritten to 20") },
+        Nothing => { assert(false, "should find key") },
+    }
+    return 0
+}
+
+@test
+func test_trie_remove() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("a", 1)
+    t.insert("b", 2)
+    let removed = t.remove("a")
+    when removed {
+        Just(val) => { assert_eq(val, 1, "removed a=1") },
+        Nothing => { assert(false, "should remove a") },
+    }
+    assert_eq(t.len(), 1, "1 key remaining")
+    assert(not t.contains("a"), "a gone")
+    assert(t.contains("b"), "b still there")
+    return 0
+}
+
+@test
+func test_trie_starts_with() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("hello", 1)
+    t.insert("help", 2)
+    assert(t.starts_with("hel"), "starts_with hel")
+    assert(t.starts_with("hello"), "starts_with hello")
+    assert(not t.starts_with("xyz"), "not starts_with xyz")
+    return 0
+}
+
+@test
+func test_trie_longest_prefix() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("app", 1)
+    t.insert("apple", 2)
+    t.insert("application", 3)
+    let lp = t.longest_prefix("applications")
+    when lp {
+        Just(p) => { assert_eq(p, "application", "longest prefix") },
+        Nothing => { assert(false, "should find prefix") },
+    }
+    return 0
+}
+
+@test
+func test_trie_keys_with_prefix() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("hello", 1)
+    t.insert("help", 2)
+    t.insert("helium", 3)
+    t.insert("world", 4)
+    let keys = t.keys_with_prefix("hel")
+    assert_eq(keys.len(), 3, "3 keys with prefix hel")
+    return 0
+}
+
+@test
+func test_trie_autocomplete() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("hello", 1)
+    t.insert("help", 2)
+    t.insert("helium", 3)
+    let ac = t.autocomplete("hel", 2)
+    assert_eq(ac.len(), 2, "autocomplete limited to 2")
+    return 0
+}
+
+@test
+func test_trie_missing_get() -> I32 {
+    var t = Trie[I64]::new()
+    t.insert("abc", 1)
+    let v = t.get("xyz")
+    when v {
+        Just(val) => { assert(false, "should not find xyz") },
+        Nothing => { assert(true, "xyz not found") },
+    }
+    return 0
+}

@@ -1,0 +1,98 @@
+use test
+use std::collections::{IntervalTree, Interval}
+
+@test
+func test_interval_new() -> I32 {
+    let t = IntervalTree[I64]::new()
+    assert_eq(t.len(), 0, "empty tree")
+    assert(t.is_empty(), "is_empty")
+    return 0
+}
+
+@test
+func test_interval_contains_point() -> I32 {
+    let iv = Interval::new(3, 8)
+    assert(iv.contains_point(3), "start inclusive")
+    assert(iv.contains_point(5), "middle")
+    assert(not iv.contains_point(8), "end exclusive")
+    assert(not iv.contains_point(2), "before")
+    return 0
+}
+
+@test
+func test_interval_overlaps() -> I32 {
+    let a = Interval::new(1, 5)
+    let b = Interval::new(3, 8)
+    let c = Interval::new(5, 10)
+    assert(a.overlaps(b), "[1,5) overlaps [3,8)")
+    assert(not a.overlaps(c), "[1,5) does NOT overlap [5,10)")
+    assert(b.overlaps(c), "[3,8) overlaps [5,10)")
+    return 0
+}
+
+@test
+func test_interval_tree_insert_query_point() -> I32 {
+    var tree = IntervalTree[Str]::new()
+    tree.insert(Interval::new(1, 5), "A")
+    tree.insert(Interval::new(3, 8), "B")
+    tree.insert(Interval::new(6, 10), "C")
+    assert_eq(tree.len(), 3, "3 intervals")
+
+    let hits = tree.query_point(4)
+    assert_eq(hits.len(), 2, "point 4 hits A and B")
+    return 0
+}
+
+@test
+func test_interval_tree_query_point_miss() -> I32 {
+    var tree = IntervalTree[I64]::new()
+    tree.insert(Interval::new(1, 5), 1)
+    tree.insert(Interval::new(10, 20), 2)
+    let hits = tree.query_point(7)
+    assert_eq(hits.len(), 0, "point 7 misses both")
+    return 0
+}
+
+@test
+func test_interval_tree_query_range() -> I32 {
+    var tree = IntervalTree[I64]::new()
+    tree.insert(Interval::new(1, 5), 1)
+    tree.insert(Interval::new(3, 8), 2)
+    tree.insert(Interval::new(6, 10), 3)
+    tree.insert(Interval::new(15, 20), 4)
+    let hits = tree.query_range(Interval::new(2, 7))
+    assert_eq(hits.len(), 3, "[2,7) overlaps [1,5), [3,8), [6,10)")
+    return 0
+}
+
+@test
+func test_interval_tree_contains() -> I32 {
+    var tree = IntervalTree[I64]::new()
+    tree.insert(Interval::new(1, 5), 1)
+    tree.insert(Interval::new(10, 20), 2)
+    assert(tree.contains(Interval::new(1, 5)), "contains [1,5)")
+    assert(not tree.contains(Interval::new(1, 6)), "not [1,6)")
+    assert(not tree.contains(Interval::new(2, 5)), "not [2,5)")
+    return 0
+}
+
+@test
+func test_interval_tree_values() -> I32 {
+    var tree = IntervalTree[Str]::new()
+    tree.insert(Interval::new(1, 10), "first")
+    tree.insert(Interval::new(5, 15), "second")
+    let vals = tree.query_point_values(7)
+    assert_eq(vals.len(), 2, "2 values at point 7")
+    return 0
+}
+
+@test
+func test_interval_tree_all_intervals() -> I32 {
+    var tree = IntervalTree[I64]::new()
+    tree.insert(Interval::new(5, 10), 1)
+    tree.insert(Interval::new(1, 3), 2)
+    tree.insert(Interval::new(8, 15), 3)
+    let all = tree.all_intervals()
+    assert_eq(all.len(), 3, "3 intervals total")
+    return 0
+}

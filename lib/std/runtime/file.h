@@ -56,6 +56,7 @@ int64_t file_position(TmlFile* file);
 bool file_seek(TmlFile* file, int64_t position);
 bool file_seek_end(TmlFile* file);
 void file_rewind(TmlFile* file);
+int64_t file_seek_from(TmlFile* file, int64_t offset, int32_t whence);
 
 // ============================================================================
 // Path Operations

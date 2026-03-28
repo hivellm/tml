@@ -1,0 +1,74 @@
+// Dynamic Virtual Dispatch via Reflection Tests
+// Tests slot-based vtable dispatch using reflection utilities
+use test
+use std::collections::List
+use core::reflect::{get_vtable_ptr, call_vtable_slot_i64}
+
+class Calculator {
+    value: I32
+
+    new(value: I32) {
+        this.value = value
+    }
+
+    virtual func compute(this) -> I64 {
+        return this.value as I64 * 2
+    }
+
+    func get_value(this) -> I32 {
+        return this.value
+    }
+}
+
+@test
+func test_direct_virtual_call() -> I32 {
+    let c: Calculator = Calculator::new(21)
+    let result: I64 = c.compute()
+    assert_eq(result, 42, "direct virtual call returns 21*2=42")
+    return 0
+}
+
+@test
+func test_vtable_ptr_not_null() -> I32 {
+    let c: Calculator = Calculator::new(5)
+    let obj_ptr: I64 = c as I64
+    let vtable: I64 = get_vtable_ptr(obj_ptr)
+    assert(vtable != 0, "vtable pointer should not be null")
+    return 0
+}
+
+@test
+func test_vtable_slot_dispatch() -> I32 {
+    let c: Calculator = Calculator::new(21)
+    let obj_ptr: I64 = c as I64
+    let vtable: I64 = get_vtable_ptr(obj_ptr)
+
+    // Call compute via vtable slot 0
+    let reflected: I64 = call_vtable_slot_i64(obj_ptr, vtable, 0)
+    assert_eq(reflected, 42, "reflected vtable call returns same as direct call")
+    return 0
+}
+
+@test
+func test_vtable_dispatch_matches_direct() -> I32 {
+    let c: Calculator = Calculator::new(10)
+    let direct: I64 = c.compute()
+    let obj_ptr: I64 = c as I64
+    let vtable: I64 = get_vtable_ptr(obj_ptr)
+    let reflected: I64 = call_vtable_slot_i64(obj_ptr, vtable, 0)
+    assert_eq(direct, reflected, "reflected dispatch must match direct call")
+    return 0
+}
+
+@test
+func test_method_intrinsics_for_class() -> I32 {
+    let mc: I64 = method_count[Calculator]()
+    assert_eq(mc, 2, "Calculator has 2 methods: compute, get_value")
+    let m0: Str = method_name[Calculator](0)
+    assert_eq(m0, "compute", "method 0 is compute")
+    let v0: Bool = is_virtual[Calculator](0)
+    assert(v0, "compute IS virtual")
+    let v1: Bool = is_virtual[Calculator](1)
+    assert(not v1, "get_value is NOT virtual")
+    return 0
+}

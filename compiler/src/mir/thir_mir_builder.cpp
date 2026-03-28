@@ -151,6 +151,7 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
     ctx_.current_func = &module_.functions.back();
     ctx_.variables.clear();
     ctx_.drop_scopes.clear();
+    ctx_.push_drop_scope(); // Push initial function-level drop scope
     current_return_type_ = func.return_type;
     context_type_ = nullptr;
     // Clear the loop stack (std::stack has no clear())
@@ -176,6 +177,7 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
 
         // If the block isn't terminated, add a return
         if (!is_terminated()) {
+            emit_all_drops(); // Drop all local variables before implicit return
             if (func.return_type && func.return_type->is<types::PrimitiveType>() &&
                 func.return_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit) {
                 emit_return();
@@ -578,6 +580,11 @@ void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
                 auto alloca_val = emit(std::move(alloca), ptr_type);
                 ctx_.variables[bp.name] = alloca_val;
                 ctx_.mut_struct_vars.insert(bp.name);
+                // Register for drop if needed
+                std::string tn = get_type_name(array_type_direct);
+                if (!tn.empty() && !env_.is_trivially_destructible(tn)) {
+                    ctx_.register_for_drop(bp.name, alloca_val, tn, array_type_direct);
+                }
                 context_type_ = saved_context;
                 return;
             }
@@ -599,6 +606,11 @@ void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
                 emit_void(std::move(store));
                 ctx_.variables[bp.name] = alloca_val;
                 ctx_.mut_struct_vars.insert(bp.name);
+                // Register for drop if needed
+                std::string tn = get_type_name(init_val.type);
+                if (!tn.empty() && !env_.is_trivially_destructible(tn)) {
+                    ctx_.register_for_drop(bp.name, alloca_val, tn, init_val.type);
+                }
                 return;
             }
 
@@ -619,16 +631,36 @@ void ThirMirBuilder::build_let_stmt(const thir::ThirLetStmt& let) {
                 emit_void(std::move(store));
                 ctx_.variables[bp.name] = alloca_val;
                 ctx_.mut_struct_vars.insert(bp.name);
+                // Register for drop if needed
+                std::string tn = get_type_name(init_val.type);
+                if (!tn.empty() && !env_.is_trivially_destructible(tn)) {
+                    ctx_.register_for_drop(bp.name, alloca_val, tn, init_val.type);
+                }
                 return;
             }
 
             build_pattern_binding(let.pattern, init_val);
+            // Register for drop if needed
+            {
+                std::string tn = get_type_name(init_val.type);
+                if (!tn.empty() && !env_.is_trivially_destructible(tn)) {
+                    ctx_.register_for_drop(bp.name, init_val, tn, init_val.type);
+                }
+            }
             return;
         }
 
         auto init_val = build_expr(*let.init);
         context_type_ = saved_context;
         build_pattern_binding(let.pattern, init_val);
+        // Register for drop if the type needs dropping
+        if (let.pattern && let.pattern->is<thir::ThirBindingPattern>()) {
+            const auto& bp2 = let.pattern->as<thir::ThirBindingPattern>();
+            std::string tn = get_type_name(init_val.type);
+            if (!tn.empty() && !env_.is_trivially_destructible(tn)) {
+                ctx_.register_for_drop(bp2.name, init_val, tn, init_val.type);
+            }
+        }
     }
 }
 
@@ -1396,8 +1428,10 @@ auto ThirMirBuilder::build_return(const thir::ThirReturnExpr& ret) -> Value {
         context_type_ = current_return_type_;
         auto val = build_expr(*ret.value);
         context_type_ = saved_context;
+        emit_all_drops(); // Drop all local variables before explicit return
         emit_return(val);
     } else {
+        emit_all_drops(); // Drop all local variables before explicit return
         emit_return();
     }
     return const_unit();

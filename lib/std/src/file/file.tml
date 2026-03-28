@@ -41,6 +41,9 @@ func ffi_file_size(handle: *Unit) -> I64
 @extern("file_flush")
 func ffi_file_flush(handle: *Unit) -> Bool
 
+@extern("file_seek_from")
+func ffi_file_seek_from(handle: *Unit, offset: I64, whence: I32) -> I64
+
 @allocates
 @extern("file_read_all")
 func ffi_file_read_all(path: Str) -> Str
@@ -133,5 +136,42 @@ impl File {
     /// Append content to a file
     pub func append_all(path: Str, content: Str) -> Bool {
         return ffi_file_append_all(path, content)
+    }
+}
+
+use std::stream::seek::{Seek, SeekFrom}
+use core::error::{IoError, IoErrorKind}
+
+impl Seek for File {
+    /// Seek to a position in the file.
+    ///
+    /// Uses the C runtime `file_seek_from` which wraps `fseek`/`ftell`.
+    /// Returns the new absolute position, or an error.
+    pub func seek(mut this, pos: SeekFrom) -> Outcome[I64, IoError] {
+        // whence: 0=SEEK_SET, 1=SEEK_CUR, 2=SEEK_END
+        var offset: I64 = 0
+        var whence: I32 = 0
+        when pos {
+            Start(o) => {
+                offset = o
+                whence = 0
+            },
+            Current(o) => {
+                offset = o
+                whence = 1
+            },
+            End(o) => {
+                offset = o
+                whence = 2
+            },
+        }
+        let result: I64 = ffi_file_seek_from(this.handle, offset, whence)
+        if result < 0 {
+            return Err(IoError::with_message(
+                IoErrorKind::Other,
+                "file seek failed"
+            ))
+        }
+        return Ok(result)
     }
 }

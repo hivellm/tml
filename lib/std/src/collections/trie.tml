@@ -1,0 +1,273 @@
+//! Trie[V] — A string-keyed prefix tree.
+//!
+//! Provides efficient prefix-based operations on string keys.
+//! Useful for autocomplete, URL routing, dictionary lookup, and IP routing.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::collections::Trie
+//!
+//! var t = Trie[I64]::new()
+//! t.insert("hello", 1)
+//! t.insert("help", 2)
+//! println(t.contains("hello"))  // true
+//! ```
+
+use std::collections::List
+
+// ============================================================================
+// Trie[V] — flat node array with parallel arrays for children
+// ============================================================================
+
+// Internal representation:
+// - children: flat array of I64, each node has 256 slots (indexed by byte value)
+//   children[node_idx * 256 + byte] = child_node_idx or -1
+// - has_value: List[I64] — 1 if node has a value, 0 otherwise
+// - value_index: List[I64] — index into values array, -1 if no value
+// - node_count: number of allocated nodes
+
+/// A string-keyed prefix tree (trie) mapping string keys to values of type V.
+///
+/// Uses a flat array layout for fast lookups. Each node has 256 child slots
+/// (one per byte value). All operations are O(k) where k is the key length.
+pub type Trie[V] {
+    children: List[I64],
+    has_val: List[I64],
+    val_idx: List[I64],
+    values: List[V],
+    keys: List[Str],
+    node_count: I64,
+    key_count: I64,
+}
+
+impl[V] Trie[V] {
+
+    /// Create an empty trie.
+    pub func new() -> Trie[V] {
+        var children = List[I64]::new(256)
+        var has_val = List[I64]::new(16)
+        var val_idx = List[I64]::new(16)
+        // Initialize root node (256 children slots, all -1)
+        var i: I64 = 0
+        loop (i < 256) {
+            children.push(-1)
+            i = i + 1
+        }
+        has_val.push(0)
+        val_idx.push(-1)
+        return Trie[V] {
+            children: children,
+            has_val: has_val,
+            val_idx: val_idx,
+            values: List[V]::new(16),
+            keys: List[Str]::new(16),
+            node_count: 1,
+            key_count: 0,
+        }
+    }
+
+    /// Allocate a new node. Returns the node index.
+    pub func alloc_node(mut this) -> I64 {
+        let idx: I64 = this.node_count
+        // Add 256 child slots
+        var i: I64 = 0
+        loop (i < 256) {
+            this.children.push(-1)
+            i = i + 1
+        }
+        this.has_val.push(0)
+        this.val_idx.push(-1)
+        this.node_count = this.node_count + 1
+        return idx
+    }
+
+    /// Get child of node for a given byte.
+    pub func get_child(this, node: I64, byte: I64) -> I64 {
+        return this.children.get(node * 256 + byte)
+    }
+
+    /// Set child of node for a given byte.
+    pub func set_child(mut this, node: I64, byte: I64, child: I64) {
+        this.children.set(node * 256 + byte, child)
+    }
+
+    /// Insert a key-value pair. Overwrites if key already exists.
+    pub func insert(mut this, key: Str, value: V) {
+        var node: I64 = 0
+        var i: I64 = 0
+        loop (i < key.len()) {
+            let byte: I64 = lowlevel { ptr_read[U8](ptr_offset[U8](key as *U8, i)) } as I64
+            var child: I64 = this.get_child(node, byte)
+            if child < 0 {
+                child = this.alloc_node()
+                this.set_child(node, byte, child)
+            }
+            node = child
+            i = i + 1
+        }
+        if this.has_val.get(node) == 1 {
+            // Overwrite existing value
+            this.values.set(this.val_idx.get(node), value)
+        } else {
+            let vi: I64 = this.values.len()
+            this.values.push(value)
+            this.keys.push(key)
+            this.has_val.set(node, 1)
+            this.val_idx.set(node, vi)
+            this.key_count = this.key_count + 1
+        }
+    }
+
+    /// Look up a key. Returns the value if found.
+    pub func get(this, key: Str) -> Maybe[V] {
+        let node = this.find_node(key)
+        if node < 0 { return Nothing }
+        if this.has_val.get(node) == 1 {
+            return Just(this.values.get(this.val_idx.get(node)))
+        }
+        return Nothing
+    }
+
+    /// Check if a key exists.
+    pub func contains(this, key: Str) -> Bool {
+        let node = this.find_node(key)
+        if node < 0 { return false }
+        return this.has_val.get(node) == 1
+    }
+
+    /// Remove a key and return its value.
+    pub func remove(mut this, key: Str) -> Maybe[V] {
+        let node = this.find_node(key)
+        if node < 0 { return Nothing }
+        if this.has_val.get(node) == 0 { return Nothing }
+        let val = this.values.get(this.val_idx.get(node))
+        this.has_val.set(node, 0)
+        this.val_idx.set(node, -1)
+        this.key_count = this.key_count - 1
+        return Just(val)
+    }
+
+    /// Number of stored keys.
+    pub func len(this) -> I64 {
+        return this.key_count
+    }
+
+    /// Whether the trie is empty.
+    pub func is_empty(this) -> Bool {
+        return this.key_count == 0
+    }
+
+    // ========================================================================
+    // Prefix operations
+    // ========================================================================
+
+    /// Check if any key starts with the given prefix.
+    pub func starts_with(this, prefix: Str) -> Bool {
+        return this.find_node(prefix) >= 0
+    }
+
+    /// Find the longest key that is a prefix of the query string.
+    pub func longest_prefix(this, query: Str) -> Maybe[Str] {
+        var node: I64 = 0
+        var last_match_len: I64 = -1
+        if this.has_val.get(0) == 1 {
+            last_match_len = 0
+        }
+        var i: I64 = 0
+        var searching: Bool = true
+        loop (i < query.len() and searching) {
+            let byte: I64 = lowlevel { ptr_read[U8](ptr_offset[U8](query as *U8, i)) } as I64
+            let child: I64 = this.get_child(node, byte)
+            if child >= 0 {
+                node = child
+                if this.has_val.get(node) == 1 {
+                    last_match_len = i + 1
+                }
+            } else {
+                searching = false
+            }
+            i = i + 1
+        }
+        if last_match_len >= 0 {
+            return Just(query.slice(0, last_match_len))
+        }
+        return Nothing
+    }
+
+    /// Get all keys with the given prefix.
+    pub func keys_with_prefix(this, prefix: Str) -> List[Str] {
+        var result = List[Str]::new(8)
+        let node = this.find_node(prefix)
+        if node >= 0 {
+            this.collect_keys(node, mut ref result)
+        }
+        return result
+    }
+
+    /// Autocomplete: get up to `limit` keys with the given prefix.
+    pub func autocomplete(this, prefix: Str, limit: I64) -> List[Str] {
+        var result = List[Str]::new(limit)
+        let node = this.find_node(prefix)
+        if node >= 0 {
+            this.collect_keys_limited(node, limit, mut ref result)
+        }
+        return result
+    }
+
+    // ========================================================================
+    // Internal helpers
+    // ========================================================================
+
+    /// Find the node index for a given key/prefix. Returns -1 if path doesn't exist.
+    pub func find_node(this, key: Str) -> I64 {
+        var node: I64 = 0
+        var i: I64 = 0
+        loop (i < key.len()) {
+            let byte: I64 = lowlevel { ptr_read[U8](ptr_offset[U8](key as *U8, i)) } as I64
+            let child: I64 = this.get_child(node, byte)
+            if child < 0 {
+                return -1
+            }
+            node = child
+            i = i + 1
+        }
+        return node
+    }
+
+    /// Recursively collect all keys from a subtree.
+    pub func collect_keys(this, node: I64, result: mut ref List[Str]) {
+        if this.has_val.get(node) == 1 {
+            let vi: I64 = this.val_idx.get(node)
+            let k: Str = this.keys.get(vi)
+            result.push(k)
+        }
+        var byte_val: I64 = 0
+        loop (byte_val < 256) {
+            let child: I64 = this.get_child(node, byte_val)
+            if child >= 0 {
+                this.collect_keys(child, result)
+            }
+            byte_val = byte_val + 1
+        }
+    }
+
+    /// Collect keys with a limit.
+    pub func collect_keys_limited(this, node: I64, limit: I64, result: mut ref List[Str]) {
+        if result.len() >= limit { return }
+        if this.has_val.get(node) == 1 {
+            let vi: I64 = this.val_idx.get(node)
+            let k: Str = this.keys.get(vi)
+            result.push(k)
+            if result.len() >= limit { return }
+        }
+        var byte_val: I64 = 0
+        loop (byte_val < 256 and result.len() < limit) {
+            let child: I64 = this.get_child(node, byte_val)
+            if child >= 0 {
+                this.collect_keys_limited(child, limit, result)
+            }
+            byte_val = byte_val + 1
+        }
+    }
+}

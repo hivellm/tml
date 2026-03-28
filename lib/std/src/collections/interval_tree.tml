@@ -1,0 +1,260 @@
+//! IntervalTree — Range query data structure.
+//!
+//! Efficiently answers "which intervals overlap this point/range?" queries.
+//! Uses an augmented BST with max-endpoint tracking for O(log n + k) queries.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::collections::{IntervalTree, Interval}
+//!
+//! var tree = IntervalTree[Str]::new()
+//! tree.insert(Interval::new(1, 5), "meeting")
+//! tree.insert(Interval::new(3, 8), "lunch")
+//! let overlaps = tree.query_point(4)  // both intervals
+//! ```
+
+use std::collections::List
+
+// ============================================================================
+// Interval — a range [start, end]
+// ============================================================================
+
+/// A half-open interval [start, end) with I64 endpoints.
+pub type Interval {
+    pub start: I64,
+    pub end: I64,
+}
+
+impl Interval {
+    /// Create a new interval [start, end).
+    pub func new(start: I64, end: I64) -> Interval {
+        return Interval { start: start, end: end }
+    }
+
+    /// Check if this interval contains a point.
+    pub func contains_point(this, point: I64) -> Bool {
+        return point >= this.start and point < this.end
+    }
+
+    /// Check if this interval overlaps another interval.
+    pub func overlaps(this, other: Interval) -> Bool {
+        return this.start < other.end and other.start < this.end
+    }
+
+    /// Check if two intervals are equal.
+    pub func equals(this, other: Interval) -> Bool {
+        return this.start == other.start and this.end == other.end
+    }
+
+    /// Return interval as string "[start, end)".
+    pub func to_string(this) -> Str {
+        return "[" + this.start.to_string() + ", " + this.end.to_string() + ")"
+    }
+}
+
+// ============================================================================
+// IntervalTree[V] — augmented BST
+// ============================================================================
+
+// Flat array BST: each node has left/right child indices (-1 = null)
+// Augmented with max_end: the maximum end value in the subtree rooted at this node
+
+/// An interval tree mapping I64 intervals to values of type V.
+///
+/// Uses an augmented BST where each node tracks the maximum end value
+/// in its subtree, enabling efficient overlap queries.
+pub type IntervalTree[V] {
+    // Node data (parallel arrays, indexed by node id)
+    intervals_start: List[I64],
+    intervals_end: List[I64],
+    values: List[V],
+    left: List[I64],
+    right: List[I64],
+    max_end: List[I64],
+    // Tree metadata
+    root: I64,
+    count: I64,
+}
+
+impl[V] IntervalTree[V] {
+
+    /// Create an empty interval tree.
+    pub func new() -> IntervalTree[V] {
+        return IntervalTree[V] {
+            intervals_start: List[I64]::new(16),
+            intervals_end: List[I64]::new(16),
+            values: List[V]::new(16),
+            left: List[I64]::new(16),
+            right: List[I64]::new(16),
+            max_end: List[I64]::new(16),
+            root: -1,
+            count: 0,
+        }
+    }
+
+    /// Allocate a new node. Returns the node index.
+    pub func alloc_node(mut this, start: I64, end: I64, value: V) -> I64 {
+        let idx: I64 = this.count
+        this.intervals_start.push(start)
+        this.intervals_end.push(end)
+        this.values.push(value)
+        this.left.push(-1)
+        this.right.push(-1)
+        this.max_end.push(end)
+        this.count = this.count + 1
+        return idx
+    }
+
+    /// Update max_end for a node based on its children.
+    pub func update_max(mut this, node: I64) {
+        var m: I64 = this.intervals_end.get(node)
+        let l: I64 = this.left.get(node)
+        let r: I64 = this.right.get(node)
+        if l >= 0 and this.max_end.get(l) > m {
+            m = this.max_end.get(l)
+        }
+        if r >= 0 and this.max_end.get(r) > m {
+            m = this.max_end.get(r)
+        }
+        this.max_end.set(node, m)
+    }
+
+    /// Insert an interval with a value. Returns the new root.
+    pub func insert_at(mut this, node: I64, start: I64, end: I64, value: V) -> I64 {
+        if node < 0 {
+            return this.alloc_node(start, end, value)
+        }
+        let node_start: I64 = this.intervals_start.get(node)
+        if start < node_start {
+            let new_left: I64 = this.insert_at(this.left.get(node), start, end, value)
+            this.left.set(node, new_left)
+        } else {
+            let new_right: I64 = this.insert_at(this.right.get(node), start, end, value)
+            this.right.set(node, new_right)
+        }
+        this.update_max(node)
+        return node
+    }
+
+    /// Insert an interval with an associated value.
+    pub func insert(mut this, interval: Interval, value: V) {
+        this.root = this.insert_at(this.root, interval.start, interval.end, value)
+    }
+
+    /// Query all intervals containing a point.
+    pub func query_point(this, point: I64) -> List[Interval] {
+        var result = List[Interval]::new(4)
+        this.query_point_at(this.root, point, mut ref result)
+        return result
+    }
+
+    /// Internal: query point recursively.
+    pub func query_point_at(this, node: I64, point: I64, result: mut ref List[Interval]) {
+        if node < 0 { return }
+        // Prune: if max_end of subtree <= point, no interval here contains point
+        if this.max_end.get(node) <= point { return }
+        // Check left subtree
+        this.query_point_at(this.left.get(node), point, result)
+        // Check current node
+        let s: I64 = this.intervals_start.get(node)
+        let e: I64 = this.intervals_end.get(node)
+        if point >= s and point < e {
+            result.push(Interval::new(s, e))
+        }
+        // Check right subtree (only if point >= start of current node)
+        if point >= s {
+            this.query_point_at(this.right.get(node), point, result)
+        }
+    }
+
+    /// Query all intervals overlapping a range.
+    pub func query_range(this, range: Interval) -> List[Interval] {
+        var result = List[Interval]::new(4)
+        this.query_range_at(this.root, range.start, range.end, mut ref result)
+        return result
+    }
+
+    /// Internal: query range recursively.
+    pub func query_range_at(this, node: I64, qs: I64, qe: I64, result: mut ref List[Interval]) {
+        if node < 0 { return }
+        // Prune: if max_end of subtree <= query start, no overlap possible
+        if this.max_end.get(node) <= qs { return }
+        // Check left subtree
+        this.query_range_at(this.left.get(node), qs, qe, result)
+        // Check current node: overlap if start < qe AND qs < end
+        let s: I64 = this.intervals_start.get(node)
+        let e: I64 = this.intervals_end.get(node)
+        if s < qe and qs < e {
+            result.push(Interval::new(s, e))
+        }
+        // Check right subtree (only if query end > start)
+        if qe > s {
+            this.query_range_at(this.right.get(node), qs, qe, result)
+        }
+    }
+
+    /// Query point and return values (not just intervals).
+    pub func query_point_values(this, point: I64) -> List[V] {
+        var result = List[V]::new(4)
+        this.query_point_values_at(this.root, point, mut ref result)
+        return result
+    }
+
+    /// Internal: query point and collect values.
+    pub func query_point_values_at(this, node: I64, point: I64, result: mut ref List[V]) {
+        if node < 0 { return }
+        if this.max_end.get(node) <= point { return }
+        this.query_point_values_at(this.left.get(node), point, result)
+        let s: I64 = this.intervals_start.get(node)
+        let e: I64 = this.intervals_end.get(node)
+        if point >= s and point < e {
+            result.push(this.values.get(node))
+        }
+        if point >= s {
+            this.query_point_values_at(this.right.get(node), point, result)
+        }
+    }
+
+    /// Check if an exact interval exists in the tree.
+    pub func contains(this, interval: Interval) -> Bool {
+        return this.contains_at(this.root, interval.start, interval.end)
+    }
+
+    /// Internal: check containment.
+    pub func contains_at(this, node: I64, start: I64, end: I64) -> Bool {
+        if node < 0 { return false }
+        let s: I64 = this.intervals_start.get(node)
+        let e: I64 = this.intervals_end.get(node)
+        if s == start and e == end { return true }
+        if start < s {
+            return this.contains_at(this.left.get(node), start, end)
+        }
+        return this.contains_at(this.right.get(node), start, end)
+    }
+
+    /// Number of intervals stored.
+    pub func len(this) -> I64 {
+        return this.count
+    }
+
+    /// Whether the tree is empty.
+    pub func is_empty(this) -> Bool {
+        return this.count == 0
+    }
+
+    /// Get all intervals in the tree (in-order traversal).
+    pub func all_intervals(this) -> List[Interval] {
+        var result = List[Interval]::new(this.count)
+        this.inorder(this.root, mut ref result)
+        return result
+    }
+
+    /// Internal: in-order traversal.
+    pub func inorder(this, node: I64, result: mut ref List[Interval]) {
+        if node < 0 { return }
+        this.inorder(this.left.get(node), result)
+        result.push(Interval::new(this.intervals_start.get(node), this.intervals_end.get(node)))
+        this.inorder(this.right.get(node), result)
+    }
+}
