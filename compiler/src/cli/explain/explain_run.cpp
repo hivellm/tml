@@ -65,6 +65,7 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         const auto& reflection = explain::get_reflection_explanations();
         const auto& query = explain::get_query_explanations();
         const auto& format = explain::get_format_explanations();
+        const auto& hir = explain::get_hir_explanations();
 
         merged.insert(lexer.begin(), lexer.end());
         merged.insert(parser.begin(), parser.end());
@@ -79,6 +80,7 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         merged.insert(reflection.begin(), reflection.end());
         merged.insert(query.begin(), query.end());
         merged.insert(format.begin(), format.end());
+        merged.insert(hir.begin(), hir.end());
 
         initialized = true;
     }

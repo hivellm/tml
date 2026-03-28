@@ -1589,6 +1589,7 @@ add_library(tml_cli STATIC
     src/cli/explain/reflection_errors.cpp
     src/cli/explain/query_errors.cpp
     src/cli/explain/format_errors.cpp
+    src/cli/explain/hir_errors.cpp
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp

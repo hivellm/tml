@@ -21,6 +21,7 @@
 //! | `reflection_errors.cpp` | R001-R005  | Reflection intrinsic errors    |
 //! | `query_errors.cpp`      | Q001-Q010  | Query system errors            |
 //! | `format_errors.cpp`     | F001-F010  | Formatter/linter rules         |
+//! | `hir_errors.cpp`        | H001-H015  | HIR lowering errors            |
 
 #pragma once
 
@@ -67,5 +68,8 @@ const std::unordered_map<std::string, std::string>& get_query_explanations();
 
 /// Get explanations for formatter/linter rule errors (F001-F010)
 const std::unordered_map<std::string, std::string>& get_format_explanations();
+
+/// Get explanations for HIR lowering errors (H001-H015)
+const std::unordered_map<std::string, std::string>& get_hir_explanations();
 
 } // namespace tml::cli::explain
