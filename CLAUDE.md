@@ -2,6 +2,58 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ MANDATORY: Delegate ALL Implementation to Agent Teams ⛔
+
+**The main conversation MUST NEVER implement code directly. ALL implementation work MUST be delegated to specialized agent teams.**
+
+This is a HARD REQUIREMENT. The main conversation exists ONLY for:
+1. **Analyzing** the task — read files, grep, understand scope
+2. **Planning** the agent dispatch — which agents, what files, what instructions
+3. **Launching** a team-lead agent that coordinates specialists
+4. **Reporting** results back to the user — verify, commit, summarize
+
+**Rules:**
+
+1. **NEVER write code in the main conversation** — no Edit, no Write for source files
+2. **NEVER run builds or tests in the main conversation** — agents do that
+3. **For ANY task involving code changes, launch a team-lead agent** that dispatches implementers
+4. **Quick reads/greps are OK** in main conversation to understand scope
+5. **Commits are OK** in main conversation after agents complete
+6. **If a single agent suffices (simple task), launch it directly** — no team needed for 1 agent
+
+**WRONG (main conversation tries to implement):**
+```
+User: "fix the bug"
+Main: *reads file* *edits file* *builds* *fails* *edits again* *builds* *fails* ...
+```
+
+**CORRECT (main coordinates, agents implement):**
+```
+User: "fix the bug"
+Main: *reads file to understand scope* → launches implementer agent with specific instructions
+Agent: *reads* *edits* *builds* *tests* → reports result
+Main: *verifies* *commits* *reports to user*
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Update tasks.md After EVERY Implementation Cycle ⛔
+
+**After ANY work is completed — by you or by agents — you MUST immediately update the corresponding tasks.md file.**
+
+This is a HARD REQUIREMENT. Stale task files cause confusion, lost progress tracking, and wasted time re-investigating what was already done.
+
+**Rules:**
+
+1. **After agents complete work** — update tasks.md BEFORE committing code
+2. **After implementing anything** — mark items `[x]` immediately, not later
+3. **After discovering scope changes** — update status line, add notes
+4. **After deferring items** — mark with note explaining WHY deferred
+5. **The status line at the top MUST reflect reality** — update progress count
+6. **NEVER commit code without updating the corresponding tasks.md**
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Implement Incrementally — Test Each Stage ⛔
 
 **NEVER implement everything at once then fight cascading errors. The line between persistence and stupidity is very thin.**
