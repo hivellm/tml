@@ -123,9 +123,17 @@ void TerminalReporter::print_summary_table(const TestRunResult& result) {
     if (result.crashed > 0) {
         TML_LOG_INFO("test", "  " << c.red() << "Crashed: " << result.crashed << c.reset());
     }
+    if (result.timed_out > 0) {
+        TML_LOG_INFO("test", "  " << c.red() << "Timeout: " << result.timed_out << c.reset());
+    }
     if (result.compilation_errors > 0) {
         TML_LOG_INFO("test", "  " << c.yellow() << "Compile errors: " << result.compilation_errors
                                   << c.reset());
+    }
+    int skipped =
+        result.total_tests - result.passed - result.failed - result.crashed - result.timed_out;
+    if (skipped > 0) {
+        TML_LOG_INFO("test", "  " << c.dim() << "Skipped: " << skipped << c.reset());
     }
 
     TML_LOG_INFO("test", "  Duration: " << (result.total_duration_us / 1000) << "ms");

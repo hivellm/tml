@@ -221,6 +221,8 @@ void McpServer::send_error(json::JsonValue id, json::JsonRpcErrorCode code,
 
 void McpServer::log(const std::string& message) {
     TML_LOG_DEBUG("mcp", message);
+    // Always output to stderr for debugging
+    std::cerr << "[MCP] " << message << "\n" << std::flush;
 }
 
 // ============================================================================
@@ -331,8 +333,19 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
                                      std::chrono::steady_clock::now() - start)
                                      .count());
         log_tool_call(tool_name, params_json, true, elapsed_ms);
-        log("Tool error: " + std::string(e.what()));
+        log("Tool error (std::exception): " + std::string(e.what()));
         return json::JsonRpcResponse::success(ToolResult::error(e.what()).to_json(), std::move(id));
+    } catch (...) {
+        auto elapsed_ms =
+            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count());
+        log_tool_call(tool_name, params_json, true, elapsed_ms);
+        log("Tool error (unknown exception) in: " + tool_name);
+        return json::JsonRpcResponse::success(
+            ToolResult::error("Internal error: unknown exception in tool '" + tool_name + "'")
+                .to_json(),
+            std::move(id));
     }
 }
 

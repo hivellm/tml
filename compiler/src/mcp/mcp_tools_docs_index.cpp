@@ -5,13 +5,13 @@ TML_MODULE("mcp")
 //! Documentation search infrastructure: DocSearchCache, BM25/HNSW indexing,
 //! query expansion, MMR diversification, and the docs/search handler.
 
-#include "codegen/llvm/llvm_ir_gen.hpp"
 #include "doc/doc_model.hpp"
 #include "doc/extractor.hpp"
-#include "hir/hir_builder.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
 #include "mcp_tools_internal.hpp"
-#include "mir/hir_mir_builder.hpp"
-#include "mir/mir_pass.hpp"
+#include "parser/parser.hpp"
+#include "preprocessor/preprocessor.hpp"
 #include "search/bm25_index.hpp"
 #include "search/hnsw_index.hpp"
 

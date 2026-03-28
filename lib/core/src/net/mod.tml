@@ -1,0 +1,20 @@
+//! Core networking types — pure data, no OS calls.
+//!
+//! This module provides IP address and socket address types that are
+//! platform-independent and require no heap allocation or system calls.
+//! These types can be used in `no_std` environments.
+//!
+//! # Types
+//!
+//! - [`Ipv4Addr`] - A 32-bit IPv4 address stored as 4 octets
+//! - [`Ipv6Addr`] - A 128-bit IPv6 address stored as 8 segments
+//! - [`IpAddr`] - An enum that holds either an IPv4 or IPv6 address
+//! - [`SocketAddrV4`] - IPv4 socket address (IP + port)
+//! - [`SocketAddrV6`] - IPv6 socket address (IP + port + flow info + scope ID)
+//! - [`SocketAddr`] - Socket address wrapper
+
+pub mod ip
+pub mod socket
+
+pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+pub use socket::{SocketAddr, SocketAddrV4, SocketAddrV6}

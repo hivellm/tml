@@ -972,9 +972,96 @@ void ThirMirBuilder::emit_drop_calls(const std::vector<BuildContext::DropInfo>& 
     }
 }
 
-void ThirMirBuilder::emit_drop_for_value(Value /*value*/, const MirTypePtr& /*type*/,
-                                         const std::string& /*type_name*/) {
-    // Drop for specific value — simplified for initial implementation
+void ThirMirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
+                                         const std::string& type_name) {
+    // Get the effective type name for drop checking
+    std::string effective_type_name = type_name;
+    if (effective_type_name.empty() && type) {
+        effective_type_name = get_type_name(type);
+    }
+
+    // Skip if type doesn't need drop at all
+    if (!effective_type_name.empty() && !env_.type_needs_drop(effective_type_name)) {
+        return;
+    }
+    // If we still don't have a type name, check for array types
+    if (effective_type_name.empty() && type) {
+        if (!std::holds_alternative<MirArrayType>(type->kind)) {
+            return;
+        }
+    }
+
+    // Step 1: If type explicitly implements Drop, call Type::drop(value)
+    bool has_explicit_drop =
+        !effective_type_name.empty() && env_.type_implements(effective_type_name, "Drop");
+    if (has_explicit_drop) {
+        CallInst call;
+        call.func_name = effective_type_name + "::drop";
+        call.args = {value};
+        call.arg_types = {type};
+        call.return_type = make_unit_type();
+        emit_void(std::move(call));
+    }
+
+    // Step 2: Recursively drop fields for structs (in reverse declaration order)
+    if (!effective_type_name.empty()) {
+        auto struct_def = env_.lookup_struct(effective_type_name);
+        if (struct_def && !struct_def->fields.empty()) {
+            size_t total_fields = struct_def->fields.size();
+            for (size_t i = total_fields; i > 0; --i) {
+                size_t field_idx = i - 1;
+                const auto& fld = struct_def->fields[field_idx];
+
+                if (!env_.type_needs_drop(fld.type)) {
+                    continue;
+                }
+
+                // Get type name for the field
+                std::string field_type_name;
+                if (fld.type && fld.type->is<types::NamedType>()) {
+                    field_type_name = fld.type->as<types::NamedType>().name;
+                } else if (fld.type && fld.type->is<types::PrimitiveType>() &&
+                           fld.type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Str) {
+                    field_type_name = "Str";
+                }
+
+                MirTypePtr field_mir_type;
+                if (!field_type_name.empty()) {
+                    field_mir_type = make_struct_type(field_type_name);
+                } else {
+                    field_mir_type = make_ptr_type();
+                }
+
+                ExtractValueInst extract;
+                extract.aggregate = value;
+                extract.indices = {static_cast<uint32_t>(field_idx)};
+                extract.aggregate_type = type;
+                extract.result_type = field_mir_type;
+
+                Value field_value = emit(std::move(extract), field_mir_type);
+                emit_drop_for_value(field_value, field_mir_type, field_type_name);
+            }
+        }
+    }
+
+    // Step 3: Handle arrays - iterate elements and drop each (in reverse order)
+    if (type && std::holds_alternative<MirArrayType>(type->kind)) {
+        const auto& arr_type = std::get<MirArrayType>(type->kind);
+        std::string elem_type_name = get_type_name(arr_type.element);
+
+        if (!elem_type_name.empty() && env_.type_needs_drop(elem_type_name)) {
+            for (size_t i = arr_type.size; i > 0; --i) {
+                ExtractValueInst extract;
+                extract.aggregate = value;
+                extract.indices = {static_cast<uint32_t>(i - 1)};
+                extract.aggregate_type = type;
+                extract.result_type = arr_type.element;
+
+                Value elem_value = emit(std::move(extract), arr_type.element);
+                emit_drop_for_value(elem_value, arr_type.element, elem_type_name);
+            }
+        }
+    }
 }
 
 void ThirMirBuilder::emit_scope_drops() {

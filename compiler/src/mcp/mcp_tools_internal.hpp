@@ -6,13 +6,8 @@
 #pragma once
 
 #include "doc/doc_model.hpp"
-#include "lexer/lexer.hpp"
-#include "lexer/source.hpp"
 #include "mcp/mcp_server.hpp"
 #include "mcp/mcp_tools.hpp"
-#include "parser/parser.hpp"
-#include "preprocessor/preprocessor.hpp"
-#include "types/checker.hpp"
 
 #include "json/json_parser.hpp"
 #include <chrono>
@@ -23,7 +18,6 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #ifdef _WIN32
@@ -40,19 +34,6 @@ namespace tml::mcp {
 namespace fs = std::filesystem;
 
 // ============================================================================
-// Shared Types
-// ============================================================================
-
-struct CompileContext {
-    parser::Module module;
-    types::TypeEnv type_env;
-};
-
-struct CompileError {
-    std::string message;
-};
-
-// ============================================================================
 // Shared Helper Functions
 // ============================================================================
 
@@ -61,10 +42,6 @@ auto strip_ansi(const std::string& input) -> std::string;
 
 /// Reads a file and returns its contents, or nullopt on error.
 auto read_source_file(const std::string& path) -> std::optional<std::string>;
-
-/// Parses and type-checks TML source code.
-auto parse_and_check(const std::string& source, const std::string& filename)
-    -> std::variant<CompileContext, CompileError>;
 
 /// Executes a command and returns its output (ANSI-stripped) and exit code.
 auto execute_command(const std::string& cmd, int timeout_seconds = 120)

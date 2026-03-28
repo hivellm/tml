@@ -601,6 +601,27 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         }
         locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
 
+        // Register for drop if the semantic type implements Drop.
+        // Opaque pointer types (List[T], Buffer, etc.) have LLVM type "ptr",
+        // so we use the semantic type to find the real type name for drop.
+        {
+            types::TypePtr sem = semantic_type ? semantic_type : semantic_var_type;
+            if (sem) {
+                std::string drop_type_name;
+                if (sem->is<types::NamedType>()) {
+                    const auto& named = sem->as<types::NamedType>();
+                    if (!named.type_args.empty()) {
+                        drop_type_name = mangle_struct_name(named.name, named.type_args);
+                    } else {
+                        drop_type_name = named.name;
+                    }
+                }
+                if (!drop_type_name.empty() && !env_.is_trivially_destructible(drop_type_name)) {
+                    register_for_drop(var_name, alloca_reg, drop_type_name, "ptr");
+                }
+            }
+        }
+
         // Register heap Str for automatic free at scope exit.
         // Requires BOTH: semantic type is Str AND init expression may produce heap Str.
         // This prevents freeing non-Str ptr types (List, Box, etc.) that have own lifecycle.
@@ -1123,6 +1144,26 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // are shared with the collection. Dropping the copy's fields would free shared data,
     // causing heap corruption when the collection is later accessed.
     std::string type_name = extract_type_name_for_drop(var_type);
+    // For opaque pointer types (like List[T] with handle: *Unit), the LLVM type is
+    // just "ptr" which gives empty type_name. Use semantic type to find the real name.
+    if (type_name.empty() && var_type == "ptr") {
+        // Try semantic_var_type first, then semantic_type from locals
+        types::TypePtr sem = semantic_var_type;
+        if (!sem && var_info.semantic_type) {
+            sem = var_info.semantic_type;
+        }
+        if (sem) {
+            if (sem->is<types::NamedType>()) {
+                const auto& named = sem->as<types::NamedType>();
+                if (!named.type_args.empty()) {
+                    // Generic type like List[I64] → mangle to List__I64
+                    type_name = mangle_struct_name(named.name, named.type_args);
+                } else {
+                    type_name = named.name;
+                }
+            }
+        }
+    }
     bool suppress_field_drops = false;
     if (let.init.has_value()) {
         const auto& init_expr = *let.init.value();
@@ -1135,6 +1176,14 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (suppress_field_drops) {
         // Only register direct Drop impl (not field-level drops)
         bool has_direct_drop = env_.type_implements(type_name, "Drop");
+        // For generic types (List__I64), also check base type (List)
+        if (!has_direct_drop) {
+            auto sep = type_name.find("__");
+            if (sep != std::string::npos) {
+                std::string base = type_name.substr(0, sep);
+                has_direct_drop = env_.type_implements(base, "Drop");
+            }
+        }
         if (has_direct_drop) {
             register_for_drop(var_name, alloca_reg, type_name, var_type);
         }

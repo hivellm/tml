@@ -934,6 +934,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             }
         }
 
+        // Emit drops before implicit return (must happen BEFORE pop_drop_scope)
+        if (!block_terminated_) {
+            emit_all_drops();
+        }
         pop_drop_scope();
     }
 
