@@ -70,6 +70,7 @@ std::any provide_read_source(QueryContext& ctx, const QueryKey& key) {
     try {
         std::ifstream file(rk.file_path);
         if (!file) {
+            TML_LOG_ERROR("query", "[Q005] Source file not found: " << rk.file_path);
             result.error_message = "Cannot open file: " + rk.file_path;
             return result;
         }
@@ -240,6 +241,13 @@ std::any provide_typecheck_module(QueryContext& ctx, const QueryKey& key) {
         return result;
     }
 
+    // Emit type checker warnings to stderr (non-blocking)
+    if (checker.has_warnings()) {
+        for (const auto& w : checker.warnings()) {
+            TML_LOG_WARN("typecheck", w.code << ": " << w.message);
+        }
+    }
+
     result.env =
         std::make_shared<types::TypeEnv>(std::move(std::get<types::TypeEnv>(check_result)));
     result.registry = registry;
@@ -313,6 +321,14 @@ std::any provide_hir_lower(QueryContext& ctx, const QueryKey& key) {
     auto env_copy = *tc.env;
     hir::HirBuilder hir_builder(env_copy);
     auto hir_module = hir_builder.lower_module(*parsed.module);
+
+    if (hir_builder.has_errors()) {
+        // HIR lowering produced errors — log them and mark as failed
+        for (const auto& err : hir_builder.errors()) {
+            TML_LOG_ERROR("query", "[" << err.code << "] " << err.message);
+        }
+        return result;
+    }
 
     result.hir_module = std::make_shared<hir::HirModule>(std::move(hir_module));
     result.success = true;

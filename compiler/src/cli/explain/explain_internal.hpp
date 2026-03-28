@@ -19,6 +19,8 @@
 //! | `backend_errors.cpp`  | N001-N008    | Linker (LLD) errors            |
 //! | `testing_errors.cpp`  | X001-X010    | Test runner errors             |
 //! | `reflection_errors.cpp` | R001-R005  | Reflection intrinsic errors    |
+//! | `query_errors.cpp`      | Q001-Q010  | Query system errors            |
+//! | `format_errors.cpp`     | F001-F010  | Formatter/linter rules         |
 
 #pragma once
 
@@ -59,5 +61,11 @@ const std::unordered_map<std::string, std::string>& get_testing_explanations();
 
 /// Get explanations for reflection intrinsic errors (R001-R005)
 const std::unordered_map<std::string, std::string>& get_reflection_explanations();
+
+/// Get explanations for query system errors (Q001-Q010)
+const std::unordered_map<std::string, std::string>& get_query_explanations();
+
+/// Get explanations for formatter/linter rule errors (F001-F010)
+const std::unordered_map<std::string, std::string>& get_format_explanations();
 
 } // namespace tml::cli::explain

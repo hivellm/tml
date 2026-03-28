@@ -281,10 +281,15 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
         uint16_t ver_major = 0, ver_minor = 0;
         uint32_t entry_count = 0;
 
-        if (!read_u32(in, magic) || magic != INCR_CACHE_MAGIC)
+        if (!read_u32(in, magic) || magic != INCR_CACHE_MAGIC) {
+            TML_LOG_ERROR("query", "[Q002] Incremental cache read failed: invalid magic number");
             return false;
-        if (!read_u16(in, ver_major) || ver_major != INCR_CACHE_VERSION_MAJOR)
+        }
+        if (!read_u16(in, ver_major) || ver_major != INCR_CACHE_VERSION_MAJOR) {
+            TML_LOG_ERROR("query", "[Q003] Incremental cache version mismatch: expected major "
+                                       << INCR_CACHE_VERSION_MAJOR << " got " << ver_major);
             return false;
+        }
         if (!read_u16(in, ver_minor))
             return false;
         if (!read_u32(in, entry_count))
@@ -305,8 +310,11 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
         }
 
         // Sanity check: a single compilation should not have more than 10K entries
-        if (entry_count > 10000)
+        if (entry_count > 10000) {
+            TML_LOG_ERROR("query", "[Q002] Incremental cache read failed: entry count "
+                                       << entry_count << " exceeds sanity limit");
             return false;
+        }
 
         // Read entries
         entries_.reserve(entry_count);
@@ -356,6 +364,8 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
         TML_LOG_DEBUG("incr", "Loaded incremental cache: " << entries_.size() << " entries");
         return true;
     } catch (...) {
+        TML_LOG_ERROR("query",
+                      "[Q002] Incremental cache read failed: exception while parsing cache file");
         entries_.clear();
         return false;
     }

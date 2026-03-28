@@ -31,6 +31,7 @@
 #include "types/env.hpp"
 #include "types/type.hpp"
 
+#include <unordered_set>
 #include <vector>
 
 namespace tml::types {
@@ -80,6 +81,16 @@ public:
         return !errors_.empty();
     }
 
+    /// Returns all accumulated warnings.
+    [[nodiscard]] auto warnings() const -> const std::vector<TypeError>& {
+        return warnings_;
+    }
+
+    /// Returns true if any warnings were emitted.
+    [[nodiscard]] auto has_warnings() const -> bool {
+        return !warnings_.empty();
+    }
+
     /// Sets the module registry for import resolution.
     void set_module_registry(std::shared_ptr<ModuleRegistry> registry) {
         env_.set_module_registry(std::move(registry));
@@ -93,6 +104,9 @@ public:
 private:
     TypeEnv env_;
     std::vector<TypeError> errors_;
+    std::vector<TypeError> warnings_;
+    std::unordered_set<std::string> read_vars_; ///< Variables that have been read (for S014).
+    bool returned_in_block_ = false; ///< True after a return stmt in current block (for S016).
     TypePtr current_return_type_ = nullptr;
     TypePtr current_self_type_ = nullptr; // For resolving 'This' in impl blocks
     std::unordered_map<std::string, TypePtr>
@@ -231,6 +245,7 @@ private:
 
     void error(const std::string& message, SourceSpan span);
     void error(const std::string& message, SourceSpan span, const std::string& code);
+    void warning(const std::string& message, SourceSpan span, const std::string& code);
 
     // Error message improvements
     auto find_similar_names(const std::string& name, const std::vector<std::string>& candidates,

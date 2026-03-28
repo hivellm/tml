@@ -70,6 +70,20 @@
 
 namespace tml::hir {
 
+/// An error discovered during HIR lowering.
+///
+/// HIR errors indicate issues that the type checker did not catch, or edge
+/// cases in the lowering process itself (unsupported expressions, failed
+/// type resolution, monomorphization problems).
+///
+/// Error codes use the "H" prefix (H001-H999).
+struct HirError {
+    std::string message;            ///< Error description.
+    SourceSpan span;                ///< Source location where the error occurred.
+    std::string code;               ///< Error code (e.g., "H001").
+    std::vector<std::string> notes; ///< Additional context or suggestions.
+};
+
 /// Tracks monomorphized instances of generic types and functions.
 ///
 /// The cache prevents duplicate instantiations and provides consistent naming
@@ -204,6 +218,20 @@ public:
     explicit HirBuilder(types::TypeEnv& type_env);
 
     // ========================================================================
+    // Error Reporting
+    // ========================================================================
+
+    /// Returns true if any errors were recorded during lowering.
+    [[nodiscard]] auto has_errors() const -> bool {
+        return !errors_.empty();
+    }
+
+    /// Returns all accumulated errors.
+    [[nodiscard]] auto errors() const -> const std::vector<HirError>& {
+        return errors_;
+    }
+
+    // ========================================================================
     // Top-Level Lowering
     // ========================================================================
 
@@ -257,6 +285,22 @@ public:
     auto lower_class_to_impl(const parser::ClassDecl& class_decl) -> HirImpl;
 
 private:
+    // ========================================================================
+    // Error Recording
+    // ========================================================================
+
+    /// Record an error discovered during HIR lowering.
+    ///
+    /// Errors are collected as a side-effect and can be checked after
+    /// lower_module() returns via has_errors() and errors().
+    ///
+    /// @param message Human-readable error description
+    /// @param span Source location of the error
+    /// @param code Error code (e.g., "H001")
+    /// @param notes Optional additional context
+    void hir_error(const std::string& message, SourceSpan span, const std::string& code,
+                   std::vector<std::string> notes = {});
+
     // ========================================================================
     // Expression Lowering
     // ========================================================================
@@ -497,6 +541,15 @@ private:
     /// Current impl self type for resolving 'This'/'Self' types.
     /// Set when lowering impl methods, cleared after.
     std::optional<HirType> current_impl_self_type_ = std::nullopt;
+
+    /// Errors accumulated during HIR lowering.
+    std::vector<HirError> errors_;
+
+    /// Current monomorphization depth for detecting infinite recursion.
+    int mono_depth_ = 0;
+
+    /// Maximum allowed monomorphization depth before emitting H004.
+    static constexpr int kMaxMonoDepth = 128;
 };
 
 } // namespace tml::hir

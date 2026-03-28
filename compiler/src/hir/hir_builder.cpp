@@ -133,6 +133,11 @@ auto MonomorphizationCache::mangle_name(const std::string& base, const std::vect
 
 HirBuilder::HirBuilder(types::TypeEnv& type_env) : type_env_(type_env) {}
 
+void HirBuilder::hir_error(const std::string& message, SourceSpan span, const std::string& code,
+                           std::vector<std::string> notes) {
+    errors_.push_back(HirError{message, span, code, std::move(notes)});
+}
+
 // ============================================================================
 // Module Lowering
 // ============================================================================
@@ -736,10 +741,32 @@ auto HirBuilder::current_return_type() const -> HirType {
 
 void HirBuilder::request_monomorphization(const std::string& func_name,
                                           const std::vector<HirType>& type_args) {
+    // H003: Check for null type arguments indicating an invalid instantiation
+    for (size_t i = 0; i < type_args.size(); ++i) {
+        if (!type_args[i]) {
+            SourceSpan span{}; // No span available at request time
+            hir_error("Monomorphization of '" + func_name +
+                          "' has null type argument at position " + std::to_string(i),
+                      span, "H003");
+            return; // Skip this invalid request
+        }
+    }
     mono_requests_.push_back({func_name, type_args});
 }
 
 void HirBuilder::process_monomorphizations() {
+    // H004: Check monomorphization depth to detect infinite recursion
+    ++mono_depth_;
+    if (mono_depth_ > kMaxMonoDepth) {
+        SourceSpan span{};
+        hir_error("Monomorphization depth exceeded (" + std::to_string(kMaxMonoDepth) +
+                      ") — possible infinite generic recursion",
+                  span, "H004");
+        mono_requests_.clear();
+        --mono_depth_;
+        return;
+    }
+
     // Process pending monomorphization requests.
     // Each request represents a call to a generic function with concrete type arguments.
     // For now, we just track the mangled names - actual instantiation will happen
@@ -748,6 +775,7 @@ void HirBuilder::process_monomorphizations() {
         mono_cache_.get_or_create_func(request.func_name, request.type_args);
     }
     mono_requests_.clear();
+    --mono_depth_;
 }
 
 auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
@@ -755,7 +783,12 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
     // For now, create a basic type mapping
     if (type.is<parser::NamedType>()) {
         const auto& named = type.as<parser::NamedType>();
-        if (!named.path.segments.empty()) {
+        if (named.path.segments.empty()) {
+            // H002: Named type with empty path — type resolution failed
+            hir_error("Type resolution failed: named type has empty path", type.span, "H002");
+            return types::make_unit();
+        }
+        {
             const std::string& name = named.path.segments.back();
 
             // Handle primitive types
@@ -798,6 +831,23 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
                 auto result = std::make_shared<types::Type>();
                 result->kind = types::ClassType{name, "", {}};
                 return result;
+            }
+
+            // H005: Check if this is an unresolved type parameter
+            // If the current function has generic params and this name matches one,
+            // it means monomorphization failed to substitute it with a concrete type.
+            if (auto sig = type_env_.lookup_func(current_func_name_)) {
+                for (const auto& tp : sig->type_params) {
+                    if (tp == name) {
+                        hir_error("Type parameter '" + name +
+                                      "' was not resolved to a concrete type in function '" +
+                                      current_func_name_ + "'",
+                                  type.span, "H005",
+                                  {"This may indicate a missing monomorphization or "
+                                   "unresolved generic parameter"});
+                        break;
+                    }
+                }
             }
 
             // For user-defined types (structs, enums), create a NamedType
@@ -875,6 +925,8 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
         return result;
     }
 
+    // H002: Unrecognized type node — could not resolve to any known type
+    hir_error("Type resolution failed: unrecognized type node", type.span, "H002");
     return types::make_unit();
 }
 

@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include "log/log.hpp"
 #include "query/query_cache.hpp"
 #include "query/query_deps.hpp"
 #include "query/query_fingerprint.hpp"
@@ -203,6 +204,14 @@ template <typename ResultType> ResultType QueryContext::force(const QueryKey& ke
     // 3. Check for cycles
     auto cycle = deps_.detect_cycle(key);
     if (cycle) {
+        // Build cycle path string for the error message
+        std::string cycle_path;
+        for (size_t i = 0; i < cycle->size(); ++i) {
+            if (i > 0)
+                cycle_path += " -> ";
+            cycle_path += query_kind_name(query_kind((*cycle)[i]));
+        }
+        TML_LOG_ERROR("query", "[Q001] Query cycle detected: " << cycle_path);
         ResultType fail_result{};
         fail_result.success = false;
         return fail_result;
@@ -212,6 +221,8 @@ template <typename ResultType> ResultType QueryContext::force(const QueryKey& ke
     auto kind = query_kind(key);
     const auto* provider = providers_.get_provider(kind);
     if (!provider) {
+        TML_LOG_ERROR("query",
+                      "[Q004] No provider registered for query kind: " << query_kind_name(kind));
         ResultType fail_result{};
         fail_result.success = false;
         return fail_result;
@@ -239,6 +250,8 @@ template <typename ResultType> ResultType QueryContext::force(const QueryKey& ke
     try {
         result = std::any_cast<ResultType>(raw_result);
     } catch (const std::bad_any_cast&) {
+        TML_LOG_ERROR(
+            "query", "[Q004] Query result type mismatch for query kind: " << query_kind_name(kind));
         result.success = false;
         return result;
     }

@@ -432,6 +432,24 @@ void emit_all_type_errors(DiagnosticEmitter& emitter, const std::vector<types::T
     }
 }
 
+void emit_all_type_warnings(DiagnosticEmitter& emitter,
+                            const std::vector<types::TypeError>& warnings) {
+    for (const auto& w : warnings) {
+        std::string code = w.code.empty() ? "S001" : w.code;
+        emitter.warning(code, w.message, w.span, w.notes);
+    }
+}
+
+void emit_hir_error(DiagnosticEmitter& emitter, const hir::HirError& error) {
+    emitter.error(error.code, error.message, error.span, error.notes);
+}
+
+void emit_all_hir_errors(DiagnosticEmitter& emitter, const std::vector<hir::HirError>& errors) {
+    for (const auto& error : errors) {
+        emit_hir_error(emitter, error);
+    }
+}
+
 void emit_all_codegen_errors(DiagnosticEmitter& emitter,
                              const std::vector<codegen::LLVMGenError>& errors) {
     for (const auto& error : errors) {

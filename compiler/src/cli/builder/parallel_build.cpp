@@ -600,6 +600,15 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
 
         const auto& env = std::get<types::TypeEnv>(check_result);
 
+        // Emit type checker warnings (non-blocking)
+        if (checker.has_warnings()) {
+            for (const auto& w : checker.warnings()) {
+                TML_LOG_WARN("build", job->source_file.string()
+                                          << ":" << w.span.start.line << ":" << w.span.start.column
+                                          << ": warning[" << w.code << "]: " << w.message);
+            }
+        }
+
         // Borrow checking (Polonius or NLL)
         std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
         if (options.polonius) {
@@ -630,6 +639,17 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             auto env_copy = env;
             hir::HirBuilder hir_builder(env_copy);
             auto hir_module = hir_builder.lower_module(module);
+
+            if (hir_builder.has_errors()) {
+                std::ostringstream err;
+                for (const auto& e : hir_builder.errors()) {
+                    err << job->source_file.string() << ": HIR error [" << e.code
+                        << "]: " << e.message << "\n";
+                }
+                job->error_message = err.str();
+                TML_LOG_ERROR("build", job->error_message);
+                return false;
+            }
 
             mir::HirMirBuilder hir_mir_builder(env);
             auto mir_module = hir_mir_builder.build(hir_module);

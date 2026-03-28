@@ -37,6 +37,22 @@ Main: *verifies* *commits* *reports to user*
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ MANDATORY: NEVER Defer — Implement or Build the Infrastructure ⛔
+
+**If a task item requires infrastructure that doesn't exist, BUILD THE INFRASTRUCTURE. Do not mark it as "deferred".**
+
+This is a HARD REQUIREMENT that already exists in `.claude/rules/no-deferred.md` but keeps being violated.
+
+**Rules:**
+
+1. **"Needs new infrastructure" is NOT a valid reason to defer** — create the infrastructure
+2. **"Requires architectural change" is NOT a valid reason to defer** — make the change
+3. **If you truly cannot implement something, implement the DEPENDENCY FIRST, then the task**
+4. **The ONLY acceptable state is DONE or IN PROGRESS** — never "deferred"
+5. **If agents defer items, send them back to finish** — do not accept deferred results
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Update tasks.md After EVERY Implementation Cycle ⛔
 
 **After ANY work is completed — by you or by agents — you MUST immediately update the corresponding tasks.md file.**

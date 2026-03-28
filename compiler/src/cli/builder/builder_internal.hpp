@@ -165,9 +165,19 @@ void emit_all_parser_errors(DiagnosticEmitter& emitter,
 // Emit all type errors
 void emit_all_type_errors(DiagnosticEmitter& emitter, const std::vector<types::TypeError>& errors);
 
+// Emit all type warnings
+void emit_all_type_warnings(DiagnosticEmitter& emitter,
+                            const std::vector<types::TypeError>& warnings);
+
 // Emit all codegen errors
 void emit_all_codegen_errors(DiagnosticEmitter& emitter,
                              const std::vector<codegen::LLVMGenError>& errors);
+
+// Emit an HIR error using the diagnostic emitter
+void emit_hir_error(DiagnosticEmitter& emitter, const hir::HirError& error);
+
+// Emit all HIR errors
+void emit_all_hir_errors(DiagnosticEmitter& emitter, const std::vector<hir::HirError>& errors);
 
 // Emit a borrow error using the diagnostic emitter
 void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& error);

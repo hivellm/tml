@@ -347,6 +347,10 @@ void TypeChecker::error(const std::string& message, SourceSpan span, const std::
     errors_.push_back(TypeError{message, span, {}, code});
 }
 
+void TypeChecker::warning(const std::string& message, SourceSpan span, const std::string& code) {
+    warnings_.push_back(TypeError{message, span, {}, code});
+}
+
 // Check if a block contains a return statement or has an implicit return (final expression)
 bool TypeChecker::block_has_return(const parser::BlockExpr& block) {
     // Check if any statement has return

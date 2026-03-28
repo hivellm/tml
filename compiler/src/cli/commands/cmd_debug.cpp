@@ -115,6 +115,14 @@ static void emit_all_type_errors(DiagnosticEmitter& emitter,
     }
 }
 
+static void emit_all_type_warnings(DiagnosticEmitter& emitter,
+                                   const std::vector<types::TypeError>& warnings) {
+    for (const auto& w : warnings) {
+        std::string code = w.code.empty() ? "S001" : w.code;
+        emitter.warning(code, w.message, w.span, w.notes);
+    }
+}
+
 int run_lex(const std::string& path, bool verbose) {
     auto& diag = get_diagnostic_emitter();
 
@@ -279,6 +287,11 @@ int run_check(const std::string& path, bool verbose) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         emit_all_type_errors(diag, errors);
         return 1;
+    }
+
+    // Emit type checker warnings (non-blocking)
+    if (checker.has_warnings()) {
+        emit_all_type_warnings(diag, checker.warnings());
     }
 
     if (verbose) {

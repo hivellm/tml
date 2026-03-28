@@ -804,6 +804,11 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
 
     TML_DEBUG_LN("[DEBUG] check_func_body called for function: " << func.name);
     env_.push_scope();
+
+    // S014: Save and reset read_vars_ for this function scope
+    auto saved_read_vars = std::move(read_vars_);
+    read_vars_.clear();
+
     current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
     // Set async context flag for await expression checking
@@ -965,6 +970,22 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
         // Check return type compatibility (simplified for now)
         (void)body_type;
     }
+
+    // S014: Check for unused parameters (local variables are checked in check_block)
+    for (const auto& p : func.params) {
+        if (p.pattern->is<parser::IdentPattern>()) {
+            const auto& ident = p.pattern->as<parser::IdentPattern>();
+            // Skip parameters starting with _ (intentionally unused)
+            if (!ident.name.empty() && ident.name[0] != '_') {
+                if (read_vars_.find(ident.name) == read_vars_.end()) {
+                    warning("Unused variable '" + ident.name + "'", ident.span, "S014");
+                }
+            }
+        }
+    }
+
+    // Restore read_vars_ from before this function
+    read_vars_ = std::move(saved_read_vars);
 
     env_.pop_scope();
     current_return_type_ = nullptr;

@@ -135,6 +135,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         return 1;
     }
 
+    // Emit type checker warnings (non-blocking)
+    if (checker.has_warnings()) {
+        emit_all_type_warnings(diag, checker.warnings());
+    }
+
     const auto& env = std::get<types::TypeEnv>(check_result);
 
     // Run borrow checker (ownership and borrowing validation)
@@ -163,6 +168,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         hir::HirBuilder hir_builder(env_copy);
         auto hir_module = hir_builder.lower_module(module);
 
+        if (hir_builder.has_errors()) {
+            emit_all_hir_errors(diag, hir_builder.errors());
+            return 1;
+        }
+
         fs::path build_dir = output_dir.empty() ? get_build_dir(false) : fs::path(output_dir);
         fs::create_directories(build_dir);
 
@@ -190,6 +200,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);
         auto hir_module = hir_builder.lower_module(module);
+
+        if (hir_builder.has_errors()) {
+            emit_all_hir_errors(diag, hir_builder.errors());
+            return 1;
+        }
 
         TML_LOG_INFO("build", "HIR: Built " << hir_module.functions.size() << " functions, "
                                             << hir_module.structs.size() << " structs, "
@@ -385,6 +400,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);
         auto hir_module = hir_builder.lower_module(module);
+
+        if (hir_builder.has_errors()) {
+            emit_all_hir_errors(diag, hir_builder.errors());
+            return 1;
+        }
 
         TML_LOG_INFO("build", "HIR: Built " << hir_module.functions.size() << " functions, "
                                             << hir_module.structs.size() << " structs, "

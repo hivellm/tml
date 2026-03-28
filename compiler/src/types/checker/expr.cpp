@@ -423,6 +423,9 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit, TypePtr expected
 }
 
 auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -> TypePtr {
+    // S014: Track variable reads for unused variable detection
+    read_vars_.insert(ident.name);
+
     auto sym = env_.current_scope()->lookup(ident.name);
     if (!sym) {
         // Check if it's a function
@@ -1125,16 +1128,51 @@ auto TypeChecker::check_block(const parser::BlockExpr& block) -> TypePtr {
     env_.push_scope();
     TypePtr result = make_unit();
 
+    // Save and reset the returned_in_block_ flag for this block scope
+    bool saved_returned = returned_in_block_;
+    returned_in_block_ = false;
+
     for (const auto& stmt : block.stmts) {
+        // S016: Warn if code follows a return in the same block
+        if (returned_in_block_) {
+            warning("Unreachable code after return", stmt->span, "S016");
+            // Still type-check for better error reporting, but don't keep looping warnings
+            result = check_stmt(*stmt);
+            continue;
+        }
+
         TML_DEBUG_LN("[check_block] Checking statement at index " << stmt->kind.index());
         result = check_stmt(*stmt);
+
+        // Check if this statement was a return (ExprStmt containing ReturnExpr)
+        if (std::holds_alternative<parser::ExprStmt>(stmt->kind)) {
+            const auto& expr_stmt = std::get<parser::ExprStmt>(stmt->kind);
+            if (expr_stmt.expr && expr_stmt.expr->is<parser::ReturnExpr>()) {
+                returned_in_block_ = true;
+            }
+        }
     }
 
     if (block.expr) {
+        if (returned_in_block_) {
+            warning("Unreachable code after return", (*block.expr)->span, "S016");
+        }
         TML_DEBUG_LN("[check_block] Checking trailing expression");
         // Pass expected return type for implicit returns (array literal inference)
         result = check_expr(**block.expr, current_return_type_);
     }
+
+    // S014: Check for unused local variables before the scope is popped
+    for (const auto& [name, sym] : env_.current_scope()->symbols()) {
+        if (!name.empty() && name[0] != '_') {
+            if (read_vars_.find(name) == read_vars_.end()) {
+                warning("Unused variable '" + name + "'", sym.span, "S014");
+            }
+        }
+    }
+
+    // Restore parent block's returned state
+    returned_in_block_ = saved_returned;
 
     env_.pop_scope();
     TML_DEBUG_LN("[check_block] Exiting block");

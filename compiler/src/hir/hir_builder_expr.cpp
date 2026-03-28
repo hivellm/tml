@@ -231,7 +231,8 @@ auto HirBuilder::lower_expr(const parser::Expr& expr) -> HirExprPtr {
             } else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
                 return lower_template_literal_segments(e.segments, expr.span);
             } else {
-                // Fallback for unsupported expressions
+                // H001: Unsupported expression type in HIR lowering
+                hir_error("Unsupported expression type in HIR lowering", expr.span, "H001");
                 return make_hir_literal(fresh_id(), int64_t(0), types::make_unit(), expr.span);
             }
         },

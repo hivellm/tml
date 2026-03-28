@@ -27,6 +27,8 @@ TML_MODULE("compiler")
 //! - `backend_errors.cpp`  — K001-K011, N001-N008
 //! - `testing_errors.cpp`  — X001-X010
 //! - `reflection_errors.cpp` — R001-R005
+//! - `query_errors.cpp`      — Q001-Q010
+//! - `format_errors.cpp`     — F001-F010
 
 #include "cli/commands/cmd_explain.hpp"
 #include "cli/diagnostic.hpp"
@@ -61,6 +63,8 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         const auto& backend = explain::get_backend_explanations();
         const auto& testing = explain::get_testing_explanations();
         const auto& reflection = explain::get_reflection_explanations();
+        const auto& query = explain::get_query_explanations();
+        const auto& format = explain::get_format_explanations();
 
         merged.insert(lexer.begin(), lexer.end());
         merged.insert(parser.begin(), parser.end());
@@ -73,6 +77,8 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         merged.insert(backend.begin(), backend.end());
         merged.insert(testing.begin(), testing.end());
         merged.insert(reflection.begin(), reflection.end());
+        merged.insert(query.begin(), query.end());
+        merged.insert(format.begin(), format.end());
 
         initialized = true;
     }
@@ -157,6 +163,8 @@ int run_explain(const std::string& code, bool /*verbose*/) {
     std::cerr << "  N001-N008   Linker (LLD) errors\n";
     std::cerr << "  X001-X010   Test runner errors\n";
     std::cerr << "  R001-R005   Reflection intrinsic errors\n";
+    std::cerr << "  Q001-Q010   Query system errors\n";
+    std::cerr << "  F001-F010   Formatter/linter rule errors\n";
     std::cerr << "  E001-E006   General errors\n";
 
     return 1;

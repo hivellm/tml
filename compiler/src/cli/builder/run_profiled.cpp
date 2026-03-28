@@ -147,6 +147,14 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Emit type checker warnings to stderr (non-blocking)
+    if (checker.has_warnings()) {
+        for (const auto& w : checker.warnings()) {
+            std::cerr << path << ":" << w.span.start.line << ":" << w.span.start.column
+                      << ": warning[" << w.code << "]: " << w.message << "\n";
+        }
+    }
+
     // Phase 4.5: Borrow Checking (Polonius or NLL)
     phase_start = Clock::now();
     std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
