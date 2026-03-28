@@ -36,6 +36,7 @@ TML_MODULE("test")
 #include <set>
 #include <sstream>
 #include <thread>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -1028,6 +1029,181 @@ TestRunResult run_tests(const TestConfig& config) {
 
     TML_LOG_INFO("test", "[coordinator] Running " << test_files.size() << " tests in "
                                                   << suites.size() << " suites");
+
+    // ========================================================================
+    // UNIFIED BINARY PATH (Zig model): compile all tests into one .exe.
+    // Enabled with config.use_unified_binary=true (--unified CLI flag).
+    // Compiles all test files in parallel, links into tml_unified.exe, then
+    // executes with --run-all, parsing NDJSON with global_index → suite/test mapping.
+    // ========================================================================
+    if (config.use_unified_binary) {
+        auto unified_start = Clock::now();
+        TML_LOG_INFO("test", "[unified] Compiling " << test_files.size()
+                                                    << " test files into unified binary...");
+
+        CompileConfig compile_config;
+        compile_config.verbose = config.verbose;
+        compile_config.coverage = config.coverage;
+        compile_config.optimization_level = 0;
+        compile_config.num_threads = config.compile_threads;
+        compile_config.no_cache = config.no_cache;
+
+        std::atomic<bool> should_stop_unified{false};
+        std::vector<UnifiedTestMapping> mapping;
+        auto unified_result =
+            compile_unified_binary(suites, compile_config, should_stop_unified, mapping);
+
+        auto compile_end = Clock::now();
+        auto compile_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(compile_end - unified_start)
+                .count();
+
+        if (!unified_result.success) {
+            TML_LOG_ERROR("test", "[unified] Compilation failed: " << unified_result.error_message);
+            for (const auto& pfe : unified_result.per_file_errors) {
+                TML_LOG_ERROR("test", "[unified] " << pfe.file_path << ": " << pfe.error);
+                result.compilation_errors++;
+            }
+            return result;
+        }
+
+        TML_LOG_INFO("test", "[unified] Compilation done in " << compile_ms << "ms → "
+                                                              << unified_result.exe_path);
+
+        // Execute the unified binary once with --run-all
+        ProcessOptions run_opts;
+        run_opts.exe_path = unified_result.exe_path;
+        run_opts.args = {"--run-all"};
+        // Timeout: per_test_timeout * test_count + headroom
+        if (config.per_test_timeout_us > 0) {
+            int64_t total_s =
+                (config.per_test_timeout_us * static_cast<int64_t>(mapping.size())) / 1000000 + 30;
+            run_opts.timeout = std::chrono::seconds(static_cast<int>(total_s));
+        } else {
+            run_opts.timeout = std::chrono::seconds(config.timeout_seconds * 10);
+        }
+
+        auto run_start = Clock::now();
+        auto proc = Process::launch(run_opts);
+
+        std::string stdout_buf;
+        std::string stderr_buf;
+
+        if (proc) {
+            // Read output while process runs
+            while (!proc->is_done()) {
+                auto chunk = proc->read_stdout();
+                if (!chunk.empty())
+                    stdout_buf += chunk;
+                auto err = proc->read_stderr();
+                if (!err.empty())
+                    stderr_buf += err;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            auto final_chunk = proc->read_stdout();
+            if (!final_chunk.empty())
+                stdout_buf += final_chunk;
+            auto final_err = proc->read_stderr();
+            if (!final_err.empty())
+                stderr_buf += final_err;
+            auto proc_result = proc->wait(std::chrono::seconds(5));
+            if (!proc_result.stderr_output.empty())
+                stderr_buf += proc_result.stderr_output;
+        }
+
+        auto run_end = Clock::now();
+        auto run_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(run_end - run_start).count();
+        auto total_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(run_end - unified_start).count();
+
+        TML_LOG_INFO("test", "[unified] Execution done in " << run_ms << "ms (total: " << total_ms
+                                                            << "ms)");
+
+        // Build suite results from NDJSON output
+        // Map suite_name → SuiteRunResult
+        std::unordered_map<std::string, SuiteRunResult> suite_map;
+        for (const auto& suite : suites) {
+            SuiteRunResult sr;
+            sr.name = suite.name;
+            sr.group = suite.group;
+            sr.test_count = static_cast<int>(suite.tests.size());
+            sr.compile_ok = true;
+            sr.compile_time_us = unified_result.compile_time_us;
+            sr.tests.resize(suite.tests.size());
+            for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
+                sr.tests[t].index = t;
+                sr.tests[t].name = suite.tests[t].test_name;
+                sr.tests[t].file = suite.tests[t].file_path;
+            }
+            suite_map[suite.name] = std::move(sr);
+        }
+
+        // Parse NDJSON output — global indices map back to suite+test via mapping[]
+        std::istringstream stream(stdout_buf);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            if (line.empty())
+                continue;
+            auto parsed = parse_json_event(line);
+            if (!parsed.ok)
+                continue;
+            std::visit(
+                [&](auto&& ev) {
+                    using T = std::decay_t<decltype(ev)>;
+                    if constexpr (std::is_same_v<T, TestPassEvent>) {
+                        if (ev.index >= 0 && ev.index < static_cast<int>(mapping.size())) {
+                            const auto& m = mapping[ev.index];
+                            auto it = suite_map.find(suites[m.suite_index].name);
+                            if (it != suite_map.end() &&
+                                m.test_index_in_suite < static_cast<int>(it->second.tests.size())) {
+                                auto& t = it->second.tests[m.test_index_in_suite];
+                                t.passed = true;
+                                t.duration_us = ev.duration_us;
+                                it->second.passed++;
+                            }
+                        }
+                    } else if constexpr (std::is_same_v<T, TestFailEvent>) {
+                        if (ev.index >= 0 && ev.index < static_cast<int>(mapping.size())) {
+                            const auto& m = mapping[ev.index];
+                            auto it = suite_map.find(suites[m.suite_index].name);
+                            if (it != suite_map.end() &&
+                                m.test_index_in_suite < static_cast<int>(it->second.tests.size())) {
+                                auto& t = it->second.tests[m.test_index_in_suite];
+                                t.passed = false;
+                                t.error = ev.error;
+                                t.duration_us = ev.duration_us;
+                                it->second.failed++;
+                            }
+                        }
+                    }
+                },
+                parsed.event);
+        }
+
+        // Populate result
+        int64_t exec_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(run_end - run_start).count();
+        for (auto& [name, sr] : suite_map) {
+            sr.exec_time_us = exec_us / static_cast<int64_t>(suites.size());
+            result.total_tests += sr.test_count;
+            result.passed += sr.passed;
+            result.failed += sr.failed;
+            result.suites.push_back(std::move(sr));
+        }
+        result.total_duration_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(run_end - unified_start).count();
+
+        TML_LOG_INFO("test", "[unified] Results: " << result.passed << " passed, " << result.failed
+                                                   << " failed out of " << result.total_tests
+                                                   << " tests");
+        TML_LOG_INFO("test", "[unified] Benchmark: compile=" << compile_ms << "ms run=" << run_ms
+                                                             << "ms total=" << total_ms << "ms");
+
+        return result;
+    }
 
     // ========================================================================
     // PER-SUITE PATH: the standard compilation path.

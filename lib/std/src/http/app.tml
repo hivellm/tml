@@ -36,7 +36,8 @@
 //! ```
 
 use core::str
-use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
+use std::collections::List
 use std::http::router::{NODE_STATIC, insert, node_new}
 use std::http::incoming::IncomingMessage
 use std::http::server_response::ServerResponse
@@ -100,7 +101,9 @@ func method_index(method: Str) -> I64 {
 // App — route registration, hooks, server config
 // ════════════════════════════════════════════════════════════════════
 //
-// All fields are I64 to avoid mut-this field access codegen bug.
+// List[I64] fields own the heap memory for each table.
+// The corresponding I64 pointer fields expose data_ptr() for the worker/dispatch ABI
+// (SharedConfig, app_listen, app_dispatch all take I64 raw pointer parameters).
 // Handler functions are stored as I64 fn pointers and cast when calling.
 // Handler signature: func(req: IncomingMessage) -> Str stored as I64.
 //   Use app_build_response(status, content_type, body) in handler bodies.
@@ -108,6 +111,17 @@ func method_index(method: Str) -> I64 {
 // Error hook signature (future): func(req: IncomingMessage, res: ServerResponse, msg: Str)
 
 pub type App {
+    // List buffers — own the backing memory for each table
+    table_buf: List[I64],       // handler table entries (3 I64s per entry: method, path, fn_ptr)
+    mw_buf: List[I64],          // middleware fn_ptr entries
+    trees_buf: List[I64],       // radix tree root pointers (one per HTTP method)
+    on_request_buf: List[I64],  // onRequest hook fn_ptrs
+    pre_handler_buf: List[I64], // preHandler hook fn_ptrs
+    on_send_buf: List[I64],     // onSend hook fn_ptrs
+    on_response_buf: List[I64], // onResponse hook fn_ptrs
+    on_error_buf: List[I64],    // onError hook fn_ptrs
+    ct_parsers_buf: List[I64],  // content-type parser pairs (2 I64s per slot: type_str, fn_ptr)
+    // Raw pointer fields for worker/dispatch ABI (I64 = data_ptr() of corresponding List)
     table: I64,             // ptr to handler table (method, path, fn_ptr entries)
     count: I64,             // number of registered routes
     trees: I64,             // ptr to array of radix tree roots (one per method)
@@ -139,21 +153,49 @@ pub type App {
 impl App {
     /// Create a new App with default settings.
     pub func new() -> App {
-        let table: I64 = lowlevel { mem_alloc(MAX_HANDLERS * ENTRY_SIZE) } as I64
-        let mw_table: I64 = lowlevel { mem_alloc(MAX_MIDDLEWARE * 8) } as I64
-        // Fixed array of METHOD_COUNT radix tree roots, all initialized to 0
-        let trees: I64 = lowlevel { mem_alloc(METHOD_COUNT * 8) } as I64
-        var t: I64 = 0
-        loop (t < METHOD_COUNT) {
-            table_write(trees, t, 0)
-            t = t + 1
-        }
-        let on_request_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
-        let pre_handler_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
-        let on_send_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
-        let on_response_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
-        let on_error_table: I64 = lowlevel { mem_alloc(MAX_HOOKS * 8) } as I64
+        // Allocate handler table: MAX_HANDLERS entries × 3 I64s each (method, path, fn_ptr)
+        let table_buf: List[I64] = List[I64]::new(MAX_HANDLERS * 3)
+        let table: I64 = table_buf.data_ptr()
+
+        // Allocate middleware table: MAX_MIDDLEWARE fn_ptr slots
+        let mw_buf: List[I64] = List[I64]::new(MAX_MIDDLEWARE)
+        let mw_table: I64 = mw_buf.data_ptr()
+
+        // Allocate radix tree roots: METHOD_COUNT slots, all initialized to 0
+        var trees_buf: List[I64] = List[I64]::new(METHOD_COUNT)
+        trees_buf.resize(METHOD_COUNT, 0)
+        let trees: I64 = trees_buf.data_ptr()
+
+        // Allocate lifecycle hook tables: MAX_HOOKS fn_ptr slots each
+        let on_request_buf: List[I64] = List[I64]::new(MAX_HOOKS)
+        let on_request_table: I64 = on_request_buf.data_ptr()
+
+        let pre_handler_buf: List[I64] = List[I64]::new(MAX_HOOKS)
+        let pre_handler_table: I64 = pre_handler_buf.data_ptr()
+
+        let on_send_buf: List[I64] = List[I64]::new(MAX_HOOKS)
+        let on_send_table: I64 = on_send_buf.data_ptr()
+
+        let on_response_buf: List[I64] = List[I64]::new(MAX_HOOKS)
+        let on_response_table: I64 = on_response_buf.data_ptr()
+
+        let on_error_buf: List[I64] = List[I64]::new(MAX_HOOKS)
+        let on_error_table: I64 = on_error_buf.data_ptr()
+
+        // Allocate content-type parser table: 16 slots × 2 I64s each (type_str ptr, fn_ptr)
+        let ct_parsers_buf: List[I64] = List[I64]::new(16 * 2)
+        let ct_parsers: I64 = ct_parsers_buf.data_ptr()
+
         return App {
+            table_buf: table_buf,
+            mw_buf: mw_buf,
+            trees_buf: trees_buf,
+            on_request_buf: on_request_buf,
+            pre_handler_buf: pre_handler_buf,
+            on_send_buf: on_send_buf,
+            on_response_buf: on_response_buf,
+            on_error_buf: on_error_buf,
+            ct_parsers_buf: ct_parsers_buf,
             table: table,
             count: 0,
             trees: trees,
@@ -170,7 +212,7 @@ impl App {
             on_error_table: on_error_table,
             on_error_count: 0,
             error_handler: 0,
-            ct_parsers: lowlevel { mem_alloc(16 * 16) } as I64,  // 16 parser slots x 16 bytes
+            ct_parsers: ct_parsers,
             ct_parser_count: 0,
             read_timeout: 30000,
             write_timeout: 30000,
@@ -238,7 +280,7 @@ impl App {
     /// Call res.end() to short-circuit the pipeline.
     pub func use_middleware(mut this, mw: I64) {
         if this.mw_count >= MAX_MIDDLEWARE { return }
-        table_write(this.mw_table, this.mw_count, mw)
+        this.mw_buf.push(mw)
         this.mw_count = this.mw_count + 1
     }
 
@@ -254,7 +296,7 @@ impl App {
     /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
     pub func add_hook_on_request(mut this, hook: I64) {
         if this.on_request_count >= MAX_HOOKS { return }
-        table_write(this.on_request_table, this.on_request_count, hook)
+        this.on_request_buf.push(hook)
         this.on_request_count = this.on_request_count + 1
     }
 
@@ -262,7 +304,7 @@ impl App {
     /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
     pub func add_hook_pre_handler(mut this, hook: I64) {
         if this.pre_handler_count >= MAX_HOOKS { return }
-        table_write(this.pre_handler_table, this.pre_handler_count, hook)
+        this.pre_handler_buf.push(hook)
         this.pre_handler_count = this.pre_handler_count + 1
     }
 
@@ -270,7 +312,7 @@ impl App {
     /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
     pub func add_hook_on_send(mut this, hook: I64) {
         if this.on_send_count >= MAX_HOOKS { return }
-        table_write(this.on_send_table, this.on_send_count, hook)
+        this.on_send_buf.push(hook)
         this.on_send_count = this.on_send_count + 1
     }
 
@@ -278,7 +320,7 @@ impl App {
     /// Signature: func(req: IncomingMessage, res: ServerResponse) stored as I64.
     pub func add_hook_on_response(mut this, hook: I64) {
         if this.on_response_count >= MAX_HOOKS { return }
-        table_write(this.on_response_table, this.on_response_count, hook)
+        this.on_response_buf.push(hook)
         this.on_response_count = this.on_response_count + 1
     }
 
@@ -286,7 +328,7 @@ impl App {
     /// Signature: func(req: IncomingMessage, res: ServerResponse, msg: Str) stored as I64.
     pub func add_hook_on_error(mut this, hook: I64) {
         if this.on_error_count >= MAX_HOOKS { return }
-        table_write(this.on_error_table, this.on_error_count, hook)
+        this.on_error_buf.push(hook)
         this.on_error_count = this.on_error_count + 1
     }
 
@@ -306,9 +348,9 @@ impl App {
     /// Parser signature: func(body: Str) -> Str (returns parsed result)
     pub func add_content_type_parser(mut this, content_type: Str, parser: I64) {
         if this.ct_parser_count >= 16 { return }
-        let slot_base: I64 = this.ct_parsers + this.ct_parser_count * 16
-        table_write(slot_base, 0, content_type as I64)
-        table_write(slot_base, 1, parser)
+        // Push 2 I64s per slot: content_type string pointer, then parser fn_ptr
+        this.ct_parsers_buf.push(content_type as I64)
+        this.ct_parsers_buf.push(parser)
         this.ct_parser_count = this.ct_parser_count + 1
     }
 

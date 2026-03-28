@@ -469,10 +469,15 @@ static std::string build_stdlib_object(const CompileConfig& config) {
     codegen::LLVMGenOptions lib_opts;
     lib_opts.coverage_enabled = config.coverage;
     lib_opts.library_ir_only = true;
-    lib_opts.lazy_library_defs = false; // Emit ALL public library functions, not just referenced
-                                        // ones. With lazy=true, functions like
-                                        // AllocError::debug_string were missing because nothing
-                                        // referenced them during bootstrap compilation.
+    // Use lazy mode to avoid the hang that occurs when emitting all 5000+ functions
+    // from 287 stdlib modules at once (lazy_library_defs=false hung for minutes).
+    // With library_decls_only=false in unified mode, the stdlib.obj is no longer
+    // linked for symbol resolution — each test .obj has its own internal-linkage
+    // library definitions. The primary purpose of build_stdlib_object() is now to
+    // capture CodegenLibraryState (via capture_library_state()) for fast per-file
+    // codegen. Lazy mode produces the complete set of function signatures needed for
+    // state capture without hanging on full-body emission.
+    lib_opts.lazy_library_defs = true;
     lib_opts.emit_comments = config.verbose;
 #ifdef _WIN32
     lib_opts.target_triple = "x86_64-pc-windows-msvc";
@@ -1362,10 +1367,12 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
             qopts.generate_exe_main = false;
             qopts.test_entry_index = i;
             qopts.cached_library_state = g_stdlib_codegen_state;
-            // library_decls_only=true: emit only declare stubs for library functions.
-            // Definitions come from the pre-compiled stdlib .obj.
-            // This keeps each test .obj tiny (~5-60KB) so LLD can handle 500+ objects.
-            qopts.library_decls_only = true;
+            // library_decls_only=false: each test .obj emits full internal-linkage
+            // library definitions. This matches per-suite mode and avoids missing-symbol
+            // errors from generic instantiations that the stdlib.obj may not contain.
+            // The cached_library_state still provides the fast codegen path (skips
+            // emit_module_pure_tml_functions) — just without the decl-only optimization.
+            qopts.library_decls_only = false;
 
             auto source_dir = fs::path(file_path).parent_path();
             if (source_dir.empty())
@@ -1608,11 +1615,10 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
         all_object_files.insert(all_object_files.end(), runtime_objs.begin(), runtime_objs.end());
     }
 
-    // Add pre-compiled stdlib .obj (contains library function definitions).
-    // Test .obj files only have declare stubs (library_decls_only=true).
-    if (!g_stdlib_obj_path.empty()) {
-        all_object_files.push_back(fs::path(g_stdlib_obj_path));
-    }
+    // NOTE: stdlib .obj is NOT linked in unified mode (library_decls_only=false).
+    // Each test .obj already contains internal-linkage library definitions.
+    // The stdlib.obj would duplicate these and cause LLD multiple-definition errors
+    // for external-linkage symbols.
 
     // ---- Step 7: Link everything into one .exe ----
     auto exe_path = cache_dir / "tml_unified.exe";

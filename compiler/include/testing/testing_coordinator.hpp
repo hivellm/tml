@@ -62,6 +62,7 @@ struct TestConfig {
     int max_compile_suites = 0; // Max suites to compile per run (0 = unlimited)
     std::string root_dir;       // Discovery root (empty = cwd)
     bool debug_layers = false;  // Emit multi-layer IR diagnostics on failure
+    bool use_unified_binary = false; // Compile all tests into one mega-binary (Zig model)
 };
 
 // ============================================================================

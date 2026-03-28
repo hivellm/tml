@@ -161,6 +161,8 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             opts.suite_mode = true; // Suite mode: multiple tests per DLL
         } else if (arg == "--debug-layers") {
             opts.debug_layers = true;
+        } else if (arg == "--unified") {
+            opts.unified_binary = true;
         } else if (arg == "--new-runner") {
             // Ignored - new runner is now the default and only runner
         } else if (arg.starts_with("--output=")) {
@@ -272,6 +274,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.max_compile_suites = opts.max_compile_suites;
     tc.list_suites = opts.list_suites;
     tc.debug_layers = opts.debug_layers;
+    tc.use_unified_binary = opts.unified_binary;
 
     auto result = testing::run_tests(tc);
 

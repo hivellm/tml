@@ -183,6 +183,7 @@ struct TestOptions {
     bool debug_layers = false;              // Emit multi-layer IR diagnostics on failure
     bool new_runner = false;                // Deprecated (always true now)
     int max_compile_suites = 0;             // Max suites to compile per run (0 = unlimited)
+    bool unified_binary = false;            // Compile all tests into one mega-binary (Zig model)
 };
 
 // Run the test command
