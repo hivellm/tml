@@ -591,24 +591,8 @@ pub behavior AsyncIteratorExt: AsyncIterator {
         return Take::new(this, n)
     }
 
-    /// Counts the number of items in the async iterator.
-    ///
-    /// This consumes the iterator.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let count = stream.count().await
-    /// ```
-    // async func count(mut this) -> I64 {
-    //     var n: I64 = 0
-    //     loop (true) {
-    //         when this.next().await {
-    //             Just(_) => n = n + 1,
-    //             Nothing => return n
-    //         }
-    //     }
-    // }
+    // count() — deferred until async/await codegen is implemented
+    // async func count(mut this) -> I64
 }
 
 // ============================================================================

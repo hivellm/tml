@@ -70,8 +70,8 @@
 //! print_test_summary(stats)
 //! ```
 
-use types
-use bench
+use test::types
+use test::bench
 
 /// Output format options
 pub type OutputFormat {
@@ -292,7 +292,7 @@ pub func print_progress_bar(current: I32, total: I32, width: I32) {
         0
     }
 
-    let i: I32 = 0
+    var i: I32 = 0
     loop (i < width) {
         if i < filled {
             print("=")

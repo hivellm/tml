@@ -75,7 +75,7 @@ func struct_debug_string[T: Reflect](value: ref T, type_name: Str, fc: I64) -> S
     var result: Str = type_name + " {}"
     if fc > 0 {
         result = type_name + " { "
-        let base: I64 = get_ref_ptr(value)
+        let base_ptr: I64 = get_ref_ptr(value)
         var i: I64 = 0
         loop (i < fc) {
             if i > 0 {
@@ -83,7 +83,7 @@ func struct_debug_string[T: Reflect](value: ref T, type_name: Str, fc: I64) -> S
             }
             let fname: Str = field_name[T](i)
             let offset: I64 = field_offset[T](i)
-            let raw: I64 = read_field_i64(base, offset)
+            let raw: I64 = read_field_i64(base_ptr, offset)
             result = result + fname + ": " + raw.to_string()
             i = i + 1
         }
@@ -115,7 +115,7 @@ pub func to_json[T: Reflect](value: ref T) -> Str {
 func struct_to_json[T: Reflect](value: ref T, fc: I64) -> Str {
     var result: Str = "{"
     if fc > 0 {
-        let base: I64 = get_ref_ptr(value)
+        let base_ptr: I64 = get_ref_ptr(value)
         var i: I64 = 0
         loop (i < fc) {
             if i > 0 {
@@ -123,7 +123,7 @@ func struct_to_json[T: Reflect](value: ref T, fc: I64) -> Str {
             }
             let fname: Str = field_name[T](i)
             let offset: I64 = field_offset[T](i)
-            let raw: I64 = read_field_i64(base, offset)
+            let raw: I64 = read_field_i64(base_ptr, offset)
             result = result + "\"" + fname + "\": " + raw.to_string()
             i = i + 1
         }

@@ -55,7 +55,7 @@
 //! - Collects statistics (pass/fail/ignore counts, timing)
 //! - Produces formatted output via the report module
 
-use types
+use test::types
 
 /// Create default test configuration
 pub func default_config() -> TestConfig {

@@ -246,10 +246,20 @@ impl[T: Copy] Copy for Poll[T] {}
 
 impl[T: PartialEq] PartialEq for Poll[T] {
     pub func eq(this, other: ref Poll[T]) -> Bool {
-        when (this, other) {
-            (Ready(a), Ready(b)) => return a.eq(b),
-            (Pending, Pending) => return true,
-            _ => return false
+        // Tuple pattern matching has codegen issues — use nested when
+        when this {
+            Ready(a) => {
+                when other {
+                    Ready(b) => return a.eq(b),
+                    Pending => return false
+                }
+            },
+            Pending => {
+                when other {
+                    Ready(b) => return false,
+                    Pending => return true
+                }
+            }
         }
     }
 }
@@ -417,10 +427,11 @@ impl RawWakerVTable {
 ///     }
 /// }
 /// ```
-pub type Waker {
-    /// The underlying raw waker.
-    waker: RawWaker
-}
+// Waker is a compiler builtin type — definition commented to avoid T038.
+// The compiler provides Waker with field: waker: RawWaker
+// pub type Waker {
+//     waker: RawWaker
+// }
 
 impl Waker {
     /// Creates a new `Waker` from a `RawWaker`.
@@ -559,12 +570,11 @@ impl Sync for Waker {}
 /// var context: Context = Context::from_waker(ref waker)
 /// let poll_result: Poll[T] = future.poll(ref mut context)
 /// ```
-pub type Context[T] {
-    /// The waker for this context.
-    waker: ref Waker,
-    /// Phantom data for the local waker type (for future extension).
-    _marker: PhantomData[T]
-}
+// Context is a compiler builtin type — definition commented to avoid T038.
+// pub type Context[T] {
+//     waker: ref Waker,
+//     _marker: PhantomData[T]
+// }
 
 impl Context[Unit] {
     /// Creates a new `Context` from a `Waker` reference.
