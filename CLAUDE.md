@@ -70,6 +70,35 @@ This is a HARD REQUIREMENT. Stale task files cause confusion, lost progress trac
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ ABSOLUTE PROHIBITION: No Shortcuts, Stubs, Placeholders, or Simplified Logic ⛔
+
+**YOU ARE EXPRESSLY FORBIDDEN FROM TAKING SHORTCUTS TO DELIVER RESULTS FASTER.**
+
+Response time is NOT important. What matters is the QUALITY of the final result. When given a task, you MUST find the correct way to implement it and deliver a proper, complete implementation — regardless of complexity.
+
+**This is NON-NEGOTIABLE. You MUST follow these rules:**
+
+1. **NEVER simplify logic** to make implementation easier or faster
+2. **NEVER add TODO/FIXME/HACK comments** as placeholders for unfinished work
+3. **NEVER create stubs** — implement the real functionality
+4. **NEVER create placeholder implementations** that "work for now" but aren't correct
+5. **NEVER alter existing logic** to avoid dealing with complexity
+6. **NEVER reduce scope** of what was requested to deliver something quicker
+7. **NEVER skip edge cases** or error handling that the correct implementation requires
+8. **NEVER deliver partial implementations** claiming "the rest can be added later"
+
+**What you MUST do instead:**
+
+- ✅ **Research the correct approach** — read existing code, understand patterns, find the right solution
+- ✅ **Implement completely** — the full functionality as requested, with all edge cases
+- ✅ **Take as long as needed** — there is no time pressure, only quality pressure
+- ✅ **Ask for clarification** if the task is ambiguous, rather than guessing and delivering something wrong
+- ✅ **Fix root causes** — never patch symptoms to make things "appear to work"
+
+**WHY:** Quick, incomplete implementations create technical debt, hide bugs, and require rework. A proper implementation done once is always better than a quick hack that needs to be redone. The user explicitly values correctness and completeness over speed.
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Implement Incrementally — Test Each Stage ⛔
 
 **NEVER implement everything at once then fight cascading errors. The line between persistence and stupidity is very thin.**
@@ -117,10 +146,14 @@ mcp__tml__docs_get(id="std::collections::HashMap")   # Full docs for a specific 
 
 **You MUST call `mcp__tml__docs_search` or `mcp__tml__docs_list` BEFORE:**
 - Writing a new TML module (search for existing types that do the same thing)
+- Adding a method to a type (check if it already exists with `docs_list`)
 - Using `impl` (confirm syntax: `impl Behavior for Type`, NOT `impl Type with Behavior`)
 - Using `loop`, `when`, enums (confirm syntax: `loop (cond) {}`, `Start(I64)` not `Start(name: I64)`)
 - Using `lowlevel` (search for safe API alternatives first)
 - Using any type you haven't used in this session
+- **Understanding what methods a type has** — use `docs_list(module, kind="method")`, NOT `Read` on the source file
+
+**NEVER read a `.tml` source file just to see what methods/types it exports.** The MCP docs tools are faster, cleaner, and their usage is tracked for research. Reading source files wastes tokens on implementation details (lowlevel blocks, internal helpers) that are irrelevant to the caller.
 
 **Step 2 — Static Docs (FALLBACK, if MCP is down):**
 
@@ -211,15 +244,32 @@ Test failing?
 └─ Unknown error → use explain with the error code
 ```
 
-### Rules
+### Workflow Rules (data-driven — measured via mcp-call-log.jsonl)
+
+**These rules address observed anti-patterns in LLM tool usage:**
 
 1. **NEVER use Bash/PowerShell** to run `tml.exe test`, `tml.exe build`, `tml.exe run`, etc. when the equivalent MCP tool exists
 2. **NEVER use Bash** to grep test output — use the MCP tool's structured output instead
 3. The ONLY acceptable use of Bash for `tml.exe` is when you need to build the **compiler itself** (`scripts\build.bat`)
 4. MCP tools handle caching, path resolution, and output formatting automatically
-5. **Use `debug_layers=true`** when debugging test failures that need IR analysis — it emits all compilation layers in one call
-6. **Use `structured=true`** on test calls to get machine-readable results instead of parsing text
-7. **Use `check` before `emit-ir`** — it's faster and catches type errors without codegen
+5. **Use `structured=true`** on test calls to get machine-readable results instead of parsing text
+
+**Anti-pattern: Reading source files instead of using docs tools (observed: docs tools used only 10% of calls)**
+
+6. **NEVER read `lib/core/src/*.tml` or `lib/std/src/*.tml` to understand an API** — use `mcp__tml__docs_search`, `mcp__tml__docs_list`, or `mcp__tml__docs_get` instead. These are instant, structured, and avoid wasting tokens on implementation details you don't need
+7. **Use `docs_resolve` to find the full path** of a type before reading its source. Example: `docs_resolve(name="HashMap")` → `std::collections::HashMap`
+8. **Use `docs_list` to discover available methods** on a type before implementing something that may already exist. Example: `docs_list(module="std::collections::List", kind="method")`
+
+**Anti-pattern: Running test without check first (observed: check used only 8.8% vs test 60.5%)**
+
+9. **Use `check` BEFORE `test`** when developing new TML code — `check` is 10x faster than `test` and catches type errors without compilation. Only run `test` after `check` passes
+10. **Use `check` BEFORE `emit-ir`** — catches type errors without codegen overhead
+
+**Anti-pattern: Not using debug_layers on failure (observed: used only 3 times out of 216 calls)**
+
+11. **ALWAYS use `debug_layers=true` on the FIRST test failure** — do not re-run the same test hoping it passes. If a test fails, the next call MUST include `debug_layers=true` to get HIR + MIR + LLVM IR diagnosis
+12. **After a test crash, use `debug_layers=true`** — crashes indicate ABI mismatches, type layout errors, or null pointer dereferences that are only diagnosable from IR output
+13. **Read the diagnosis hints** in debug_layers output — they identify which compilation layer (HIR/MIR/IR) is the source of the bug
 
 **WHY:** MCP tools are purpose-built for this workflow. They strip ANSI codes, handle Windows path normalization, validate meta caches, and provide clean structured output. Using Bash/PowerShell bypasses all of this and wastes tokens on noisy output. Every call is also logged for LLM debugging research.
 
