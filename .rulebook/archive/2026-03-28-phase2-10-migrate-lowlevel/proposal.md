@@ -6,6 +6,10 @@
 
 The TML HTTP server, async runtime, and stream layer originally contained ~702 `lowlevel` blocks using raw `ptr_read`/`ptr_write`/`mem_alloc` to implement what should have been typed struct fields. This made the code unsafe, unmaintainable, and opaque to the optimizer. The migration introduced typed accessor functions and proper struct layouts, reducing raw pointer usage to only the legitimate cases (FFI, zero-copy sharing, core primitives).
 
+## Why
+
+The TML HTTP server used raw mem_alloc/ptr_write for hook tables instead of typed List/HashMap collections, making the code unsafe, unmaintainable, and opaque to the optimizer.
+
 ## Motivation
 
 Raw `ptr_read`/`ptr_write` at an offset from a base pointer is equivalent to writing C with no struct definitions. Every access requires computing offsets manually, there are no compile-time type checks, and the optimizer cannot reason about aliasing. A codebase with 702 such blocks in a single module is not maintainable.
