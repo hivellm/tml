@@ -1,264 +1,226 @@
-# TML Standard Library (`std`)
-
-The TML standard library provides common data structures, I/O operations, networking, cryptography, compression, and more.
-
-**Status**: 1550+ tests passing | [Changelog](CHANGELOG.md)
-
-## Modules
-
-### `std::collections` — Data Structures
-
-- **`List[T]`** — Generic dynamic array (Vec equivalent)
-- **`HashMap[K, V]`** — Generic key-value store
-- **`HashSet[T]`** — Unique value set
-- **`Buffer`** — Byte buffer for binary data
-- **`Deque[T]`** — Double-ended queue (ring buffer)
-- **`BinaryHeap[T]`** — Priority queue
-- **`BTreeMap[K, V]`** — Ordered map (sorted-array, binary search)
-- **`BTreeSet[T]`** — Ordered set
-- **`ArrayList[T]`** — Alternative dynamic array
-
-All collections are implemented in **pure TML** — no C runtime dependency.
-
-```tml
-use std::collections::{List, HashMap}
-
-var numbers: List[I32] = List[I32]::new()
-numbers.push(10)
-numbers.push(20)
-
-var scores: HashMap[Str, I32] = HashMap[Str, I32]::new()
-scores.insert("Alice", 100)
-```
-
-### `std::http` — HTTP Server and Client
-
-Full HTTP/1.1 implementation with router, middleware, TLS support.
-
-- **Router** — Radix tree routing with path params and wildcards
-- **Request / Response** — HTTP message types with headers, body, status
-- **Headers** — Case-insensitive header storage
-- **Cookies** — Cookie parsing and serialization
-- **Encoding** — URL encoding/decoding, multipart, form data
-- **HttpClient** — `get()`, `post()`, `put()`, `delete()`, `send()`
-- **Connection** — DNS + TCP + optional TLS
-
-```tml
-use std::http::client::HttpClient
-
-let client: HttpClient = HttpClient::new()
-let response = client.get("https://example.com")!
-```
-
-### `std::crypto` — Cryptography
-
-Comprehensive crypto suite via OpenSSL/BCrypt FFI.
-
-- **Hash**: SHA-256, SHA-512, MD5, BLAKE3
-- **HMAC**: Message authentication codes
-- **Cipher**: AES-GCM, ChaCha20-Poly1305
-- **KDF**: PBKDF2, HKDF, scrypt
-- **Signatures**: ECDSA, Ed25519
-- **Key Management**: Key generation and exchange
-- **DH / ECDH**: Diffie-Hellman key exchange
-- **RSA**: RSA encryption and signing
-- **X.509**: Certificate handling and verification
-- **Random**: `random_bytes()`, `random_int()`, `random_uuid()`, `SecureRandom`
-
-### `std::zlib` — Compression
-
-- **Deflate / Inflate** — Configurable compression levels
-- **Gzip** — `gzip_compress()`, `gzip_decompress()`
-- **Brotli** — `brotli_compress()`, `brotli_decompress()`
-- **Zstd** — `zstd_compress()`, `zstd_decompress()`
-- **CRC32** — `crc32()`, `crc32_combine()`
-- **Streaming API** — `DeflateStream`, `InflateStream`
-
-### `std::sqlite` — SQLite Database
-
-- **`Database`** — Open file or in-memory DB, `exec()`, `prepare()`, transactions
-- **`Statement`** — Prepared statements with typed binds and column accessors
-- **`Row`** / **`Value`** — Result row and dynamic value types
-
-### `std::json` — JSON
-
-- **`JsonValue`** — JSON value type (object, array, string, number, bool, null)
-- `parse()` — Parse JSON string
-- `stringify()` — Convert to JSON string
-
-```tml
-use std::json::{JsonValue, parse}
-
-let json: JsonValue = parse("{\"name\": \"Alice\", \"age\": 30}")
-```
-
-### `std::regex` — Regular Expressions
-
-Thompson's NFA engine with O(n*m) worst case — no exponential backtracking.
-
-- **`Regex`** — `is_match()`, `find()`, `find_all()`, `replace()`, `replace_all()`, `split()`
-- Syntax: `.`, `*`, `+`, `?`, `|`, `()`, `[a-z]`, `[^0-9]`, `\d`, `\w`, `\s`, `^`, `$`
-
-### `std::search` — Search and Indexing
-
-- **`BM25Index`** — Full-text search with TF-IDF scoring
-- **`HnswIndex`** — HNSW approximate nearest neighbor search
-- **`TfIdfVectorizer`** — Document embedding
-- **Distance Functions** — SIMD-accelerated dot product, L2, cosine similarity
-
-### `std::net` — Networking
-
-- **`IpAddr`** / **`Ipv4Addr`** / **`Ipv6Addr`** — IP addresses
-- **`SocketAddr`** — Socket address (IP + port)
-- **TCP** — `TcpStream`, `TcpListener` with connect/bind/accept
-- **UDP** — `UdpSocket` with sendto/recvfrom
-- **DNS** — DNS resolution
-- **TLS** — `TlsConfig`, `TlsStream` (OpenSSL/BCrypt)
-
-### `std::sync` — Synchronization
-
-- **`Mutex[T]`** / **`MutexGuard[T]`** — Mutual exclusion lock
-- **`RwLock[T]`** — Reader-writer lock
-- **`Condvar`** — Condition variable
-- **`Barrier`** — Thread barrier
-- **`Once`** — One-time initialization
-
-```tml
-use std::sync::{Mutex, MutexGuard}
-
-let mutex: Mutex[I32] = Mutex::new(42)
-{
-    var guard: MutexGuard[I32] = mutex.lock()
-    *guard.get_mut() = 100
-}
-```
-
-### `std::sync::mpsc` — Channels
-
-- **`Sender[T]`** / **`Receiver[T]`** — Multi-producer, single-consumer
-- `channel[T]()` — Create unbounded channel
-
-### `std::thread` — Threading
-
-- **`Thread`** / **`JoinHandle[T]`** — Thread handle and join
-- `spawn()`, `sleep()`, `current()`, `yield_now()`
-
-### `std::aio` — Async I/O
-
-Event-driven I/O with Node.js/libuv-style architecture.
-
-- **`Poller`** — Platform I/O polling (epoll on Linux, WSAPoll on Windows)
-- **`TimerWheel`** — Hashed 2-level timer wheel (O(1) schedule/cancel/fire)
-- **`EventLoop`** — Single-threaded event loop with I/O + timer + callback dispatch
-
-### `std::stream` — Streams
-
-Composable byte streams with backpressure.
-
-- **`Readable`** / **`Writable`** — Stream behaviors
-- **`BufferedReader`** / **`BufferedWriter`** — Buffered I/O
-- **`ByteStream`** — In-memory read/write stream
-- **`DuplexStream`** — Combined read+write
-- **`TransformStream`** — Stateful transformations
-- **`PipelineStream`** — Chain multiple streams
-- `pipe()` — Fluent reader → transform → writer
-
-### `std::file` — File I/O
-
-- **`File`** — File handle with read/write methods
-- **`Path`** — Path utilities
-- **`BufReader`** / **`BufWriter`** / **`LineWriter`** — Buffered I/O
-
-```tml
-use std::file::File
-
-File::write_all("hello.txt", "Hello, World!")
-let content: Str = File::read_all("hello.txt")
-```
-
-### `std::math` — Mathematics
-
-- **Trigonometric**: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
-- **Hyperbolic**: `sinh`, `cosh`, `tanh`
-- **Exponential**: `exp`, `ln`, `log2`, `log10`, `pow`
-- **Rounding**: `floor`, `ceil`, `round`, `trunc`
-- **Utility**: `abs`, `sqrt`, `cbrt`, `min`, `max`, `clamp`
-- **Constants**: `PI`, `E`, `TAU`, `SQRT_2`, `LN_2`, `LN_10`
-
-### `std::datetime` — Date and Time
-
-- **`DateTime`** — `now()`, `from_timestamp()`, `from_parts()`
-- Components: `year()`, `month()`, `day()`, `hour()`, `minute()`, `second()`
-- Calendar: `weekday()`, `day_of_year()`, `is_leap_year()`
-- Formatting: `to_iso8601()`, `to_rfc2822()`
-- Parsing: `parse_iso8601()`, `parse_date()`, `parse()`
-
-### `std::os` — Operating System
-
-- Environment: `env_get()`, `env_set()`, `env_unset()`
-- Process: `process_exit()`, `process_id()`, `exec()`, `exec_status()`
-- System: `cpu_count()`, `total_memory()`, `system_name()`
-- Directory: `get_cwd()`, `set_cwd()`
-
-### `std::time` — Time
-
-- **`Instant`** — Monotonic clock (`now()`, `elapsed()`, `duration_since()`)
-- **`SystemTime`** — Wall clock (`now()`, `as_secs()`, `duration_since_epoch()`)
-- `sleep(millis)` — Thread sleep
-
-### `std::glob` — Glob Patterns
-
-- Pattern matching: `*`, `?`, `**`, `[a-z]`, `{a,b}`
-- Directory walking: `find()`, `find_all()`, `count()`
-- Cross-platform (Windows + POSIX)
-
-### `std::random` — Random Numbers
-
-- `random_i64()`, `random_f64()`, `random_bool()`, `random_range()`
-- `shuffle_i64()`, `shuffle_i32()` — Fisher-Yates shuffle
-- **`Rng`** — Seeded random number generator
-
-### `std::hash` — Fast Hashing
-
-Non-cryptographic hash functions (NOT for security).
-
-- **FNV-1a**: `fnv1a32()`, `fnv1a64()`
-- **MurmurHash2**: `murmur2_32()`, `murmur2_64()`
-- ETag helpers: `etag_weak()`, `etag_strong()`
-
-### `std::text` — Text Builder
-
-- **`Text`** — Heap-allocated, growable string with SSO (≤23 bytes on stack)
-- 40+ methods: `len`, `push`, `concat`, `substring`, `trim`, `replace`, etc.
-- Template literals: `` `Hello, {name}!` `` produces `Text`
-
-### Additional Modules
-
-| Module | Description |
-|--------|-------------|
-| `std::cli` | Command-line argument parsing |
-| `std::events` | Event emitter pattern |
-| `std::exception` | Exception types and stack traces |
-| `std::io` | I/O utilities |
-| `std::iter` | Extended iterator adapters |
-| `std::log` | Logging framework |
-| `std::mime` | MIME type detection |
-| `std::profiler` | Code profiling |
-| `std::semver` | Semantic versioning |
-| `std::traits` | Extended behavior implementations |
-| `std::types` | Extended type utilities |
-| `std::url` | URL parsing |
-| `std::uuid` | UUID generation |
-
-## Runtime
-
-The std library uses C runtime via `@extern` FFI for OS-level operations:
-
-- `sync.c` — Synchronization primitives
-- `thread.c` — Threading support
-- `file.c` — File I/O
-- `net.c` — Networking
-- `crypto.c` — Cryptography (OpenSSL/BCrypt)
-- `zlib/` — Compression (zlib, brotli, zstd)
-
-Collections (`List`, `HashMap`, `Buffer`) are implemented in **pure TML** with no C runtime dependency.
+# TML Standard Library
+
+Full-featured standard library with collections, networking, crypto, HTTP, JSON, database, compression, and more. Depends on `core`.
+
+[Changelog](CHANGELOG.md)
+
+## Module Index
+
+### Collections (`collections/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| List[T] | `std::collections::List` | Dynamic array (Rust's `Vec`) — push, pop, get, set, retain, drain |
+| HashMap[K,V] | `std::collections::HashMap` | Hash map — Swiss-table style, open addressing |
+| BTreeMap[K,V] | `std::collections::BTreeMap` | Ordered map — sorted array, binary search |
+| BTreeSet[T] | `std::collections::BTreeSet` | Ordered set |
+| HashSet[T] | `std::collections::HashSet` | Hash-based unique set |
+| Deque[T] | `std::collections::Deque` | Double-ended queue (ring buffer) |
+| BinaryHeap[T] | `std::collections::BinaryHeap` | Priority queue |
+| Buffer | `std::collections::Buffer` | Byte buffer for binary data |
+| Trie[V] | `std::collections::Trie` | String-keyed prefix tree — autocomplete, prefix search |
+| IntervalTree[V] | `std::collections::IntervalTree` | Augmented BST — range/point overlap queries |
+| ArrayList[T] | `std::collections::ArrayList` | Alternative dynamic array (class-based) |
+| LinkedList[T] | `std::collections::LinkedList` | Doubly-linked list (class-based) |
+
+### Networking (`net/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| ip | `std::net::ip` | `IpAddr`, `Ipv4Addr`, `Ipv6Addr` — address types and classification |
+| tcp | `std::net::tcp` | `TcpStream`, `TcpListener` — connect, bind, accept, read, write |
+| udp | `std::net::udp` | `UdpSocket` — sendto, recvfrom, multicast |
+| tls | `std::net::tls` | `TlsConfig`, `TlsStream` — OpenSSL/BCrypt TLS |
+| dns | `std::net::dns` | DNS resolution |
+| socket | `std::net::socket` | Low-level socket operations |
+| async_tcp | `std::net::async_tcp` | Async TCP with IOCP/epoll |
+| async_udp | `std::net::async_udp` | Async UDP |
+| url | `std::net::url` | URL parsing, building, query params |
+| mime | `std::net::mime` | MIME type detection and parsing |
+
+### HTTP (`http/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| server | `std::http::server` | HTTP/1.1 server with connection handling |
+| client | `std::http::client` | `HttpClient` — get, post, put, delete, send |
+| router | `std::http::router` | Radix tree routing with path params and wildcards |
+| request | `std::http::request` | `Request` — method, headers, body, URL |
+| response | `std::http::response` | `Response` — status, headers, body |
+| headers | `std::http::headers` | Case-insensitive header storage |
+| cookies | `std::http::cookies` | Cookie parsing and serialization |
+| middleware | `std::http::middleware` | Middleware chain — cors, logger, compress |
+| static_server | `std::http::static_server` | Static file serving with MIME detection |
+
+### Cryptography (`crypto/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| hash | `std::crypto::hash` | SHA-256, SHA-512, MD5, BLAKE3 |
+| hmac | `std::crypto::hmac` | HMAC message authentication |
+| cipher | `std::crypto::cipher` | AES-GCM, ChaCha20-Poly1305 |
+| kdf | `std::crypto::kdf` | PBKDF2, HKDF, scrypt |
+| dh | `std::crypto::dh` | Diffie-Hellman key exchange |
+| ecdh | `std::crypto::ecdh` | Elliptic curve Diffie-Hellman |
+| key | `std::crypto::key` | Key generation and management |
+| random | `std::crypto::random` | `SecureRandom` — cryptographic RNG |
+
+### Synchronization (`sync/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| mutex | `std::sync::Mutex` | `Mutex[T]`, `MutexGuard[T]` — mutual exclusion |
+| rwlock | `std::sync::RwLock` | `RwLock[T]` — reader-writer lock |
+| arc | `std::sync::Arc` | `Arc[T]`, `Weak[T]` — atomic reference counting |
+| mpsc | `std::sync::mpsc` | `Sender[T]`, `Receiver[T]` — channels |
+| barrier | `std::sync::Barrier` | Thread barrier |
+| condvar | `std::sync::Condvar` | Condition variable |
+| semaphore | `std::sync::Semaphore` | Counting semaphore |
+| once | `std::sync::Once` | One-time initialization |
+| wait_group | `std::sync::WaitGroup` | Wait for group of tasks |
+| atomic | `std::sync::atomic` | Atomic types and operations |
+| queue | `std::sync::queue` | Lock-free concurrent queue |
+| stack | `std::sync::stack` | Lock-free concurrent stack |
+
+### File I/O (`file/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| file | `std::file::File` | File handle — open, read, write, seek, close |
+| path | `std::file::path` | Path utilities — exists, join, parent, extension, create_dir |
+| dir | `std::file::dir` | Directory creation and removal |
+| bufio | `std::file::bufio` | `BufReader` — buffered line/chunk reading |
+| glob | `std::file::glob` | Glob pattern matching and directory walking |
+
+### Streams (`stream/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| readable | `std::stream::Readable` | Readable behavior for byte sources |
+| writable | `std::stream::Writable` | Writable behavior for byte sinks |
+| buffered | `std::stream::buffered` | Buffered reader/writer |
+| duplex | `std::stream::duplex` | Combined read+write stream |
+| transform | `std::stream::transform` | Stateful stream transformations |
+| pipeline | `std::stream::pipeline` | Chain multiple streams |
+| pipe | `std::stream::pipe` | Readable → Writable pipe |
+| seek | `std::stream::seek` | `Seek`, `SeekFrom`, `Cursor` — random access |
+| passthrough | `std::stream::passthrough` | Pass-through stream |
+| byte_stream | `std::stream::byte_stream` | In-memory byte stream |
+
+### Database (`sqlite/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| database | `std::sqlite::Database` | Open, exec, prepare, transactions |
+| statement | `std::sqlite::Statement` | Prepared statements with typed binds |
+| row | `std::sqlite::Row` | Result row with column accessors |
+| value | `std::sqlite::Value` | Dynamic value type (text, int, float, blob, null) |
+
+### Compression (`zlib/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| deflate | `std::zlib` | Deflate/inflate with configurable levels |
+| gzip | `std::zlib` | Gzip compress/decompress |
+| brotli | `std::zlib` | Brotli compress/decompress |
+| zstd | `std::zlib` | Zstandard compress/decompress |
+| crc32 | `std::zlib` | CRC32 checksum |
+| streaming | `std::zlib` | `DeflateStream`, `InflateStream` |
+
+### Events & Async (`events/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| events | `std::events` | `EventEmitter` — pub/sub event pattern |
+| observable | `std::events::observable` | RxJS-style observables, subjects, operators |
+| promise | `std::events::promise` | `Promise[T]` — async value resolution |
+
+### Time (`time/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| time | `std::time` | `Instant`, `SystemTime`, `sleep`, `time_ns` |
+| datetime | `std::time::datetime` | `DateTime` — now, parse, format, components |
+
+### Math
+
+| Module | Path | Description |
+|--------|------|-------------|
+| math | `std::math` | Trig, exp, log, rounding, abs, sqrt + Complex numbers |
+| bigint | `std::bigint` | `BigInt` — arbitrary precision integers, mod_pow, Miller-Rabin |
+
+### Search (`search/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| bm25 | `std::search` | BM25 full-text search with TF-IDF scoring |
+| hnsw | `std::search` | HNSW approximate nearest neighbor |
+| distance | `std::search` | SIMD-accelerated dot product, L2, cosine |
+
+### Standalone Modules
+
+| Module | Path | Description |
+|--------|------|-------------|
+| json | `std::json` | `JsonValue` — parse, stringify |
+| regex | `std::regex` | `Regex` — NFA engine, no backtracking |
+| random | `std::random` | `Rng` (xoshiro256**), `Random` trait, `random_range` |
+| text | `std::text` | `Text` — growable string builder with SSO |
+| uuid | `std::uuid` | UUID v4/v7 generation and parsing |
+| semver | `std::semver` | Semantic version parsing, comparison, ranges |
+| cli | `std::cli` | Command-line argument parsing |
+| hash | `std::hash` | FNV-1a, MurmurHash2 — non-crypto hashing |
+| log | `std::log` | Logging framework with levels and filters |
+| debug | `std::debug` | `debug_print[T: Reflect]`, `to_json[T: Reflect]` |
+| profiler | `std::profiler` | Code profiling utilities |
+| io | `std::io` | `IoError`, `IoErrorKind` |
+| exception | `std::exception` | Exception types — `Exception`, `ArgumentException` |
+| iter | `std::iter` | Extended iterator adapters |
+| traits | `std::traits` | Extended behavior implementations |
+| types | `std::types` | Extended type utilities |
+| interfaces | `std::interfaces` | Common interface definitions |
+| object | `std::object` | Re-export of `std::oop::object` |
+
+### OS & Platform (`os/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| subprocess | `std::os::subprocess` | `Command` builder, child process, stdio redirect |
+| signal | `std::os::signal` | Signal registration and polling |
+| pipe | `std::os::pipe` | Anonymous pipes for IPC |
+
+### OOP (`oop/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| object | `std::oop::object` | `Object` base class with `to_string`, `get_type`, `get_hash_code` |
+| interfaces | `std::oop::interfaces` | OOP interface definitions |
+
+### Threading (`thread/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| thread | `std::thread` | `spawn`, `sleep`, `yield_now`, `current`, `JoinHandle` |
+| builder | `std::thread` | `Builder` — named threads with stack size config |
+| scope | `std::thread` | Scoped thread spawning |
+
+### Async I/O (`aio/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| poller | `std::aio` | Platform I/O polling (epoll/WSAPoll) |
+| timer_wheel | `std::aio` | Hashed timer wheel — O(1) schedule/cancel |
+| event_loop | `std::aio` | Single-threaded event loop |
+
+### FFI (`ffi/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| types | `std::ffi` | FFI type definitions |
+| helpers | `std::ffi` | FFI helper utilities |
+
+### Allocation (`alloc/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| global | `std::alloc` | Global allocator interface |
+| tracking | `std::alloc` | Allocation tracking and leak detection |

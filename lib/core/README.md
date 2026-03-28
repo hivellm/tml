@@ -1,274 +1,129 @@
 # TML Core Library
 
-The `core` library provides fundamental behaviors and types for the TML language. This is the foundation that other libraries build upon, similar to Rust's `core` crate.
-
-**Status**: 830+ tests passing | [Changelog](CHANGELOG.md)
-
-## Modules
-
-### Fundamental Behaviors
-
-#### `clone` — Duplication and Copying
-- **`Duplicate`** — Behavior for types that can be duplicated (Rust's `Clone`)
-- **`Copy`** — Marker behavior for types that can be bitwise copied
-
-```tml
-use core::clone::{Duplicate, Copy}
-
-let x: I32 = 42
-let y: I32 = x.duplicate()  // Explicit duplication
-```
-
-#### `cmp` — Comparison
-- **`Ordering`** — Less, Equal, Greater enum
-- **`PartialEq`** — Partial equality (`eq`, `ne`)
-- **`Eq`** — Marker for full equality
-- **`PartialOrd`** — Partially ordered types
-- **`Ord`** — Totally ordered types (`cmp`, `min`, `max`, `clamp`)
-
-```tml
-use core::cmp::{Ordering, Ord}
-
-let a: I32 = 5
-let b: I32 = 10
-when a.cmp(ref b) {
-    Less => print("a < b"),
-    Equal => print("a == b"),
-    Greater => print("a > b")
-}
-```
-
-#### `ops` — Operator Overloading
-- **Arithmetic**: `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`
-- **Bitwise**: `BitAnd`, `BitOr`, `BitXor`, `Shl`, `Shr`, `Not`
-- **Indexing**: `Index`, `IndexMut`
-- **Compound assignment**: `AddAssign`, `SubAssign`, `MulAssign`, etc.
-- **Range**: `Range`, `RangeInclusive`, `RangeTo`, `RangeFrom`
-- **Function traits**: `Fn`, `FnMut`, `FnOnce`
-- **Coroutine**: `Coroutine`, `CoroutineState`
-- **Drop**: `Drop` for custom destructors
-
-```tml
-use core::ops::Add
-
-type Point { x: I32, y: I32 }
-
-impl Add for Point {
-    type Output = Point
-    pub func add(this, rhs: Point) -> Point {
-        return Point { x: this.x + rhs.x, y: this.y + rhs.y }
-    }
-}
-```
-
-#### `default` — Default Values
-- **`Default`** — Behavior for types with a default value
-
-#### `fmt` — Formatting
-- **`Display`** — Human-readable formatting (`to_string`)
-- **`Debug`** — Debug formatting (`debug_string`)
-- **`Formatter`** — Format state and buffer management
-- **`Write`** — Behavior for writable buffers
-
-### Type Conversion
-
-#### `convert` — Type Conversions
-- **`From[T]`** / **`Into[T]`** — Infallible conversion
-- **`TryFrom[T]`** / **`TryInto[T]`** — Fallible conversion (returns `Outcome`)
-- **`AsRef[T]`** / **`AsMut[T]`** — Borrow as reference
-
-### Memory and Safety
-
-#### `alloc` — Memory Allocation
-- **`Heap[T]`** — Heap-allocated box (Rust's `Box`)
-- **`Shared[T]`** — Reference-counted pointer (Rust's `Rc`)
-- **`Sync[T]`** — Atomic reference-counted pointer (Rust's `Arc`)
-- **`Weak[T]`** — Weak reference to `Shared[T]`
-- `alloc(size)` / `dealloc(ptr)` — Raw allocation functions
-
-```tml
-use core::alloc::{Heap, Shared, Sync}
-
-let boxed: Heap[I32] = Heap::new(42)
-let shared: Shared[I32] = Shared::new(100)
-let synced: Sync[I32] = Sync::new(42)
-let weak: Weak[I32] = shared.downgrade()
-```
-
-#### `arena` — Arena Allocation
-- **`Arena`** — Bump allocator for fast allocation of same-lifetime objects
-
-#### `pool` — Object Pooling
-- **`Pool[T]`** — Reusable object pool
-- **`PooledObject[T]`** — RAII handle to pooled object
-
-#### `mem` — Memory Utilities
-- `size_of[T]()`, `align_of[T]()`, `swap(a, b)`, `replace(dest, src)`, `take(dest)`, `forget(value)`
-- **`ManuallyDrop[T]`** — Prevent automatic dropping
-- **`MaybeUninit[T]`** — Possibly uninitialized memory
-
-#### `cell` — Interior Mutability
-- **`Cell[T]`** — Single-threaded interior mutability for `Copy` types
-- **`RefCell[T]`** — Runtime borrow checking with `Ref[T]`/`RefMut[T]`
-- **`OnceCell[T]`** — Write-once cell
-- **`LazyCell[T]`** — Lazy initialization
-
-#### `marker` — Marker Behaviors
-- **`Send`**, **`Sync`**, **`Sized`**, **`Unpin`**, **`PhantomData[T]`**
-
-#### `borrow` — Borrowing
-- **`Borrow[T]`** / **`BorrowMut[T]`** — Borrow data as type T
-- **`ToOwned`** — Create owned data from borrowed
-- **`Cow[T]`** — Clone-on-write smart pointer
-
-#### `pin` — Pinning
-- **`Pin[P]`** — Pinned pointer that guarantees stability
-
-### Collections Support
-
-#### `iter` — Iteration
-- **`Iterator`** — Core iteration with `next()`
-- **`IntoIterator`** / **`FromIterator`** / **`Extend`**
-- **`DoubleEndedIterator`** / **`ExactSizeIterator`**
-- Adapters: `Map`, `Filter`, `Take`, `Skip`, `Chain`, `Zip`, `Enumerate`, `Peekable`, `TakeWhile`, `SkipWhile`, `Flatten`, `FlatMap`, `Cycle`, `Fuse`, `Rev`, `Cloned`, `Copied`, `Chunks`, `Windows`, `StepBy`
-
-```tml
-use core::iter::Iterator
-
-let sum: I32 = (1 through 10)
-    .iter()
-    .filter(do(x: ref I32) *x % 2 == 0)
-    .map(do(x: I32) x * 2)
-    .sum()
-```
-
-#### `async_iter` — Async Iteration
-- **`AsyncIterator`** — Async iteration with `poll_next()`
-
-#### `slice` — Slice Operations
-- **`Slice[T]`** — Immutable view into contiguous memory
-- Sorting, searching, manipulation, chunking
-
-#### `array` — Fixed-Size Arrays
-- Methods for `[T; N]` types: `len()`, `is_empty()`, `get()`, `iter()`
-
-#### `hash` — Hashing
-- **`Hash`** / **`Hasher`** / **`BuildHasher`**
-
-### Enhanced Types
-
-#### `option` — Maybe[T] Methods
-- Extracting: `unwrap()`, `expect()`, `unwrap_or()`, `unwrap_or_else()`
-- Transforming: `map()`, `map_or()`, `and_then()`, `or_else()`, `filter()`
-- Converting: `ok_or()`, `transpose()`, `zip()`, `flatten()`
-
-#### `result` — Outcome[T, E] Methods
-- Extracting: `unwrap()`, `expect()`, `unwrap_err()`, `unwrap_or_else()`
-- Transforming: `map()`, `map_err()`, `and_then()`, `or_else()`
-- Converting: `ok()`, `err()`, `transpose()`, `flatten()`
-
-#### `range` — Range Types
-- **`Range[T]`**, **`RangeInclusive[T]`**, **`RangeFrom[T]`**, **`RangeTo[T]`**
-
-#### `tuple` — Tuple Operations
-- Methods for tuple types (up to 12 elements)
-
-### Strings and Text
-
-#### `str` — String Utilities
-- `len()`, `is_empty()`, `char_at()`, `trim()`, `starts_with()`, `ends_with()`, `contains()`
-- `split()`, `lines()`, `chars()`, `to_uppercase()`, `to_lowercase()`
-- `find()`, `replace()`, `repeat()`
-
-#### `ascii` — ASCII Operations
-- Character classification and case conversion
-- `AsciiChar` — Single ASCII character type
-
-#### `char` — Unicode Characters
-- **`Char`** — Unicode scalar value
-- UTF-8/UTF-16 encoding/decoding, character properties
-
-#### `bstr` — Byte Strings
-- **`BStr`** — Byte string slice (may not be valid UTF-8)
-
-#### `unicode` — Unicode Support
-- Unicode categories, properties, normalization
-
-#### `encoding` — Encoding Utilities
-- Base64, hex, and other encoding/decoding functions
-
-### Error Handling
-
-#### `error` — Error Types
-- **`Error`** — Base behavior for error types
-- **`SimpleError`** — Basic string error
-- **`ChainedError[E]`** — Error with underlying cause
-- **`BoxedError`** — Type-erased error
-- **`ParseError`**, **`IoError`**, **`TryFromIntError`**
-
-### Low-Level
-
-#### `ptr` — Raw Pointers
-- **`RawPtr[T]`**, **`RawMutPtr[T]`**, **`NonNull[T]`**
-- `copy()`, `copy_nonoverlapping()`, `write_bytes()`
-
-#### `intrinsics` — Compiler Intrinsics
-- `type_id[T]()`, `type_name[T]()`, `likely()`, `unlikely()`, `unreachable()`
-
-#### `sync` — Synchronization Primitives (core)
-- Generic atomics: `atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_exchange`, `atomic_cas`
-- Typed atomic FFI: `atomic_fetch_add_i32`, `atomic_load_i32`, etc.
-- Memory fences: `atomic_fence`, `atomic_fence_acquire`, `atomic_fence_release`
-- Spinlock: `spin_lock`, `spin_unlock`, `spin_trylock`
-
-#### `any` — Type Erasure
-- **`Any`** — Type-erased value with runtime type checking
-- `downcast[T]()` — Safe downcasting
-
-### Specialized
-
-#### `soo` — Small Object Optimization
-- **`SmallBox[T, N]`** — Stack-allocated box with fallback to heap
-
-#### `cache` — Caching
-- **`Cache[K, V]`** — LRU cache implementation
-
-#### `reflect` — Reflection
-- Runtime type introspection via `@derive(Reflect)`
-- `variant_name()`, `variant_tag()` for enums
-
-#### `ringbuf` — Ring Buffer
-- Lock-free ring buffer for concurrent producers/consumers
-
-#### `bitset` — Bit Sets
-- Fixed-size and dynamic bit set operations
-
-#### `simd` — SIMD Intrinsics
-- Native SSE2: `sse2_cmpeq_epi8`, `sse2_movemask_epi8`
-- `simd_splat`, `simd_load_ptr`, `cttz`
-- Guarded with `#if X86_64`
-
-### Async/Concurrency
-
-#### `future` — Futures
-- **`Future`** — Async computation
-- **`Poll`** — Future poll result
-
-#### `task` — Task Management
-- **`Context`** — Task context
-- **`Waker`** — Task waker
-
-#### `time` — Time Utilities
-- **`Duration`** — Time duration
-- **`Instant`** — Point in time
-- `now()`, `elapsed()`, `sleep()`
-
-## Design Philosophy
-
-The core library follows TML's design principles:
-
-1. **Self-documenting names**: `Duplicate` instead of `Clone`, `Maybe` instead of `Option`
-2. **Words over symbols**: `ref T` instead of `&T`, `and`/`or` instead of `&&`/`||`
-3. **Explicit over implicit**: Clear behavior contracts with explicit type constraints
-4. **Rust compatibility**: Familiar patterns adapted to TML syntax
-5. **Minimal C dependencies**: Smart pointers, iterators, fmt — all pure TML
+Foundation types and behaviors for the TML language. Everything here is available without `std` — similar to Rust's `core` crate.
+
+[Changelog](CHANGELOG.md)
+
+## Module Index
+
+### Traits & Behaviors (`traits/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| clone | `core::traits::clone` | `Duplicate`, `Copy` — type duplication |
+| cmp | `core::traits::cmp` | `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Ordering` |
+| convert | `core::traits::convert` | `From`, `Into`, `TryFrom`, `TryInto`, `AsRef`, `AsMut` |
+| default | `core::traits::default` | `Default` — types with a default value |
+| hash | `core::traits::hash` | `Hash`, `Hasher`, `BuildHasher` |
+| marker | `core::traits::marker` | `Send`, `Sync`, `Sized`, `Unpin`, `Copy`, `PhantomData` |
+| borrow | `core::traits::borrow` | `Borrow`, `BorrowMut`, `ToOwned`, `Cow` |
+
+### Core Types (`types/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| option | `core::types::option` | `Maybe[T]` — `Just(T)` / `Nothing` with 30 methods |
+| result | `core::types::result` | `Outcome[T,E]` — `Ok(T)` / `Err(E)` with 34 methods |
+| tuple | `core::types::tuple` | Tuple impls up to 12 elements |
+| range | `core::types::range` | `Range`, `RangeInclusive`, `RangeFrom`, `RangeTo` |
+| any | `core::types::any` | `TypeId`, `AnyValue`, runtime type checking, `downcast` |
+
+### Runtime & Compiler (`runtime/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| error | `core::runtime::error` | `Error`, `IoError`, `IoErrorKind`, `ParseError`, `SimpleError` |
+| panic | `core::runtime::panic` | `panic()`, `PanicInfo`, catch support |
+| intrinsics | `core::runtime::intrinsics` | Compiler intrinsics — math, memory, SIMD, type info |
+| mem | `core::runtime::mem` | `size_of`, `align_of`, `swap`, `replace`, `take`, `forget`, `ManuallyDrop`, `MaybeUninit` |
+| pin | `core::runtime::pin` | `Pin[P]` — pinned pointer for self-referential types |
+| hint | `core::runtime::hint` | `unreachable`, `assume`, `likely`, `unlikely` |
+| profiler | `core::runtime::profiler` | Profiling utilities |
+
+### Data Structures (`data/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| arena | `core::data::arena` | Arena bump allocator |
+| bitset | `core::data::bitset` | Fixed-size and dynamic bit sets |
+| cache | `core::data::cache` | LRU cache with TTL expiry |
+| pool | `core::data::pool` | `Pool[T]` — reusable object pool |
+| ringbuf | `core::data::ringbuf` | Lock-free ring buffer |
+| soo | `core::data::soo` | `SmallBox` — small object optimization |
+| collections | `core::data::collections` | Collection re-exports |
+
+### Async (`async/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| async_iter | `core::async::async_iter` | `AsyncIterator` — async iteration with `poll_next` |
+| task | `core::async::task` | `Poll`, `Waker`, `Context`, `RawWaker` |
+
+### Memory (`alloc/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| heap | `core::alloc` | `Heap[T]` — owned heap allocation (Rust's `Box`) |
+| shared | `core::alloc` | `Shared[T]` — reference-counted pointer (Rust's `Rc`) |
+| sync | `core::alloc` | `Sync[T]` — atomic reference-counted pointer (Rust's `Arc`) |
+| weak | `core::alloc` | `Weak[T]` — weak reference |
+
+### Cell (`cell/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| cell | `core::cell` | `Cell[T]` — interior mutability for Copy types |
+| ref_cell | `core::cell` | `RefCell[T]` — runtime borrow checking |
+| once | `core::cell` | `OnceCell[T]` — write-once cell |
+| lazy | `core::cell` | `LazyCell[T]` — lazy initialization |
+| unsafe_cell | `core::cell` | `UnsafeCell[T]` — raw interior mutability |
+
+### Iterators (`iter/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| traits | `core::iter` | `Iterator`, `IntoIterator`, `FromIterator`, `DoubleEndedIterator` |
+| adapters | `core::iter` | `Map`, `Filter`, `Take`, `Skip`, `Chain`, `Zip`, `Enumerate`, `Peekable`, `Flatten`, `FlatMap`, `Cycle`, `Rev`, `StepBy`, `Intersperse` |
+| sources | `core::iter` | `empty`, `once`, `repeat`, `from_fn`, `successors` |
+| accumulators | `core::iter` | `sum`, `product` |
+
+### Strings & Text
+
+| Module | Path | Description |
+|--------|------|-------------|
+| str | `core::str` | String methods — split, find, replace, trim, parse, chars |
+| char | `core::char` | Unicode scalar — properties, escape, case conversion |
+| ascii | `core::ascii` | ASCII character classification and conversion |
+| encoding | `core::encoding` | Base64, hex, UTF-8/16/32 codecs, BStr |
+
+### Operators (`ops/`)
+
+| Module | Path | Description |
+|--------|------|-------------|
+| arith | `core::ops` | `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg` |
+| bit | `core::ops` | `BitAnd`, `BitOr`, `BitXor`, `Shl`, `Shr`, `Not` |
+| index | `core::ops` | `Index`, `IndexMut` |
+| assign | `core::ops` | `AddAssign`, `SubAssign`, `MulAssign`, etc. |
+| range | `core::ops` | `Range`, `RangeInclusive`, `RangeTo`, `RangeFrom` |
+| function | `core::ops` | `Fn`, `FnMut`, `FnOnce` |
+| deref | `core::ops` | `Deref`, `DerefMut` |
+| drop | `core::ops` | `Drop` — custom destructors |
+| try_trait | `core::ops` | `Try`, `FromResidual` — `?` operator support |
+| coroutine | `core::ops` | `Coroutine`, `CoroutineState` |
+
+### Other
+
+| Module | Path | Description |
+|--------|------|-------------|
+| fmt | `core::fmt` | `Display`, `Debug`, `Formatter`, `Write` |
+| reflect | `core::reflect` | `Reflect`, `TypeInfo`, `FieldInfo`, vtable dispatch |
+| ptr | `core::ptr` | `RawPtr`, `NonNull`, `copy`, `write_bytes` |
+| ffi | `core::ffi` | `CStr`, `CString`, FFI types |
+| slice | `core::slice` | Slice methods — sort, search, chunks |
+| array | `core::array` | Fixed-size array methods |
+| num | `core::num` | Integer traits, `NonZero`, wrapping arithmetic |
+| future | `core::future` | `Future`, `Join`, `Select`, `Ready` |
+| unicode | `core::unicode` | Unicode tables and categories |
+| simd | `core::simd` | SIMD vectors — `F32x4`, `I32x8`, `U8x16` |
+| sync | `core::sync` | Atomic operations, fences, spinlocks |
+| time | `core::time` | `Duration`, `Instant`, `time_ns` |
