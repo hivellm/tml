@@ -173,6 +173,10 @@ private:
     auto expect(lexer::TokenKind kind, const std::string& message)
         -> Result<lexer::Token, ParseError>;
 
+    /// Expects and consumes a token of given kind, or returns error with an explicit code.
+    auto expect(lexer::TokenKind kind, const std::string& message, const std::string& code)
+        -> Result<lexer::Token, ParseError>;
+
     /// Skips insignificant newlines.
     void skip_newlines();
 

@@ -647,8 +647,8 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             }
 
             if (timed_out) {
-                fr.error_message =
-                    "Codegen timed out after " + std::to_string(CODEGEN_TIMEOUT_SECONDS) + "s";
+                fr.error_message = "[X002] Codegen timed out after " +
+                                   std::to_string(CODEGEN_TIMEOUT_SECONDS) + "s";
                 continue;
             }
 
@@ -824,7 +824,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     if (!disp_result.success) {
         result.success = false;
-        result.error_message = "Dispatcher compilation failed: " + disp_result.error_message;
+        result.error_message = "[X001] Dispatcher compilation failed: " + disp_result.error_message;
         auto end = Clock::now();
         result.compile_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -1541,7 +1541,7 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
                                                         g_clang_path, disp_opts);
     if (!disp_result.success) {
         result.error_message =
-            "Unified dispatcher compilation failed: " + disp_result.error_message;
+            "[X001] Unified dispatcher compilation failed: " + disp_result.error_message;
         auto end = Clock::now();
         result.compile_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();

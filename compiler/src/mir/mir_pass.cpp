@@ -113,14 +113,14 @@ static bool verify_mir(const Module& module, const std::string& after_pass) {
             for (const auto& inst : block.instructions) {
                 if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
                     if (defined.find(bin->left.id) == defined.end()) {
-                        TML_LOG_ERROR("mir", "MIR VERIFICATION FAILED after "
+                        TML_LOG_ERROR("mir", "[M005] MIR VERIFICATION FAILED after "
                                                  << after_pass << ": undefined value %"
                                                  << bin->left.id << " used in " << func.name
                                                  << " block " << block.id);
                         return false;
                     }
                     if (defined.find(bin->right.id) == defined.end()) {
-                        TML_LOG_ERROR("mir", "MIR VERIFICATION FAILED after "
+                        TML_LOG_ERROR("mir", "[M005] MIR VERIFICATION FAILED after "
                                                  << after_pass << ": undefined value %"
                                                  << bin->right.id << " used in " << func.name
                                                  << " block " << block.id);
@@ -174,7 +174,7 @@ auto PassManager::run(Module& module) -> int {
 
             if (debug_mir) {
                 if (!verify_mir(module, pass->name())) {
-                    TML_LOG_ERROR("mir", "Pass " << pass->name() << " corrupted MIR!");
+                    TML_LOG_ERROR("mir", "[M006] Pass " << pass->name() << " corrupted MIR!");
                 }
             }
 

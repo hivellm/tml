@@ -1583,6 +1583,10 @@ add_library(tml_cli STATIC
     src/cli/explain/codegen_errors.cpp
     src/cli/explain/general_errors.cpp
     src/cli/explain/preproc_errors.cpp
+    src/cli/explain/mir_errors.cpp
+    src/cli/explain/backend_errors.cpp
+    src/cli/explain/testing_errors.cpp
+    src/cli/explain/reflection_errors.cpp
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp

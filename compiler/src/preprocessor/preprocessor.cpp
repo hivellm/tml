@@ -353,7 +353,7 @@ PreprocessorResult Preprocessor::process(std::string_view source, const std::str
 
     // Check for unclosed conditionals
     if (!state.condition_stack.empty()) {
-        report_error(state, "Unterminated #if directive");
+        report_error(state, "[PP002] Unterminated #if directive");
     }
 
     PreprocessorResult result;
@@ -436,7 +436,8 @@ void Preprocessor::process_directive(ProcessingState& state, std::string_view li
         } else if (directive == "warning") {
             handle_warning(state, trimmed);
         } else {
-            report_error(state, "Unknown preprocessor directive: #" + std::string(directive));
+            report_error(state,
+                         "[PP001] Unknown preprocessor directive: #" + std::string(directive));
         }
     }
 }
@@ -495,7 +496,7 @@ void Preprocessor::handle_ifndef(ProcessingState& state, std::string_view symbol
 
 void Preprocessor::handle_elif(ProcessingState& state, std::string_view expr) {
     if (state.condition_stack.empty()) {
-        report_error(state, "#elif without matching #if");
+        report_error(state, "[PP003] #elif without matching #if");
         return;
     }
 
@@ -520,7 +521,7 @@ void Preprocessor::handle_elif(ProcessingState& state, std::string_view expr) {
 
 void Preprocessor::handle_else(ProcessingState& state) {
     if (state.condition_stack.empty()) {
-        report_error(state, "#else without matching #if");
+        report_error(state, "[PP004] #else without matching #if");
         return;
     }
 
@@ -536,7 +537,7 @@ void Preprocessor::handle_else(ProcessingState& state) {
 
 void Preprocessor::handle_endif(ProcessingState& state) {
     if (state.condition_stack.empty()) {
-        report_error(state, "#endif without matching #if");
+        report_error(state, "[PP005] #endif without matching #if");
         return;
     }
 
@@ -547,7 +548,7 @@ void Preprocessor::handle_endif(ProcessingState& state) {
 void Preprocessor::handle_define(ProcessingState& state, std::string_view rest) {
     std::string_view sym = read_identifier(rest);
     if (sym.empty()) {
-        report_error(state, "#define requires a symbol name");
+        report_error(state, "[PP006] #define requires a symbol name");
         return;
     }
 
@@ -561,7 +562,7 @@ void Preprocessor::handle_define(ProcessingState& state, std::string_view rest) 
 void Preprocessor::handle_undef(ProcessingState& state, std::string_view symbol) {
     std::string_view sym = trim(symbol);
     if (sym.empty()) {
-        report_error(state, "#undef requires a symbol name");
+        report_error(state, "[PP007] #undef requires a symbol name");
         return;
     }
 
@@ -576,7 +577,7 @@ void Preprocessor::handle_error(ProcessingState& state, std::string_view message
         msg = msg.substr(1, msg.size() - 2);
     }
 
-    report_error(state, "#error: " + std::string(msg));
+    report_error(state, "[PP008] #error: " + std::string(msg));
 }
 
 void Preprocessor::handle_warning(ProcessingState& state, std::string_view message) {
@@ -679,7 +680,7 @@ bool Preprocessor::parse_primary_expr(ProcessingState& state, std::string_view& 
     skip_whitespace(expr);
 
     if (expr.empty()) {
-        report_error(state, "Unexpected end of preprocessor expression");
+        report_error(state, "[PP009] Unexpected end of preprocessor expression");
         return false;
     }
 
@@ -689,7 +690,7 @@ bool Preprocessor::parse_primary_expr(ProcessingState& state, std::string_view& 
         bool result = parse_or_expr(state, expr);
         skip_whitespace(expr);
         if (expr.empty() || expr[0] != ')') {
-            report_error(state, "Missing ')' in preprocessor expression");
+            report_error(state, "[PP010] Missing ')' in preprocessor expression");
         } else {
             expr.remove_prefix(1);
         }
@@ -710,14 +711,14 @@ bool Preprocessor::parse_primary_expr(ProcessingState& state, std::string_view& 
 
         std::string_view symbol = read_identifier(expr);
         if (symbol.empty()) {
-            report_error(state, "'defined' requires a symbol name");
+            report_error(state, "[PP009] 'defined' requires a symbol name");
             return false;
         }
 
         if (has_paren) {
             skip_whitespace(expr);
             if (expr.empty() || expr[0] != ')') {
-                report_error(state, "Missing ')' after 'defined(symbol'");
+                report_error(state, "[PP010] Missing ')' after 'defined(symbol'");
             } else {
                 expr.remove_prefix(1);
             }
@@ -729,7 +730,7 @@ bool Preprocessor::parse_primary_expr(ProcessingState& state, std::string_view& 
     // Simple identifier - treat as defined check
     std::string_view symbol = read_identifier(expr);
     if (symbol.empty()) {
-        report_error(state, "Expected symbol in preprocessor expression");
+        report_error(state, "[PP009] Expected symbol in preprocessor expression");
         return false;
     }
 

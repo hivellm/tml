@@ -50,6 +50,16 @@ static bool is_ident_start(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
+// Helper to report escape sequence errors with the correct L-code.
+// Unicode-related errors use L025; all other escape errors use L024.
+static std::string escape_error_code(const std::string& msg) {
+    if (msg.find("unicode") != std::string::npos || msg.find("Unicode") != std::string::npos ||
+        msg.find("\\u") != std::string::npos) {
+        return "L025";
+    }
+    return "L024";
+}
+
 // Helper to encode a Unicode codepoint as UTF-8
 static void encode_utf8(std::string& out, char32_t cp) {
     if (cp < 0x80) {
@@ -119,7 +129,8 @@ auto Lexer::lex_string() -> Token {
             if (is_ok(escape_result)) {
                 encode_utf8(value, unwrap(escape_result));
             } else {
-                report_error(unwrap_err(escape_result));
+                report_error(unwrap_err(escape_result),
+                             escape_error_code(unwrap_err(escape_result)));
                 has_error = true;
             }
         } else {
@@ -189,7 +200,8 @@ auto Lexer::lex_interp_string_continue() -> Token {
             if (is_ok(escape_result)) {
                 encode_utf8(value, unwrap(escape_result));
             } else {
-                report_error(unwrap_err(escape_result));
+                report_error(unwrap_err(escape_result),
+                             escape_error_code(unwrap_err(escape_result)));
                 has_error = true;
             }
         } else {
@@ -282,7 +294,8 @@ auto Lexer::lex_char() -> Token {
         advance();
         auto escape_result = parse_escape_sequence();
         if (is_err(escape_result)) {
-            return make_error_token(unwrap_err(escape_result));
+            return make_error_token(unwrap_err(escape_result),
+                                    escape_error_code(unwrap_err(escape_result)));
         }
         value = unwrap(escape_result);
     } else {
@@ -451,7 +464,8 @@ auto Lexer::lex_template_literal() -> Token {
             if (is_ok(escape_result)) {
                 encode_utf8(value, unwrap(escape_result));
             } else {
-                report_error(unwrap_err(escape_result));
+                report_error(unwrap_err(escape_result),
+                             escape_error_code(unwrap_err(escape_result)));
                 has_error = true;
             }
         } else {
@@ -525,7 +539,8 @@ auto Lexer::lex_template_literal_continue() -> Token {
             if (is_ok(escape_result)) {
                 encode_utf8(value, unwrap(escape_result));
             } else {
-                report_error(unwrap_err(escape_result));
+                report_error(unwrap_err(escape_result),
+                             escape_error_code(unwrap_err(escape_result)));
                 has_error = true;
             }
         } else {

@@ -689,6 +689,122 @@ How to fix: call static methods that are defined on the type:
 Related: C006 (method not found), T006 (unknown method)
 )EX"},
 
+        {"C036", R"EX(
+@no_mangle with generic function [C036]
+
+The `@no_mangle` attribute cannot be applied to generic functions.
+Generic functions require name mangling to distinguish between
+different instantiations (e.g., `foo[I32]` vs `foo[F64]`).
+
+Example of erroneous code:
+
+    @no_mangle
+    func foo[T](x: T) -> T { x }  // error: cannot suppress mangling
+
+How to fix: remove `@no_mangle` from generic functions, or create
+a non-generic wrapper:
+
+    @no_mangle
+    func foo_i32(x: I32) -> I32 { foo(x) }
+
+Related: C001 (generic instantiation)
+)EX"},
+
+        {"C044", R"EX(
+Generic instantiation failure [C044]
+
+Code generation failed while instantiating a generic function or type
+with specific type arguments. The instantiation produced an invalid
+LLVM IR construction.
+
+This is typically an internal compiler error. If you encounter this,
+please file a bug report with a minimal reproduction case.
+
+Related: T001 (type mismatch), C001 (generic type)
+)EX"},
+
+        {"C045", R"EX(
+sret ABI mismatch [C045]
+
+A struct-return (sret) ABI convention mismatch was detected during
+code generation. The caller and callee disagree on whether a return
+value is passed via a hidden pointer parameter.
+
+This is an internal compiler error. The function signature and call
+site must agree on the return value convention.
+
+Related: C046 (ABI mismatch)
+)EX"},
+
+        {"C046", R"EX(
+ABI mismatch [C046]
+
+A calling convention or ABI mismatch was detected between a function
+declaration and its call site during code generation.
+
+This can occur when:
+- An `@extern("c")` declaration uses wrong parameter types
+- A function pointer has incompatible signature
+
+Check that extern function declarations exactly match the C signatures.
+
+Related: C045 (sret ABI), C047 (void return)
+)EX"},
+
+        {"C047", R"EX(
+Void return mismatch [C047]
+
+A function declared to return a value returned void (unit), or vice
+versa, during code generation. The return type in the IR does not
+match the function's declared return type.
+
+This is an internal compiler error. Please file a bug report.
+
+Related: C046 (ABI mismatch), T004 (return type mismatch)
+)EX"},
+
+        {"C048", R"EX(
+Array bounds in codegen [C048]
+
+An array index operation during code generation used a bounds check
+that could not be satisfied or produced invalid IR.
+
+This may indicate a const-size array was used with an out-of-bounds
+compile-time index.
+
+Related: T049 (array index out of bounds)
+)EX"},
+
+        {"C049", R"EX(
+Integer overflow in codegen [C049]
+
+A compile-time integer constant operation resulted in overflow during
+code generation. The result cannot be represented in the target type.
+
+Example:
+    const X: I8 = 200;  // 200 does not fit in I8 (-128..127)
+
+Fix: use a larger integer type or reduce the value.
+
+Related: T060 (integer overflow)
+)EX"},
+
+        {"C050", R"EX(
+Invalid bitcast [C050]
+
+A bitcast operation produced invalid LLVM IR because the source and
+destination types have different sizes or incompatible layouts.
+
+Bitcasts require source and destination types to have identical bit widths.
+
+Example:
+    // casting I32 (32-bit) to I64 (64-bit) via bitcast is invalid
+
+Fix: use explicit numeric conversions instead of bitcasts.
+
+Related: C046 (ABI mismatch)
+)EX"},
+
     };
     return db;
 }

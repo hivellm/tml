@@ -432,26 +432,29 @@ struct CaptureInfo {
 /// Each error code corresponds to a specific violation of borrowing rules.
 /// Error codes are prefixed with 'B' in diagnostics (e.g., B001).
 enum class BorrowErrorCode {
-    UseAfterMove,            ///< B001: Use of moved value
-    MoveWhileBorrowed,       ///< B002: Cannot move because value is borrowed
-    AssignNotMutable,        ///< B003: Cannot assign to immutable variable
-    AssignWhileBorrowed,     ///< B004: Cannot assign because value is borrowed
-    BorrowAfterMove,         ///< B005: Cannot borrow moved value
-    MutBorrowNotMutable,     ///< B006: Cannot mutably borrow non-mutable variable
-    MutBorrowWhileImmut,     ///< B007: Cannot mutably borrow while immutably borrowed
-    DoubleMutBorrow,         ///< B008: Cannot borrow mutably more than once
-    ImmutBorrowWhileMut,     ///< B009: Cannot immutably borrow while mutably borrowed
-    ReturnLocalRef,          ///< B010: Cannot return reference to local
-    PartialMove,             ///< B011: Partial move detected
-    OverlappingBorrow,       ///< B012: Overlapping borrows conflict
-    UseWhileBorrowed,        ///< B013: Cannot use value while borrowed
-    ClosureCapturesMoved,    ///< B014: Closure captures moved value
-    ClosureCaptureConflict,  ///< B015: Closure captures ref while outer scope borrows
-    PartiallyMovedValue,     ///< B016: Use of partially moved value
-    ReborrowOutlivesOrigin,  ///< B017: Reborrow outlives original borrow
-    AmbiguousReturnLifetime, ///< E031: Cannot determine return reference lifetime
-    InteriorMutWarning,      ///< W001: Interior mutability bypasses borrow checking
-    Other,                   ///< B099: Other borrow errors
+    UseAfterMove,             ///< B001: Use of moved value
+    MoveWhileBorrowed,        ///< B002: Cannot move because value is borrowed
+    AssignNotMutable,         ///< B003: Cannot assign to immutable variable
+    AssignWhileBorrowed,      ///< B004: Cannot assign because value is borrowed
+    BorrowAfterMove,          ///< B005: Cannot borrow moved value
+    MutBorrowNotMutable,      ///< B006: Cannot mutably borrow non-mutable variable
+    MutBorrowWhileImmut,      ///< B007: Cannot mutably borrow while immutably borrowed
+    DoubleMutBorrow,          ///< B008: Cannot borrow mutably more than once
+    ImmutBorrowWhileMut,      ///< B009: Cannot immutably borrow while mutably borrowed
+    ReturnLocalRef,           ///< B010: Cannot return reference to local
+    PartialMove,              ///< B011: Partial move detected
+    OverlappingBorrow,        ///< B012: Overlapping borrows conflict
+    UseWhileBorrowed,         ///< B013: Cannot use value while borrowed
+    ClosureCapturesMoved,     ///< B014: Closure captures moved value
+    ClosureCaptureConflict,   ///< B015: Closure captures ref while outer scope borrows
+    PartiallyMovedValue,      ///< B016: Use of partially moved value
+    ReborrowOutlivesOrigin,   ///< B017: Reborrow outlives original borrow
+    AmbiguousReturnLifetime,  ///< E031: Cannot determine return reference lifetime
+    InteriorMutWarning,       ///< W001: Interior mutability bypasses borrow checking
+    TempDroppedWhileBorrowed, ///< B028: Temporary value dropped while borrowed
+    CannotMoveFromRef,        ///< B029: Cannot move out of a reference
+    BorrowBeyondScope,        ///< B030: Borrow extends beyond the scope it was created in
+    Other,                    ///< B099: Other borrow errors
 };
 
 /// A suggestion for fixing a borrow error.

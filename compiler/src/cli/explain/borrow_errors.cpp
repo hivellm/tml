@@ -363,6 +363,52 @@ outlive the original reference it was derived from.
 Related: B010 (return local reference)
 )EX"},
 
+        {"B028", R"EX(
+Temporary value dropped while borrowed [B028]
+
+A temporary value is dropped at the end of the statement while a borrow
+of it is still active. The borrow outlives the temporary.
+
+Example:
+    let r = ref some_fn().field; // temporary dropped at end of statement
+
+Fix: Assign the temporary to a variable first:
+    let temp = some_fn();
+    let r = ref temp.field;
+)EX"},
+
+        {"B029", R"EX(
+Cannot move out of reference [B029]
+
+You attempted to move a value out of a reference. Moving out of a reference
+would leave the referent in an invalid state, which is not allowed.
+
+Example:
+    let r = ref some_value;
+    let x = *r; // cannot move out of reference
+
+Fix: Clone the value instead:
+    let x = (*r).clone();
+Or use copy semantics if the type implements Copy.
+)EX"},
+
+        {"B030", R"EX(
+Borrow extends beyond scope [B030]
+
+A borrow is used outside the scope in which the referenced value is defined.
+The value being borrowed does not live long enough.
+
+Example:
+    let r;
+    {
+        let x = 42;
+        r = ref x; // x dropped at end of inner scope
+    }
+    use(r); // r is dangling here
+
+Fix: Ensure the borrowed value outlives all borrows of it.
+)EX"},
+
     };
     return db;
 }

@@ -20,9 +20,13 @@ TML_MODULE("compiler")
 //! - `parser_errors.cpp`   — P001-P065
 //! - `type_errors.cpp`     — T001-T054
 //! - `borrow_errors.cpp`   — B001-B017
-//! - `codegen_errors.cpp`  — C001-C014
+//! - `codegen_errors.cpp`  — C001-C035
 //! - `general_errors.cpp`  — E001-E006
-//! - `preproc_errors.cpp`  — PP001-PP002
+//! - `preproc_errors.cpp`  — PP001-PP010
+//! - `mir_errors.cpp`      — M001-M020
+//! - `backend_errors.cpp`  — K001-K011, N001-N008
+//! - `testing_errors.cpp`  — X001-X010
+//! - `reflection_errors.cpp` — R001-R005
 
 #include "cli/commands/cmd_explain.hpp"
 #include "cli/diagnostic.hpp"
@@ -53,6 +57,10 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         const auto& codegen = explain::get_codegen_explanations();
         const auto& general = explain::get_general_explanations();
         const auto& preproc = explain::get_preprocessor_explanations();
+        const auto& mir = explain::get_mir_explanations();
+        const auto& backend = explain::get_backend_explanations();
+        const auto& testing = explain::get_testing_explanations();
+        const auto& reflection = explain::get_reflection_explanations();
 
         merged.insert(lexer.begin(), lexer.end());
         merged.insert(parser.begin(), parser.end());
@@ -61,6 +69,10 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         merged.insert(codegen.begin(), codegen.end());
         merged.insert(general.begin(), general.end());
         merged.insert(preproc.begin(), preproc.end());
+        merged.insert(mir.begin(), mir.end());
+        merged.insert(backend.begin(), backend.end());
+        merged.insert(testing.begin(), testing.end());
+        merged.insert(reflection.begin(), reflection.end());
 
         initialized = true;
     }
@@ -136,10 +148,15 @@ int run_explain(const std::string& code, bool /*verbose*/) {
     std::cerr << "Available error code categories:\n";
     std::cerr << "  L001-L020   Lexer errors (tokenization)\n";
     std::cerr << "  P001-P065   Parser errors (syntax)\n";
-    std::cerr << "  PP001-PP002 Preprocessor errors (conditional compilation)\n";
+    std::cerr << "  PP001-PP010 Preprocessor errors (conditional compilation)\n";
     std::cerr << "  T001-T084   Type errors (type checking)\n";
     std::cerr << "  B001-B017   Borrow errors (ownership/lifetimes)\n";
     std::cerr << "  C001-C035   Codegen errors (code generation)\n";
+    std::cerr << "  M001-M020   MIR building errors\n";
+    std::cerr << "  K001-K011   LLVM backend errors\n";
+    std::cerr << "  N001-N008   Linker (LLD) errors\n";
+    std::cerr << "  X001-X010   Test runner errors\n";
+    std::cerr << "  R001-R005   Reflection intrinsic errors\n";
     std::cerr << "  E001-E006   General errors\n";
 
     return 1;

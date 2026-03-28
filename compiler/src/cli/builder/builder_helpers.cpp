@@ -503,6 +503,15 @@ void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& er
     case borrow::BorrowErrorCode::InteriorMutWarning:
         diag.code = "W001";
         break;
+    case borrow::BorrowErrorCode::TempDroppedWhileBorrowed:
+        diag.code = "B028";
+        break;
+    case borrow::BorrowErrorCode::CannotMoveFromRef:
+        diag.code = "B029";
+        break;
+    case borrow::BorrowErrorCode::BorrowBeyondScope:
+        diag.code = "B030";
+        break;
     default:
         diag.code = "B099";
         break;

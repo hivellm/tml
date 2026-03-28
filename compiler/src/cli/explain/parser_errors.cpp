@@ -447,6 +447,261 @@ How to fix:
     let f = do(x: I32) { x + 1 }
 )EX"},
 
+        {"P066", R"EX(
+Missing function name [P066]
+
+A function declaration is missing its name identifier.
+
+Example of erroneous code:
+
+    func () -> I32 { return 0 }   // no name
+
+How to fix:
+
+    func compute() -> I32 { return 0 }
+)EX"},
+
+        {"P067", R"EX(
+Missing struct name [P067]
+
+A struct declaration is missing its name identifier after `type`.
+
+Example of erroneous code:
+
+    type { x: I32, y: I32 }   // no name
+
+How to fix:
+
+    type Point { x: I32, y: I32 }
+)EX"},
+
+        {"P068", R"EX(
+Missing enum name [P068]
+
+An enum declaration is missing its name identifier after `type`.
+
+Example of erroneous code:
+
+    type { A, B, C }   // no name
+
+How to fix:
+
+    type Color { Red, Green, Blue }
+)EX"},
+
+        {"P069", R"EX(
+Missing behavior name [P069]
+
+A behavior (trait) declaration is missing its name identifier after `behavior`.
+
+Example of erroneous code:
+
+    behavior { func display(this) -> Text }   // no name
+
+How to fix:
+
+    behavior Display { func display(this) -> Text }
+)EX"},
+
+        {"P070", R"EX(
+Missing field name [P070]
+
+A struct or union field declaration is missing its name identifier.
+
+Example of erroneous code:
+
+    type Point {
+        : I32   // no field name
+    }
+
+How to fix:
+
+    type Point {
+        x: I32
+        y: I32
+    }
+)EX"},
+
+        {"P071", R"EX(
+Missing enum variant name [P071]
+
+An enum variant declaration is missing its name identifier.
+
+Example of erroneous code:
+
+    type Color {
+        (I32)   // no variant name
+    }
+
+How to fix:
+
+    type Color {
+        Rgb(I32)
+        Named(Text)
+    }
+)EX"},
+
+        {"P072", R"EX(
+Missing decorator name [P072]
+
+A decorator (attribute) is missing its name identifier after `@`.
+
+Example of erroneous code:
+
+    @   // decorator with no name
+    func compute() -> I32 { 0 }
+
+How to fix:
+
+    @inline
+    func compute() -> I32 { 0 }
+)EX"},
+
+        {"P073", R"EX(
+Missing module name [P073]
+
+A `mod` declaration is missing its name identifier.
+
+Example of erroneous code:
+
+    mod    // no module name
+
+How to fix:
+
+    pub mod utils
+)EX"},
+
+        {"P074", R"EX(
+Missing union name [P074]
+
+A union declaration is missing its name identifier after `union`.
+
+Example of erroneous code:
+
+    union { a: I32, b: F32 }   // no name
+
+How to fix:
+
+    union IntOrFloat { a: I32, b: F32 }
+)EX"},
+
+        {"P075", R"EX(
+Missing opening brace for struct body [P075]
+
+A struct body must begin with `{`. The opening brace is missing or in the
+wrong position.
+
+Example of erroneous code:
+
+    type Point
+        x: I32   // missing '{'
+
+How to fix:
+
+    type Point {
+        x: I32
+        y: I32
+    }
+)EX"},
+
+        {"P076", R"EX(
+Missing opening brace for enum body [P076]
+
+An enum body must begin with `{`. The opening brace is missing or in the
+wrong position.
+
+Example of erroneous code:
+
+    type Color
+        Red   // missing '{'
+
+How to fix:
+
+    type Color {
+        Red
+        Green
+        Blue
+    }
+)EX"},
+
+        {"P077", R"EX(
+Missing closing brace after struct fields [P077]
+
+A struct body must end with `}`. The closing brace is missing or the struct
+fields are malformed.
+
+Example of erroneous code:
+
+    type Point {
+        x: I32
+        y: I32
+    // missing '}'
+
+How to fix:
+
+    type Point {
+        x: I32
+        y: I32
+    }
+)EX"},
+
+        {"P078", R"EX(
+Missing closing brace after enum variants [P078]
+
+An enum body must end with `}`. The closing brace is missing or the enum
+variants are malformed.
+
+Example of erroneous code:
+
+    type Color {
+        Red
+        Green
+    // missing '}'
+
+How to fix:
+
+    type Color {
+        Red
+        Green
+        Blue
+    }
+)EX"},
+
+        {"P079", R"EX(
+Expected '(' after method type arguments [P079]
+
+When calling a method with explicit type arguments using `[]` syntax, the
+argument list in parentheses must follow immediately.
+
+Example of erroneous code:
+
+    obj.method[I32]     // no call parentheses
+
+How to fix:
+
+    obj.method[I32]()       // empty argument list
+    obj.method[I32](42)     // with argument
+)EX"},
+
+        {"P080", R"EX(
+Expected binary operator [P080]
+
+A binary expression requires a valid operator between the left and right
+operands. The token at this position is not a recognized binary operator.
+
+Common binary operators: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`,
+`<=`, `>=`, `and`, `or`, `&`, `|`, `^`, `<<`, `>>`
+
+Example of erroneous code:
+
+    let x = 1 2   // no operator between 1 and 2
+
+How to fix:
+
+    let x = 1 + 2
+    let x = 1 * 2
+)EX"},
+
     };
     return db;
 }

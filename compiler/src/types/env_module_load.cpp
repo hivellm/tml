@@ -349,8 +349,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     // In non-fatal mode (meta preload), these are expected for some
                     // library files that use unsupported syntax and would spam the output.
                     if (abort_on_module_error_) {
-                        TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
-                        TML_LOG_ERROR("types", "Failed to parse: " << entry_path);
+                        TML_LOG_ERROR("types", "[D001] === MODULE PARSE ERROR ===");
+                        TML_LOG_ERROR("types", "[D001] Failed to parse: " << entry_path);
 
                         for (const auto& err : parsed.lex_errors) {
                             TML_LOG_ERROR("types", entry_path << ":" << err.span.start.line << ":"
@@ -385,8 +385,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         auto parsed = parse_tml_file(file_path);
         if (!parsed.success) {
             if (abort_on_module_error_) {
-                TML_LOG_ERROR("types", "=== MODULE PARSE ERROR ===");
-                TML_LOG_ERROR("types", "Failed to parse: " << file_path);
+                TML_LOG_ERROR("types", "[D001] === MODULE PARSE ERROR ===");
+                TML_LOG_ERROR("types", "[D001] Failed to parse: " << file_path);
 
                 for (const auto& err : parsed.lex_errors) {
                     TML_LOG_ERROR("types", file_path << ":" << err.span.start.line << ":"
@@ -410,8 +410,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 TML_LOG_ERROR("types", "=========================");
 
                 // Log fatal but don't abort — let caller handle the error
-                TML_LOG_ERROR("types",
-                              "Cannot continue - module '" << module_path << "' failed to parse");
+                TML_LOG_ERROR("types", "[D001] Cannot continue - module '" << module_path
+                                                                           << "' failed to parse");
             } else {
                 TML_DEBUG_LN("[MODULE] Parse error in " << file_path << " (" << parsed.errors.size()
                                                         << " errors, skipping)");
@@ -425,8 +425,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // If any file in a directory module failed to parse, abort (unless in non-fatal mode)
     if (had_errors) {
         if (abort_on_module_error_) {
-            TML_LOG_ERROR("types",
-                          "Cannot continue - module '" << module_path << "' has parse errors");
+            TML_LOG_ERROR("types", "[D001] Cannot continue - module '" << module_path
+                                                                       << "' has parse errors");
             return false;
         }
         // In non-fatal mode, continue with successfully parsed files if any
@@ -439,8 +439,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     if (all_parsed.empty()) {
         if (abort_on_module_error_) {
-            TML_LOG_ERROR("types",
-                          "Module '" << module_path << "' is empty or all files failed to parse");
+            TML_LOG_ERROR("types", "[D001] Module '" << module_path
+                                                     << "' is empty or all files failed to parse");
             return false;
         }
         return false;

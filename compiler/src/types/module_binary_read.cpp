@@ -867,8 +867,8 @@ std::optional<Module> load_module_from_cache(const std::string& module_path,
     Module module = reader.read_module();
 
     if (reader.has_error()) {
-        TML_LOG_WARN("types", "[META] Failed to read cache for " << module_path << ": "
-                                                                 << reader.error_message());
+        TML_LOG_WARN("types", "[D003] [META] Failed to read cache for " << module_path << ": "
+                                                                        << reader.error_message());
         return std::nullopt;
     }
 
@@ -1114,8 +1114,8 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
         Module module = reader.read_module();
 
         if (reader.has_error()) {
-            TML_LOG_WARN("meta",
-                         "  [LOAD FAILED] " << module_path << " - " << reader.error_message());
+            TML_LOG_WARN("meta", "  [D003] [LOAD FAILED] " << module_path << " - "
+                                                           << reader.error_message());
             continue;
         }
 
@@ -1181,7 +1181,7 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
 static int generate_all_meta_from_source() {
     auto lib_root = find_lib_root_for_meta();
     if (lib_root.empty()) {
-        TML_LOG_WARN("meta", "[META] Cannot find lib/ directory to generate meta caches");
+        TML_LOG_WARN("meta", "[D010] Cannot find lib/ directory to generate meta caches");
         return 0;
     }
 

@@ -714,7 +714,7 @@ auto ThirMirBuilder::build_pattern_match(const thir::ThirPatternPtr& pattern, Va
 
 auto ThirMirBuilder::create_block(const std::string& name) -> uint32_t {
     if (!ctx_.current_func) {
-        throw std::runtime_error("ThirMirBuilder: No function being built");
+        throw std::runtime_error("[M003] ThirMirBuilder: No function being built");
     }
     return ctx_.current_func->create_block(name);
 }
@@ -732,7 +732,7 @@ auto ThirMirBuilder::is_terminated() const -> bool {
 
 auto ThirMirBuilder::emit(Instruction inst, MirTypePtr type, SourceSpan span) -> Value {
     if (!ctx_.current_func) {
-        throw std::runtime_error("ThirMirBuilder: No function being built");
+        throw std::runtime_error("[M003] ThirMirBuilder: No function being built");
     }
     auto* block = ctx_.current_func->get_block(ctx_.current_block);
     if (!block) {
@@ -768,7 +768,7 @@ void ThirMirBuilder::emit_void(Instruction inst, SourceSpan span) {
 
 auto ThirMirBuilder::emit_at_entry(Instruction inst, MirTypePtr type) -> Value {
     if (!ctx_.current_func) {
-        throw std::runtime_error("ThirMirBuilder: No function being built");
+        throw std::runtime_error("[M003] ThirMirBuilder: No function being built");
     }
     auto& entry = ctx_.current_func->entry_block();
 

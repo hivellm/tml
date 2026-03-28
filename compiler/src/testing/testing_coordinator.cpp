@@ -269,7 +269,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     // run-all mode: mark all tests as failed to launch
                     for (auto& t : r.tests) {
                         t.passed = false;
-                        t.error = "Failed to launch subprocess";
+                        t.error = "[X004] Failed to launch subprocess";
                     }
                     r.failed += static_cast<int>(r.tests.size());
                 } else {
@@ -359,7 +359,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                         ev.index < static_cast<int>(sr.tests.size())) {
                                         auto& t = sr.tests[ev.index];
                                         t.passed = false;
-                                        t.error = "CRASH: " + ev.signal;
+                                        t.error = "[X003] CRASH: " + ev.signal;
                                         t.duration_us = ev.duration_us;
                                         sr.crashed++;
                                         resolved_indices.insert(ev.index);
@@ -369,7 +369,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                         ev.index < static_cast<int>(sr.tests.size())) {
                                         auto& t = sr.tests[ev.index];
                                         t.passed = false;
-                                        t.error = "TIMEOUT";
+                                        t.error = "[X002] TIMEOUT";
                                         sr.failed++;
                                         resolved_indices.insert(ev.index);
                                     }
@@ -387,7 +387,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                         for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
                             if (resolved_indices.count(idx) == 0) {
                                 sr.tests[idx].passed = false;
-                                sr.tests[idx].error = "TIMEOUT";
+                                sr.tests[idx].error = "[X002] TIMEOUT";
                                 sr.failed++;
                             }
                         }
@@ -401,7 +401,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                             auto& t = sr.tests[idx];
                             t.passed = false;
                             if (started_indices.count(idx)) {
-                                t.error = "TIMEOUT: test exceeded 100ms limit — killed";
+                                t.error = "[X002] TIMEOUT: test exceeded 100ms limit — killed";
                                 sr.failed++;
                             } else {
                                 t.error = "NOT RUN: previous test timed out";
@@ -421,11 +421,11 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                             t.passed = false;
                             if (started_indices.count(idx)) {
                                 // Started but no outcome = process crashed during this test
-                                t.error = "CRASH: " + crash_err;
+                                t.error = "[X003] CRASH: " + crash_err;
                                 sr.crashed++;
                             } else {
                                 // Never reached = subprocess died before this test
-                                t.error = "NOT RUN: " + crash_err;
+                                t.error = "[X003] NOT RUN: " + crash_err;
                                 sr.crashed++;
                             }
                         }
@@ -483,13 +483,13 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                     got_event = true;
                                 } else if constexpr (std::is_same_v<T, TestCrashEvent>) {
                                     test_result.passed = false;
-                                    test_result.error = "CRASH: " + ev.signal;
+                                    test_result.error = "[X003] CRASH: " + ev.signal;
                                     test_result.duration_us = ev.duration_us;
                                     sr.crashed++;
                                     got_event = true;
                                 } else if constexpr (std::is_same_v<T, TestTimeoutEvent>) {
                                     test_result.passed = false;
-                                    test_result.error = "TIMEOUT";
+                                    test_result.error = "[X002] TIMEOUT";
                                     got_event = true;
                                 }
                             },
@@ -500,14 +500,14 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     if (!got_event) {
                         if (proc_result.timed_out) {
                             test_result.passed = false;
-                            test_result.error = "TIMEOUT";
+                            test_result.error = "[X002] TIMEOUT";
                             sr.failed++;
                         } else if (proc_result.exit_code != 0) {
                             test_result.passed = false;
                             test_result.exit_code = proc_result.exit_code;
                             test_result.error = !it->accumulated_stderr.empty()
-                                                    ? it->accumulated_stderr
-                                                    : "Process crashed with exit code " +
+                                                    ? "[X003] " + it->accumulated_stderr
+                                                    : "[X003] Process crashed with exit code " +
                                                           std::to_string(proc_result.exit_code);
                             sr.crashed++;
                         } else {

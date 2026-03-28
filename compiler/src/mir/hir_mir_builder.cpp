@@ -358,7 +358,7 @@ auto HirMirBuilder::convert_type(const hir::HirType& type) -> MirTypePtr {
 
 auto HirMirBuilder::create_block(const std::string& name) -> uint32_t {
     if (!ctx_.current_func) {
-        throw std::runtime_error("No current function in HirMirBuilder::create_block");
+        throw std::runtime_error("[M003] No current function in HirMirBuilder::create_block");
     }
     return ctx_.current_func->create_block(name);
 }
@@ -377,12 +377,12 @@ auto HirMirBuilder::is_terminated() const -> bool {
 
 auto HirMirBuilder::emit(Instruction inst, MirTypePtr type, SourceSpan span) -> Value {
     if (!ctx_.current_func) {
-        throw std::runtime_error("No current function in HirMirBuilder::emit");
+        throw std::runtime_error("[M003] No current function in HirMirBuilder::emit");
     }
 
     auto* block = ctx_.current_func->get_block(ctx_.current_block);
     if (!block) {
-        throw std::runtime_error("Invalid current block in HirMirBuilder::emit");
+        throw std::runtime_error("[M004] Invalid current block in HirMirBuilder::emit");
     }
 
     ValueId result_id = ctx_.current_func->fresh_value();
@@ -401,12 +401,12 @@ auto HirMirBuilder::emit(Instruction inst, MirTypePtr type, SourceSpan span) -> 
 
 void HirMirBuilder::emit_void(Instruction inst, SourceSpan span) {
     if (!ctx_.current_func) {
-        throw std::runtime_error("No current function in HirMirBuilder::emit_void");
+        throw std::runtime_error("[M003] No current function in HirMirBuilder::emit_void");
     }
 
     auto* block = ctx_.current_func->get_block(ctx_.current_block);
     if (!block) {
-        throw std::runtime_error("Invalid current block in HirMirBuilder::emit_void");
+        throw std::runtime_error("[M004] Invalid current block in HirMirBuilder::emit_void");
     }
 
     InstructionData data;
@@ -422,7 +422,7 @@ auto HirMirBuilder::emit_at_entry(Instruction inst, MirTypePtr type) -> Value {
     // Insert instruction at the start of the entry block.
     // This is used for allocas that need to dominate all uses (for LLVM's mem2reg).
     if (!ctx_.current_func) {
-        throw std::runtime_error("No current function in HirMirBuilder::emit_at_entry");
+        throw std::runtime_error("[M003] No current function in HirMirBuilder::emit_at_entry");
     }
 
     auto& entry = ctx_.current_func->entry_block();

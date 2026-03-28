@@ -25,7 +25,7 @@ auto InfiniteLoopCheckPass::run(Module& module) -> bool {
 
 void InfiniteLoopCheckPass::print_warnings() const {
     for (const auto& warning : warnings_) {
-        TML_LOG_WARN("mir", "potential infinite loop in function '"
+        TML_LOG_WARN("mir", "[M007] potential infinite loop in function '"
                                 << warning.function_name << "' at block '" << warning.block_name
                                 << "' (id=" << warning.block_id << "): " << warning.reason);
     }

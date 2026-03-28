@@ -343,6 +343,59 @@ How to fix: use a value within the valid integer range:
 Related: L003 (general invalid number), L011 (number overflow)
 )EX"},
 
+        {"L024", R"EX(
+Invalid escape sequence [L024]
+
+An escape sequence inside a string, character, or template literal is not
+recognized or is malformed. Only the following escape sequences are valid:
+
+    \n   — newline
+    \t   — tab
+    \r   — carriage return
+    \\   — backslash
+    \"   — double quote
+    \'   — single quote
+    \0   — null character
+    \xNN — hexadecimal byte (e.g., \x41 = 'A')
+    \u{N} — Unicode codepoint (e.g., \u{1F600} = emoji)
+
+Example of erroneous code:
+
+    let s = "hello \q world"    // '\q' is not a valid escape
+
+How to fix:
+
+    let s = "hello world"       // remove the invalid escape
+    let s = "hello \\q world"   // escape the backslash if literal '\q' needed
+
+Related: L004 (invalid escape in string), L025 (invalid unicode escape)
+)EX"},
+
+        {"L025", R"EX(
+Invalid unicode escape [L025]
+
+A `\u{...}` unicode escape sequence inside a string, character, or template
+literal is malformed. Unicode escapes must be written as `\u{NNNN}` where
+`NNNN` is one to six hexadecimal digits representing a valid Unicode codepoint.
+
+Valid range: U+0000 to U+10FFFF
+
+Example of erroneous code:
+
+    let s = "emoji: \u{}"           // empty — no digits
+    let s = "emoji: \u{1234567}"    // too long — max 6 hex digits
+    let s = "emoji: \u{FFFFFF}"     // out of range — exceeds U+10FFFF
+    let s = "\u 1F600"              // missing braces
+
+How to fix:
+
+    let s = "emoji: \u{1F600}"      // smiley face emoji
+    let s = "letter: \u{41}"        // 'A'
+    let s = "euro: \u{20AC}"        // '€'
+
+Related: L024 (invalid escape sequence)
+)EX"},
+
     };
     return db;
 }

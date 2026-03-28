@@ -83,7 +83,7 @@ auto Parser::parse_decorators() -> Result<std::vector<Decorator>, ParseError> {
 
         // Parse decorator name
         auto name_result =
-            expect(lexer::TokenKind::Identifier, "Expected decorator name after '@'");
+            expect(lexer::TokenKind::Identifier, "Expected decorator name after '@'", "P072");
         if (is_err(name_result))
             return unwrap_err(name_result);
         auto name = std::string(unwrap(name_result).lexeme);
@@ -309,7 +309,7 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
     if (is_err(func_result))
         return unwrap_err(func_result);
 
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected function name");
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected function name", "P066");
     if (is_err(name_result))
         return unwrap_err(name_result);
     auto name = std::string(unwrap(name_result).lexeme);
@@ -511,7 +511,7 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
     if (is_err(type_result))
         return unwrap_err(type_result);
 
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected struct name");
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected struct name", "P067");
     if (is_err(name_result))
         return unwrap_err(name_result);
     auto name = std::string(unwrap(name_result).lexeme);
@@ -533,7 +533,7 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
     where_clause = std::move(unwrap(where_result));
 
     skip_newlines();
-    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for struct body");
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for struct body", "P075");
     if (is_err(lbrace))
         return unwrap_err(lbrace);
 
@@ -545,7 +545,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         auto field_doc = collect_doc_comment();
         auto field_vis = parse_visibility();
 
-        auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
+        auto field_name_result =
+            expect(lexer::TokenKind::Identifier, "Expected field name", "P070");
         if (is_err(field_name_result))
             return unwrap_err(field_name_result);
         auto field_name = std::string(unwrap(field_name_result).lexeme);
@@ -589,7 +590,7 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         }
     }
 
-    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after struct fields");
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after struct fields", "P077");
     if (is_err(rbrace))
         return unwrap_err(rbrace);
 
@@ -616,7 +617,7 @@ auto Parser::parse_union_decl(Visibility vis, std::vector<Decorator> decorators,
     if (is_err(union_result))
         return unwrap_err(union_result);
 
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected union name");
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected union name", "P074");
     if (is_err(name_result))
         return unwrap_err(name_result);
     auto name = std::string(unwrap(name_result).lexeme);
@@ -633,7 +634,8 @@ auto Parser::parse_union_decl(Visibility vis, std::vector<Decorator> decorators,
         auto field_doc = collect_doc_comment();
         auto field_vis = parse_visibility();
 
-        auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
+        auto field_name_result =
+            expect(lexer::TokenKind::Identifier, "Expected field name", "P070");
         if (is_err(field_name_result))
             return unwrap_err(field_name_result);
         auto field_name = std::string(unwrap(field_name_result).lexeme);
@@ -691,7 +693,7 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
     // 'type' keyword already consumed by parse_decl
     // We're called when parse_decl determines this is an enum
 
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected enum name");
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected enum name", "P068");
     if (is_err(name_result))
         return unwrap_err(name_result);
     auto name = std::string(unwrap(name_result).lexeme);
@@ -706,7 +708,7 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
     }
 
     skip_newlines();
-    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for enum body");
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for enum body", "P076");
     if (is_err(lbrace))
         return unwrap_err(lbrace);
 
@@ -717,7 +719,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
         // Collect doc comment for variant
         auto variant_doc = collect_doc_comment();
 
-        auto variant_name_result = expect(lexer::TokenKind::Identifier, "Expected variant name");
+        auto variant_name_result =
+            expect(lexer::TokenKind::Identifier, "Expected variant name", "P071");
         if (is_err(variant_name_result))
             return unwrap_err(variant_name_result);
         auto variant_name = std::string(unwrap(variant_name_result).lexeme);
@@ -831,7 +834,7 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
         skip_newlines();
     }
 
-    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after enum variants");
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after enum variants", "P078");
     if (is_err(rbrace))
         return unwrap_err(rbrace);
 
@@ -860,7 +863,7 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators,
         return unwrap_err(behavior_tok);
 
     // Parse name
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected behavior name");
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected behavior name", "P069");
     if (is_err(name_result))
         return unwrap_err(name_result);
     auto name = std::string(unwrap(name_result).lexeme);

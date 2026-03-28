@@ -38,7 +38,7 @@ auto HirMirBuilder::build_return(const hir::HirReturnExpr& ret) -> Value {
 
 auto HirMirBuilder::build_break(const hir::HirBreakExpr& brk) -> Value {
     if (ctx_.loop_stack.empty()) {
-        throw std::runtime_error("break outside of loop");
+        throw std::runtime_error("[M001] break outside of loop");
     }
 
     // Emit scope drops
@@ -61,7 +61,7 @@ auto HirMirBuilder::build_break(const hir::HirBreakExpr& brk) -> Value {
 
 auto HirMirBuilder::build_continue(const hir::HirContinueExpr& /*cont*/) -> Value {
     if (ctx_.loop_stack.empty()) {
-        throw std::runtime_error("continue outside of loop");
+        throw std::runtime_error("[M002] continue outside of loop");
     }
 
     emit_scope_drops();

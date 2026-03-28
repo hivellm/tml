@@ -39,11 +39,11 @@ auto MemoryLeakCheckPass::has_errors() const -> bool {
 void MemoryLeakCheckPass::print_warnings() const {
     for (const auto& warning : warnings_) {
         if (warning.is_error) {
-            TML_LOG_ERROR("mir", "potential memory leak in function '"
+            TML_LOG_ERROR("mir", "[M008] potential memory leak in function '"
                                      << warning.function_name << "' at " << warning.allocation_site
                                      << ": " << warning.reason);
         } else {
-            TML_LOG_WARN("mir", "potential memory leak in function '"
+            TML_LOG_WARN("mir", "[M008] potential memory leak in function '"
                                     << warning.function_name << "' at " << warning.allocation_site
                                     << ": " << warning.reason);
         }
