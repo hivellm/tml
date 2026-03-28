@@ -19,6 +19,51 @@ For detailed changes in each component, see:
 
 ---
 
+## [0.2.6] — 2026-03-28
+
+### Added (Compiler)
+
+- **Pre-condition runtime assertions** — `pre: expr` contracts now emit `if (!cond) panic(msg)` at function entry. Type checker validates contract expressions return Bool (error T090).
+- **`impl_count[T]()` / `impl_name[T](index)`** intrinsics — query which behaviors a type implements at compile time.
+- **Compile-time field index validation** — `field_name[T](N)`, `field_type_id[T](N)`, `field_offset[T](N)` now emit error R001 when N exceeds field count.
+- **MCP emit-ir rewrite** — changed from subprocess (8s timeout) to in-process `LLVMIRGen::generate()` (sub-second). Fixes "Connection closed" errors.
+
+### Added (Standard Library)
+
+- **`std::bigint::BigInt`** — arbitrary precision integers with base-10^9 limbs. Includes: add, sub, mul, div, rem, pow, gcd, mod_pow, mod_inverse, is_probably_prime (Miller-Rabin), bitand/bitor/bitxor, shift_left/shift_right, bit_length, to_hex, from_str. 26 tests.
+- **`std::collections::Trie[V]`** — string-keyed prefix tree with flat-array layout. insert, get, contains, remove, starts_with, longest_prefix, keys_with_prefix, autocomplete. 10 tests.
+- **`std::collections::IntervalTree[V]`** — augmented BST with max-endpoint tracking. query_point, query_range, query_point_values, contains, all_intervals. 9 tests.
+- **`impl Seek for File`** — file seeking via `file_seek_from` C FFI (fseek/ftell wrapper).
+- **Reflection vtable dispatch tests** — `dynamic_dispatch.test.tml` (5 tests) validates slot-based virtual method calls via reflection match direct calls.
+- **Reflection benchmark** — debug: 2ns/call direct vs 5.5ns/call reflected; release: ~0ns both (optimizer inlines).
+
+### Refactored (Project Structure)
+
+- **Core library reorganized** — 30 loose files → 6 thematic directories:
+  - `data/` (arena, bitset, cache, pool, ringbuf, soo, collections)
+  - `types/` (option/Maybe, result/Outcome, tuple, range, any)
+  - `traits/` (clone, cmp, convert, default, borrow, hash, marker)
+  - `async/` (async_iter, task)
+  - `runtime/` (error, panic, hint, mem, pin, intrinsics, profiler)
+  - `reflect/` (reflect → reflect/mod.tml)
+- **Std library reorganized** — 9 loose files → thematic directories:
+  - `math/`, `time/`, `debug/`, `events/` (new directories)
+  - `glob → file/`, `url/mime → net/` (moved to existing dirs)
+- **12 single-mod.tml directories flattened** to standalone files (core: async_iter, bstr, panic, task; std: observable, promise, debug, math; test: bench, coverage, report, runner)
+
+### Fixed
+
+- **6 source errors fixed**: `base` keyword conflict in debug.tml, `Waker`/`Context` builtin type clash in task.tml, `let`→`var` for mutable loop vars in bench.tml/report.tml, relative `use types` → `use test::types` in report.tml/runner.tml.
+
+### Documentation
+
+- **Rust vs TML comparison report** (`docs/compare-rust-tml.md`) — complete module-level and function-level gap analysis covering 38 Rust core modules and 19 Rust std modules with priority rankings.
+
+### Archived Tasks
+
+- phase1-08-reflection (100%), phase1-02-function-contracts, phase2-04-seek-behavior
+- phase2-05-bigint, phase2-06-complex-numbers, phase2-07-trie, phase2-08-interval-tree
+
 ## [0.2.5] — 2026-03-26
 
 ### Fixed (Compiler — Codegen)

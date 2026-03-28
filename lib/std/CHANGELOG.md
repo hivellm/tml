@@ -5,6 +5,19 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-03-28
+
+### Added
+- **`std::bigint::BigInt`** — arbitrary precision integers (975 lines, 47 pub, 26 tests)
+- **`std::collections::Trie[V]`** — prefix tree with autocomplete (10 tests)
+- **`std::collections::IntervalTree[V]`** — augmented BST range queries (9 tests)
+- **`impl Seek for File`** — `file_seek_from` FFI wrapper for fseek/ftell
+- **`file_seek_from()` in C runtime** — seek with SEEK_SET/CUR/END, returns new position
+
+### Changed
+- **Reorganized loose files into directories**: math/, time/, debug/, events/ (new dirs); glob→file/, url/mime→net/
+- **`base` → `base_ptr`** in debug.tml (keyword conflict fix)
+
 ## [0.2.3] — 2026-03-25
 
 ### Added

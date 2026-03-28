@@ -5,6 +5,26 @@ All notable changes to the TML core library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-03-28
+
+### Added
+- **Reflection**: compile-time field index validation (R001), impl_count/impl_name intrinsics, dynamic vtable dispatch tests, benchmark
+
+### Changed
+- **Major reorganization** — 30 loose files → 6 thematic directories:
+  - `data/` (arena, bitset, cache, pool, ringbuf, soo, collections)
+  - `types/` (option, result, tuple, range, any)
+  - `traits/` (clone, cmp, convert, default, borrow, hash, marker)
+  - `async/` (async_iter, task)
+  - `runtime/` (error, panic, hint, mem, pin, intrinsics, profiler)
+  - `reflect/` (reflect → reflect/mod.tml)
+  - `encoding/` (bstr moved here)
+- 553 import references updated across the codebase
+
+### Fixed
+- `async_iter.tml` — removed dangling doc comments causing P001 parser error
+- `task.tml` — commented out Waker/Context type redefinitions (builtin clash T038), rewrote PartialEq for Poll[T] with nested when
+
 ## [0.2.3] — 2026-03-25
 
 ### Added

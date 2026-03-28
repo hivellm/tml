@@ -5,6 +5,19 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-03-28
+
+### Added
+- **Pre-condition codegen** — `pre: expr` emits `if (!cond) panic("contract violation: ...")` at function entry
+- **Contract type checking** — validates pre/post expressions return Bool in `check_func_body()` (error T090)
+- **`impl_count[T]()` / `impl_name[T](index)`** intrinsics for querying behavior implementations
+- **Compile-time field index validation** — R001 error for out-of-bounds `field_name/type_id/offset`
+- **MCP emit-ir in-process** — `LLVMIRGen::generate()` directly instead of subprocess
+
+### Changed
+- Type checker allowlist updated for `impl_count` (I64 return) and `impl_name` (Str return)
+- `call_primitive.cpp` handles `impl_count`/`impl_name` via `env_.get_behavior_impls()`
+
 ## [0.2.3] — 2026-03-25
 
 ### Added
