@@ -1,6 +1,6 @@
 // Tests for primitive type Hash behavior implementations
 use test
-use core::hash::{Hasher, DefaultHasher, Hash}
+use core::traits::hash::{Hasher, DefaultHasher, Hash}
 
 @test
 func test_hash_i32_deterministic() -> I32 {

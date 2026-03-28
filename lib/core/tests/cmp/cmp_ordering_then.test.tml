@@ -1,6 +1,6 @@
 // Tests for core::cmp - Ordering enum methods
 use test::{assert, assert_eq}
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_ordering_is_less() -> I32 {

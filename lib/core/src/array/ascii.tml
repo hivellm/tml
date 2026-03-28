@@ -14,7 +14,7 @@
 //! }
 //! ```
 
-use core::option::Maybe
+use core::types::option::Maybe
 use core::array::Array
 use core::ascii::Char
 

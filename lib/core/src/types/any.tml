@@ -32,8 +32,8 @@
 //! The `TypeId::of[T]()` function uses the compiler's `type_id[T]()` intrinsic
 //! to generate unique type identifiers based on FNV-1a hashing of type names.
 
-use core::intrinsics::type_id
-use core::cmp::Ordering
+use core::runtime::intrinsics::type_id
+use core::traits::cmp::Ordering
 
 // ============================================================================
 // TypeId
@@ -221,7 +221,7 @@ pub behavior Any {
 // AnyValue - Type-erased Container
 // ============================================================================
 
-use core::intrinsics::{size_of, align_of, type_id, ptr_write, ptr_read}
+use core::runtime::intrinsics::{size_of, align_of, type_id, ptr_write, ptr_read}
 use core::ops::Drop
 
 /// A type-erased container for runtime type inspection and manipulation.

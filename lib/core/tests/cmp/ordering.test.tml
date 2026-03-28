@@ -1,6 +1,6 @@
 // Tests for core::cmp — Ordering methods, min, max, clamp
 use test::{assert, assert_eq}
-use core::cmp::{Ordering, min, max}
+use core::traits::cmp::{Ordering, min, max}
 
 // === Ordering predicates ===
 

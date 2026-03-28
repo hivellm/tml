@@ -36,7 +36,7 @@
 //! let aligned: CacheAligned[LargeStruct] = CacheAligned::new(data)
 //! ```
 
-use core::mem::{size_of, mem_alloc, mem_free}
+use core::runtime::mem::{size_of, mem_alloc, mem_free}
 use core::alloc::{Layout, AllocError}
 
 // ============================================================================

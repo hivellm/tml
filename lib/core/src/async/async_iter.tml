@@ -13,7 +13,7 @@
 //! ```tml
 //! use core::async_iter::AsyncIterator
 //! use core::task::{Context, Poll}
-//! use core::pin::Pin
+//! use core::runtime::pin::Pin
 //!
 //! type Counter {
 //!     count: I64,
@@ -91,7 +91,7 @@
 //! // upper: optional maximum items
 //! ```
 
-use core::pin::Pin
+use core::runtime::pin::Pin
 use core::task::{Context, Poll}
 // PartialEq, Eq, Duplicate, Copy are builtins - no import needed
 
@@ -126,7 +126,7 @@ use core::task::{Context, Poll}
 /// ```tml
 /// use core::async_iter::AsyncIterator
 /// use core::task::{Context, Poll}
-/// use core::pin::Pin
+/// use core::runtime::pin::Pin
 ///
 /// type Repeat[T] {
 ///     value: T,

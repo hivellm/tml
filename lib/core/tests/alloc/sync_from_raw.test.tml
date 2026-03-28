@@ -3,7 +3,7 @@
 // a compatible memory layout and casting to the expected pointer type.
 use test::{assert, assert_eq}
 use core::alloc::sync::Sync
-use core::mem::{mem_alloc, size_of}
+use core::runtime::mem::{mem_alloc, size_of}
 
 @test
 func test_sync_from_raw_via_alloc() -> I32 {

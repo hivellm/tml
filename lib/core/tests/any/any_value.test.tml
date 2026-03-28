@@ -1,6 +1,6 @@
 // Tests for core::any — TypeId::of generic instantiation and debug_string
 use test
-use core::any::TypeId
+use core::types::any::TypeId
 
 // =============================================================================
 // TypeId::of — generic instantiation with concrete types

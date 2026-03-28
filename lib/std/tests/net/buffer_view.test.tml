@@ -2,7 +2,7 @@
 
 use test::{assert, assert_eq}
 use std::net::buffer_view::BufferView
-use core::intrinsics::{ptr_write}
+use core::runtime::intrinsics::{ptr_write}
 
 // Helper: allocate a test buffer with known content "Hello, World!" (13 bytes)
 func make_test_data() -> *U8 {

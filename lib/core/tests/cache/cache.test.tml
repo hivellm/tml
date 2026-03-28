@@ -1,6 +1,6 @@
 // Consolidated tests for core::cache
 use test
-use core::cache::{CacheAligned, Padded, CacheAlignedBox, SoaVec, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
+use core::data::cache::{CacheAligned, Padded, CacheAlignedBox, SoaVec, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
 
 // --- CacheAligned tests ---
 

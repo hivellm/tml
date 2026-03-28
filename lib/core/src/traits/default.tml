@@ -49,7 +49,7 @@
 //! `Default` is commonly used with functions like [`mem::take`]:
 //!
 //! ```tml
-//! use core::mem::take
+//! use core::runtime::mem::take
 //!
 //! let mut name = "Alice"
 //! let taken = take(mut ref name)

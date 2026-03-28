@@ -1,6 +1,6 @@
 // Tests for saturating arithmetic intrinsics
 use test
-use core::intrinsics::{saturating_add, saturating_sub, saturating_mul}
+use core::runtime::intrinsics::{saturating_add, saturating_sub, saturating_mul}
 
 @test
 func test_saturating_add_normal() -> I32 {

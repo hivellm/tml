@@ -71,7 +71,7 @@
 
 use core::iter::*
 // PartialEq is a builtin behavior - no import needed
-use core::default::Default
+use core::traits::default::Default
 
 // ============================================================================
 // Maybe[T] Type (defined in std::types, enhanced here)

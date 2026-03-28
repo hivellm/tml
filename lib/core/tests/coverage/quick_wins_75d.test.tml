@@ -1,6 +1,6 @@
 // Math intrinsics coverage tests
 use test::{assert_eq, assert}
-use core::intrinsics::{sin, cos, floor, ceil, trunc, exp, fabs}
+use core::runtime::intrinsics::{sin, cos, floor, ceil, trunc, exp, fabs}
 
 @test
 func test_floor_f64() -> I32 {

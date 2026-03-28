@@ -17,8 +17,8 @@
 //! nums.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write, mem_free}
-use core::mem::size_of
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_free}
+use core::runtime::mem::size_of
 
 /// A dynamic array that grows automatically.
 ///

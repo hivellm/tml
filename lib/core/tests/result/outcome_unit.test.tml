@@ -1,7 +1,7 @@
 // Tests for Outcome[Unit, E] — pattern matching and methods
 // Previously blocked by Unit void-in-data-context codegen bug
 use test::{assert, assert_eq}
-use core::tuple::Unit
+use core::types::tuple::Unit
 
 func returns_outcome(flag: Bool) -> Outcome[Unit, Str] {
     if flag {

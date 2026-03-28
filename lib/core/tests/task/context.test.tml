@@ -1,6 +1,6 @@
 // Tests for Context::from_waker, Context::waker
 use test::{assert}
-use core::task::{Context, Waker, RawWaker, RawWakerVTable}
+use core::async::task::{Context, Waker, RawWaker, RawWakerVTable}
 use core::ptr::RawPtr
 
 func noop_clone(p: RawPtr[Unit]) -> RawWaker {

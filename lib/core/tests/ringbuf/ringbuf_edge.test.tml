@@ -1,5 +1,5 @@
 use test
-use core::ringbuf::RingBuf
+use core::data::ringbuf::RingBuf
 
 @test
 func test_ringbuf_clear() -> I32 {

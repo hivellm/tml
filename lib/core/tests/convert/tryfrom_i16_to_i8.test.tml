@@ -1,6 +1,6 @@
 // Tests for TryFrom[I16] for I8
 use test::{assert, assert_eq}
-use core::convert::{TryFrom, TryFromIntError}
+use core::traits::convert::{TryFrom, TryFromIntError}
 
 @test
 func test_tryfrom_i16_to_i8_ok() -> I32 {

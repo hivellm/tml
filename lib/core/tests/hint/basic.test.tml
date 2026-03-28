@@ -1,5 +1,5 @@
 use test::{assert, assert_eq}
-use core::hint::{likely, unlikely, black_box_i64, black_box_bool, black_box_f64, spin_loop_hint, assume}
+use core::runtime::hint::{likely, unlikely, black_box_i64, black_box_bool, black_box_f64, spin_loop_hint, assume}
 
 @test
 func test_likely_true() -> I32 {

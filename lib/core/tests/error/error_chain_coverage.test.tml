@@ -3,7 +3,7 @@
 // NOTE: error_chain() / ErrorChain::next() crash (SEGFAULT) due to
 //       dyn Error trait object vtable dispatch codegen bug
 use test::{assert, assert_eq}
-use core::error::{SimpleError, ChainedError}
+use core::runtime::error::{SimpleError, ChainedError}
 
 // === ChainedError::source (returns Maybe[ref dyn Error]) ===
 

@@ -3,4 +3,4 @@
 //! The object pool is defined in `core::pool` and re-exported here for
 //! convenience under the `std::alloc` namespace.
 
-pub use core::pool::*
+pub use core::data::pool::*

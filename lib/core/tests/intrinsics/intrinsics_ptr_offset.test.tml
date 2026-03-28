@@ -1,6 +1,6 @@
 // Tests for ptr_offset intrinsic
 use test::{assert, assert_eq}
-use core::intrinsics::{ptr_read, ptr_write, ptr_offset}
+use core::runtime::intrinsics::{ptr_read, ptr_write, ptr_offset}
 
 @test
 func test_ptr_offset_i32() -> I32 {

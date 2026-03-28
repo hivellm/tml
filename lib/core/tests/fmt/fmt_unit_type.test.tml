@@ -1,6 +1,6 @@
 // Tests for Unit Display/Debug type formatting
 use test::{assert, assert_eq}
-use core::tuple::Unit
+use core::types::tuple::Unit
 use core::fmt::Debug
 
 @test

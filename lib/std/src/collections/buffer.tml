@@ -25,7 +25,7 @@
 //! buf.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 use core::str
 
 // ============================================================================

@@ -31,12 +31,12 @@
 //! Because `Shared[T]` uses non-atomic operations, it is faster than `Sync[T]`
 //! when sharing is only needed within a single thread.
 
-use core::mem::{mem_alloc, mem_free, size_of}
-use core::intrinsics::ptr_write
+use core::runtime::mem::{mem_alloc, mem_free, size_of}
+use core::runtime::intrinsics::ptr_write
 use core::ops::Deref
-use core::clone::Duplicate
+use core::traits::clone::Duplicate
 use core::fmt::{Display, Debug}
-use core::default::Default
+use core::traits::default::Default
 
 /// Inner structure holding the value and reference count.
 type SharedInner[T] {

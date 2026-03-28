@@ -1,6 +1,6 @@
 // Tests for Cow::borrow
 use test::{assert_eq}
-use core::borrow::{Cow, Borrow}
+use core::traits::borrow::{Cow, Borrow}
 
 @test
 func test_cow_owned_borrow() -> I32 {

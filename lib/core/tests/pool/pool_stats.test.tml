@@ -1,6 +1,6 @@
 // Tests for PoolStats
 use test::{assert, assert_eq}
-use core::pool::PoolStats
+use core::data::pool::PoolStats
 
 @test
 func test_pool_stats_new() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for core::mem — ManuallyDrop, MaybeUninit::new
 use test::{assert, assert_eq}
-use core::mem::{ManuallyDrop, MaybeUninit}
+use core::runtime::mem::{ManuallyDrop, MaybeUninit}
 
 @test
 func test_manually_drop_new_into_inner() -> I32 {

@@ -1,7 +1,7 @@
 // Tests for core::tuple — Unit type
 use test::{assert, assert_eq}
-use core::tuple::Unit
-use core::clone::Clone
+use core::types::tuple::Unit
+use core::traits::clone::Clone
 
 @test
 func test_unit_default() -> I32 {

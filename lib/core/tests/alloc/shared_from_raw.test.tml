@@ -3,7 +3,7 @@
 // an existing Shared and re-wrapping it.
 use test::{assert, assert_eq}
 use core::alloc::shared::Shared
-use core::mem::{mem_alloc, mem_free, size_of}
+use core::runtime::mem::{mem_alloc, mem_free, size_of}
 
 @test
 func test_shared_from_raw_via_alloc() -> I32 {

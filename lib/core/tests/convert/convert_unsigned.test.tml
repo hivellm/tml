@@ -1,6 +1,6 @@
 // Tests for core::convert - From behavior (unsigned widening)
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_from_u8_to_u16() -> I32 {

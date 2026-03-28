@@ -1,7 +1,7 @@
 // Tests for core::any — TypeId::of additional type instantiations
 // AnyValue::from[T] blocked by generic codegen (%struct.T not monomorphized)
 use test::{assert}
-use core::any::TypeId
+use core::types::any::TypeId
 
 @test
 func test_typeid_of_f64() -> I32 {

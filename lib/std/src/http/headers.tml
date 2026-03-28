@@ -4,7 +4,7 @@
 //! Multi-value headers use comma-separated format per RFC 7230.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::collections::HashMap
 use std::text::Text
 

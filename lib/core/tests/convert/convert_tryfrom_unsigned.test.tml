@@ -1,6 +1,6 @@
 // Tests for core::convert — TryFrom unsigned narrowing conversions
 use test::{assert, assert_eq}
-use core::convert::{TryFrom, TryFromIntError}
+use core::traits::convert::{TryFrom, TryFromIntError}
 
 @test
 func test_tryfrom_u64_to_u32_ok() -> I32 {

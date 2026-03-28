@@ -1,6 +1,6 @@
 // Tests for GrowthPolicy::can_grow
 use test::{assert, assert_eq}
-use core::pool::GrowthPolicy
+use core::data::pool::GrowthPolicy
 
 @test
 func test_fixed_cannot_grow() -> I32 {

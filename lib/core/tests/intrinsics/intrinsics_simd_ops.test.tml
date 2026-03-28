@@ -1,7 +1,7 @@
 // Tests for SIMD intrinsics: simd_store, simd_insert, simd_splat
 use test::{assert, assert_eq}
 use core::simd::i32x4::I32x4
-use core::intrinsics::{simd_load, simd_store, simd_insert, simd_splat, simd_extract}
+use core::runtime::intrinsics::{simd_load, simd_store, simd_insert, simd_splat, simd_extract}
 
 // ============================================================================
 // simd_store — store SIMD vector back to memory

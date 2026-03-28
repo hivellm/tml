@@ -24,7 +24,7 @@
 //! let dp = dot_product_f32(&a[0], &b[0], 3)   // 32.0
 //! ```
 
-use core::intrinsics
+use core::runtime::intrinsics
 
 // ============================================================================
 // F64 Public API

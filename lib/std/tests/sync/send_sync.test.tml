@@ -1,7 +1,7 @@
 // Send/Sync behavior tests
 // Tests for marker behaviors used for thread safety
 use test::{assert, assert_eq}
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 use std::sync::{Arc, Mutex, RwLock, Condvar, Barrier, Once, OnceLock}
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicBool, AtomicI64, AtomicU64}
 

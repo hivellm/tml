@@ -2,7 +2,7 @@
 // Sources: identity.test.tml, from.test.tml, from_extra.test.tml, into.test.tml, tryinto.test.tml
 // Total @test count: 45
 use test::{assert, assert_eq}
-use core::convert::*
+use core::traits::convert::*
 
 // ============================================================================
 // Custom types for testing From (from from.test.tml)

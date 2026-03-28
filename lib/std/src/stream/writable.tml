@@ -21,7 +21,7 @@
 //! stream.flush()!
 //! ```
 
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 /// A sink of bytes that can be written to.
 ///

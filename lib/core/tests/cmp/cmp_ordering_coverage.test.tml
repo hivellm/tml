@@ -1,6 +1,6 @@
 // Tests targeting uncovered Ordering methods
 use test
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_ordering_is_less() -> I32 {

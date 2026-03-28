@@ -1,6 +1,6 @@
 // Tests for core::pool — GrowthPolicy, PoolStats
 use test::{assert, assert_eq}
-use core::pool::{GrowthPolicy, PoolStats}
+use core::data::pool::{GrowthPolicy, PoolStats}
 
 // === GrowthPolicy ===
 

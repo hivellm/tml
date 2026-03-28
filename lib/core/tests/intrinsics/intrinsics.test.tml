@@ -1,6 +1,6 @@
 // Tests for core::intrinsics module - size_of and align_of
 use test
-use core::intrinsics::{size_of, align_of}
+use core::runtime::intrinsics::{size_of, align_of}
 
 // ============================================================================
 // Type information intrinsics - size_of

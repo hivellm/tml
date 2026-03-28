@@ -1,6 +1,6 @@
 // Consolidated tests for core::arena (10 tests)
 use test
-use core::arena::{Arena, ArenaStats}
+use core::data::arena::{Arena, ArenaStats}
 
 // === Basic ===
 

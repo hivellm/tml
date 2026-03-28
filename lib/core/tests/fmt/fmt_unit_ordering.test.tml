@@ -1,6 +1,6 @@
 // Tests for uncovered Display/Debug impls: Ordering
 use test::{assert, assert_eq}
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 // --- Ordering Display ---
 

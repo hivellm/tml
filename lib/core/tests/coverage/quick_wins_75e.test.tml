@@ -1,6 +1,6 @@
 // Error module coverage tests (non-generic functions with real bodies)
 use test::{assert_eq, assert}
-use core::error::{ParseError, IoError, IoErrorKind}
+use core::runtime::error::{ParseError, IoError, IoErrorKind}
 
 @test
 func test_parse_error_new() -> I32 {

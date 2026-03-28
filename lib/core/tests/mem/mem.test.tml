@@ -2,13 +2,13 @@
 // ManuallyDrop, MaybeUninit, swap, replace, size_of, align_of, drop, forget, zeroed, transmute
 // BLOCKED: MaybeUninit::uninit[T] — generic monomorphization
 use test
-use core::mem
-use core::mem::ManuallyDrop
-use core::mem::MaybeUninit
-use core::mem::{swap, replace, drop}
-use core::mem::{size_of, align_of, size_of_val, align_of_val}
+use core::runtime::mem
+use core::runtime::mem::ManuallyDrop
+use core::runtime::mem::MaybeUninit
+use core::runtime::mem::{swap, replace, drop}
+use core::runtime::mem::{size_of, align_of, size_of_val, align_of_val}
 use test::{assert, assert_eq}
-use core::mem::{ManuallyDrop, MaybeUninit, forget, drop, take, size_of_val, align_of_val}
+use core::runtime::mem::{ManuallyDrop, MaybeUninit, forget, drop, take, size_of_val, align_of_val}
 
 // === ManuallyDrop ===
 

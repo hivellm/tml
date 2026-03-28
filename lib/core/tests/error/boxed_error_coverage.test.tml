@@ -1,7 +1,7 @@
 // Tests for BoxedError — message field access
 // BoxedError::new[E: Error] blocked by trait constraint codegen (Unknown method: to_string)
 use test::{assert, assert_eq}
-use core::error::BoxedError
+use core::runtime::error::BoxedError
 
 @test
 func test_boxed_error_message_field() -> I32 {

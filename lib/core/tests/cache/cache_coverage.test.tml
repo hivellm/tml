@@ -1,6 +1,6 @@
 // Tests for cache module — uncovered: get_mut, prefetch, prefetch_next
 use test::{assert, assert_eq}
-use core::cache::{CacheAligned, Padded, PrefetchHint, prefetch, prefetch_next}
+use core::data::cache::{CacheAligned, Padded, PrefetchHint, prefetch, prefetch_next}
 
 // === CacheAligned::get_mut ===
 

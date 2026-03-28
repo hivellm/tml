@@ -1,6 +1,6 @@
 // Tests for core::mem — size_of, align_of, swap, replace
 use test::{assert, assert_eq}
-use core::mem::{size_of, align_of, swap, replace}
+use core::runtime::mem::{size_of, align_of, swap, replace}
 
 // === size_of ===
 

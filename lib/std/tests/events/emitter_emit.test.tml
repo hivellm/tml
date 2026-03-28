@@ -1,6 +1,6 @@
 use test::{assert_eq, assert_true, assert_false}
 use std::events::EventEmitter
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // Listeners write to a counter at the address passed as `data`.
 // data points to: [call_count: I64, last_value: I64]

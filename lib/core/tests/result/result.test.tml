@@ -1,6 +1,6 @@
 // Consolidated tests for core::result (73 tests)
 use test
-use core::result::OutcomeIter
+use core::types::result::OutcomeIter
 
 // ############################################################################
 // From: result.test.tml

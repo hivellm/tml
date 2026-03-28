@@ -1,6 +1,6 @@
 // Tests for core::task - Poll[T], Ready[T], Pending[T]
 use test
-use core::task::{Poll, Ready, Pending, ready, pending}
+use core::async::task::{Poll, Ready, Pending, ready, pending}
 
 @test
 func test_poll_ready() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for core::error — ChainedError, ParseError with position
 use test::{assert, assert_eq}
-use core::error::{SimpleError, ParseError, ChainedError}
+use core::runtime::error::{SimpleError, ParseError, ChainedError}
 
 // === ParseError with position ===
 

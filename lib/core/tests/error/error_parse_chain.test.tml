@@ -1,6 +1,6 @@
 // Tests for core::error — ParseError::with_position extra coverage
 use test::{assert, assert_eq}
-use core::error::{ParseError, SimpleError, BoxedError}
+use core::runtime::error::{ParseError, SimpleError, BoxedError}
 
 // =============================================================================
 // ParseError::with_position

@@ -1,6 +1,6 @@
 // Tests for core::convert — From[Bool] for I32/I64, From F32->F64
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_from_bool_true_to_i32() -> I32 {

@@ -56,11 +56,11 @@ pub mod ascii  // ASCII array methods (uses core::ascii::Char)
 pub use iter::{ArrayIter}
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::{Hash}
-use core::default::Default
+use core::traits::hash::{Hash}
+use core::traits::default::Default
 use core::iter::{Iterator, IntoIterator, FromIterator}
-use core::convert::{TryFrom, AsRef, AsMut}
-use core::borrow::{Borrow, BorrowMut}
+use core::traits::convert::{TryFrom, AsRef, AsMut}
+use core::traits::borrow::{Borrow, BorrowMut}
 use core::slice::{Slice, MutSlice}
 
 // ============================================================================

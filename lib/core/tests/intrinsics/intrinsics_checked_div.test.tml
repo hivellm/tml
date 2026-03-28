@@ -1,6 +1,6 @@
 // Tests for checked_div intrinsic
 use test::{assert, assert_eq}
-use core::intrinsics::checked_div
+use core::runtime::intrinsics::checked_div
 
 @test
 func test_checked_div_normal() -> I32 {

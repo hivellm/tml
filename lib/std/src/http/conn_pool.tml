@@ -5,7 +5,7 @@
 //! DNS + TCP + TLS handshake on repeated requests to the same server.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}  // ptr_read/ptr_write used by pool_get/pool_set
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}  // ptr_read/ptr_write used by pool_get/pool_set
 
 /// Maximum idle connections per host.
 const MAX_IDLE_PER_HOST: I64 = 4

@@ -1,6 +1,6 @@
 // Tests for core::error — BoxedError, ParseError extended, IoError debug coverage
 use test
-use core::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
+use core::runtime::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
 
 // =============================================================================
 // BoxedError — concrete method coverage

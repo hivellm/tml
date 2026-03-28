@@ -1,6 +1,6 @@
 // Tests for Padded[T] — into_inner, set
 use test::{assert, assert_eq}
-use core::cache::{Padded, CacheAligned}
+use core::data::cache::{Padded, CacheAligned}
 
 @test
 func test_padded_into_inner() -> I32 {

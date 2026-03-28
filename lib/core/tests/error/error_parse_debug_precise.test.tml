@@ -6,7 +6,7 @@
 //       (suite-bundling codegen bug corrupts Maybe[I64] Just branch output)
 //       Passes individually: tml test lib/core/tests/error/error_parse_debug_precise.test.tml
 use test::{assert, assert_eq}
-use core::error::ParseError
+use core::runtime::error::ParseError
 
 // === ParseError debug_string with Nothing position ===
 

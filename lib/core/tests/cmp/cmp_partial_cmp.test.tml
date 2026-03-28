@@ -1,6 +1,6 @@
 // Tests for partial_cmp on various integer types
 use test
-use core::cmp::{Ordering, PartialOrd}
+use core::traits::cmp::{Ordering, PartialOrd}
 
 // =============================================================================
 // I32 partial_cmp (already tested elsewhere, but adding for coverage)

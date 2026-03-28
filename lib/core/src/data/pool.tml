@@ -35,7 +35,7 @@
 
 use core::alloc::{Layout, AllocError}
 use core::sync::{atomic_load, atomic_store, atomic_cas, atomic_cas_val, fence_acquire, fence_release}
-use core::mem::size_of
+use core::runtime::mem::size_of
 
 // ============================================================================
 // Growth Policy

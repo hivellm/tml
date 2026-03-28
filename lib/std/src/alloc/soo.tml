@@ -3,4 +3,4 @@
 //! Small object optimization types are defined in `core::soo` and re-exported
 //! here for convenience under the `std::alloc` namespace.
 
-pub use core::soo::*
+pub use core::data::soo::*

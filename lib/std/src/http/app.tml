@@ -36,7 +36,7 @@
 //! ```
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc}
 use std::http::router::{NODE_STATIC, insert, node_new}
 use std::http::incoming::IncomingMessage
 use std::http::server_response::ServerResponse

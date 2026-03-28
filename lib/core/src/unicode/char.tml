@@ -33,7 +33,7 @@
 //! let cat = unicode::char::general_category(c)
 //! ```
 
-use core::option::Maybe
+use core::types::option::Maybe
 use core::char::Char
 use core::unicode::unicode_data
 use core::unicode::GeneralCategory

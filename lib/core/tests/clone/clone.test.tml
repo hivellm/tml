@@ -1,7 +1,7 @@
 // Consolidated tests for core::clone (20 tests)
 use test
 
-use core::clone::{Duplicate, Copy}
+use core::traits::clone::{Duplicate, Copy}
 
 // ============================================================================
 // Custom types for testing

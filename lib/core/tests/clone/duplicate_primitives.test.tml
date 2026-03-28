@@ -1,6 +1,6 @@
 // Tests for core::clone::Duplicate — primitive type duplication
 use test::{assert, assert_eq}
-use core::clone::Duplicate
+use core::traits::clone::Duplicate
 
 @test
 func test_duplicate_i8() -> I32 {

@@ -391,6 +391,23 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                 sr.failed++;
                             }
                         }
+                    } else if (proc_result.exit_code == 99 &&
+                               resolved_indices.size() < sr.tests.size()) {
+                        // Exit code 99 = per-test timeout watchdog killed the process.
+                        // The last started-but-unresolved test is the one that timed out.
+                        for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
+                            if (resolved_indices.count(idx) != 0)
+                                continue;
+                            auto& t = sr.tests[idx];
+                            t.passed = false;
+                            if (started_indices.count(idx)) {
+                                t.error = "TIMEOUT: test exceeded 100ms limit — killed";
+                                sr.failed++;
+                            } else {
+                                t.error = "NOT RUN: previous test timed out";
+                                sr.failed++;
+                            }
+                        }
                     } else if (proc_result.exit_code != 0 &&
                                resolved_indices.size() < sr.tests.size()) {
                         std::string crash_err = !it->accumulated_stderr.empty()

@@ -1,6 +1,6 @@
 // Tests for BoxedError::source, SimpleError::description
 use test::{assert, assert_eq}
-use core::error::{BoxedError, SimpleError, IoError, IoErrorKind}
+use core::runtime::error::{BoxedError, SimpleError, IoError, IoErrorKind}
 
 @test
 func test_boxed_error_source_is_nothing() -> I32 {

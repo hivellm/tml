@@ -2,8 +2,8 @@
 // Test count: 40 @test functions
 // Sources: checked.test.tml, checked_minimal.test.tml, saturating_intrinsics.test.tml, saturating.test.tml
 use test
-use core::intrinsics::{checked_add, checked_sub, checked_mul, checked_div}
-use core::intrinsics::{saturating_add, saturating_sub, saturating_mul}
+use core::runtime::intrinsics::{checked_add, checked_sub, checked_mul, checked_div}
+use core::runtime::intrinsics::{saturating_add, saturating_sub, saturating_mul}
 use core::num::saturating::Saturating
 
 // ============================================================================

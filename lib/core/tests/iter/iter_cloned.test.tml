@@ -8,7 +8,7 @@
 use test::{assert, assert_eq}
 use core::iter::Iterator
 use core::iter::adapters::cloned::Cloned
-use core::option::{Maybe, Just, Nothing}
+use core::types::option::{Maybe, Just, Nothing}
 use core::slice::{Slice, SliceIter}
 
 @test

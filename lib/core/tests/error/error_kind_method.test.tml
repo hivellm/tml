@@ -1,6 +1,6 @@
 // Tests for core::error — IoError::kind() method coverage
 use test::{assert, assert_eq}
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 @test
 func test_io_error_kind_not_found() -> I32 {

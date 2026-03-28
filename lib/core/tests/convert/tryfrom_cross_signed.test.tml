@@ -1,6 +1,6 @@
 // Tests for TryFrom signed/unsigned cross conversions
 use test::{assert, assert_eq}
-use core::convert::{TryFrom, TryFromIntError}
+use core::traits::convert::{TryFrom, TryFromIntError}
 
 @test
 func test_tryfrom_i8_to_u8_ok() -> I32 {

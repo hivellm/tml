@@ -23,7 +23,7 @@
 //! ```
 
 use core::reflect::{Reflect, TypeKind, read_field_i64}
-use core::intrinsics::{field_name, field_offset}
+use core::runtime::intrinsics::{field_name, field_offset}
 
 /// Internal helper: get the raw pointer value of a reference as I64.
 /// Used to obtain the base address for field offset calculations.

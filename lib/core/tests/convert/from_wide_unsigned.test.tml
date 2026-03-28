@@ -1,6 +1,6 @@
 // Tests for core::convert — wider unsigned From conversions
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_from_u8_to_u64() -> I32 {

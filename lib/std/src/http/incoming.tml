@@ -7,7 +7,7 @@
 //! Corresponds to Node.js `http.IncomingMessage` (server-side).
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
 use std::http::method::Method
 use std::http::headers::Headers
 use std::http::version::HttpVersion

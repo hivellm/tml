@@ -3,7 +3,7 @@ use test::{assert, assert_eq}
 use core::ptr::ops::{size_of, size_of_val, align_of_val, read, write, copy_nonoverlapping, swap, replace, write_bytes, zero_memory, ptr_distance}
 use core::ptr::const_ptr::RawPtr
 use core::ptr::mut_ptr::RawMutPtr
-use core::intrinsics::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{mem_alloc, mem_free}
 
 @test
 func test_size_of_val_i32() -> I32 {

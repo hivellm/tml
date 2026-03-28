@@ -1,6 +1,6 @@
 // Tests for core::default::Default — primitive type defaults
 use test::{assert, assert_eq}
-use core::default::Default
+use core::traits::default::Default
 
 @test
 func test_default_i8() -> I32 {

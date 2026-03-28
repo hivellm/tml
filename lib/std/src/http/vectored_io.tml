@@ -4,7 +4,7 @@
 //! Avoids copying header + body into a single buffer before sending.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
 
 // FFI to C runtime
 @extern("c") func tml_sys_send(handle: I64, buf: *Unit, len: I64) -> I64

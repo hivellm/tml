@@ -11,8 +11,8 @@
 //!
 //! ```tml
 //! use core::future::select::{select2, SelectResult}
-//! use core::task::{Poll, Context, Ready}
-//! use core::pin::Pin
+//! use core::async::task::{Poll, Context, Ready}
+//! use core::runtime::pin::Pin
 //!
 //! // With two ready futures:
 //! var a = Ready::new(10)
@@ -34,8 +34,8 @@
 //! // result is Poll::Ready(IndexedResult { index: 2, value: 42 })
 //! ```
 
-use core::task::{Poll, Context}
-use core::pin::Pin
+use core::async::task::{Poll, Context}
+use core::runtime::pin::Pin
 use core::future::Future
 
 // ============================================================================
@@ -139,7 +139,7 @@ pub type IndexedResult[T] {
 ///
 /// ```tml
 /// use core::future::select::{select2, SelectResult}
-/// use core::task::{Poll, Context, Ready, Pending}
+/// use core::async::task::{Poll, Context, Ready, Pending}
 ///
 /// var a: Ready[I32] = Ready::new(10)
 /// var b: Ready[Str] = Ready::new("hello")

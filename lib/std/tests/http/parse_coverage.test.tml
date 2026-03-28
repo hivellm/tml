@@ -1,7 +1,7 @@
 // Tests covering uncovered http/parse functions
 use test::{assert, assert_eq}
 use core::str
-use core::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
+use core::runtime::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
 use std::http::parse::{
     app_is_bodyless_method, app_find_header_end_in_str,
     app_extract_query, app_extract_path_from_url,

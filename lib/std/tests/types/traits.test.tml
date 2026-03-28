@@ -1,5 +1,5 @@
 use test
-use core::hash
+use core::traits::hash
 
 // Tests for Core Traits
 // Tests behavior definitions and implementations

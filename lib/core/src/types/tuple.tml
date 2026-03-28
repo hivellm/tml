@@ -21,8 +21,8 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering are builtins - no import needed
-use core::default::Default
-use core::clone::Clone
+use core::traits::default::Default
+use core::traits::clone::Clone
 
 // ============================================================================
 // Default implementations for tuples

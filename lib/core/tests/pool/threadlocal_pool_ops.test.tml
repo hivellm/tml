@@ -7,7 +7,7 @@
 // grow_by and clear do NOT require acquire and can be tested.
 
 use test::{assert, assert_eq}
-use core::pool::{ThreadLocalPool, PoolStats}
+use core::data::pool::{ThreadLocalPool, PoolStats}
 
 @test
 func test_threadlocal_grow_by() -> I32 {

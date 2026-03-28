@@ -1,6 +1,6 @@
 // Consolidated tests for core::pool (14 tests)
 use test
-use core::pool::{Pool, GrowthPolicy, PoolStats}
+use core::data::pool::{Pool, GrowthPolicy, PoolStats}
 
 // ============================================================================
 // GrowthPolicy Tests (from pool.test.tml)

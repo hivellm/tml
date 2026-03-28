@@ -43,11 +43,11 @@
 //! | Performance | Faster | Slightly slower |
 //! | Use case | Single-threaded | Multi-threaded |
 
-use core::mem::{mem_alloc, mem_free, size_of}
+use core::runtime::mem::{mem_alloc, mem_free, size_of}
 use core::ops::Deref
-use core::clone::Duplicate
+use core::traits::clone::Duplicate
 use core::fmt::{Display, Debug}
-use core::default::Default
+use core::traits::default::Default
 
 /// FFI declarations for atomic operations (declared at module-level in runtime.cpp)
 @extern("atomic_fetch_add_i32")

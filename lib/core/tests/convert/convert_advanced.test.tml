@@ -2,7 +2,7 @@
 // Sources: tryfrom.test.tml, tryfrom_small.test.tml
 // Total @test count: 49
 use test::{assert, assert_eq}
-use core::convert::*
+use core::traits::convert::*
 
 // ============================================================================
 // Section 1: TryFrom I64 -> I32 narrowing (6 tests)

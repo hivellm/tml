@@ -42,8 +42,8 @@
 //!
 //! ```tml
 //! use core::future::Future
-//! use core::task::{Context, Poll}
-//! use core::pin::Pin
+//! use core::async::task::{Context, Poll}
+//! use core::runtime::pin::Pin
 //!
 //! type Delay {
 //!     remaining: I32
@@ -74,8 +74,8 @@
 //! })
 //! ```
 
-use core::pin::Pin
-pub use core::task::{Context, Poll, Ready, Pending}
+use core::runtime::pin::Pin
+pub use core::async::task::{Context, Poll, Ready, Pending}
 
 // ============================================================================
 // Future Behavior
@@ -109,8 +109,8 @@ pub use core::task::{Context, Poll, Ready, Pending}
 ///
 /// ```tml
 /// use core::future::Future
-/// use core::task::{Context, Poll}
-/// use core::pin::Pin
+/// use core::async::task::{Context, Poll}
+/// use core::runtime::pin::Pin
 ///
 /// type Counter {
 ///     count: I32,
@@ -471,5 +471,5 @@ impl[Fut] Fuse[Fut] {
 // ============================================================================
 
 // Re-export task primitives commonly used with futures
-pub use core::task::{Context, Poll}
-pub use core::pin::Pin
+pub use core::async::task::{Context, Poll}
+pub use core::runtime::pin::Pin

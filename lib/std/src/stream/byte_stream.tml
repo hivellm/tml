@@ -30,8 +30,8 @@
 //! stream.destroy()
 //! ```
 
-use core::error::{IoError, IoErrorKind}
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::error::{IoError, IoErrorKind}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::collections::buffer::{
     Buffer,
     buf_mem_alloc,

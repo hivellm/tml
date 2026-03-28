@@ -1,6 +1,6 @@
 // Tests for core::intrinsics — size_of and align_of for various types
 use test::{assert, assert_eq}
-use core::intrinsics::{size_of, align_of}
+use core::runtime::intrinsics::{size_of, align_of}
 
 @test
 func test_size_of_i8() -> I32 {

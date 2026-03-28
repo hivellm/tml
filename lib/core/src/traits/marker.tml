@@ -172,7 +172,7 @@ pub behavior Sized {
 
 // Note: Unpin behavior is defined in core::pin along with the Pin type.
 // Re-export it here for convenience.
-pub use core::pin::Unpin
+pub use core::runtime::pin::Unpin
 
 // ============================================================================
 // Send implementations for primitives

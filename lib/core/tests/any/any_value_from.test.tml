@@ -1,6 +1,6 @@
 // Tests for AnyValue::from[T] — type-erased heap storage
 use test::{assert}
-use core::any::AnyValue
+use core::types::any::AnyValue
 
 @test
 func test_from_i32() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for SoaVec::set — exercising bounds check path
 use test::{assert, assert_eq}
-use core::cache::SoaVec
+use core::data::cache::SoaVec
 
 @test
 func test_soavec_set_out_of_bounds() -> I32 {

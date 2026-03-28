@@ -1,6 +1,6 @@
 use test::{assert_eq, assert_true, assert_false}
 use std::events::EventEmitter
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 func counting_listener(data: I64) {
     let count: I64 = lowlevel { ptr_read[I64](data as *I64) }

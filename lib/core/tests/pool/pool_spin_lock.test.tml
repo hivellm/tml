@@ -1,6 +1,6 @@
 // Tests for spin_lock and spin_unlock functions
 use test::{assert, assert_eq}
-use core::pool::{spin_lock, spin_unlock}
+use core::data::pool::{spin_lock, spin_unlock}
 
 @test
 func test_spin_lock_unlock() -> I32 {

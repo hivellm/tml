@@ -2,7 +2,7 @@
 //!
 //! `RefCell[T]` provides interior mutability with runtime borrow checking.
 
-use core::option::*
+use core::types::option::*
 use core::cell::unsafe_cell::UnsafeCell
 
 // ============================================================================

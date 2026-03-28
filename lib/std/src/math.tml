@@ -38,7 +38,7 @@
 //! All functions have F32 variants with a `_f32` suffix:
 //! `sin_f32`, `cos_f32`, `sqrt_f32`, `mul_add_f32`, etc.
 
-use core::intrinsics
+use core::runtime::intrinsics
 
 // ============================================================================
 // Constants

@@ -4,7 +4,7 @@ use std::collections::Buffer
 use std::http::h2::frame::{H2_CONNECTION_PREFACE, H2_CONNECTION_PREFACE_LEN}
 use std::http::h2::hpack::{HpackEntry}
 use std::http::h2::server::{H2Request, h2_validate_preface, h2_extract_request}
-use core::intrinsics::{ptr_read}
+use core::runtime::intrinsics::{ptr_read}
 
 @test
 func test_validate_preface_valid() -> Outcome[Unit, Str] {

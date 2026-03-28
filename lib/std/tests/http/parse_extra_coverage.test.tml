@@ -1,7 +1,7 @@
 // Tests for app_extract_body, app_request_offset, app_get_content_length, app_has_expect_continue
 use test::{assert, assert_eq}
 use core::str
-use core::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
+use core::runtime::intrinsics::{mem_alloc, ptr_write, copy_nonoverlapping}
 use std::http::parse::{
     app_extract_body, app_request_offset,
     app_get_content_length, app_has_expect_continue,

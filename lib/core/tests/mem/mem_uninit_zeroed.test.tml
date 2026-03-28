@@ -2,7 +2,7 @@
 // Note: MaybeUninit::uninit() is blocked by codegen bug (maybe_uninit_create intrinsic
 // returns i32 but expects struct type). Only MaybeUninit::new and zeroed are testable.
 use test::{assert, assert_eq}
-use core::mem::{MaybeUninit, zeroed}
+use core::runtime::mem::{MaybeUninit, zeroed}
 
 @test
 func test_maybe_uninit_new_and_assume_init() -> I32 {

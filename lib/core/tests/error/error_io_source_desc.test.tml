@@ -4,7 +4,7 @@
 // - ParseError::source (default — returns Nothing)
 // - ParseError::description delegates to to_string
 use test::{assert, assert_eq}
-use core::error::{IoError, IoErrorKind, ParseError}
+use core::runtime::error::{IoError, IoErrorKind, ParseError}
 
 // === IoError::source (inherited default behavior — returns Nothing) ===
 

@@ -6,7 +6,7 @@
 //   test_tryfrom_u8_to_i8_overflow_v2, test_tryfrom_i32_to_u32_positive_v2,
 //   test_tryfrom_i32_to_u32_negative_v2
 use test::{assert, assert_eq}
-use core::convert::*
+use core::traits::convert::*
 
 // ============================================================================
 // Section 1: I8 -> U8 TryFrom (4 tests)

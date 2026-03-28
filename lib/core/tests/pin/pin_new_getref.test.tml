@@ -2,7 +2,7 @@
 // The type checker ref-ref bug is fixed; codegen for Pin generic instantiation
 // still has separate issues with struct type name mangling.
 use test::{assert}
-use core::pin::Pin
+use core::runtime::pin::Pin
 
 @test
 func test_pin_type_check_passes() -> I32 {

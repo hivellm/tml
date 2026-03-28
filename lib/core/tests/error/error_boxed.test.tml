@@ -1,6 +1,6 @@
 // Tests for BoxedError
 use test::{assert, assert_eq, assert_true}
-use core::error::{BoxedError}
+use core::runtime::error::{BoxedError}
 
 @test
 func test_boxed_error_from_message() -> I32 {

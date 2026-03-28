@@ -1,7 +1,7 @@
 use test::{assert_eq, assert_true}
 use std::events::EventEmitter
-use core::intrinsics::{ptr_read, ptr_write}
-use core::mem::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
+use core::runtime::mem::{mem_alloc, mem_free}
 
 // Writes its own unique value to the counter (so we can verify order)
 func write_1(data: I64) {

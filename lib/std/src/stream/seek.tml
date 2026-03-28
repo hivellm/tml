@@ -3,7 +3,7 @@
 /// Provides the ability to move the read/write cursor within a stream.
 /// Includes `Cursor` — an in-memory seekable stream over a byte buffer.
 
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 // ============================================================================
 // SeekFrom — Where to seek from

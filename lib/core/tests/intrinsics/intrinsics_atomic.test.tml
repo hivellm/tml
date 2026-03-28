@@ -1,6 +1,6 @@
 // Tests for atomic intrinsics: atomic_load, atomic_store, atomic_add, atomic_sub, atomic_and, atomic_or
 use test::{assert, assert_eq}
-use core::intrinsics::{atomic_load, atomic_store, atomic_add, atomic_sub, atomic_and, atomic_or}
+use core::runtime::intrinsics::{atomic_load, atomic_store, atomic_add, atomic_sub, atomic_and, atomic_or}
 
 @test
 func test_atomic_store_load_i32() -> I32 {

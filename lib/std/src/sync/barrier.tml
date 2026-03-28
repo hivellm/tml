@@ -229,7 +229,7 @@ impl BarrierWaitResult {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Barrier is Send.
 /// Barriers can be safely transferred between threads.

@@ -4,7 +4,7 @@
 //! Inspired by Express.js `express-rate-limit`.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use core::fmt::helpers::i64_to_str
 use std::text::Text
 

@@ -70,7 +70,7 @@
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of}
+use core::runtime::mem::{size_of, align_of}
 
 // ============================================================================
 // Node[T] - Internal queue node
@@ -395,7 +395,7 @@ impl[T] Drop for LockFreeQueue[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// LockFreeQueue[T] is Send if T is Send.
 /// The queue can be transferred to another thread if its contents can be.

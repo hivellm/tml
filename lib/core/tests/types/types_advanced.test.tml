@@ -5,7 +5,7 @@
 
 use test
 use core::time::Duration
-use core::range::{RangeIterI64, RangeInclusiveIterI64}
+use core::types::range::{RangeIterI64, RangeInclusiveIterI64}
 use core::char::decode
 use core::slice::Slice
 

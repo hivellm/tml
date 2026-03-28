@@ -1,6 +1,6 @@
 use test::{assert, assert_eq}
 use core::reflect::{TypeInfo, TypeKind, Reflect}
-use core::intrinsics::{size_of, field_count, variant_count, field_name}
+use core::runtime::intrinsics::{size_of, field_count, variant_count, field_name}
 
 @derive(Reflect)
 type Vec3 {

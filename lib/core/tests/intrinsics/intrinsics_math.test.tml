@@ -1,6 +1,6 @@
 // Tests for core::intrinsics — type_name, type_id
 use test::{assert, assert_eq}
-use core::intrinsics::{type_name, type_id}
+use core::runtime::intrinsics::{type_name, type_id}
 
 @test
 func test_type_name_i32() -> I32 {

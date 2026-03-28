@@ -1,6 +1,6 @@
 // Tests for core::cache — CacheAligned and Padded wrappers
 use test::{assert, assert_eq}
-use core::cache::{CacheAligned, Padded, CACHE_LINE_SIZE}
+use core::data::cache::{CacheAligned, Padded, CACHE_LINE_SIZE}
 
 @test
 func test_cache_aligned_new_into_inner() -> I32 {

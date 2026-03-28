@@ -1,6 +1,6 @@
 // Tests for AnyValue::downcast, downcast_mut, into_inner, drop
 use test::{assert, assert_eq}
-use core::any::AnyValue
+use core::types::any::AnyValue
 
 @test
 func test_anyvalue_drop_implicit() -> I32 {

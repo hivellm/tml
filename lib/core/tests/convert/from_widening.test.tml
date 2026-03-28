@@ -1,6 +1,6 @@
 // Tests for core::convert — From widening conversions
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_from_i8_to_i32() -> I32 {

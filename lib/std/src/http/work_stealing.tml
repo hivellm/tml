@@ -9,7 +9,7 @@
 //! - FIFO global queue: overflow from full local queues
 //! - Steal-half: idle workers take half of a busy worker's local queue
 
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
 
 // ════════════════════════════════════════════════════════════════════
 // Per-worker local queue (fixed-size ring buffer, no locks)

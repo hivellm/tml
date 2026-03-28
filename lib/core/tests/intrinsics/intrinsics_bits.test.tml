@@ -1,6 +1,6 @@
 // Tests for core::intrinsics — bit manipulation (ctlz, cttz, ctpop, bswap, bitreverse)
 use test::{assert_eq}
-use core::intrinsics::{ctlz, cttz, ctpop, bswap, bitreverse}
+use core::runtime::intrinsics::{ctlz, cttz, ctpop, bswap, bitreverse}
 
 // ============================================================================
 // ctlz — count leading zeros

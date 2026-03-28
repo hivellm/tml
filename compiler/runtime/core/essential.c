@@ -1073,9 +1073,80 @@ static void tml_remove_exception_filter(void) {
 /// Helper: run test_fn wrapped in SEH __try/__except.
 /// This is a separate function because MSVC forbids setjmp and __try in the same function.
 /// Returns -2 on crash, or the test's return value on success.
+// ============================================================================
+// Per-test timeout enforcement
+// ============================================================================
+
+/** @brief Timeout in milliseconds for individual test functions. 0 = disabled. */
+static int32_t tml_test_timeout_ms = 0;
+
+/**
+ * @brief Set the per-test timeout in milliseconds.
+ * Any test that exceeds this duration will be forcefully terminated.
+ * Set to 0 to disable (default).
+ */
+TML_EXPORT void tml_set_test_timeout(int32_t timeout_ms) {
+    tml_test_timeout_ms = timeout_ms;
+}
+
+#ifdef _WIN32
+/** @brief Thread parameter for watchdog. */
+typedef struct {
+    HANDLE test_thread;
+    int32_t timeout_ms;
+    volatile int32_t* finished_flag;
+    const char* test_name;
+} tml_watchdog_params;
+
+static DWORD WINAPI tml_watchdog_thread(LPVOID lpParam) {
+    tml_watchdog_params* p = (tml_watchdog_params*)lpParam;
+    Sleep((DWORD)p->timeout_ms);
+    if (!*(p->finished_flag)) {
+        // Test exceeded timeout — report and terminate process
+        RT_FATAL("test", "TIMEOUT: test exceeded %dms limit — killed", p->timeout_ms);
+        fflush(stderr);
+        fflush(stdout);
+        // Use TerminateProcess to kill the entire subprocess immediately
+        TerminateProcess(GetCurrentProcess(), 99);
+    }
+    return 0;
+}
+
+/**
+ * @brief Run a test function with a timeout watchdog.
+ * If the test exceeds tml_test_timeout_ms, the process is terminated with exit code 99.
+ */
+static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
+    if (tml_test_timeout_ms <= 0) {
+        return test_fn();
+    }
+    volatile int32_t finished = 0;
+    tml_watchdog_params params;
+    params.test_thread = GetCurrentThread();
+    params.timeout_ms = tml_test_timeout_ms;
+    params.finished_flag = &finished;
+    params.test_name = NULL;
+
+    HANDLE watchdog = CreateThread(NULL, 0, tml_watchdog_thread, &params, 0, NULL);
+    int32_t result = test_fn();
+    finished = 1;
+    if (watchdog) {
+        // Give watchdog a moment to notice, then close handle
+        WaitForSingleObject(watchdog, 50);
+        CloseHandle(watchdog);
+    }
+    return result;
+}
+#else
+static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
+    // On non-Windows, just run directly (TODO: pthread-based timeout)
+    return test_fn();
+}
+#endif
+
 static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
     __try {
-        return test_fn();
+        return tml_run_with_timeout(test_fn);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return -2;
     }
@@ -1151,8 +1222,8 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
 
     int jmp_result = setjmp(tml_panic_jmp_buf);
     if (jmp_result == 0) {
-        // First time through - run the test
-        int32_t result = test_fn();
+        // First time through - run the test (with timeout if configured)
+        int32_t result = tml_run_with_timeout(test_fn);
         tml_catching_panic = 0;
         tml_restore_signal_handlers();
         return result;

@@ -4,8 +4,8 @@
 
 use test
 
-use core::marker::PhantomPinned
-use core::marker::PhantomData
+use core::traits::marker::PhantomPinned
+use core::traits::marker::PhantomData
 
 // ============================================================================
 // Pair (A, B) Tests - Basic Operations (from tuple.test.tml)

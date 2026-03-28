@@ -9,7 +9,7 @@
 //! Both modes share the same shared-state memory layout and dispatch pipeline.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
 use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,

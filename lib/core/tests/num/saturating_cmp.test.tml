@@ -1,7 +1,7 @@
 // Tests for Saturating[T] — cmp, partial_cmp, eq
 use test
 use core::num::saturating::Saturating
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_saturating_cmp_less() -> I32 {

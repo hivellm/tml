@@ -22,7 +22,7 @@
 //! let byte = view.get(0)            // First byte
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
 
 /// Reads a single byte from a raw memory address.
 func rd_byte(addr: I64) -> U8 {

@@ -1,6 +1,6 @@
 // Tests for cache module — CacheAligned/Padded extra methods, constants
 use test::{assert, assert_eq}
-use core::cache::{CacheAligned, Padded, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
+use core::data::cache::{CacheAligned, Padded, CACHE_LINE_SIZE, HALF_CACHE_LINE, DOUBLE_CACHE_LINE}
 
 // === Constants ===
 

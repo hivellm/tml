@@ -61,7 +61,7 @@
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of}
+use core::runtime::mem::{size_of, align_of}
 
 // ============================================================================
 // StackNode[T] - Internal stack node
@@ -362,7 +362,7 @@ impl[T] Drop for LockFreeStack[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// LockFreeStack[T] is Send if T is Send.
 /// The stack can be transferred to another thread if its contents can be.

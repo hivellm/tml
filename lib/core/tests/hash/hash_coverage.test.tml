@@ -11,9 +11,9 @@
 //   hash_random_state_extra.test.tml
 
 use test
-use core::hash::{DefaultHasher, RandomState}
-use core::default::Default
-use core::clone::Duplicate
+use core::traits::hash::{DefaultHasher, RandomState}
+use core::traits::default::Default
+use core::traits::clone::Duplicate
 
 // =============================================================================
 // DefaultHasher Construction (from hash_default_hasher.test.tml)

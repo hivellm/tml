@@ -1,6 +1,6 @@
 // Phase 0 validation: copy_nonoverlapping
 use test::{assert, assert_eq}
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 
 // --- copy single I32 element ---
 @test

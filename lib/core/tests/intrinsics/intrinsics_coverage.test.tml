@@ -12,7 +12,7 @@
 // Root cause: generic parameter monomorphization for intrinsics does not substitute
 // concrete types into IR function signatures.
 use test::{assert, assert_eq}
-use core::intrinsics::{
+use core::runtime::intrinsics::{
     minnum, maxnum,
 }
 

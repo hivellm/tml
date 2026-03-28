@@ -10,7 +10,7 @@ use test::{assert, assert_eq}
 use std::sync::{Mutex, MutexGuard, Condvar, Arc}
 use std::sync::condvar::Condvar
 use std::sync::atomic::{AtomicUsize, AtomicBool}
-use core::mem::drop
+use core::runtime::mem::drop
 
 // Simple struct to point to
 type MutexData {

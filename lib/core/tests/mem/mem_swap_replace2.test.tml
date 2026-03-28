@@ -1,6 +1,6 @@
 // Tests for core::mem — swap, replace, drop, forget
 use test::{assert, assert_eq}
-use core::mem
+use core::runtime::mem
 
 @test
 func test_swap_i32() -> I32 {

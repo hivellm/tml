@@ -140,7 +140,7 @@ impl File {
 }
 
 use std::stream::seek::{Seek, SeekFrom}
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 impl Seek for File {
     /// Seek to a position in the file.

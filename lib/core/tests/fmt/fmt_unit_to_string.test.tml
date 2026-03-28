@@ -1,6 +1,6 @@
 // Tests for fmt/impls — Unit Display and Debug via to_string
 use test::{assert, assert_eq}
-use core::tuple::Unit
+use core::types::tuple::Unit
 use core::fmt::Display
 
 @test

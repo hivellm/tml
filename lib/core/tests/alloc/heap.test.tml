@@ -1,7 +1,7 @@
 // Tests for alloc/heap - Heap extra methods
 use test
 use core::alloc::heap::Heap
-use core::mem::mem_free
+use core::runtime::mem::mem_free
 
 @test
 func test_heap_new_default_i32() -> I32 {

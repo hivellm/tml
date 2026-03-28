@@ -1,6 +1,6 @@
 // Tests for ParseError::with_position — display and debug output
 use test::{assert, assert_eq}
-use core::error::ParseError
+use core::runtime::error::ParseError
 
 @test
 func test_with_position_display_format() -> I32 {

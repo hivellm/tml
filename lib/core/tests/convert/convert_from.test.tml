@@ -1,6 +1,6 @@
 // Tests for core::convert — From and TryFrom implementations
 use test::{assert, assert_eq}
-use core::convert::{From, TryFrom}
+use core::traits::convert::{From, TryFrom}
 
 @test
 func test_from_bool_to_i32_true() -> I32 {

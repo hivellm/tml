@@ -1,5 +1,5 @@
 use test::{assert, assert_eq}
-use core::panic::{catch_unwind_fn, set_hook, clear_hook, resume_unwind, CatchResult, PanicInfo}
+use core::runtime::panic::{catch_unwind_fn, set_hook, clear_hook, resume_unwind, CatchResult, PanicInfo}
 
 func panics_boom() -> Unit {
     panic("boom")

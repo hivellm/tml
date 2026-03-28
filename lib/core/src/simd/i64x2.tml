@@ -1,7 +1,7 @@
 //! 2-lane I64 SIMD vector type.
 
 use core::simd::mask::Mask2
-use core::intrinsics::{
+use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract, simd_insert, simd_splat,
     llvm_add, llvm_sub, llvm_mul, llvm_div,
     llvm_and, llvm_or, llvm_xor

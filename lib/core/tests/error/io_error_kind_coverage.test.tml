@@ -1,6 +1,6 @@
 // Tests for IoErrorKind to_string and debug_string — uncovered variants
 use test::{assert, assert_eq}
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 // === to_string coverage for untested variants ===
 

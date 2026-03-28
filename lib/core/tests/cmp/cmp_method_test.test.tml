@@ -1,6 +1,6 @@
 // Tests for primitive .cmp() and .partial_cmp() methods
 use test
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 // =============================================================================
 // .cmp() on integer types — covers I8::cmp through U64::cmp, Bool::cmp

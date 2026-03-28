@@ -70,7 +70,7 @@
 
 use core::iter::*
 // PartialEq, Duplicate are builtin behaviors - no import needed
-use core::default::Default
+use core::traits::default::Default
 
 // ============================================================================
 // Outcome[T, E] Type (defined in std::types, enhanced here)

@@ -2,7 +2,7 @@
 // These are the default implementations in the Error behavior itself.
 // We define a custom error type that uses the defaults (empty impl Error body).
 use test::{assert, assert_eq}
-use core::error::Error
+use core::runtime::error::Error
 
 type TestError {
     msg: Str

@@ -1,7 +1,7 @@
 // Consolidated tests for core::default (31 active tests, 1 commented-out)
 use test
-use core::default
-use core::default::Default
+use core::traits::default
+use core::traits::default::Default
 
 // ============================================================================
 // Section 1: default.test.tml - Integer Default implementations

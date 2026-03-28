@@ -7,8 +7,8 @@
 //!
 //! Inspired by tokio's timer wheel and Varghese & Lauck's paper.
 
-use core::mem::{mem_alloc, mem_free}
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use core::runtime::mem::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 
 // ── Raw memory accessors ─────────────────────────────────────────────────
 

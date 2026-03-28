@@ -1,6 +1,6 @@
 // Tests for core::intrinsics — compiler hints: likely, unlikely, assume, fence
 use test::{assert, assert_eq}
-use core::intrinsics::{likely, unlikely, assume, fence}
+use core::runtime::intrinsics::{likely, unlikely, assume, fence}
 
 @test
 func test_likely_true() -> I32 {

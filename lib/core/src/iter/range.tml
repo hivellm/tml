@@ -17,7 +17,7 @@
 //! # Examples
 //!
 //! ```tml
-//! use core::range::*
+//! use core::types::range::*
 //! use core::iter::*
 //!
 //! // Iterate over a range
@@ -30,7 +30,7 @@
 //! }
 //! ```
 
-use core::range::*
+use core::types::range::*
 // PartialOrd is a builtin behavior - no import needed
 
 // ============================================================================

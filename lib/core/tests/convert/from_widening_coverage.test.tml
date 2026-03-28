@@ -9,7 +9,7 @@
 //   U16::from, U32::from, U64::from, F64::from
 // Blocked by codegen: Outcome::from (generic E not resolved)
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_i16_from_i8() -> I32 {

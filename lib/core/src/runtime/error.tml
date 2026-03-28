@@ -83,7 +83,7 @@
 
 // Display, Debug are builtins - no import needed
 use core::fmt::FmtError
-use core::option::*
+use core::types::option::*
 use core::iter::*
 
 // ============================================================================

@@ -11,7 +11,7 @@
 //! pair: a high surrogate (0xD800-0xDBFF) followed by a low surrogate
 //! (0xDC00-0xDFFF).
 
-use core::option::Maybe
+use core::types::option::Maybe
 use core::slice::Slice
 
 // ============================================================================

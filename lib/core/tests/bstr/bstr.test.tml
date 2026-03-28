@@ -1,6 +1,6 @@
 // Consolidated tests for core::bstr (6 tests)
 use test
-use core::bstr
+use core::encoding::bstr
 use core::slice::{Slice}
 
 // --- is_ascii tests ---

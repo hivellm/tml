@@ -1,6 +1,6 @@
 // Tests for core::convert - From behavior (signed widening + float + bool)
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 // --- Signed integer widening ---
 

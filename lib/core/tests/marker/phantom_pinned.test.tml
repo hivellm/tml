@@ -1,6 +1,6 @@
 // Tests for core::marker — PhantomPinned
 use test::{assert, assert_eq}
-use core::marker::PhantomPinned
+use core::traits::marker::PhantomPinned
 
 @test
 func test_phantom_pinned_new() -> I32 {

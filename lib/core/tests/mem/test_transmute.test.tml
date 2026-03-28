@@ -1,5 +1,5 @@
 use test
-use core::mem
+use core::runtime::mem
 
 @test
 func test_mem_transmute_i32_u32() -> I32 {

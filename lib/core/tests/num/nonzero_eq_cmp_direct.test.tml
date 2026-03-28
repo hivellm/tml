@@ -3,7 +3,7 @@
 // layout issue in NonZero::new. The eq/cmp methods themselves work correctly.
 use test
 use core::num::nonzero::NonZero
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_nonzero_eq_equal() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for Error::description default method and Error::source default method
 use test
-use core::error::{SimpleError, ParseError}
+use core::runtime::error::{SimpleError, ParseError}
 
 @test
 func test_simple_error_description() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for core::hash — Hasher, BuildHasher, and primitive Hash impls coverage
 use test::{assert}
-use core::hash::{DefaultHasher, RandomState, BuildHasher}
+use core::traits::hash::{DefaultHasher, RandomState, BuildHasher}
 
 // ============================================================================
 // Primitive Hash impls — each calls T::hash() to trigger coverage

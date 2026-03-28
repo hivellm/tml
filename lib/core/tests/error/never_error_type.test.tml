@@ -2,7 +2,7 @@
 // NeverError::to_string and NeverError::debug_string call unreachable()
 // and cannot actually be invoked, so we can only test the type at compile time.
 use test::{assert, assert_eq}
-use core::error::NeverError
+use core::runtime::error::NeverError
 
 @test
 func test_never_error_in_outcome_ok() -> I32 {

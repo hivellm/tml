@@ -1,7 +1,7 @@
 // Tests for Wrapping[T] struct methods
 use test
 use core::num::wrapping::Wrapping
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_wrapping_new_value() -> I32 {

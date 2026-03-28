@@ -4,7 +4,7 @@
 //! wrapping (modular) arithmetic operations.
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Duplicate, Copy are builtins - no import needed
-use core::default::Default
+use core::traits::default::Default
 
 // ============================================================================
 // Wrapping Wrapper Type

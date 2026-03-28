@@ -1,7 +1,7 @@
 // Extended tests for core::range iterators
 use test::{assert, assert_eq}
-use core::range::RangeIterI64
-use core::range::RangeInclusiveIterI64
+use core::types::range::RangeIterI64
+use core::types::range::RangeInclusiveIterI64
 
 @test
 func test_range_iter_sum() -> I32 {

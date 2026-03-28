@@ -1,6 +1,6 @@
 // Tests for ThreadLocalPool[T] — basic operations
 use test::{assert, assert_eq}
-use core::pool::{ThreadLocalPool, PoolStats}
+use core::data::pool::{ThreadLocalPool, PoolStats}
 
 @test
 func test_threadlocal_pool_new() -> I32 {

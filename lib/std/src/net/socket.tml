@@ -27,9 +27,9 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::Hash
+use core::traits::hash::Hash
 // Note: Formatter and FormatResult would need real imports if used
-use core::option::Maybe::{Just, Nothing}
+use core::types::option::Maybe::{Just, Nothing}
 
 use super::ip::{IpAddr, Ipv4Addr, Ipv6Addr}
 

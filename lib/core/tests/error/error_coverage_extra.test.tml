@@ -1,7 +1,7 @@
 // Tests for uncovered error module functions:
 // Error::description on different types, ChainedError::source
 use test::{assert, assert_eq}
-use core::error::{SimpleError, ParseError, IoError, IoErrorKind, ChainedError}
+use core::runtime::error::{SimpleError, ParseError, IoError, IoErrorKind, ChainedError}
 
 // === Error::description on IoError ===
 

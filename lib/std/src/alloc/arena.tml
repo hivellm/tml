@@ -3,4 +3,4 @@
 //! The arena allocator is defined in `core::arena` and re-exported here for
 //! convenience under the `std::alloc` namespace.
 
-pub use core::arena::*
+pub use core::data::arena::*

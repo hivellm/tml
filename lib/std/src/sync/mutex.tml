@@ -341,7 +341,7 @@ impl[T] Drop for MutexGuard[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Mutex[T] is Send if T is Send.
 /// A mutex can be sent to another thread if its contents can be transferred.

@@ -1,6 +1,6 @@
 // Tests for ChainedError — new, cause, to_string, debug_string
 use test::{assert, assert_eq}
-use core::error::{ChainedError, SimpleError}
+use core::runtime::error::{ChainedError, SimpleError}
 
 @test
 func test_chained_error_new_to_string() -> I32 {

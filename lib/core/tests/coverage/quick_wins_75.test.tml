@@ -2,7 +2,7 @@
 use test::{assert_eq, assert}
 use core::alloc::{Layout, handle_alloc_error}
 use core::char::convert::TryFromCharError
-use core::error::Error
+use core::runtime::error::Error
 
 // ============================================================================
 // handle_alloc_error (alloc/global) — 1 function

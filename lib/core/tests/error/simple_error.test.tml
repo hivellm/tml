@@ -1,6 +1,6 @@
 // Tests for core::error — SimpleError, BoxedError, ParseError, IoError
 use test::{assert, assert_eq}
-use core::error::{SimpleError, BoxedError, ParseError, IoError, IoErrorKind}
+use core::runtime::error::{SimpleError, BoxedError, ParseError, IoError, IoErrorKind}
 
 @test
 func test_simple_error_new() -> I32 {

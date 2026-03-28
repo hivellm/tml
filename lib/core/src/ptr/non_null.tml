@@ -3,8 +3,8 @@
 //! This module contains the `NonNull[T]` type, a pointer type guaranteed
 //! to never be null.
 
-use core::hash::*
-use core::option::*
+use core::traits::hash::*
+use core::types::option::*
 use core::ptr::const_ptr::RawPtr
 use core::ptr::mut_ptr::RawMutPtr
 

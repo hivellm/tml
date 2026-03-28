@@ -11,7 +11,7 @@
 //! functional, use the scalar functions in parse.tml instead.
 
 use core::str
-use core::intrinsics::{ptr_read}
+use core::runtime::intrinsics::{ptr_read}
 
 // ════════════════════════════════════════════════════════════════════
 // Scalar fallback (always works, used for tail bytes)

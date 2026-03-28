@@ -7,7 +7,7 @@
 //! Pattern matching helpers support the legacy linear-scan compatibility path.
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, copy_nonoverlapping}
 
 /// Read a byte at buf + offset.
 func rd(buf: I64, offset: I64) -> I32 {

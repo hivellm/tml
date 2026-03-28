@@ -1,5 +1,5 @@
 use test
-use core::ringbuf::{RingBuf, RingBufIter}
+use core::data::ringbuf::{RingBuf, RingBufIter}
 
 @test
 func test_ringbuf_iter_empty() -> I32 {

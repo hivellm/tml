@@ -63,7 +63,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of}
+use core::runtime::mem::{size_of, align_of}
 
 // ============================================================================
 // TLS Slot - Per-thread storage slot
@@ -481,7 +481,7 @@ pub func local_const[T](value: T) -> LocalKey[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// LocalKey[T] is Send - the key itself can be transferred between threads.
 /// Note: The actual thread-local values are never shared.

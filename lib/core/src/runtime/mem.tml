@@ -61,7 +61,7 @@
 //! behavior if misused. Pay attention to safety requirements in each
 //! function's documentation.
 
-use core::default::Default
+use core::traits::default::Default
 
 // ============================================================================
 // Size and Alignment

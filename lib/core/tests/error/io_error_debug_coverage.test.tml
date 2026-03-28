@@ -1,6 +1,6 @@
 // Tests for IoError::debug_string — ensuring both Nothing and Just paths are covered
 use test::{assert, assert_eq}
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 @test
 func test_io_error_debug_no_message() -> I32 {

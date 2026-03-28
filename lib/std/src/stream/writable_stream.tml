@@ -39,7 +39,7 @@
 //! ws.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::events::EventEmitter
 
 // ============================================================================

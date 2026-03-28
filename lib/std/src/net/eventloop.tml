@@ -54,7 +54,7 @@
 //! ```
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
 
 // ── FFI to tml_poll_* (WSAPoll on Windows, epoll on Linux) ──────
 @extern("c") func tml_poll_create() -> I64

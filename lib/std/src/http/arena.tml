@@ -4,7 +4,7 @@
 //! allocation. Reset after each request — zero malloc/free in steady state.
 //! Falls back to mem_alloc for oversized requests.
 
-use core::intrinsics::{mem_alloc, mem_free, ptr_write}
+use core::runtime::intrinsics::{mem_alloc, mem_free, ptr_write}
 
 /// Default arena size: 64KB per worker (handles most requests without fallback).
 const DEFAULT_ARENA_SIZE: I64 = 65536

@@ -1,6 +1,6 @@
 // Tests for BoxedError::new[E: Error] — generic constructor
 use test::{assert, assert_eq}
-use core::error::{BoxedError, SimpleError}
+use core::runtime::error::{BoxedError, SimpleError}
 
 @test
 func test_boxed_error_new_from_simple_error() -> I32 {

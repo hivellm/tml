@@ -337,7 +337,7 @@ impl[T] Drop for RwLockWriteGuard[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// RwLock[T] is Send if T is Send.
 /// The lock can be transferred to another thread if its contents can be.

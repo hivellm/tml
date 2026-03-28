@@ -1,6 +1,6 @@
 // Tests for DefaultHasher::default, DefaultHasher::duplicate, DefaultHasher::with_seed
 use test::{assert, assert_eq}
-use core::hash::DefaultHasher
+use core::traits::hash::DefaultHasher
 
 @test
 func test_default_hasher_default() -> I32 {

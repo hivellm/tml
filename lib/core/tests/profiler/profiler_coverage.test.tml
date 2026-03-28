@@ -2,7 +2,7 @@
 // end, message, plot, frame_mark
 // In non-PROFILE mode all these are no-ops — just verify they compile and run.
 use test::{assert}
-use core::profiler
+use core::runtime::profiler
 
 @test
 func test_profiler_end_noop() -> I32 {

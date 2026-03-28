@@ -7,8 +7,8 @@
 
 use test
 use core::iter::*
-use core::range::*
-use core::range::{RangeIterI64, RangeInclusiveIterI64}
+use core::types::range::*
+use core::types::range::{RangeIterI64, RangeInclusiveIterI64}
 use core::iter::sources::once::{Once, once}
 use core::iter::sources::repeat_n::{RepeatN, repeat_n}
 

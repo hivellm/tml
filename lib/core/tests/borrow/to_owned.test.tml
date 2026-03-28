@@ -1,6 +1,6 @@
 // Tests for core::borrow::ToOwned — primitive type to_owned
 use test::{assert, assert_eq}
-use core::borrow::ToOwned
+use core::traits::borrow::ToOwned
 
 @test
 func test_to_owned_i32() -> I32 {

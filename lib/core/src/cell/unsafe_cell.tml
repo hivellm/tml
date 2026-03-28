@@ -7,7 +7,7 @@
 //!
 //! This module also provides [`SyncUnsafeCell[T]`], a thread-safe variant.
 
-use core::option::*
+use core::types::option::*
 
 // ============================================================================
 // UnsafeCell[T]

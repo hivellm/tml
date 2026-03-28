@@ -1,6 +1,6 @@
 // Tests for core::soo module - Small Object Optimization
 use test
-use core::soo::SmallVec8
+use core::data::soo::SmallVec8
 
 // ============================================================================
 // SmallVec8 Creation and Basic Properties

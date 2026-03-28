@@ -69,8 +69,8 @@ use std::sync::mutex::Mutex
 use std::sync::condvar::Condvar
 use std::sync::arc::Arc
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of, drop}
-use core::clone::Duplicate
+use core::runtime::mem::{size_of, align_of, drop}
+use core::traits::clone::Duplicate
 use core::time::Duration
 
 // ============================================================================
@@ -613,7 +613,7 @@ pub func channel[T]() -> (Sender[T], Receiver[T]) {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Sender[T] is Send if T is Send.
 /// Senders can be transferred to other threads.

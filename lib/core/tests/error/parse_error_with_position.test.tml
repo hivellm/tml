@@ -1,6 +1,6 @@
 // Tests for ParseError::with_position — covers the constructor and display output
 use test::{assert, assert_eq}
-use core::error::ParseError
+use core::runtime::error::ParseError
 
 @test
 func test_with_position_creates_error() -> I32 {

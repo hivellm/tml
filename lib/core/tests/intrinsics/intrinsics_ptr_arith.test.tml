@@ -1,7 +1,7 @@
 // Phase 0 validation: pointer arithmetic, multi-element array access
 // Pattern: compute ALL pointers first, THEN write/read values
 use test::{assert, assert_eq}
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // --- 4-element I32 array via address arithmetic ---
 @test

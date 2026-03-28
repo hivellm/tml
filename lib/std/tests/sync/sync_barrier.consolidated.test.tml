@@ -10,7 +10,7 @@ use std::sync::mutex::{Mutex, MutexGuard}
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicBool, AtomicI64, AtomicU64, AtomicUsize}
 use std::sync::Ordering
 use std::sync::ordering::fence
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 // Helper types
 type SendSyncPoint { x: I32, y: I32 }

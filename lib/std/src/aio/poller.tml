@@ -6,7 +6,7 @@
 //! This is the lowest TML layer of the async I/O stack.
 //! Higher layers (EventLoop, TcpServer) build on top of this.
 
-use core::intrinsics::{mem_alloc, mem_free, ptr_read}
+use core::runtime::intrinsics::{mem_alloc, mem_free, ptr_read}
 
 // ── FFI to poll.c ────────────────────────────────────────────────────────
 

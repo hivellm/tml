@@ -32,4 +32,4 @@
 
 // Re-export from core::error for now — these types were originally defined there.
 // As the project matures, the canonical definitions will move here.
-pub use core::error::{IoError, IoErrorKind}
+pub use core::runtime::error::{IoError, IoErrorKind}

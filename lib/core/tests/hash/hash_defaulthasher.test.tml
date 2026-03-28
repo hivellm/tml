@@ -1,6 +1,6 @@
 // Tests for core::hash — DefaultHasher, RandomState, combine_hashes
 use test::{assert, assert_eq}
-use core::hash::{DefaultHasher, RandomState, combine_hashes}
+use core::traits::hash::{DefaultHasher, RandomState, combine_hashes}
 
 // === combine_hashes ===
 

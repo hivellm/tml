@@ -1,6 +1,6 @@
 // Additional tests for core::hash — with_seed determinism and write methods
 use test
-use core::hash::{DefaultHasher, RandomState, BuildHasher}
+use core::traits::hash::{DefaultHasher, RandomState, BuildHasher}
 
 @test
 func test_default_hasher_with_seed_same_seed_deterministic() {

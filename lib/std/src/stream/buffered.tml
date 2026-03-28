@@ -19,8 +19,8 @@
 //! reader.destroy()
 //! ```
 
-use core::error::{IoError, IoErrorKind}
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::error::{IoError, IoErrorKind}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::stream::readable::Readable
 use std::stream::writable::Writable
 use std::stream::byte_stream::ByteStream

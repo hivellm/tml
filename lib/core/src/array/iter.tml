@@ -17,8 +17,8 @@
 //! returned by the array's `into_iter()` method.
 
 use core::iter::{Iterator, IntoIterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator, TrustedLen}
-use core::clone::Duplicate
-use core::default::Default
+use core::traits::clone::Duplicate
+use core::traits::default::Default
 use core::fmt::Debug
 
 // ============================================================================

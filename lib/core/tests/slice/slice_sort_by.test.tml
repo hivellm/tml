@@ -1,7 +1,7 @@
 // Tests for MutSlice::sort_by
 use test::{assert, assert_eq}
 use core::slice::{Slice, MutSlice}
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_sort_by_descending() -> I32 {

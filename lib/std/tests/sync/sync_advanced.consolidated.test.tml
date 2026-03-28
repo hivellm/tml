@@ -11,7 +11,7 @@ use test::{assert, assert_eq}
 use std::sync::{AtomicU32, AtomicU64, AtomicUsize, AtomicIsize, AtomicBool, Ordering}
 use std::sync::{Arc, Weak, Mutex, RwLock, Condvar, Barrier, Once, OnceLock}
 use std::sync::ordering::Ordering
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 // Helper types
 type SSPoint { x: I32, y: I32 }

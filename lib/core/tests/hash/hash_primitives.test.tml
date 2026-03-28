@@ -1,7 +1,7 @@
 // Tests for core::hash — combine_hashes and DefaultHasher
 use test::{assert, assert_eq}
-use core::hash::{combine_hashes, DefaultHasher}
-use core::hash::{combine_hashes}
+use core::traits::hash::{combine_hashes, DefaultHasher}
+use core::traits::hash::{combine_hashes}
 
 @test
 func test_combine_hashes_basic() -> I32 {

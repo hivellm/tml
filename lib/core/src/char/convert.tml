@@ -3,11 +3,11 @@
 //! This module contains functions for converting between characters and
 //! other types, as well as error types for failed conversions.
 
-use core::option::Maybe
-use core::result::Outcome
+use core::types::option::Maybe
+use core::types::result::Outcome
 // Display, Debug are builtins - no import needed
 // Note: Formatter and FormatResult would need real imports if used
-use core::error::Error
+use core::runtime::error::Error
 // Note: Char is a builtin type, no import needed
 
 // ============================================================================

@@ -2,7 +2,7 @@
 // NOTE: primitive .cmp()/.partial_cmp() calls fail with undefined symbol errors
 // Only Ordering methods and Ord::clamp on I32 (which might use operators) are testable
 use test
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_ordering_is_less_comprehensive() -> I32 {

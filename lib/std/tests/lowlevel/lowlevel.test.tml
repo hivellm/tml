@@ -1,7 +1,7 @@
 // Consolidated tests for std::lowlevel (15 tests)
 use test::{assert, assert_eq}
 use std::sync::{Mutex, MutexGuard, Arc}
-use core::mem::drop
+use core::runtime::mem::drop
 
 // ============================================================================
 // Helper Types

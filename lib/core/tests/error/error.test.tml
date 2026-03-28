@@ -1,7 +1,7 @@
 // Consolidated tests for core::error (23 tests)
 use test
-use core::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
-use core::error::{SimpleError, ParseError}
+use core::runtime::error::{IoErrorKind, IoError, SimpleError, ParseError, BoxedError}
+use core::runtime::error::{SimpleError, ParseError}
 
 // =============================================================================
 // IoErrorKind Tests - These work because IoErrorKind has explicit Display impl

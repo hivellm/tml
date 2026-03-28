@@ -1,7 +1,7 @@
 //! Tests for core::any module - TypeId and type reflection.
 
-use core::any::*
-use core::cmp::*
+use core::types::any::*
+use core::traits::cmp::*
 
 // ============================================================================
 // TypeId Construction and Basic Operations

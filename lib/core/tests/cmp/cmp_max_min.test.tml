@@ -1,6 +1,6 @@
 // Tests for cmp::max and cmp::min free functions
 use test::{assert, assert_eq}
-use core::cmp::{max, min}
+use core::traits::cmp::{max, min}
 
 @test
 func test_max_i32() -> I32 {

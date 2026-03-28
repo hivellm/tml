@@ -1,5 +1,5 @@
 use test::{assert, assert_eq}
-use core::async_iter::{Once, Empty, Repeat, Take, FromIter, once, empty, repeat, from_iter}
+use core::async::async_iter::{Once, Empty, Repeat, Take, FromIter, once, empty, repeat, from_iter}
 
 // Test Once constructor and size_hint lower bound
 @test

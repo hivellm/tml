@@ -3,7 +3,7 @@
 //! This module provides `LazyCell[T]`, a cell that lazily computes its value
 //! on first access using a provided initialization function.
 
-use core::option::*
+use core::types::option::*
 use core::cell::once::OnceCell
 
 // ============================================================================

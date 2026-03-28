@@ -20,7 +20,7 @@
 //! assert_eq(unicode, 65)
 //! ```
 
-use core::option::Maybe
+use core::types::option::Maybe
 use core::char::Char
 
 // ============================================================================

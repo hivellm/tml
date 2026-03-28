@@ -98,8 +98,8 @@
 //! - **Scheduling**: Depends on OS scheduler implementation
 
 use std::sync::atomic::{AtomicBool, Ordering}
-use core::clone::Duplicate
-use core::marker::Send
+use core::traits::clone::Duplicate
+use core::traits::marker::Send
 
 // ============================================================================
 // Platform-specific thread handle

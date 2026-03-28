@@ -1,7 +1,7 @@
 //! 4-lane F32 SIMD vector type.
 
 use core::simd::mask::Mask4
-use core::intrinsics::{
+use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract, simd_insert, simd_splat,
     llvm_add, llvm_sub, llvm_mul, llvm_div
 }

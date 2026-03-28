@@ -20,7 +20,7 @@
 //! let n = stream.read(mut ref buf)!   // n == 5, buf = "hello"
 //! ```
 
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 
 /// A source of bytes that can be read from.
 ///

@@ -5,7 +5,7 @@
 //          cmp_ordering_coverage.test.tml, cmp_primitive_eq.test.tml, cmp_primitive_ord.test.tml
 // NOTE: Duplicate function names from different source files are renamed with _v2/_v3/_v4 suffixes
 use test
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 // ============================================================================
 // Ordering methods - compact style (from ordering_methods.test.tml)

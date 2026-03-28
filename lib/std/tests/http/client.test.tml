@@ -2,7 +2,7 @@
 use test::{assert, assert_eq}
 use std::http::client::HttpClient
 use std::http::response::Response
-use core::intrinsics::mem_free
+use core::runtime::intrinsics::mem_free
 
 @test
 func test_client_get_https() -> I32 {

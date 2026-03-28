@@ -27,9 +27,9 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::Hash
-use core::default::Default
-use core::option::Maybe::{Just, Nothing}
+use core::traits::hash::Hash
+use core::traits::default::Default
+use core::types::option::Maybe::{Just, Nothing}
 
 // =============================================================================
 // Ipv4Addr - IPv4 Address (32 bits)

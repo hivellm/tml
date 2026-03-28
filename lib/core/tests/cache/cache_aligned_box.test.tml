@@ -1,6 +1,6 @@
 // Tests for CacheAlignedBox — heap-allocated cache-aligned data
 use test::{assert, assert_eq}
-use core::cache::CacheAlignedBox
+use core::data::cache::CacheAlignedBox
 
 @test
 func test_cache_aligned_box_new_is_valid() -> I32 {

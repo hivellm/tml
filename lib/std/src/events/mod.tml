@@ -38,7 +38,7 @@
 //! emitter.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::collections::hashmap::HashMap
 use std::collections::List
 use std::aio::EventLoop

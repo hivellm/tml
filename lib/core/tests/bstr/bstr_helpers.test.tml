@@ -1,5 +1,5 @@
 use test::{assert, assert_eq}
-use core::bstr
+use core::encoding::bstr
 
 @test
 func test_is_ascii_whitespace() -> I32 {

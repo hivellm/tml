@@ -238,7 +238,7 @@ impl[T] DerefMut for Pin[mut ref T] where T: Unpin {
 ///
 /// Types with self-references should not be `Unpin`:
 /// ```tml
-/// use core::marker::PhantomPinned
+/// use core::traits::marker::PhantomPinned
 ///
 /// type SelfReferential {
 ///     data: Str,

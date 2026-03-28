@@ -11,7 +11,7 @@ use core::alloc::layout::{Layout, LayoutError}
 use core::alloc::heap::{Heap}
 use core::alloc::shared::{Shared}
 use core::alloc::sync::{Sync}
-use core::mem::mem_free
+use core::runtime::mem::mem_free
 
 // ============================================================================
 // From layout.test.tml - Duplicate tests (renamed with _v2 suffix)

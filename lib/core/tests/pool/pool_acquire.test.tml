@@ -15,7 +15,7 @@
 //   - acquire/release cycle maintaining correct stats
 
 use test::{assert, assert_eq}
-use core::pool::{Pool, GrowthPolicy}
+use core::data::pool::{Pool, GrowthPolicy}
 
 @test
 func test_pool_acquire_blocked_placeholder() -> I32 {

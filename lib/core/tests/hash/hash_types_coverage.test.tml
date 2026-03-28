@@ -1,5 +1,5 @@
 use test
-use core::hash
+use core::traits::hash
 
 @test
 func test_hash_i8_deterministic() {

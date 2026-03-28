@@ -3,7 +3,7 @@
 // Total @test count: 50
 // Sources: cmp.test.tml, cmp_eq_small.test.tml, cmp_float.test.tml (partial)
 use test
-use core::cmp::{Ordering, min, max}
+use core::traits::cmp::{Ordering, min, max}
 
 // ============================================================================
 // Ordering tests using pattern matching (from cmp.test.tml)

@@ -1,6 +1,6 @@
 // Tests for core::hash — RandomState
 use test::{assert, assert_eq}
-use core::hash::{RandomState, DefaultHasher}
+use core::traits::hash::{RandomState, DefaultHasher}
 
 @test
 func test_random_state_new() -> I32 {

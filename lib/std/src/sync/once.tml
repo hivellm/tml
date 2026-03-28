@@ -393,7 +393,7 @@ impl[T] OnceLock[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Once is Send.
 /// Once can be safely transferred between threads.

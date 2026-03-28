@@ -2,8 +2,8 @@
 //!
 //! This module contains the `RawMutPtr[T]` type, TML's equivalent of Rust's `*mut T`.
 
-use core::hash::*
-use core::option::*
+use core::traits::hash::*
+use core::types::option::*
 use core::ptr::const_ptr::RawPtr
 
 // ============================================================================

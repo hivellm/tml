@@ -1,5 +1,5 @@
 use test
-use core::intrinsics::{field_count, field_name, field_offset}
+use core::runtime::intrinsics::{field_count, field_name, field_offset}
 use core::reflect::{Reflect, read_field_i64}
 
 @derive(Reflect)

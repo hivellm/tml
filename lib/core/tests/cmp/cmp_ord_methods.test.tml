@@ -1,6 +1,6 @@
 // Tests for Ord::max, Ord::min, Ord::clamp methods and cmp::max/min free functions
 use test::{assert, assert_eq}
-use core::cmp::{max, min}
+use core::traits::cmp::{max, min}
 
 // --- Ord::max method ---
 

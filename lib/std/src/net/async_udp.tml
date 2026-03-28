@@ -14,8 +14,8 @@ use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily}
 use std::net::udp::UdpSocket
 use std::aio::event_loop::EventLoop
 use std::aio::poller::READABLE
-use core::mem::{mem_alloc, mem_free}
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::mem::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // ============================================================================
 // AsyncUdpSocket

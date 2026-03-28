@@ -291,7 +291,7 @@ pub type GeneratorState[Y, R] = CoroutineState[Y, R]
 ///
 /// ```tml
 /// use core::ops::PinnedCoroutine
-/// use core::pin::Pin
+/// use core::runtime::pin::Pin
 ///
 /// impl PinnedCoroutine[Unit] for SelfReferential {
 ///     type Yield = I32

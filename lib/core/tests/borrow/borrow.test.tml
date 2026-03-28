@@ -1,6 +1,6 @@
 // Consolidated tests for core::borrow (12 tests)
 use test
-use core::borrow::ToOwned
+use core::traits::borrow::ToOwned
 
 // ---------------------------------------------------------------------------
 // Basic borrow patterns

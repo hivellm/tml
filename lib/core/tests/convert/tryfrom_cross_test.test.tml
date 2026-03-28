@@ -1,5 +1,5 @@
 use test
-use core::convert::TryFromIntError
+use core::traits::convert::TryFromIntError
 
 @test
 func test_i32_try_from_i64() -> I32 {

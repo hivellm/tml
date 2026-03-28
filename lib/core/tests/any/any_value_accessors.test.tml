@@ -1,6 +1,6 @@
 // Tests for core::any — TypeId::of for additional types
 use test::{assert, assert_eq}
-use core::any::TypeId
+use core::types::any::TypeId
 
 @test
 func test_typeid_of_i16() -> I32 {

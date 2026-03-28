@@ -549,6 +549,9 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
     emitln("define dllexport i32 @" + quote_func_name(options_.test_entry_name) + "() {");
     emitln("entry:");
 
+    // Set per-test timeout (100ms) to kill tests stuck in infinite loops
+    emitln("  call void @tml_set_test_timeout(i32 100)");
+
     if (!test_funcs.empty()) {
         // Call each @test function sequentially
         for (const auto* tf : test_funcs) {
@@ -710,6 +713,7 @@ void MirCodegen::emit_preamble() {
     // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
     emitln("declare dso_local ptr @mem_alloc(i64)");
     emitln("declare dso_local void @mem_free(ptr)");
+    emitln("declare dso_local void @tml_set_test_timeout(i32)");
     emitln("declare dso_local i64 @strlen(ptr)");
     emitln("declare dso_local ptr @malloc(i64)");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");

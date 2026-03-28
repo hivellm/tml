@@ -11,7 +11,7 @@
 
 use test
 use core::ascii::AsciiChar
-use core::option::Maybe
+use core::types::option::Maybe
 
 // ============================================================================
 // Helper functions (from ascii.test.tml)

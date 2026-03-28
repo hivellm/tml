@@ -1,6 +1,6 @@
 // Tests for Pending::new and pending() helper
 use test::{assert}
-use core::task::{Pending, pending}
+use core::async::task::{Pending, pending}
 
 @test
 func test_pending_new() -> I32 {

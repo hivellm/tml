@@ -33,7 +33,7 @@
 //! }
 //! ```
 
-use core::intrinsics::{field_count, field_name, field_type_id, field_offset, variant_count}
+use core::runtime::intrinsics::{field_count, field_name, field_type_id, field_offset, variant_count}
 
 // ============================================================================
 // TypeKind - Discriminates between different kinds of types

@@ -1,7 +1,7 @@
 // Phase 0 validation: ptr_read, ptr_write, pointer dereference
 // Validates memory intrinsics work before migrating C runtime to TML.
 use test::{assert, assert_eq}
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // --- ptr_write + ptr_read for I32 ---
 @test

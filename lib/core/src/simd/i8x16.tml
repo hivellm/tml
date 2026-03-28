@@ -1,7 +1,7 @@
 //! 16-lane I8 SIMD vector type.
 
 use core::simd::mask::Mask16
-use core::intrinsics::{
+use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract, simd_insert,
     llvm_add, llvm_sub
 }

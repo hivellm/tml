@@ -1,7 +1,7 @@
 // Tests for uncovered error module methods
 // IoError::kind, IoError::with_message, ParseError/SimpleError fields
 use test::{assert, assert_eq}
-use core::error::{IoError, IoErrorKind, ParseError, SimpleError}
+use core::runtime::error::{IoError, IoErrorKind, ParseError, SimpleError}
 
 // === IoError::kind() ===
 

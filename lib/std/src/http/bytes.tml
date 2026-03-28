@@ -5,7 +5,7 @@
 //! Cheap to clone (just increments refcount + adjusts offset/len).
 
 use core::str
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 
 /// A reference-counted immutable byte buffer.
 /// Layout of backing allocation: [refcount: I64 | data...]

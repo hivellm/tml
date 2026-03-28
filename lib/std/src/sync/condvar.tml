@@ -340,7 +340,7 @@ impl Drop for Condvar {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Condvar is Send.
 /// Condition variables can be safely transferred between threads.

@@ -1,6 +1,6 @@
 // Tests for slice_swap and transmute intrinsics
 use test::{assert, assert_eq}
-use core::intrinsics::{transmute}
+use core::runtime::intrinsics::{transmute}
 
 // ============================================================================
 // transmute — reinterpret bits between same-sized types

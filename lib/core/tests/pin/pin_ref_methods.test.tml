@@ -1,6 +1,6 @@
 // Tests for Pin[ref T] and Pin[mut ref T] methods
 use test::{assert_eq, assert}
-use core::pin::Pin
+use core::runtime::pin::Pin
 
 // ============================================================================
 // Pin[ref T]::new and get_ref

@@ -3,7 +3,7 @@
 //! This module provides classification, conversion, and manipulation
 //! functions for Unicode characters.
 
-use core::option::Maybe
+use core::types::option::Maybe
 // Note: Char is a builtin type, no import needed
 
 // Note: We can't import MAX from core::char because methods.tml is a submodule

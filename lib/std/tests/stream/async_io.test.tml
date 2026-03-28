@@ -5,8 +5,8 @@
 
 use test::{assert, assert_eq}
 use std::stream::async_io::{AsyncRead, AsyncWrite}
-use core::task::{Poll, Context}
-use core::error::{IoError, IoErrorKind}
+use core::async::task::{Poll, Context}
+use core::runtime::error::{IoError, IoErrorKind}
 
 // ============================================================================
 // Tests for Poll[Outcome[...]] construction — validates the type signatures

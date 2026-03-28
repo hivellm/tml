@@ -16,7 +16,7 @@
 //! ```
 
 use std::collections::{BTreeMap, BTreeMapIter}
-use core::intrinsics::ptr_read
+use core::runtime::intrinsics::ptr_read
 
 /// A sorted set of `I64` values, backed by a `BTreeMap`.
 ///

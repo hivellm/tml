@@ -72,8 +72,8 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering}
 use core::alloc::{Layout, alloc_global, dealloc_global}
-use core::mem::{size_of, align_of}
-use core::clone::Duplicate
+use core::runtime::mem::{size_of, align_of}
+use core::traits::clone::Duplicate
 
 // ============================================================================
 // ArcInner[T] - Internal structure with reference counts
@@ -640,7 +640,7 @@ impl[T] Drop for Weak[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}
 
 /// Arc[T] is Send if T is Send + Sync.
 /// The Arc can be sent to another thread if the data it contains

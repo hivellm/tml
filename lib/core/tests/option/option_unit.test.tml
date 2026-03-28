@@ -1,7 +1,7 @@
 // Tests for Maybe[Unit] — pattern matching and methods
 // Previously blocked by "alloca void" and GEP out-of-bounds codegen bugs
 use test::{assert, assert_eq}
-use core::tuple::Unit
+use core::types::tuple::Unit
 
 func returns_maybe_unit(flag: Bool) -> Maybe[Unit] {
     if flag {

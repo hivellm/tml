@@ -1,6 +1,6 @@
 // Tests for core::error — ParseError, SimpleError constructors and Display/Debug
 use test::{assert, assert_eq}
-use core::error::{ParseError, SimpleError}
+use core::runtime::error::{ParseError, SimpleError}
 
 // === SimpleError ===
 

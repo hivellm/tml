@@ -1,6 +1,6 @@
 // Tests for Pool[T] — with_doubling and clear
 use test::{assert, assert_eq}
-use core::pool::{Pool, GrowthPolicy, PoolStats}
+use core::data::pool::{Pool, GrowthPolicy, PoolStats}
 
 @test
 func test_pool_with_doubling() -> I32 {

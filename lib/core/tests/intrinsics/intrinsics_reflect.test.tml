@@ -2,7 +2,7 @@
 // BLOCKED: field_name (returns empty string), field_type_id (returns 0),
 //          field_offset (returns 0 for all fields) -- codegen not implemented
 use test::{assert, assert_eq}
-use core::intrinsics::{field_count, variant_count}
+use core::runtime::intrinsics::{field_count, variant_count}
 
 type Point {
     x: I32,

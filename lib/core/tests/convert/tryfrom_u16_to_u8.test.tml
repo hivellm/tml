@@ -1,6 +1,6 @@
 // Tests for TryFrom[U16] for U8, TryFrom[U32] for U16, TryFrom[U64] for U16
 use test::{assert, assert_eq}
-use core::convert::{TryFrom, TryFromIntError}
+use core::traits::convert::{TryFrom, TryFromIntError}
 
 @test
 func test_tryfrom_u16_to_u8_ok() -> I32 {

@@ -2,7 +2,7 @@
 //!
 //! This module provides functions for working with memory alignment.
 
-use core::option::*
+use core::types::option::*
 
 // ============================================================================
 // Alignment Functions

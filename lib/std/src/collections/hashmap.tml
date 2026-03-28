@@ -18,9 +18,9 @@
 //! scores.destroy()
 //! ```
 
-use core::intrinsics::{ptr_read, ptr_write}
-use core::hash::Hash
-use core::clone::Duplicate
+use core::runtime::intrinsics::{ptr_read, ptr_write}
+use core::traits::hash::Hash
+use core::traits::clone::Duplicate
 
 /// A hash-based key-value collection.
 ///

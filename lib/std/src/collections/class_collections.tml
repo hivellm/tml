@@ -25,7 +25,7 @@
 //! ```
 
 use std::collections::List
-use core::intrinsics::ptr_read
+use core::runtime::intrinsics::ptr_read
 
 // ============================================================================
 // ArrayList[T] - Dynamic array

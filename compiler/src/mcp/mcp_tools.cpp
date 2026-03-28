@@ -139,7 +139,7 @@ auto make_test_tool() -> Tool {
                     {"no_cache", "boolean", "Force full recompilation (disable test cache)", false},
                     {"fail_fast", "boolean", "Stop on first test failure", false},
                     {"structured", "boolean",
-                     "Return parsed results: total, passed, failed, failures[]", false},
+                     "Return parsed results: total, passed, failed, failures[], timeouts[]", false},
                     {"debug_layers", "boolean",
                      "Emit multi-layer IR diagnostics on failure (default: true). "
                      "Set to false to disable. Includes HIR + MIR + LLVM IR for failing functions.",
@@ -888,6 +888,7 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         //   "COMPILE ERROR suite: message"
         int total = 0, passed = 0, failed = 0;
         std::vector<std::string> failures;
+        std::vector<std::string> timeouts;
 
         auto extract_number = [](const std::string& l, const std::string& key) -> int {
             auto pos = l.find(key);
@@ -924,8 +925,17 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
                     if (name_start != std::string::npos) {
                         auto paren_pos = line.find(" (", name_start);
                         auto end_pos = (paren_pos != std::string::npos) ? paren_pos : line.size();
-                        failures.push_back(line.substr(name_start, end_pos - name_start));
+                        std::string test_name = line.substr(name_start, end_pos - name_start);
+                        failures.push_back(test_name);
                     }
+                }
+            }
+            // Collect timeout details from "TIMEOUT:" lines in error output
+            if (line.find("TIMEOUT:") != std::string::npos) {
+                auto timeout_pos = line.find("TIMEOUT:");
+                auto detail_start = line.find_first_not_of(' ', timeout_pos);
+                if (detail_start != std::string::npos) {
+                    timeouts.push_back(line.substr(detail_start));
                 }
             }
             // Also collect compile errors as failures
@@ -952,6 +962,13 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
             if (i > 0)
                 result << ",";
             result << "\"" << failures[i] << "\"";
+        }
+        result << "],";
+        result << "\"timeouts\":[";
+        for (size_t i = 0; i < timeouts.size(); ++i) {
+            if (i > 0)
+                result << ",";
+            result << "\"" << timeouts[i] << "\"";
         }
         result << "]";
         result << "}";

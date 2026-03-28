@@ -3,7 +3,7 @@
 // The trait resolution generates function refs like @tml_s0_I16_eq that don't exist
 // This is a fundamental codegen limitation - only Ordering methods are testable
 use test
-use core::cmp::{Ordering, PartialOrd}
+use core::traits::cmp::{Ordering, PartialOrd}
 
 // PartialOrd default methods: lt, le, gt, ge
 // These are the uncovered trait default impls

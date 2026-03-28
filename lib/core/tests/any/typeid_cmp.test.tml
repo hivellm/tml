@@ -1,7 +1,7 @@
 // Tests for TypeId comparison methods: lt, le, gt, ge, partial_cmp, cmp
 use test::{assert, assert_eq}
-use core::any::TypeId
-use core::cmp::Ordering
+use core::types::any::TypeId
+use core::traits::cmp::Ordering
 
 @test
 func test_typeid_lt_gt() -> I32 {

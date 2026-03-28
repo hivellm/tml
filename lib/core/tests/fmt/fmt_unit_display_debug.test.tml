@@ -1,6 +1,6 @@
 // Tests for Unit Display/Debug implementations
 use test::{assert, assert_eq}
-use core::tuple::Unit
+use core::types::tuple::Unit
 use core::fmt::Display
 use core::fmt::Debug
 

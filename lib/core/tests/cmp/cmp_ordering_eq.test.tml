@@ -1,6 +1,6 @@
 // Tests for Ordering PartialEq implementation
 use test::{assert}
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_ordering_eq_less_less() -> I32 {

@@ -1,6 +1,6 @@
 use test::{assert_eq, assert_true}
 use std::events::EventEmitter
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // Each listener increments the counter at the data address.
 func inc_listener(data: I64) {

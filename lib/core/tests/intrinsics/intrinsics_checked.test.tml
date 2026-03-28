@@ -1,6 +1,6 @@
 // Tests for checked arithmetic intrinsics
 use test
-use core::intrinsics::{checked_add, checked_sub, checked_mul}
+use core::runtime::intrinsics::{checked_add, checked_sub, checked_mul}
 
 @test
 func test_checked_add_no_overflow() -> I32 {

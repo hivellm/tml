@@ -1,6 +1,6 @@
 // Tests for Maybe::eq, Outcome::eq, and Ord::partial_cmp
 use test
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 @test
 func test_ord_partial_cmp_i32() -> I32 {

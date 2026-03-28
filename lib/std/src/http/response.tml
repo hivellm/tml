@@ -4,7 +4,7 @@
 //! status, headers, and body components.
 
 use core::str
-use core::intrinsics::mem_free
+use core::runtime::intrinsics::mem_free
 use std::http::status::Status
 use std::http::headers::Headers
 use std::http::version::HttpVersion

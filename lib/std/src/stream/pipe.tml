@@ -12,7 +12,7 @@
 //! let n = pipe(mut ref src, mut ref dst)!  // n == 11
 //! ```
 
-use core::error::{IoError, IoErrorKind}
+use core::runtime::error::{IoError, IoErrorKind}
 use std::collections::buffer::{
     buf_get_data,
     buf_set_data,

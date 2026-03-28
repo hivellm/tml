@@ -26,11 +26,11 @@
 //! - Both automatically deallocate when dropped
 //! - Both can be dereferenced to access the underlying value
 
-use core::mem::{mem_alloc, mem_free, size_of}
+use core::runtime::mem::{mem_alloc, mem_free, size_of}
 use core::ops::{Deref, DerefMut}
-use core::clone::Duplicate
+use core::traits::clone::Duplicate
 use core::fmt::{Display, Debug}
-use core::default::Default
+use core::traits::default::Default
 
 /// A unique pointer to heap-allocated data.
 ///

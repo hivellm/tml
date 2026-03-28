@@ -2,8 +2,8 @@
 //!
 //! This module contains the `RawPtr[T]` type, TML's equivalent of Rust's `*const T`.
 
-use core::hash::*
-use core::option::*
+use core::traits::hash::*
+use core::types::option::*
 
 // ============================================================================
 // RawPtr[T] - Immutable Raw Pointer

@@ -1,6 +1,6 @@
 // Tests for ParseError::with_position
 use test::{assert, assert_eq}
-use core::error::ParseError
+use core::runtime::error::ParseError
 
 @test
 func test_parse_error_with_position() -> I32 {

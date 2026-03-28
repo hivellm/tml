@@ -21,7 +21,7 @@
 //!
 //! ```tml
 //! use core::task::{Poll, Context}
-//! use core::pin::Pin
+//! use core::runtime::pin::Pin
 //!
 //! behavior Future {
 //!     type Output
@@ -46,7 +46,7 @@
 //!
 //! ```tml
 //! use core::task::{Poll, Context}
-//! use core::pin::Pin
+//! use core::runtime::pin::Pin
 //! use core::future::Future
 //!
 //! type Ready[T] {
@@ -65,9 +65,9 @@
 //! }
 //! ```
 
-use core::pin::Pin
+use core::runtime::pin::Pin
 use core::ops::{Deref, DerefMut}
-use core::intrinsics::ptr_read
+use core::runtime::intrinsics::ptr_read
 
 // ============================================================================
 // Poll Type
@@ -91,7 +91,7 @@ use core::intrinsics::ptr_read
 ///
 /// ```tml
 /// use core::task::{Poll, Context}
-/// use core::pin::Pin
+/// use core::runtime::pin::Pin
 ///
 /// func poll_my_operation(cx: mut ref Context) -> Poll[I32] {
 ///     if data_is_ready() {
@@ -712,10 +712,10 @@ pub func pending[T]() -> Pending[T] {
 // ============================================================================
 
 // Re-export PhantomData for convenience in this module
-use core::marker::PhantomData
-use core::clone::{Duplicate, Copy}
-use core::cmp::{PartialEq, Eq}
-use core::default::Default
+use core::traits::marker::PhantomData
+use core::traits::clone::{Duplicate, Copy}
+use core::traits::cmp::{PartialEq, Eq}
+use core::traits::default::Default
 use core::ptr::*
 use core::ops::Drop
-use core::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync}

@@ -2,7 +2,7 @@
 // BLOCKED: generic codegen bug — Outcome__I32__E vs Outcome__I32__Str type mismatch
 // Will pass when generic type parameter resolution is fixed in codegen.
 use test::{assert, assert_eq}
-use core::convert::From
+use core::traits::convert::From
 
 @test
 func test_outcome_from_i32() -> I32 {

@@ -1,5 +1,5 @@
 use test
-use core::bitset::{BitSet, BitSetIter}
+use core::data::bitset::{BitSet, BitSetIter}
 
 @test
 func test_bitset_iter_empty() -> I32 {

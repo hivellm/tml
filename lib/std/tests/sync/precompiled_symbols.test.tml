@@ -3,7 +3,7 @@
 // monomorphization of common generic types (Mutex, Arc, etc.)
 use test::{assert, assert_eq}
 use std::sync::{Mutex, MutexGuard, Arc}
-use core::mem::drop
+use core::runtime::mem::drop
 
 // ============================================================================
 // Mutex[I32] Tests (exercising precompiled types)

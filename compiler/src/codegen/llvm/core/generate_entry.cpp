@@ -353,6 +353,10 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         }
         emit_line("entry:");
 
+        // Set per-test timeout (100ms) to kill tests stuck in infinite loops
+        require_runtime_decl("tml_set_test_timeout");
+        emit_line("  call void @tml_set_test_timeout(i32 100)");
+
         // In suite mode, test functions have a prefix to avoid collisions
         std::string test_suite_prefix = "";
         if (options_.suite_test_index >= 0 && options_.force_internal_linkage) {

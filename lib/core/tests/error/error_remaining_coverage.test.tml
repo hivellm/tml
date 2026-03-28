@@ -4,7 +4,7 @@
 // - ParseError debug_string with precise output checking
 // - SimpleError debug_string with precise output checking
 use test::{assert, assert_eq}
-use core::error::{SimpleError, ParseError, IoError, IoErrorKind}
+use core::runtime::error::{SimpleError, ParseError, IoError, IoErrorKind}
 
 // === ParseError::source (inherited default — returns Nothing) ===
 

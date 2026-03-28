@@ -2,7 +2,7 @@
 // in the parsed headers buffer from app_parse_headers.
 use test::{assert, assert_eq}
 use core::str
-use core::intrinsics::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{mem_alloc, mem_free}
 use std::http::parse::{app_parse_headers, app_has_chunked_encoding, MAX_HEADERS, HEADER_ENTRY_SIZE}
 
 @test

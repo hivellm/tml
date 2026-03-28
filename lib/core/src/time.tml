@@ -29,7 +29,7 @@
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::ops::{Add, Sub, Mul, Div}
-use core::default::Default
+use core::traits::default::Default
 
 // ============================================================================
 // Constants

@@ -1,6 +1,6 @@
 // Tests for core::mem — swap, replace, size_of, align_of
 use test::{assert, assert_eq}
-use core::mem
+use core::runtime::mem
 
 @test
 func test_size_of_i32() -> I32 {

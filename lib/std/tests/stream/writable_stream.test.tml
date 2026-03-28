@@ -1,6 +1,6 @@
 use test::{assert, assert_eq, assert_true, assert_false}
 use std::stream::writable_stream::WritableStream
-use core::intrinsics::{ptr_read, ptr_write}
+use core::runtime::intrinsics::{ptr_read, ptr_write}
 
 // ============================================================================
 // Listener/callback helpers

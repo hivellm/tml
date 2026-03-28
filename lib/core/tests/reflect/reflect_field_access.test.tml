@@ -1,6 +1,6 @@
 use test::{assert, assert_eq}
 use core::reflect::{TypeInfo, Reflect, read_field_i64, write_field_i64, read_field_f64, write_field_f64, read_field_str, write_field_str}
-use core::intrinsics::{field_name, field_offset, field_count}
+use core::runtime::intrinsics::{field_name, field_offset, field_count}
 
 @derive(Reflect)
 type Point {

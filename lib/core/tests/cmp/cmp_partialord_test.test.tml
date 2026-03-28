@@ -1,7 +1,7 @@
 // Tests for PartialOrd default methods: lt, le, gt, ge
 // And Ord::partial_cmp default, Maybe::eq, Outcome::eq
 use test
-use core::cmp::{Ordering, PartialOrd}
+use core::traits::cmp::{Ordering, PartialOrd}
 
 // =============================================================================
 // PartialOrd default methods: .lt(), .le(), .gt(), .ge()

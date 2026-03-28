@@ -116,6 +116,9 @@ void LLVMIRGen::init_runtime_catalog() {
     add("tml_run_should_panic", "declare dso_local i32 @tml_run_should_panic(ptr)");
     add("tml_panic_message_contains", "declare dso_local i32 @tml_panic_message_contains(ptr)");
 
+    // --- Test timeout ---
+    add("tml_set_test_timeout", "declare dso_local void @tml_set_test_timeout(i32)");
+
     // --- Backtrace ---
     add("tml_enable_backtrace_on_panic", "declare dso_local void @tml_enable_backtrace_on_panic()");
 

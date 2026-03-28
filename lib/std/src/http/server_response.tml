@@ -5,7 +5,7 @@
 //! and sends the complete HTTP/1.1 response.
 
 use core::str
-use core::intrinsics::{ptr_write, copy_nonoverlapping, mem_alloc}
+use core::runtime::intrinsics::{ptr_write, copy_nonoverlapping, mem_alloc}
 use std::http::headers::Headers
 use std::http::error::{HttpError, HttpErrorKind}
 use std::http::cookie::Cookie

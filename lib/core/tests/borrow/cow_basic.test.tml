@@ -1,6 +1,6 @@
 // Tests for Cow[T] clone-on-write smart pointer
 use test::{assert, assert_eq}
-use core::borrow::{Cow, ToOwned}
+use core::traits::borrow::{Cow, ToOwned}
 
 @test
 func test_cow_owned_is_owned() -> I32 {

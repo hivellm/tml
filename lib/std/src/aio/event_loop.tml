@@ -16,8 +16,8 @@
 //! loop.destroy()
 //! ```
 
-use core::mem::{mem_alloc, mem_free}
-use core::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
+use core::runtime::mem::{mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping}
 use std::aio::poller::{Poller, PollEvent, READABLE, WRITABLE, ERROR, HUP}
 use std::aio::timer_wheel::{TimerWheel, TimerId}
 use std::time::Instant

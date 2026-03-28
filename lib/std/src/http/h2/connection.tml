@@ -33,7 +33,7 @@ use std::http::h2::stream::{
     H2_EVENT_NONE, H2_EVENT_HEADERS_COMPLETE, H2_EVENT_DATA,
     H2_EVENT_RESET, H2_EVENT_WINDOW_UPDATE,
 }
-use core::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
+use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free}
 
 // ============================================================================
 // Settings

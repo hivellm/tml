@@ -1,6 +1,6 @@
 // Test DefaultHasher::write with byte slice
 use test::{assert, assert_eq}
-use core::hash::{DefaultHasher, Hasher}
+use core::traits::hash::{DefaultHasher, Hasher}
 
 @test
 func test_default_hasher_write() -> I32 {

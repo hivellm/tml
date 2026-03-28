@@ -1,6 +1,6 @@
 // Tests for Pool[T] basic operations
 use test::{assert, assert_eq, assert_true}
-use core::pool::{Pool, GrowthPolicy}
+use core::data::pool::{Pool, GrowthPolicy}
 
 @test
 func test_pool_new_doubling() -> I32 {

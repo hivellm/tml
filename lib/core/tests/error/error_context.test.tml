@@ -1,6 +1,6 @@
 // Tests for Outcome::context() and Outcome::with_context()
 use test
-use core::error::{SimpleError, ChainedError}
+use core::runtime::error::{SimpleError, ChainedError}
 
 @test
 func test_context_on_err() -> I32 {

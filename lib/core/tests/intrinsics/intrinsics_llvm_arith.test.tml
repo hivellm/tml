@@ -1,8 +1,8 @@
 // Tests for core::intrinsics — LLVM arithmetic, comparison, and bitwise
 use test::{assert, assert_eq}
-use core::intrinsics::{llvm_add, llvm_sub, llvm_mul, llvm_div, llvm_rem, llvm_neg}
-use core::intrinsics::{llvm_eq, llvm_ne, llvm_lt, llvm_le, llvm_gt, llvm_ge}
-use core::intrinsics::{llvm_and, llvm_or, llvm_xor, llvm_not, llvm_shl, llvm_shr}
+use core::runtime::intrinsics::{llvm_add, llvm_sub, llvm_mul, llvm_div, llvm_rem, llvm_neg}
+use core::runtime::intrinsics::{llvm_eq, llvm_ne, llvm_lt, llvm_le, llvm_gt, llvm_ge}
+use core::runtime::intrinsics::{llvm_and, llvm_or, llvm_xor, llvm_not, llvm_shl, llvm_shr}
 
 // ============================================================================
 // Arithmetic

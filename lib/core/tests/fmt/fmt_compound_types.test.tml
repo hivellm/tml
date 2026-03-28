@@ -1,6 +1,6 @@
 // Tests for Display/Debug implementations on compound types (Ordering, Maybe, Outcome)
 use test::{assert, assert_eq}
-use core::cmp::Ordering
+use core::traits::cmp::Ordering
 
 // --- Ordering Display ---
 

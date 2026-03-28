@@ -1,6 +1,6 @@
 // Tests for copy and write_bytes intrinsics
 use test::{assert, assert_eq}
-use core::intrinsics::{ptr_read, ptr_write, copy, write_bytes}
+use core::runtime::intrinsics::{ptr_read, ptr_write, copy, write_bytes}
 
 @test
 func test_copy_single() -> I32 {
