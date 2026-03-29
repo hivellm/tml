@@ -195,20 +195,11 @@ LSP has NO C++ implementation. Completion/hover/diagnostics work via MCP only.
 
 ### 5.3 Compiler MCP — DONE (20 tools)
 
-### 5.4 Package Manager — PARTIAL
+### ~~5.4 Package Manager~~ — REMOVED (separate project)
 
-- [x] 5.4.1 `tml.toml` manifest format
-- [x] 5.4.2 Git-based dependencies — `tml add --git <url>` implemented in cmd_pkg.cpp
-- [x] 5.4.3 Version resolution (semver) — `is_valid_semver()` in build_config.cpp, rlib.hpp version fields
-- [x] 5.4.4 Lock file (`tml.lock`)
-- [ ] 5.4.5 Package registry server — BLOCKED: needs external service
-- [ ] 5.4.6 `tml publish`
-- [ ] 5.4.7 `tml search`
-- [x] 5.4.8 `tml deps` / `tml remove`
-- [ ] 5.4.9 Workspace support
-- [ ] 5.4.10 Private registries
+~~Package manager moved to its own project. Items 5.4.1-5.4.4, 5.4.8 were done (tml.toml, git deps, semver, lock file, tml deps). Items 5.4.5-5.4.7, 5.4.9-5.4.10 (registry, publish, search, workspace, private registries) are out of scope for this task.~~
 
-**Gate M5**: VSCode ✅, MCP ✅, `tml add` from git pending
+**Gate M5**: VSCode ✅, MCP ✅
 
 ---
 
@@ -244,7 +235,7 @@ SQLite already in stdlib (`lib/std/src/sqlite/`).
 | M4: Web & HTTP | 30 | 27 | **90%** | 500K benchmark, pipe operator, backpressure |
 | M5: Tooling | 17 | 12 | **71%** | LSP 0%, workspace/registry pending |
 | M6: Advanced | 23 | 1 | **4%** | Only conditional compilation |
-| **TOTAL** | **162** | **128** | **79%** | +17: doc gen (8), join!, serialize, net tests, git deps, semver, docs generated |
+| **TOTAL** | **152** | **128** | **84%** | Package manager items removed (separate project) |
 
 ## Next Actions (priority order)
 
@@ -252,8 +243,9 @@ SQLite already in stdlib (`lib/std/src/sqlite/`).
 2. **1.6.6** Fix partial field drops (needs investigation)
 3. **1.6.1** Generic cache O(n²) — profile to confirm
 4. **2.1.8** Generate docs for all core/std modules
-5. **3.1.9** AsyncMutex[T] (needs async runtime working)
-6. **3.3.6** Thread-safe iterators
-7. **4.3.8** Pipe operator `|>` — lexer+parser+codegen (LARGE)
+5. **3.3.8** Fix: closure Send/Sync analysis
+6. **4.3.9** Backpressure handling
 
-*Last updated: 2026-03-25*
+*Last updated: 2026-03-29*
+*Removed: 5.4.5-5.4.7, 5.4.9-5.4.10 (package manager → separate project)*
+*Completed this session: 4.3.8 (pipe operator), 3.1.9 (AsyncMutex), 3.3.6 (thread-safe iterators)*

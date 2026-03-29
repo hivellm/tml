@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
-**Last updated**: 2026-03-25
-**Total tasks**: 25 active (5 archived)
+**Last updated**: 2026-03-28
+**Total tasks**: 35 active (5 archived)
 
 ## Phase 1 — Foundation & Language
 
@@ -83,6 +83,23 @@ Cross-compilation and compiler self-hosting.
 | 6-01 | [Cross-Compilation](phase6-01-cross-compilation/) | Proposed | HIGH | 0% |
 | 6-02 | [Self-Hosting Compiler](phase6-02-self-hosting-compiler/) | Proposed | HIGH | 0% |
 | 6-03 | [Self-Hosting Cranelift](phase6-03-self-hosting-cranelift/) | Proposed | LOW | 0% |
+
+## Phase 8 — Database Library
+
+Native database abstraction with ORM, migrations, query builder, and benchmarks.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 8-01 | [DB Foundation (Core + SQLite Adapter)](phase8-01-db-foundation/) | Planning | **CRITICAL** | 0% (0/20) |
+| 8-02 | [DB Query Builder + Connection Pool](phase8-02-db-query-pool/) | Planning | HIGH | 0% (0/22) |
+| 8-03 | [DB Schema + Migration Engine](phase8-03-db-schema-migration/) | Planning | HIGH | 0% (0/18) |
+| 8-04 | [DB ORM Layer](phase8-04-db-orm/) | Planning | MEDIUM | 0% (0/15) |
+| 8-05 | [DB Benchmark Infrastructure](phase8-05-db-benchmarks/) | Planning | MEDIUM | 0% (0/14) |
+| 8-06 | [Conditional Compilation + Feature Flags](phase8-06-db-conditional-compilation/) | Planning | MEDIUM | 0% (0/12) |
+| 8-07 | [PostgreSQL Driver (External Package)](phase8-07-db-postgres/) | Planning | MEDIUM | 0% (0/14) |
+| 8-08 | [MongoDB Driver (External Package)](phase8-08-db-mongodb/) | Planning | LOW | 0% (0/16) |
+| 8-09 | [Redis + MySQL Drivers](phase8-09-db-redis-mysql/) | Planning | LOW | 0% (0/18) |
+| 8-10 | [HTTP + DB Integration](phase8-10-db-http-integration/) | Planning | LOW | 0% (0/10) |
 
 ---
 
