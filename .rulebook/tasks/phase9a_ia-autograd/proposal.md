@@ -1,13 +1,16 @@
-# Proposal: phase9a_ia-autograd
+# Proposal: IA Autograd Engine
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Automatic differentiation is required for training neural networks. Tape-based recording of operations enables backward pass gradient computation.
 
 ## What Changes
-[Describe what will change]
+- Variable type (tensor + requires_grad + tape link)
+- Computation graph recording (tape-based)
+- backward() — reverse topological order traversal
+- Gradient functions for all ops: arithmetic, matmul, activations, loss
+- zero_grad(), no_grad() context
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/ia/src/autograd/ (new)
+- Breaking change: NO
+- User benefit: Train neural networks with automatic gradient computation

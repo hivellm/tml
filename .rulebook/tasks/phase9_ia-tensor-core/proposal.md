@@ -1,13 +1,18 @@
-# Proposal: phase9_ia-tensor-core
+# Proposal: IA Tensor Core (CPU)
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Foundation for the entire AI library. Tensor type with shape/dtype/storage, element-wise ops, matmul, reductions, reshaping. Everything else builds on this.
 
 ## What Changes
-[Describe what will change]
+- Create lib/ia/ (separate library: src/, tests/, README.md, CHANGELOG.md)
+- IaError enum and IaResult[T]
+- DType enum, Shape/Layout types with broadcasting
+- Tensor type with CPU storage (Buffer-backed)
+- Creation: zeros, ones, rand, randn, arange, from_list
+- Ops: add, sub, mul, div, exp, log, sqrt, matmul, sum, mean, argmax
+- Reshape, transpose, permute, slice, gather, scatter
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/ia/ (new separate library)
+- Breaking change: NO
+- User benefit: NumPy-like tensor operations in TML

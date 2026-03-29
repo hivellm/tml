@@ -1,13 +1,15 @@
-# Proposal: phase8g_db-mongodb
+# Proposal: MongoDB Driver (lib/mongodb/)
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+First NoSQL driver. Separate library with libmongoc/libbson FFI, Document/BSON types, and collection-based API.
 
 ## What Changes
-[Describe what will change]
+- lib/mongodb/ with FFI bindings to libmongoc + libbson
+- BSON Document type compatible with std::json
+- MongoDriver, MongoConnection, Collection, Cursor
+- Integration tests and benchmarks
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/mongodb/ (new separate library)
+- Breaking change: NO
+- User benefit: MongoDB support with native BSON documents

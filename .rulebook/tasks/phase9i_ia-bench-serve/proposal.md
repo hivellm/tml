@@ -1,13 +1,15 @@
-# Proposal: phase9i_ia-bench-serve
+# Proposal: IA Benchmarks + HTTP Serving
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Benchmark infrastructure for performance validation and HTTP serving for deploying LLMs as API endpoints. Integration with std::http.
 
 ## What Changes
-[Describe what will change]
+- BenchmarkRunner with GPU event timing
+- Benchmarks: GEMM, inference tok/s, training throughput, memory
+- HTTP serving: mount_llm_endpoint, SSE streaming, OpenAI-compatible API
+- Cross-language benchmarks (vs candle, PyTorch, llama.cpp)
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/ia/src/bench/ (new), lib/ia/src/infer/serve.tml
+- Breaking change: NO
+- User benefit: Deploy LLMs as HTTP APIs, performance data

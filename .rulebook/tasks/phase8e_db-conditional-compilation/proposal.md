@@ -1,13 +1,16 @@
-# Proposal: phase8e_db-conditional-compilation
+# Proposal: DB Conditional Compilation + Feature Flags
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Enable optional driver support via #ifdef and tml.toml feature flags. Required for external drivers (PostgreSQL, MySQL, etc.) to be conditionally included.
 
 ## What Changes
-[Describe what will change]
+- Verify --define CLI flag works for custom symbols
+- Parse [features] section in tml.toml, generate symbols (postgres -> DB_POSTGRES)
+- Update db/mod.tml with #ifdef blocks for optional drivers
+- Driver registry and URL-based routing
+- External driver scaffold template
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: compiler (feature parsing), lib/std/src/db/mod.tml
+- Breaking change: NO
+- User benefit: Opt-in driver support, smaller binaries

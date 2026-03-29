@@ -1,13 +1,16 @@
-# Proposal: phase9c_ia-training
+# Proposal: IA Training Loop + Optimizers
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Complete training infrastructure: optimizers (Adam, SGD), LR schedulers, DataLoader, training loop, and checkpoint management.
 
 ## What Changes
-[Describe what will change]
+- Optimizer behavior + SGD (momentum), Adam, AdamW
+- LR schedulers: CosineAnnealing, LinearWarmup, StepLR
+- Gradient clipping (by norm, by value)
+- Dataset behavior, DataLoader (batching, shuffling, parallel)
+- Trainer (epochs, eval, logging), checkpoint save/load
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/ia/src/optim/ (new), lib/ia/src/train/ (new)
+- Breaking change: NO
+- User benefit: Train models end-to-end in TML

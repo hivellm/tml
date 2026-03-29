@@ -1,13 +1,14 @@
-# Proposal: phase8h_db-redis-mysql
+# Proposal: Redis + MySQL Drivers
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Complete the driver ecosystem. Redis for key-value/pub-sub, MySQL for the most popular open-source SQL database.
 
 ## What Changes
-[Describe what will change]
+- lib/redis/ with hiredis FFI, command API, pub/sub
+- lib/mysql/ with libmysqlclient FFI, MysqlDialect (backtick quoting, ? placeholders)
+- Both implement std::db Driver behaviors
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/redis/ (new), lib/mysql/ (new)
+- Breaking change: NO
+- User benefit: Redis + MySQL support

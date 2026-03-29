@@ -1,13 +1,16 @@
-# Proposal: phase8b_db-schema-migration
+# Proposal: DB Schema & Migration Engine
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Schema introspection and migration engine for production database management. Auto-diff generation enables Prisma-like developer experience.
 
 ## What Changes
-[Describe what will change]
+- Schema types (TableSchema, ColumnDef, IndexDef, ForeignKeyDef)
+- DDL builders (CREATE TABLE, ALTER TABLE, DROP TABLE)
+- Schema introspection via PRAGMA (SQLite) / information_schema (others)
+- Migration engine: apply, rollback, status, diff generation, checksum verification
+- _tml_migrations tracking table
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/std/src/db/schema/ (new), lib/std/src/db/migration/ (new)
+- Breaking change: NO
+- User benefit: Auto-generated migrations, schema versioning

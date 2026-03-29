@@ -1,13 +1,16 @@
-# Proposal: phase8a_db-query-pool
+# Proposal: DB Connection Pool + Query Builder
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Connection pooling for performance and a fluent query builder for type-safe SQL construction. Core productivity features for database work.
 
 ## What Changes
-[Describe what will change]
+- ConnectionPool[C] wrapping core::data::Pool with config (min/max/timeout)
+- Expression system (Expr enum, col(), comparisons, logical ops)
+- Query builders: SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder
+- Dialect behavior for SQL rendering differences between databases
+- SqliteDialect as first implementation
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/std/src/db/driver/pool.tml, lib/std/src/db/query/ (new)
+- Breaking change: NO
+- User benefit: Fluent query API, efficient connection reuse

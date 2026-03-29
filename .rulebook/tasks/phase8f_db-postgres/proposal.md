@@ -1,13 +1,15 @@
-# Proposal: phase8f_db-postgres
+# Proposal: PostgreSQL Driver (lib/postgresql/)
 
 ## Why
-[Explain why this change is needed - minimum 20 characters]
+Most requested SQL database driver. Separate library implementing std::db behaviors via libpq FFI.
 
 ## What Changes
-[Describe what will change]
+- lib/postgresql/ with FFI bindings to libpq
+- PostgresDriver, PgConnection, PgStatement implementing Driver behaviors
+- PostgresDialect ($N placeholders, RETURNING support)
+- Integration tests and benchmarks
 
 ## Impact
-- Affected specs: [list]
-- Affected code: [list]
-- Breaking change: YES/NO
-- User benefit: [describe]
+- Affected code: lib/postgresql/ (new separate library)
+- Breaking change: NO
+- User benefit: PostgreSQL support via familiar std::db API
