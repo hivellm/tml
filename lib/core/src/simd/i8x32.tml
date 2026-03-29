@@ -1,0 +1,65 @@
+//! 32-lane I8 SIMD vector type (256 bits, AVX2).
+
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert,
+    llvm_add, llvm_sub
+}
+
+/// A 32-lane vector of I8 values (256 bits total).
+@simd
+pub type I8x32 {
+    e0: I8, e1: I8, e2: I8, e3: I8, e4: I8, e5: I8, e6: I8, e7: I8,
+    e8: I8, e9: I8, e10: I8, e11: I8, e12: I8, e13: I8, e14: I8, e15: I8,
+    e16: I8, e17: I8, e18: I8, e19: I8, e20: I8, e21: I8, e22: I8, e23: I8,
+    e24: I8, e25: I8, e26: I8, e27: I8, e28: I8, e29: I8, e30: I8, e31: I8
+}
+
+impl I8x32 {
+    /// Broadcast a single value to all 32 lanes.
+    pub func splat(v: I8) -> I8x32 {
+        return I8x32 {
+            e0: v, e1: v, e2: v, e3: v, e4: v, e5: v, e6: v, e7: v,
+            e8: v, e9: v, e10: v, e11: v, e12: v, e13: v, e14: v, e15: v,
+            e16: v, e17: v, e18: v, e19: v, e20: v, e21: v, e22: v, e23: v,
+            e24: v, e25: v, e26: v, e27: v, e28: v, e29: v, e30: v, e31: v
+        }
+    }
+
+    /// All lanes zero.
+    pub func zero() -> I8x32 {
+        return I8x32::splat(0)
+    }
+
+    /// Get lane by index (0-31).
+    pub func get(this, idx: I32) -> I8 {
+        if idx < 0 or idx > 31 { return 0 }
+        lowlevel {
+            let v = simd_load[I8x32](ref this)
+            return simd_extract[I8x32, I8](v, idx)
+        }
+    }
+
+    /// Lane-wise addition.
+    pub func add(this, other: I8x32) -> I8x32 {
+        lowlevel {
+            let a = simd_load[I8x32](ref this)
+            let b = simd_load[I8x32](ref other)
+            let c = llvm_add(a, b)
+            var result: I8x32 = I8x32::zero()
+            simd_store[I8x32](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise subtraction.
+    pub func sub(this, other: I8x32) -> I8x32 {
+        lowlevel {
+            let a = simd_load[I8x32](ref this)
+            let b = simd_load[I8x32](ref other)
+            let c = llvm_sub(a, b)
+            var result: I8x32 = I8x32::zero()
+            simd_store[I8x32](mut ref result, c)
+            return result
+        }
+    }
+}

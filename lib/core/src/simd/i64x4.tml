@@ -1,0 +1,60 @@
+//! 4-lane I64 SIMD vector type (256 bits, AVX2).
+
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert,
+    llvm_add, llvm_sub, llvm_mul
+}
+
+/// A 4-lane vector of I64 values (256 bits total).
+@simd
+pub type I64x4 {
+    e0: I64, e1: I64, e2: I64, e3: I64
+}
+
+impl I64x4 {
+    pub func new(e0: I64, e1: I64, e2: I64, e3: I64) -> I64x4 {
+        return I64x4 { e0: e0, e1: e1, e2: e2, e3: e3 }
+    }
+
+    pub func splat(v: I64) -> I64x4 {
+        return I64x4 { e0: v, e1: v, e2: v, e3: v }
+    }
+
+    pub func zero() -> I64x4 {
+        return I64x4::splat(0)
+    }
+
+    pub func get(this, idx: I32) -> I64 {
+        if idx < 0 or idx > 3 { return 0 }
+        lowlevel {
+            let v = simd_load[I64x4](ref this)
+            return simd_extract[I64x4, I64](v, idx)
+        }
+    }
+
+    pub func add(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let c = llvm_add(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    pub func sub(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let c = llvm_sub(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    pub func sum(this) -> I64 {
+        return this.e0 + this.e1 + this.e2 + this.e3
+    }
+}

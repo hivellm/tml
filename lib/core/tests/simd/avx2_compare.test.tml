@@ -1,0 +1,70 @@
+use test
+use core::simd::i8x32::I8x32
+use core::simd::i32x8::I32x8
+use core::runtime::intrinsics::{
+    avx2_cmpeq_epi8, avx2_cmpgt_epi8, avx2_cmpeq_epi32, avx2_cmpgt_epi32,
+    avx2_and_si256, avx2_or_si256, avx2_xor_si256, avx2_movemask_epi8
+}
+
+@test
+func test_avx2_cmpeq_epi8_all_equal() -> I32 {
+    let a = I8x32::splat(7)
+    let b = I8x32::splat(7)
+    let eq = lowlevel { avx2_cmpeq_epi8(a, b) }
+    let mask = lowlevel { avx2_movemask_epi8(eq) }
+    assert_eq(mask, -1)
+    0
+}
+
+@test
+func test_avx2_cmpeq_epi8_none_equal() -> I32 {
+    let a = I8x32::splat(1)
+    let b = I8x32::splat(2)
+    let eq = lowlevel { avx2_cmpeq_epi8(a, b) }
+    let mask = lowlevel { avx2_movemask_epi8(eq) }
+    assert_eq(mask, 0)
+    0
+}
+
+@test
+func test_avx2_cmpgt_epi8() -> I32 {
+    let a = I8x32::splat(10)
+    let b = I8x32::splat(5)
+    let gt = lowlevel { avx2_cmpgt_epi8(a, b) }
+    let mask = lowlevel { avx2_movemask_epi8(gt) }
+    assert_eq(mask, -1)
+    0
+}
+
+@test
+func test_avx2_xor_self_zero() -> I32 {
+    let a = I8x32::splat(42)
+    let xored = lowlevel { avx2_xor_si256(a, a) }
+    let zero = I8x32::splat(0)
+    let eq = lowlevel { avx2_cmpeq_epi8(xored, zero) }
+    let mask = lowlevel { avx2_movemask_epi8(eq) }
+    assert_eq(mask, -1)
+    0
+}
+
+@test
+func test_avx2_and_with_zero() -> I32 {
+    let a = I8x32::splat(42)
+    let zero = I8x32::splat(0)
+    let result = lowlevel { avx2_and_si256(a, zero) }
+    let eq = lowlevel { avx2_cmpeq_epi8(result, zero) }
+    let mask = lowlevel { avx2_movemask_epi8(eq) }
+    assert_eq(mask, -1)
+    0
+}
+
+@test
+func test_avx2_or_with_zero() -> I32 {
+    let a = I8x32::splat(42)
+    let zero = I8x32::splat(0)
+    let result = lowlevel { avx2_or_si256(a, zero) }
+    let eq = lowlevel { avx2_cmpeq_epi8(result, a) }
+    let mask = lowlevel { avx2_movemask_epi8(eq) }
+    assert_eq(mask, -1)
+    0
+}

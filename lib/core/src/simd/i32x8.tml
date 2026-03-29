@@ -1,0 +1,87 @@
+//! 8-lane I32 SIMD vector type (256 bits, AVX2).
+
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert,
+    llvm_add, llvm_sub, llvm_mul
+}
+
+/// An 8-lane vector of I32 values (256 bits total).
+/// Requires AVX2 support at runtime.
+@simd
+pub type I32x8 {
+    e0: I32,
+    e1: I32,
+    e2: I32,
+    e3: I32,
+    e4: I32,
+    e5: I32,
+    e6: I32,
+    e7: I32
+}
+
+impl I32x8 {
+    /// Construct from eight lane values.
+    pub func new(e0: I32, e1: I32, e2: I32, e3: I32, e4: I32, e5: I32, e6: I32, e7: I32) -> I32x8 {
+        return I32x8 { e0: e0, e1: e1, e2: e2, e3: e3, e4: e4, e5: e5, e6: e6, e7: e7 }
+    }
+
+    /// Broadcast a single value to all lanes.
+    pub func splat(v: I32) -> I32x8 {
+        return I32x8 { e0: v, e1: v, e2: v, e3: v, e4: v, e5: v, e6: v, e7: v }
+    }
+
+    /// All lanes zero.
+    pub func zero() -> I32x8 {
+        return I32x8::splat(0)
+    }
+
+    /// Get lane by index (0-7). Returns 0 for out-of-bounds.
+    pub func get(this, idx: I32) -> I32 {
+        if idx < 0 or idx > 7 { return 0 }
+        lowlevel {
+            let v = simd_load[I32x8](ref this)
+            return simd_extract[I32x8, I32](v, idx)
+        }
+    }
+
+    /// Lane-wise addition.
+    pub func add(this, other: I32x8) -> I32x8 {
+        lowlevel {
+            let a = simd_load[I32x8](ref this)
+            let b = simd_load[I32x8](ref other)
+            let c = llvm_add(a, b)
+            var result: I32x8 = I32x8::zero()
+            simd_store[I32x8](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise subtraction.
+    pub func sub(this, other: I32x8) -> I32x8 {
+        lowlevel {
+            let a = simd_load[I32x8](ref this)
+            let b = simd_load[I32x8](ref other)
+            let c = llvm_sub(a, b)
+            var result: I32x8 = I32x8::zero()
+            simd_store[I32x8](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise multiplication (low 32 bits of each product).
+    pub func mul(this, other: I32x8) -> I32x8 {
+        lowlevel {
+            let a = simd_load[I32x8](ref this)
+            let b = simd_load[I32x8](ref other)
+            let c = llvm_mul(a, b)
+            var result: I32x8 = I32x8::zero()
+            simd_store[I32x8](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Sum all 8 lanes.
+    pub func sum(this) -> I32 {
+        return this.e0 + this.e1 + this.e2 + this.e3 + this.e4 + this.e5 + this.e6 + this.e7
+    }
+}

@@ -753,6 +753,70 @@ pub func popcnt_u32(val: U32) -> U32
 pub func popcnt_u64(val: U64) -> U64
 
 // ============================================================================
+// AVX2 Comparison Intrinsics (x86-64 only)
+// ============================================================================
+
+/// 256-bit byte-wise equality. Returns 0xFF/-1 per matching lane.
+@intrinsic
+pub func avx2_cmpeq_epi8[V](a: V, b: V) -> V
+
+/// 256-bit word-wise equality.
+@intrinsic
+pub func avx2_cmpeq_epi16[V](a: V, b: V) -> V
+
+/// 256-bit dword-wise equality.
+@intrinsic
+pub func avx2_cmpeq_epi32[V](a: V, b: V) -> V
+
+/// 256-bit byte-wise signed greater-than.
+@intrinsic
+pub func avx2_cmpgt_epi8[V](a: V, b: V) -> V
+
+/// 256-bit word-wise signed greater-than.
+@intrinsic
+pub func avx2_cmpgt_epi16[V](a: V, b: V) -> V
+
+/// 256-bit dword-wise signed greater-than.
+@intrinsic
+pub func avx2_cmpgt_epi32[V](a: V, b: V) -> V
+
+// ============================================================================
+// AVX2 Bitwise & Movemask Intrinsics (x86-64 only)
+// ============================================================================
+
+/// 256-bit bitwise AND. Compiles to VPAND.
+@intrinsic
+pub func avx2_and_si256[V](a: V, b: V) -> V
+
+/// 256-bit bitwise OR. Compiles to VPOR.
+@intrinsic
+pub func avx2_or_si256[V](a: V, b: V) -> V
+
+/// 256-bit bitwise XOR. Compiles to VPXOR.
+@intrinsic
+pub func avx2_xor_si256[V](a: V, b: V) -> V
+
+/// Extract MSB of each byte into a 32-bit mask. Compiles to VPMOVMSKB.
+@intrinsic
+pub func avx2_movemask_epi8[V](v: V) -> I32
+
+// ============================================================================
+// AVX2 Shuffle & Permute Intrinsics (x86-64 only)
+// ============================================================================
+
+/// In-lane byte shuffle (256-bit). Compiles to VPSHUFB.
+@intrinsic
+pub func avx2_shuffle_epi8[V](a: V, b: V) -> V
+
+/// Cross-lane 64-bit permute using index vector. Compiles to VPERMQ/VPERMD.
+@intrinsic
+pub func avx2_permute4x64_epi64[V](v: V, idx: V) -> V
+
+/// Cross-lane 128-bit permute. Compiles to VPERM2I128.
+@intrinsic
+pub func avx2_permute2x128_si256[V](a: V, b: V, imm: I8) -> V
+
+// ============================================================================
 // CPU Feature Detection (x86-64 only)
 // ============================================================================
 

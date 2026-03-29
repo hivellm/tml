@@ -1,0 +1,71 @@
+//! 4-lane F64 SIMD vector type (256 bits, AVX/AVX2).
+
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract,
+    llvm_add, llvm_sub, llvm_mul, llvm_div
+}
+
+/// A 4-lane vector of F64 values (256 bits total).
+@simd
+pub type F64x4 {
+    e0: F64, e1: F64, e2: F64, e3: F64
+}
+
+impl F64x4 {
+    pub func new(e0: F64, e1: F64, e2: F64, e3: F64) -> F64x4 {
+        return F64x4 { e0: e0, e1: e1, e2: e2, e3: e3 }
+    }
+
+    pub func splat(v: F64) -> F64x4 {
+        return F64x4 { e0: v, e1: v, e2: v, e3: v }
+    }
+
+    pub func zero() -> F64x4 {
+        return F64x4::splat(0.0)
+    }
+
+    pub func get(this, idx: I32) -> F64 {
+        if idx < 0 or idx > 3 { return 0.0 }
+        lowlevel {
+            let v = simd_load[F64x4](ref this)
+            return simd_extract[F64x4, F64](v, idx)
+        }
+    }
+
+    pub func add(this, other: F64x4) -> F64x4 {
+        lowlevel {
+            let a = simd_load[F64x4](ref this)
+            let b = simd_load[F64x4](ref other)
+            let c = llvm_add(a, b)
+            var result: F64x4 = F64x4::zero()
+            simd_store[F64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    pub func sub(this, other: F64x4) -> F64x4 {
+        lowlevel {
+            let a = simd_load[F64x4](ref this)
+            let b = simd_load[F64x4](ref other)
+            let c = llvm_sub(a, b)
+            var result: F64x4 = F64x4::zero()
+            simd_store[F64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    pub func mul(this, other: F64x4) -> F64x4 {
+        lowlevel {
+            let a = simd_load[F64x4](ref this)
+            let b = simd_load[F64x4](ref other)
+            let c = llvm_mul(a, b)
+            var result: F64x4 = F64x4::zero()
+            simd_store[F64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    pub func sum(this) -> F64 {
+        return this.e0 + this.e1 + this.e2 + this.e3
+    }
+}

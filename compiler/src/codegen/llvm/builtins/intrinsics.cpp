@@ -173,6 +173,13 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "sse42_crc32_u8", "sse42_crc32_u16", "sse42_crc32_u32", "sse42_crc32_u64",
         // POPCNT
         "popcnt_u32", "popcnt_u64",
+        // AVX2 comparison
+        "avx2_cmpeq_epi8", "avx2_cmpeq_epi16", "avx2_cmpeq_epi32", "avx2_cmpgt_epi8",
+        "avx2_cmpgt_epi16", "avx2_cmpgt_epi32",
+        // AVX2 bitwise & movemask
+        "avx2_and_si256", "avx2_or_si256", "avx2_xor_si256", "avx2_movemask_epi8",
+        // AVX2 shuffle & permute
+        "avx2_shuffle_epi8", "avx2_permute4x64_epi64", "avx2_permute2x128_si256",
         // Array element intrinsics
         "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
 

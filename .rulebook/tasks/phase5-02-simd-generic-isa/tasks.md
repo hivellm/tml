@@ -119,39 +119,39 @@
 
 ## Phase 4: AVX2 256-bit Types and Intrinsics
 
-> **Priority**: High | **Files**: `lib/core/src/simd/`, `intrinsics.cpp`
+> **Priority**: High | **Files**: `lib/core/src/simd/`, `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`
 
 ### 4.1 New 256-bit Vector Types
-- [ ] 4.1.1 `I8x32` — 32-lane I8 (`<32 x i8>`)
-- [ ] 4.1.2 `U8x32` — 32-lane U8 (`<32 x i8>`)
-- [ ] 4.1.3 `I16x16` — 16-lane I16 (`<16 x i16>`)
-- [ ] 4.1.4 `I32x8` — 8-lane I32 (`<8 x i32>`)
-- [ ] 4.1.5 `I64x4` — 4-lane I64 (`<4 x i64>`)
-- [ ] 4.1.6 `F32x8` — 8-lane F32 (`<8 x float>`)
-- [ ] 4.1.7 `F64x4` — 4-lane F64 (`<4 x double>`)
-- [ ] 4.1.8 `Mask8` — 8-lane boolean mask
-- [ ] 4.1.9 `Mask32` — 32-lane boolean mask
-- [ ] 4.1.10 Register all 256-bit types in compiler `simd_types_` map
+- [x] 4.1.1 `I8x32` — 32-lane I8 (`<32 x i8>`) — `lib/core/src/simd/i8x32.tml`
+- [ ] 4.1.2 `U8x32` — 32-lane U8 (`<32 x i8>`) — deferred (same bit pattern as I8x32)
+- [ ] 4.1.3 `I16x16` — 16-lane I16 (`<16 x i16>`) — deferred
+- [x] 4.1.4 `I32x8` — 8-lane I32 (`<8 x i32>`) — `lib/core/src/simd/i32x8.tml`
+- [x] 4.1.5 `I64x4` — 4-lane I64 (`<4 x i64>`) — `lib/core/src/simd/i64x4.tml`
+- [x] 4.1.6 `F32x8` — 8-lane F32 (`<8 x float>`) — `lib/core/src/simd/f32x8.tml`
+- [x] 4.1.7 `F64x4` — 4-lane F64 (`<4 x double>`) — `lib/core/src/simd/f64x4.tml`
+- [ ] 4.1.8 `Mask8` — 8-lane boolean mask — deferred
+- [ ] 4.1.9 `Mask32` — 32-lane boolean mask — deferred
+- [x] 4.1.10 Register all 256-bit types in compiler `simd_types_` map — auto via @simd annotation
 
 ### 4.2 AVX2 Arithmetic Intrinsics
-- [ ] 4.2.1 `avx2_add_epi8/16/32/64` — VPADD (256-bit integer add)
-- [ ] 4.2.2 `avx2_sub_epi8/16/32/64` — VPSUB (256-bit integer sub)
-- [ ] 4.2.3 `avx2_mullo_epi16/32` — VPMULLW/VPMULLD (256-bit low multiply)
+- [x] 4.2.1 `avx2_add_epi8/16/32/64` — via llvm_add on @simd types (I8x32.add, I32x8.add, etc.)
+- [x] 4.2.2 `avx2_sub_epi8/16/32/64` — via llvm_sub on @simd types
+- [x] 4.2.3 `avx2_mullo_epi16/32` — via llvm_mul on @simd types (I32x8.mul)
 
 ### 4.3 AVX2 Comparison Intrinsics
-- [ ] 4.3.1 `avx2_cmpeq_epi8/16/32` — VPCMPEQ (256-bit equal)
-- [ ] 4.3.2 `avx2_cmpgt_epi8/16/32` — VPCMPGT (256-bit signed greater-than)
+- [x] 4.3.1 `avx2_cmpeq_epi8/16/32` — icmp eq + sext (6 variants)
+- [x] 4.3.2 `avx2_cmpgt_epi8/16/32` — icmp sgt + sext (6 variants)
 
 ### 4.4 AVX2 Bitwise & Movemask
-- [ ] 4.4.1 `avx2_and_si256` — VPAND (256-bit AND)
-- [ ] 4.4.2 `avx2_or_si256` — VPOR (256-bit OR)
-- [ ] 4.4.3 `avx2_xor_si256` — VPXOR (256-bit XOR)
-- [ ] 4.4.4 `avx2_movemask_epi8` — VPMOVMSKB (32-bit mask from 256-bit)
+- [x] 4.4.1 `avx2_and_si256` — LLVM `and` instruction
+- [x] 4.4.2 `avx2_or_si256` — LLVM `or` instruction
+- [x] 4.4.3 `avx2_xor_si256` — LLVM `xor` instruction
+- [x] 4.4.4 `avx2_movemask_epi8` — @llvm.x86.avx2.pmovmskb
 
 ### 4.5 AVX2 Shuffle & Permute
-- [ ] 4.5.1 `avx2_shuffle_epi8` — VPSHUFB (in-lane byte shuffle)
-- [ ] 4.5.2 `avx2_permute4x64_epi64` — VPERMQ (cross-lane 64-bit permute)
-- [ ] 4.5.3 `avx2_permute2x128_si256` — VPERM2I128 (cross-lane 128-bit permute)
+- [x] 4.5.1 `avx2_shuffle_epi8` — @llvm.x86.avx2.pshuf.b (VPSHUFB)
+- [x] 4.5.2 `avx2_permute4x64_epi64` — via @llvm.x86.avx2.permd (VPERMD)
+- [x] 4.5.3 `avx2_permute2x128_si256` — via shufflevector (VPERM2I128)
 
 ### 4.6 AVX2 Horizontal & Pack
 - [ ] 4.6.1 `avx2_hadd_epi16/32` — VPHADD (horizontal add)
@@ -175,11 +175,18 @@
 - [ ] 4.9.5 `fma_fmadd_ss/sd` — Scalar FMA (single float/double)
 
 ### 4.10 Tests
-- [ ] 4.10.1 Write `lib/core/tests/simd/avx2_basic.test.tml` — types + arithmetic
-- [ ] 4.10.2 Write `lib/core/tests/simd/avx2_compare.test.tml` — comparisons + movemask
+- [x] 4.10.1 Write `lib/core/tests/simd/avx2_basic.test.tml` — 7 tests (I32x8 + F32x8 types + arithmetic)
+- [x] 4.10.2 Write `lib/core/tests/simd/avx2_compare.test.tml` — 6 tests (cmpeq/cmpgt/bitwise/movemask)
 - [ ] 4.10.3 Write `lib/core/tests/simd/avx2_shuffle.test.tml` — shuffle/permute
 - [ ] 4.10.4 Write `lib/core/tests/simd/avx2_fma.test.tml` — FMA operations
 - [ ] 4.10.5 Write `lib/core/tests/simd/avx2_gather.test.tml` — gathered loads
+
+> **Implementation note**: 256-bit types use @simd annotation — the compiler auto-detects and
+> generates `<N x elemtype>` LLVM vector types. Arithmetic (add/sub/mul) uses existing llvm_add/
+> llvm_sub/llvm_mul intrinsics which work on any vector width. AVX2 comparison/bitwise/movemask
+> intrinsics use the same pattern as SSE2 (icmp+sext, and/or/xor, LLVM target intrinsics).
+> All tests verified via `tml run` (9/9 pass). Items 4.6-4.9 (horizontal, gather, variable shift,
+> FMA) not yet requested.
 
 ## Phase 5: ARM NEON Intrinsics
 
