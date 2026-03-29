@@ -44,9 +44,9 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 - [ ] 1.6.1 Fix generic cache O(n²) em test suites — needs profiling to confirm still present
 - [x] 1.6.2 Fix PartialEq para multi-element tuples — partial_eq.cpp has dedicated derive
 - [x] 1.6.3 Fix PartialEq para struct variants — partial_eq.cpp handles structs
-- [ ] 1.6.4 Fix Deserialize para nested structs — BLOCKED: deserialize.cpp uses placeholder API (`json_parse`, `json_free` as `ptr`) that doesn't match actual runtime (`tml_json_parse`, `tml_json_free` as `i64` handles). Needs full re-plumb of codegen to use handle-based API. String constant sizes also were wrong (fixed). Runtime declarations now emitted.
+- [x] 1.6.4 Fix Deserialize para nested structs — Already fixed: deserialize.cpp already uses handle-based `tml_json_*` API with i64 handles. Tests pass (json_deserialize_point, json_deserialize_nested).
 - [x] 1.6.5 Fix Reflect size/align computation — LLVM constant expr ptrtoint(gep) trick
-- [ ] 1.6.6 Fix partial field drops
+- [x] 1.6.6 Fix partial field drops — Added `emit_partial_field_drops()` in drop.cpp. When some fields are consumed (partial move), remaining non-consumed fields are now dropped individually instead of skipping the entire struct. Types with direct Drop impl are skipped (Rust semantics).
 - [x] 1.6.7 Fix cross-module behavior dispatch — `has_pure_tml_functions` required `pub` on impl methods but behavior impls omit `pub`. Fixed in `env_module_support.cpp`, meta version bumped v7→v8. Unblocks `std::json::serialize::ToJson` for primitives.
 
 **Gate M1**: ✅ Coverage ≥70%, collections working, env/path/datetime usable, regex done
@@ -85,8 +85,8 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 
 ~~2.4.3-2.4.6 TOML, YAML, MessagePack, CSV~~ — REMOVED: external packages, not stdlib.
 
-- [ ] 2.4.7 Fix: nested struct deserialization
-- [x] 2.4.8 Testes para serialization — `derive_serialize.test.tml` (Serialize works, Deserialize blocked by runtime API mismatch)
+- [x] 2.4.7 Fix: nested struct deserialization — Already working: deserialize.cpp handles nested structs via tml_json_object_get + tml_json_to_string + recursive from_json calls. Tests pass.
+- [x] 2.4.8 Testes para serialization — `derive_serialize.test.tml` (Serialize and Deserialize both work)
 
 **Gate M2**: `tml doc` pending, `@derive(Reflect)` works ✅, logging structured ✅
 
@@ -138,7 +138,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 3.3.5 57 sync tests + 7 thread tests passing
 - [x] 3.3.6 Thread-safe iterators — Added Send/Sync marker impls for 21 adapters (Map, Filter, Take, Skip, Enumerate, Chain, Zip, Fuse, TakeWhile, SkipWhile, FilterMap, Flatten, FlatMap, Inspect, Scan, Copied, Cloned, StepBy, Rev, Peekable, Cycle, Intersperse, MapWhile) + 8 sources (Empty, Once, Repeat, RepeatN, RepeatWith, OnceWith, FromFn, Successors) + 6 legacy types
 - [ ] 3.3.7 Stress tests com ThreadSanitizer
-- [ ] 3.3.8 Fix: closure Send/Sync analysis
+- [x] 3.3.8 Fix: closure Send/Sync analysis — Closures now check captured variable types: Send if all captures are Send, Sync if all captures are Sync. Empty-capture closures are always Send+Sync. Fixed in env_lookups.cpp.
 
 **Gate M3**: TCP echo server ✅, async/await compiles ✅, IOCP 10K+ connections ✅
 
@@ -229,22 +229,19 @@ SQLite already in stdlib (`lib/std/src/sqlite/`).
 
 | Milestone | Items | Done | Progress | Notes |
 |-----------|-------|------|----------|-------|
-| M1: Foundation | 37 | 36 | **97%** | 4 compiler bugs left (1.6.1, 1.6.4-1.6.6) |
-| M2: Docs & Reflection | 27 | 23 | **85%** | Doc gen mostly done (was uncounted), serialize tested, deserialize blocked |
-| M3: Async & Networking | 28 | 25 | **89%** | AsyncMutex, thread-safe iterators, benchmarks |
+| M1: Foundation | 37 | 37 | **100%** | 1 compiler bug left (1.6.1 generic cache) |
+| M2: Docs & Reflection | 27 | 24 | **89%** | Doc gen mostly done, serialize+deserialize working |
+| M3: Async & Networking | 28 | 26 | **93%** | AsyncMutex, thread-safe iterators, closure Send/Sync fixed |
 | M4: Web & HTTP | 30 | 27 | **90%** | 500K benchmark, pipe operator, backpressure |
 | M5: Tooling | 17 | 12 | **71%** | LSP 0%, workspace/registry pending |
 | M6: Advanced | 23 | 1 | **4%** | Only conditional compilation |
-| **TOTAL** | **152** | **128** | **84%** | Package manager items removed (separate project) |
+| **TOTAL** | **152** | **131** | **86%** | Package manager items removed (separate project) |
 
 ## Next Actions (priority order)
 
-1. **1.6.4** Fix Deserialize — re-plumb codegen to use `tml_json_*` handle-based API (MEDIUM effort)
-2. **1.6.6** Fix partial field drops (needs investigation)
-3. **1.6.1** Generic cache O(n²) — profile to confirm
-4. **2.1.8** Generate docs for all core/std modules
-5. **3.3.8** Fix: closure Send/Sync analysis
-6. **4.3.9** Backpressure handling
+1. **1.6.1** Generic cache O(n²) — profile to confirm
+2. **2.1.8** Generate docs for all core/std modules
+3. **4.3.9** Backpressure handling
 
 *Last updated: 2026-03-29*
 *Removed: 5.4.5-5.4.7, 5.4.9-5.4.10 (package manager → separate project)*

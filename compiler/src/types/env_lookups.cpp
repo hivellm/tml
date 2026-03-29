@@ -581,12 +581,19 @@ bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_n
         }
 
         // Closures: Send if all captures are Send, Sync if all captures are Sync
-        // For now, we conservatively say closures are not Send/Sync
-        // unless explicitly marked (requires capture analysis)
         if (type->is<ClosureType>()) {
-            // TODO: Analyze captured variables to determine Send/Sync
-            // For now, assume closures that only capture Send types are Send
-            return false;
+            const auto& closure = type->as<ClosureType>();
+            // A closure with no captures is always Send and Sync
+            if (closure.captures.empty()) {
+                return true;
+            }
+            // Check each captured variable's type
+            for (const auto& cap : closure.captures) {
+                if (cap.type && !type_implements(cap.type, behavior_name)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         // Tuples: Send/Sync if all elements are Send/Sync

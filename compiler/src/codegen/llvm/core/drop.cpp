@@ -526,6 +526,151 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
     }
 }
 
+void LLVMIRGen::emit_partial_field_drops(const DropInfo& info) {
+    // When some fields of a struct have been moved out (partial move),
+    // we still need to drop the remaining non-consumed fields.
+    // This is like emit_field_level_drops but checks consumed_vars_ for each field.
+
+    // If the type directly implements Drop, we cannot do partial field drops —
+    // the Drop impl may depend on all fields being present. In that case,
+    // the borrow checker should have prevented partial moves. Skip silently.
+    bool has_drop = env_.type_implements(info.type_name, "Drop");
+    if (!has_drop) {
+        auto sep_pos = info.type_name.find("__");
+        if (sep_pos != std::string::npos) {
+            std::string base_type = info.type_name.substr(0, sep_pos);
+            has_drop = env_.type_implements(base_type, "Drop");
+        }
+    }
+    if (has_drop) {
+        TML_DEBUG_LN("[DROP] Type " << info.type_name
+                                    << " implements Drop, cannot do partial field drops");
+        return;
+    }
+
+    auto fields_it = struct_fields_.find(info.type_name);
+    if (fields_it == struct_fields_.end()) {
+        TML_DEBUG_LN("[DROP] No field info for " << info.type_name
+                                                 << ", skipping partial field drops");
+        return;
+    }
+
+    const auto& fields = fields_it->second;
+    std::string struct_type = info.llvm_type;
+
+    // Drop fields in reverse order (last field first, matching Rust semantics)
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
+        const auto& field = *it;
+
+        // Check if THIS specific field was consumed (moved out)
+        std::string field_key = info.var_name + "." + field.name;
+        if (consumed_vars_.find(field_key) != consumed_vars_.end()) {
+            TML_DEBUG_LN("[DROP]   Skipping consumed field: " << field_key);
+            continue;
+        }
+
+        // Determine field type name (same logic as emit_field_level_drops)
+        std::string field_type_name;
+        bool is_str_field = false;
+        if (field.llvm_type.starts_with("%struct.")) {
+            field_type_name = field.llvm_type.substr(8);
+        } else if (field.semantic_type) {
+            if (field.semantic_type->is<types::NamedType>()) {
+                field_type_name = field.semantic_type->as<types::NamedType>().name;
+            } else if (field.semantic_type->is<types::ClassType>()) {
+                field_type_name = field.semantic_type->as<types::ClassType>().name;
+            } else if (field.semantic_type->is<types::PrimitiveType>() &&
+                       field.semantic_type->as<types::PrimitiveType>().kind ==
+                           types::PrimitiveKind::Str) {
+                field_type_name = "Str";
+                is_str_field = true;
+            }
+        }
+
+        if (field_type_name.empty()) {
+            continue;
+        }
+
+        // Str fields: emit tml_str_free
+        if (is_str_field) {
+            std::string field_ptr = fresh_reg();
+            emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                      info.var_reg + ", i32 0, i32 " + std::to_string(field.index));
+            require_runtime_decl("tml_str_free");
+            std::string str_val = fresh_reg();
+            emit_line("  " + str_val + " = load ptr, ptr " + field_ptr);
+            emit_line("  call void @tml_str_free(ptr " + str_val + ")");
+            TML_DEBUG_LN("[DROP]   Partial drop: " << field_key << " (Str)");
+            continue;
+        }
+
+        // Check if field type needs drop
+        bool field_has_drop = env_.type_implements(field_type_name, "Drop");
+        if (!field_has_drop) {
+            auto sep_pos = field_type_name.find("__");
+            if (sep_pos != std::string::npos) {
+                std::string base_type = field_type_name.substr(0, sep_pos);
+                field_has_drop = env_.type_implements(base_type, "Drop");
+            }
+        }
+        bool field_needs_recursive = false;
+        if (!field_has_drop) {
+            field_needs_recursive = env_.type_needs_drop(field_type_name);
+        }
+
+        if (!field_has_drop && !field_needs_recursive) {
+            continue;
+        }
+
+        TML_DEBUG_LN("[DROP]   Partial drop field: " << field_key << " (type=" << field_type_name
+                                                     << ")");
+
+        // GEP to get field pointer
+        std::string field_ptr = fresh_reg();
+        emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
+                  info.var_reg + ", i32 0, i32 " + std::to_string(field.index));
+
+        if (field_needs_recursive) {
+            DropInfo field_info;
+            field_info.var_name = info.var_name + "." + field.name;
+            field_info.var_reg = field_ptr;
+            field_info.type_name = field_type_name;
+            field_info.llvm_type = field.llvm_type;
+            field_info.needs_field_drops = true;
+            emit_field_level_drops(field_info);
+        } else {
+            std::string drop_lookup_key = field_type_name + "_drop";
+            auto drop_it = functions_.find(drop_lookup_key);
+            std::string drop_func;
+            if (drop_it != functions_.end()) {
+                drop_func = drop_it->second.llvm_name;
+            } else {
+                std::string func_llvm_name = mangle_impl_method(field_type_name, "drop");
+                drop_func = "@" + func_llvm_name;
+                bool is_library = !find_module_for_type(field_type_name).empty();
+                functions_[drop_lookup_key] = FuncInfo{drop_func, "void (ptr)", "void", {"ptr"}};
+
+                std::string base_type_name;
+                auto sep = field_type_name.find("__");
+                if (sep != std::string::npos) {
+                    base_type_name = field_type_name.substr(0, sep);
+                }
+
+                if (generated_impl_methods_.find(func_llvm_name) == generated_impl_methods_.end()) {
+                    std::string inst_base =
+                        base_type_name.empty() ? field_type_name : base_type_name;
+                    std::unordered_map<std::string, types::TypePtr> empty_subs;
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{field_type_name, "drop", empty_subs, inst_base, "",
+                                          /*is_library_type=*/is_library});
+                    generated_impl_methods_.insert(func_llvm_name);
+                }
+            }
+            emit_line("  call void " + drop_func + "(ptr " + field_ptr + ")");
+        }
+    }
+}
+
 // Helper: get a mangled type name from a semantic TypePtr for drop purposes.
 // E.g., NamedType{"Heap", type_args=[NamedType{"Expr"}]} → "Heap__Expr"
 static std::string mangled_type_name_for_drop(const types::TypePtr& type) {
@@ -974,10 +1119,11 @@ void LLVMIRGen::emit_scope_drops() {
         if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
             continue;
         }
-        // Skip if any field of this variable was consumed (partial move)
-        // TODO: In the future, we could emit drop calls for individual non-moved fields
+        // Partial move: some fields consumed, drop remaining fields individually
         if (has_consumed_fields(it->var_name)) {
-            TML_DEBUG_LN("[DROP] Skipping drop for " << it->var_name << " due to partial move");
+            TML_DEBUG_LN("[DROP] Partial move for " << it->var_name
+                                                    << ", dropping non-consumed fields");
+            emit_partial_field_drops(*it);
             continue;
         }
         emit_drop_call(*it);
@@ -994,10 +1140,11 @@ void LLVMIRGen::emit_all_drops() {
             if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
                 continue;
             }
-            // Skip if any field of this variable was consumed (partial move)
+            // Partial move: some fields consumed, drop remaining fields individually
             if (has_consumed_fields(it->var_name)) {
-                TML_DEBUG_LN("[DROP] Skipping drop for "
-                             << it->var_name << " in emit_all_drops due to partial move");
+                TML_DEBUG_LN("[DROP] Partial move for "
+                             << it->var_name << " in emit_all_drops, dropping non-consumed fields");
+                emit_partial_field_drops(*it);
                 continue;
             }
             emit_drop_call(*it);

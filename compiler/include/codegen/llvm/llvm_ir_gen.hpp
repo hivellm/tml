@@ -549,6 +549,7 @@ private:
     void emit_all_drops();   // Emit drops for all scopes (for return)
     void emit_drop_call(const DropInfo& info);
     void emit_field_level_drops(const DropInfo& info);
+    void emit_partial_field_drops(const DropInfo& info);
     void emit_enum_variant_drops(const DropInfo& info);
     void ensure_enum_drop_function(const std::string& enum_type_name);
     std::stringstream enum_drop_output_;
