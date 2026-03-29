@@ -1379,6 +1379,167 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
         return "0";
     }
 
+    // ============================================================================
+    // SSE4.2 String Comparison Intrinsics (3.1)
+    // ============================================================================
+
+    // sse42_cmpistrm(a, b, imm) -> <16 x i8>  — PCMPISTRM
+    // Implicit-length string compare, returns byte mask.
+    // imm8 controls comparison mode (see Intel manual).
+    if (intrinsic_name == "sse42_cmpistrm") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string imm = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <16 x i8> @llvm.x86.sse42.pcmpistrm128(<16 x i8> " +
+                      a + ", <16 x i8> " + b + ", i8 " + imm + ")");
+            last_expr_type_ = "<16 x i8>";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_cmpistri(a, b, imm) -> I32  — PCMPISTRI
+    // Implicit-length string compare, returns index of first match/mismatch.
+    if (intrinsic_name == "sse42_cmpistri") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string imm = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse42.pcmpistri128(<16 x i8> " + a +
+                      ", <16 x i8> " + b + ", i8 " + imm + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_cmpestrm(a, la, b, lb, imm) -> <16 x i8>  — PCMPESTRM
+    // Explicit-length string compare, returns byte mask.
+    if (intrinsic_name == "sse42_cmpestrm") {
+        if (call.args.size() >= 5) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string la = gen_expr(*call.args[1]);
+            std::string b = gen_expr(*call.args[2]);
+            std::string lb = gen_expr(*call.args[3]);
+            std::string imm = gen_expr(*call.args[4]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <16 x i8> @llvm.x86.sse42.pcmpestrm128(<16 x i8> " +
+                      a + ", i32 " + la + ", <16 x i8> " + b + ", i32 " + lb + ", i8 " + imm + ")");
+            last_expr_type_ = "<16 x i8>";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_cmpestri(a, la, b, lb, imm) -> I32  — PCMPESTRI
+    // Explicit-length string compare, returns index.
+    if (intrinsic_name == "sse42_cmpestri") {
+        if (call.args.size() >= 5) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string la = gen_expr(*call.args[1]);
+            std::string b = gen_expr(*call.args[2]);
+            std::string lb = gen_expr(*call.args[3]);
+            std::string imm = gen_expr(*call.args[4]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse42.pcmpestri128(<16 x i8> " + a +
+                      ", i32 " + la + ", <16 x i8> " + b + ", i32 " + lb + ", i8 " + imm + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // SSE4.2 CRC32 Intrinsics (3.2)
+    // ============================================================================
+
+    // sse42_crc32_u8(crc: U32, data: U8) -> U32
+    if (intrinsic_name == "sse42_crc32_u8") {
+        if (call.args.size() >= 2) {
+            std::string crc = gen_expr(*call.args[0]);
+            std::string data = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse42.crc32.32.8(i32 " + crc +
+                      ", i8 " + data + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_crc32_u16(crc: U32, data: U16) -> U32
+    if (intrinsic_name == "sse42_crc32_u16") {
+        if (call.args.size() >= 2) {
+            std::string crc = gen_expr(*call.args[0]);
+            std::string data = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse42.crc32.32.16(i32 " + crc +
+                      ", i16 " + data + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_crc32_u32(crc: U32, data: U32) -> U32
+    if (intrinsic_name == "sse42_crc32_u32") {
+        if (call.args.size() >= 2) {
+            std::string crc = gen_expr(*call.args[0]);
+            std::string data = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.x86.sse42.crc32.32.32(i32 " + crc +
+                      ", i32 " + data + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // sse42_crc32_u64(crc: U64, data: U64) -> U64
+    if (intrinsic_name == "sse42_crc32_u64") {
+        if (call.args.size() >= 2) {
+            std::string crc = gen_expr(*call.args[0]);
+            std::string data = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @llvm.x86.sse42.crc32.64.64(i64 " + crc +
+                      ", i64 " + data + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // POPCNT Intrinsics (3.3)
+    // ============================================================================
+
+    // popcnt_u32(val: U32) -> U32  — count set bits
+    if (intrinsic_name == "popcnt_u32") {
+        if (!call.args.empty()) {
+            std::string val = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @llvm.ctpop.i32(i32 " + val + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+        return "0";
+    }
+
+    // popcnt_u64(val: U64) -> U64  — count set bits
+    if (intrinsic_name == "popcnt_u64") {
+        if (!call.args.empty()) {
+            std::string val = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @llvm.ctpop.i64(i64 " + val + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        return "0";
+    }
+
     return std::nullopt;
 }
 

@@ -83,32 +83,39 @@
 
 ## Phase 3: SSE4.2 Intrinsics
 
-> **Priority**: High | **Files**: `intrinsics.cpp`, `lib/core/src/simd/sse42.tml`
+> **Priority**: High | **Files**: `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`, `lib/core/src/simd/sse42.tml`
 
 ### 3.1 String Comparison Intrinsics
-- [ ] 3.1.1 `sse42_cmpistrm` — PCMPISTRM (implicit-length string compare, return mask)
-- [ ] 3.1.2 `sse42_cmpistri` — PCMPISTRI (implicit-length string compare, return index)
-- [ ] 3.1.3 `sse42_cmpestrm` — PCMPESTRM (explicit-length string compare, return mask)
-- [ ] 3.1.4 `sse42_cmpestri` — PCMPESTRI (explicit-length string compare, return index)
+- [x] 3.1.1 `sse42_cmpistrm` — @llvm.x86.sse42.pcmpistrm128
+- [x] 3.1.2 `sse42_cmpistri` — @llvm.x86.sse42.pcmpistri128
+- [x] 3.1.3 `sse42_cmpestrm` — @llvm.x86.sse42.pcmpestrm128
+- [x] 3.1.4 `sse42_cmpestri` — @llvm.x86.sse42.pcmpestri128
 
 ### 3.2 CRC32 Intrinsics
-- [ ] 3.2.1 `sse42_crc32_u8` — CRC32C 8-bit
-- [ ] 3.2.2 `sse42_crc32_u16` — CRC32C 16-bit
-- [ ] 3.2.3 `sse42_crc32_u32` — CRC32C 32-bit
-- [ ] 3.2.4 `sse42_crc32_u64` — CRC32C 64-bit
+- [x] 3.2.1 `sse42_crc32_u8` — @llvm.x86.sse42.crc32.32.8
+- [x] 3.2.2 `sse42_crc32_u16` — @llvm.x86.sse42.crc32.32.16
+- [x] 3.2.3 `sse42_crc32_u32` — @llvm.x86.sse42.crc32.32.32
+- [x] 3.2.4 `sse42_crc32_u64` — @llvm.x86.sse42.crc32.64.64
 
 ### 3.3 POPCNT
-- [ ] 3.3.1 `popcnt_u32` — POPCNT 32-bit
-- [ ] 3.3.2 `popcnt_u64` — POPCNT 64-bit
+- [x] 3.3.1 `popcnt_u32` — @llvm.ctpop.i32
+- [x] 3.3.2 `popcnt_u64` — @llvm.ctpop.i64
 
 ### 3.4 Library Wrappers
-- [ ] 3.4.1 Create `lib/core/src/simd/sse42.tml` with high-level wrappers
-- [ ] 3.4.2 `str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]`
-- [ ] 3.4.3 `crc32c(data: Slice[U8]) -> U32`
+- [x] 3.4.1 Create `lib/core/src/simd/sse42.tml` with `crc32c` high-level wrapper
+- [ ] 3.4.2 `str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` — deferred (needs Slice iteration support in lowlevel blocks)
+- [x] 3.4.3 `crc32c(data: Slice[U8]) -> U32` — processes 8 bytes at a time via CRC32Q
 
 ### 3.5 Tests
-- [ ] 3.5.1 Write `lib/core/tests/simd/sse42_intrinsics.test.tml`
-- [ ] 3.5.2 Write `lib/core/tests/simd/crc32c.test.tml`
+- [x] 3.5.1 Write `lib/core/tests/simd/sse42_intrinsics.test.tml` — 8 tests (POPCNT + CRC32)
+- [x] 3.5.2 Write `lib/core/tests/simd/crc32c.test.tml` — 4 CRC32C accumulation tests
+
+> **Implementation note**: All intrinsics use LLVM target intrinsics (@llvm.x86.sse42.*) for
+> CRC32/string comparison, and @llvm.ctpop for POPCNT. String comparison intrinsics (PCMPISTRI/M,
+> PCMPESTRI/M) are exposed as raw intrinsics — the imm8 control byte determines comparison mode.
+> The `crc32c` high-level wrapper processes 8 bytes at a time for throughput.
+> Note: SIMD test suite has a pre-existing 100ms per-suite execution timeout issue;
+> tests verified via `tml run` (all pass) and individually via `tml test --path` (crc32c passes).
 
 ## Phase 4: AVX2 256-bit Types and Intrinsics
 

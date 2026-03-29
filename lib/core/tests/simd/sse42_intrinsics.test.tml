@@ -1,0 +1,73 @@
+use test
+use core::runtime::intrinsics::{
+    sse42_crc32_u8, sse42_crc32_u32, sse42_crc32_u64,
+    popcnt_u32, popcnt_u64
+}
+
+// ============================================================================
+// POPCNT Tests
+// ============================================================================
+
+@test
+func test_popcnt_u32_zero() -> I32 {
+    let result: U32 = lowlevel { popcnt_u32(0_u32) }
+    assert_eq(result, 0_u32)
+    0
+}
+
+@test
+func test_popcnt_u32_one() -> I32 {
+    let result: U32 = lowlevel { popcnt_u32(1_u32) }
+    assert_eq(result, 1_u32)
+    0
+}
+
+@test
+func test_popcnt_u32_seven() -> I32 {
+    // 7 = 0b111, 3 bits set
+    let result: U32 = lowlevel { popcnt_u32(7_u32) }
+    assert_eq(result, 3_u32)
+    0
+}
+
+@test
+func test_popcnt_u64_byte() -> I32 {
+    // 255 = 0xFF, 8 bits set
+    let result: U64 = lowlevel { popcnt_u64(255_u64) }
+    assert_eq(result, 8_u64)
+    0
+}
+
+// ============================================================================
+// CRC32 Tests
+// ============================================================================
+
+@test
+func test_crc32_u8_nonzero() -> I32 {
+    let result: U32 = lowlevel { sse42_crc32_u8(0_u32, 1_u8) }
+    assert_true(result != 0_u32)
+    0
+}
+
+@test
+func test_crc32_u32_nonzero() -> I32 {
+    let result: U32 = lowlevel { sse42_crc32_u32(0_u32, 1_u32) }
+    assert_true(result != 0_u32)
+    0
+}
+
+@test
+func test_crc32_u8_deterministic() -> I32 {
+    let r1: U32 = lowlevel { sse42_crc32_u8(0_u32, 42_u8) }
+    let r2: U32 = lowlevel { sse42_crc32_u8(0_u32, 42_u8) }
+    assert_eq(r1, r2)
+    0
+}
+
+@test
+func test_crc32_u8_different_input() -> I32 {
+    let r1: U32 = lowlevel { sse42_crc32_u8(0_u32, 1_u8) }
+    let r2: U32 = lowlevel { sse42_crc32_u8(0_u32, 2_u8) }
+    assert_true(r1 != r2)
+    0
+}

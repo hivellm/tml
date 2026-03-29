@@ -695,6 +695,64 @@ pub func sse2_storeu_si128[V](ptr: Ptr[V], v: V)
 pub func sse2_store_si128[V](ptr: Ptr[V], v: V)
 
 // ============================================================================
+// SSE4.2 String Comparison Intrinsics (x86-64 only)
+// ============================================================================
+
+/// Implicit-length string compare, returns byte mask.
+/// `imm` is the control byte (see Intel SSE4.2 PCMPISTRM documentation).
+/// Compiles to PCMPISTRM on x86.
+@intrinsic
+pub func sse42_cmpistrm[V](a: V, b: V, imm: I8) -> V
+
+/// Implicit-length string compare, returns index of first match/mismatch.
+/// Compiles to PCMPISTRI on x86.
+@intrinsic
+pub func sse42_cmpistri[V](a: V, b: V, imm: I8) -> I32
+
+/// Explicit-length string compare, returns byte mask.
+/// `la`/`lb` specify lengths of strings in `a`/`b`.
+/// Compiles to PCMPESTRM on x86.
+@intrinsic
+pub func sse42_cmpestrm[V](a: V, la: I32, b: V, lb: I32, imm: I8) -> V
+
+/// Explicit-length string compare, returns index.
+/// Compiles to PCMPESTRI on x86.
+@intrinsic
+pub func sse42_cmpestri[V](a: V, la: I32, b: V, lb: I32, imm: I8) -> I32
+
+// ============================================================================
+// SSE4.2 CRC32 Intrinsics (x86-64 only)
+// ============================================================================
+
+/// CRC32C accumulate 8-bit value. Compiles to CRC32B on x86.
+@intrinsic
+pub func sse42_crc32_u8(crc: U32, data: U8) -> U32
+
+/// CRC32C accumulate 16-bit value. Compiles to CRC32W on x86.
+@intrinsic
+pub func sse42_crc32_u16(crc: U32, data: U16) -> U32
+
+/// CRC32C accumulate 32-bit value. Compiles to CRC32D on x86.
+@intrinsic
+pub func sse42_crc32_u32(crc: U32, data: U32) -> U32
+
+/// CRC32C accumulate 64-bit value. Compiles to CRC32Q on x86.
+@intrinsic
+pub func sse42_crc32_u64(crc: U64, data: U64) -> U64
+
+// ============================================================================
+// POPCNT Intrinsics (x86-64 only)
+// ============================================================================
+
+/// Count set bits in a 32-bit value. Compiles to POPCNT on x86.
+@intrinsic
+pub func popcnt_u32(val: U32) -> U32
+
+/// Count set bits in a 64-bit value. Compiles to POPCNT on x86.
+@intrinsic
+pub func popcnt_u64(val: U64) -> U64
+
+// ============================================================================
 // CPU Feature Detection (x86-64 only)
 // ============================================================================
 

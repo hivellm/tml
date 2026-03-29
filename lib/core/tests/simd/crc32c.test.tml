@@ -1,0 +1,50 @@
+use test
+use core::runtime::intrinsics::{sse42_crc32_u8, sse42_crc32_u32, sse42_crc32_u64}
+
+@test
+func test_crc32c_accumulate_bytes() -> I32 {
+    // Accumulate CRC32C over multiple bytes
+    var crc: U32 = 0_u32
+    crc = lowlevel { sse42_crc32_u8(crc, 72_u8) }  // 'H'
+    crc = lowlevel { sse42_crc32_u8(crc, 101_u8) } // 'e'
+    crc = lowlevel { sse42_crc32_u8(crc, 108_u8) } // 'l'
+    crc = lowlevel { sse42_crc32_u8(crc, 108_u8) } // 'l'
+    crc = lowlevel { sse42_crc32_u8(crc, 111_u8) } // 'o'
+    // CRC32C("Hello") should be non-zero and deterministic
+    assert_true(crc != 0_u32)
+    0
+}
+
+@test
+func test_crc32c_u32_accumulate() -> I32 {
+    // CRC32C over 32-bit words
+    var crc: U32 = 0_u32
+    crc = lowlevel { sse42_crc32_u32(crc, 1_u32) }
+    crc = lowlevel { sse42_crc32_u32(crc, 2_u32) }
+    crc = lowlevel { sse42_crc32_u32(crc, 3_u32) }
+    assert_true(crc != 0_u32)
+    0
+}
+
+@test
+func test_crc32c_u64_accumulate() -> I32 {
+    var crc: U64 = 0_u64
+    crc = lowlevel { sse42_crc32_u64(crc, 12345678901234_u64) }
+    assert_true(crc != 0_u64)
+    0
+}
+
+@test
+func test_crc32c_order_matters() -> I32 {
+    // CRC32C(0, 1, 2) != CRC32C(0, 2, 1)
+    var crc1: U32 = 0_u32
+    crc1 = lowlevel { sse42_crc32_u8(crc1, 1_u8) }
+    crc1 = lowlevel { sse42_crc32_u8(crc1, 2_u8) }
+
+    var crc2: U32 = 0_u32
+    crc2 = lowlevel { sse42_crc32_u8(crc2, 2_u8) }
+    crc2 = lowlevel { sse42_crc32_u8(crc2, 1_u8) }
+
+    assert_true(crc1 != crc2)
+    0
+}

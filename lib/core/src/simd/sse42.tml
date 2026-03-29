@@ -1,0 +1,57 @@
+//! SSE4.2 high-level wrappers.
+//!
+//! Provides safe, ergonomic functions built on the raw SSE4.2 intrinsics.
+//! These require SSE4.2 support — check with `detect::has_sse42()` first.
+//!
+//! # Functions
+//!
+//! - `crc32c` — Hardware-accelerated CRC32C checksum
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::simd::sse42
+//! use core::simd::detect
+//!
+//! if detect::has_sse42() {
+//!     let checksum = sse42::crc32c(data.as_slice())
+//! }
+//! ```
+
+use core::runtime::intrinsics::{sse42_crc32_u8, sse42_crc32_u64}
+
+#if X86_64
+
+/// Compute CRC32C checksum of a byte slice using hardware SSE4.2 instructions.
+///
+/// Processes 8 bytes at a time using CRC32Q, then handles remaining bytes
+/// with CRC32B. Returns a 32-bit checksum.
+///
+/// Requires SSE4.2 support. Check with `detect::has_sse42()` before calling.
+pub func crc32c(data: Slice[U8]) -> U32 {
+    var crc: U64 = 0_u64
+    let len = data.len()
+    var i: I64 = 0
+
+    // Process 8 bytes at a time with CRC32Q (64-bit accumulation)
+    loop (i + 8 <= len) {
+        // Read 8 bytes as a U64
+        let ptr = lowlevel { ptr_offset(data.as_ptr(), i) }
+        let val: U64 = lowlevel { ptr_read[U64](ptr as Ptr[U64]) }
+        crc = lowlevel { sse42_crc32_u64(crc, val) }
+        i = i + 8
+    }
+
+    // Process remaining bytes one at a time
+    let crc32: U32 = lowlevel { cast[U64, U32](crc) }
+    var result: U32 = crc32
+    loop (i < len) {
+        let byte: U8 = data.get(i)
+        result = lowlevel { sse42_crc32_u8(result, byte) }
+        i = i + 1
+    }
+
+    return result
+}
+
+#endif

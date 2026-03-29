@@ -167,6 +167,12 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "sse2_srli_epi32", "sse2_srli_epi64", "sse2_srai_epi16", "sse2_srai_epi32",
         // SSE2 memory
         "sse2_storeu_si128", "sse2_store_si128",
+        // SSE4.2 string comparison
+        "sse42_cmpistrm", "sse42_cmpistri", "sse42_cmpestrm", "sse42_cmpestri",
+        // SSE4.2 CRC32
+        "sse42_crc32_u8", "sse42_crc32_u16", "sse42_crc32_u32", "sse42_crc32_u64",
+        // POPCNT
+        "popcnt_u32", "popcnt_u64",
         // Array element intrinsics
         "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
 
