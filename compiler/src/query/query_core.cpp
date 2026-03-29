@@ -244,7 +244,9 @@ std::any provide_typecheck_module(QueryContext& ctx, const QueryKey& key) {
     // Emit type checker warnings to stderr (non-blocking)
     if (checker.has_warnings()) {
         for (const auto& w : checker.warnings()) {
-            TML_LOG_WARN("typecheck", w.code << ": " << w.message);
+            TML_LOG_WARN("typecheck", w.span.start.file << ":" << w.span.start.line << ":"
+                                                        << w.span.start.column << ": " << w.code
+                                                        << ": " << w.message);
         }
     }
 
