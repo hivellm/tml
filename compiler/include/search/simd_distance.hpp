@@ -1,10 +1,10 @@
 //! # SIMD-Optimized Distance Functions
 //!
 //! Provides vector distance and similarity functions for nearest-neighbor search.
-//! Uses auto-vectorizable loops following TML's portable SIMD philosophy —
-//! the compiler auto-vectorizes to SSE2/AVX2 without explicit intrinsics.
+//! Uses explicit AVX2+FMA intrinsics for maximum throughput with SSE2 and scalar
+//! fallbacks selected at runtime via CPUID detection.
 //!
-//! ## Functions
+//! ## Float (f32) Functions
 //!
 //! | Function | Description |
 //! |----------|-------------|
@@ -13,73 +13,106 @@
 //! | `euclidean_distance_f32` | L2 (Euclidean) distance |
 //! | `l2_distance_squared_f32` | Squared L2 distance (avoids sqrt) |
 //! | `normalize_f32` | L2-normalize a vector in place |
+//! | `norm_f32` | L2 norm (magnitude) of a vector |
+//!
+//! ## Double (f64) Functions
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | `dot_product_f64` | Inner product of two double vectors |
+//! | `cosine_similarity_f64` | Cosine similarity for doubles |
+//! | `euclidean_distance_f64` | L2 distance for doubles |
+//! | `l2_distance_squared_f64` | Squared L2 distance for doubles |
+//! | `normalize_f64` | L2-normalize a double vector in place |
+//! | `norm_f64` | L2 norm of a double vector |
 //!
 //! ## Design
 //!
-//! All functions operate on raw `float*` arrays with explicit dimension parameter.
-//! Loops are written to be trivially auto-vectorizable by MSVC, GCC, and Clang.
-//! No platform-specific intrinsics are used.
+//! All functions use runtime CPUID dispatch:
+//! - AVX2+FMA: 8 floats or 4 doubles per cycle
+//! - SSE2 fallback: 4 floats or 2 doubles per cycle
+//! - Scalar fallback: portable, no SIMD
+//!
+//! All pointer parameters carry `__restrict` to enable further optimizations.
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
 namespace tml::search {
 
+// ============================================================================
+// Float (f32) Distance Functions
+// ============================================================================
+
 /// Computes the dot product (inner product) of two float vectors.
-///
-/// @param a First vector
-/// @param b Second vector
-/// @param dim Number of dimensions
-/// @return Sum of element-wise products
-auto dot_product_f32(const float* a, const float* b, size_t dim) -> float;
+/// AVX2+FMA: 8 floats/cycle. SSE2 fallback: 4 floats/cycle.
+auto dot_product_f32(const float* __restrict a, const float* __restrict b, size_t dim) -> float;
 
 /// Computes cosine similarity between two float vectors.
-///
-/// Returns value in [-1, 1] where 1 means identical direction,
-/// 0 means orthogonal, -1 means opposite direction.
-///
-/// @param a First vector
-/// @param b Second vector
-/// @param dim Number of dimensions
-/// @return Cosine similarity score
-auto cosine_similarity_f32(const float* a, const float* b, size_t dim) -> float;
+/// Uses three FMA accumulators (dot, norm_a, norm_b) in a single pass.
+/// Returns value in [-1, 1].
+auto cosine_similarity_f32(const float* __restrict a, const float* __restrict b, size_t dim)
+    -> float;
 
 /// Computes the Euclidean (L2) distance between two float vectors.
-///
-/// @param a First vector
-/// @param b Second vector
-/// @param dim Number of dimensions
-/// @return L2 distance (always >= 0)
-auto euclidean_distance_f32(const float* a, const float* b, size_t dim) -> float;
+auto euclidean_distance_f32(const float* __restrict a, const float* __restrict b, size_t dim)
+    -> float;
 
 /// Computes squared Euclidean distance (avoids sqrt for comparisons).
-///
-/// When comparing distances, using squared distance avoids the sqrt and
-/// preserves ordering. Use this for HNSW neighbor selection.
-///
-/// @param a First vector
-/// @param b Second vector
-/// @param dim Number of dimensions
-/// @return Squared L2 distance (always >= 0)
-auto l2_distance_squared_f32(const float* a, const float* b, size_t dim) -> float;
+/// AVX2: sub + fmadd for 8 floats/cycle.
+auto l2_distance_squared_f32(const float* __restrict a, const float* __restrict b, size_t dim)
+    -> float;
 
 /// L2-normalizes a vector in place (makes it unit length).
-///
-/// After normalization, dot_product equals cosine_similarity.
-/// If the vector has zero magnitude, it is left unchanged.
-///
-/// @param vec Vector to normalize (modified in place)
-/// @param dim Number of dimensions
-void normalize_f32(float* vec, size_t dim);
+/// AVX2: bulk scale with broadcast inverse.
+void normalize_f32(float* __restrict vec, size_t dim);
 
 /// Computes the L2 norm (magnitude) of a vector.
+/// Uses self-dot-product via FMA.
+auto norm_f32(const float* __restrict vec, size_t dim) -> float;
+
+// ============================================================================
+// Double (f64) Distance Functions
+// ============================================================================
+
+/// Computes the dot product of two double vectors.
+/// AVX2+FMA: 4 doubles/cycle. SSE2 fallback: 2 doubles/cycle.
+auto dot_product_f64(const double* __restrict a, const double* __restrict b, size_t dim) -> double;
+
+/// Computes cosine similarity between two double vectors.
+/// Three FMA accumulators in a single pass.
+auto cosine_similarity_f64(const double* __restrict a, const double* __restrict b, size_t dim)
+    -> double;
+
+/// Computes the Euclidean (L2) distance between two double vectors.
+auto euclidean_distance_f64(const double* __restrict a, const double* __restrict b, size_t dim)
+    -> double;
+
+/// Computes squared L2 distance for doubles.
+auto l2_distance_squared_f64(const double* __restrict a, const double* __restrict b, size_t dim)
+    -> double;
+
+/// L2-normalizes a double vector in place.
+void normalize_f64(double* __restrict vec, size_t dim);
+
+/// Computes the L2 norm of a double vector.
+auto norm_f64(const double* __restrict vec, size_t dim) -> double;
+
+// ============================================================================
+// Batch Distance (HNSW optimization)
+// ============================================================================
+
+/// Computes distances from a query to 4 candidate vectors simultaneously.
+/// Interleaves loads to maximize throughput.
 ///
-/// @param vec Input vector
+/// @param query Query vector
+/// @param candidates Array of 4 pointers to candidate vectors
 /// @param dim Number of dimensions
-/// @return L2 norm (always >= 0)
-auto norm_f32(const float* vec, size_t dim) -> float;
+/// @param out_distances Output array of 4 distances (squared L2)
+void batch_l2_squared_f32_x4(const float* __restrict query,
+                             const float* const __restrict candidates[4], size_t dim,
+                             float* __restrict out_distances);
 
 } // namespace tml::search

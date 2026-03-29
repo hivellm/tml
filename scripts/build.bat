@@ -28,6 +28,7 @@ set "BUMP_MINOR=0"
 set "ENABLE_MODULAR=ON"
 set "ENABLE_PROFILE=OFF"
 set "ENABLE_PACK=0"
+set "BUILD_BENCH=OFF"
 set "USE_ZIG_CC=auto"
 set "USE_CLANG=0"
 
@@ -47,6 +48,7 @@ if /i "%~1"=="--cranelift" set "ENABLE_CRANELIFT_BACKEND=ON" & shift & goto :par
 if /i "%~1"=="--monolithic" set "ENABLE_MODULAR=OFF" & shift & goto :parse_args
 if /i "%~1"=="--profile" set "ENABLE_PROFILE=ON" & shift & goto :parse_args
 if /i "%~1"=="--pack" set "ENABLE_PACK=1" & shift & goto :parse_args
+if /i "%~1"=="--bench" set "BUILD_BENCH=ON" & shift & goto :parse_args
 if /i "%~1"=="--zig" set "USE_ZIG_CC=1" & shift & goto :parse_args
 if /i "%~1"=="--msvc" set "USE_ZIG_CC=0" & shift & goto :parse_args
 if /i "%~1"=="--clang" set "USE_ZIG_CC=0" & set "USE_CLANG=1" & shift & goto :parse_args
@@ -78,6 +80,7 @@ echo   --ubsan        Enable UndefinedBehaviorSanitizer
 echo   --sanitize     Enable both ASan and UBSan
 echo   --cranelift    Enable Cranelift backend (fast debug builds)
 echo   --monolithic   Build single executable (default is modular with DLLs)
+echo   --bench        Build SIMD benchmark harness (tml_bench.exe)
 echo   --pack         Pack plugins (compress DLLs + manifest); default modular build
 echo   --zig          Use Zig CC (default when available, fastest builds)
 echo   --msvc         Force MSVC compiler (cl.exe via Ninja or MSBuild)
@@ -305,6 +308,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_USE_LLVM_BACKEND=%ENABLE_LLVM_BACKEND% ^
     -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
     -DTML_BUILD_MODULAR=%ENABLE_MODULAR% ^
+    -DTML_BUILD_BENCH=%BUILD_BENCH% ^
     -DTML_PROFILE=%ENABLE_PROFILE% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^

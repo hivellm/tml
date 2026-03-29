@@ -111,6 +111,7 @@ option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(TML_ENABLE_LSAN "Enable LeakSanitizer (Linux/macOS only)" OFF)
 option(TML_ENABLE_MSAN "Enable MemorySanitizer (Linux Clang only)" OFF)
 option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" ON)
+option(TML_BUILD_BENCH "Build SIMD benchmark harness" OFF)
 option(TML_PROFILE "Enable Tracy profiler integration" OFF)
 
 # Tracy profiler setup
@@ -1207,6 +1208,12 @@ add_library(tml_search STATIC
     src/search/hnsw_index.cpp
 )
 target_include_directories(tml_search PUBLIC include src)
+# Enable AVX2+FMA intrinsics for SIMD distance functions
+if(MSVC)
+    target_compile_options(tml_search PRIVATE /arch:AVX2)
+else()
+    target_compile_options(tml_search PRIVATE -mavx2 -mfma)
+endif()
 
 # MCP library (Model Context Protocol server)
 # Named tml_mcp_lib to avoid conflict with tml_mcp executable
@@ -1919,6 +1926,30 @@ if(TML_BUILD_TESTS)
 
     include(GoogleTest)
     gtest_discover_tests(tml_tests)
+endif()
+
+# =============================================================================
+# SIMD Benchmark Harness
+# =============================================================================
+if(TML_BUILD_BENCH)
+    add_executable(tml_bench
+        tests/bench/bench_simd.cpp
+    )
+
+    target_include_directories(tml_bench PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    # Optimize benchmarks even in debug builds — need realistic timings
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(tml_bench PRIVATE -O3 -mavx2 -mfma -msse4.2 -mbmi -mbmi2 -maes)
+    elseif(MSVC)
+        target_compile_options(tml_bench PRIVATE /O2 /arch:AVX2)
+    endif()
+
+    set_target_properties(tml_bench PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${TML_BIN_DIR}
+    )
 endif()
 
 # =============================================================================

@@ -1,17 +1,17 @@
 # Tasks: SIMD Optimization Across TML Runtime and Compiler
 
-**Status**: Planning (0%)
+**Status**: Phase 1 Complete (5/5), Phase 2 Complete (18/21 — benchmarks pending)
 **Priority**: High
 
 ## Phase 1: SIMD Infrastructure
 
 > **Priority**: Critical | **Dir**: `compiler/include/simd/`
 
-- [ ] 1.1 Create `simd_detect.hpp` — runtime CPUID detection for SSE2, SSE4.2, AVX2, AVX-512, AES-NI, POPCNT
-- [ ] 1.2 Create `simd_utils.h` — portable macros (`TML_SSE2`, `TML_AVX2`, `TML_NEON`), alignment helpers, `SIMD_INLINE` attribute
-- [ ] 1.3 Create `simd_charclass.h` — 256-byte lookup tables for whitespace, alpha, digit, identifier, hex character classification
-- [ ] 1.4 Create benchmark harness `compiler/tests/bench/bench_simd.cpp` — timing framework with `rdtsc`/`QueryPerformanceCounter`, warm-up, statistical reporting (median, p95, stddev)
-- [ ] 1.5 Add `--bench` flag to build scripts for benchmark compilation with appropriate optimization flags
+- [x] 1.1 Create `simd_detect.hpp` — runtime CPUID detection for SSE2, SSE4.2, AVX2, AVX-512, AES-NI, POPCNT, FMA, BMI1, BMI2
+- [x] 1.2 Create `simd_utils.h` — portable macros (`TML_SSE2`, `TML_AVX2`, `TML_NEON`), alignment helpers, `SIMD_INLINE`, aligned alloc/free
+- [x] 1.3 Create `simd_charclass.h` — 256-byte lookup tables + bitmask table for whitespace, alpha, digit, identifier, hex, upper, lower
+- [x] 1.4 Create benchmark harness `compiler/tests/bench/bench_simd.cpp` — QueryPerformanceCounter timing, warm-up, min/median/p95/stddev, feature detection print
+- [x] 1.5 Add `--bench` flag to build scripts — `scripts\build.bat --bench` builds `tml_bench.exe` with `-O3 -mavx2 -mfma -msse4.2 -mbmi -mbmi2 -maes`
 
 ## Phase 2: Vector Distance Functions (HNSW Search)
 
@@ -19,34 +19,34 @@
 
 ### 2.1 Float (f32) Distance — `simd_distance.cpp`
 
-- [ ] 2.1.1 `dot_product_f32` (line 13) — AVX2 `_mm256_fmadd_ps`, 8 floats/cycle, horizontal sum via `_mm256_hadd_ps` + extract
-- [ ] 2.1.2 `cosine_similarity_f32` (line 21) — three AVX2 FMA accumulators (`dot`, `norm_a`, `norm_b`) in single loop pass
-- [ ] 2.1.3 `l2_distance_squared_f32` (line 43) — AVX2 `_mm256_sub_ps` + `_mm256_fmadd_ps`
-- [ ] 2.1.4 `normalize_f32` (line 52) — AVX2 `_mm256_mul_ps` bulk scale with broadcast inverse
-- [ ] 2.1.5 `norm_f32` (line 63) — AVX2 self-dot-product via `_mm256_fmadd_ps`
-- [ ] 2.1.6 Add SSE2 fallback path for all f32 functions (4 floats/cycle)
-- [ ] 2.1.7 Add `__restrict` qualifiers to all pointer parameters to enable auto-vectorization as secondary path
+- [x] 2.1.1 `dot_product_f32` — AVX2 `_mm256_fmadd_ps`, 8 floats/cycle, horizontal sum via movehdup+movehl
+- [x] 2.1.2 `cosine_similarity_f32` — three AVX2 FMA accumulators (`dot`, `norm_a`, `norm_b`) in single loop pass
+- [x] 2.1.3 `l2_distance_squared_f32` — AVX2 `_mm256_sub_ps` + `_mm256_fmadd_ps`
+- [x] 2.1.4 `normalize_f32` — AVX2 `_mm256_mul_ps` bulk scale with broadcast inverse
+- [x] 2.1.5 `norm_f32` — AVX2 self-dot-product via `_mm256_fmadd_ps`
+- [x] 2.1.6 Add SSE2 fallback path for all f32 functions (4 floats/cycle) — runtime CPUID dispatch
+- [x] 2.1.7 Add `__restrict` qualifiers to all pointer parameters in header and implementation
 
-### 2.2 Double (f64) Distance — `search.c`
+### 2.2 Double (f64) Distance — `simd_distance.cpp` (no search.c — file doesn't exist)
 
-- [ ] 2.2.1 `search_dot_product` (line 34) — AVX2 `_mm256_fmadd_pd`, 4 doubles/cycle
-- [ ] 2.2.2 `search_cosine_similarity` (line 46) — three AVX2 FMA accumulators for f64
-- [ ] 2.2.3 `search_euclidean_distance` (line 67) — AVX2 `_mm256_sub_pd` + `_mm256_fmadd_pd`
-- [ ] 2.2.4 `search_normalize` (line 90) — AVX2 `_mm256_mul_pd` bulk scale
-- [ ] 2.2.5 `search_norm` (line 79) — AVX2 self-dot f64
+- [x] 2.2.1 `dot_product_f64` — AVX2 `_mm256_fmadd_pd`, 4 doubles/cycle + SSE2 fallback
+- [x] 2.2.2 `cosine_similarity_f64` — three AVX2 FMA accumulators for f64 + SSE2 fallback
+- [x] 2.2.3 `euclidean_distance_f64` — AVX2 `_mm256_sub_pd` + `_mm256_fmadd_pd` + SSE2 fallback
+- [x] 2.2.4 `normalize_f64` — AVX2 `_mm256_mul_pd` bulk scale + SSE2 fallback
+- [x] 2.2.5 `norm_f64` — AVX2 self-dot f64 + SSE2 fallback
 
 ### 2.3 HNSW Structural Optimizations — `hnsw_index.cpp`
 
-- [ ] 2.3.1 Batch distance: compute distances to 4 neighbors simultaneously by interleaving vector loads
-- [ ] 2.3.2 Embedding storage: replace per-node `std::vector<float>` (line 69 of `hnsw_index.hpp`) with flat `float*` array + stride indexing for cache locality
-- [ ] 2.3.3 Ensure 32-byte alignment for embedding storage (`alignas(32)` or `_mm_malloc`)
+- [x] 2.3.1 Batch distance: `batch_l2_squared_f32_x4` computes 4 distances simultaneously with interleaved AVX2 loads
+- [x] 2.3.2 Embedding storage: replaced per-node `std::vector<float>` with flat `float*` array + stride indexing. HnswNode no longer owns embedding. Serialization supports v1 (legacy) and v2 (flat) formats.
+- [x] 2.3.3 32-byte alignment: `_aligned_malloc`/`posix_memalign` with 32-byte alignment, stride = dims rounded up to multiple of 8 for AVX2
 
 ### 2.4 Benchmarks — Distance Functions
 
 - [ ] 2.4.1 Benchmark `dot_product_f32`: scalar vs SSE2 vs AVX2, dims = {64, 128, 256, 512, 1024}
 - [ ] 2.4.2 Benchmark `cosine_similarity_f32`: same dimension sweep
 - [ ] 2.4.3 Benchmark `l2_distance_squared_f32`: same dimension sweep
-- [ ] 2.4.4 Benchmark `search_dot_product` (f64): same dimension sweep
+- [ ] 2.4.4 Benchmark `dot_product_f64`: same dimension sweep
 - [ ] 2.4.5 Benchmark HNSW end-to-end query latency: 1K, 10K, 100K document index, top-10 search
 - [ ] 2.4.6 Record baseline results in `build/bench/distance_baseline.json`
 

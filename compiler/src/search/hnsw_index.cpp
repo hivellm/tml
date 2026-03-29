@@ -5,6 +5,9 @@ TML_MODULE("tools")
 //! Implements the HNSW algorithm from:
 //! "Efficient and Robust Approximate Nearest Neighbor using Hierarchical
 //!  Navigable Small World Graphs" (Malkov & Yashunin, 2018)
+//!
+//! Embeddings are stored in a flat, 32-byte aligned array for cache locality
+//! and direct SIMD access without per-node std::vector overhead.
 
 #include "search/hnsw_index.hpp"
 
@@ -13,6 +16,7 @@ TML_MODULE("tools")
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <queue>
 #include <unordered_set>
@@ -108,11 +112,110 @@ auto TfIdfVectorizer::vectorize(const std::string& text) const -> std::vector<fl
 }
 
 // ============================================================================
-// HnswIndex
+// HnswIndex — Aligned memory management
 // ============================================================================
 
-HnswIndex::HnswIndex(size_t dims) : dims_(dims) {
+auto HnswIndex::compute_stride(size_t dims) -> size_t {
+    // Round up to multiple of 8 for AVX2 alignment (8 floats = 32 bytes)
+    return (dims + 7) & ~size_t(7);
+}
+
+auto HnswIndex::alloc_aligned(size_t n) -> float* {
+    if (n == 0)
+        return nullptr;
+    size_t bytes = n * sizeof(float);
+#ifdef _MSC_VER
+    auto* ptr = static_cast<float*>(_aligned_malloc(bytes, 32));
+#else
+    void* raw = nullptr;
+    if (posix_memalign(&raw, 32, bytes) != 0)
+        return nullptr;
+    auto* ptr = static_cast<float*>(raw);
+#endif
+    return ptr;
+}
+
+void HnswIndex::free_aligned(float* ptr) {
+    if (!ptr)
+        return;
+#ifdef _MSC_VER
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
+}
+
+void HnswIndex::ensure_embedding_capacity(size_t count) {
+    if (count <= embedding_capacity_)
+        return;
+
+    // Grow by at least 2x or to count, whichever is larger
+    size_t new_cap = std::max(count, embedding_capacity_ * 2);
+    if (new_cap < 64)
+        new_cap = 64;
+
+    float* new_data = alloc_aligned(new_cap * stride_);
+    if (!new_data)
+        return; // allocation failure
+
+    // Zero the entire buffer (padding beyond dims_ must be zero for SIMD)
+    std::memset(new_data, 0, new_cap * stride_ * sizeof(float));
+
+    if (embedding_data_) {
+        // Copy existing embeddings
+        size_t existing_count = nodes_.size();
+        std::memcpy(new_data, embedding_data_, existing_count * stride_ * sizeof(float));
+        free_aligned(embedding_data_);
+    }
+
+    embedding_data_ = new_data;
+    embedding_capacity_ = new_cap;
+}
+
+// ============================================================================
+// HnswIndex — Core
+// ============================================================================
+
+HnswIndex::HnswIndex(size_t dims) : dims_(dims), stride_(compute_stride(dims)) {
     mL_ = 1.0f / std::log(static_cast<float>(M_));
+}
+
+HnswIndex::~HnswIndex() {
+    free_aligned(embedding_data_);
+}
+
+HnswIndex::HnswIndex(HnswIndex&& other) noexcept
+    : dims_(other.dims_), stride_(other.stride_), M_(other.M_), M_max0_(other.M_max0_),
+      ef_construction_(other.ef_construction_), ef_search_(other.ef_search_), mL_(other.mL_),
+      nodes_(std::move(other.nodes_)), embedding_data_(other.embedding_data_),
+      embedding_capacity_(other.embedding_capacity_), entry_point_(other.entry_point_),
+      max_layer_(other.max_layer_), rng_(std::move(other.rng_)) {
+    other.embedding_data_ = nullptr;
+    other.embedding_capacity_ = 0;
+}
+
+auto HnswIndex::operator=(HnswIndex&& other) noexcept -> HnswIndex& {
+    if (this != &other) {
+        free_aligned(embedding_data_);
+
+        dims_ = other.dims_;
+        stride_ = other.stride_;
+        M_ = other.M_;
+        M_max0_ = other.M_max0_;
+        ef_construction_ = other.ef_construction_;
+        ef_search_ = other.ef_search_;
+        mL_ = other.mL_;
+        nodes_ = std::move(other.nodes_);
+        embedding_data_ = other.embedding_data_;
+        embedding_capacity_ = other.embedding_capacity_;
+        entry_point_ = other.entry_point_;
+        max_layer_ = other.max_layer_;
+        rng_ = std::move(other.rng_);
+
+        other.embedding_data_ = nullptr;
+        other.embedding_capacity_ = 0;
+    }
+    return *this;
 }
 
 void HnswIndex::set_params(int M, int ef_construction, int ef_search) {
@@ -129,16 +232,16 @@ auto HnswIndex::random_layer() -> int32_t {
     return static_cast<int32_t>(std::floor(-std::log(r) * mL_));
 }
 
-auto HnswIndex::distance(const std::vector<float>& a, const std::vector<float>& b) const -> float {
+auto HnswIndex::distance(const float* a, const float* b) const -> float {
     // Cosine distance = 1 - cosine_similarity
     // Since vectors are L2-normalized, dot product = cosine similarity
-    float sim = dot_product_f32(a.data(), b.data(), dims_);
+    float sim = dot_product_f32(a, b, dims_);
     return 1.0f - sim;
 }
 
-auto HnswIndex::search_layer_greedy(const std::vector<float>& query, uint32_t entry,
-                                    int layer) const -> uint32_t {
-    float best_dist = distance(query, nodes_[entry].embedding);
+auto HnswIndex::search_layer_greedy(const float* query, uint32_t entry, int layer) const
+    -> uint32_t {
+    float best_dist = distance(query, embedding_ptr(entry));
     uint32_t best_node = entry;
     bool changed = true;
 
@@ -146,7 +249,7 @@ auto HnswIndex::search_layer_greedy(const std::vector<float>& query, uint32_t en
         changed = false;
         const auto& neighbors = nodes_[best_node].neighbors[layer];
         for (uint32_t neighbor : neighbors) {
-            float d = distance(query, nodes_[neighbor].embedding);
+            float d = distance(query, embedding_ptr(neighbor));
             if (d < best_dist) {
                 best_dist = d;
                 best_node = neighbor;
@@ -158,9 +261,9 @@ auto HnswIndex::search_layer_greedy(const std::vector<float>& query, uint32_t en
     return best_node;
 }
 
-auto HnswIndex::search_layer(const std::vector<float>& query, uint32_t entry, int ef,
-                             int layer) const -> std::vector<DistNodePair> {
-    float entry_dist = distance(query, nodes_[entry].embedding);
+auto HnswIndex::search_layer(const float* query, uint32_t entry, int ef, int layer) const
+    -> std::vector<DistNodePair> {
+    float entry_dist = distance(query, embedding_ptr(entry));
 
     // candidates: min-heap (closest first for expansion)
     // result: max-heap (farthest first for pruning)
@@ -189,7 +292,7 @@ auto HnswIndex::search_layer(const std::vector<float>& query, uint32_t entry, in
                 continue;
             visited.insert(neighbor);
 
-            float d = distance(query, nodes_[neighbor].embedding);
+            float d = distance(query, embedding_ptr(neighbor));
             farthest = result.top().first;
 
             if (d < farthest || static_cast<int>(result.size()) < ef) {
@@ -231,10 +334,17 @@ void HnswIndex::insert(uint32_t doc_id, const std::vector<float>& embedding) {
     uint32_t node_idx = static_cast<uint32_t>(nodes_.size());
     int32_t node_layer = random_layer();
 
+    // Ensure flat embedding storage has room
+    ensure_embedding_capacity(node_idx + 1);
+
+    // Copy embedding to flat storage (stride-aligned, zero-padded)
+    float* dest = embedding_ptr_mut(node_idx);
+    size_t copy_count = std::min(embedding.size(), dims_);
+    std::memcpy(dest, embedding.data(), copy_count * sizeof(float));
+
     HnswNode node;
     node.doc_id = doc_id;
     node.max_layer = node_layer;
-    node.embedding = embedding;
     node.neighbors.resize(node_layer + 1);
     nodes_.push_back(std::move(node));
 
@@ -245,16 +355,17 @@ void HnswIndex::insert(uint32_t doc_id, const std::vector<float>& embedding) {
         return;
     }
 
+    const float* node_emb = embedding_ptr(node_idx);
     uint32_t ep = entry_point_;
 
     // Phase 1: Greedily descend from top layer to node_layer + 1
     for (int32_t layer = max_layer_; layer > node_layer; --layer) {
-        ep = search_layer_greedy(nodes_[node_idx].embedding, ep, layer);
+        ep = search_layer_greedy(node_emb, ep, layer);
     }
 
     // Phase 2: Insert at layers [node_layer, 0]
     for (int32_t layer = std::min(node_layer, max_layer_); layer >= 0; --layer) {
-        auto candidates = search_layer(nodes_[node_idx].embedding, ep, ef_construction_, layer);
+        auto candidates = search_layer(node_emb, ep, ef_construction_, layer);
 
         int max_conn = (layer == 0) ? M_max0_ : M_;
         auto selected = select_neighbors(candidates, max_conn);
@@ -272,8 +383,9 @@ void HnswIndex::insert(uint32_t doc_id, const std::vector<float>& embedding) {
                 // Re-evaluate connections for this neighbor
                 std::vector<DistNodePair> conn_dists;
                 conn_dists.reserve(neighbor_connections.size());
+                const float* neighbor_emb = embedding_ptr(neighbor_idx);
                 for (uint32_t c : neighbor_connections) {
-                    float d = distance(nodes_[neighbor_idx].embedding, nodes_[c].embedding);
+                    float d = distance(neighbor_emb, embedding_ptr(c));
                     conn_dists.push_back({d, c});
                 }
                 neighbor_connections = select_neighbors(conn_dists, max_conn);
@@ -302,12 +414,12 @@ auto HnswIndex::search(const std::vector<float>& query, size_t k) const -> std::
 
     // Phase 1: Greedy descent from top to layer 1
     for (int32_t layer = max_layer_; layer > 0; --layer) {
-        ep = search_layer_greedy(query, ep, layer);
+        ep = search_layer_greedy(query.data(), ep, layer);
     }
 
     // Phase 2: Beam search at layer 0
     int ef = std::max(ef_search_, static_cast<int>(k));
-    auto candidates = search_layer(query, ep, ef, 0);
+    auto candidates = search_layer(query.data(), ep, ef, 0);
 
     // Sort by distance ascending and take top-k
     std::sort(candidates.begin(), candidates.end());
@@ -471,7 +583,7 @@ auto TfIdfVectorizer::deserialize(const uint8_t* data, size_t len) -> bool {
 }
 
 // ============================================================================
-// HnswIndex Serialization
+// HnswIndex Serialization (version 2 — flat embedding storage)
 // ============================================================================
 
 auto HnswIndex::serialize() const -> std::vector<uint8_t> {
@@ -480,7 +592,7 @@ auto HnswIndex::serialize() const -> std::vector<uint8_t> {
     buf.reserve(nodes_.size() * (dims_ * 4 + 256) + 1024);
 
     write_val(buf, static_cast<uint32_t>(0x484E5357)); // "HNSW"
-    write_val(buf, static_cast<uint32_t>(1));          // version
+    write_val(buf, static_cast<uint32_t>(2));          // version 2 (flat embedding)
 
     // Parameters
     write_val(buf, static_cast<uint32_t>(dims_));
@@ -492,8 +604,9 @@ auto HnswIndex::serialize() const -> std::vector<uint8_t> {
     write_val(buf, entry_point_);
     write_val(buf, max_layer_);
 
-    // Nodes
-    write_val(buf, static_cast<uint32_t>(nodes_.size()));
+    // Nodes (metadata + neighbors only)
+    uint32_t node_count = static_cast<uint32_t>(nodes_.size());
+    write_val(buf, node_count);
     for (const auto& node : nodes_) {
         write_val(buf, node.doc_id);
         write_val(buf, node.max_layer);
@@ -506,12 +619,14 @@ auto HnswIndex::serialize() const -> std::vector<uint8_t> {
                 write_val(buf, n);
             }
         }
+    }
 
-        // Embedding vector
-        write_val(buf, static_cast<uint32_t>(node.embedding.size()));
-        for (float v : node.embedding) {
-            write_val(buf, v);
-        }
+    // Embeddings (flat, dims_ floats per node — no stride padding in serialization)
+    for (uint32_t i = 0; i < node_count; ++i) {
+        const float* emb = embedding_ptr(i);
+        size_t emb_bytes = dims_ * sizeof(float);
+        const auto* p = reinterpret_cast<const uint8_t*>(emb);
+        buf.insert(buf.end(), p, p + emb_bytes);
     }
 
     return buf;
@@ -524,7 +639,11 @@ auto HnswIndex::deserialize(const uint8_t* data, size_t len) -> bool {
     uint32_t magic, version;
     if (!read_val(ptr, remaining, magic) || magic != 0x484E5357)
         return false;
-    if (!read_val(ptr, remaining, version) || version != 1)
+    if (!read_val(ptr, remaining, version))
+        return false;
+
+    // Support both v1 (legacy per-node embedding) and v2 (flat)
+    if (version != 1 && version != 2)
         return false;
 
     // Parameters
@@ -532,6 +651,7 @@ auto HnswIndex::deserialize(const uint8_t* data, size_t len) -> bool {
     if (!read_val(ptr, remaining, dims))
         return false;
     dims_ = dims;
+    stride_ = compute_stride(dims_);
 
     int32_t m, m_max0, ef_c, ef_s;
     if (!read_val(ptr, remaining, m))
@@ -558,46 +678,101 @@ auto HnswIndex::deserialize(const uint8_t* data, size_t len) -> bool {
     uint32_t node_count;
     if (!read_val(ptr, remaining, node_count))
         return false;
+
+    // Free old data
+    free_aligned(embedding_data_);
+    embedding_data_ = nullptr;
+    embedding_capacity_ = 0;
+
     nodes_.clear();
     nodes_.reserve(node_count);
 
-    for (uint32_t i = 0; i < node_count; ++i) {
-        HnswNode node;
-        if (!read_val(ptr, remaining, node.doc_id))
-            return false;
-        if (!read_val(ptr, remaining, node.max_layer))
-            return false;
+    // Allocate flat embedding storage
+    if (node_count > 0) {
+        ensure_embedding_capacity(node_count);
+    }
 
-        // Neighbors per layer
-        uint32_t num_layers;
-        if (!read_val(ptr, remaining, num_layers))
-            return false;
-        node.neighbors.resize(num_layers);
-        for (uint32_t l = 0; l < num_layers; ++l) {
-            uint32_t num_neighbors;
-            if (!read_val(ptr, remaining, num_neighbors))
+    if (version == 1) {
+        // Legacy format: embedding stored per-node inline
+        for (uint32_t i = 0; i < node_count; ++i) {
+            HnswNode node;
+            if (!read_val(ptr, remaining, node.doc_id))
                 return false;
-            node.neighbors[l].resize(num_neighbors);
-            for (uint32_t j = 0; j < num_neighbors; ++j) {
-                if (!read_val(ptr, remaining, node.neighbors[l][j]))
+            if (!read_val(ptr, remaining, node.max_layer))
+                return false;
+
+            // Neighbors per layer
+            uint32_t num_layers;
+            if (!read_val(ptr, remaining, num_layers))
+                return false;
+            node.neighbors.resize(num_layers);
+            for (uint32_t l = 0; l < num_layers; ++l) {
+                uint32_t num_neighbors;
+                if (!read_val(ptr, remaining, num_neighbors))
                     return false;
+                node.neighbors[l].resize(num_neighbors);
+                for (uint32_t j = 0; j < num_neighbors; ++j) {
+                    if (!read_val(ptr, remaining, node.neighbors[l][j]))
+                        return false;
+                }
             }
+
+            // Embedding (inline in v1)
+            uint32_t emb_size;
+            if (!read_val(ptr, remaining, emb_size))
+                return false;
+            size_t emb_bytes = emb_size * sizeof(float);
+            if (remaining < emb_bytes)
+                return false;
+
+            // Copy to flat storage
+            float* dest = embedding_ptr_mut(i);
+            size_t copy_count = std::min(static_cast<size_t>(emb_size), dims_);
+            std::memcpy(dest, ptr, copy_count * sizeof(float));
+            ptr += emb_bytes;
+            remaining -= emb_bytes;
+
+            nodes_.push_back(std::move(node));
+        }
+    } else {
+        // Version 2: nodes first, then flat embedding block
+        for (uint32_t i = 0; i < node_count; ++i) {
+            HnswNode node;
+            if (!read_val(ptr, remaining, node.doc_id))
+                return false;
+            if (!read_val(ptr, remaining, node.max_layer))
+                return false;
+
+            // Neighbors per layer
+            uint32_t num_layers;
+            if (!read_val(ptr, remaining, num_layers))
+                return false;
+            node.neighbors.resize(num_layers);
+            for (uint32_t l = 0; l < num_layers; ++l) {
+                uint32_t num_neighbors;
+                if (!read_val(ptr, remaining, num_neighbors))
+                    return false;
+                node.neighbors[l].resize(num_neighbors);
+                for (uint32_t j = 0; j < num_neighbors; ++j) {
+                    if (!read_val(ptr, remaining, node.neighbors[l][j]))
+                        return false;
+                }
+            }
+
+            nodes_.push_back(std::move(node));
         }
 
-        // Embedding
-        uint32_t emb_size;
-        if (!read_val(ptr, remaining, emb_size))
-            return false;
-        node.embedding.resize(emb_size);
-        // Read embedding as a block for efficiency
-        size_t emb_bytes = emb_size * sizeof(float);
-        if (remaining < emb_bytes)
-            return false;
-        std::memcpy(node.embedding.data(), ptr, emb_bytes);
-        ptr += emb_bytes;
-        remaining -= emb_bytes;
+        // Flat embedding block
+        for (uint32_t i = 0; i < node_count; ++i) {
+            size_t emb_bytes = dims_ * sizeof(float);
+            if (remaining < emb_bytes)
+                return false;
 
-        nodes_.push_back(std::move(node));
+            float* dest = embedding_ptr_mut(i);
+            std::memcpy(dest, ptr, emb_bytes);
+            ptr += emb_bytes;
+            remaining -= emb_bytes;
+        }
     }
 
     return true;

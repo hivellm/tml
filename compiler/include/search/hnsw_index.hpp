@@ -21,12 +21,11 @@
 //! | efSearch | 50 | Beam width during query |
 //! | mL | 1/ln(M) | Level generation factor |
 //!
-//! ## Embedding Strategy
+//! ## Embedding Storage
 //!
-//! Documents are embedded as TF-IDF weighted bag-of-words vectors.
-//! The vocabulary is built at index time from the corpus. Each dimension
-//! corresponds to a term, weighted by its IDF. Vectors are L2-normalized
-//! so that dot product equals cosine similarity.
+//! Embeddings are stored in a flat, 32-byte aligned array for cache locality
+//! and SIMD access. Each embedding is at `embedding_data_ + node_idx * stride_`
+//! where stride is dims rounded up to a multiple of 8 for AVX2 alignment.
 //!
 //! ## Usage
 //!
@@ -57,7 +56,7 @@ struct HnswResult {
     float distance;
 };
 
-/// Node in the HNSW graph.
+/// Node in the HNSW graph (embedding stored separately in flat array).
 struct HnswNode {
     /// Document ID this node represents.
     uint32_t doc_id;
@@ -65,8 +64,6 @@ struct HnswNode {
     int32_t max_layer;
     /// Connections at each layer. neighbors[layer] = vector of node indices.
     std::vector<std::vector<uint32_t>> neighbors;
-    /// The embedding vector for this node.
-    std::vector<float> embedding;
 };
 
 /// TF-IDF Vectorizer for converting text to embeddings.
@@ -135,6 +132,7 @@ private:
 /// HNSW (Hierarchical Navigable Small World) approximate nearest neighbor index.
 ///
 /// Provides sub-linear search time for high-dimensional vector similarity.
+/// Embeddings stored in flat 32-byte-aligned array for SIMD efficiency.
 /// Thread-safe for concurrent search (not concurrent insert).
 class HnswIndex {
 public:
@@ -142,6 +140,16 @@ public:
     ///
     /// @param dims Number of dimensions per vector
     explicit HnswIndex(size_t dims);
+
+    ~HnswIndex();
+
+    // Non-copyable (owns aligned memory)
+    HnswIndex(const HnswIndex&) = delete;
+    auto operator=(const HnswIndex&) -> HnswIndex& = delete;
+
+    // Movable
+    HnswIndex(HnswIndex&& other) noexcept;
+    auto operator=(HnswIndex&& other) noexcept -> HnswIndex&;
 
     /// Sets HNSW construction and search parameters.
     ///
@@ -188,14 +196,21 @@ public:
 
 private:
     size_t dims_;
+    /// Stride between embeddings: dims_ rounded up to multiple of 8 for AVX2.
+    size_t stride_;
     int M_ = 16;
     int M_max0_ = 32; // Max connections at layer 0 (2*M)
     int ef_construction_ = 200;
     int ef_search_ = 50;
     float mL_ = 0.0f; // 1/ln(M)
 
-    /// All nodes in the graph.
+    /// All nodes in the graph (without embeddings).
     std::vector<HnswNode> nodes_;
+
+    /// Flat embedding storage: 32-byte aligned, layout: [node0_emb | node1_emb | ...]
+    /// Each embedding occupies stride_ floats (padded with zeros beyond dims_).
+    float* embedding_data_ = nullptr;
+    size_t embedding_capacity_ = 0; // in number of embeddings
 
     /// Entry point node index.
     uint32_t entry_point_ = 0;
@@ -206,21 +221,42 @@ private:
     /// Random number generator for layer assignment.
     mutable std::mt19937 rng_{42};
 
+    /// Returns a pointer to the embedding for a given node index.
+    auto embedding_ptr(size_t node_idx) const -> const float* {
+        return embedding_data_ + node_idx * stride_;
+    }
+
+    /// Returns a mutable pointer to the embedding for a given node index.
+    auto embedding_ptr_mut(size_t node_idx) -> float* {
+        return embedding_data_ + node_idx * stride_;
+    }
+
+    /// Ensures the embedding array has room for at least `count` embeddings.
+    void ensure_embedding_capacity(size_t count);
+
+    /// Allocates 32-byte aligned memory for `n` floats.
+    static auto alloc_aligned(size_t n) -> float*;
+
+    /// Frees 32-byte aligned memory.
+    static void free_aligned(float* ptr);
+
+    /// Computes stride from dims (round up to multiple of 8).
+    static auto compute_stride(size_t dims) -> size_t;
+
     /// Generates a random layer for a new node.
     auto random_layer() -> int32_t;
 
-    /// Computes distance between two nodes (1 - cosine_similarity for cosine metric).
-    auto distance(const std::vector<float>& a, const std::vector<float>& b) const -> float;
+    /// Computes distance between two embeddings (1 - dot_product for cosine metric).
+    auto distance(const float* a, const float* b) const -> float;
 
     /// Greedy search at a single layer to find the closest node.
-    auto search_layer_greedy(const std::vector<float>& query, uint32_t entry, int layer) const
-        -> uint32_t;
+    auto search_layer_greedy(const float* query, uint32_t entry, int layer) const -> uint32_t;
 
     /// Beam search at a single layer.
     /// Returns a max-heap of (distance, node_index) pairs.
     using DistNodePair = std::pair<float, uint32_t>;
 
-    auto search_layer(const std::vector<float>& query, uint32_t entry, int ef, int layer) const
+    auto search_layer(const float* query, uint32_t entry, int ef, int layer) const
         -> std::vector<DistNodePair>;
 
     /// Selects M best neighbors from candidates using the simple heuristic.
