@@ -1,0 +1,75 @@
+use test
+use core::simd::neon::{
+    neon_addv_i32, neon_maxv_i32, neon_minv_i32,
+    neon_addv_i8, neon_maxv_i8, neon_minv_i8,
+    neon_min_i32, neon_max_i32,
+    neon_abs_i32,
+    neon_min_f32, neon_max_f32
+}
+use core::simd::i32x4::I32x4
+use core::simd::i8x16::I8x16
+use core::simd::f32x4::F32x4
+
+@test
+func test_neon_addv_i32() -> I32 {
+    let a = I32x4::new(1, 2, 3, 4)
+    assert_eq(neon_addv_i32(a), 10)
+    0
+}
+
+@test
+func test_neon_maxv_i32() -> I32 {
+    let a = I32x4::new(3, 7, 1, 5)
+    assert_eq(neon_maxv_i32(a), 7)
+    0
+}
+
+@test
+func test_neon_minv_i32() -> I32 {
+    let a = I32x4::new(3, 7, 1, 5)
+    assert_eq(neon_minv_i32(a), 1)
+    0
+}
+
+@test
+func test_neon_addv_i8() -> I32 {
+    let a = I8x16::splat(1)
+    let s = neon_addv_i8(a)
+    assert_eq(s as I32, 16)
+    0
+}
+
+@test
+func test_neon_min_max_i32() -> I32 {
+    let a = I32x4::new(5, 2, 8, 1)
+    let b = I32x4::new(3, 7, 4, 9)
+    let mn = neon_min_i32(a, b)
+    let mx = neon_max_i32(a, b)
+    assert_eq(mn.get(0), 3)
+    assert_eq(mn.get(1), 2)
+    assert_eq(mx.get(0), 5)
+    assert_eq(mx.get(1), 7)
+    0
+}
+
+@test
+func test_neon_abs_i32() -> I32 {
+    let a = I32x4::new(-5, 3, -1, 0)
+    let r = neon_abs_i32(a)
+    assert_eq(r.get(0), 5)
+    assert_eq(r.get(1), 3)
+    assert_eq(r.get(2), 1)
+    assert_eq(r.get(3), 0)
+    0
+}
+
+@test
+func test_neon_min_max_f32() -> I32 {
+    let a = F32x4::new(1.0, 5.0, 3.0, 7.0)
+    let b = F32x4::new(4.0, 2.0, 6.0, 0.0)
+    let mn = neon_min_f32(a, b)
+    let mx = neon_max_f32(a, b)
+    assert_true(mn.get(0) < 1.1 and mn.get(0) > 0.9)
+    assert_true(mx.get(0) < 4.1 and mx.get(0) > 3.9)
+    0
+}

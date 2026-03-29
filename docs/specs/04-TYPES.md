@@ -1101,6 +1101,47 @@ func print_all[T: Debug](items: List[T]) {
 }
 ```
 
+## SIMD Vector Types
+
+TML provides fixed-width SIMD vector types via `core::simd`. Types annotated with `@simd` compile to native LLVM vector types.
+
+### 128-bit Types (SSE2, always available on x86-64)
+
+| Type | Lanes | Element | LLVM Type |
+|------|-------|---------|-----------|
+| `I32x4` | 4 | I32 | `<4 x i32>` |
+| `F32x4` | 4 | F32 | `<4 x float>` |
+| `I64x2` | 2 | I64 | `<2 x i64>` |
+| `F64x2` | 2 | F64 | `<2 x double>` |
+| `I8x16` | 16 | I8 | `<16 x i8>` |
+| `U8x16` | 16 | U8 | `<16 x i8>` |
+
+### 256-bit Types (AVX2, requires runtime check)
+
+| Type | Lanes | Element | LLVM Type |
+|------|-------|---------|-----------|
+| `I8x32` | 32 | I8 | `<32 x i8>` |
+| `U8x32` | 32 | U8 | `<32 x i8>` |
+| `I16x16` | 16 | I16 | `<16 x i16>` |
+| `I32x8` | 8 | I32 | `<8 x i32>` |
+| `I64x4` | 4 | I64 | `<4 x i64>` |
+| `F32x8` | 8 | F32 | `<8 x float>` |
+| `F64x4` | 4 | F64 | `<4 x double>` |
+
+### Mask Types
+
+| Type | Lanes | Description |
+|------|-------|-------------|
+| `Mask2` | 2 | For I64x2/F64x2 comparisons |
+| `Mask4` | 4 | For I32x4/F32x4 comparisons |
+| `Mask8` | 8 | For I32x8/F32x8 comparisons (AVX2) |
+| `Mask16` | 16 | For I8x16/U8x16 comparisons |
+| `Mask32` | 32 | For I8x32/U8x32 comparisons (AVX2) |
+
+### Common Methods
+
+All SIMD types provide: `new()`, `splat()`, `zero()`, `get()`, `set()`, `add()`, `sub()`, `band()`, `bor()`, `bxor()`. Integer types also provide `mul()`. Float types provide `mul()`, `div()`, `min()`, `max()`. Most types provide `sum()`, `hmin()`, `hmax()` for horizontal reductions.
+
 ---
 
 *Previous: [03-GRAMMAR.md](./03-GRAMMAR.md)*

@@ -1,0 +1,49 @@
+use test
+use core::simd::algorithms::{
+    memchr_simd, dot_product_simd
+}
+
+@test
+func test_memchr_first_byte() -> I32 {
+    let data: Slice[U8] = "hello world".as_bytes()
+    let found = memchr_simd(data, 104 as U8)  // 'h' = 104
+    when found {
+        Just(idx) -> { assert_eq(idx, 0) }
+        Nothing -> { assert_true(false) }
+    }
+    0
+}
+
+@test
+func test_memchr_middle() -> I32 {
+    let data: Slice[U8] = "hello world".as_bytes()
+    let found = memchr_simd(data, 111 as U8)  // 'o' = 111
+    when found {
+        Just(idx) -> { assert_eq(idx, 4) }
+        Nothing -> { assert_true(false) }
+    }
+    0
+}
+
+@test
+func test_memchr_not_found() -> I32 {
+    let data: Slice[U8] = "hello world".as_bytes()
+    let found = memchr_simd(data, 122 as U8)  // 'z' = 122
+    when found {
+        Just(idx) -> { assert_true(false) }
+        Nothing -> { }
+    }
+    0
+}
+
+@test
+func test_dot_product_basic() -> I32 {
+    // [1,2,3,4] . [5,6,7,8] = 5+12+21+32 = 70
+    var a_data: Array[F32, 4] = [1.0, 2.0, 3.0, 4.0]
+    var b_data: Array[F32, 4] = [5.0, 6.0, 7.0, 8.0]
+    let a_slice = a_data.as_slice()
+    let b_slice = b_data.as_slice()
+    let result = dot_product_simd(a_slice, b_slice)
+    assert_true(result > 69.9 and result < 70.1)
+    0
+}

@@ -277,6 +277,47 @@ To compare two benchmark runs (e.g., before and after an optimization), save the
 4. Add benchmarks in `compiler/tests/bench/bench_simd.cpp`
 5. Verify scalar fallback compiles without AVX2 (`#if TML_AVX2` guards)
 
+## Phase 4.6-4.9: Advanced AVX2 + FMA Intrinsics
+
+### Horizontal & Pack
+| Intrinsic | LLVM | Description |
+|-----------|------|-------------|
+| `avx2_hadd_epi16/32` | `@llvm.x86.avx2.phadd.w/d` | Horizontal add adjacent pairs |
+| `avx2_packs_epi16/32` | `@llvm.x86.avx2.packsswb/packssdw` | Pack with signed saturation |
+| `avx2_packus_epi16/32` | `@llvm.x86.avx2.packuswb/packusdw` | Pack with unsigned saturation |
+
+### Gather (via `llvm.masked.gather`)
+| Intrinsic | LLVM | Description |
+|-----------|------|-------------|
+| `avx2_gather_epi32` | `@llvm.masked.gather.v8i32` | Gather 8 x I32 by index |
+| `avx2_gather_epi64` | `@llvm.masked.gather.v4i64` | Gather 4 x I64 by index |
+| `avx2_gather_ps` | `@llvm.masked.gather.v8f32` | Gather 8 x F32 by index |
+
+### Variable Shift
+| Intrinsic | LLVM | Description |
+|-----------|------|-------------|
+| `avx2_sllv_epi32/64` | `shl <N x iM>` | Per-lane variable shift left |
+| `avx2_srlv_epi32/64` | `lshr <N x iM>` | Per-lane variable shift right |
+
+### FMA (Fused Multiply-Add)
+| Intrinsic | LLVM | Description |
+|-----------|------|-------------|
+| `fma_fmadd_ps/pd` | `@llvm.fma.v8f32/v4f64` | a*b + c |
+| `fma_fmsub_ps/pd` | `fneg + @llvm.fma` | a*b - c |
+| `fma_fnmadd_ps/pd` | `fneg + @llvm.fma` | -a*b + c |
+| `fma_fmadd_ss/sd` | `@llvm.fma.f32/f64` | Scalar FMA |
+
+## Library Algorithms (`core::simd::algorithms`)
+
+| Function | Description |
+|----------|-------------|
+| `memchr_simd(haystack, byte)` | SSE2 byte search (PCMPEQB + PMOVMSKB) |
+| `str_find_simd(haystack, needle)` | SIMD substring search |
+| `case_upper_simd(data)` | ASCII lowercase to uppercase |
+| `case_lower_simd(data)` | ASCII uppercase to lowercase |
+| `crc32c_simd(data)` | Hardware CRC32C (delegates to sse42::crc32c) |
+| `dot_product_simd(a, b)` | F32 dot product with F32x4 accumulation |
+
 ## Architecture Notes
 
 - All SIMD code is C++ compiled with appropriate ISA flags (`-mavx2 -mfma` or `/arch:AVX2`)
@@ -284,3 +325,5 @@ To compare two benchmark runs (e.g., before and after an optimization), save the
 - `extern "C"` linkage for functions called from TML via FFI
 - The sort improvements (introsort) are in pure TML, not SIMD — they use algorithmic optimization rather than data parallelism
 - HNSW search uses flat embedding storage with 32-byte aligned arrays for optimal AVX2 loads
+- Function attributes include `"target-features"="+sse2,+sse4.2,+avx,+avx2,+fma"` for LLVM ISA intrinsic selection
+- LLVM 23 removed old `@llvm.x86.avx2.gather.*` intrinsics — gather uses `@llvm.masked.gather` instead

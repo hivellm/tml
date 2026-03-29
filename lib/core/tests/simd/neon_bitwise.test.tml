@@ -1,0 +1,94 @@
+use test
+use core::simd::neon::{
+    neon_and_v128, neon_or_v128, neon_xor_v128,
+    neon_bsl_v128, neon_not_v128,
+    neon_and_i8, neon_or_i8, neon_xor_i8
+}
+use core::simd::i32x4::I32x4
+use core::simd::i8x16::I8x16
+
+@test
+func test_neon_and_v128() -> Outcome[Unit, Str] {
+    let a = I32x4::new(0xFF, 0xF0, 0x0F, 0x00)
+    let b = I32x4::new(0x0F, 0x0F, 0x0F, 0x0F)
+    let r = neon_and_v128(a, b)
+    assert_eq(r.get(0), 0x0F)
+    assert_eq(r.get(1), 0x00)
+    assert_eq(r.get(2), 0x0F)
+    assert_eq(r.get(3), 0x00)
+    Ok(())
+}
+
+@test
+func test_neon_or_v128() -> Outcome[Unit, Str] {
+    let a = I32x4::new(0xF0, 0x00, 0xFF, 0x0F)
+    let b = I32x4::new(0x0F, 0x0F, 0x00, 0xF0)
+    let r = neon_or_v128(a, b)
+    assert_eq(r.get(0), 0xFF)
+    assert_eq(r.get(1), 0x0F)
+    assert_eq(r.get(2), 0xFF)
+    assert_eq(r.get(3), 0xFF)
+    Ok(())
+}
+
+@test
+func test_neon_xor_self_zero() -> Outcome[Unit, Str] {
+    let a = I32x4::new(42, 99, 7, 256)
+    let r = neon_xor_v128(a, a)
+    assert_eq(r.get(0), 0)
+    assert_eq(r.get(1), 0)
+    assert_eq(r.get(2), 0)
+    assert_eq(r.get(3), 0)
+    Ok(())
+}
+
+@test
+func test_neon_not_v128() -> Outcome[Unit, Str] {
+    let a = I32x4::new(0, -1, 1, 0x0F)
+    let r = neon_not_v128(a)
+    assert_eq(r.get(0), -1)
+    assert_eq(r.get(1), 0)
+    Ok(())
+}
+
+@test
+func test_neon_bsl_select() -> Outcome[Unit, Str] {
+    let mask = I32x4::new(-1, 0, -1, 0)
+    let a = I32x4::new(10, 20, 30, 40)
+    let b = I32x4::new(50, 60, 70, 80)
+    let r = neon_bsl_v128(mask, a, b)
+    assert_eq(r.get(0), 10)
+    assert_eq(r.get(1), 60)
+    assert_eq(r.get(2), 30)
+    assert_eq(r.get(3), 80)
+    Ok(())
+}
+
+@test
+func test_neon_and_i8() -> Outcome[Unit, Str] {
+    let a = I8x16::splat(0x0F as I8)
+    let b = I8x16::splat(0x33 as I8)
+    let r = neon_and_i8(a, b)
+    assert_eq(r.e0, 0x03 as I8)
+    assert_eq(r.e15, 0x03 as I8)
+    Ok(())
+}
+
+@test
+func test_neon_or_i8() -> Outcome[Unit, Str] {
+    let a = I8x16::splat(0x0F as I8)
+    let b = I8x16::splat(0x30 as I8)
+    let r = neon_or_i8(a, b)
+    assert_eq(r.e0, 0x3F as I8)
+    Ok(())
+}
+
+@test
+func test_neon_xor_i8() -> Outcome[Unit, Str] {
+    let a = I8x16::splat(0x55 as I8)
+    let b = I8x16::splat(0x55 as I8)
+    let r = neon_xor_i8(a, b)
+    assert_eq(r.e0, 0 as I8)
+    assert_eq(r.e15, 0 as I8)
+    Ok(())
+}

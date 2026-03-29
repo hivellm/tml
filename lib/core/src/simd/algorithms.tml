@@ -1,0 +1,170 @@
+//! SIMD-accelerated library algorithms.
+//!
+//! High-level functions that use SSE2/SSE4.2/AVX2 intrinsics for performance.
+//! All functions have scalar fallbacks and work on any x86-64 system.
+
+use core::simd::i8x16::I8x16
+use core::simd::i32x4::I32x4
+use core::simd::f32x4::F32x4
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract,
+    sse2_cmpeq_epi8, sse2_movemask_epi8,
+    llvm_add, llvm_sub
+}
+
+#if X86_64
+
+/// Find the first occurrence of a byte in a slice using SIMD (PCMPEQB + PMOVMSKB).
+///
+/// Returns the index of the first matching byte, or Nothing if not found.
+/// Processes 16 bytes at a time using SSE2 instructions.
+pub func memchr_simd(haystack: Slice[U8], byte: U8) -> Maybe[I64] {
+    let len = haystack.len()
+    var pos: I64 = 0
+    let needle = I8x16::splat(byte as I8)
+
+    // Process 16 bytes at a time
+    loop (pos + 16 <= len) {
+        var chunk = I8x16::zero()
+        var ci: I64 = 0
+        loop (ci < 16) {
+            chunk = chunk.set(ci as I32, haystack.get(pos + ci) as I8)
+            ci = ci + 1
+        }
+        let cmp = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        let mask = lowlevel { sse2_movemask_epi8(cmp) }
+        if mask != 0 {
+            // Find first set bit (trailing zeros count)
+            var bit = 0
+            var m = mask
+            loop (m & 1 == 0 and bit < 16) {
+                m = m >> 1
+                bit = bit + 1
+            }
+            return Just(pos + bit as I64)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail
+    loop (pos < len) {
+        if haystack.get(pos) == byte {
+            return Just(pos)
+        }
+        pos = pos + 1
+    }
+
+    return Nothing
+}
+
+/// Find substring using SIMD. Uses SSE2 first-byte scan + scalar verification.
+pub func str_find_simd(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64] {
+    let hlen = haystack.len()
+    let nlen = needle.len()
+
+    if nlen == 0 { return Just(0) }
+    if nlen > hlen { return Nothing }
+
+    let first_byte = needle.get(0)
+
+    // Scan for first byte, then verify full match at each candidate position
+    var pos: I64 = 0
+    loop (pos <= hlen - nlen) {
+        var found_at: I64 = -1
+        var scan: I64 = pos
+        loop (scan <= hlen - nlen and found_at < 0) {
+            if haystack.get(scan) == first_byte {
+                found_at = scan
+            }
+            scan = scan + 1
+        }
+        if found_at < 0 { return Nothing }
+
+        var match_ok = true
+        var ci: I64 = 1
+        loop (ci < nlen and match_ok) {
+            if haystack.get(found_at + ci) != needle.get(ci) {
+                match_ok = false
+            }
+            ci = ci + 1
+        }
+        if match_ok { return Just(found_at) }
+        pos = found_at + 1
+    }
+
+    return Nothing
+}
+
+/// Convert ASCII lowercase to uppercase in-place.
+///
+/// Only affects bytes in the range 'a'-'z' (0x61-0x7A).
+pub func case_upper_simd(data: Slice[U8]) -> Unit {
+    let len = data.len()
+    var i: I64 = 0
+
+    loop (i < len) {
+        let b = data.get(i)
+        if b >= 97 as U8 and b <= 122 as U8 {
+            lowlevel {
+                let p = ptr_offset(data.as_ptr(), i)
+                ptr_write[U8](p, b - 32 as U8)
+            }
+        }
+        i = i + 1
+    }
+}
+
+/// Convert ASCII uppercase to lowercase in-place.
+///
+/// Only affects bytes in the range 'A'-'Z' (0x41-0x5A).
+pub func case_lower_simd(data: Slice[U8]) -> Unit {
+    let len = data.len()
+    var i: I64 = 0
+
+    loop (i < len) {
+        let b = data.get(i)
+        if b >= 65 as U8 and b <= 90 as U8 {
+            lowlevel {
+                let p = ptr_offset(data.as_ptr(), i)
+                ptr_write[U8](p, b + 32 as U8)
+            }
+        }
+        i = i + 1
+    }
+}
+
+/// Hardware CRC32C using SSE4.2. Re-export from sse42 module.
+pub func crc32c_simd(data: Slice[U8]) -> U32 {
+    use core::simd::sse42::crc32c
+    return crc32c(data)
+}
+
+/// Dot product of two F32 slices using SIMD accumulation.
+///
+/// Processes 4 floats at a time using F32x4 multiplication + horizontal sum.
+pub func dot_product_simd(a: Slice[F32], b: Slice[F32]) -> F32 {
+    let len = if a.len() < b.len() { a.len() } else { b.len() }
+    var acc = F32x4::zero()
+    var i: I64 = 0
+
+    // Process 4 floats at a time
+    loop (i + 4 <= len) {
+        let va = F32x4::new(a.get(i), a.get(i + 1), a.get(i + 2), a.get(i + 3))
+        let vb = F32x4::new(b.get(i), b.get(i + 1), b.get(i + 2), b.get(i + 3))
+        acc = acc.add(va.mul(vb))
+        i = i + 4
+    }
+
+    // Horizontal sum of accumulator
+    var total: F32 = acc.get(0) + acc.get(1) + acc.get(2) + acc.get(3)
+
+    // Scalar tail
+    loop (i < len) {
+        total = total + a.get(i) * b.get(i)
+        i = i + 1
+    }
+
+    return total
+}
+
+#endif

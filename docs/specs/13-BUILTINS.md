@@ -1013,6 +1013,65 @@ let s: String = String.from(42)
 let n: I32 = "42".parse().unwrap()
 ```
 
+## 12. SIMD Intrinsics
+
+TML exposes hardware SIMD operations through `core::runtime::intrinsics` (compiler intrinsics) and `core::simd` (portable types and algorithms).
+
+### 12.1 SSE2 Intrinsics (x86-64, always available)
+
+| Intrinsic | Description |
+|-----------|-------------|
+| `sse2_cmpeq_epi8/16/32` | Byte/word/dword equality comparison |
+| `sse2_cmpgt_epi8/16/32` | Signed greater-than comparison |
+| `sse2_and/or/xor_si128` | 128-bit bitwise operations |
+| `sse2_movemask_epi8/ps/pd` | Extract MSB from each lane |
+| `sse2_packs_epi16/32` | Pack with signed saturation |
+| `sse2_slli/srli/srai_epi16/32/64` | Shift by immediate |
+| `sse2_store/storeu_si128` | Aligned/unaligned store |
+
+### 12.2 SSE4.2 Intrinsics
+
+| Intrinsic | Description |
+|-----------|-------------|
+| `sse42_cmpistrm/cmpistri` | Implicit-length string compare (mask/index) |
+| `sse42_cmpestrm/cmpestri` | Explicit-length string compare |
+| `sse42_crc32_u8/u16/u32/u64` | Hardware CRC32C |
+| `popcnt_u32/u64` | Population count |
+
+### 12.3 AVX2 Intrinsics (256-bit, requires runtime check)
+
+| Intrinsic | Description |
+|-----------|-------------|
+| `avx2_cmpeq/cmpgt_epi8/16/32` | 256-bit comparisons |
+| `avx2_and/or/xor_si256` | 256-bit bitwise |
+| `avx2_movemask_epi8` | 32-bit byte MSB mask |
+| `avx2_shuffle_epi8` | In-lane byte shuffle (VPSHUFB) |
+| `avx2_permute4x64_epi64` | Cross-lane 64-bit permute |
+| `avx2_hadd_epi16/32` | Horizontal add |
+| `avx2_packs/packus_epi16/32` | Pack with saturation |
+| `avx2_gather_epi32/epi64/ps` | Indexed memory gather |
+| `avx2_sllv/srlv_epi32/64` | Per-lane variable shift |
+
+### 12.4 FMA Intrinsics (requires runtime check)
+
+| Intrinsic | Description |
+|-----------|-------------|
+| `fma_fmadd_ps/pd` | a*b + c (vector) |
+| `fma_fmsub_ps/pd` | a*b - c (vector) |
+| `fma_fnmadd_ps/pd` | -a*b + c (vector) |
+| `fma_fmadd_ss/sd` | a*b + c (scalar) |
+
+### 12.5 Generic SIMD Intrinsics
+
+| Intrinsic | Description |
+|-----------|-------------|
+| `simd_load[V](ref) -> V` | Load vector from memory |
+| `simd_store[V](mut ref, V)` | Store vector to memory |
+| `simd_extract[V, E](v, idx) -> E` | Extract lane |
+| `simd_insert[V, E](v, val, idx) -> V` | Insert lane |
+| `simd_splat[V, E](val) -> V` | Broadcast scalar |
+| `simd_bitmask[V](v) -> I32` | Extract MSBs |
+
 ---
 
 *Previous: [12-ERRORS.md](./12-ERRORS.md)*

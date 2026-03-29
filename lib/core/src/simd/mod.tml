@@ -67,3 +67,7 @@ pub mod f32x8
 pub mod f64x4
 // ARM NEON stubs (portable wrappers, actual NEON on ARM64)
 pub mod neon
+// Portable SIMD abstraction layer (ISA-agnostic SimdVector behavior)
+pub mod portable
+// SIMD-accelerated library algorithms
+pub mod algorithms
