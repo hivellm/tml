@@ -1,5 +1,6 @@
 //! 4-lane F64 SIMD vector type (256 bits, AVX/AVX2).
 
+use core::simd::i64x4::I64x4
 use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract,
     llvm_add, llvm_sub, llvm_mul, llvm_div
@@ -67,5 +68,45 @@ impl F64x4 {
 
     pub func sum(this) -> F64 {
         return this.e0 + this.e1 + this.e2 + this.e3
+    }
+
+    /// Minimum lane value (horizontal min).
+    pub func hmin(this) -> F64 {
+        var m: F64 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        return m
+    }
+
+    /// Maximum lane value (horizontal max).
+    pub func hmax(this) -> F64 {
+        var m: F64 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        return m
+    }
+
+    // -- Display / Debug --
+
+    /// Display as string: "F64x4(e0, e1, e2, e3)".
+    pub func to_string(this) -> Str {
+        return "F64x4(" + this.e0.to_string() + ", " + this.e1.to_string() + ", "
+             + this.e2.to_string() + ", " + this.e3.to_string() + ")"
+    }
+
+    /// Debug string representation.
+    pub func debug_string(this) -> Str {
+        return this.to_string()
+    }
+
+    // -- Conversions --
+
+    /// Truncate all lanes to I64, returning an I64x4.
+    pub func to_i64x4(this) -> I64x4 {
+        return I64x4::new(
+            this.e0 as I64, this.e1 as I64, this.e2 as I64, this.e3 as I64
+        )
     }
 }

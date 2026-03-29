@@ -1,8 +1,10 @@
 //! 4-lane I64 SIMD vector type (256 bits, AVX2).
 
+use core::simd::f64x4::F64x4
 use core::runtime::intrinsics::{
-    simd_load, simd_store, simd_extract, simd_insert,
-    llvm_add, llvm_sub, llvm_mul
+    simd_load, simd_store, simd_extract, simd_insert, simd_splat,
+    llvm_add, llvm_sub, llvm_mul,
+    llvm_and, llvm_or, llvm_xor, llvm_shl, llvm_shr
 }
 
 /// A 4-lane vector of I64 values (256 bits total).
@@ -54,7 +56,115 @@ impl I64x4 {
         }
     }
 
+    pub func mul(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let c = llvm_mul(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, c)
+            return result
+        }
+    }
+
+    // -- Bitwise --
+
+    pub func band(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let r = llvm_and(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func bor(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let r = llvm_or(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func bxor(this, other: I64x4) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let b = simd_load[I64x4](ref other)
+            let r = llvm_xor(a, b)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func shift_left(this, n: I64) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let s = simd_splat[I64x4, I64](n)
+            let r = llvm_shl(a, s)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func shift_right(this, n: I64) -> I64x4 {
+        lowlevel {
+            let a = simd_load[I64x4](ref this)
+            let s = simd_splat[I64x4, I64](n)
+            let r = llvm_shr(a, s)
+            var result: I64x4 = I64x4::zero()
+            simd_store[I64x4](mut ref result, r)
+            return result
+        }
+    }
+
+    // -- Reductions --
+
     pub func sum(this) -> I64 {
         return this.e0 + this.e1 + this.e2 + this.e3
+    }
+
+    pub func hmin(this) -> I64 {
+        var m: I64 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        return m
+    }
+
+    pub func hmax(this) -> I64 {
+        var m: I64 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        return m
+    }
+
+    // -- Display / Debug --
+
+    /// Display as string: "I64x4(e0, e1, e2, e3)".
+    pub func to_string(this) -> Str {
+        return "I64x4(" + this.e0.to_string() + ", " + this.e1.to_string() + ", "
+             + this.e2.to_string() + ", " + this.e3.to_string() + ")"
+    }
+
+    /// Debug string representation.
+    pub func debug_string(this) -> Str {
+        return this.to_string()
+    }
+
+    // -- Conversions --
+
+    /// Convert all lanes to F64, returning an F64x4.
+    pub func to_f64x4(this) -> F64x4 {
+        return F64x4::new(
+            this.e0 as F64, this.e1 as F64, this.e2 as F64, this.e3 as F64
+        )
     }
 }

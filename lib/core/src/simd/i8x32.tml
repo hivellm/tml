@@ -2,7 +2,7 @@
 
 use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract, simd_insert,
-    llvm_add, llvm_sub
+    llvm_add, llvm_sub, llvm_and, llvm_or, llvm_xor
 }
 
 /// A 32-lane vector of I8 values (256 bits total).
@@ -61,5 +61,146 @@ impl I8x32 {
             simd_store[I8x32](mut ref result, c)
             return result
         }
+    }
+
+    // -- Bitwise --
+
+    /// Lane-wise bitwise AND.
+    pub func band(this, other: I8x32) -> I8x32 {
+        lowlevel {
+            let a = simd_load[I8x32](ref this)
+            let b = simd_load[I8x32](ref other)
+            let r = llvm_and(a, b)
+            var result: I8x32 = I8x32::zero()
+            simd_store[I8x32](mut ref result, r)
+            return result
+        }
+    }
+
+    /// Lane-wise bitwise OR.
+    pub func bor(this, other: I8x32) -> I8x32 {
+        lowlevel {
+            let a = simd_load[I8x32](ref this)
+            let b = simd_load[I8x32](ref other)
+            let r = llvm_or(a, b)
+            var result: I8x32 = I8x32::zero()
+            simd_store[I8x32](mut ref result, r)
+            return result
+        }
+    }
+
+    /// Lane-wise bitwise XOR.
+    pub func bxor(this, other: I8x32) -> I8x32 {
+        lowlevel {
+            let a = simd_load[I8x32](ref this)
+            let b = simd_load[I8x32](ref other)
+            let r = llvm_xor(a, b)
+            var result: I8x32 = I8x32::zero()
+            simd_store[I8x32](mut ref result, r)
+            return result
+        }
+    }
+
+    // -- Reductions --
+
+    /// Sum all 32 lanes (wrapping I8 arithmetic, result as I32 to avoid overflow).
+    pub func sum(this) -> I32 {
+        return (this.e0 as I32) + (this.e1 as I32) + (this.e2 as I32) + (this.e3 as I32)
+             + (this.e4 as I32) + (this.e5 as I32) + (this.e6 as I32) + (this.e7 as I32)
+             + (this.e8 as I32) + (this.e9 as I32) + (this.e10 as I32) + (this.e11 as I32)
+             + (this.e12 as I32) + (this.e13 as I32) + (this.e14 as I32) + (this.e15 as I32)
+             + (this.e16 as I32) + (this.e17 as I32) + (this.e18 as I32) + (this.e19 as I32)
+             + (this.e20 as I32) + (this.e21 as I32) + (this.e22 as I32) + (this.e23 as I32)
+             + (this.e24 as I32) + (this.e25 as I32) + (this.e26 as I32) + (this.e27 as I32)
+             + (this.e28 as I32) + (this.e29 as I32) + (this.e30 as I32) + (this.e31 as I32)
+    }
+
+    /// Minimum lane value (horizontal min).
+    pub func hmin(this) -> I8 {
+        var m: I8 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        if this.e4 < m { m = this.e4 }
+        if this.e5 < m { m = this.e5 }
+        if this.e6 < m { m = this.e6 }
+        if this.e7 < m { m = this.e7 }
+        if this.e8 < m { m = this.e8 }
+        if this.e9 < m { m = this.e9 }
+        if this.e10 < m { m = this.e10 }
+        if this.e11 < m { m = this.e11 }
+        if this.e12 < m { m = this.e12 }
+        if this.e13 < m { m = this.e13 }
+        if this.e14 < m { m = this.e14 }
+        if this.e15 < m { m = this.e15 }
+        if this.e16 < m { m = this.e16 }
+        if this.e17 < m { m = this.e17 }
+        if this.e18 < m { m = this.e18 }
+        if this.e19 < m { m = this.e19 }
+        if this.e20 < m { m = this.e20 }
+        if this.e21 < m { m = this.e21 }
+        if this.e22 < m { m = this.e22 }
+        if this.e23 < m { m = this.e23 }
+        if this.e24 < m { m = this.e24 }
+        if this.e25 < m { m = this.e25 }
+        if this.e26 < m { m = this.e26 }
+        if this.e27 < m { m = this.e27 }
+        if this.e28 < m { m = this.e28 }
+        if this.e29 < m { m = this.e29 }
+        if this.e30 < m { m = this.e30 }
+        if this.e31 < m { m = this.e31 }
+        return m
+    }
+
+    /// Maximum lane value (horizontal max).
+    pub func hmax(this) -> I8 {
+        var m: I8 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        if this.e4 > m { m = this.e4 }
+        if this.e5 > m { m = this.e5 }
+        if this.e6 > m { m = this.e6 }
+        if this.e7 > m { m = this.e7 }
+        if this.e8 > m { m = this.e8 }
+        if this.e9 > m { m = this.e9 }
+        if this.e10 > m { m = this.e10 }
+        if this.e11 > m { m = this.e11 }
+        if this.e12 > m { m = this.e12 }
+        if this.e13 > m { m = this.e13 }
+        if this.e14 > m { m = this.e14 }
+        if this.e15 > m { m = this.e15 }
+        if this.e16 > m { m = this.e16 }
+        if this.e17 > m { m = this.e17 }
+        if this.e18 > m { m = this.e18 }
+        if this.e19 > m { m = this.e19 }
+        if this.e20 > m { m = this.e20 }
+        if this.e21 > m { m = this.e21 }
+        if this.e22 > m { m = this.e22 }
+        if this.e23 > m { m = this.e23 }
+        if this.e24 > m { m = this.e24 }
+        if this.e25 > m { m = this.e25 }
+        if this.e26 > m { m = this.e26 }
+        if this.e27 > m { m = this.e27 }
+        if this.e28 > m { m = this.e28 }
+        if this.e29 > m { m = this.e29 }
+        if this.e30 > m { m = this.e30 }
+        if this.e31 > m { m = this.e31 }
+        return m
+    }
+
+    // -- Display / Debug --
+
+    /// Display as string showing first 4 and last 4 lanes.
+    pub func to_string(this) -> Str {
+        return "I8x32(" + (this.e0 as I32).to_string() + ", " + (this.e1 as I32).to_string() + ", "
+             + (this.e2 as I32).to_string() + ", " + (this.e3 as I32).to_string() + ", ..., "
+             + (this.e28 as I32).to_string() + ", " + (this.e29 as I32).to_string() + ", "
+             + (this.e30 as I32).to_string() + ", " + (this.e31 as I32).to_string() + ")"
+    }
+
+    /// Debug string representation.
+    pub func debug_string(this) -> Str {
+        return this.to_string()
     }
 }

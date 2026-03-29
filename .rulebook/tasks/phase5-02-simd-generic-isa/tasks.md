@@ -187,6 +187,13 @@
 > intrinsics use the same pattern as SSE2 (icmp+sext, and/or/xor, LLVM target intrinsics).
 > All tests verified via `tml run` (9/9 pass). Items 4.6-4.9 (horizontal, gather, variable shift,
 > FMA) not yet requested.
+>
+> **Utility methods added**: I32x8 now has full parity with I32x4 (div, neg, set, band/bor/bxor,
+> shift_left/shift_right, product, hmin/hmax, min/max). F32x8 has neg (via sub), set, hmin/hmax,
+> min/max, to_string/debug_string. I8x32 has band/bor/bxor, sum(->I32), hmin/hmax, to_string.
+> I64x4 has mul, band/bor/bxor, shift_left/shift_right, hmin/hmax.
+> Note: F32x8::neg uses `zero().sub(this)` because `simd_splat[F32x8, F32](0.0)` has a
+> pre-existing F32/F64 literal codegen issue (0.0 emits as double instead of float).
 
 ## Phase 5: ARM NEON Intrinsics
 

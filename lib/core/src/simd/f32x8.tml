@@ -1,7 +1,8 @@
 //! 8-lane F32 SIMD vector type (256 bits, AVX/AVX2).
 
+use core::simd::i32x8::I32x8
 use core::runtime::intrinsics::{
-    simd_load, simd_store, simd_extract, simd_insert,
+    simd_load, simd_store, simd_extract, simd_insert, simd_splat,
     llvm_add, llvm_sub, llvm_mul, llvm_div
 }
 
@@ -36,6 +37,19 @@ impl F32x8 {
             return simd_extract[F32x8, F32](v, idx)
         }
     }
+
+    /// Return a new vector with lane `idx` replaced by `val`.
+    pub func set(this, idx: I32, val: F32) -> F32x8 {
+        lowlevel {
+            let v = simd_load[F32x8](ref this)
+            let w = simd_insert[F32x8, F32](v, val, idx)
+            var result: F32x8 = F32x8::zero()
+            simd_store[F32x8](mut ref result, w)
+            return result
+        }
+    }
+
+    // -- Arithmetic --
 
     /// Lane-wise addition.
     pub func add(this, other: F32x8) -> F32x8 {
@@ -85,8 +99,92 @@ impl F32x8 {
         }
     }
 
+    /// Lane-wise negation.
+    pub func neg(this) -> F32x8 {
+        return F32x8::zero().sub(this)
+    }
+
+    // -- Horizontal reductions --
+
     /// Sum all 8 lanes.
     pub func sum(this) -> F32 {
         return this.e0 + this.e1 + this.e2 + this.e3 + this.e4 + this.e5 + this.e6 + this.e7
+    }
+
+    /// Minimum lane value.
+    pub func hmin(this) -> F32 {
+        var m: F32 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        if this.e4 < m { m = this.e4 }
+        if this.e5 < m { m = this.e5 }
+        if this.e6 < m { m = this.e6 }
+        if this.e7 < m { m = this.e7 }
+        return m
+    }
+
+    /// Maximum lane value.
+    pub func hmax(this) -> F32 {
+        var m: F32 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        if this.e4 > m { m = this.e4 }
+        if this.e5 > m { m = this.e5 }
+        if this.e6 > m { m = this.e6 }
+        if this.e7 > m { m = this.e7 }
+        return m
+    }
+
+    /// Lane-wise minimum.
+    pub func min(this, other: F32x8) -> F32x8 {
+        var r0 = this.e0; if other.e0 < r0 { r0 = other.e0 }
+        var r1 = this.e1; if other.e1 < r1 { r1 = other.e1 }
+        var r2 = this.e2; if other.e2 < r2 { r2 = other.e2 }
+        var r3 = this.e3; if other.e3 < r3 { r3 = other.e3 }
+        var r4 = this.e4; if other.e4 < r4 { r4 = other.e4 }
+        var r5 = this.e5; if other.e5 < r5 { r5 = other.e5 }
+        var r6 = this.e6; if other.e6 < r6 { r6 = other.e6 }
+        var r7 = this.e7; if other.e7 < r7 { r7 = other.e7 }
+        return F32x8 { e0: r0, e1: r1, e2: r2, e3: r3, e4: r4, e5: r5, e6: r6, e7: r7 }
+    }
+
+    /// Lane-wise maximum.
+    pub func max(this, other: F32x8) -> F32x8 {
+        var r0 = this.e0; if other.e0 > r0 { r0 = other.e0 }
+        var r1 = this.e1; if other.e1 > r1 { r1 = other.e1 }
+        var r2 = this.e2; if other.e2 > r2 { r2 = other.e2 }
+        var r3 = this.e3; if other.e3 > r3 { r3 = other.e3 }
+        var r4 = this.e4; if other.e4 > r4 { r4 = other.e4 }
+        var r5 = this.e5; if other.e5 > r5 { r5 = other.e5 }
+        var r6 = this.e6; if other.e6 > r6 { r6 = other.e6 }
+        var r7 = this.e7; if other.e7 > r7 { r7 = other.e7 }
+        return F32x8 { e0: r0, e1: r1, e2: r2, e3: r3, e4: r4, e5: r5, e6: r6, e7: r7 }
+    }
+
+    // -- Display / Debug --
+
+    /// Display as string: "F32x8(e0, e1, ..., e7)".
+    pub func to_string(this) -> Str {
+        return "F32x8(" + this.e0.to_string() + ", " + this.e1.to_string() + ", "
+             + this.e2.to_string() + ", " + this.e3.to_string() + ", "
+             + this.e4.to_string() + ", " + this.e5.to_string() + ", "
+             + this.e6.to_string() + ", " + this.e7.to_string() + ")"
+    }
+
+    /// Debug string representation.
+    pub func debug_string(this) -> Str {
+        return this.to_string()
+    }
+
+    // -- Conversions --
+
+    /// Truncate all lanes to I32, returning an I32x8.
+    pub func to_i32x8(this) -> I32x8 {
+        return I32x8::new(
+            this.e0 as I32, this.e1 as I32, this.e2 as I32, this.e3 as I32,
+            this.e4 as I32, this.e5 as I32, this.e6 as I32, this.e7 as I32
+        )
     }
 }
