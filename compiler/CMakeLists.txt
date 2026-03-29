@@ -1239,6 +1239,28 @@ foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 message(STATUS "TML SIMD String: Building static library (tml_simd_string)")
 
+# SIMD math operations library (AVX2 + SSE2 optimized sum/dot)
+add_library(tml_simd_math STATIC
+    src/simd/simd_math.cpp
+)
+target_include_directories(tml_simd_math PUBLIC include src)
+target_link_libraries(tml_simd_math PUBLIC tml_search)
+# Enable AVX2 intrinsics for SIMD math functions
+if(MSVC)
+    target_compile_options(tml_simd_math PRIVATE /arch:AVX2)
+else()
+    target_compile_options(tml_simd_math PRIVATE -mavx2 -mfma -msse4.2)
+endif()
+set_target_properties(tml_simd_math PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_simd_math PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+message(STATUS "TML SIMD Math: Building static library (tml_simd_math)")
+
 # MCP library (Model Context Protocol server)
 # Named tml_mcp_lib to avoid conflict with tml_mcp executable
 add_library(tml_mcp_lib STATIC
@@ -1962,6 +1984,13 @@ if(TML_BUILD_BENCH)
 
     target_include_directories(tml_bench PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+
+    target_link_libraries(tml_bench PRIVATE
+        tml_search
+        tml_simd_string
+        tml_simd_math
     )
 
     # Optimize benchmarks even in debug builds — need realistic timings

@@ -49,6 +49,22 @@ use core::slice::{MutSlice}
 // Ordering, Ord are builtins - no import needed
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/// Compute floor(log2(n)) for positive n.
+/// Used to determine introsort depth limit (2 * floor_log2(n)).
+func floor_log2(n: I64) -> I64 {
+    let mut result: I64 = 0
+    let mut val: I64 = n
+    loop (val > 1) {
+        val = val / 2
+        result = result + 1
+    }
+    return result
+}
+
+// ============================================================================
 // Sort Behaviors
 // ============================================================================
 
@@ -79,9 +95,10 @@ impl[T: Ord] MutSlice[T] {
     ///
     /// # Current Implementation
     ///
-    /// The current implementation uses quicksort with the last element as
-    /// pivot. This may degrade to O(n²) for certain inputs (already sorted,
-    /// reverse sorted).
+    /// Uses introsort: quicksort with median-of-three pivot selection,
+    /// insertion sort for small partitions (< 16 elements), and a depth
+    /// limit of 2 * floor(log2(n)) that switches to heapsort to guarantee
+    /// O(n log n) worst-case.
     ///
     /// # Examples
     ///
@@ -98,31 +115,129 @@ impl[T: Ord] MutSlice[T] {
         if this.len <= 1 {
             return
         }
-        this.quicksort(0, this.len - 1)
+        let max_depth: I64 = 2 * floor_log2(this.len)
+        this.introsort(0, this.len - 1, max_depth)
     }
 
-    /// Internal quicksort implementation.
-    ///
-    /// Uses the classic Lomuto partition scheme with the last element as
-    /// pivot.
-    func quicksort(mut this, low: I64, high: I64) {
-        if low < high {
-            let pivot: I64 = this.partition(low, high)
-            if pivot > 0 {
-                this.quicksort(low, pivot - 1)
+    /// Introsort: quicksort with depth limit that falls back to heapsort.
+    func introsort(mut this, low: I64, high: I64, depth_limit: I64) {
+        let size: I64 = high - low + 1
+        if size <= 1 {
+            return
+        }
+        if size < 16 {
+            this.insertion_sort(low, high)
+            return
+        }
+        if depth_limit == 0 {
+            this.heapsort(low, high)
+            return
+        }
+        let pivot: I64 = this.partition(low, high)
+        if pivot > 0 {
+            this.introsort(low, pivot - 1, depth_limit - 1)
+        }
+        this.introsort(pivot + 1, high, depth_limit - 1)
+    }
+
+    /// Insertion sort for small partitions.
+    func insertion_sort(mut this, low: I64, high: I64) {
+        let mut i: I64 = low + 1
+        loop (i <= high) {
+            let mut j: I64 = i
+            loop (j > low) {
+                let prev: ref T = this.get(j - 1).unwrap()
+                let curr: ref T = this.get(j).unwrap()
+                if prev.gt(curr) {
+                    this.swap(j - 1, j)
+                    j = j - 1
+                } else {
+                    // Element is in correct position
+                    j = low  // break
+                }
             }
-            this.quicksort(pivot + 1, high)
+            i = i + 1
         }
     }
 
-    /// Lomuto partition scheme.
+    /// Heapsort fallback for depth-limited introsort.
+    func heapsort(mut this, low: I64, high: I64) {
+        let n: I64 = high - low + 1
+
+        // Build max-heap (heapify from bottom up)
+        let mut i: I64 = n / 2 - 1
+        loop (i >= 0) {
+            this.sift_down(low, i, n)
+            i = i - 1
+        }
+
+        // Extract elements from heap one by one
+        let mut end: I64 = n - 1
+        loop (end > 0) {
+            this.swap(low, low + end)
+            this.sift_down(low, 0, end)
+            end = end - 1
+        }
+    }
+
+    /// Sift down element at index `idx` in a max-heap of size `heap_size`.
+    /// All indices are relative to `base` offset in the slice.
+    func sift_down(mut this, base: I64, idx: I64, heap_size: I64) {
+        let mut root: I64 = idx
+        loop (2 * root + 1 < heap_size) {
+            let left: I64 = 2 * root + 1
+            let right: I64 = left + 1
+            let mut largest: I64 = root
+
+            let largest_ref: ref T = this.get(base + largest).unwrap()
+            let left_ref: ref T = this.get(base + left).unwrap()
+            if left_ref.gt(largest_ref) {
+                largest = left
+            }
+
+            if right < heap_size {
+                let largest_ref2: ref T = this.get(base + largest).unwrap()
+                let right_ref: ref T = this.get(base + right).unwrap()
+                if right_ref.gt(largest_ref2) {
+                    largest = right
+                }
+            }
+
+            if largest == root {
+                return
+            }
+            this.swap(base + root, base + largest)
+            root = largest
+        }
+    }
+
+    /// Lomuto partition with median-of-three pivot selection.
     ///
-    /// Partitions the slice around the pivot (last element) such that:
-    /// - All elements less than or equal to pivot are before it
-    /// - All elements greater than pivot are after it
-    ///
-    /// Returns the final position of the pivot.
+    /// Selects the median of {low, mid, high} elements as pivot and moves
+    /// it to the high position before partitioning. This prevents O(n^2)
+    /// on already-sorted or reverse-sorted inputs.
     func partition(mut this, low: I64, high: I64) -> I64 {
+        // Median-of-three: select median of {low, mid, high} as pivot
+        let mid: I64 = low + (high - low) / 2
+        // Sort the three elements so median ends up in the middle
+        let low_ref: ref T = this.get(low).unwrap()
+        let mid_ref: ref T = this.get(mid).unwrap()
+        if mid_ref.lt(low_ref) {
+            this.swap(low, mid)
+        }
+        let low_ref2: ref T = this.get(low).unwrap()
+        let high_ref: ref T = this.get(high).unwrap()
+        if high_ref.lt(low_ref2) {
+            this.swap(low, high)
+        }
+        let mid_ref2: ref T = this.get(mid).unwrap()
+        let high_ref2: ref T = this.get(high).unwrap()
+        if mid_ref2.lt(high_ref2) {
+            // Median is at mid — move it to high (pivot position)
+            this.swap(mid, high)
+        }
+        // Now the median element is at `high`
+
         let pivot_ref: ref T = this.get(high).unwrap()
         let mut i: I64 = low - 1
         let mut j: I64 = low
@@ -182,22 +297,127 @@ impl[T] MutSlice[T] {
         if this.len <= 1 {
             return
         }
-        this.quicksort_by(0, this.len - 1, compare)
+        let max_depth: I64 = 2 * floor_log2(this.len)
+        this.introsort_by(0, this.len - 1, max_depth, compare)
     }
 
-    /// Quicksort with custom comparison.
-    func quicksort_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) {
-        if low < high {
-            let pivot: I64 = this.partition_by(low, high, compare)
-            if pivot > 0 {
-                this.quicksort_by(low, pivot - 1, compare)
+    /// Introsort with custom comparison: quicksort with depth limit.
+    func introsort_by(mut this, low: I64, high: I64, depth_limit: I64, compare: func(ref T, ref T) -> Ordering) {
+        let size: I64 = high - low + 1
+        if size <= 1 {
+            return
+        }
+        if size < 16 {
+            this.insertion_sort_by(low, high, compare)
+            return
+        }
+        if depth_limit == 0 {
+            this.heapsort_by(low, high, compare)
+            return
+        }
+        let pivot: I64 = this.partition_by(low, high, compare)
+        if pivot > 0 {
+            this.introsort_by(low, pivot - 1, depth_limit - 1, compare)
+        }
+        this.introsort_by(pivot + 1, high, depth_limit - 1, compare)
+    }
+
+    /// Insertion sort with custom comparison for small partitions.
+    func insertion_sort_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) {
+        let mut i: I64 = low + 1
+        loop (i <= high) {
+            let mut j: I64 = i
+            loop (j > low) {
+                let prev: ref T = this.get(j - 1).unwrap()
+                let curr: ref T = this.get(j).unwrap()
+                when compare(prev, curr) {
+                    Greater => {
+                        this.swap(j - 1, j)
+                        j = j - 1
+                    },
+                    _ => {
+                        j = low  // break
+                    }
+                }
             }
-            this.quicksort_by(pivot + 1, high, compare)
+            i = i + 1
         }
     }
 
-    /// Partition with custom comparison.
+    /// Heapsort with custom comparison fallback.
+    func heapsort_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) {
+        let n: I64 = high - low + 1
+
+        let mut i: I64 = n / 2 - 1
+        loop (i >= 0) {
+            this.sift_down_by(low, i, n, compare)
+            i = i - 1
+        }
+
+        let mut end: I64 = n - 1
+        loop (end > 0) {
+            this.swap(low, low + end)
+            this.sift_down_by(low, 0, end, compare)
+            end = end - 1
+        }
+    }
+
+    /// Sift down with custom comparison.
+    func sift_down_by(mut this, base: I64, idx: I64, heap_size: I64, compare: func(ref T, ref T) -> Ordering) {
+        let mut root: I64 = idx
+        loop (2 * root + 1 < heap_size) {
+            let left: I64 = 2 * root + 1
+            let right: I64 = left + 1
+            let mut largest: I64 = root
+
+            let largest_ref: ref T = this.get(base + largest).unwrap()
+            let left_ref: ref T = this.get(base + left).unwrap()
+            when compare(left_ref, largest_ref) {
+                Greater => { largest = left },
+                _ => {}
+            }
+
+            if right < heap_size {
+                let largest_ref2: ref T = this.get(base + largest).unwrap()
+                let right_ref: ref T = this.get(base + right).unwrap()
+                when compare(right_ref, largest_ref2) {
+                    Greater => { largest = right },
+                    _ => {}
+                }
+            }
+
+            if largest == root {
+                return
+            }
+            this.swap(base + root, base + largest)
+            root = largest
+        }
+    }
+
+    /// Partition with median-of-three pivot and custom comparison.
     func partition_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) -> I64 {
+        let mid: I64 = low + (high - low) / 2
+
+        // Sort three elements to find median
+        let low_ref: ref T = this.get(low).unwrap()
+        let mid_ref: ref T = this.get(mid).unwrap()
+        when compare(mid_ref, low_ref) {
+            Less => this.swap(low, mid),
+            _ => {}
+        }
+        let low_ref2: ref T = this.get(low).unwrap()
+        let high_ref: ref T = this.get(high).unwrap()
+        when compare(high_ref, low_ref2) {
+            Less => this.swap(low, high),
+            _ => {}
+        }
+        let mid_ref2: ref T = this.get(mid).unwrap()
+        let high_ref2: ref T = this.get(high).unwrap()
+        when compare(mid_ref2, high_ref2) {
+            Less => this.swap(mid, high),
+            _ => {}
+        }
+
         let pivot_ref: ref T = this.get(high).unwrap()
         let mut i: I64 = low - 1
         let mut j: I64 = low
