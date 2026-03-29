@@ -5,7 +5,7 @@
 //! and use `insertelement`/`extractelement` for lane access. LLVM collapses
 //! element-wise patterns into single vector instructions at -O2+.
 //!
-//! # Types
+//! # 128-bit Types (SSE2)
 //!
 //! | Type | Lanes | Element | Description |
 //! |------|-------|---------|-------------|
@@ -15,6 +15,25 @@
 //! | `F64x2` | 2 | F64 | 2-lane 64-bit float |
 //! | `I8x16` | 16 | I8 | 16-lane signed 8-bit integer |
 //! | `U8x16` | 16 | U8 | 16-lane unsigned 8-bit integer |
+//!
+//! # 256-bit Types (AVX2)
+//!
+//! | Type | Lanes | Element | Description |
+//! |------|-------|---------|-------------|
+//! | `I32x8` | 8 | I32 | 8-lane signed 32-bit integer |
+//! | `F32x8` | 8 | F32 | 8-lane 32-bit float |
+//! | `I64x4` | 4 | I64 | 4-lane signed 64-bit integer |
+//! | `F64x4` | 4 | F64 | 4-lane 64-bit float |
+//! | `I8x32` | 32 | I8 | 32-lane signed 8-bit integer |
+//!
+//! # Other Modules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | `detect` | Runtime CPUID feature detection |
+//! | `sse42` | SSE4.2 high-level wrappers (CRC32C) |
+//! | `neon` | ARM NEON portable stubs |
+//! | `mask` | Lane masks for conditional operations |
 //!
 //! # Examples
 //!
@@ -42,3 +61,5 @@ pub mod i32x8
 pub mod i64x4
 pub mod f32x8
 pub mod f64x4
+// ARM NEON stubs (portable wrappers, actual NEON on ARM64)
+pub mod neon

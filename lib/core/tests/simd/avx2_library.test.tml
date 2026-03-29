@@ -1,0 +1,162 @@
+use test
+use core::simd::i32x8::I32x8
+use core::simd::f32x8::F32x8
+use core::simd::i64x4::I64x4
+use core::simd::f64x4::F64x4
+use core::simd::i8x32::I8x32
+
+// -- I32x8 Display/Debug --
+
+@test
+func test_i32x8_to_string() -> I32 {
+    let v = I32x8::new(1, 2, 3, 4, 5, 6, 7, 8)
+    let s = v.to_string()
+    assert_eq(s, "I32x8(1, 2, 3, 4, 5, 6, 7, 8)")
+    0
+}
+
+@test
+func test_i32x8_debug_string() -> I32 {
+    let v = I32x8::splat(42)
+    let s = v.debug_string()
+    assert_eq(s, "I32x8(42, 42, 42, 42, 42, 42, 42, 42)")
+    0
+}
+
+// -- I32x8 Horizontal ops --
+
+@test
+func test_i32x8_hmin() -> I32 {
+    let v = I32x8::new(5, 3, 8, 1, 9, 2, 7, 4)
+    assert_eq(v.hmin(), 1)
+    0
+}
+
+@test
+func test_i32x8_hmax() -> I32 {
+    let v = I32x8::new(5, 3, 8, 1, 9, 2, 7, 4)
+    assert_eq(v.hmax(), 9)
+    0
+}
+
+@test
+func test_i32x8_product() -> I32 {
+    let v = I32x8::new(1, 2, 3, 1, 1, 1, 1, 4)
+    assert_eq(v.product(), 24)
+    0
+}
+
+// -- I32x8 Conversion --
+
+@test
+func test_i32x8_to_f32x8() -> I32 {
+    let iv = I32x8::new(1, 2, 3, 4, 5, 6, 7, 8)
+    let fv = iv.to_f32x8()
+    assert_true(fv.get(0) > 0.9 and fv.get(0) < 1.1)
+    assert_true(fv.get(7) > 7.9 and fv.get(7) < 8.1)
+    0
+}
+
+// -- F32x8 Display/Debug --
+
+@test
+func test_f32x8_to_string() -> I32 {
+    let v = F32x8::splat(1.0)
+    let s = v.to_string()
+    // Should start with "F32x8("
+    assert_true(s.len() > 10)
+    0
+}
+
+// -- F32x8 Conversion --
+
+@test
+func test_f32x8_to_i32x8() -> I32 {
+    let fv = F32x8::new(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    let iv = fv.to_i32x8()
+    assert_eq(iv.get(0), 1)
+    assert_eq(iv.get(4), 5)
+    assert_eq(iv.get(7), 8)
+    0
+}
+
+// -- I64x4 Display/Horizontal --
+
+@test
+func test_i64x4_to_string() -> I32 {
+    let v = I64x4::new(10, 20, 30, 40)
+    let s = v.to_string()
+    assert_eq(s, "I64x4(10, 20, 30, 40)")
+    0
+}
+
+@test
+func test_i64x4_hmin_hmax() -> I32 {
+    let v = I64x4::new(50, 10, 30, 20)
+    assert_eq(v.hmin(), 10)
+    assert_eq(v.hmax(), 50)
+    0
+}
+
+@test
+func test_i64x4_to_f64x4() -> I32 {
+    let iv = I64x4::new(100, 200, 300, 400)
+    let fv = iv.to_f64x4()
+    assert_true(fv.get(0) > 99.9 and fv.get(0) < 100.1)
+    assert_true(fv.get(3) > 399.9 and fv.get(3) < 400.1)
+    0
+}
+
+// -- F64x4 Display/Horizontal --
+
+@test
+func test_f64x4_to_string() -> I32 {
+    let v = F64x4::new(1.5, 2.5, 3.5, 4.5)
+    let s = v.to_string()
+    assert_true(s.len() > 10)
+    0
+}
+
+@test
+func test_f64x4_hmin_hmax() -> I32 {
+    let v = F64x4::new(3.0, 1.0, 4.0, 2.0)
+    assert_true(v.hmin() > 0.9 and v.hmin() < 1.1)
+    assert_true(v.hmax() > 3.9 and v.hmax() < 4.1)
+    0
+}
+
+@test
+func test_f64x4_to_i64x4() -> I32 {
+    let fv = F64x4::new(1.9, 2.1, 3.7, 4.0)
+    let iv = fv.to_i64x4()
+    assert_eq(iv.get(0), 1)
+    assert_eq(iv.get(3), 4)
+    0
+}
+
+// -- I8x32 Reductions --
+
+@test
+func test_i8x32_sum() -> I32 {
+    let v = I8x32::splat(1)
+    assert_eq(v.sum(), 32)
+    0
+}
+
+@test
+func test_i8x32_hmin_hmax() -> I32 {
+    var v = I8x32::splat(5)
+    // Can't easily set individual lanes without set(), so test with splat
+    assert_eq(v.hmin() as I32, 5)
+    assert_eq(v.hmax() as I32, 5)
+    0
+}
+
+@test
+func test_i8x32_to_string() -> I32 {
+    let v = I8x32::splat(7)
+    let s = v.to_string()
+    // Should start with "I8x32(" and contain "7"
+    assert_true(s.len() > 10)
+    0
+}

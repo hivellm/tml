@@ -1,0 +1,100 @@
+//! ARM NEON portable stubs.
+//!
+//! These functions provide a NEON-like API using the portable SIMD types.
+//! On x86-64, they delegate to the same underlying LLVM vector operations
+//! that NEON would use on ARM64. When ARM64 target support is added,
+//! these can be replaced with actual NEON intrinsics for optimal codegen.
+
+use core::simd::i32x4::I32x4
+use core::simd::f32x4::F32x4
+
+// -- Arithmetic --
+
+/// NEON VADD.4S equivalent — 4-lane I32 addition.
+pub func neon_add_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.add(b)
+}
+
+/// NEON FADD.4S equivalent — 4-lane F32 addition.
+pub func neon_add_f32(a: F32x4, b: F32x4) -> F32x4 {
+    return a.add(b)
+}
+
+/// NEON VSUB.4S equivalent — 4-lane I32 subtraction.
+pub func neon_sub_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.sub(b)
+}
+
+/// NEON FSUB.4S equivalent — 4-lane F32 subtraction.
+pub func neon_sub_f32(a: F32x4, b: F32x4) -> F32x4 {
+    return a.sub(b)
+}
+
+/// NEON VMUL.4S equivalent — 4-lane I32 multiplication.
+pub func neon_mul_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.mul(b)
+}
+
+/// NEON FMUL.4S equivalent — 4-lane F32 multiplication.
+pub func neon_mul_f32(a: F32x4, b: F32x4) -> F32x4 {
+    return a.mul(b)
+}
+
+// -- Horizontal Reductions --
+
+/// NEON VADDV.4S equivalent — horizontal sum of 4 I32 lanes.
+pub func neon_addv_i32(a: I32x4) -> I32 {
+    return a.sum()
+}
+
+/// NEON VMAXV.4S equivalent — horizontal max of 4 I32 lanes.
+pub func neon_maxv_i32(a: I32x4) -> I32 {
+    return a.hmax()
+}
+
+/// NEON VMINV.4S equivalent — horizontal min of 4 I32 lanes.
+pub func neon_minv_i32(a: I32x4) -> I32 {
+    return a.hmin()
+}
+
+// -- Bitwise --
+
+/// NEON VAND equivalent — 128-bit bitwise AND.
+pub func neon_and_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.band(b)
+}
+
+/// NEON VORR equivalent — 128-bit bitwise OR.
+pub func neon_or_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.bor(b)
+}
+
+/// NEON VEOR equivalent — 128-bit bitwise XOR.
+pub func neon_xor_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return a.bxor(b)
+}
+
+// -- Comparison --
+
+/// NEON VCEQ.4S equivalent — 4-lane I32 equality comparison.
+/// Returns a mask (Mask4) with true where lanes are equal.
+pub func neon_ceq_i32(a: I32x4, b: I32x4) -> I32x4 {
+    // Returns -1 for equal, 0 for not-equal (NEON convention)
+    return I32x4::new(
+        if a.get(0) == b.get(0) { -1 } else { 0 },
+        if a.get(1) == b.get(1) { -1 } else { 0 },
+        if a.get(2) == b.get(2) { -1 } else { 0 },
+        if a.get(3) == b.get(3) { -1 } else { 0 }
+    )
+}
+
+/// NEON VCGT.4S equivalent — 4-lane I32 signed greater-than.
+/// Returns -1 for true, 0 for false in each lane.
+pub func neon_cgt_i32(a: I32x4, b: I32x4) -> I32x4 {
+    return I32x4::new(
+        if a.get(0) > b.get(0) { -1 } else { 0 },
+        if a.get(1) > b.get(1) { -1 } else { 0 },
+        if a.get(2) > b.get(2) { -1 } else { 0 },
+        if a.get(3) > b.get(3) { -1 } else { 0 }
+    )
+}

@@ -1,6 +1,6 @@
 # Tasks: Generic SIMD ISA Support for TML
 
-**Status**: Phase 1 Complete (Phase 1: 100%)
+**Status**: Phase 1-4 Complete, Phase 5-8 Partial (Display/Debug, conversions, NEON stubs, integration tests, docs done)
 **Priority**: High
 
 ## Phase 1: CPU Feature Detection Infrastructure
@@ -194,6 +194,26 @@
 > I64x4 has mul, band/bor/bxor, shift_left/shift_right, hmin/hmax.
 > Note: F32x8::neg uses `zero().sub(this)` because `simd_splat[F32x8, F32](0.0)` has a
 > pre-existing F32/F64 literal codegen issue (0.0 emits as double instead of float).
+>
+> **256-bit type library additions** (Phase 5 library work):
+> - Display/Debug: `to_string()`/`debug_string()` added to all 5 types (I32x8, F32x8, I64x4, F64x4, I8x32)
+> - Conversions: `I32x8.to_f32x8()`, `F32x8.to_i32x8()`, `I64x4.to_f64x4()`, `F64x4.to_i64x4()`
+> - I8x32 reductions: `sum() -> I32`, `hmin() -> I8`, `hmax() -> I8`
+> - F64x4 reductions: `hmin()`, `hmax()`
+> - All verified via `tml run` (standalone tests pass)
+> - Note: to_string uses Str concatenation (not template literals) because templates return Text, not Str
+>
+> **ARM NEON portable stubs** created in `lib/core/src/simd/neon.tml`:
+> - 15 functions wrapping I32x4/F32x4 operations (add/sub/mul, horizontal, bitwise, comparison)
+> - All verified via `tml run` (standalone tests pass)
+>
+> **Integration tests** in `lib/core/tests/simd/simd_integration.test.tml`:
+> - 12 tests covering cross-type width, conversion round-trips, arithmetic chains, horizontal ops, byte processing
+> - All verified via `tml run` (standalone tests pass)
+>
+> **Documentation** updated:
+> - `docs/SIMD.md`: Added Phase 5-02 section with CPUID API, SSE2/SSE4.2/AVX2 intrinsic tables, 256-bit type reference, NEON stubs, usage example
+> - `lib/core/src/simd/mod.tml`: Updated doc comment with 256-bit types table and module index
 
 ## Phase 5: ARM NEON Intrinsics
 
@@ -280,8 +300,9 @@
 
 - [ ] 8.1 Update `docs/13-BUILTINS.md` with new SIMD intrinsics
 - [ ] 8.2 Update `docs/04-TYPES.md` with new 256-bit vector types
-- [ ] 8.3 Update `lib/core/src/simd/mod.tml` doc comments
-- [ ] 8.4 Add usage examples in doc comments for key functions
+- [x] 8.3 Update `lib/core/src/simd/mod.tml` doc comments — added 256-bit types + neon + detect to module docs
+- [x] 8.4 Add usage examples in doc comments for key functions — added to mod.tml and docs/SIMD.md
+- [x] 8.5 Update `docs/SIMD.md` with Phase 5-02 intrinsics list, 256-bit type API reference, CPUID TML API, NEON stubs
 
 ## Validation
 

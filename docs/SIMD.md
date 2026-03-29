@@ -11,7 +11,99 @@ This document covers the SIMD (Single Instruction, Multiple Data) optimizations 
 | AVX2 | ymm0-ymm15 | 256-bit | Distance functions, math sum, batch operations |
 | AVX2+FMA | ymm0-ymm15 | 256-bit | Dot product, cosine similarity (fused multiply-add) |
 | AVX-512 | zmm0-zmm31 | 512-bit | Detected but not yet used (future) |
-| ARM NEON | v0-v31 | 128-bit | Planned (not yet implemented) |
+| ARM NEON | v0-v31 | 128-bit | Portable stubs available (actual NEON on ARM64 target) |
+
+## TML SIMD Intrinsics (Phase 5-02)
+
+The TML standard library exposes SIMD intrinsics directly in `core::simd` and `core::runtime::intrinsics`.
+
+### CPUID Detection API (`core::simd::detect`)
+
+| Function | Description |
+|----------|-------------|
+| `has_sse2() -> Bool` | Always true on x86-64 |
+| `has_sse42() -> Bool` | SSE4.2 support |
+| `has_popcnt() -> Bool` | POPCNT instruction |
+| `has_avx() -> Bool` | AVX support (OSXSAVE + XGETBV check) |
+| `has_avx2() -> Bool` | AVX2 support |
+| `has_fma() -> Bool` | FMA3 support |
+| `has_neon() -> Bool` | ARM NEON (compile-time true on ARM64) |
+
+### SSE2 Intrinsics (30 functions in `core::runtime::intrinsics`)
+
+| Category | Functions | Count |
+|----------|-----------|-------|
+| Comparison | `sse2_cmpeq_epi8/16/32`, `sse2_cmpgt_epi8/16/32`, `sse2_cmplt_epi8` | 7 |
+| Bitwise | `sse2_and/or/xor/andnot_si128` | 4 |
+| Min/Max | `sse2_min/max_epu8`, `sse2_min/max_epi16` | 4 |
+| Movemask | `sse2_movemask_ps/pd`, `sse2_movemask_epi8` | 3 |
+| Pack/Unpack | `sse2_packs/packus_epi16`, `sse2_packs_epi32`, `sse2_unpacklo/hi_epi8` | 5 |
+| Shift | `sse2_slli/srli/srai_epi16/32/64` | 5 |
+| Memory | `sse2_storeu/store_si128` | 2 |
+
+### SSE4.2 Intrinsics (10 functions)
+
+| Category | Functions | Count |
+|----------|-----------|-------|
+| String comparison | `sse42_cmpistrm/cmpistri/cmpestrm/cmpestri` | 4 |
+| CRC32 | `sse42_crc32_u8/u16/u32/u64` | 4 |
+| POPCNT | `popcnt_u32/u64` | 2 |
+
+### AVX2 Intrinsics (13+ functions)
+
+| Category | Functions | Count |
+|----------|-----------|-------|
+| Comparison | `avx2_cmpeq/cmpgt_epi8/16/32` | 6 |
+| Bitwise | `avx2_and/or/xor_si256` | 3 |
+| Movemask | `avx2_movemask_epi8` | 1 |
+| Shuffle | `avx2_shuffle_epi8`, `avx2_permute4x64_epi64`, `avx2_permute2x128_si256` | 3 |
+
+### 256-bit Vector Types
+
+| Type | Lanes | Element | Module |
+|------|-------|---------|--------|
+| `I32x8` | 8 | I32 | `core::simd::i32x8` |
+| `F32x8` | 8 | F32 | `core::simd::f32x8` |
+| `I64x4` | 4 | I64 | `core::simd::i64x4` |
+| `F64x4` | 4 | F64 | `core::simd::f64x4` |
+| `I8x32` | 32 | I8 | `core::simd::i8x32` |
+
+All types support: `new`, `splat`, `zero`, `get`, `set`, `add`, `sub`, `mul`, `sum`, `hmin`, `hmax`, `to_string`, `debug_string`.
+Integer types also support: `band`, `bor`, `bxor`, `shift_left`, `shift_right`, `min`, `max`, `product`.
+Cross-type conversions: `I32x8.to_f32x8()`, `F32x8.to_i32x8()`, `I64x4.to_f64x4()`, `F64x4.to_i64x4()`.
+
+### ARM NEON Stubs (`core::simd::neon`)
+
+Portable NEON-like API for cross-platform code. On x86-64, delegates to 128-bit SSE operations.
+
+| Function | NEON Equivalent |
+|----------|----------------|
+| `neon_add/sub/mul_i32` | VADD/VSUB/VMUL.4S |
+| `neon_add/sub/mul_f32` | FADD/FSUB/FMUL.4S |
+| `neon_addv/maxv/minv_i32` | VADDV/VMAXV/VMINV |
+| `neon_and/or/xor_i32` | VAND/VORR/VEOR |
+| `neon_ceq/cgt_i32` | VCEQ/VCGT |
+
+### Usage Example
+
+```tml
+use core::simd::detect::has_avx2
+use core::simd::i32x8::I32x8
+use core::simd::i32x4::I32x4
+
+func sum_array(data: I32, count: I32) -> I32 {
+    if has_avx2() {
+        // Process 8 elements at a time with AVX2
+        let acc = I32x8::splat(0)
+        // ... vectorized loop ...
+        return acc.sum()
+    }
+    // Fallback: 4 elements at a time with SSE2
+    let acc = I32x4::splat(0)
+    // ... vectorized loop ...
+    return acc.sum()
+}
+```
 
 ## Runtime Dispatch
 

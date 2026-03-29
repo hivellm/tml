@@ -1,0 +1,154 @@
+use test
+use core::simd::i32x4::I32x4
+use core::simd::i32x8::I32x8
+use core::simd::f32x4::F32x4
+use core::simd::f32x8::F32x8
+use core::simd::i64x4::I64x4
+use core::simd::f64x4::F64x4
+use core::simd::i8x32::I8x32
+use core::simd::detect::{has_sse2, has_avx2}
+
+// -- Feature detection + dispatch pattern --
+
+@test
+func test_feature_detect_sse2() -> I32 {
+    // SSE2 is always true on x86-64
+    assert_true(has_sse2())
+    0
+}
+
+@test
+func test_feature_detect_dispatch() -> I32 {
+    // Demonstrate detection -> dispatch pattern
+    let data = I32x4::new(1, 2, 3, 4)
+    var result: I32 = 0
+    if has_avx2() {
+        // Use 256-bit path
+        let wide = I32x8::new(1, 2, 3, 4, 5, 6, 7, 8)
+        result = wide.sum()
+    } else {
+        // Fallback to 128-bit path
+        result = data.sum()
+    }
+    assert_true(result > 0)
+    0
+}
+
+// -- Cross-type width tests (128-bit and 256-bit together) --
+
+@test
+func test_i32_128_256_consistency() -> I32 {
+    // Verify 128-bit and 256-bit give same results on shared lanes
+    let narrow = I32x4::new(10, 20, 30, 40)
+    let wide = I32x8::new(10, 20, 30, 40, 50, 60, 70, 80)
+    // First 4 lanes of sum should match
+    let narrow_sum = narrow.sum()
+    let wide_first4 = wide.get(0) + wide.get(1) + wide.get(2) + wide.get(3)
+    assert_eq(narrow_sum, wide_first4)
+    0
+}
+
+// -- Conversion round-trip --
+
+@test
+func test_i32x8_f32x8_round_trip() -> I32 {
+    let orig = I32x8::new(1, 2, 3, 4, 5, 6, 7, 8)
+    let as_float = orig.to_f32x8()
+    let back = as_float.to_i32x8()
+    assert_eq(back.get(0), 1)
+    assert_eq(back.get(3), 4)
+    assert_eq(back.get(7), 8)
+    0
+}
+
+@test
+func test_i64x4_f64x4_round_trip() -> I32 {
+    let orig = I64x4::new(100, 200, 300, 400)
+    let as_double = orig.to_f64x4()
+    let back = as_double.to_i64x4()
+    assert_eq(back.get(0), 100)
+    assert_eq(back.get(3), 400)
+    0
+}
+
+// -- Multi-operation pipeline --
+
+@test
+func test_arithmetic_chain_i32x8() -> I32 {
+    // (a + b) * c - d
+    let a = I32x8::splat(2)
+    let b = I32x8::splat(3)
+    let c = I32x8::splat(4)
+    let d = I32x8::splat(1)
+    let result = a.add(b).mul(c).sub(d)
+    // (2+3)*4-1 = 19 per lane
+    assert_eq(result.get(0), 19)
+    assert_eq(result.get(7), 19)
+    assert_eq(result.sum(), 152)
+    0
+}
+
+@test
+func test_arithmetic_chain_f32x8() -> I32 {
+    let a = F32x8::splat(2.0)
+    let b = F32x8::splat(3.0)
+    let sum = a.add(b)
+    let product = sum.mul(a)
+    // (2+3)*2 = 10 per lane, 80 total
+    let total = product.sum()
+    assert_true(total > 79.0 and total < 81.0)
+    0
+}
+
+// -- Horizontal reduction verification --
+
+@test
+func test_horizontal_ops_i32x8() -> I32 {
+    let v = I32x8::new(5, 3, 8, 1, 9, 2, 7, 4)
+    assert_eq(v.sum(), 39)
+    assert_eq(v.hmin(), 1)
+    assert_eq(v.hmax(), 9)
+    0
+}
+
+@test
+func test_horizontal_ops_f64x4() -> I32 {
+    let v = F64x4::new(1.0, 4.0, 2.0, 3.0)
+    let s = v.sum()
+    assert_true(s > 9.9 and s < 10.1)
+    assert_true(v.hmin() > 0.9 and v.hmin() < 1.1)
+    assert_true(v.hmax() > 3.9 and v.hmax() < 4.1)
+    0
+}
+
+// -- I8x32 with wider types --
+
+@test
+func test_i8x32_byte_processing() -> I32 {
+    // Simulate byte processing: XOR with splat value, XOR again to recover
+    let data = I8x32::splat(42)
+    let mask = I8x32::splat(55)
+    let xored = data.bxor(mask)
+    // 42 XOR 55 = 29
+    assert_eq(xored.get(0) as I32, 29)
+    // XOR twice returns original
+    let back = xored.bxor(mask)
+    assert_eq(back.get(0) as I32, 42)
+    0
+}
+
+// -- Min/Max lane-wise operations --
+
+@test
+func test_i32x8_lane_min_max() -> I32 {
+    let a = I32x8::new(1, 5, 3, 7, 2, 6, 4, 8)
+    let b = I32x8::new(8, 4, 6, 2, 7, 3, 5, 1)
+    let mn = a.min(b)
+    let mx = a.max(b)
+    // Min should be (1,4,3,2,2,3,4,1), max should be (8,5,6,7,7,6,5,8)
+    assert_eq(mn.get(0), 1)
+    assert_eq(mn.get(1), 4)
+    assert_eq(mx.get(0), 8)
+    assert_eq(mx.get(1), 5)
+    0
+}
