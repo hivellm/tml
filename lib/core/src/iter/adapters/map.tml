@@ -67,3 +67,7 @@ impl[I: Iterator, F, B] Iterator for Map[I, F] where F = func(I::Item) -> B {
 pub func map[I: Iterator, F, B](iter: I, f: F) -> Map[I, F] where F = func(I::Item) -> B {
     return Map { iter: iter, f: f }
 }
+
+// Thread safety: Map is Send/Sync if both the inner iterator and function are
+impl[I: Send, F: Send] Send for Map[I, F] {}
+impl[I: Sync, F: Sync] Sync for Map[I, F] {}

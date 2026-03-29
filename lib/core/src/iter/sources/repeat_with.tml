@@ -84,3 +84,7 @@ impl[F, T] Iterator for RepeatWith[F] where F = func() -> T {
 pub func repeat_with[F, T](gen: F) -> RepeatWith[F] where F = func() -> T {
     return RepeatWith { gen: gen }
 }
+
+// Thread safety
+impl[F: Send] Send for RepeatWith[F] {}
+impl[F: Sync] Sync for RepeatWith[F] {}

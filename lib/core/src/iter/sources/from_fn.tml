@@ -76,3 +76,7 @@ impl[F, T] Iterator for FromFn[F] where F = func() -> Maybe[T] {
 pub func from_fn[F, T](gen: F) -> FromFn[F] where F = func() -> Maybe[T] {
     return FromFn { gen: gen }
 }
+
+// Thread safety
+impl[F: Send] Send for FromFn[F] {}
+impl[F: Sync] Sync for FromFn[F] {}

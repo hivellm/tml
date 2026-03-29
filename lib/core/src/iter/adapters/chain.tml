@@ -90,3 +90,7 @@ impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item 
 pub func chain[A: Iterator, B: Iterator](first: A, second: B) -> Chain[A, B] where A::Item = B::Item {
     return Chain { first: first, second: second, first_done: false }
 }
+
+// Thread safety
+impl[A: Send, B: Send] Send for Chain[A, B] {}
+impl[A: Sync, B: Sync] Sync for Chain[A, B] {}

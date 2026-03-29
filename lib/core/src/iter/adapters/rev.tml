@@ -80,3 +80,7 @@ impl[I: DoubleEndedIterator] DoubleEndedIterator for Rev[I] {
 pub func rev[I: DoubleEndedIterator](iter: I) -> Rev[I] {
     return Rev { iter: iter }
 }
+
+// Thread safety
+impl[I: Send] Send for Rev[I] {}
+impl[I: Sync] Sync for Rev[I] {}

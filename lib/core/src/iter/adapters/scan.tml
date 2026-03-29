@@ -67,3 +67,7 @@ impl[I: Iterator, St, F, B] Iterator for Scan[I, St, F] where F = func(mut ref S
 pub func scan[I: Iterator, St, F, B](iter: I, initial: St, f: F) -> Scan[I, St, F] where F = func(mut ref St, I::Item) -> Maybe[B] {
     return Scan { iter: iter, state: initial, f: f }
 }
+
+// Thread safety
+impl[I: Send, St: Send, F: Send] Send for Scan[I, St, F] {}
+impl[I: Sync, St: Sync, F: Sync] Sync for Scan[I, St, F] {}

@@ -72,3 +72,7 @@ impl[I: Iterator, F, B] Iterator for MapWhile[I, F] where F = func(I::Item) -> M
 pub func map_while[I: Iterator, F, B](iter: I, f: F) -> MapWhile[I, F] where F = func(I::Item) -> Maybe[B] {
     return MapWhile { iter: iter, f: f, done: false }
 }
+
+// Thread safety
+impl[I: Send, F: Send] Send for MapWhile[I, F] {}
+impl[I: Sync, F: Sync] Sync for MapWhile[I, F] {}

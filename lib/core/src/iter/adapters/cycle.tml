@@ -95,3 +95,7 @@ impl[I: Iterator + Duplicate] Iterator for Cycle[I] where I::Item: Duplicate {
 pub func cycle[I: Iterator + Duplicate](iter: I) -> Cycle[I] where I::Item: Duplicate {
     return Cycle { orig: iter.duplicate(), iter: iter }
 }
+
+// Thread safety
+impl[I: Send] Send for Cycle[I] {}
+impl[I: Sync] Sync for Cycle[I] {}

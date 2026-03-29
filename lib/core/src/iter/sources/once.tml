@@ -70,3 +70,7 @@ impl[T] Iterator for Once[T] {
 pub func once[T](value: T) -> Once[T] {
     return Once { value: Just(value) }
 }
+
+// Thread safety
+impl[T: Send] Send for Once[T] {}
+impl[T: Sync] Sync for Once[T] {}

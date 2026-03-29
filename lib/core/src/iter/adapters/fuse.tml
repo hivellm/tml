@@ -76,3 +76,7 @@ impl[I: Iterator] Iterator for Fuse[I] {
 pub func fuse[I: Iterator](iter: I) -> Fuse[I] {
     return Fuse { iter: iter, done: false }
 }
+
+// Thread safety
+impl[I: Send] Send for Fuse[I] {}
+impl[I: Sync] Sync for Fuse[I] {}

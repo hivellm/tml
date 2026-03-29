@@ -69,3 +69,7 @@ impl[I: Iterator, P] Iterator for SkipWhile[I, P] where P = func(ref I::Item) ->
 pub func skip_while[I: Iterator, P](iter: I, pred: P) -> SkipWhile[I, P] where P = func(ref I::Item) -> Bool {
     return SkipWhile { iter: iter, pred: pred, skipping: true }
 }
+
+// Thread safety
+impl[I: Send, P: Send] Send for SkipWhile[I, P] {}
+impl[I: Sync, P: Sync] Sync for SkipWhile[I, P] {}

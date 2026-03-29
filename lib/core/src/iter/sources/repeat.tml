@@ -72,3 +72,7 @@ impl[T: Duplicate] Iterator for Repeat[T] {
 pub func repeat[T: Duplicate](value: T) -> Repeat[T] {
     return Repeat { value: value }
 }
+
+// Thread safety
+impl[T: Send] Send for Repeat[T] {}
+impl[T: Sync] Sync for Repeat[T] {}

@@ -82,3 +82,7 @@ impl[I: Iterator] Iterator for Take[I] {
 pub func take[I: Iterator](iter: I, n: I64) -> Take[I] {
     return Take { iter: iter, remaining: n }
 }
+
+// Thread safety
+impl[I: Send] Send for Take[I] {}
+impl[I: Sync] Sync for Take[I] {}

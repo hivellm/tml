@@ -204,3 +204,7 @@ impl[I: Iterator] Peekable[I] {
 pub func peekable[I: Iterator](iter: I) -> Peekable[I] {
     return Peekable { iter: iter, peeked: Nothing }
 }
+
+// Thread safety
+impl[I: Send] Send for Peekable[I] {}
+impl[I: Sync] Sync for Peekable[I] {}

@@ -74,3 +74,7 @@ impl[I: Iterator] Iterator for StepBy[I] {
 pub func step_by[I: Iterator](iter: I, step: I64) -> StepBy[I] {
     return StepBy { iter: iter, step: step, first_take: true }
 }
+
+// Thread safety
+impl[I: Send] Send for StepBy[I] {}
+impl[I: Sync] Sync for StepBy[I] {}

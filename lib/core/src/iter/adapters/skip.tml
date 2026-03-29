@@ -86,3 +86,7 @@ impl[I: Iterator] Iterator for Skip[I] {
 pub func skip[I: Iterator](iter: I, n: I64) -> Skip[I] {
     return Skip { iter: iter, remaining: n }
 }
+
+// Thread safety
+impl[I: Send] Send for Skip[I] {}
+impl[I: Sync] Sync for Skip[I] {}

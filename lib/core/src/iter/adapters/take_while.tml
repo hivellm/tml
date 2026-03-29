@@ -67,3 +67,7 @@ impl[I: Iterator, P] Iterator for TakeWhile[I, P] where P = func(ref I::Item) ->
 pub func take_while[I: Iterator, P](iter: I, pred: P) -> TakeWhile[I, P] where P = func(ref I::Item) -> Bool {
     return TakeWhile { iter: iter, pred: pred, done: false }
 }
+
+// Thread safety
+impl[I: Send, P: Send] Send for TakeWhile[I, P] {}
+impl[I: Sync, P: Sync] Sync for TakeWhile[I, P] {}

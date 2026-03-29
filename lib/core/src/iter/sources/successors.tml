@@ -92,3 +92,7 @@ impl[T, F] Iterator for Successors[T, F] where F = func(ref T) -> Maybe[T] {
 pub func successors[T, F](first: Maybe[T], succ: F) -> Successors[T, F] where F = func(ref T) -> Maybe[T] {
     return Successors { next_value: first, succ: succ }
 }
+
+// Thread safety
+impl[T: Send, F: Send] Send for Successors[T, F] {}
+impl[T: Sync, F: Sync] Sync for Successors[T, F] {}

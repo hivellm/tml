@@ -1,6 +1,6 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: In Progress — 76% (124/162)
+**Status**: In Progress — 77% (125/162)
 **Last updated**: 2026-03-28
 
 ---
@@ -136,7 +136,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 3.3.3 Atomic types (Bool, I32, I64, U32, U64, Isize, Usize, Ptr) — 1432 lines
 - [x] 3.3.4 Thread scopes, thread-local storage
 - [x] 3.3.5 57 sync tests + 7 thread tests passing
-- [ ] 3.3.6 Thread-safe iterators
+- [x] 3.3.6 Thread-safe iterators — Added Send/Sync marker impls for 21 adapters (Map, Filter, Take, Skip, Enumerate, Chain, Zip, Fuse, TakeWhile, SkipWhile, FilterMap, Flatten, FlatMap, Inspect, Scan, Copied, Cloned, StepBy, Rev, Peekable, Cycle, Intersperse, MapWhile) + 8 sources (Empty, Once, Repeat, RepeatN, RepeatWith, OnceWith, FromFn, Successors) + 6 legacy types
 - [ ] 3.3.7 Stress tests com ThreadSanitizer
 - [ ] 3.3.8 Fix: closure Send/Sync analysis
 

@@ -71,3 +71,7 @@ impl[I: Iterator, F] Iterator for Inspect[I, F] where F = func(ref I::Item) {
 pub func inspect[I: Iterator, F](iter: I, f: F) -> Inspect[I, F] where F = func(ref I::Item) {
     return Inspect { iter: iter, f: f }
 }
+
+// Thread safety
+impl[I: Send, F: Send] Send for Inspect[I, F] {}
+impl[I: Sync, F: Sync] Sync for Inspect[I, F] {}

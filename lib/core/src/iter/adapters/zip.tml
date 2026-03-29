@@ -94,3 +94,7 @@ impl[A: Iterator, B: Iterator] Iterator for Zip[A, B] {
 pub func zip[A: Iterator, B: Iterator](first: A, second: B) -> Zip[A, B] {
     return Zip { first: first, second: second }
 }
+
+// Thread safety
+impl[A: Send, B: Send] Send for Zip[A, B] {}
+impl[A: Sync, B: Sync] Sync for Zip[A, B] {}

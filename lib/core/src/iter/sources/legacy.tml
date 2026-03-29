@@ -285,3 +285,17 @@ impl Iterator for RepeatNI64 {
 pub func repeat_n_i64(value: I64, n: I64) -> RepeatNI64 {
     return RepeatNI64 { value: value, remaining: n }
 }
+
+// Thread safety: all legacy types contain only primitives
+impl Send for EmptyI32 {}
+impl Sync for EmptyI32 {}
+impl Send for EmptyI64 {}
+impl Sync for EmptyI64 {}
+impl Send for OnceI32 {}
+impl Sync for OnceI32 {}
+impl Send for OnceI64 {}
+impl Sync for OnceI64 {}
+impl Send for RepeatNI32 {}
+impl Sync for RepeatNI32 {}
+impl Send for RepeatNI64 {}
+impl Sync for RepeatNI64 {}

@@ -67,3 +67,7 @@ impl[I: Iterator, P] Iterator for Filter[I, P] where P = func(ref I::Item) -> Bo
 pub func filter[I: Iterator, P](iter: I, pred: P) -> Filter[I, P] where P = func(ref I::Item) -> Bool {
     return Filter { iter: iter, pred: pred }
 }
+
+// Thread safety: Filter is Send/Sync if both the inner iterator and predicate are
+impl[I: Send, P: Send] Send for Filter[I, P] {}
+impl[I: Sync, P: Sync] Sync for Filter[I, P] {}

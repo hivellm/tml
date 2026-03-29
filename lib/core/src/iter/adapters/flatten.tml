@@ -80,3 +80,7 @@ impl[I: Iterator, U: Iterator] Iterator for Flatten[I, U] where I::Item: IntoIte
 pub func flatten[I: Iterator, U: Iterator](iter: I) -> Flatten[I, U] where I::Item: IntoIterator[IntoIter = U] {
     return Flatten { iter: iter, current: Nothing }
 }
+
+// Thread safety
+impl[I: Send, U: Send] Send for Flatten[I, U] {}
+impl[I: Sync, U: Sync] Sync for Flatten[I, U] {}

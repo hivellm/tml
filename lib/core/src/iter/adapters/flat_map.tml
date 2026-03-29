@@ -78,3 +78,7 @@ impl[I: Iterator, F, U: Iterator] Iterator for FlatMap[I, F, U] where F = func(I
 pub func flat_map[I: Iterator, F, U: Iterator](iter: I, f: F) -> FlatMap[I, F, U] where F = func(I::Item) -> U {
     return FlatMap { iter: iter, f: f, current: Nothing }
 }
+
+// Thread safety
+impl[I: Send, F: Send, U: Send] Send for FlatMap[I, F, U] {}
+impl[I: Sync, F: Sync, U: Sync] Sync for FlatMap[I, F, U] {}

@@ -66,3 +66,7 @@ impl[I: Iterator, F, B] Iterator for FilterMap[I, F] where F = func(I::Item) -> 
 pub func filter_map[I: Iterator, F, B](iter: I, f: F) -> FilterMap[I, F] where F = func(I::Item) -> Maybe[B] {
     return FilterMap { iter: iter, f: f }
 }
+
+// Thread safety
+impl[I: Send, F: Send] Send for FilterMap[I, F] {}
+impl[I: Sync, F: Sync] Sync for FilterMap[I, F] {}

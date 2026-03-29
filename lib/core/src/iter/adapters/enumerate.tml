@@ -65,3 +65,7 @@ impl[I: Iterator] Iterator for Enumerate[I] {
 pub func enumerate[I: Iterator](iter: I) -> Enumerate[I] {
     return Enumerate { iter: iter, index: 0 }
 }
+
+// Thread safety
+impl[I: Send] Send for Enumerate[I] {}
+impl[I: Sync] Sync for Enumerate[I] {}

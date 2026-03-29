@@ -60,3 +60,7 @@ impl[T] Iterator for Empty[T] {
 pub func empty[T]() -> Empty[T] {
     return Empty { _marker: () }
 }
+
+// Thread safety: Empty contains no data
+impl[T] Send for Empty[T] {}
+impl[T] Sync for Empty[T] {}

@@ -73,3 +73,7 @@ impl[I: Iterator, T: Duplicate] Iterator for Cloned[I] where I::Item = ref T {
 pub func cloned[I: Iterator, T: Duplicate](iter: I) -> Cloned[I] where I::Item = ref T {
     return Cloned { iter: iter }
 }
+
+// Thread safety
+impl[I: Send] Send for Cloned[I] {}
+impl[I: Sync] Sync for Cloned[I] {}

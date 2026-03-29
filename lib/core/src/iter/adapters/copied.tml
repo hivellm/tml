@@ -77,3 +77,7 @@ impl[I: Iterator, T: Copy] Iterator for Copied[I] where I::Item = ref T {
 pub func copied[I: Iterator, T: Copy](iter: I) -> Copied[I] where I::Item = ref T {
     return Copied { iter: iter }
 }
+
+// Thread safety
+impl[I: Send] Send for Copied[I] {}
+impl[I: Sync] Sync for Copied[I] {}

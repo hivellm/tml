@@ -93,3 +93,7 @@ impl[I: Iterator] Iterator for Intersperse[I] where I::Item: Duplicate {
 pub func intersperse[I: Iterator](iter: I, sep: I::Item) -> Intersperse[I] where I::Item: Duplicate {
     return Intersperse { iter: iter, sep: sep, next_is_sep: false, next_item: Nothing }
 }
+
+// Thread safety
+impl[I: Send] Send for Intersperse[I] {}
+impl[I: Sync] Sync for Intersperse[I] {}

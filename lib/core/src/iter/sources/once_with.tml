@@ -81,3 +81,7 @@ impl[F, T] Iterator for OnceWith[F] where F = func() -> T {
 pub func once_with[F, T](gen: F) -> OnceWith[F] where F = func() -> T {
     return OnceWith { gen: Just(gen) }
 }
+
+// Thread safety
+impl[F: Send] Send for OnceWith[F] {}
+impl[F: Sync] Sync for OnceWith[F] {}
