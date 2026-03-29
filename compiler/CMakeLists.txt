@@ -284,6 +284,7 @@ configure_file(
 set(TML_RUNTIME_SOURCES
     # core/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential.c
+    # cpuid functions are in essential.c (CPUID/XGETBV for CPU feature detection)
     # memory/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/mem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c

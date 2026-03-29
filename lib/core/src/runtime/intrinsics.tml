@@ -537,4 +537,30 @@ pub func sse2_cmpeq_epi8[V](a: V, b: V) -> V
 @intrinsic
 pub func sse2_movemask_epi8[V](v: V) -> I32
 
+// ============================================================================
+// CPU Feature Detection (x86-64 only)
+// ============================================================================
+
+/// Execute CPUID(leaf, subleaf) and return the EAX register.
+@extern("c")
+pub func tml_cpuid_eax(leaf: I32, subleaf: I32) -> I32
+
+/// Execute CPUID(leaf, subleaf) and return the EBX register.
+@extern("c")
+pub func tml_cpuid_ebx(leaf: I32, subleaf: I32) -> I32
+
+/// Execute CPUID(leaf, subleaf) and return the ECX register.
+@extern("c")
+pub func tml_cpuid_ecx(leaf: I32, subleaf: I32) -> I32
+
+/// Execute CPUID(leaf, subleaf) and return the EDX register.
+@extern("c")
+pub func tml_cpuid_edx(leaf: I32, subleaf: I32) -> I32
+
+/// Read Extended Control Register (XCR) value.
+/// Used to check OS support for AVX state saving (XCR0 bits 1:2).
+/// Only call after verifying OSXSAVE (CPUID.1:ECX bit 27).
+@extern("c")
+pub func tml_xgetbv(xcr_index: I32) -> I64
+
 #endif

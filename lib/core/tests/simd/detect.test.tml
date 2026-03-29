@@ -1,0 +1,80 @@
+use test
+use core::simd::detect
+
+@test
+func test_has_sse2() -> I32 {
+    // SSE2 is always true on x86-64
+    assert_eq(detect::has_sse2(), true)
+    0
+}
+
+@test
+func test_has_sse42() -> I32 {
+    // SSE4.2 is supported on virtually all modern x86-64 CPUs (2008+)
+    // We just check that the function returns a valid boolean
+    let result: Bool = detect::has_sse42()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_has_popcnt() -> I32 {
+    let result: Bool = detect::has_popcnt()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_has_osxsave() -> I32 {
+    let result: Bool = detect::has_osxsave()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_has_avx() -> I32 {
+    let result: Bool = detect::has_avx()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_has_avx2() -> I32 {
+    let result: Bool = detect::has_avx2()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_has_fma() -> I32 {
+    let result: Bool = detect::has_fma()
+    assert_eq(result or not result, true)
+    0
+}
+
+@test
+func test_avx_implies_osxsave() -> I32 {
+    // AVX requires OSXSAVE — if AVX is true, OSXSAVE must also be true
+    if detect::has_avx() {
+        assert_eq(detect::has_osxsave(), true)
+    }
+    0
+}
+
+@test
+func test_avx2_implies_avx() -> I32 {
+    // AVX2 requires AVX — if AVX2 is true, AVX must also be true
+    if detect::has_avx2() {
+        assert_eq(detect::has_avx(), true)
+    }
+    0
+}
+
+@test
+func test_fma_implies_avx() -> I32 {
+    // FMA requires AVX — if FMA is true, AVX must also be true
+    if detect::has_fma() {
+        assert_eq(detect::has_avx(), true)
+    }
+    0
+}

@@ -27,6 +27,7 @@
 //! assert(c.sum() == 50)
 //! ```
 
+pub mod detect
 pub mod mask
 pub mod i32x4
 pub mod f32x4

@@ -1,0 +1,149 @@
+//! Runtime CPU feature detection for SIMD ISA extensions.
+//!
+//! Uses CPUID and XGETBV instructions on x86-64 to detect hardware support
+//! for SSE4.2, AVX, AVX2, FMA, and POPCNT at runtime. On ARM64, NEON is
+//! always available (it is mandatory in AArch64).
+//!
+//! # Usage
+//!
+//! ```tml
+//! use core::simd::detect
+//!
+//! if detect::has_avx2() {
+//!     // Use AVX2 path
+//! } else {
+//!     // Scalar fallback
+//! }
+//! ```
+//!
+//! # Detection Logic
+//!
+//! AVX/AVX2 detection requires three checks:
+//! 1. CPU supports OSXSAVE (CPUID.1:ECX bit 27)
+//! 2. OS has enabled AVX state saving (XGETBV(0) bits 1 and 2 both set)
+//! 3. CPU advertises the specific feature (AVX, AVX2, FMA)
+
+use core::runtime::intrinsics::{tml_cpuid_eax, tml_cpuid_ebx, tml_cpuid_ecx, tml_cpuid_edx, tml_xgetbv}
+
+#if X86_64
+
+/// Returns true if SSE2 is supported.
+/// Always true on x86-64 (SSE2 is part of the AMD64 baseline).
+pub func has_sse2() -> Bool {
+    return true
+}
+
+/// Returns true if SSE4.2 is supported.
+/// Checks CPUID.1:ECX bit 20.
+pub func has_sse42() -> Bool {
+    let ecx: I32 = lowlevel { tml_cpuid_ecx(1, 0) }
+    return lowlevel { llvm_and(llvm_shr(ecx, 20), 1) } == 1
+}
+
+/// Returns true if POPCNT is supported.
+/// Checks CPUID.1:ECX bit 23.
+pub func has_popcnt() -> Bool {
+    let ecx: I32 = lowlevel { tml_cpuid_ecx(1, 0) }
+    return lowlevel { llvm_and(llvm_shr(ecx, 23), 1) } == 1
+}
+
+/// Returns true if OSXSAVE is supported (OS uses XSAVE/XRSTOR).
+/// Checks CPUID.1:ECX bit 27.
+/// This is a prerequisite for AVX — the OS must save/restore YMM state.
+pub func has_osxsave() -> Bool {
+    let ecx: I32 = lowlevel { tml_cpuid_ecx(1, 0) }
+    return lowlevel { llvm_and(llvm_shr(ecx, 27), 1) } == 1
+}
+
+/// Returns true if AVX is supported.
+/// Requires all three conditions:
+/// 1. OSXSAVE enabled (CPUID.1:ECX bit 27)
+/// 2. OS has enabled XMM and YMM state saving (XGETBV(0) bits 1 and 2)
+/// 3. CPU advertises AVX (CPUID.1:ECX bit 28)
+pub func has_avx() -> Bool {
+    let ecx: I32 = lowlevel { tml_cpuid_ecx(1, 0) }
+
+    // Check OSXSAVE (bit 27)
+    let osxsave: I32 = lowlevel { llvm_and(llvm_shr(ecx, 27), 1) }
+    if osxsave != 1 {
+        return false
+    }
+
+    // Check OS has enabled AVX state saving: XCR0 bits 1 (SSE) and 2 (AVX)
+    let xcr0: I64 = lowlevel { tml_xgetbv(0) }
+    let sse_avx_bits: I64 = lowlevel { llvm_and(xcr0, 6_i64) }
+    if sse_avx_bits != 6_i64 {
+        return false
+    }
+
+    // Check AVX bit (bit 28)
+    let avx: I32 = lowlevel { llvm_and(llvm_shr(ecx, 28), 1) }
+    return avx == 1
+}
+
+/// Returns true if AVX2 is supported.
+/// Requires AVX support plus CPUID.7.0:EBX bit 5.
+pub func has_avx2() -> Bool {
+    if not has_avx() {
+        return false
+    }
+    let ebx: I32 = lowlevel { tml_cpuid_ebx(7, 0) }
+    return lowlevel { llvm_and(llvm_shr(ebx, 5), 1) } == 1
+}
+
+/// Returns true if FMA (Fused Multiply-Add) is supported.
+/// Requires AVX support plus CPUID.1:ECX bit 12.
+pub func has_fma() -> Bool {
+    if not has_avx() {
+        return false
+    }
+    let ecx: I32 = lowlevel { tml_cpuid_ecx(1, 0) }
+    return lowlevel { llvm_and(llvm_shr(ecx, 12), 1) } == 1
+}
+
+#endif
+
+#if ARM64
+
+/// Returns true if NEON is supported.
+/// Always true on ARM64 (NEON is mandatory in AArch64).
+pub func has_neon() -> Bool {
+    return true
+}
+
+/// Returns true if SSE2 is supported. Always false on ARM64.
+pub func has_sse2() -> Bool {
+    return false
+}
+
+/// Returns true if SSE4.2 is supported. Always false on ARM64.
+pub func has_sse42() -> Bool {
+    return false
+}
+
+/// Returns true if AVX is supported. Always false on ARM64.
+pub func has_avx() -> Bool {
+    return false
+}
+
+/// Returns true if AVX2 is supported. Always false on ARM64.
+pub func has_avx2() -> Bool {
+    return false
+}
+
+/// Returns true if FMA is supported. Always false on ARM64.
+pub func has_fma() -> Bool {
+    return false
+}
+
+/// Returns true if POPCNT is supported. Always false on ARM64.
+pub func has_popcnt() -> Bool {
+    return false
+}
+
+/// Returns true if OSXSAVE is supported. Always false on ARM64.
+pub func has_osxsave() -> Bool {
+    return false
+}
+
+#endif

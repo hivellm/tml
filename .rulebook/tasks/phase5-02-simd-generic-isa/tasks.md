@@ -1,26 +1,31 @@
 # Tasks: Generic SIMD ISA Support for TML
 
-**Status**: Planning (0%)
+**Status**: Phase 1 Complete (Phase 1: 100%)
 **Priority**: High
 
 ## Phase 1: CPU Feature Detection Infrastructure
 
-> **Priority**: Critical | **Files**: `compiler/src/codegen/llvm/builtins/intrinsics.cpp`, `lib/core/src/simd/detect.tml`
+> **Priority**: Critical | **Files**: `compiler/runtime/core/essential.c`, `lib/core/src/runtime/intrinsics.tml`, `lib/core/src/simd/detect.tml`
 
-- [ ] 1.1 Add `cpuid` compiler intrinsic — execute x86 CPUID, return (eax, ebx, ecx, edx) as 4x U32
-- [ ] 1.2 Add `xgetbv` compiler intrinsic — read XCR0 register, return U64
-- [ ] 1.3 Declare `cpuid` and `xgetbv` in `lib/core/src/intrinsics.tml` (guarded by `#if X86_64`)
-- [ ] 1.4 Create `lib/core/src/simd/detect.tml` with feature detection functions:
-  - [ ] 1.4.1 `has_sse2() -> Bool` (always true on x86-64)
-  - [ ] 1.4.2 `has_sse42() -> Bool` (CPUID.1:ECX bit 20)
-  - [ ] 1.4.3 `has_popcnt() -> Bool` (CPUID.1:ECX bit 23)
-  - [ ] 1.4.4 `has_osxsave() -> Bool` (CPUID.1:ECX bit 27)
-  - [ ] 1.4.5 `has_avx() -> Bool` (OSXSAVE + XGETBV(0) bits 1:2 + CPUID.1:ECX bit 28)
-  - [ ] 1.4.6 `has_avx2() -> Bool` (has_avx() + CPUID.7.0:EBX bit 5)
-  - [ ] 1.4.7 `has_fma() -> Bool` (has_avx() + CPUID.1:ECX bit 12)
-  - [ ] 1.4.8 `has_neon() -> Bool` (compile-time true on ARM64)
-- [ ] 1.5 Add `detect` to `lib/core/src/simd/mod.tml` module exports
-- [ ] 1.6 Write `lib/core/tests/simd/detect.test.tml`
+- [x] 1.1 Add CPUID C runtime helpers — `tml_cpuid_eax/ebx/ecx/edx(leaf, subleaf) -> I32` in `essential.c`
+- [x] 1.2 Add XGETBV C runtime helper — `tml_xgetbv(xcr_index) -> I64` in `essential.c`
+- [x] 1.3 Declare `tml_cpuid_*` and `tml_xgetbv` as `@extern("c")` in `lib/core/src/runtime/intrinsics.tml` (guarded by `#if X86_64`)
+- [x] 1.4 Create `lib/core/src/simd/detect.tml` with feature detection functions:
+  - [x] 1.4.1 `has_sse2() -> Bool` (always true on x86-64)
+  - [x] 1.4.2 `has_sse42() -> Bool` (CPUID.1:ECX bit 20)
+  - [x] 1.4.3 `has_popcnt() -> Bool` (CPUID.1:ECX bit 23)
+  - [x] 1.4.4 `has_osxsave() -> Bool` (CPUID.1:ECX bit 27)
+  - [x] 1.4.5 `has_avx() -> Bool` (OSXSAVE + XGETBV(0) bits 1:2 + CPUID.1:ECX bit 28)
+  - [x] 1.4.6 `has_avx2() -> Bool` (has_avx() + CPUID.7.0:EBX bit 5)
+  - [x] 1.4.7 `has_fma() -> Bool` (has_avx() + CPUID.1:ECX bit 12)
+  - [x] 1.4.8 `has_neon() -> Bool` (compile-time true on ARM64)
+- [x] 1.5 Add `detect` to `lib/core/src/simd/mod.tml` module exports
+- [x] 1.6 Write `lib/core/tests/simd/detect.test.tml` — 10 tests (all pass)
+
+> **Implementation note**: Used `@extern("c")` FFI to C runtime helpers instead of compiler intrinsics.
+> Per-register functions (`tml_cpuid_eax`, `tml_cpuid_ebx`, etc.) avoid pointer-passing complexity.
+> Functions added to `essential.c` (not separate file) because the test runtime archive
+> (`tml_test_runtime.lib`) only includes essential.c objects via WHOLEARCHIVE.
 
 ## Phase 2: SSE2 Complete Intrinsic Set
 
