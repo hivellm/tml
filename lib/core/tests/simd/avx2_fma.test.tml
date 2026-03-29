@@ -1,0 +1,107 @@
+use test
+use core::simd::f32x8::F32x8
+use core::simd::f64x4::F64x4
+use core::runtime::intrinsics::{
+    fma_fmadd_ps, fma_fmadd_pd,
+    fma_fmsub_ps, fma_fmsub_pd,
+    fma_fnmadd_ps, fma_fnmadd_pd,
+    fma_fmadd_ss, fma_fmadd_sd
+}
+
+@test
+func test_fma_fmadd_ps() -> I32 {
+    // a*b + c = 2*3 + 10 = 16
+    let a = F32x8::splat(2.0)
+    let b = F32x8::splat(3.0)
+    let c = F32x8::splat(10.0)
+    var result: F32x8 = F32x8::zero()
+    lowlevel { result = fma_fmadd_ps(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > 15.9 and v < 16.1)
+    let v7 = result.get(7)
+    assert_true(v7 > 15.9 and v7 < 16.1)
+    0
+}
+
+@test
+func test_fma_fmadd_pd() -> I32 {
+    // a*b + c = 5*4 + 1 = 21
+    let a = F64x4::splat(5.0)
+    let b = F64x4::splat(4.0)
+    let c = F64x4::splat(1.0)
+    var result: F64x4 = F64x4::zero()
+    lowlevel { result = fma_fmadd_pd(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > 20.9 and v < 21.1)
+    0
+}
+
+@test
+func test_fma_fmsub_ps() -> I32 {
+    // a*b - c = 2*3 - 10 = -4
+    let a = F32x8::splat(2.0)
+    let b = F32x8::splat(3.0)
+    let c = F32x8::splat(10.0)
+    var result: F32x8 = F32x8::zero()
+    lowlevel { result = fma_fmsub_ps(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > -4.1 and v < -3.9)
+    0
+}
+
+@test
+func test_fma_fmsub_pd() -> I32 {
+    // a*b - c = 5*4 - 1 = 19
+    let a = F64x4::splat(5.0)
+    let b = F64x4::splat(4.0)
+    let c = F64x4::splat(1.0)
+    var result: F64x4 = F64x4::zero()
+    lowlevel { result = fma_fmsub_pd(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > 18.9 and v < 19.1)
+    0
+}
+
+@test
+func test_fma_fnmadd_ps() -> I32 {
+    // -a*b + c = -2*3 + 10 = 4
+    let a = F32x8::splat(2.0)
+    let b = F32x8::splat(3.0)
+    let c = F32x8::splat(10.0)
+    var result: F32x8 = F32x8::zero()
+    lowlevel { result = fma_fnmadd_ps(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > 3.9 and v < 4.1)
+    0
+}
+
+@test
+func test_fma_fnmadd_pd() -> I32 {
+    // -a*b + c = -5*4 + 1 = -19
+    let a = F64x4::splat(5.0)
+    let b = F64x4::splat(4.0)
+    let c = F64x4::splat(1.0)
+    var result: F64x4 = F64x4::zero()
+    lowlevel { result = fma_fnmadd_pd(a, b, c) }
+    let v = result.get(0)
+    assert_true(v > -19.1 and v < -18.9)
+    0
+}
+
+@test
+func test_fma_fmadd_ss_scalar() -> I32 {
+    // Scalar FMA: 2*3 + 10 = 16
+    var result: F32 = 0.0
+    lowlevel { result = fma_fmadd_ss(2.0, 3.0, 10.0) }
+    assert_true(result > 15.9 and result < 16.1)
+    0
+}
+
+@test
+func test_fma_fmadd_sd_scalar() -> I32 {
+    // Scalar FMA double: 5*4 + 1 = 21
+    var result: F64 = 0.0
+    lowlevel { result = fma_fmadd_sd(5.0, 4.0, 1.0) }
+    assert_true(result > 20.9 and result < 21.1)
+    0
+}

@@ -1,0 +1,135 @@
+use test
+use core::simd::i32x8::I32x8
+use core::simd::i8x32::I8x32
+use core::simd::i64x4::I64x4
+use core::simd::i16x16::I16x16
+use core::runtime::intrinsics::{
+    avx2_hadd_epi32, avx2_shuffle_epi8, avx2_movemask_epi8,
+    avx2_packs_epi32, avx2_packus_epi16,
+    avx2_sllv_epi32, avx2_srlv_epi32, avx2_sllv_epi64, avx2_srlv_epi64
+}
+
+@test
+func test_avx2_hadd_epi32_basic() -> I32 {
+    let a = I32x8::new(1, 2, 3, 4, 5, 6, 7, 8)
+    let b = I32x8::new(10, 20, 30, 40, 50, 60, 70, 80)
+    var result: I32x8 = I32x8::zero()
+    lowlevel { result = avx2_hadd_epi32(a, b) }
+    // In-lane hadd: [1+2, 3+4, 10+20, 30+40, 5+6, 7+8, 50+60, 70+80]
+    assert_eq(result.get(0), 3)
+    assert_eq(result.get(1), 7)
+    assert_eq(result.get(2), 30)
+    assert_eq(result.get(3), 70)
+    assert_eq(result.get(4), 11)
+    assert_eq(result.get(5), 15)
+    assert_eq(result.get(6), 110)
+    assert_eq(result.get(7), 150)
+    0
+}
+
+@test
+func test_avx2_hadd_epi32_self() -> I32 {
+    let a = I32x8::new(1, 1, 1, 1, 1, 1, 1, 1)
+    var result: I32x8 = I32x8::zero()
+    lowlevel { result = avx2_hadd_epi32(a, a) }
+    // hadd(a, a) = [1+1, 1+1, 1+1, 1+1, 1+1, 1+1, 1+1, 1+1] = all 2
+    assert_eq(result.get(0), 2)
+    assert_eq(result.get(7), 2)
+    0
+}
+
+@test
+func test_avx2_packs_epi32_saturation() -> I32 {
+    let a = I32x8::new(100, 200, 300, 400, -100, -200, -300, -400)
+    let b = I32x8::new(1000, 2000, 32767, 40000, -32768, -40000, 0, 1)
+    var packed: I16x16 = I16x16::zero()
+    lowlevel { packed = avx2_packs_epi32(a, b) }
+    // Low 128: a[0..3] -> lanes 0-3, b[0..3] -> lanes 4-7
+    assert_eq(packed.get(0), 100)
+    assert_eq(packed.get(3), 400)
+    assert_eq(packed.get(4), 1000)
+    assert_eq(packed.get(7), 32767)  // 40000 saturated to 32767
+    // High 128: a[4..7] -> lanes 8-11, b[4..7] -> lanes 12-15
+    assert_eq(packed.get(8), -100)
+    assert_eq(packed.get(12), -32768)  // -32768 stays
+    assert_eq(packed.get(13), -32768)  // -40000 saturated to -32768
+    assert_eq(packed.get(15), 1)
+    0
+}
+
+@test
+func test_avx2_sllv_epi32_variable() -> I32 {
+    let vals = I32x8::new(1, 2, 4, 8, 16, 32, 64, 128)
+    let shifts = I32x8::new(1, 2, 3, 4, 0, 1, 2, 3)
+    var result: I32x8 = I32x8::zero()
+    lowlevel { result = avx2_sllv_epi32(vals, shifts) }
+    assert_eq(result.get(0), 2)    // 1<<1
+    assert_eq(result.get(1), 8)    // 2<<2
+    assert_eq(result.get(2), 32)   // 4<<3
+    assert_eq(result.get(3), 128)  // 8<<4
+    assert_eq(result.get(4), 16)   // 16<<0
+    assert_eq(result.get(5), 64)   // 32<<1
+    assert_eq(result.get(6), 256)  // 64<<2
+    assert_eq(result.get(7), 1024) // 128<<3
+    0
+}
+
+@test
+func test_avx2_srlv_epi32_variable() -> I32 {
+    let vals = I32x8::new(256, 256, 256, 256, 128, 128, 128, 128)
+    let shifts = I32x8::new(0, 1, 2, 3, 4, 5, 6, 7)
+    var result: I32x8 = I32x8::zero()
+    lowlevel { result = avx2_srlv_epi32(vals, shifts) }
+    assert_eq(result.get(0), 256) // 256>>0
+    assert_eq(result.get(1), 128) // 256>>1
+    assert_eq(result.get(2), 64)  // 256>>2
+    assert_eq(result.get(3), 32)  // 256>>3
+    assert_eq(result.get(4), 8)   // 128>>4
+    assert_eq(result.get(5), 4)   // 128>>5
+    assert_eq(result.get(6), 2)   // 128>>6
+    assert_eq(result.get(7), 1)   // 128>>7
+    0
+}
+
+@test
+func test_avx2_sllv_epi64_variable() -> I32 {
+    let vals = I64x4::new(1, 2, 4, 8)
+    let shifts = I64x4::new(1, 2, 3, 4)
+    var result: I64x4 = I64x4::zero()
+    lowlevel { result = avx2_sllv_epi64(vals, shifts) }
+    assert_eq(result.get(0), 2)   // 1<<1
+    assert_eq(result.get(1), 8)   // 2<<2
+    assert_eq(result.get(2), 32)  // 4<<3
+    assert_eq(result.get(3), 128) // 8<<4
+    0
+}
+
+@test
+func test_avx2_srlv_epi64_variable() -> I32 {
+    let vals = I64x4::new(256, 256, 256, 256)
+    let shifts = I64x4::new(0, 1, 2, 3)
+    var result: I64x4 = I64x4::zero()
+    lowlevel { result = avx2_srlv_epi64(vals, shifts) }
+    assert_eq(result.get(0), 256) // 256>>0
+    assert_eq(result.get(1), 128) // 256>>1
+    assert_eq(result.get(2), 64)  // 256>>2
+    assert_eq(result.get(3), 32)  // 256>>3
+    0
+}
+
+@test
+func test_avx2_shuffle_epi8_identity() -> I32 {
+    // Shuffle with identity pattern (0,1,2,...,15,16,17,...,31)
+    // Since VPSHUFB is in-lane, indices 0-15 in low lane, 0-15 in high lane
+    let data = I8x32::splat(42)
+    let idx = I8x32::splat(0)  // All lanes pick lane 0 within each 128-bit half
+    var result: I8x32 = I8x32::zero()
+    lowlevel { result = avx2_shuffle_epi8(data, idx) }
+    // All lanes should be 42 (data lane 0 = 42)
+    let eq = lowlevel { avx2_movemask_epi8(result) }
+    // movemask extracts MSB, 42 = 0b00101010, MSB=0, so mask should be 0
+    // Actually let's just check the value
+    assert_eq(result.get(0), 42)
+    assert_eq(result.get(16), 42)
+    0
+}

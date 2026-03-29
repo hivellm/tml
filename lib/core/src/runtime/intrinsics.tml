@@ -817,6 +817,106 @@ pub func avx2_permute4x64_epi64[V](v: V, idx: V) -> V
 pub func avx2_permute2x128_si256[V](a: V, b: V, imm: I8) -> V
 
 // ============================================================================
+// AVX2 Horizontal & Pack Intrinsics (x86-64 only)
+// ============================================================================
+
+/// 256-bit horizontal add of adjacent pairs (16-bit). Compiles to VPHADDW.
+@intrinsic
+pub func avx2_hadd_epi16[V](a: V, b: V) -> V
+
+/// 256-bit horizontal add of adjacent pairs (32-bit). Compiles to VPHADDD.
+@intrinsic
+pub func avx2_hadd_epi32[V](a: V, b: V) -> V
+
+/// 256-bit pack i16 to i8 with signed saturation. Compiles to VPACKSSWB.
+@intrinsic
+pub func avx2_packs_epi16[V, R](a: V, b: V) -> R
+
+/// 256-bit pack i32 to i16 with signed saturation. Compiles to VPACKSSDW.
+@intrinsic
+pub func avx2_packs_epi32[V, R](a: V, b: V) -> R
+
+/// 256-bit pack i16 to u8 with unsigned saturation. Compiles to VPACKUSWB.
+@intrinsic
+pub func avx2_packus_epi16[V, R](a: V, b: V) -> R
+
+/// 256-bit pack i32 to u16 with unsigned saturation. Compiles to VPACKUSDW.
+@intrinsic
+pub func avx2_packus_epi32[V, R](a: V, b: V) -> R
+
+// ============================================================================
+// AVX2 Gather Intrinsics (x86-64 only)
+// ============================================================================
+
+/// Gather 8 x I32 from memory using 32-bit indices. Compiles to VPGATHERDD.
+@intrinsic
+pub func avx2_gather_epi32[V, P](addr: P, indices: V, mask: V, scale: I8) -> V
+
+/// Gather 4 x I64 from memory using 32-bit indices. Compiles to VPGATHERDQ.
+@intrinsic
+pub func avx2_gather_epi64[V, Idx, P](addr: P, indices: Idx, mask: V, scale: I8) -> V
+
+/// Gather 8 x F32 from memory using 32-bit indices. Compiles to VGATHERDPS.
+@intrinsic
+pub func avx2_gather_ps[V, Idx, P](addr: P, indices: Idx, mask: V, scale: I8) -> V
+
+// ============================================================================
+// AVX2 Variable Shift Intrinsics (x86-64 only)
+// ============================================================================
+
+/// Per-lane variable shift left (32-bit). Compiles to VPSLLVD.
+@intrinsic
+pub func avx2_sllv_epi32[V](a: V, shift: V) -> V
+
+/// Per-lane variable shift left (64-bit). Compiles to VPSLLVQ.
+@intrinsic
+pub func avx2_sllv_epi64[V](a: V, shift: V) -> V
+
+/// Per-lane variable logical shift right (32-bit). Compiles to VPSRLVD.
+@intrinsic
+pub func avx2_srlv_epi32[V](a: V, shift: V) -> V
+
+/// Per-lane variable logical shift right (64-bit). Compiles to VPSRLVQ.
+@intrinsic
+pub func avx2_srlv_epi64[V](a: V, shift: V) -> V
+
+// ============================================================================
+// FMA Intrinsics (x86-64 only, requires FMA3)
+// ============================================================================
+
+/// Fused multiply-add: a*b + c (8 floats). Compiles to VFMADD.
+@intrinsic
+pub func fma_fmadd_ps[V](a: V, b: V, c: V) -> V
+
+/// Fused multiply-add: a*b + c (4 doubles). Compiles to VFMADD.
+@intrinsic
+pub func fma_fmadd_pd[V](a: V, b: V, c: V) -> V
+
+/// Fused multiply-subtract: a*b - c (8 floats). Compiles to VFMSUB.
+@intrinsic
+pub func fma_fmsub_ps[V](a: V, b: V, c: V) -> V
+
+/// Fused multiply-subtract: a*b - c (4 doubles). Compiles to VFMSUB.
+@intrinsic
+pub func fma_fmsub_pd[V](a: V, b: V, c: V) -> V
+
+/// Negated fused multiply-add: -a*b + c (8 floats). Compiles to VFNMADD.
+@intrinsic
+pub func fma_fnmadd_ps[V](a: V, b: V, c: V) -> V
+
+/// Negated fused multiply-add: -a*b + c (4 doubles). Compiles to VFNMADD.
+@intrinsic
+pub func fma_fnmadd_pd[V](a: V, b: V, c: V) -> V
+
+/// Scalar fused multiply-add: a*b + c (single float).
+@intrinsic
+pub func fma_fmadd_ss(a: F32, b: F32, c: F32) -> F32
+
+/// Scalar fused multiply-add: a*b + c (single double).
+@intrinsic
+pub func fma_fmadd_sd(a: F64, b: F64, c: F64) -> F64
+
+// ============================================================================
 // CPU Feature Detection (x86-64 only)
 // ============================================================================
 

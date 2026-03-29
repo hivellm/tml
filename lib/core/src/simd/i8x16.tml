@@ -3,7 +3,7 @@
 use core::simd::mask::Mask16
 use core::runtime::intrinsics::{
     simd_load, simd_store, simd_extract, simd_insert,
-    llvm_add, llvm_sub
+    llvm_add, llvm_sub, llvm_and, llvm_or, llvm_xor
 }
 
 /// A 16-lane vector of I8 values (128 bits total).
@@ -73,6 +73,41 @@ impl I8x16 {
             let a = simd_load[I8x16](ref this)
             let b = simd_load[I8x16](ref other)
             let r = llvm_sub(a, b)
+            var result: I8x16 = I8x16::zero()
+            simd_store[I8x16](mut ref result, r)
+            return result
+        }
+    }
+
+    // -- Bitwise --
+
+    pub func band(this, other: I8x16) -> I8x16 {
+        lowlevel {
+            let a = simd_load[I8x16](ref this)
+            let b = simd_load[I8x16](ref other)
+            let r = llvm_and(a, b)
+            var result: I8x16 = I8x16::zero()
+            simd_store[I8x16](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func bor(this, other: I8x16) -> I8x16 {
+        lowlevel {
+            let a = simd_load[I8x16](ref this)
+            let b = simd_load[I8x16](ref other)
+            let r = llvm_or(a, b)
+            var result: I8x16 = I8x16::zero()
+            simd_store[I8x16](mut ref result, r)
+            return result
+        }
+    }
+
+    pub func bxor(this, other: I8x16) -> I8x16 {
+        lowlevel {
+            let a = simd_load[I8x16](ref this)
+            let b = simd_load[I8x16](ref other)
+            let r = llvm_xor(a, b)
             var result: I8x16 = I8x16::zero()
             simd_store[I8x16](mut ref result, r)
             return result

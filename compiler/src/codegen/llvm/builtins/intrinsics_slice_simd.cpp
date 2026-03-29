@@ -1766,6 +1766,346 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
         return "0";
     }
 
+    // ============================================================================
+    // AVX2 Horizontal & Pack Intrinsics (4.6)
+    // ============================================================================
+
+    // avx2_hadd_epi16(a, b) -> <16 x i16>  — VPHADDW (horizontal add pairs)
+    if (intrinsic_name == "avx2_hadd_epi16") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <16 x i16> @llvm.x86.avx2.phadd.w(<16 x i16> " + a +
+                      ", <16 x i16> " + b + ")");
+            last_expr_type_ = "<16 x i16>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_hadd_epi32(a, b) -> <8 x i32>  — VPHADDD (horizontal add pairs)
+    if (intrinsic_name == "avx2_hadd_epi32") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <8 x i32> @llvm.x86.avx2.phadd.d(<8 x i32> " + a +
+                      ", <8 x i32> " + b + ")");
+            last_expr_type_ = "<8 x i32>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_packs_epi16(a, b) -> <32 x i8>  — VPACKSSWB (i16->i8 signed saturation)
+    if (intrinsic_name == "avx2_packs_epi16") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <32 x i8> @llvm.x86.avx2.packsswb(<16 x i16> " + a +
+                      ", <16 x i16> " + b + ")");
+            last_expr_type_ = "<32 x i8>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_packs_epi32(a, b) -> <16 x i16>  — VPACKSSDW (i32->i16 signed saturation)
+    if (intrinsic_name == "avx2_packs_epi32") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <16 x i16> @llvm.x86.avx2.packssdw(<8 x i32> " + a +
+                      ", <8 x i32> " + b + ")");
+            last_expr_type_ = "<16 x i16>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_packus_epi16(a, b) -> <32 x i8>  — VPACKUSWB (i16->u8 unsigned saturation)
+    if (intrinsic_name == "avx2_packus_epi16") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <32 x i8> @llvm.x86.avx2.packuswb(<16 x i16> " + a +
+                      ", <16 x i16> " + b + ")");
+            last_expr_type_ = "<32 x i8>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_packus_epi32(a, b) -> <16 x i16>  — VPACKUSDW (i32->u16 unsigned saturation)
+    if (intrinsic_name == "avx2_packus_epi32") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <16 x i16> @llvm.x86.avx2.packusdw(<8 x i32> " + a +
+                      ", <8 x i32> " + b + ")");
+            last_expr_type_ = "<16 x i16>";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // AVX2 Gather Intrinsics (4.7)
+    // ============================================================================
+
+    // avx2_gather_epi32(base_ptr, indices, mask, scale) -> <8 x i32>  — VPGATHERDD
+    if (intrinsic_name == "avx2_gather_epi32") {
+        if (call.args.size() >= 4) {
+            std::string base = gen_expr(*call.args[0]);    // ptr (i32*)
+            std::string indices = gen_expr(*call.args[1]); // <8 x i32>
+            std::string mask = gen_expr(*call.args[2]);    // <8 x i32> (all-ones for active)
+            std::string scale = gen_expr(*call.args[3]);   // i8 (1, 2, 4, or 8)
+            std::string result = fresh_reg();
+            // @llvm.x86.avx2.gather.d.d.256(<8 x i32> passthru, ptr base, <8 x i32> idx, <8 x i32>
+            // mask, i8 scale)
+            emit_line("  " + result +
+                      " = call <8 x i32> @llvm.x86.avx2.gather.d.d.256(<8 x i32> zeroinitializer, "
+                      "ptr " +
+                      base + ", <8 x i32> " + indices + ", <8 x i32> " + mask + ", i8 " + scale +
+                      ")");
+            last_expr_type_ = "<8 x i32>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_gather_epi64(base_ptr, indices, mask, scale) -> <4 x i64>  — VPGATHERDQ
+    // Uses 4 x i32 indices to gather 4 x i64 values
+    if (intrinsic_name == "avx2_gather_epi64") {
+        if (call.args.size() >= 4) {
+            std::string base = gen_expr(*call.args[0]);    // ptr
+            std::string indices = gen_expr(*call.args[1]); // <4 x i32>
+            std::string mask = gen_expr(*call.args[2]);    // <4 x i64> (all-ones for active)
+            std::string scale = gen_expr(*call.args[3]);   // i8
+            std::string result = fresh_reg();
+            emit_line("  " + result +
+                      " = call <4 x i64> @llvm.x86.avx2.gather.d.q.256(<4 x i64> zeroinitializer, "
+                      "ptr " +
+                      base + ", <4 x i32> " + indices + ", <4 x i64> " + mask + ", i8 " + scale +
+                      ")");
+            last_expr_type_ = "<4 x i64>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_gather_ps(base_ptr, indices, mask, scale) -> <8 x float>  — VGATHERDPS
+    if (intrinsic_name == "avx2_gather_ps") {
+        if (call.args.size() >= 4) {
+            std::string base = gen_expr(*call.args[0]);    // ptr
+            std::string indices = gen_expr(*call.args[1]); // <8 x i32>
+            std::string mask = gen_expr(*call.args[2]);    // <8 x float> (bitcast from i32 mask)
+            std::string scale = gen_expr(*call.args[3]);   // i8
+            std::string result = fresh_reg();
+            emit_line(
+                "  " + result +
+                " = call <8 x float> @llvm.x86.avx2.gather.d.ps.256(<8 x float> zeroinitializer, "
+                "ptr " +
+                base + ", <8 x i32> " + indices + ", <8 x float> " + mask + ", i8 " + scale + ")");
+            last_expr_type_ = "<8 x float>";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // AVX2 Variable Shift Intrinsics (4.8)
+    // ============================================================================
+
+    // avx2_sllv_epi32(a, shift) -> <8 x i32>  — VPSLLVD (per-lane shift left)
+    if (intrinsic_name == "avx2_sllv_epi32") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = shl <8 x i32> " + a + ", " + b);
+            last_expr_type_ = "<8 x i32>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_sllv_epi64(a, shift) -> <4 x i64>  — VPSLLVQ (per-lane shift left)
+    if (intrinsic_name == "avx2_sllv_epi64") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = shl <4 x i64> " + a + ", " + b);
+            last_expr_type_ = "<4 x i64>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_srlv_epi32(a, shift) -> <8 x i32>  — VPSRLVD (per-lane shift right)
+    if (intrinsic_name == "avx2_srlv_epi32") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = lshr <8 x i32> " + a + ", " + b);
+            last_expr_type_ = "<8 x i32>";
+            return result;
+        }
+        return "0";
+    }
+
+    // avx2_srlv_epi64(a, shift) -> <4 x i64>  — VPSRLVQ (per-lane shift right)
+    if (intrinsic_name == "avx2_srlv_epi64") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = lshr <4 x i64> " + a + ", " + b);
+            last_expr_type_ = "<4 x i64>";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============================================================================
+    // FMA Intrinsics (4.9) — Fused Multiply-Add
+    // ============================================================================
+
+    // fma_fmadd_ps(a, b, c) -> <8 x float>  — VFMADD (a*b + c)
+    if (intrinsic_name == "fma_fmadd_ps") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <8 x float> @llvm.fma.v8f32(<8 x float> " + a +
+                      ", <8 x float> " + b + ", <8 x float> " + c + ")");
+            last_expr_type_ = "<8 x float>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fmadd_pd(a, b, c) -> <4 x double>  — VFMADD (a*b + c)
+    if (intrinsic_name == "fma_fmadd_pd") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <4 x double> @llvm.fma.v4f64(<4 x double> " + a +
+                      ", <4 x double> " + b + ", <4 x double> " + c + ")");
+            last_expr_type_ = "<4 x double>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fmsub_ps(a, b, c) -> <8 x float>  — VFMSUB (a*b - c = fma(a, b, -c))
+    if (intrinsic_name == "fma_fmsub_ps") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string neg_c = fresh_reg();
+            emit_line("  " + neg_c + " = fneg <8 x float> " + c);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <8 x float> @llvm.fma.v8f32(<8 x float> " + a +
+                      ", <8 x float> " + b + ", <8 x float> " + neg_c + ")");
+            last_expr_type_ = "<8 x float>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fmsub_pd(a, b, c) -> <4 x double>  — VFMSUB (a*b - c)
+    if (intrinsic_name == "fma_fmsub_pd") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string neg_c = fresh_reg();
+            emit_line("  " + neg_c + " = fneg <4 x double> " + c);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <4 x double> @llvm.fma.v4f64(<4 x double> " + a +
+                      ", <4 x double> " + b + ", <4 x double> " + neg_c + ")");
+            last_expr_type_ = "<4 x double>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fnmadd_ps(a, b, c) -> <8 x float>  — VFNMADD (-a*b + c = fma(-a, b, c))
+    if (intrinsic_name == "fma_fnmadd_ps") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string neg_a = fresh_reg();
+            emit_line("  " + neg_a + " = fneg <8 x float> " + a);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <8 x float> @llvm.fma.v8f32(<8 x float> " + neg_a +
+                      ", <8 x float> " + b + ", <8 x float> " + c + ")");
+            last_expr_type_ = "<8 x float>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fnmadd_pd(a, b, c) -> <4 x double>  — VFNMADD (-a*b + c)
+    if (intrinsic_name == "fma_fnmadd_pd") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string neg_a = fresh_reg();
+            emit_line("  " + neg_a + " = fneg <4 x double> " + a);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call <4 x double> @llvm.fma.v4f64(<4 x double> " + neg_a +
+                      ", <4 x double> " + b + ", <4 x double> " + c + ")");
+            last_expr_type_ = "<4 x double>";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fmadd_ss(a, b, c) -> F32  — Scalar FMA (a*b + c)
+    if (intrinsic_name == "fma_fmadd_ss") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call float @llvm.fma.f32(float " + a + ", float " + b +
+                      ", float " + c + ")");
+            last_expr_type_ = "float";
+            return result;
+        }
+        return "0";
+    }
+
+    // fma_fmadd_sd(a, b, c) -> F64  — Scalar FMA (a*b + c)
+    if (intrinsic_name == "fma_fmadd_sd") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string c = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @llvm.fma.f64(double " + a + ", double " + b +
+                      ", double " + c + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0";
+    }
+
     return std::nullopt;
 }
 

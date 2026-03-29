@@ -1,0 +1,152 @@
+//! 16-lane I16 SIMD vector type (256 bits, AVX2).
+
+use core::runtime::intrinsics::{
+    simd_load, simd_store, simd_extract, simd_insert,
+    llvm_add, llvm_sub, llvm_mul,
+    llvm_and, llvm_or, llvm_xor
+}
+
+/// A 16-lane vector of I16 values (256 bits total).
+/// Requires AVX2 support at runtime.
+@simd
+pub type I16x16 {
+    e0: I16, e1: I16, e2: I16, e3: I16,
+    e4: I16, e5: I16, e6: I16, e7: I16,
+    e8: I16, e9: I16, e10: I16, e11: I16,
+    e12: I16, e13: I16, e14: I16, e15: I16
+}
+
+impl I16x16 {
+    /// Construct from sixteen lane values.
+    pub func new(
+        e0: I16, e1: I16, e2: I16, e3: I16,
+        e4: I16, e5: I16, e6: I16, e7: I16,
+        e8: I16, e9: I16, e10: I16, e11: I16,
+        e12: I16, e13: I16, e14: I16, e15: I16
+    ) -> I16x16 {
+        return I16x16 {
+            e0: e0, e1: e1, e2: e2, e3: e3,
+            e4: e4, e5: e5, e6: e6, e7: e7,
+            e8: e8, e9: e9, e10: e10, e11: e11,
+            e12: e12, e13: e13, e14: e14, e15: e15
+        }
+    }
+
+    /// Broadcast a single value to all 16 lanes.
+    pub func splat(v: I16) -> I16x16 {
+        return I16x16 {
+            e0: v, e1: v, e2: v, e3: v,
+            e4: v, e5: v, e6: v, e7: v,
+            e8: v, e9: v, e10: v, e11: v,
+            e12: v, e13: v, e14: v, e15: v
+        }
+    }
+
+    /// All lanes zero.
+    pub func zero() -> I16x16 {
+        return I16x16::splat(0)
+    }
+
+    /// Get lane by index (0-15). Returns 0 for out-of-bounds.
+    pub func get(this, idx: I32) -> I16 {
+        if idx < 0 or idx > 15 { return 0 }
+        lowlevel {
+            let v = simd_load[I16x16](ref this)
+            return simd_extract[I16x16, I16](v, idx)
+        }
+    }
+
+    /// Return a new vector with lane `idx` replaced by `val`.
+    pub func set(this, idx: I32, val: I16) -> I16x16 {
+        lowlevel {
+            let v = simd_load[I16x16](ref this)
+            let w = simd_insert[I16x16, I16](v, val, idx)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, w)
+            return result
+        }
+    }
+
+    /// Lane-wise addition.
+    pub func add(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let c = llvm_add(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise subtraction.
+    pub func sub(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let c = llvm_sub(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise multiplication (low 16 bits).
+    pub func mul(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let c = llvm_mul(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, c)
+            return result
+        }
+    }
+
+    /// Lane-wise bitwise AND.
+    pub func band(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let r = llvm_and(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, r)
+            return result
+        }
+    }
+
+    /// Lane-wise bitwise OR.
+    pub func bor(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let r = llvm_or(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, r)
+            return result
+        }
+    }
+
+    /// Lane-wise bitwise XOR.
+    pub func bxor(this, other: I16x16) -> I16x16 {
+        lowlevel {
+            let a = simd_load[I16x16](ref this)
+            let b = simd_load[I16x16](ref other)
+            let r = llvm_xor(a, b)
+            var result: I16x16 = I16x16::zero()
+            simd_store[I16x16](mut ref result, r)
+            return result
+        }
+    }
+
+    /// Sum all 16 lanes.
+    pub func sum(this) -> I32 {
+        var total: I32 = 0
+        var i = 0
+        loop (i < 16) {
+            total = total + this.get(i) as I32
+            i = i + 1
+        }
+        return total
+    }
+}

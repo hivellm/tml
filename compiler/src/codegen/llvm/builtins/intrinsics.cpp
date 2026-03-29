@@ -180,6 +180,16 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "avx2_and_si256", "avx2_or_si256", "avx2_xor_si256", "avx2_movemask_epi8",
         // AVX2 shuffle & permute
         "avx2_shuffle_epi8", "avx2_permute4x64_epi64", "avx2_permute2x128_si256",
+        // AVX2 horizontal & pack
+        "avx2_hadd_epi16", "avx2_hadd_epi32", "avx2_packs_epi16", "avx2_packs_epi32",
+        "avx2_packus_epi16", "avx2_packus_epi32",
+        // AVX2 gather
+        "avx2_gather_epi32", "avx2_gather_epi64", "avx2_gather_ps",
+        // AVX2 variable shift
+        "avx2_sllv_epi32", "avx2_sllv_epi64", "avx2_srlv_epi32", "avx2_srlv_epi64",
+        // FMA intrinsics
+        "fma_fmadd_ps", "fma_fmadd_pd", "fma_fmsub_ps", "fma_fmsub_pd", "fma_fnmadd_ps",
+        "fma_fnmadd_pd", "fma_fmadd_ss", "fma_fmadd_sd",
         // Array element intrinsics
         "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
 

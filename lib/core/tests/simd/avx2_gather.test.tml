@@ -1,0 +1,90 @@
+use test
+use core::simd::i32x4::I32x4
+use core::simd::i32x8::I32x8
+use core::simd::i64x4::I64x4
+use core::runtime::intrinsics::{
+    avx2_gather_epi32, avx2_gather_epi64,
+    ptr_write, ptr_offset
+}
+
+@test
+func test_avx2_gather_epi32_sequential() -> I32 {
+    lowlevel {
+        let buf = mem_alloc(32)
+        ptr_write[I32](buf, 100)
+        ptr_write[I32](ptr_offset[I32](buf, 1), 200)
+        ptr_write[I32](ptr_offset[I32](buf, 2), 300)
+        ptr_write[I32](ptr_offset[I32](buf, 3), 400)
+        ptr_write[I32](ptr_offset[I32](buf, 4), 500)
+        ptr_write[I32](ptr_offset[I32](buf, 5), 600)
+        ptr_write[I32](ptr_offset[I32](buf, 6), 700)
+        ptr_write[I32](ptr_offset[I32](buf, 7), 800)
+
+        // Gather in order: indices [0, 1, 2, 3, 4, 5, 6, 7], scale=4
+        let indices = I32x8::new(0, 1, 2, 3, 4, 5, 6, 7)
+        let mask = I32x8::splat(-1)
+        var result: I32x8 = I32x8::zero()
+        result = avx2_gather_epi32(buf, indices, mask, 4 as I8)
+
+        assert_eq(result.get(0), 100)
+        assert_eq(result.get(1), 200)
+        assert_eq(result.get(4), 500)
+        assert_eq(result.get(7), 800)
+
+        mem_free(buf)
+    }
+    0
+}
+
+@test
+func test_avx2_gather_epi32_permuted() -> I32 {
+    lowlevel {
+        let buf = mem_alloc(32)
+        ptr_write[I32](buf, 10)
+        ptr_write[I32](ptr_offset[I32](buf, 1), 20)
+        ptr_write[I32](ptr_offset[I32](buf, 2), 30)
+        ptr_write[I32](ptr_offset[I32](buf, 3), 40)
+        ptr_write[I32](ptr_offset[I32](buf, 4), 50)
+        ptr_write[I32](ptr_offset[I32](buf, 5), 60)
+        ptr_write[I32](ptr_offset[I32](buf, 6), 70)
+        ptr_write[I32](ptr_offset[I32](buf, 7), 80)
+
+        // Gather reversed
+        let indices = I32x8::new(7, 6, 5, 4, 3, 2, 1, 0)
+        let mask = I32x8::splat(-1)
+        var result: I32x8 = I32x8::zero()
+        result = avx2_gather_epi32(buf, indices, mask, 4 as I8)
+
+        assert_eq(result.get(0), 80)
+        assert_eq(result.get(1), 70)
+        assert_eq(result.get(7), 10)
+
+        mem_free(buf)
+    }
+    0
+}
+
+@test
+func test_avx2_gather_epi64_basic() -> I32 {
+    lowlevel {
+        let buf = mem_alloc(32)  // 4 x I64 = 32 bytes
+        ptr_write[I64](buf, 1000)
+        ptr_write[I64](ptr_offset[I64](buf, 1), 2000)
+        ptr_write[I64](ptr_offset[I64](buf, 2), 3000)
+        ptr_write[I64](ptr_offset[I64](buf, 3), 4000)
+
+        // gather_epi64 uses <4 x i32> indices for 4 x i64 values
+        let indices = I32x4::new(3, 2, 1, 0)
+        let mask = I64x4::splat(-1)
+        var result: I64x4 = I64x4::zero()
+        result = avx2_gather_epi64(buf, indices, mask, 8 as I8)
+
+        assert_eq(result.get(0), 4000)
+        assert_eq(result.get(1), 3000)
+        assert_eq(result.get(2), 2000)
+        assert_eq(result.get(3), 1000)
+
+        mem_free(buf)
+    }
+    0
+}
