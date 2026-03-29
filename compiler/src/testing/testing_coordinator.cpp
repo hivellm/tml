@@ -1591,7 +1591,15 @@ TestRunResult run_tests(const TestConfig& config) {
         for (const auto& cr : new_compile_results) {
             if (!cr.success) {
                 result.compilation_errors++;
+            } else if (!cr.per_file_errors.empty()) {
+                // Per-file SKIPs also count as errors for fail-fast purposes
+                result.compilation_errors += static_cast<int>(cr.per_file_errors.size());
             }
+        }
+
+        // Fail-fast: abort immediately if any compile error occurred
+        if (config.fail_fast && result.compilation_errors > 0) {
+            should_stop.store(true, std::memory_order_relaxed);
         }
 
         // Final flush after compilation
