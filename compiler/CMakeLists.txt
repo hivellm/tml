@@ -292,6 +292,7 @@ set(TML_RUNTIME_SOURCES
     # text.c deleted (Phase 30) — Text migrated to pure TML (Phase 22)
     # collections/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/collections.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/collections/buffer_simd.c
     # math/
     # math.c deleted (Phase 32) — all functions migrated to inline LLVM IR
     # time/
@@ -1214,6 +1215,29 @@ if(MSVC)
 else()
     target_compile_options(tml_search PRIVATE -mavx2 -mfma)
 endif()
+
+# SIMD string operations library (SSE4.2 + SSE2 optimized)
+add_library(tml_simd_string STATIC
+    src/simd/simd_string.cpp
+)
+target_include_directories(tml_simd_string PUBLIC include src)
+# Enable SSE4.2 intrinsics (includes SSE2, SSSE3, SSE4.1)
+if(MSVC)
+    # MSVC: SSE2 is default for x64, SSE4.2 enabled via /arch:AVX (minimum that includes SSE4.2)
+    # Note: MSVC has no /arch:SSE4.2, closest is /arch:AVX
+    target_compile_options(tml_simd_string PRIVATE /arch:AVX)
+else()
+    target_compile_options(tml_simd_string PRIVATE -msse4.2)
+endif()
+set_target_properties(tml_simd_string PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_simd_string PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+message(STATUS "TML SIMD String: Building static library (tml_simd_string)")
 
 # MCP library (Model Context Protocol server)
 # Named tml_mcp_lib to avoid conflict with tml_mcp executable

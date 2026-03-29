@@ -29,6 +29,36 @@ use core::runtime::intrinsics::{ptr_read, ptr_write}
 use core::str
 
 // ============================================================================
+// C FFI — SIMD-optimized and libc operations
+// ============================================================================
+
+/// C libc memcmp — compare n bytes; returns <0, 0, or >0.
+@extern("memcmp")
+func c_memcmp(a: *Unit, b: *Unit, n: I64) -> I32
+
+/// C libc memchr — find first byte `c` in `s[0..n)`, returns pointer or null.
+@extern("memchr")
+func c_memchr(s: *Unit, c: I32, n: I64) -> *Unit
+
+/// SSE2-accelerated reverse byte search (buffer_simd.c).
+/// Searches data[0..len) backward from `start` for `value`.
+/// Returns index, or -1 if not found.
+@extern("buf_last_index_of_simd")
+func c_buf_last_index_of_simd(data: *Unit, len: I64, value: I32, start: I64) -> I64
+
+/// bswap16 bulk swap — reverses each 2-byte word in data[0..len) in place.
+@extern("buf_bswap16")
+func c_buf_bswap16(data: *Unit, len: I64)
+
+/// bswap32 bulk swap — reverses each 4-byte word in data[0..len) in place.
+@extern("buf_bswap32")
+func c_buf_bswap32(data: *Unit, len: I64)
+
+/// bswap64 bulk swap — reverses each 8-byte word in data[0..len) in place.
+@extern("buf_bswap64")
+func c_buf_bswap64(data: *Unit, len: I64)
+
+// ============================================================================
 // Memory helpers (using lowlevel intrinsics, same pattern as list.tml)
 // ============================================================================
 
@@ -755,13 +785,12 @@ impl Buffer {
         var e: I64 = end
         if s < 0 { s = 0 }
         if e < 0 or e > len { e = len }
+        let count: I64 = e - s
+        if count <= 0 { return }
         let data: *Unit = buf_get_data(h)
+        let dst_addr: I64 = data as I64 + s
         let byte_val: I32 = value % 256
-        var i: I64 = s
-        loop (i < e) {
-            buf_write_byte_at(data, i, byte_val)
-            i = i + 1
-        }
+        lowlevel { memset(dst_addr, byte_val, count) }
     }
 
     /// Fills the entire buffer with the specified value.
@@ -788,12 +817,9 @@ impl Buffer {
         buf_ensure_len(th, ts + bytes_to_copy)
         let src_data: *Unit = buf_get_data(sh)
         let dst_data: *Unit = buf_get_data(th)
-        var i: I64 = 0
-        loop (i < bytes_to_copy) {
-            let byte_val: I32 = buf_read_byte_at(src_data, ss + i)
-            buf_write_byte_at(dst_data, ts + i, byte_val)
-            i = i + 1
-        }
+        let src_ptr: *Unit = (src_data as I64 + ss) as *Unit
+        let dst_ptr: *Unit = (dst_data as I64 + ts) as *Unit
+        lowlevel { copy_nonoverlapping(src_ptr, dst_ptr, bytes_to_copy) }
         bytes_to_copy
     }
 
@@ -813,11 +839,8 @@ impl Buffer {
         let rh: I64 = result.handle as I64
         let src_data: *Unit = buf_get_data(h)
         let dst_data: *Unit = buf_get_data(rh)
-        var i: I64 = 0
-        loop (i < slice_len) {
-            buf_write_byte_at(dst_data, i, buf_read_byte_at(src_data, s + i))
-            i = i + 1
-        }
+        let src_ptr: *Unit = (src_data as I64 + s) as *Unit
+        lowlevel { copy_nonoverlapping(src_ptr, dst_data, slice_len) }
         buf_set_len(rh, slice_len)
         result
     }
@@ -833,14 +856,7 @@ impl Buffer {
         let len: I64 = buf_get_len(h)
         if len < 2 { return }
         let data: *Unit = buf_get_data(h)
-        var i: I64 = 0
-        loop (i + 1 < len) {
-            let a: I32 = buf_read_byte_at(data, i)
-            let b: I32 = buf_read_byte_at(data, i + 1)
-            buf_write_byte_at(data, i, b)
-            buf_write_byte_at(data, i + 1, a)
-            i = i + 2
-        }
+        c_buf_bswap16(data, len)
     }
 
     /// Swaps byte order for 32-bit values in place.
@@ -849,18 +865,7 @@ impl Buffer {
         let len: I64 = buf_get_len(h)
         if len < 4 { return }
         let data: *Unit = buf_get_data(h)
-        var i: I64 = 0
-        loop (i + 3 < len) {
-            let a: I32 = buf_read_byte_at(data, i)
-            let b: I32 = buf_read_byte_at(data, i + 1)
-            let c: I32 = buf_read_byte_at(data, i + 2)
-            let d: I32 = buf_read_byte_at(data, i + 3)
-            buf_write_byte_at(data, i, d)
-            buf_write_byte_at(data, i + 1, c)
-            buf_write_byte_at(data, i + 2, b)
-            buf_write_byte_at(data, i + 3, a)
-            i = i + 4
-        }
+        c_buf_bswap32(data, len)
     }
 
     /// Swaps byte order for 64-bit values in place.
@@ -869,18 +874,7 @@ impl Buffer {
         let len: I64 = buf_get_len(h)
         if len < 8 { return }
         let data: *Unit = buf_get_data(h)
-        var i: I64 = 0
-        loop (i + 7 < len) {
-            var j: I64 = 0
-            loop (j < 4) {
-                let a: I32 = buf_read_byte_at(data, i + j)
-                let b: I32 = buf_read_byte_at(data, i + 7 - j)
-                buf_write_byte_at(data, i + j, b)
-                buf_write_byte_at(data, i + 7 - j, a)
-                j = j + 1
-            }
-            i = i + 8
-        }
+        c_buf_bswap64(data, len)
     }
 
     // ========================================================================
@@ -897,13 +891,10 @@ impl Buffer {
         let d2: *Unit = buf_get_data(h2)
         var min_len: I64 = len1
         if len2 < min_len { min_len = len2 }
-        var i: I64 = 0
-        loop (i < min_len) {
-            let a: I32 = buf_read_byte_at(d1, i)
-            let b: I32 = buf_read_byte_at(d2, i)
-            if a < b { return -1 }
-            if a > b { return 1 }
-            i = i + 1
+        if min_len > 0 {
+            let cmp: I32 = c_memcmp(d1, d2, min_len)
+            if cmp < 0 { return -1 }
+            if cmp > 0 { return 1 }
         }
         if len1 < len2 { return -1 }
         if len1 > len2 { return 1 }
@@ -919,18 +910,18 @@ impl Buffer {
     pub func index_of(this, value: I32, start: I64) -> I64 {
         let h: I64 = this.handle as I64
         let len: I64 = buf_get_len(h)
-        let data: *Unit = buf_get_data(h)
         var s: I64 = start
         if s < 0 { s = 0 }
+        if s >= len { return -1 }
+        let data: *Unit = buf_get_data(h)
+        let search_ptr: *Unit = (data as I64 + s) as *Unit
+        let search_len: I64 = len - s
         let target: I32 = value % 256
-        var i: I64 = s
-        loop (i < len) {
-            if buf_read_byte_at(data, i) == target {
-                return i
-            }
-            i = i + 1
+        let found: *Unit = c_memchr(search_ptr, target, search_len)
+        if found as I64 == 0 {
+            return -1
         }
-        -1
+        found as I64 - data as I64
     }
 
     /// Finds the last occurrence of a byte value.
@@ -939,17 +930,8 @@ impl Buffer {
         let len: I64 = buf_get_len(h)
         if len == 0 { return -1 }
         let data: *Unit = buf_get_data(h)
-        var s: I64 = start
-        if s < 0 or s >= len { s = len - 1 }
         let target: I32 = value % 256
-        var i: I64 = s
-        loop (i >= 0) {
-            if buf_read_byte_at(data, i) == target {
-                return i
-            }
-            i = i - 1
-        }
-        -1
+        c_buf_last_index_of_simd(data, len, target, start)
     }
 
     /// Checks if the buffer contains a byte value.

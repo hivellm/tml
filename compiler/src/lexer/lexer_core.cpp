@@ -20,9 +20,19 @@ TML_MODULE("compiler")
 //! | Memory       | `mut`, `ref`                                |
 
 #include "lexer/lexer.hpp"
+#include "simd/simd_utils.h"
 
 #include <algorithm>
 #include <unordered_map>
+
+#if TML_SSE2
+#include <emmintrin.h>
+#ifdef _MSC_VER
+#include <intrin.h> // _BitScanForward
+#else
+#include <x86intrin.h>
+#endif
+#endif
 
 namespace tml::lexer {
 
@@ -206,13 +216,51 @@ void Lexer::report_error(const std::string& message, const std::string& code) {
 }
 
 void Lexer::skip_whitespace() {
-    while (!is_at_end()) {
-        char c = peek();
+    const char* src = source_.content().data();
+    size_t len = source_.length();
+
+#if TML_SSE2
+    // SSE2 fast path: scan 16 bytes at a time for non-whitespace.
+    // We only skip ' ', '\t', '\r' — NOT '\n' (significant token).
+    // We also need to stop at '/' (potential comment start).
+    while (pos_ + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos_));
+        __m128i cmp_space = _mm_cmpeq_epi8(chunk, _mm_set1_epi8(' '));
+        __m128i cmp_tab = _mm_cmpeq_epi8(chunk, _mm_set1_epi8('\t'));
+        __m128i cmp_cr = _mm_cmpeq_epi8(chunk, _mm_set1_epi8('\r'));
+        __m128i ws = _mm_or_si128(_mm_or_si128(cmp_space, cmp_tab), cmp_cr);
+        int mask = _mm_movemask_epi8(ws);
+
+        if (mask == 0xFFFF) {
+            // All 16 bytes are whitespace — skip entire chunk
+            pos_ += 16;
+            continue;
+        }
+
+        // Find first non-whitespace byte
+        int first_non_ws;
+#ifdef _MSC_VER
+        unsigned long idx;
+        _BitScanForward(&idx, static_cast<unsigned long>(~mask & 0xFFFF));
+        first_non_ws = static_cast<int>(idx);
+#else
+        first_non_ws = __builtin_ctz(~mask & 0xFFFF);
+#endif
+        pos_ += first_non_ws;
+        // Fall through to scalar loop for comment detection
+        goto scalar_tail;
+    }
+scalar_tail:
+#endif // TML_SSE2
+
+    // Scalar path: handles remaining bytes, comment detection, and newlines
+    while (pos_ < len) {
+        char c = src[pos_];
         switch (c) {
         case ' ':
         case '\t':
         case '\r':
-            advance();
+            ++pos_;
             break;
         case '\n':
             // Newlines are significant in TML for statement separation
@@ -275,9 +323,34 @@ auto Lexer::lex_doc_comment() -> Token {
         advance();
     }
 
-    // Read until end of line
-    while (!is_at_end() && peek() != '\n') {
-        content += advance();
+    // Read until end of line — SIMD bulk append
+    {
+        const char* src = source_.content().data();
+        size_t len = source_.length();
+        size_t line_start = pos_;
+#if TML_SSE2
+        const __m128i nl_vec = _mm_set1_epi8('\n');
+        while (pos_ + 16 <= len) {
+            __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos_));
+            int mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, nl_vec));
+            if (mask != 0) {
+#ifdef _MSC_VER
+                unsigned long idx;
+                _BitScanForward(&idx, static_cast<unsigned long>(mask));
+                pos_ += idx;
+#else
+                pos_ += __builtin_ctz(mask);
+#endif
+                break;
+            }
+            pos_ += 16;
+        }
+#endif
+        // Scalar tail for remaining bytes
+        while (pos_ < len && src[pos_] != '\n') {
+            ++pos_;
+        }
+        content.append(src + line_start, pos_ - line_start);
     }
 
     // For consecutive doc comment lines, we merge them
@@ -316,9 +389,33 @@ auto Lexer::lex_doc_comment() -> Token {
                     advance();
                 }
 
-                // Read line content
-                while (!is_at_end() && peek() != '\n') {
-                    content += advance();
+                // Read line content — SIMD bulk append
+                {
+                    const char* s = source_.content().data();
+                    size_t l = source_.length();
+                    size_t ls = pos_;
+#if TML_SSE2
+                    const __m128i nlv = _mm_set1_epi8('\n');
+                    while (pos_ + 16 <= l) {
+                        __m128i ch = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s + pos_));
+                        int m = _mm_movemask_epi8(_mm_cmpeq_epi8(ch, nlv));
+                        if (m != 0) {
+#ifdef _MSC_VER
+                            unsigned long ix;
+                            _BitScanForward(&ix, static_cast<unsigned long>(m));
+                            pos_ += ix;
+#else
+                            pos_ += __builtin_ctz(m);
+#endif
+                            break;
+                        }
+                        pos_ += 16;
+                    }
+#endif
+                    while (pos_ < l && s[pos_] != '\n') {
+                        ++pos_;
+                    }
+                    content.append(s + ls, pos_ - ls);
                 }
                 saved_pos = pos_;
             } else {
@@ -345,31 +442,91 @@ auto Lexer::lex_doc_comment() -> Token {
 
 void Lexer::skip_line_comment() {
     // Skip //
-    advance();
-    advance();
+    pos_ += 2;
 
-    while (!is_at_end() && peek() != '\n') {
-        advance();
+    const char* src = source_.content().data();
+    size_t len = source_.length();
+
+#if TML_SSE2
+    // SSE2: scan 16 bytes at a time for '\n'
+    const __m128i nl_vec = _mm_set1_epi8('\n');
+    while (pos_ + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos_));
+        int mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, nl_vec));
+        if (mask != 0) {
+            // Found newline — advance to it but don't consume it
+#ifdef _MSC_VER
+            unsigned long idx;
+            _BitScanForward(&idx, static_cast<unsigned long>(mask));
+            pos_ += idx;
+#else
+            pos_ += __builtin_ctz(mask);
+#endif
+            return;
+        }
+        pos_ += 16;
+    }
+#endif
+
+    // Scalar tail
+    while (pos_ < len && src[pos_] != '\n') {
+        ++pos_;
     }
 }
 
 void Lexer::skip_block_comment() {
     // Skip /*
-    advance();
-    advance();
+    pos_ += 2;
+
+    const char* src = source_.content().data();
+    size_t len = source_.length();
 
     int depth = 1;
-    while (!is_at_end() && depth > 0) {
-        if (peek() == '/' && peek_next() == '*') {
-            advance();
-            advance();
+
+#if TML_SSE2
+    // SSE2: scan for '*' or '/' in 16-byte chunks, then check pairs at hit positions
+    const __m128i star_vec = _mm_set1_epi8('*');
+    const __m128i slash_vec = _mm_set1_epi8('/');
+
+    while (depth > 0 && pos_ + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos_));
+        __m128i cmp_star = _mm_cmpeq_epi8(chunk, star_vec);
+        __m128i cmp_slash = _mm_cmpeq_epi8(chunk, slash_vec);
+        int mask = _mm_movemask_epi8(_mm_or_si128(cmp_star, cmp_slash));
+
+        if (mask == 0) {
+            // No '*' or '/' in this chunk — skip all 16 bytes
+            pos_ += 16;
+            continue;
+        }
+
+        // Process hits one by one within this chunk
+        size_t chunk_end = pos_ + 16;
+        while (pos_ < chunk_end && pos_ < len && depth > 0) {
+            char c = src[pos_];
+            if (c == '/' && pos_ + 1 < len && src[pos_ + 1] == '*') {
+                pos_ += 2;
+                ++depth;
+            } else if (c == '*' && pos_ + 1 < len && src[pos_ + 1] == '/') {
+                pos_ += 2;
+                --depth;
+            } else {
+                ++pos_;
+            }
+        }
+    }
+#endif
+
+    // Scalar tail
+    while (pos_ < len && depth > 0) {
+        if (src[pos_] == '/' && pos_ + 1 < len && src[pos_ + 1] == '*') {
+            pos_ += 2;
             ++depth;
-        } else if (peek() == '*' && peek_next() == '/') {
-            advance();
-            advance();
+        } else if (src[pos_] == '*' && pos_ + 1 < len && src[pos_ + 1] == '/') {
+            pos_ += 2;
             --depth;
         } else {
-            advance();
+            ++pos_;
         }
     }
 

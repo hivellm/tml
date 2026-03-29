@@ -40,15 +40,153 @@ TML_MODULE("compiler")
 //! - `"\{"` → literal `{` (escaped, always works)
 
 #include "lexer/lexer.hpp"
+#include "simd/simd_utils.h"
 
 #include <charconv>
 #include <system_error>
+
+#if TML_SSE2
+#include <emmintrin.h>
+#ifdef _MSC_VER
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+#endif
 namespace tml::lexer {
 
 // Helper to check if a character can start an identifier (for interpolation detection)
 static bool is_ident_start(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
+
+#if TML_SSE2
+// SIMD helper: Find first sentinel character in a string body.
+// Sentinels for regular strings: '"', '\n', '{', '}', '\\'
+// Returns offset relative to `start` of first sentinel, or `avail` if none found.
+// Bulk-appends safe bytes to `value`.
+static inline size_t simd_scan_string_body(const char* src, size_t start, size_t len,
+                                           std::string& value) {
+    const __m128i quote_vec = _mm_set1_epi8('"');
+    const __m128i nl_vec = _mm_set1_epi8('\n');
+    const __m128i lbrace_vec = _mm_set1_epi8('{');
+    const __m128i rbrace_vec = _mm_set1_epi8('}');
+    const __m128i bslash_vec = _mm_set1_epi8('\\');
+
+    size_t pos = start;
+    size_t safe_start = start;
+
+    while (pos + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos));
+        __m128i sentinel = _mm_or_si128(
+            _mm_or_si128(_mm_cmpeq_epi8(chunk, quote_vec), _mm_cmpeq_epi8(chunk, nl_vec)),
+            _mm_or_si128(
+                _mm_or_si128(_mm_cmpeq_epi8(chunk, lbrace_vec), _mm_cmpeq_epi8(chunk, rbrace_vec)),
+                _mm_cmpeq_epi8(chunk, bslash_vec)));
+
+        int mask = _mm_movemask_epi8(sentinel);
+        if (mask != 0) {
+#ifdef _MSC_VER
+            unsigned long idx;
+            _BitScanForward(&idx, static_cast<unsigned long>(mask));
+            pos += idx;
+#else
+            pos += __builtin_ctz(mask);
+#endif
+            // Bulk append everything from safe_start to pos
+            if (pos > safe_start) {
+                value.append(src + safe_start, pos - safe_start);
+            }
+            return pos;
+        }
+        pos += 16;
+    }
+
+    // Append all scanned safe bytes
+    if (pos > safe_start) {
+        value.append(src + safe_start, pos - safe_start);
+    }
+    return pos;
+}
+
+// SIMD helper for raw strings: only 2 sentinels ('"', '\n')
+static inline size_t simd_scan_raw_string_body(const char* src, size_t start, size_t len,
+                                               std::string& value) {
+    const __m128i quote_vec = _mm_set1_epi8('"');
+    const __m128i nl_vec = _mm_set1_epi8('\n');
+
+    size_t pos = start;
+    size_t safe_start = start;
+
+    while (pos + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos));
+        int mask = _mm_movemask_epi8(
+            _mm_or_si128(_mm_cmpeq_epi8(chunk, quote_vec), _mm_cmpeq_epi8(chunk, nl_vec)));
+        if (mask != 0) {
+#ifdef _MSC_VER
+            unsigned long idx;
+            _BitScanForward(&idx, static_cast<unsigned long>(mask));
+            pos += idx;
+#else
+            pos += __builtin_ctz(mask);
+#endif
+            if (pos > safe_start) {
+                value.append(src + safe_start, pos - safe_start);
+            }
+            return pos;
+        }
+        pos += 16;
+    }
+
+    if (pos > safe_start) {
+        value.append(src + safe_start, pos - safe_start);
+    }
+    return pos;
+}
+
+// SIMD helper for template literals: sentinels are '`', '{', '}', '\\'
+static inline size_t simd_scan_template_body(const char* src, size_t start, size_t len,
+                                             std::string& value) {
+    const __m128i bt_vec = _mm_set1_epi8('`');
+    const __m128i lbrace_vec = _mm_set1_epi8('{');
+    const __m128i rbrace_vec = _mm_set1_epi8('}');
+    const __m128i bslash_vec = _mm_set1_epi8('\\');
+    const __m128i nl_vec = _mm_set1_epi8('\n');
+
+    size_t pos = start;
+    size_t safe_start = start;
+
+    while (pos + 16 <= len) {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + pos));
+        __m128i sentinel =
+            _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(chunk, bt_vec), _mm_cmpeq_epi8(chunk, nl_vec)),
+                         _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(chunk, lbrace_vec),
+                                                   _mm_cmpeq_epi8(chunk, rbrace_vec)),
+                                      _mm_cmpeq_epi8(chunk, bslash_vec)));
+
+        int mask = _mm_movemask_epi8(sentinel);
+        if (mask != 0) {
+#ifdef _MSC_VER
+            unsigned long idx;
+            _BitScanForward(&idx, static_cast<unsigned long>(mask));
+            pos += idx;
+#else
+            pos += __builtin_ctz(mask);
+#endif
+            if (pos > safe_start) {
+                value.append(src + safe_start, pos - safe_start);
+            }
+            return pos;
+        }
+        pos += 16;
+    }
+
+    if (pos > safe_start) {
+        value.append(src + safe_start, pos - safe_start);
+    }
+    return pos;
+}
+#endif // TML_SSE2
 
 // Helper to report escape sequence errors with the correct L-code.
 // Unicode-related errors use L025; all other escape errors use L024.
@@ -87,6 +225,16 @@ auto Lexer::lex_string() -> Token {
     bool has_error = false;
 
     while (!is_at_end() && peek() != '"') {
+#if TML_SSE2
+        // SIMD: skip bulk plain text, stop at first sentinel
+        {
+            size_t new_pos =
+                simd_scan_string_body(source_.content().data(), pos_, source_.length(), value);
+            pos_ = new_pos;
+            if (is_at_end() || peek() == '"')
+                break;
+        }
+#endif
         if (peek() == '\n') {
             return make_error_token("Unterminated string literal", "L002");
         }
@@ -163,6 +311,15 @@ auto Lexer::lex_interp_string_continue() -> Token {
     bool has_error = false;
 
     while (!is_at_end() && peek() != '"') {
+#if TML_SSE2
+        {
+            size_t new_pos =
+                simd_scan_string_body(source_.content().data(), pos_, source_.length(), value);
+            pos_ = new_pos;
+            if (is_at_end() || peek() == '"')
+                break;
+        }
+#endif
         if (peek() == '\n') {
             return make_error_token("Unterminated string literal", "L002");
         }
@@ -263,6 +420,15 @@ auto Lexer::lex_raw_string() -> Token {
     std::string value;
 
     while (!is_at_end() && peek() != '"') {
+#if TML_SSE2
+        {
+            size_t new_pos =
+                simd_scan_raw_string_body(source_.content().data(), pos_, source_.length(), value);
+            pos_ = new_pos;
+            if (is_at_end() || peek() == '"')
+                break;
+        }
+#endif
         if (peek() == '\n') {
             return make_error_token("Unterminated raw string literal", "L013");
         }
@@ -420,6 +586,15 @@ auto Lexer::lex_template_literal() -> Token {
     bool has_error = false;
 
     while (!is_at_end() && peek() != '`') {
+#if TML_SSE2
+        {
+            size_t new_pos =
+                simd_scan_template_body(source_.content().data(), pos_, source_.length(), value);
+            pos_ = new_pos;
+            if (is_at_end() || peek() == '`')
+                break;
+        }
+#endif
         // Template literals support multi-line strings
         if (peek() == '\n') {
             value += advance();
@@ -500,6 +675,15 @@ auto Lexer::lex_template_literal_continue() -> Token {
     bool has_error = false;
 
     while (!is_at_end() && peek() != '`') {
+#if TML_SSE2
+        {
+            size_t new_pos =
+                simd_scan_template_body(source_.content().data(), pos_, source_.length(), value);
+            pos_ = new_pos;
+            if (is_at_end() || peek() == '`')
+                break;
+        }
+#endif
         // Template literals support multi-line strings
         if (peek() == '\n') {
             value += advance();

@@ -165,6 +165,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including collections runtime: " << collections_obj);
             }
 
+            // collections/ - buffer_simd.c (SIMD-optimized buffer ops: bswap, SSE2 search)
+            fs::path buffer_simd_c = runtime_dir / "collections" / "buffer_simd.c";
+            if (fs::exists(buffer_simd_c)) {
+                std::string buffer_simd_obj = ensure_c_compiled(
+                    to_forward_slashes(buffer_simd_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(buffer_simd_obj));
+                TML_LOG_DEBUG("build", "Including buffer_simd runtime: " << buffer_simd_obj);
+            }
+
             // concurrency/ - sync.c
             fs::path sync_c = runtime_dir / "concurrency" / "sync.c";
             if (fs::exists(sync_c)) {
