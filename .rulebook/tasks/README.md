@@ -141,7 +141,7 @@
 | 🔄 | phase4-01-developer-tooling | 67/78 | phase4 01 developer tooling |
 | ⬚ | phase4-02-inspector-diagnostics | 0/117 | phase4 02 inspector diagnostics |
 | ⬚ | phase4-03-package-manager | - | phase4 03 package manager |
-| ⬚ | phase5-01-simd-optimization | 40/116 | phase5 01 simd optimization |
+| ⬚ | phase5-01-simd-optimization | 49/109 | phase5 01 simd optimization |
 | ⬚ | phase5-02-simd-generic-isa | 0/160 | phase5 02 simd generic isa |
 | ⬚ | phase5-03-auto-parallel | 0/41 | phase5 03 auto parallel |
 | ⬚ | phase6-01-cross-compilation | 0/118 | phase6 01 cross compilation |
