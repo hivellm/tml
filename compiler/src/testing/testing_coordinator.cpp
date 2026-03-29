@@ -52,7 +52,7 @@ static TestResultCache* g_atexit_cache = nullptr;
 static std::string g_atexit_cache_path;
 
 static void atexit_save_cache() {
-    if (g_atexit_cache && !g_atexit_cache_path.empty()) {
+    if (g_atexit_cache != nullptr && !g_atexit_cache_path.empty()) {
         g_atexit_cache->save(g_atexit_cache_path);
     }
 }
@@ -70,8 +70,9 @@ static std::string normalize_slashes(std::string s) {
 /// Filter test files by pattern (substring match, slash-normalized).
 static std::vector<TestFileInfo> filter_by_patterns(const std::vector<TestFileInfo>& files,
                                                     const std::vector<std::string>& patterns) {
-    if (patterns.empty())
+    if (patterns.empty()) {
         return files;
+    }
 
     std::vector<TestFileInfo> filtered;
     for (const auto& file : files) {
@@ -100,7 +101,13 @@ suite_filters_to_patterns(const std::vector<std::string>& suite_filters) {
             if (lib_name == "compiler") {
                 patterns.push_back("compiler/tests/" + module_name);
             } else {
-                patterns.push_back("lib/" + lib_name + "/tests/" + module_name);
+                std::string p;
+                p.reserve(5 + lib_name.size() + 7 + module_name.size());
+                p += "lib/";
+                p += lib_name;
+                p += "/tests/";
+                p += module_name;
+                patterns.push_back(std::move(p));
             }
         } else {
             patterns.push_back(filter);
@@ -167,7 +174,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
     for (int i = 0; i < static_cast<int>(compile_results.size()); ++i) {
         if (compile_results[i].success) {
             auto& r = results[i];
-            auto& suite = suites[i];
+            const auto& suite = suites[i];
             r.name = suite.name;
             r.group = suite.group;
             r.test_count = static_cast<int>(suite.tests.size());
@@ -224,18 +231,20 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             if (config.per_test_timeout_us > 0 && work.test_index < 0) {
                 // run-all: timeout = per_test_limit * test_count + 2s headroom
                 int test_count = static_cast<int>(suites[work.suite_index].tests.size());
-                int64_t total_s = (config.per_test_timeout_us * test_count) / 1000000 + 2;
+                int64_t total_s = ((config.per_test_timeout_us * test_count) / 1000000) + 2;
                 opts.timeout = std::chrono::seconds(static_cast<int>(total_s));
             } else if (config.per_test_timeout_us > 0 && work.test_index >= 0) {
                 // per-test: timeout = per_test_limit + 1s headroom
-                int64_t total_s = config.per_test_timeout_us / 1000000 + 1;
+                int64_t total_s = (config.per_test_timeout_us / 1000000) + 1;
                 opts.timeout = std::chrono::seconds(static_cast<int>(total_s));
             } else {
                 opts.timeout = std::chrono::seconds(config.timeout_seconds);
             }
+            // Hard cap: no test executable may run longer than 60 seconds
+            opts.timeout = std::min(opts.timeout, std::chrono::milliseconds(60'000));
 
             // Coverage: tell subprocess to write covered functions to a file
-            if (config.coverage && out_covered) {
+            if (config.coverage && out_covered != nullptr) {
                 auto cov_dir = fs::current_path() / "build" / "coverage";
                 std::error_code ec;
                 fs::create_directories(cov_dir, ec);
@@ -281,32 +290,38 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             }
         }
 
-        if (running.empty())
+        if (running.empty()) {
             break;
+        }
 
         // Poll running processes
         bool any_done = false;
         for (auto it = running.begin(); it != running.end();) {
             auto chunk = it->proc.read_stdout();
-            if (!chunk.empty())
+            if (!chunk.empty()) {
                 it->accumulated_stdout += chunk;
+            }
             auto err_chunk = it->proc.read_stderr();
-            if (!err_chunk.empty())
+            if (!err_chunk.empty()) {
                 it->accumulated_stderr += err_chunk;
+            }
 
             if (it->proc.is_done()) {
                 any_done = true;
                 auto final_chunk = it->proc.read_stdout();
-                if (!final_chunk.empty())
+                if (!final_chunk.empty()) {
                     it->accumulated_stdout += final_chunk;
+                }
                 auto final_err = it->proc.read_stderr();
-                if (!final_err.empty())
+                if (!final_err.empty()) {
                     it->accumulated_stderr += final_err;
+                }
 
                 int64_t exec_us = now_us() - it->start_us;
                 auto proc_result = it->proc.wait(std::chrono::milliseconds(100));
-                if (!proc_result.stderr_output.empty())
+                if (!proc_result.stderr_output.empty()) {
                     it->accumulated_stderr += proc_result.stderr_output;
+                }
 
                 int si = it->suite_index;
                 int ti = it->test_index;
@@ -323,13 +338,16 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     std::istringstream stream(it->accumulated_stdout);
                     std::string line;
                     while (std::getline(stream, line)) {
-                        if (!line.empty() && line.back() == '\r')
+                        if (!line.empty() && line.back() == '\r') {
                             line.pop_back();
-                        if (line.empty())
+                        }
+                        if (line.empty()) {
                             continue;
+                        }
                         auto parsed = parse_json_event(line);
-                        if (!parsed.ok)
+                        if (!parsed.ok) {
                             continue;
+                        }
                         std::visit(
                             [&](auto&& ev) {
                                 using T = std::decay_t<decltype(ev)>;
@@ -354,6 +372,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                         t.duration_us = ev.duration_us;
                                         sr.failed++;
                                         resolved_indices.insert(ev.index);
+                                        if (config.fail_fast) {
+                                            should_stop.store(true, std::memory_order_relaxed);
+                                            it->proc.kill();
+                                        }
                                     }
                                 } else if constexpr (std::is_same_v<T, TestCrashEvent>) {
                                     if (ev.index >= 0 &&
@@ -364,6 +386,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                         t.duration_us = ev.duration_us;
                                         sr.crashed++;
                                         resolved_indices.insert(ev.index);
+                                        if (config.fail_fast) {
+                                            should_stop.store(true, std::memory_order_relaxed);
+                                            it->proc.kill();
+                                        }
                                     }
                                 } else if constexpr (std::is_same_v<T, TestTimeoutEvent>) {
                                     if (ev.index >= 0 &&
@@ -373,6 +399,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                         t.error = "[X002] TIMEOUT";
                                         sr.failed++;
                                         resolved_indices.insert(ev.index);
+                                        if (config.fail_fast) {
+                                            should_stop.store(true, std::memory_order_relaxed);
+                                            it->proc.kill();
+                                        }
                                     }
                                 }
                                 // SuiteStartEvent and SuiteEndEvent are informational only
@@ -386,7 +416,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     if (proc_result.timed_out) {
                         // Mark all unresolved tests as timed out
                         for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
-                            if (resolved_indices.count(idx) == 0) {
+                            if (!resolved_indices.contains(idx)) {
                                 sr.tests[idx].passed = false;
                                 sr.tests[idx].error = "[X002] TIMEOUT";
                                 sr.failed++;
@@ -397,11 +427,12 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                         // Exit code 99 = per-test timeout watchdog killed the process.
                         // The last started-but-unresolved test is the one that timed out.
                         for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
-                            if (resolved_indices.count(idx) != 0)
+                            if (resolved_indices.contains(idx)) {
                                 continue;
+                            }
                             auto& t = sr.tests[idx];
                             t.passed = false;
-                            if (started_indices.count(idx)) {
+                            if (started_indices.contains(idx)) {
                                 t.error = "[X002] TIMEOUT: test exceeded 100ms limit — killed";
                                 sr.failed++;
                             } else {
@@ -416,11 +447,12 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                                     : "Process crashed with exit code " +
                                                           std::to_string(proc_result.exit_code);
                         for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
-                            if (resolved_indices.count(idx) != 0)
+                            if (resolved_indices.contains(idx)) {
                                 continue;
+                            }
                             auto& t = sr.tests[idx];
                             t.passed = false;
-                            if (started_indices.count(idx)) {
+                            if (started_indices.contains(idx)) {
                                 // Started but no outcome = process crashed during this test
                                 t.error = "[X003] CRASH: " + crash_err;
                                 sr.crashed++;
@@ -460,13 +492,16 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     std::istringstream stream(it->accumulated_stdout);
                     std::string line;
                     while (std::getline(stream, line)) {
-                        if (!line.empty() && line.back() == '\r')
+                        if (!line.empty() && line.back() == '\r') {
                             line.pop_back();
-                        if (line.empty())
+                        }
+                        if (line.empty()) {
                             continue;
+                        }
                         auto parsed = parse_json_event(line);
-                        if (!parsed.ok)
+                        if (!parsed.ok) {
                             continue;
+                        }
                         std::visit(
                             [&](auto&& ev) {
                                 using T = std::decay_t<decltype(ev)>;
@@ -482,16 +517,28 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                     test_result.duration_us = ev.duration_us;
                                     sr.failed++;
                                     got_event = true;
+                                    if (config.fail_fast) {
+                                        should_stop.store(true, std::memory_order_relaxed);
+                                        it->proc.kill();
+                                    }
                                 } else if constexpr (std::is_same_v<T, TestCrashEvent>) {
                                     test_result.passed = false;
                                     test_result.error = "[X003] CRASH: " + ev.signal;
                                     test_result.duration_us = ev.duration_us;
                                     sr.crashed++;
                                     got_event = true;
+                                    if (config.fail_fast) {
+                                        should_stop.store(true, std::memory_order_relaxed);
+                                        it->proc.kill();
+                                    }
                                 } else if constexpr (std::is_same_v<T, TestTimeoutEvent>) {
                                     test_result.passed = false;
                                     test_result.error = "[X002] TIMEOUT";
                                     got_event = true;
+                                    if (config.fail_fast) {
+                                        should_stop.store(true, std::memory_order_relaxed);
+                                        it->proc.kill();
+                                    }
                                 }
                             },
                             parsed.event);
@@ -503,6 +550,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                             test_result.passed = false;
                             test_result.error = "[X002] TIMEOUT";
                             sr.failed++;
+                            if (config.fail_fast) {
+                                should_stop.store(true, std::memory_order_relaxed);
+                                it->proc.kill();
+                            }
                         } else if (proc_result.exit_code != 0) {
                             test_result.passed = false;
                             test_result.exit_code = proc_result.exit_code;
@@ -511,6 +562,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                                     : "[X003] Process crashed with exit code " +
                                                           std::to_string(proc_result.exit_code);
                             sr.crashed++;
+                            if (config.fail_fast) {
+                                should_stop.store(true, std::memory_order_relaxed);
+                                it->proc.kill();
+                            }
                         } else {
                             // exit 0 but no events — treat as pass (shouldn't happen normally)
                             test_result.passed = true;
@@ -529,7 +584,7 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                 }
 
                 // Read coverage data from output file
-                if (config.coverage && out_covered) {
+                if (config.coverage && out_covered != nullptr) {
                     fs::path cov_file;
                     if (ti < 0) {
                         cov_file = fs::current_path() / "build" / "coverage" /
@@ -543,10 +598,12 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                         std::string func_name;
                         std::lock_guard<std::mutex> lock(cov_mutex);
                         while (std::getline(in, func_name)) {
-                            if (!func_name.empty() && func_name.back() == '\r')
+                            if (!func_name.empty() && func_name.back() == '\r') {
                                 func_name.pop_back();
-                            if (!func_name.empty())
+                            }
+                            if (!func_name.empty()) {
                                 out_covered->insert(func_name);
+                            }
                         }
                         in.close();
                         std::error_code ec;
@@ -567,8 +624,9 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
     // Kill remaining processes on fail-fast
     if (should_stop.load(std::memory_order_relaxed)) {
-        for (auto& rp : running)
+        for (auto& rp : running) {
             rp.proc.kill();
+        }
     }
 
     return results;
@@ -844,7 +902,9 @@ static std::string generate_diagnosis_hints(const std::string& error_text,
     }
 
     if (!test_name.empty()) {
-        hints += "Focus function: " + test_name + "\n";
+        hints += "Focus function: ";
+        hints += test_name;
+        hints += "\n";
     }
 
     return hints;
@@ -865,7 +925,7 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
             std::string src_file = test.file;
             std::replace(src_file.begin(), src_file.end(), '\\', '/');
 
-            if (already_emitted.count(src_file) > 0) {
+            if (already_emitted.contains(src_file)) {
                 test.error += "\n\n=== DEBUG LAYERS ===\n(see above — same source file)\n";
                 continue;
             }
@@ -876,8 +936,11 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
 
             // --- HIR Layer ---
             TML_LOG_INFO("test", "[debug-layers] Emitting HIR for: " << src_file);
-            std::string hir_cmd =
-                "\"" + tml_exe + "\" build \"" + src_file + "\" --emit-hir --legacy 2>&1";
+            std::string hir_cmd = "\"";
+            hir_cmd += tml_exe;
+            hir_cmd += "\" build \"";
+            hir_cmd += src_file;
+            hir_cmd += "\" --emit-hir --legacy 2>&1";
             run_capture(hir_cmd);
 
             fs::path hir_path = fs::path("build/debug") / (stem + ".hir");
@@ -891,7 +954,8 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
                     } else {
                         hir_section = extract_mir_function(full_hir, "");
                     }
-                    test.error += "\n\n=== HIR (--debug-layers) ===\n" + hir_section;
+                    test.error += "\n\n=== HIR (--debug-layers) ===\n";
+                    test.error += hir_section;
                 }
             } else {
                 test.error += "\n\n=== HIR ===\n[debug-layers] Could not generate HIR\n";
@@ -899,8 +963,11 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
 
             // --- MIR Layer ---
             TML_LOG_INFO("test", "[debug-layers] Emitting MIR for: " << src_file);
-            std::string mir_cmd =
-                "\"" + tml_exe + "\" build \"" + src_file + "\" --emit-mir --legacy 2>&1";
+            std::string mir_cmd = "\"";
+            mir_cmd += tml_exe;
+            mir_cmd += "\" build \"";
+            mir_cmd += src_file;
+            mir_cmd += "\" --emit-mir --legacy 2>&1";
             run_capture(mir_cmd);
 
             fs::path mir_path = fs::path("build/debug") / (stem + ".mir");
@@ -913,7 +980,8 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
                     } else {
                         mir_section = extract_mir_function(full_mir, "");
                     }
-                    test.error += "\n\n=== MIR (--debug-layers) ===\n" + mir_section;
+                    test.error += "\n\n=== MIR (--debug-layers) ===\n";
+                    test.error += mir_section;
                 }
             } else {
                 test.error += "\n\n=== MIR ===\n[debug-layers] Could not generate MIR\n";
@@ -921,8 +989,11 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
 
             // --- LLVM IR Layer ---
             TML_LOG_INFO("test", "[debug-layers] Emitting LLVM IR for: " << src_file);
-            std::string ir_cmd =
-                "\"" + tml_exe + "\" build \"" + src_file + "\" --emit-ir --legacy 2>&1";
+            std::string ir_cmd = "\"";
+            ir_cmd += tml_exe;
+            ir_cmd += "\" build \"";
+            ir_cmd += src_file;
+            ir_cmd += "\" --emit-ir --legacy 2>&1";
             run_capture(ir_cmd);
 
             fs::path ll_path = fs::path("build/debug") / (stem + ".ll");
@@ -935,7 +1006,8 @@ static void emit_debug_layers_for_failures(TestRunResult& result) {
                     } else {
                         ir_section = extract_function_ir(full_ir, "");
                     }
-                    test.error += "\n\n=== LLVM IR (--debug-layers) ===\n" + ir_section;
+                    test.error += "\n\n=== LLVM IR (--debug-layers) ===\n";
+                    test.error += ir_section;
                 }
             } else {
                 test.error += "\n\n=== LLVM IR ===\n[debug-layers] Could not generate IR\n";
@@ -972,8 +1044,9 @@ TestRunResult run_tests(const TestConfig& config) {
 
     // 1. Discovery (independent)
     std::string root = config.root_dir;
-    if (root.empty())
+    if (root.empty()) {
         root = fs::current_path().string();
+    }
 
     auto test_files = discover_tests(root);
     if (test_files.empty()) {
@@ -1077,7 +1150,8 @@ TestRunResult run_tests(const TestConfig& config) {
         // Timeout: per_test_timeout * test_count + headroom
         if (config.per_test_timeout_us > 0) {
             int64_t total_s =
-                (config.per_test_timeout_us * static_cast<int64_t>(mapping.size())) / 1000000 + 30;
+                ((config.per_test_timeout_us * static_cast<int64_t>(mapping.size())) / 1000000) +
+                30;
             run_opts.timeout = std::chrono::seconds(static_cast<int>(total_s));
         } else {
             run_opts.timeout = std::chrono::seconds(config.timeout_seconds * 10);
@@ -1093,22 +1167,27 @@ TestRunResult run_tests(const TestConfig& config) {
             // Read output while process runs
             while (!proc->is_done()) {
                 auto chunk = proc->read_stdout();
-                if (!chunk.empty())
+                if (!chunk.empty()) {
                     stdout_buf += chunk;
+                }
                 auto err = proc->read_stderr();
-                if (!err.empty())
+                if (!err.empty()) {
                     stderr_buf += err;
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             auto final_chunk = proc->read_stdout();
-            if (!final_chunk.empty())
+            if (!final_chunk.empty()) {
                 stdout_buf += final_chunk;
+            }
             auto final_err = proc->read_stderr();
-            if (!final_err.empty())
+            if (!final_err.empty()) {
                 stderr_buf += final_err;
+            }
             auto proc_result = proc->wait(std::chrono::seconds(5));
-            if (!proc_result.stderr_output.empty())
+            if (!proc_result.stderr_output.empty()) {
                 stderr_buf += proc_result.stderr_output;
+            }
         }
 
         auto run_end = Clock::now();
@@ -1143,13 +1222,16 @@ TestRunResult run_tests(const TestConfig& config) {
         std::istringstream stream(stdout_buf);
         std::string line;
         while (std::getline(stream, line)) {
-            if (!line.empty() && line.back() == '\r')
+            if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
-            if (line.empty())
+            }
+            if (line.empty()) {
                 continue;
+            }
             auto parsed = parse_json_event(line);
-            if (!parsed.ok)
+            if (!parsed.ok) {
                 continue;
+            }
             std::visit(
                 [&](auto&& ev) {
                     using T = std::decay_t<decltype(ev)>;
@@ -1218,9 +1300,10 @@ TestRunResult run_tests(const TestConfig& config) {
     std::string flags_hash;
 
     bool use_cache = !config.no_cache;
+    bool compiler_changed = false; // True if compiler/runtime changed since last run
     if (use_cache) {
         auto build_dir = fs::current_path() / "build" / "debug";
-        auto cache_file = build_dir / ".new-test-cache.json";
+        auto cache_file = build_dir / "cache" / "tests.json";
         if (cache.load(cache_file.string())) {
             TML_LOG_INFO("test", "  [cache] Loaded " << cache.size() << " cached suites from "
                                                      << cache_file.string());
@@ -1232,9 +1315,11 @@ TestRunResult run_tests(const TestConfig& config) {
         flags_hash = TestResultCache::compute_flags_hash(config);
 
         if (!cache.compiler_hash().empty() && cache.compiler_hash() != compiler_hash) {
-            TML_LOG_INFO("test",
-                         "[cache] Compiler changed — downgrading cached suites to exe-reusable");
-            cache.downgrade_to_exe_reusable();
+            TML_LOG_INFO("test", "[cache] Compiler/runtime changed — invalidating all cached EXEs");
+            // Full invalidation: runtime lib is part of the hash, so old EXEs have stale
+            // runtime code baked in and must be recompiled, not just re-run.
+            cache.invalidate_all_exes();
+            compiler_changed = true;
         }
         cache.set_compiler_hash(compiler_hash);
     }
@@ -1255,8 +1340,9 @@ TestRunResult run_tests(const TestConfig& config) {
         for (auto& suite : suites) {
             std::vector<std::string> file_paths;
             file_paths.reserve(suite.tests.size());
-            for (const auto& t : suite.tests)
+            for (const auto& t : suite.tests) {
                 file_paths.push_back(t.file_path);
+            }
             auto source_hashes = TestResultCache::compute_source_hashes(file_paths);
             // Store for reuse in step 8
             suite_source_hashes[suite.name] = source_hashes;
@@ -1295,9 +1381,10 @@ TestRunResult run_tests(const TestConfig& config) {
                 reuse_exe_suites.push_back(std::move(suite));
             } else {
                 // Fallback: check if exe exists on disk even without cache entry
-                // Only for non-coverage runs — coverage exes must be compiled with instrumentation
-                if (!config.coverage) {
-                    auto exe_cache_dir = fs::current_path() / "build" / "debug" / ".new-run-cache";
+                // Only for non-coverage runs and when compiler/runtime has NOT changed.
+                // If compiler_changed, old EXEs have stale runtime baked in — must recompile.
+                if (!config.coverage && !compiler_changed) {
+                    auto exe_cache_dir = fs::current_path() / "build" / "debug" / "cache";
                     auto disk_exe = exe_cache_dir / (suite.name + ".exe");
                     if (fs::exists(disk_exe)) {
                         TML_LOG_INFO("test", "  [cache] Suite "
@@ -1335,10 +1422,10 @@ TestRunResult run_tests(const TestConfig& config) {
 
     // Cache file path for incremental saves
     auto cache_file_path =
-        (fs::current_path() / "build" / "debug" / ".new-test-cache.json").string();
+        (fs::current_path() / "build" / "debug" / "cache" / "tests.json").string();
     {
         std::error_code ec;
-        fs::create_directories(fs::current_path() / "build" / "debug", ec);
+        fs::create_directories(fs::current_path() / "build" / "debug" / "cache", ec);
     }
 
     // Register atexit handler to save cache even if LLVM calls exit()
@@ -1358,7 +1445,7 @@ TestRunResult run_tests(const TestConfig& config) {
                                     const std::vector<SuiteRunResult>* flush_results,
                                     const std::vector<CompileResult>& flush_compile_results) {
         for (int i = 0; i < static_cast<int>(flush_suites.size()); ++i) {
-            auto& suite = flush_suites[i];
+            const auto& suite = flush_suites[i];
 
             std::vector<std::string> source_hashes;
             auto hash_it = suite_source_hashes.find(suite.name);
@@ -1367,8 +1454,9 @@ TestRunResult run_tests(const TestConfig& config) {
             } else {
                 std::vector<std::string> file_paths;
                 file_paths.reserve(suite.tests.size());
-                for (const auto& t : suite.tests)
+                for (const auto& t : suite.tests) {
                     file_paths.push_back(t.file_path);
+                }
                 source_hashes = TestResultCache::compute_source_hashes(file_paths);
             }
 
@@ -1377,7 +1465,7 @@ TestRunResult run_tests(const TestConfig& config) {
             entry.flags_hash = flags_hash;
 
             if (flush_results && i < static_cast<int>(flush_results->size())) {
-                auto& sr = (*flush_results)[i];
+                const auto& sr = (*flush_results)[i];
                 entry.all_passed = sr.compile_ok && sr.failed == 0 && sr.crashed == 0 &&
                                    sr.passed == sr.test_count;
                 entry.test_count = sr.test_count;
@@ -1452,7 +1540,7 @@ TestRunResult run_tests(const TestConfig& config) {
                 std::make_move_iterator(uncached_suites.begin() + batch_end));
 
             TML_LOG_INFO("test", "[coordinator] Compiling batch "
-                                     << (batch_start / batch_size + 1) << " (" << batch_count
+                                     << ((batch_start / batch_size) + 1) << " (" << batch_count
                                      << " suites, " << batch_start << "-" << batch_end << " of "
                                      << total << ")");
 
@@ -1495,7 +1583,7 @@ TestRunResult run_tests(const TestConfig& config) {
             if (use_cache) {
                 cache.save(cache_file_path);
                 TML_LOG_INFO("test", "  [cache] Saved " << cache.size() << " entries after batch "
-                                                        << (batch_start / batch_size + 1));
+                                                        << ((batch_start / batch_size) + 1));
             }
         }
 
@@ -1536,18 +1624,21 @@ TestRunResult run_tests(const TestConfig& config) {
 
     // 9. Aggregate results (cached + executed)
     result.suites.reserve(cached_results.size() + exec_results.size());
-    for (auto& sr : cached_results)
+    for (auto& sr : cached_results) {
         result.suites.push_back(std::move(sr));
-    for (auto& sr : exec_results)
+    }
+    for (auto& sr : exec_results) {
         result.suites.push_back(std::move(sr));
+    }
 
     for (const auto& sr : result.suites) {
         result.total_tests += sr.test_count;
         result.passed += sr.passed;
         result.failed += sr.failed;
         result.crashed += sr.crashed;
-        if (!sr.compile_ok)
+        if (!sr.compile_ok) {
             result.failed += sr.test_count;
+        }
     }
 
     // 9.5. Debug layers: emit LLVM IR for failing tests

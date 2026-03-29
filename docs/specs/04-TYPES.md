@@ -1142,6 +1142,10 @@ TML provides fixed-width SIMD vector types via `core::simd`. Types annotated wit
 
 All SIMD types provide: `new()`, `splat()`, `zero()`, `get()`, `set()`, `add()`, `sub()`, `band()`, `bor()`, `bxor()`. Integer types also provide `mul()`. Float types provide `mul()`, `div()`, `min()`, `max()`. Most types provide `sum()`, `hmin()`, `hmax()` for horizontal reductions.
 
+### Portable Abstraction
+
+`core::simd::portable::SimdVector` is a behavior that provides a unified API over all vector types. Implemented for I32x4, F32x4, I8x16, I64x2 (128-bit) and I32x8, F32x8 (256-bit). See `core::simd::neon` for ARM NEON portable stubs and `core::simd::algorithms` for high-level SIMD-accelerated algorithms (`memchr_simd`, `dot_product_simd`, etc.).
+
 ---
 
 *Previous: [03-GRAMMAR.md](./03-GRAMMAR.md)*

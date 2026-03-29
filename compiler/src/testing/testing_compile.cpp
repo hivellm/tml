@@ -160,7 +160,7 @@ static std::string to_fwd_slashes(const std::string& s) {
 /// Get the cache directory for compiled test executables.
 static fs::path get_test_exe_cache_dir() {
     auto build_dir = cli::build::get_build_dir(false);
-    auto cache_dir = build_dir / ".new-run-cache";
+    auto cache_dir = build_dir / "cache";
     std::error_code ec;
     fs::create_directories(cache_dir, ec);
     return cache_dir;
@@ -214,7 +214,7 @@ static std::string build_runtime_archive(const CompileConfig& config) {
 
     // Determine cache directory (same as suite cache dir) — use absolute paths
     fs::path cache_dir = fs::absolute(
-        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / ".test-cache");
+        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / "cache");
     fs::create_directories(cache_dir);
 
     fs::path archive_path = cache_dir / "tml_test_runtime.lib";
@@ -342,7 +342,7 @@ static std::string build_stdlib_object(const CompileConfig& config) {
     init_compile_env();
 
     fs::path cache_dir = fs::absolute(
-        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / ".test-cache");
+        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / "cache");
     fs::create_directories(cache_dir);
 
     // Cache key includes coverage mode (coverage instruments functions differently)

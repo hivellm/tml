@@ -371,9 +371,9 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
 
     fs::path cwd = fs::current_path();
     fs::path run_cache_dir = cwd / "build" / "debug" / ".run-cache";
-    fs::path test_cache_dir = cwd / "build" / "debug" / ".test-cache";
+    fs::path test_cache_dir = cwd / "build" / "debug" / "cache";
     fs::path mir_cache_dir = cwd / "build" / "debug" / ".cache";
-    fs::path test_cache_file = cwd / ".test-cache.json";
+    fs::path test_cache_file = cwd / "build" / "debug" / "cache" / "tests.json";
 
     int invalidated_count = 0;
     int errors = 0;
@@ -451,7 +451,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
             }
         }
 
-        // 3. Clear test cache (.test-cache directory)
+        // 3. Clear test cache (cache directory)
         if (fs::exists(test_cache_dir)) {
             try {
                 for (const auto& entry : fs::directory_iterator(test_cache_dir)) {
@@ -470,7 +470,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
             }
         }
 
-        // 4. Update .test-cache.json if it exists
+        // 4. Update cache/tests.json if it exists
         if (fs::exists(test_cache_file)) {
             try {
                 // Read and parse JSON
@@ -493,7 +493,7 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
                     if (content.find(cache_key) != std::string::npos ||
                         content.find(file_name) != std::string::npos) {
                         found_any = true;
-                        TML_LOG_DEBUG("cache", "Found in .test-cache.json");
+                        TML_LOG_DEBUG("cache", "Found in cache/tests.json");
 
                         // Remove the entry by rewriting without this file
                         // For simplicity, we'll just mark that invalidation is needed

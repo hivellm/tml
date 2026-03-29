@@ -1088,68 +1088,85 @@ static void tml_remove_exception_filter(void) {
 /** @brief Timeout in milliseconds for individual test functions. 0 = disabled. */
 static int32_t tml_test_timeout_ms = 0;
 
+#ifdef _WIN32
+
+/* Persistent watchdog — one thread, reused for every test. */
+static HANDLE g_wd_start_event = NULL; /* auto-reset: main signals "test starting" */
+static HANDLE g_wd_done_event = NULL;  /* auto-reset: main signals "test finished" */
+static volatile int32_t g_wd_timeout_ms = 0;
+
+static DWORD WINAPI persistent_watchdog_fn(LPVOID param) {
+    (void)param;
+    for (;;) {
+        /* Wait for main thread to start a new test. */
+        DWORD r = WaitForSingleObject(g_wd_start_event, INFINITE);
+        if (r != WAIT_OBJECT_0)
+            return 0; /* handles closed → shutdown */
+
+        int32_t tms = g_wd_timeout_ms;
+        if (tms <= 0)
+            continue; /* timeout disabled */
+
+        /* Wait for main thread to signal test-done. */
+        r = WaitForSingleObject(g_wd_done_event, (DWORD)tms);
+        if (r == WAIT_TIMEOUT) {
+            RT_FATAL("test", "TIMEOUT: test exceeded %dms limit — killed", tms);
+            fflush(stderr);
+            fflush(stdout);
+            TerminateProcess(GetCurrentProcess(), 99);
+        }
+        /* WAIT_OBJECT_0 → test finished in time. Loop. */
+    }
+}
+
 /**
  * @brief Set the per-test timeout in milliseconds.
- * Any test that exceeds this duration will be forcefully terminated.
+ * Creates the persistent watchdog thread on first call (if timeout > 0).
+ * Set to 0 to disable (default).
+ */
+TML_EXPORT void tml_set_test_timeout(int32_t timeout_ms) {
+    tml_test_timeout_ms = timeout_ms;
+    if (timeout_ms > 0 && g_wd_start_event == NULL) {
+        g_wd_start_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+        g_wd_done_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+        if (g_wd_start_event && g_wd_done_event) {
+            HANDLE t = CreateThread(NULL, 0, persistent_watchdog_fn, NULL, 0, NULL);
+            if (t)
+                CloseHandle(t); /* detach — runs until process exits */
+        }
+    }
+}
+
+/**
+ * @brief Run a test function with per-test timeout enforcement.
+ * Overhead: two SetEvent calls (~microseconds). No thread creation per test.
+ */
+static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
+    if (tml_test_timeout_ms <= 0 || !g_wd_start_event) {
+        return test_fn();
+    }
+    g_wd_timeout_ms = tml_test_timeout_ms;
+    SetEvent(g_wd_start_event); /* start the watchdog timer */
+    int32_t result = test_fn();
+    SetEvent(g_wd_done_event); /* cancel the watchdog timer */
+    return result;
+}
+
+#else /* non-Windows */
+
+/**
+ * @brief Set the per-test timeout in milliseconds.
  * Set to 0 to disable (default).
  */
 TML_EXPORT void tml_set_test_timeout(int32_t timeout_ms) {
     tml_test_timeout_ms = timeout_ms;
 }
 
-#ifdef _WIN32
-/** @brief Thread parameter for watchdog. */
-typedef struct {
-    HANDLE test_thread;
-    int32_t timeout_ms;
-    volatile int32_t* finished_flag;
-    const char* test_name;
-} tml_watchdog_params;
-
-static DWORD WINAPI tml_watchdog_thread(LPVOID lpParam) {
-    tml_watchdog_params* p = (tml_watchdog_params*)lpParam;
-    Sleep((DWORD)p->timeout_ms);
-    if (!*(p->finished_flag)) {
-        // Test exceeded timeout — report and terminate process
-        RT_FATAL("test", "TIMEOUT: test exceeded %dms limit — killed", p->timeout_ms);
-        fflush(stderr);
-        fflush(stdout);
-        // Use TerminateProcess to kill the entire subprocess immediately
-        TerminateProcess(GetCurrentProcess(), 99);
-    }
-    return 0;
-}
-
-/**
- * @brief Run a test function with a timeout watchdog.
- * If the test exceeds tml_test_timeout_ms, the process is terminated with exit code 99.
- */
 static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
-    if (tml_test_timeout_ms <= 0) {
-        return test_fn();
-    }
-    volatile int32_t finished = 0;
-    tml_watchdog_params params;
-    params.test_thread = GetCurrentThread();
-    params.timeout_ms = tml_test_timeout_ms;
-    params.finished_flag = &finished;
-    params.test_name = NULL;
-
-    HANDLE watchdog = CreateThread(NULL, 0, tml_watchdog_thread, &params, 0, NULL);
-    int32_t result = test_fn();
-    finished = 1;
-    if (watchdog) {
-        // Give watchdog a moment to notice, then close handle
-        WaitForSingleObject(watchdog, 50);
-        CloseHandle(watchdog);
-    }
-    return result;
-}
-#else
-static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
-    // On non-Windows, just run directly (TODO: pthread-based timeout)
+    /* TODO: pthread-based timeout */
     return test_fn();
 }
+
 #endif
 
 static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {

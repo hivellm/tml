@@ -28,6 +28,7 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
     struct TestInfo {
         std::string name;
         bool should_panic = false;
+        bool slow_test = false;                 // @slow_test: use 10000ms timeout instead of 100ms
         std::string expected_panic_message;     // Empty means any panic is fine
         std::string expected_panic_message_str; // LLVM string constant reference
     };
@@ -49,11 +50,14 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
             const auto& func = decl->as<parser::FuncDecl>();
             bool is_test = false;
             bool should_panic = false;
+            bool slow_test = false;
             std::string expected_panic_message;
 
             for (const auto& decorator : func.decorators) {
                 if (decorator.name == "test") {
                     is_test = true;
+                } else if (decorator.name == "slow_test") {
+                    slow_test = true;
                 } else if (decorator.name == "should_panic") {
                     should_panic = true;
                     // Check for expected message: @should_panic(expected = "message")
@@ -128,6 +132,7 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                 TestInfo info;
                 info.name = func.name;
                 info.should_panic = should_panic;
+                info.slow_test = slow_test;
                 info.expected_panic_message = expected_panic_message;
                 // Pre-register the expected message string BEFORE emit_string_constants
                 if (!expected_panic_message.empty()) {
@@ -353,9 +358,8 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         }
         emit_line("entry:");
 
-        // Set per-test timeout (20s) to kill tests stuck in infinite loops
+        // Declare tml_set_test_timeout — called per-test below
         require_runtime_decl("tml_set_test_timeout");
-        emit_line("  call void @tml_set_test_timeout(i32 20000)");
 
         // In suite mode, test functions have a prefix to avoid collisions
         std::string test_suite_prefix = "";
@@ -368,6 +372,10 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         for (const auto& test_info : test_functions) {
             std::string test_fn = "@tml_" + test_suite_prefix + test_info.name;
             std::string idx_str = std::to_string(test_idx);
+
+            // Set timeout per-test: @slow_test gets 10000ms, normal tests get 100ms
+            int timeout_ms = test_info.slow_test ? 10000 : 100;
+            emit_line("  call void @tml_set_test_timeout(i32 " + std::to_string(timeout_ms) + ")");
 
             if (test_info.should_panic) {
                 // Generate panic-catching call for @should_panic tests

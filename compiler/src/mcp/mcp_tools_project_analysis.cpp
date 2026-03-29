@@ -475,9 +475,9 @@ auto handle_project_artifacts(const json::JsonValue& params) -> ToolResult {
             };
             std::vector<CacheDir> cache_dirs = {
                 {".run-cache", build_dir / ".run-cache"},
-                {".test-cache", build_dir / ".test-cache"},
+                {"cache", build_dir / "cache"},
                 {"cache/meta", build_dir / "cache" / "meta"},
-                {".incr-cache", build_dir / ".incr-cache"},
+                {"cache/incr", build_dir / "cache" / "incr"},
             };
 
             // CMake cache

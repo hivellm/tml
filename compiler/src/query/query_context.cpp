@@ -249,7 +249,7 @@ bool QueryContext::load_incremental_cache(const fs::path& build_dir) {
         return false;
     }
 
-    incr_cache_dir_ = build_dir / ".incr-cache";
+    incr_cache_dir_ = build_dir / "cache" / "incr";
 
     // Compute options hash for this session
     options_hash_ =
@@ -292,7 +292,7 @@ bool QueryContext::save_incremental_cache(const fs::path& build_dir) {
 
     // Use build_dir to set cache dir if not already set (e.g., save without prior load)
     if (incr_cache_dir_.empty()) {
-        incr_cache_dir_ = build_dir / ".incr-cache";
+        incr_cache_dir_ = build_dir / "cache" / "incr";
         fs::create_directories(incr_cache_dir_);
     }
 

@@ -56,12 +56,12 @@ struct Colors {
 
 static void enable_ansi_colors() {
 #ifdef _WIN32
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut != INVALID_HANDLE_VALUE) {
-        DWORD dwMode = 0;
-        if (GetConsoleMode(hOut, &dwMode)) {
-            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-            SetConsoleMode(hOut, dwMode);
+    HANDLE h_out = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (h_out != INVALID_HANDLE_VALUE) {
+        DWORD dw_mode = 0;
+        if (static_cast<bool>(GetConsoleMode(h_out, &dw_mode))) {
+            dw_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(h_out, dw_mode);
         }
     }
 #endif
@@ -101,13 +101,14 @@ void TerminalReporter::on_coverage_report(int covered, int total, const std::str
     print_coverage_summary(covered, total, report_path);
 }
 
-void TerminalReporter::print_summary_table(const TestRunResult& result) {
+void TerminalReporter::print_summary_table(const TestRunResult& result) const {
     Colors c(use_color);
 
     int cached_count = 0;
     for (const auto& s : result.suites) {
-        if (s.cached)
+        if (s.cached) {
             ++cached_count;
+        }
     }
 
     TML_LOG_INFO("test", "  Suites:  " << result.suites.size()
@@ -144,7 +145,7 @@ void TerminalReporter::print_summary_table(const TestRunResult& result) {
     }
 }
 
-void TerminalReporter::print_failure_details(const TestRunResult& result) {
+void TerminalReporter::print_failure_details(const TestRunResult& result) const {
     Colors c(use_color);
 
     TML_LOG_INFO("test", "");
@@ -170,17 +171,13 @@ void TerminalReporter::print_failure_details(const TestRunResult& result) {
                 if (!test.error.empty()) {
                     std::istringstream err_stream(test.error);
                     std::string err_line;
-                    int line_count = 0;
-                    while (std::getline(err_stream, err_line) && line_count < 20) {
-                        if (!err_line.empty() && err_line.back() == '\r')
+                    while (std::getline(err_stream, err_line)) {
+                        if (!err_line.empty() && err_line.back() == '\r') {
                             err_line.pop_back();
+                        }
                         if (!err_line.empty()) {
                             TML_LOG_ERROR("test", "    " << err_line);
-                            ++line_count;
                         }
-                    }
-                    if (line_count >= 20) {
-                        TML_LOG_ERROR("test", "    " << c.dim() << "... (truncated)" << c.reset());
                     }
                 }
             }
@@ -188,7 +185,7 @@ void TerminalReporter::print_failure_details(const TestRunResult& result) {
     }
 }
 
-void TerminalReporter::print_profile_summary(const TestRunResult& result) {
+void TerminalReporter::print_profile_summary(const TestRunResult& result) const {
     Colors c(use_color);
 
     // Collect suite timings
@@ -198,6 +195,7 @@ void TerminalReporter::print_profile_summary(const TestRunResult& result) {
         int64_t exec_us;
     };
     std::vector<SuiteTiming> timings;
+    timings.reserve(result.suites.size());
 
     for (const auto& suite : result.suites) {
         timings.push_back({suite.name, suite.compile_time_us, suite.exec_time_us});
@@ -222,7 +220,7 @@ void TerminalReporter::print_profile_summary(const TestRunResult& result) {
 }
 
 void TerminalReporter::print_coverage_summary(int covered, int total,
-                                              const std::string& report_path) {
+                                              const std::string& report_path) const {
     Colors c(use_color);
 
     if (total > 0) {
@@ -239,7 +237,7 @@ void TerminalReporter::print_coverage_summary(int covered, int total,
 // JsonReporter Implementation
 // ============================================================================
 
-std::string JsonReporter::escape_json_string(const std::string& s) const {
+std::string JsonReporter::escape_json_string(const std::string& s) {
     std::string result;
     for (char c : s) {
         switch (c) {
@@ -303,8 +301,9 @@ void JsonReporter::on_run_end(const TestRunResult& result) {
         oss << ",\"tests\":[";
         bool first = true;
         for (const auto& test : suite.tests) {
-            if (!first)
+            if (!first) {
                 oss << ",";
+            }
             oss << "{\"name\":\"" << escape_json_string(test.name) << "\""
                 << ",\"passed\":" << (test.passed ? "true" : "false")
                 << ",\"exit_code\":" << test.exit_code << ",\"duration_us\":" << test.duration_us;
@@ -330,7 +329,7 @@ void JsonReporter::on_run_end(const TestRunResult& result) {
 // JunitXmlReporter Implementation
 // ============================================================================
 
-std::string JunitXmlReporter::escape_xml_string(const std::string& s) const {
+std::string JunitXmlReporter::escape_xml_string(const std::string& s) {
     std::string result;
     for (char c : s) {
         switch (c) {

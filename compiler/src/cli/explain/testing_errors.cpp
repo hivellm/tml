@@ -189,8 +189,8 @@ This error is usually self-healing — the cache is automatically invalidated
 and tests will recompile from scratch. If the error persists:
 
 - Run with `--no-cache` to force a full rebuild
-- The cache files are in `build/debug/.new-test-cache.json`
-  and `build/debug/.incr-cache/`
+- The cache files are in `build/debug/cache/tests.json`
+  and `build/debug/cache/incr/`
 )EX"},
 
         {"X009", R"EX(

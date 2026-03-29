@@ -555,8 +555,8 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
     emitln("define dllexport i32 @" + quote_func_name(options_.test_entry_name) + "() {");
     emitln("entry:");
 
-    // Set per-test timeout (20s) to kill tests stuck in infinite loops
-    emitln("  call void @tml_set_test_timeout(i32 20000)");
+    // Set per-test timeout (100ms) to kill tests stuck in infinite loops
+    emitln("  call void @tml_set_test_timeout(i32 100)");
 
     if (!test_funcs.empty()) {
         // Call each @test function sequentially

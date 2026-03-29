@@ -23,6 +23,7 @@ func tml_exe() -> Str {
 // ============================================================================
 
 @test
+@slow_test
 func test_doc_list_type() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -39,6 +40,7 @@ func test_doc_list_type() -> I32 {
 }
 
 @test
+@slow_test
 func test_doc_hashmap_type() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -55,6 +57,7 @@ func test_doc_hashmap_type() -> I32 {
 }
 
 @test
+@slow_test
 func test_doc_str_type() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -71,6 +74,7 @@ func test_doc_str_type() -> I32 {
 }
 
 @test
+@slow_test
 func test_doc_qualified_path() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -87,6 +91,7 @@ func test_doc_qualified_path() -> I32 {
 }
 
 @test
+@slow_test
 func test_doc_method_lookup() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -103,6 +108,7 @@ func test_doc_method_lookup() -> I32 {
 }
 
 @test
+@slow_test
 func test_doc_exits_zero_on_success() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")
@@ -122,6 +128,7 @@ func test_doc_exits_zero_on_success() -> I32 {
 // ============================================================================
 
 @test
+@slow_test
 func test_doc_help_flag() -> I32 {
     let result = Command::new(tml_exe())
         .arg("doc")

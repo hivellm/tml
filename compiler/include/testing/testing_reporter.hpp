@@ -123,10 +123,10 @@ struct TerminalReporter : ITestReporter {
     void on_coverage_report(int covered, int total, const std::string& report_path) override;
 
 private:
-    void print_summary_table(const TestRunResult& result);
-    void print_failure_details(const TestRunResult& result);
-    void print_profile_summary(const TestRunResult& result);
-    void print_coverage_summary(int covered, int total, const std::string& report_path);
+    void print_summary_table(const TestRunResult& result) const;
+    void print_failure_details(const TestRunResult& result) const;
+    void print_profile_summary(const TestRunResult& result) const;
+    void print_coverage_summary(int covered, int total, const std::string& report_path) const;
     static void enable_ansi_colors();
 };
 
@@ -147,7 +147,7 @@ struct JsonReporter : ITestReporter {
     void on_run_end(const TestRunResult& result) override;
 
 private:
-    std::string escape_json_string(const std::string& s) const;
+    static std::string escape_json_string(const std::string& s);
 };
 
 // ============================================================================
@@ -164,7 +164,7 @@ struct JunitXmlReporter : ITestReporter {
     void on_run_end(const TestRunResult& result) override;
 
 private:
-    std::string escape_xml_string(const std::string& s) const;
+    static std::string escape_xml_string(const std::string& s);
 };
 
 // ============================================================================

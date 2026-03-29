@@ -548,51 +548,75 @@ void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntr
 std::string TestResultCache::compute_compiler_hash() {
     std::error_code ec;
 
-    // Build candidate paths to fingerprint
-    std::vector<fs::path> candidates;
+    // Build candidate paths for the compiler binary/DLL
+    std::vector<fs::path> compiler_candidates;
 
 #ifdef _WIN32
     char path[MAX_PATH];
     DWORD len = GetModuleFileNameA(nullptr, path, MAX_PATH);
     if (len > 0 && len < MAX_PATH) {
         fs::path exe(std::string(path, len));
-        candidates.push_back(exe.parent_path() / "plugins" / "tml_compiler.dll");
-        candidates.push_back(exe);
+        compiler_candidates.push_back(exe.parent_path() / "plugins" / "tml_compiler.dll");
+        compiler_candidates.push_back(exe);
     }
 #else
     auto exe_path = fs::read_symlink("/proc/self/exe", ec);
     if (!ec) {
-        candidates.push_back(exe_path);
+        compiler_candidates.push_back(exe_path);
     }
 #endif
 
-    // Also try CWD-relative paths
+    // Also try CWD-relative paths for both debug and release
     auto cwd = fs::current_path(ec);
     if (!ec) {
-        candidates.push_back(cwd / "build" / "debug" / "bin" / "plugins" / "tml_compiler.dll");
-        candidates.push_back(cwd / "build" / "debug" / "bin" / "tml.exe");
+        compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "plugins" /
+                                      "tml_compiler.dll");
+        compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "tml.exe");
     }
 
-    for (const auto& p : candidates) {
-        if (!fs::exists(p, ec) || ec) {
-            continue;
+    // Helper lambda: compute "TIME:SIZE" fingerprint string for the first existing candidate
+    auto fingerprint_first_existing = [&](const std::vector<fs::path>& paths) -> std::string {
+        for (const auto& p : paths) {
+            if (!fs::exists(p, ec) || ec) {
+                continue;
+            }
+            auto fsize = fs::file_size(p, ec);
+            if (ec || fsize == 0) {
+                continue;
+            }
+            auto ftime = fs::last_write_time(p, ec);
+            if (ec) {
+                continue;
+            }
+            auto time_val = ftime.time_since_epoch().count();
+            return std::to_string(time_val) + ":" + std::to_string(fsize);
         }
-        auto fsize = fs::file_size(p, ec);
-        if (ec || fsize == 0) {
-            continue;
-        }
-        auto ftime = fs::last_write_time(p, ec);
-        if (ec) {
-            continue;
-        }
-        // Use mtime + size as fast fingerprint
-        auto time_val = ftime.time_since_epoch().count();
-        std::string fp = std::to_string(time_val) + ":" + std::to_string(fsize);
-        return crc32c_hex(fp.data(), fp.size());
+        return "";
+    };
+
+    // Fingerprint the compiler binary
+    std::string compiler_fp = fingerprint_first_existing(compiler_candidates);
+    if (compiler_fp.empty()) {
+        TML_LOG_WARN("test", "[cache] Could not compute compiler hash from any candidate");
+        return "unknown";
     }
 
-    TML_LOG_WARN("test", "[cache] Could not compute compiler hash from any candidate");
-    return "unknown";
+    // Build candidate paths for the test runtime lib (debug and release)
+    std::vector<fs::path> runtime_candidates;
+    if (!ec) { // cwd is still valid
+        runtime_candidates.push_back(cwd / "build" / "debug" / "cache" / "tml_test_runtime.lib");
+        runtime_candidates.push_back(cwd / "build" / "release" / "cache" / "tml_test_runtime.lib");
+    }
+
+    // Fingerprint the runtime lib (optional — not all builds produce it)
+    std::string runtime_fp = fingerprint_first_existing(runtime_candidates);
+
+    // Combine into a single string and hash it
+    std::string combined = "compiler:" + compiler_fp;
+    if (!runtime_fp.empty()) {
+        combined += "+runtime:" + runtime_fp;
+    }
+    return crc32c_hex(combined.data(), combined.size());
 }
 
 std::string TestResultCache::compute_flags_hash(const TestConfig& config) {

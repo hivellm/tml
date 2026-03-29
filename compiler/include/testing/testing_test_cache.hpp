@@ -102,6 +102,16 @@ public:
         }
     }
 
+    /// Fully invalidate all entries: clear all_passed AND exe_path.
+    /// Used when the runtime library changes — old EXEs have the old runtime baked in
+    /// and must be recompiled, not just re-run.
+    void invalidate_all_exes() {
+        for (auto& [name, entry] : entries_) {
+            entry.all_passed = false;
+            entry.exe_path.clear();
+        }
+    }
+
     // ========================================================================
     // Static utility functions
     // ========================================================================

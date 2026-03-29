@@ -1072,6 +1072,77 @@ TML exposes hardware SIMD operations through `core::runtime::intrinsics` (compil
 | `simd_splat[V, E](val) -> V` | Broadcast scalar |
 | `simd_bitmask[V](v) -> I32` | Extract MSBs |
 
+### 12.6 ARM NEON Portable Stubs (`core::simd::neon`)
+
+Portable NEON-like API backed by the same LLVM vector operations on x86-64. On ARM64, these map
+directly to NEON instructions.
+
+| Function | NEON Equivalent | Description |
+|----------|----------------|-------------|
+| `neon_add_i8/16/32/64(a, b)` | VADD | Lane-wise integer addition |
+| `neon_sub_i8/16/32/64(a, b)` | VSUB | Lane-wise integer subtraction |
+| `neon_mul_i8/16/32(a, b)` | VMUL | Lane-wise integer multiplication |
+| `neon_add_f32/f64(a, b)` | FADD | Lane-wise float addition |
+| `neon_mul_f32/f64(a, b)` | FMUL | Lane-wise float multiplication |
+| `neon_fmla_f32/f64(acc, a, b)` | VFMLA | Fused multiply-add: acc + a*b |
+| `neon_fmls_f32/f64(acc, a, b)` | VFMLS | Fused multiply-sub: acc - a*b |
+| `neon_ceq_i8/16/32(a, b)` | VCEQ | Equality comparison mask |
+| `neon_cgt_i8/16/32(a, b)` | VCGT | Greater-than mask |
+| `neon_cge_i8/16/32(a, b)` | VCGE | Greater-or-equal mask |
+| `neon_ceq/cgt_f32/f64(a, b)` | FCMEQ/FCMGT | Float comparison mask |
+| `neon_and/or/xor_v128(a, b)` | VAND/VORR/VEOR | 128-bit bitwise ops (I32x4) |
+| `neon_bsl_v128(mask, a, b)` | VBSL | Bitwise select |
+| `neon_not_v128(a)` | VMVN | Bitwise NOT |
+| `neon_and/or/xor_i8(a, b)` | VAND/VORR/VEOR | 16-lane I8 bitwise |
+| `neon_tbl1_i8(tbl, idx)` | VTBL1 | Byte table lookup |
+| `neon_cnt_i8(a)` | VCNT | Popcount per byte |
+| `neon_addv_i8/16/32(a)` | VADDV | Horizontal sum |
+| `neon_maxv_i8/16/32(a)` | VMAXV | Horizontal max |
+| `neon_minv_i8/16/32(a)` | VMINV | Horizontal min |
+| `neon_min/max_i8/16/32(a, b)` | VMIN/VMAX | Lane-wise min/max |
+| `neon_min/max_f32/f64(a, b)` | FMIN/FMAX | Float lane-wise min/max |
+| `neon_abs_i8/16/32(a)` | VABS | Lane-wise absolute value |
+| `neon_ld1_i8/16/32/64(...)` | VLD1 | Load vector from scalars |
+| `neon_st1_i8/32/64(v)` | VST1 | Store (identity passthrough) |
+| `neon_ld2_i8/16/32_even/odd(...)` | VLD2 | Interleaved load (even/odd lanes) |
+
+### 12.7 Portable SIMD Behavior (`core::simd::portable`)
+
+`SimdVector` is a behavior providing an ISA-agnostic API over all SIMD vector types.
+
+```tml
+pub behavior SimdVector {
+    func add(this, other: Self) -> Self
+    func sub(this, other: Self) -> Self
+    func mul(this, other: Self) -> Self
+    func band(this, other: Self) -> Self
+    func bor(this, other: Self) -> Self
+    func bxor(this, other: Self) -> Self
+    func zero() -> Self
+}
+```
+
+Implemented for: `I32x4`, `F32x4`, `I8x16`, `I64x2` (128-bit), `I32x8`, `F32x8` (256-bit).
+
+```tml
+func sum_all[V: SimdVector](v: V, init: V) -> V {
+    return init.add(v)
+}
+```
+
+`simd_select(mask: I32x4, a: I32x4, b: I32x4) -> I32x4` — Portable blend: mask=-1 selects `a`, 0 selects `b`.
+
+### 12.8 SIMD-Accelerated Library Algorithms (`core::simd::algorithms`)
+
+| Function | Description |
+|----------|-------------|
+| `memchr_simd(haystack: Slice[U8], byte: U8) -> Maybe[I64]` | Find byte (SSE2, 16B/iter) |
+| `str_find_simd(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` | Find substring |
+| `case_upper_simd(data: Slice[U8]) -> Unit` | ASCII lowercase→uppercase in-place |
+| `case_lower_simd(data: Slice[U8]) -> Unit` | ASCII uppercase→lowercase in-place |
+| `crc32c_simd(data: Slice[U8]) -> U32` | Hardware CRC32C (SSE4.2) |
+| `dot_product_simd(a: Slice[F32], b: Slice[F32]) -> F32` | Dot product (F32x4 accumulation) |
+
 ---
 
 *Previous: [12-ERRORS.md](./12-ERRORS.md)*

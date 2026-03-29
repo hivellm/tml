@@ -180,8 +180,8 @@ impl[T: Ord] MutSlice[T] {
         }
     }
 
-    /// Sift down element at index `idx` in a max-heap of size `heap_size`.
-    /// All indices are relative to `base` offset in the slice.
+    /// Sift down element at index idx in a max-heap of size heap_size.
+    /// All indices are relative to base offset in the slice.
     func sift_down(mut this, base: I64, idx: I64, heap_size: I64) {
         let mut root: I64 = idx
         loop (2 * root + 1 < heap_size) {
@@ -471,7 +471,7 @@ impl[T] MutSlice[T] {
     /// # Performance Note
     ///
     /// The key function is called multiple times per element during sorting.
-    /// If the key computation is expensive, consider using `sort_by` with
+    /// If the key computation is expensive, consider using sort_by with
     /// cached keys or a Schwartzian transform.
     pub func sort_by_key[K: Ord](mut this, key_fn: func(ref T) -> K) {
         this.sort_by(do(a: ref T, b: ref T) key_fn(a).cmp(ref key_fn(b)))
@@ -485,7 +485,7 @@ impl[T] MutSlice[T] {
 impl[T: Ord] MutSlice[T] {
     /// Checks if the slice is sorted in ascending order.
     ///
-    /// Returns `true` for empty slices and single-element slices.
+    /// Returns true for empty slices and single-element slices.
     ///
     /// # Examples
     ///
