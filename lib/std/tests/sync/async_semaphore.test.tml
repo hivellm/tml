@@ -1,0 +1,65 @@
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::sync::async_semaphore::AsyncSemaphore
+
+@test
+func test_async_semaphore_new() -> I32 {
+    let sem = AsyncSemaphore::new(3)
+    assert_eq(sem.available(), 3 as I64, "initial permits = 3")
+    assert_eq(sem.max_permits(), 3 as I64, "max permits = 3")
+    return 0
+}
+
+@test
+func test_async_semaphore_try_acquire() -> I32 {
+    var sem = AsyncSemaphore::new(2)
+    assert_true(sem.try_acquire(), "first try_acquire succeeds")
+    assert_eq(sem.available(), 1 as I64, "one permit left")
+    assert_true(sem.try_acquire(), "second try_acquire succeeds")
+    assert_eq(sem.available(), 0 as I64, "no permits left")
+    assert_false(sem.try_acquire(), "try_acquire when empty fails")
+    return 0
+}
+
+@test
+func test_async_semaphore_release() -> I32 {
+    var sem = AsyncSemaphore::new(1)
+    sem.acquire()
+    assert_eq(sem.available(), 0 as I64, "no permits after acquire")
+    sem.release()
+    assert_eq(sem.available(), 1 as I64, "permit restored after release")
+    return 0
+}
+
+@test
+func test_async_semaphore_acquire_release_cycle() -> I32 {
+    var sem = AsyncSemaphore::new(3)
+    sem.acquire()
+    sem.acquire()
+    assert_eq(sem.available(), 1 as I64, "1 permit after 2 acquires")
+    sem.release()
+    assert_eq(sem.available(), 2 as I64, "2 permits after 1 release")
+    sem.release()
+    assert_eq(sem.available(), 3 as I64, "3 permits after 2 releases")
+    return 0
+}
+
+@test
+func test_async_semaphore_zero_permits() -> I32 {
+    var sem = AsyncSemaphore::new(0)
+    assert_eq(sem.available(), 0 as I64, "zero initial permits")
+    assert_false(sem.try_acquire(), "try_acquire on 0-permit sem fails")
+    sem.release()
+    assert_eq(sem.available(), 1 as I64, "permit count can grow above initial")
+    return 0
+}
+
+@test
+func test_async_semaphore_single_permit() -> I32 {
+    var sem = AsyncSemaphore::new(1)
+    assert_true(sem.try_acquire(), "can acquire single permit")
+    assert_false(sem.try_acquire(), "second acquire fails")
+    sem.release()
+    assert_true(sem.try_acquire(), "can acquire after release")
+    sem.release()
+    return 0
+}

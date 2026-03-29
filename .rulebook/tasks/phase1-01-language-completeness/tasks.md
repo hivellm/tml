@@ -1,6 +1,6 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: In Progress — 77% (125/162)
+**Status**: In Progress — 79% (128/162)
 **Last updated**: 2026-03-28
 
 ---
@@ -53,7 +53,7 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 
 ---
 
-## Milestone 2: Documentation & Reflection — 52% (14/27)
+## Milestone 2: Documentation & Reflection — 56% (15/27)
 
 **Goal**: Linguagem auto-documentada com introspecção de tipos
 
@@ -67,7 +67,7 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 - [x] 2.1.6 JSON export — `doc/generators.cpp` has JSON output support
 - [x] 2.1.7 `tml doc <symbol>` — `--symbol` flag in cmd_doc.hpp
 - [x] 2.1.8 Gerar docs para lib/core e lib/std — `tml doc --all`: 382 modules, 4103 items documented
-- [ ] 2.1.9 Testes de geração de docs
+- [x] 2.1.9 Testes de geração de docs — `compiler/tests/cli/doc_generation.test.tml` (7 tests: List/HashMap/Str lookup, qualified path, method lookup, exit code, help flag)
 
 ### 2.2 Reflection System — PARTIAL
 
@@ -92,7 +92,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 
 ---
 
-## Milestone 3: Async & Networking — 82% (23/28)
+## Milestone 3: Async & Networking — 86% (24/28)
 
 **Goal**: Aplicações de rede assíncronas com 10K+ conexões concorrentes
 
@@ -108,7 +108,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 3.1.8 I/O reactor — `lib/std/src/aio/poller.tml`
 - [x] 3.1.9 `AsyncMutex[T]` — `lib/std/src/sync/async_mutex.tml`, spinlock + yield, RAII guard with Drop, lock/try_lock/unlock/is_locked
 - [x] 3.1.10 `AsyncChannel[T]` — `lib/std/src/runtime/channel.tml` (bounded SPSC)
-- [ ] 3.1.11 `AsyncSemaphore` — controle de concurrência (tracked in phase2-02)
+- [x] 3.1.11 `AsyncSemaphore` — `lib/std/src/sync/async_semaphore.tml`, spin+yield, acquire/try_acquire/release/available/max_permits, exported from sync::mod; 6 tests in `lib/std/tests/sync/async_semaphore.test.tml`
 - [x] 3.1.12 `select!` — `lib/core/src/future/select.tml` (select2, select_first)
 - [x] 3.1.13 `join!` — `Join2[A,B]`, `Join3[A,B,C]`, `join2()`, `join3()` in `core::future::join`
 - [ ] 3.1.14 Benchmarks: sub-microsecond task switch, linear scaling com cores
@@ -144,7 +144,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 
 ---
 
-## Milestone 4: Web & HTTP — 90% (27/30)
+## Milestone 4: Web & HTTP — 93% (28/30)
 
 **Goal**: Framework HTTP completo para web apps e APIs
 
@@ -167,7 +167,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 
 - [x] 4.2.1-4.2.8 Full TLS: context, stream, ALPN, SNI, cert verification, HTTPS
 
-### 4.3 Promises & Reactivity — MOSTLY DONE
+### 4.3 Promises & Reactivity — DONE
 
 - [x] 4.3.1 `Promise[T]` — then, resolve, reject, state machine
 - [x] 4.3.2 `Promise::all()`, `race()`, `any()`, `all_settled()`
@@ -176,7 +176,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 4.3.5-4.3.6 BehaviorSubject, ReplaySubject — documented in observable/mod.tml
 - [x] 4.3.7 Operators: take, skip, scan, distinct, merge, concat
 - [x] 4.3.8 Pipe operator `|>` — lexer emits `PipeRight` token, parser desugars `a |> f` to `f(a)` and `a |> f(b)` to `f(a, b)`. Chaining works: `a |> f |> g` = `g(f(a))`
-- [ ] 4.3.9 Backpressure handling — partial (WritableStream has cork/uncork)
+- [x] 4.3.9 Backpressure handling — cork/uncork + highWaterMark on WritableStream, DuplexStream, PassThroughStream, TransformStream; ReadableStream push() signals backpressure; 9 dedicated tests in `lib/std/tests/stream/backpressure.test.tml`
 - [x] 4.3.10 Observable has known codegen bugs (closure symbols, struct GEP)
 
 **Gate M4**: HTTP server ✅, HTTPS ✅, WebSocket ✅, rotas ✅

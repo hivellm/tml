@@ -1,0 +1,139 @@
+//! Tests for `tml doc` command — documentation generation and symbol lookup.
+//!
+//! Verifies that the `tml doc <symbol>` command outputs meaningful
+//! documentation for standard library types and methods.
+
+use test::{assert, assert_eq}
+use std::os
+use std::os::subprocess::Command
+use core::str
+
+// ============================================================================
+// Helper
+// ============================================================================
+
+/// Returns the path to `tml.exe` in the debug build directory.
+func tml_exe() -> Str {
+    let root: Str = os::current_dir()
+    return root + "/build/debug/bin/tml.exe"
+}
+
+// ============================================================================
+// Symbol lookup tests
+// ============================================================================
+
+@test
+func test_doc_list_type() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("List")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "tml doc List should succeed")
+            assert(str::contains(out.stdout, "List"), "output should mention 'List'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_doc_hashmap_type() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("HashMap")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "tml doc HashMap should succeed")
+            assert(str::contains(out.stdout, "HashMap"), "output should mention 'HashMap'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_doc_str_type() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("Str")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "tml doc Str should succeed")
+            assert(str::contains(out.stdout, "Str"), "output should mention 'Str'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_doc_qualified_path() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("core::str::split")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "tml doc core::str::split should succeed")
+            assert(str::contains(out.stdout, "split"), "output should mention 'split'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_doc_method_lookup() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("HashMap::get")
+        .output()
+    when result {
+        Ok(out) => {
+            assert(out.success(), "tml doc HashMap::get should succeed")
+            assert(str::contains(out.stdout, "get"), "output should mention 'get'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+@test
+func test_doc_exits_zero_on_success() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("Mutex")
+        .output()
+    when result {
+        Ok(out) => {
+            assert_eq(out.exit_code, 0, "tml doc exits with 0 on success")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}
+
+// ============================================================================
+// Help / error handling
+// ============================================================================
+
+@test
+func test_doc_help_flag() -> I32 {
+    let result = Command::new(tml_exe())
+        .arg("doc")
+        .arg("--help")
+        .output()
+    when result {
+        Ok(out) => {
+            // --help exits with 0 and prints usage
+            assert(str::contains(out.stdout, "doc") or str::contains(out.stderr, "doc"),
+                "doc help output should contain 'doc'")
+        }
+        Err(e) => assert(false, e)
+    }
+    0
+}

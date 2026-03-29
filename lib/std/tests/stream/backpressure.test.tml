@@ -1,0 +1,169 @@
+//! Tests for stream backpressure semantics — both readable and writable sides.
+//!
+//! Backpressure prevents fast producers from overwhelming slow consumers.
+//! On the writable side: `write()` returns `false` when buffer exceeds
+//! `highWaterMark`, signalling the producer to pause.
+//! On the readable side: `push()` returns `false` when buffer exceeds
+//! `highWaterMark`, signalling the source to pause production.
+
+use test::{assert, assert_eq, assert_true, assert_false}
+use std::stream::writable_stream::WritableStream
+use std::stream::readable_stream::ReadableStream
+
+// Sink callback that silently discards data
+func sink_write(data: I64, cb: I64) {}
+
+// ============================================================================
+// Writable backpressure — write() returns false when buffer >= hwm
+// ============================================================================
+
+@test
+func test_write_returns_false_at_hwm() -> I32 {
+    // hwm = 4: any buffer >= 4 bytes triggers backpressure
+    var ws: WritableStream = WritableStream::with_options(4)
+    ws.set_write_fn(sink_write as I64)
+
+    ws.cork()  // buffer writes so we can measure buffer length
+
+    let ok1: Bool = ws.write("ab")   // 2 bytes — below hwm
+    assert_true(ok1, "write 2 bytes: below hwm")
+
+    let ok2: Bool = ws.write("cd")   // now 4 bytes — at hwm → backpressure
+    assert_false(ok2, "write to hwm triggers backpressure (returns false)")
+
+    ws.uncork()
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_write_below_hwm_returns_true() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(16)
+    ws.set_write_fn(sink_write as I64)
+
+    ws.cork()
+
+    let ok: Bool = ws.write("hello")  // 5 bytes — below hwm(16)
+    assert_true(ok, "write below hwm returns true")
+
+    ws.uncork()
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_needs_drain_set_on_backpressure() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(3)
+    ws.set_write_fn(sink_write as I64)
+
+    assert_false(ws.writable_needs_drain(), "no drain needed initially")
+
+    ws.cork()
+    ws.write("abcd")  // 4 bytes > hwm(3) — sets needs_drain
+
+    assert_true(ws.writable_needs_drain(), "needs_drain set when buffer exceeds hwm")
+
+    ws.uncork()
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_cork_buffers_writes() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(sink_write as I64)
+
+    ws.cork()
+    assert_true(ws.writable_corked(), "stream is corked")
+
+    ws.write("foo")
+    ws.write("bar")
+    assert_eq(ws.writable_length(), 6 as I64, "6 bytes buffered while corked")
+
+    ws.uncork()
+    assert_false(ws.writable_corked(), "stream is uncorked after uncork")
+    assert_eq(ws.writable_length(), 0 as I64, "buffer flushed on uncork")
+
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_nested_cork_only_flushes_on_last_uncork() -> I32 {
+    var ws: WritableStream = WritableStream::with_options(256)
+    ws.set_write_fn(sink_write as I64)
+
+    ws.cork()
+    ws.cork()
+    assert_eq(ws.writable_corked_count(), 2 as I64, "cork count = 2")
+
+    ws.write("data")
+    ws.uncork()  // count → 1, still corked
+    assert_true(ws.writable_corked(), "still corked after first uncork")
+    assert_eq(ws.writable_length(), 4 as I64, "still buffered")
+
+    ws.uncork()  // count → 0, flush
+    assert_false(ws.writable_corked(), "uncorked after second uncork")
+    assert_eq(ws.writable_length(), 0 as I64, "buffer flushed")
+
+    ws.destroy()
+    return 0
+}
+
+@test
+func test_write_after_backpressure_can_recover() -> I32 {
+    // After uncork + flush, needs_drain is cleared and writes succeed again
+    var ws: WritableStream = WritableStream::with_options(4)
+    ws.set_write_fn(sink_write as I64)
+
+    ws.cork()
+    ws.write("abcde")  // 5 > hwm → backpressure
+
+    assert_true(ws.writable_needs_drain(), "backpressure active")
+    ws.uncork()  // flushes, clears needs_drain
+
+    // After uncork, fresh writes go directly to sink (below hwm)
+    let ok: Bool = ws.write("xy")  // 2 bytes, uncorked → written directly, buf=0
+    assert_true(ok, "write succeeds after backpressure cleared")
+
+    ws.destroy()
+    return 0
+}
+
+// ============================================================================
+// Readable backpressure — push() returns false when buffer >= hwm
+// ============================================================================
+
+@test
+func test_readable_push_returns_false_at_hwm() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(4)
+    // pause mode: push buffers data
+
+    let ok1: Bool = rs.push("ab")   // 2 bytes < hwm(4)
+    assert_true(ok1, "push 2 bytes: below hwm")
+
+    let ok2: Bool = rs.push("cd")   // total 4 bytes = hwm → backpressure
+    assert_false(ok2, "push at hwm signals backpressure (returns false)")
+
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_readable_push_below_hwm_returns_true() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(64)
+
+    let ok: Bool = rs.push("small")  // 5 bytes < hwm(64)
+    assert_true(ok, "push below hwm returns true")
+
+    rs.destroy()
+    return 0
+}
+
+@test
+func test_readable_high_water_mark() -> I32 {
+    var rs: ReadableStream = ReadableStream::with_options(1024)
+    assert_eq(rs.readable_high_water_mark(), 1024 as I64, "hwm matches options")
+    rs.destroy()
+    return 0
+}

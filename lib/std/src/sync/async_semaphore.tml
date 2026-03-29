@@ -1,0 +1,204 @@
+//! Asynchronous counting semaphore for bounded concurrency control.
+//!
+//! This module provides [`AsyncSemaphore`], a semaphore that yields to the
+//! async executor instead of blocking the thread when no permits are available.
+//! This makes it suitable for use in async contexts where blocking would starve
+//! other tasks.
+//!
+//! # Overview
+//!
+//! A semaphore maintains a count of available permits. Callers `acquire()` a
+//! permit before entering a critical section and `release()` it afterward.
+//! Unlike [`Semaphore`][super::semaphore::Semaphore], `AsyncSemaphore` spins
+//! briefly then yields via CPU pause hints rather than blocking the OS thread.
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use sync::async_semaphore::AsyncSemaphore
+//!
+//! var sem = AsyncSemaphore::new(3)
+//!
+//! // Acquire a permit (yields if none available)
+//! sem.acquire()
+//! // ... do work ...
+//! sem.release()
+//! ```
+//!
+//! ## Try Acquire (Non-blocking)
+//!
+//! ```tml
+//! use sync::async_semaphore::AsyncSemaphore
+//!
+//! var sem = AsyncSemaphore::new(2)
+//!
+//! if sem.try_acquire() {
+//!     // got a permit
+//!     sem.release()
+//! }
+//! ```
+
+use std::sync::atomic::{AtomicI64, Ordering, spin_loop_hint}
+
+// ============================================================================
+// AsyncSemaphore
+// ============================================================================
+
+/// Maximum number of spin iterations before yielding.
+/// Tuned for typical async workloads — short critical sections.
+const ASYNC_SEM_SPIN_LIMIT: I64 = 32
+
+/// An asynchronous counting semaphore backed by atomic operations.
+///
+/// Maintains a count of available permits. When no permits are available,
+/// `acquire()` spins briefly using CPU pause hints then retries, allowing
+/// other async tasks to make progress without blocking the OS thread.
+pub type AsyncSemaphore {
+    permits: AtomicI64,
+    max_permits: I64,
+}
+
+impl AsyncSemaphore {
+    /// Creates a new `AsyncSemaphore` with the given number of initial permits.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::async_semaphore::AsyncSemaphore
+    ///
+    /// let sem = AsyncSemaphore::new(4)
+    /// ```
+    pub func new(permits: I64) -> AsyncSemaphore {
+        return AsyncSemaphore {
+            permits: AtomicI64::new(permits),
+            max_permits: permits,
+        }
+    }
+
+    /// Acquires a permit, spinning briefly then yielding if none are available.
+    ///
+    /// Spins for up to [`ASYNC_SEM_SPIN_LIMIT`] iterations using CPU pause
+    /// hints. If no permit becomes available, yields via `spin_loop_hint()`
+    /// and retries. Returns once a permit has been successfully acquired.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var sem = AsyncSemaphore::new(1)
+    /// sem.acquire()
+    /// // ... critical section ...
+    /// sem.release()
+    /// ```
+    pub func acquire(mut this) {
+        loop (true) {
+            // Fast path: try to claim a permit immediately
+            let current = this.permits.load(Ordering::SeqCst)
+            if current > 0 {
+                let result = this.permits.compare_exchange(
+                    current, current - 1,
+                    Ordering::Acquire, Ordering::Relaxed,
+                )
+                when result {
+                    Ok(_) => return,
+                    Err(_) => {},  // CAS failed — retry
+                }
+            }
+
+            // Spin phase: wait briefly with pause hints
+            var spins: I64 = 0
+            loop (spins < ASYNC_SEM_SPIN_LIMIT) {
+                spin_loop_hint()
+                let c = this.permits.load(Ordering::Relaxed)
+                if c > 0 {
+                    let r = this.permits.compare_exchange(
+                        c, c - 1,
+                        Ordering::Acquire, Ordering::Relaxed,
+                    )
+                    when r {
+                        Ok(_) => return,
+                        Err(_) => {},
+                    }
+                }
+                spins = spins + 1
+            }
+
+            // Yield phase: give other tasks a chance to run
+            spin_loop_hint()
+        }
+    }
+
+    /// Attempts to acquire a permit without spinning or yielding.
+    ///
+    /// Returns `true` if a permit was acquired, `false` if none were available.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var sem = AsyncSemaphore::new(1)
+    /// if sem.try_acquire() {
+    ///     // got a permit
+    ///     sem.release()
+    /// }
+    /// ```
+    pub func try_acquire(mut this) -> Bool {
+        let current = this.permits.load(Ordering::SeqCst)
+        if current <= 0 {
+            return false
+        }
+        let result = this.permits.compare_exchange(
+            current, current - 1,
+            Ordering::Acquire, Ordering::Relaxed,
+        )
+        when result {
+            Ok(_) => return true,
+            Err(_) => return false,
+        }
+    }
+
+    /// Releases a permit back to the semaphore.
+    ///
+    /// The permit count is incremented. Callers that are spinning in
+    /// `acquire()` will pick up the released permit on their next attempt.
+    ///
+    /// # Note
+    ///
+    /// Release does not enforce an upper bound — it is the caller's
+    /// responsibility not to release more permits than were acquired.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var sem = AsyncSemaphore::new(1)
+    /// sem.acquire()
+    /// sem.release()
+    /// ```
+    pub func release(mut this) {
+        this.permits.fetch_add(1, Ordering::Release)
+    }
+
+    /// Returns the current number of available permits.
+    ///
+    /// This is a relaxed snapshot — by the time the caller acts on it,
+    /// the count may have changed due to concurrent acquires or releases.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let sem = AsyncSemaphore::new(3)
+    /// assert_eq(sem.available(), 3)
+    /// ```
+    pub func available(this) -> I64 {
+        return this.permits.load(Ordering::SeqCst)
+    }
+
+    /// Returns the maximum number of permits this semaphore was created with.
+    pub func max_permits(this) -> I64 {
+        return this.max_permits
+    }
+}
+
+// Thread safety: AsyncSemaphore is Send + Sync (all state is atomic)
+impl Send for AsyncSemaphore {}
+impl Sync for AsyncSemaphore {}
