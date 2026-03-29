@@ -195,3 +195,8 @@ impl[T] Drop for AsyncMutexGuard[T] {
         this.mutex.unlock()
     }
 }
+
+// Thread safety: AsyncMutex is Send/Sync if T is Send
+impl[T: Send] Send for AsyncMutex[T] {}
+impl[T: Send] Sync for AsyncMutex[T] {}
+impl[T: Sync] Sync for AsyncMutexGuard[T] {}

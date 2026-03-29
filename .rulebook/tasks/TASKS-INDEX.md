@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-03-28
-**Total tasks**: 35 active (5 archived)
+**Total tasks**: 45 active (5 archived)
 
 ## Phase 1 — Foundation & Language
 
@@ -100,6 +100,23 @@ Native database abstraction with ORM, migrations, query builder, and benchmarks.
 | 8-08 | [MongoDB Driver (External Package)](phase8-08-db-mongodb/) | Planning | LOW | 0% (0/16) |
 | 8-09 | [Redis + MySQL Drivers](phase8-09-db-redis-mysql/) | Planning | LOW | 0% (0/18) |
 | 8-10 | [HTTP + DB Integration](phase8-10-db-http-integration/) | Planning | LOW | 0% (0/10) |
+
+## Phase 9 — AI/ML Library
+
+Separate `ia` library (`lib/ia/`) with tensors, autograd, CUDA, inference, and training.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 9-01 | [IA Tensor Core (CPU)](phase9-01-ia-tensor-core/) | Planning | **CRITICAL** | 0% (0/25) |
+| 9-02 | [IA Autograd Engine](phase9-02-ia-autograd/) | Planning | HIGH | 0% (0/15) |
+| 9-03 | [IA Neural Network Layers](phase9-03-ia-nn-layers/) | Planning | HIGH | 0% (0/20) |
+| 9-04 | [IA Training Loop + Optimizers](phase9-04-ia-training/) | Planning | HIGH | 0% (0/15) |
+| 9-05 | [IA CUDA Backend](phase9-05-ia-cuda/) | Planning | HIGH | 0% (0/20) |
+| 9-06 | [IA Model Loading (safetensors + GGUF)](phase9-06-ia-model-loading/) | Planning | MEDIUM | 0% (0/12) |
+| 9-07 | [IA LLM Inference Engine](phase9-07-ia-inference/) | Planning | MEDIUM | 0% (0/15) |
+| 9-08 | [IA LoRA/QLoRA Fine-Tuning](phase9-08-ia-lora-finetune/) | Planning | MEDIUM | 0% (0/8) |
+| 9-09 | [IA Multi-GPU Distributed](phase9-09-ia-distributed/) | Planning | LOW | 0% (0/8) |
+| 9-10 | [IA Benchmarks + HTTP Serving](phase9-10-ia-bench-serve/) | Planning | LOW | 0% (0/12) |
 
 ---
 
