@@ -537,6 +537,163 @@ pub func sse2_cmpeq_epi8[V](a: V, b: V) -> V
 @intrinsic
 pub func sse2_movemask_epi8[V](v: V) -> I32
 
+// --- SSE2 Comparison Intrinsics ---
+
+/// Byte-wise signed greater-than comparison.
+/// Returns 0xFF for lanes where a > b, 0x00 otherwise.
+/// Compiles to PCMPGTB on x86.
+@intrinsic
+pub func sse2_cmpgt_epi8[V](a: V, b: V) -> V
+
+/// Byte-wise signed less-than comparison (swapped PCMPGTB).
+/// Returns 0xFF for lanes where a < b, 0x00 otherwise.
+@intrinsic
+pub func sse2_cmplt_epi8[V](a: V, b: V) -> V
+
+/// Word-wise equality comparison.
+/// Returns 0xFFFF for matching lanes, 0x0000 otherwise.
+/// Compiles to PCMPEQW on x86.
+@intrinsic
+pub func sse2_cmpeq_epi16[V](a: V, b: V) -> V
+
+/// Dword-wise equality comparison.
+/// Returns 0xFFFFFFFF for matching lanes, 0x00000000 otherwise.
+/// Compiles to PCMPEQD on x86.
+@intrinsic
+pub func sse2_cmpeq_epi32[V](a: V, b: V) -> V
+
+/// Word-wise signed greater-than comparison.
+/// Returns 0xFFFF for lanes where a > b, 0x0000 otherwise.
+/// Compiles to PCMPGTW on x86.
+@intrinsic
+pub func sse2_cmpgt_epi16[V](a: V, b: V) -> V
+
+/// Dword-wise signed greater-than comparison.
+/// Returns 0xFFFFFFFF for lanes where a > b, 0x00000000 otherwise.
+/// Compiles to PCMPGTD on x86.
+@intrinsic
+pub func sse2_cmpgt_epi32[V](a: V, b: V) -> V
+
+// --- SSE2 Bitwise Intrinsics ---
+
+/// 128-bit bitwise AND. Compiles to PAND on x86.
+@intrinsic
+pub func sse2_and_si128[V](a: V, b: V) -> V
+
+/// 128-bit bitwise OR. Compiles to POR on x86.
+@intrinsic
+pub func sse2_or_si128[V](a: V, b: V) -> V
+
+/// 128-bit bitwise XOR. Compiles to PXOR on x86.
+@intrinsic
+pub func sse2_xor_si128[V](a: V, b: V) -> V
+
+/// 128-bit bitwise AND-NOT (~a & b). Compiles to PANDN on x86.
+@intrinsic
+pub func sse2_andnot_si128[V](a: V, b: V) -> V
+
+// --- SSE2 Min/Max Intrinsics ---
+
+/// Unsigned byte-wise minimum. Compiles to PMINUB on x86.
+@intrinsic
+pub func sse2_min_epu8[V](a: V, b: V) -> V
+
+/// Unsigned byte-wise maximum. Compiles to PMAXUB on x86.
+@intrinsic
+pub func sse2_max_epu8[V](a: V, b: V) -> V
+
+/// Signed word-wise minimum. Compiles to PMINSW on x86.
+@intrinsic
+pub func sse2_min_epi16[V](a: V, b: V) -> V
+
+/// Signed word-wise maximum. Compiles to PMAXSW on x86.
+@intrinsic
+pub func sse2_max_epi16[V](a: V, b: V) -> V
+
+// --- SSE2 Movemask Intrinsics ---
+
+/// Extract sign bits from 4 floats into a 4-bit mask.
+/// Compiles to MOVMSKPS on x86.
+@intrinsic
+pub func sse2_movemask_ps[V](v: V) -> I32
+
+/// Extract sign bits from 2 doubles into a 2-bit mask.
+/// Compiles to MOVMSKPD on x86.
+@intrinsic
+pub func sse2_movemask_pd[V](v: V) -> I32
+
+// --- SSE2 Pack/Unpack Intrinsics ---
+
+/// Pack 16-bit integers to 8-bit with signed saturation.
+/// Compiles to PACKSSWB on x86.
+@intrinsic
+pub func sse2_packs_epi16[V, R](a: V, b: V) -> R
+
+/// Pack 16-bit integers to 8-bit with unsigned saturation.
+/// Compiles to PACKUSWB on x86.
+@intrinsic
+pub func sse2_packus_epi16[V, R](a: V, b: V) -> R
+
+/// Pack 32-bit integers to 16-bit with signed saturation.
+/// Compiles to PACKSSDW on x86.
+@intrinsic
+pub func sse2_packs_epi32[V, R](a: V, b: V) -> R
+
+/// Interleave low bytes from two vectors.
+/// Compiles to PUNPCKLBW on x86.
+@intrinsic
+pub func sse2_unpacklo_epi8[V](a: V, b: V) -> V
+
+/// Interleave high bytes from two vectors.
+/// Compiles to PUNPCKHBW on x86.
+@intrinsic
+pub func sse2_unpackhi_epi8[V](a: V, b: V) -> V
+
+// --- SSE2 Shift Intrinsics ---
+
+/// Shift 16-bit lanes left by immediate count.
+@intrinsic
+pub func sse2_slli_epi16[V](v: V, imm: I16) -> V
+
+/// Shift 32-bit lanes left by immediate count.
+@intrinsic
+pub func sse2_slli_epi32[V](v: V, imm: I32) -> V
+
+/// Shift 64-bit lanes left by immediate count.
+@intrinsic
+pub func sse2_slli_epi64[V](v: V, imm: I64) -> V
+
+/// Shift 16-bit lanes right logical by immediate count.
+@intrinsic
+pub func sse2_srli_epi16[V](v: V, imm: I16) -> V
+
+/// Shift 32-bit lanes right logical by immediate count.
+@intrinsic
+pub func sse2_srli_epi32[V](v: V, imm: I32) -> V
+
+/// Shift 64-bit lanes right logical by immediate count.
+@intrinsic
+pub func sse2_srli_epi64[V](v: V, imm: I64) -> V
+
+/// Shift 16-bit lanes right arithmetic by immediate count.
+@intrinsic
+pub func sse2_srai_epi16[V](v: V, imm: I16) -> V
+
+/// Shift 32-bit lanes right arithmetic by immediate count.
+@intrinsic
+pub func sse2_srai_epi32[V](v: V, imm: I32) -> V
+
+// --- SSE2 Memory Intrinsics ---
+
+/// Unaligned 128-bit store. Compiles to MOVDQU on x86.
+@intrinsic
+pub func sse2_storeu_si128[V](ptr: Ptr[V], v: V)
+
+/// Aligned 128-bit store. Compiles to MOVDQA on x86.
+/// Pointer must be 16-byte aligned or behavior is undefined.
+@intrinsic
+pub func sse2_store_si128[V](ptr: Ptr[V], v: V)
+
 // ============================================================================
 // CPU Feature Detection (x86-64 only)
 // ============================================================================

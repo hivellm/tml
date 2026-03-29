@@ -1,0 +1,63 @@
+use test
+use core::simd::i8x16::I8x16
+use core::runtime::intrinsics::{
+    sse2_and_si128, sse2_or_si128, sse2_xor_si128, sse2_andnot_si128,
+    sse2_cmpeq_epi8, sse2_movemask_epi8
+}
+
+@test
+func test_xor_self_is_zero() -> I32 {
+    let a = I8x16::splat(42)
+    let result = lowlevel { sse2_xor_si128(a, a) }
+    let zero = I8x16::splat(0)
+    let eq = lowlevel { sse2_cmpeq_epi8(result, zero) }
+    let mask = lowlevel { sse2_movemask_epi8(eq) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_and_with_all_ones() -> I32 {
+    let a = I8x16::splat(42)
+    let all_ones = I8x16::splat(-1_i8)
+    let result = lowlevel { sse2_and_si128(a, all_ones) }
+    let eq = lowlevel { sse2_cmpeq_epi8(result, a) }
+    let mask = lowlevel { sse2_movemask_epi8(eq) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_and_with_zero() -> I32 {
+    let a = I8x16::splat(42)
+    let zero = I8x16::splat(0)
+    let result = lowlevel { sse2_and_si128(a, zero) }
+    let eq = lowlevel { sse2_cmpeq_epi8(result, zero) }
+    let mask = lowlevel { sse2_movemask_epi8(eq) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_or_with_zero() -> I32 {
+    let a = I8x16::splat(42)
+    let zero = I8x16::splat(0)
+    let result = lowlevel { sse2_or_si128(a, zero) }
+    let eq = lowlevel { sse2_cmpeq_epi8(result, a) }
+    let mask = lowlevel { sse2_movemask_epi8(eq) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_or_combines_bits() -> I32 {
+    // 0x0F | 0xF0 = 0xFF = -1 in i8
+    let a = I8x16::splat(15)
+    let b = I8x16::splat(-16_i8)
+    let result = lowlevel { sse2_or_si128(a, b) }
+    let expected = I8x16::splat(-1_i8)
+    let eq = lowlevel { sse2_cmpeq_epi8(result, expected) }
+    let mask = lowlevel { sse2_movemask_epi8(eq) }
+    assert_eq(mask, 65535)
+    0
+}

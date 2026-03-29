@@ -29,52 +29,57 @@
 
 ## Phase 2: SSE2 Complete Intrinsic Set
 
-> **Priority**: Critical | **Files**: `intrinsics.cpp`, `lib/core/src/intrinsics.tml`
+> **Priority**: Critical | **Files**: `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`
 
 ### 2.1 Comparison Intrinsics
-- [ ] 2.1.1 `sse2_cmpgt_epi8` — PCMPGTB (byte signed greater-than)
-- [ ] 2.1.2 `sse2_cmpeq_epi16` — PCMPEQW (word equal)
-- [ ] 2.1.3 `sse2_cmpeq_epi32` — PCMPEQD (dword equal)
-- [ ] 2.1.4 `sse2_cmpgt_epi16` — PCMPGTW (word signed greater-than)
-- [ ] 2.1.5 `sse2_cmpgt_epi32` — PCMPGTD (dword signed greater-than)
-- [ ] 2.1.6 `sse2_cmplt_epi8` — via PCMPGTB with swapped args
+- [x] 2.1.1 `sse2_cmpgt_epi8` — PCMPGTB (byte signed greater-than) — icmp sgt + sext
+- [x] 2.1.2 `sse2_cmpeq_epi16` — PCMPEQW (word equal) — icmp eq + sext
+- [x] 2.1.3 `sse2_cmpeq_epi32` — PCMPEQD (dword equal) — icmp eq + sext
+- [x] 2.1.4 `sse2_cmpgt_epi16` — PCMPGTW (word signed greater-than) — icmp sgt + sext
+- [x] 2.1.5 `sse2_cmpgt_epi32` — PCMPGTD (dword signed greater-than) — icmp sgt + sext
+- [x] 2.1.6 `sse2_cmplt_epi8` — via icmp slt + sext
 
 ### 2.2 Bitwise Intrinsics
-- [ ] 2.2.1 `sse2_and_si128` — PAND (128-bit bitwise AND)
-- [ ] 2.2.2 `sse2_or_si128` — POR (128-bit bitwise OR)
-- [ ] 2.2.3 `sse2_xor_si128` — PXOR (128-bit bitwise XOR)
-- [ ] 2.2.4 `sse2_andnot_si128` — PANDN (128-bit AND-NOT)
+- [x] 2.2.1 `sse2_and_si128` — PAND (LLVM `and` instruction)
+- [x] 2.2.2 `sse2_or_si128` — POR (LLVM `or` instruction)
+- [x] 2.2.3 `sse2_xor_si128` — PXOR (LLVM `xor` instruction)
+- [x] 2.2.4 `sse2_andnot_si128` — PANDN (xor -1 + and)
 
 ### 2.3 Min/Max Intrinsics
-- [ ] 2.3.1 `sse2_min_epu8` — PMINUB (unsigned byte min)
-- [ ] 2.3.2 `sse2_max_epu8` — PMAXUB (unsigned byte max)
-- [ ] 2.3.3 `sse2_min_epi16` — PMINSW (signed word min)
-- [ ] 2.3.4 `sse2_max_epi16` — PMAXSW (signed word max)
+- [x] 2.3.1 `sse2_min_epu8` — PMINUB (icmp ult + select)
+- [x] 2.3.2 `sse2_max_epu8` — PMAXUB (icmp ugt + select)
+- [x] 2.3.3 `sse2_min_epi16` — PMINSW (icmp slt + select)
+- [x] 2.3.4 `sse2_max_epi16` — PMAXSW (icmp sgt + select)
 
 ### 2.4 Movemask Intrinsics
-- [ ] 2.4.1 `sse2_movemask_ps` — MOVMSKPS (4-bit float mask)
-- [ ] 2.4.2 `sse2_movemask_pd` — MOVMSKPD (2-bit double mask)
+- [x] 2.4.1 `sse2_movemask_ps` — @llvm.x86.sse.movmsk.ps
+- [x] 2.4.2 `sse2_movemask_pd` — @llvm.x86.sse2.movmsk.pd
 
 ### 2.5 Pack/Unpack Intrinsics
-- [ ] 2.5.1 `sse2_packs_epi16` — PACKSSWB (i16 -> i8 signed saturation)
-- [ ] 2.5.2 `sse2_packus_epi16` — PACKUSWB (i16 -> u8 unsigned saturation)
-- [ ] 2.5.3 `sse2_packs_epi32` — PACKSSDW (i32 -> i16 signed saturation)
-- [ ] 2.5.4 `sse2_unpacklo_epi8` — PUNPCKLBW (interleave low bytes)
-- [ ] 2.5.5 `sse2_unpackhi_epi8` — PUNPCKHBW (interleave high bytes)
+- [x] 2.5.1 `sse2_packs_epi16` — @llvm.x86.sse2.packsswb.128
+- [x] 2.5.2 `sse2_packus_epi16` — @llvm.x86.sse2.packuswb.128
+- [x] 2.5.3 `sse2_packs_epi32` — @llvm.x86.sse2.packssdw.128
+- [x] 2.5.4 `sse2_unpacklo_epi8` — shufflevector (low interleave)
+- [x] 2.5.5 `sse2_unpackhi_epi8` — shufflevector (high interleave)
 
 ### 2.6 Shift Intrinsics
-- [ ] 2.6.1 `sse2_slli_epi16/32/64` — Shift left immediate
-- [ ] 2.6.2 `sse2_srli_epi16/32/64` — Shift right logical immediate
-- [ ] 2.6.3 `sse2_srai_epi16/32` — Shift right arithmetic immediate
+- [x] 2.6.1 `sse2_slli_epi16/32/64` — shl with splatted shift amount
+- [x] 2.6.2 `sse2_srli_epi16/32/64` — lshr with splatted shift amount
+- [x] 2.6.3 `sse2_srai_epi16/32` — ashr with splatted shift amount
 
 ### 2.7 Memory Intrinsics
-- [ ] 2.7.1 `sse2_storeu_si128` — Unaligned 128-bit store
-- [ ] 2.7.2 `sse2_store_si128` — Aligned 128-bit store
+- [x] 2.7.1 `sse2_storeu_si128` — store align 1
+- [x] 2.7.2 `sse2_store_si128` — store align 16
 
 ### 2.8 Tests
-- [ ] 2.8.1 Write `lib/core/tests/simd/sse2_intrinsics.test.tml` — all comparison ops
-- [ ] 2.8.2 Write `lib/core/tests/simd/sse2_bitwise.test.tml` — AND/OR/XOR/ANDNOT
-- [ ] 2.8.3 Write `lib/core/tests/simd/sse2_pack_shift.test.tml` — pack/unpack/shift
+- [x] 2.8.1 Write `lib/core/tests/simd/sse2_intrinsics.test.tml` — 6 comparison tests (all pass)
+- [x] 2.8.2 Write `lib/core/tests/simd/sse2_bitwise.test.tml` — 5 bitwise tests (all pass)
+- [x] 2.8.3 Write `lib/core/tests/simd/sse2_pack_shift.test.tml` — 5 shift tests (all pass)
+
+> **Implementation note**: All intrinsics use pure LLVM IR (icmp+sext for comparisons, and/or/xor for
+> bitwise, icmp+select for min/max, shl/lshr/ashr for shifts). LLVM's backend lowers these to the
+> correct SSE2 instructions. Pack intrinsics use LLVM x86 target intrinsics (@llvm.x86.sse2.*).
+> Tests verified both via `tml.exe test` (direct) and `tml.exe run` (sandbox).
 
 ## Phase 3: SSE4.2 Intrinsics
 

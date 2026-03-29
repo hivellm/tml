@@ -1,0 +1,69 @@
+use test
+use core::simd::i8x16::I8x16
+use core::simd::i32x4::I32x4
+use core::runtime::intrinsics::{
+    sse2_cmpeq_epi8, sse2_cmpgt_epi8, sse2_cmplt_epi8,
+    sse2_cmpeq_epi32, sse2_cmpgt_epi32,
+    sse2_movemask_epi8
+}
+
+@test
+func test_cmpeq_epi8_all_equal() -> I32 {
+    let a = I8x16::splat(42)
+    let b = I8x16::splat(42)
+    let result = lowlevel { sse2_cmpeq_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_cmpeq_epi8_none_equal() -> I32 {
+    let a = I8x16::splat(1)
+    let b = I8x16::splat(2)
+    let result = lowlevel { sse2_cmpeq_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 0)
+    0
+}
+
+@test
+func test_cmpgt_epi8_all_greater() -> I32 {
+    let a = I8x16::splat(10)
+    let b = I8x16::splat(5)
+    let result = lowlevel { sse2_cmpgt_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_cmpgt_epi8_none_greater() -> I32 {
+    let a = I8x16::splat(3)
+    let b = I8x16::splat(10)
+    let result = lowlevel { sse2_cmpgt_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 0)
+    0
+}
+
+@test
+func test_cmplt_epi8() -> I32 {
+    let a = I8x16::splat(5)
+    let b = I8x16::splat(10)
+    let result = lowlevel { sse2_cmplt_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 65535)
+    0
+}
+
+@test
+func test_cmpgt_epi8_signed_negative() -> I32 {
+    // -1 is NOT greater than 0 in signed comparison
+    let a = I8x16::splat(-1_i8)
+    let b = I8x16::splat(0)
+    let result = lowlevel { sse2_cmpgt_epi8(a, b) }
+    let mask = lowlevel { sse2_movemask_epi8(result) }
+    assert_eq(mask, 0)
+    0
+}

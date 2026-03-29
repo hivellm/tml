@@ -150,6 +150,23 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "simd_bitmask",
         // Native SSE2 intrinsics
         "sse2_cmpeq_epi8", "sse2_movemask_epi8",
+        // SSE2 comparison
+        "sse2_cmpgt_epi8", "sse2_cmpeq_epi16", "sse2_cmpeq_epi32", "sse2_cmpgt_epi16",
+        "sse2_cmpgt_epi32", "sse2_cmplt_epi8",
+        // SSE2 bitwise
+        "sse2_and_si128", "sse2_or_si128", "sse2_xor_si128", "sse2_andnot_si128",
+        // SSE2 min/max
+        "sse2_min_epu8", "sse2_max_epu8", "sse2_min_epi16", "sse2_max_epi16",
+        // SSE2 movemask
+        "sse2_movemask_ps", "sse2_movemask_pd",
+        // SSE2 pack/unpack
+        "sse2_packs_epi16", "sse2_packus_epi16", "sse2_packs_epi32", "sse2_unpacklo_epi8",
+        "sse2_unpackhi_epi8",
+        // SSE2 shift
+        "sse2_slli_epi16", "sse2_slli_epi32", "sse2_slli_epi64", "sse2_srli_epi16",
+        "sse2_srli_epi32", "sse2_srli_epi64", "sse2_srai_epi16", "sse2_srai_epi32",
+        // SSE2 memory
+        "sse2_storeu_si128", "sse2_store_si128",
         // Array element intrinsics
         "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
 
