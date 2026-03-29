@@ -1,6 +1,6 @@
 # Tasks: Generic SIMD ISA Support for TML
 
-**Status**: Phase 1-4 Complete, Phase 5-8 Partial (Display/Debug, conversions, NEON stubs, integration tests, docs done)
+**Status**: In Progress — 72/153 done (47%). Phases 1-8 core implementation done. Remaining: advanced intrinsics (broadcast, gather, FMA, AVX-512), remaining type methods, str_find_sse42, some tests.
 **Priority**: High
 
 ## Phase 1: CPU Feature Detection Infrastructure
