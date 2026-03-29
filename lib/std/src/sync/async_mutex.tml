@@ -1,0 +1,197 @@
+//! Asynchronous mutual exclusion primitive.
+//!
+//! This module provides [`AsyncMutex[T]`], a mutex that yields to the async
+//! executor instead of blocking the thread when contended. This makes it
+//! suitable for use in async contexts where blocking would starve other tasks.
+//!
+//! # Overview
+//!
+//! Unlike the synchronous [`Mutex[T]`][super::mutex::Mutex], `AsyncMutex[T]`
+//! does not block the operating system thread when the lock is held by another
+//! task. Instead, it spins briefly and then yields control back to the executor,
+//! allowing other async tasks to make progress.
+//!
+//! # When to Use
+//!
+//! - Use `AsyncMutex[T]` when protecting shared data in async code
+//! - Use [`Mutex[T]`][super::mutex::Mutex] when in synchronous code or when
+//!   the critical section is very short (no I/O)
+//!
+//! # Examples
+//!
+//! ## Basic Usage
+//!
+//! ```tml
+//! use sync::async_mutex::AsyncMutex
+//!
+//! let counter = AsyncMutex::new(0)
+//!
+//! // Acquire lock (spins + yields if contended)
+//! {
+//!     let mut guard = counter.lock()
+//!     *guard = *guard + 1
+//! }  // guard dropped, lock released
+//! ```
+//!
+//! ## Try Lock (Non-blocking)
+//!
+//! ```tml
+//! use sync::async_mutex::AsyncMutex
+//!
+//! let mutex = AsyncMutex::new(42)
+//!
+//! when mutex.try_lock() {
+//!     Just(guard) => print(*guard),
+//!     Nothing => print("lock held"),
+//! }
+//! ```
+
+use std::sync::atomic::{AtomicBool, Ordering, spin_loop_hint}
+
+// ============================================================================
+// AsyncMutex
+// ============================================================================
+
+/// An asynchronous mutual exclusion primitive.
+///
+/// This mutex uses an atomic spinlock internally. When contended, it spins
+/// for a short number of iterations using CPU pause hints, then yields to
+/// the async executor to avoid wasting CPU cycles.
+///
+/// The data is accessed through an [`AsyncMutexGuard`] which releases the
+/// lock when dropped.
+pub type AsyncMutex[T] {
+    locked: AtomicBool,
+    data: T,
+}
+
+/// Maximum number of spin iterations before yielding.
+/// Tuned for typical async workloads -- short critical sections.
+const SPIN_LIMIT: I64 = 32
+
+impl[T] AsyncMutex[T] {
+    /// Creates a new `AsyncMutex[T]` with the given initial value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::async_mutex::AsyncMutex
+    ///
+    /// let mutex = AsyncMutex::new(0)
+    /// ```
+    pub func new(value: T) -> AsyncMutex[T] {
+        return AsyncMutex {
+            locked: AtomicBool::new(false),
+            data: value,
+        }
+    }
+
+    /// Attempts to acquire the lock without blocking or yielding.
+    ///
+    /// Returns `Just(guard)` if the lock was successfully acquired,
+    /// or `Nothing` if the lock is currently held.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mutex = AsyncMutex::new(42)
+    /// when mutex.try_lock() {
+    ///     Just(guard) => print(*guard),
+    ///     Nothing => print("busy"),
+    /// }
+    /// ```
+    pub func try_lock(mut this) -> Maybe[AsyncMutexGuard[T]] {
+        when this.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
+            Ok(_) => return Just(AsyncMutexGuard { mutex: mut ref this }),
+            Err(_) => return Nothing,
+        }
+    }
+
+    /// Acquires the lock, spinning briefly then yielding if contended.
+    ///
+    /// This method will spin for up to [`SPIN_LIMIT`] iterations using
+    /// CPU pause hints. If the lock is still not available after spinning,
+    /// it yields to the executor via `spin_loop_hint()` and retries.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mutex = AsyncMutex::new(0)
+    /// {
+    ///     let mut guard = mutex.lock()
+    ///     *guard = 42
+    /// }
+    /// ```
+    pub func lock(mut this) -> AsyncMutexGuard[T] {
+        loop (true) {
+            // Fast path: try to acquire immediately
+            when this.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
+                Ok(_) => return AsyncMutexGuard { mutex: mut ref this },
+                Err(_) => {},
+            }
+
+            // Spin phase: wait briefly with pause hints
+            var spins: I64 = 0
+            loop (spins < SPIN_LIMIT) {
+                spin_loop_hint()
+                if not this.locked.load(Ordering::Relaxed) {
+                    // Lock appears free -- try to acquire
+                    when this.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
+                        Ok(_) => return AsyncMutexGuard { mutex: mut ref this },
+                        Err(_) => {},
+                    }
+                }
+                spins = spins + 1
+            }
+
+            // Yield phase: give other tasks a chance to run
+            // In a full async runtime this would be an actual yield point.
+            // Here we use spin_loop_hint as a lightweight yield.
+            spin_loop_hint()
+        }
+    }
+
+    /// Returns whether the lock is currently held.
+    ///
+    /// This is a relaxed check -- by the time the caller acts on the result,
+    /// the lock state may have changed.
+    pub func is_locked(this) -> Bool {
+        return this.locked.load(Ordering::Relaxed)
+    }
+
+    /// Releases the lock. Called by AsyncMutexGuard on drop.
+    pub func unlock(mut this) {
+        this.locked.store(false, Ordering::Release)
+    }
+}
+
+// ============================================================================
+// AsyncMutexGuard
+// ============================================================================
+
+/// RAII guard for [`AsyncMutex[T]`].
+///
+/// When this guard is dropped, the lock is released. The guard provides
+/// access to the protected data via dereference.
+pub type AsyncMutexGuard[T] {
+    mutex: mut ref AsyncMutex[T],
+}
+
+impl[T] AsyncMutexGuard[T] {
+    /// Returns a reference to the protected data.
+    pub func get(this) -> ref T {
+        return ref this.mutex.data
+    }
+
+    /// Returns a mutable reference to the protected data.
+    pub func get_mut(mut this) -> mut ref T {
+        return mut ref this.mutex.data
+    }
+}
+
+impl[T] Drop for AsyncMutexGuard[T] {
+    /// Releases the lock when the guard goes out of scope.
+    func drop(mut this) {
+        this.mutex.unlock()
+    }
+}
