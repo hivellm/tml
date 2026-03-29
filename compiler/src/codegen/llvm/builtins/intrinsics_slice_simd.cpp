@@ -1859,20 +1859,24 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
     // ============================================================================
 
     // avx2_gather_epi32(base_ptr, indices, mask, scale) -> <8 x i32>  — VPGATHERDD
+    // Uses llvm.masked.gather (target-independent; LLVM lowers to VPGATHERDD with +avx2)
     if (intrinsic_name == "avx2_gather_epi32") {
         if (call.args.size() >= 4) {
-            std::string base = gen_expr(*call.args[0]);    // ptr (i32*)
-            std::string indices = gen_expr(*call.args[1]); // <8 x i32>
-            std::string mask = gen_expr(*call.args[2]);    // <8 x i32> (all-ones for active)
-            std::string scale = gen_expr(*call.args[3]);   // i8 (1, 2, 4, or 8)
+            std::string base = gen_expr(*call.args[0]);     // ptr
+            std::string indices = gen_expr(*call.args[1]);  // <8 x i32>
+            std::string mask_vec = gen_expr(*call.args[2]); // <8 x i32> (-1 = active)
+            // scale arg consumed by GEP element size (i32 = 4 bytes)
+            // Build vector of pointers: GEP base by each index
+            std::string ptrs = fresh_reg();
+            emit_line("  " + ptrs + " = getelementptr i32, ptr " + base + ", <8 x i32> " + indices);
+            // Convert <8 x i32> mask to <8 x i1>
+            std::string mask_cmp = fresh_reg();
+            emit_line("  " + mask_cmp + " = icmp ne <8 x i32> " + mask_vec + ", zeroinitializer");
             std::string result = fresh_reg();
-            // @llvm.x86.avx2.gather.d.d.256(<8 x i32> passthru, ptr base, <8 x i32> idx, <8 x i32>
-            // mask, i8 scale)
             emit_line("  " + result +
-                      " = call <8 x i32> @llvm.x86.avx2.gather.d.d.256(<8 x i32> zeroinitializer, "
-                      "ptr " +
-                      base + ", <8 x i32> " + indices + ", <8 x i32> " + mask + ", i8 " + scale +
-                      ")");
+                      " = call <8 x i32> @llvm.masked.gather.v8i32.v8p0("
+                      "<8 x ptr> " +
+                      ptrs + ", i32 4, <8 x i1> " + mask_cmp + ", <8 x i32> zeroinitializer)");
             last_expr_type_ = "<8 x i32>";
             return result;
         }
@@ -1880,19 +1884,23 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
     }
 
     // avx2_gather_epi64(base_ptr, indices, mask, scale) -> <4 x i64>  — VPGATHERDQ
-    // Uses 4 x i32 indices to gather 4 x i64 values
     if (intrinsic_name == "avx2_gather_epi64") {
         if (call.args.size() >= 4) {
-            std::string base = gen_expr(*call.args[0]);    // ptr
-            std::string indices = gen_expr(*call.args[1]); // <4 x i32>
-            std::string mask = gen_expr(*call.args[2]);    // <4 x i64> (all-ones for active)
-            std::string scale = gen_expr(*call.args[3]);   // i8
+            std::string base = gen_expr(*call.args[0]);     // ptr
+            std::string indices = gen_expr(*call.args[1]);  // <4 x i32>
+            std::string mask_vec = gen_expr(*call.args[2]); // <4 x i64> (-1 = active)
+            // sext <4 x i32> indices to <4 x i64> for GEP
+            std::string idx64 = fresh_reg();
+            emit_line("  " + idx64 + " = sext <4 x i32> " + indices + " to <4 x i64>");
+            std::string ptrs = fresh_reg();
+            emit_line("  " + ptrs + " = getelementptr i64, ptr " + base + ", <4 x i64> " + idx64);
+            std::string mask_cmp = fresh_reg();
+            emit_line("  " + mask_cmp + " = icmp ne <4 x i64> " + mask_vec + ", zeroinitializer");
             std::string result = fresh_reg();
             emit_line("  " + result +
-                      " = call <4 x i64> @llvm.x86.avx2.gather.d.q.256(<4 x i64> zeroinitializer, "
-                      "ptr " +
-                      base + ", <4 x i32> " + indices + ", <4 x i64> " + mask + ", i8 " + scale +
-                      ")");
+                      " = call <4 x i64> @llvm.masked.gather.v4i64.v4p0("
+                      "<4 x ptr> " +
+                      ptrs + ", i32 8, <4 x i1> " + mask_cmp + ", <4 x i64> zeroinitializer)");
             last_expr_type_ = "<4 x i64>";
             return result;
         }
@@ -1902,16 +1910,19 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
     // avx2_gather_ps(base_ptr, indices, mask, scale) -> <8 x float>  — VGATHERDPS
     if (intrinsic_name == "avx2_gather_ps") {
         if (call.args.size() >= 4) {
-            std::string base = gen_expr(*call.args[0]);    // ptr
-            std::string indices = gen_expr(*call.args[1]); // <8 x i32>
-            std::string mask = gen_expr(*call.args[2]);    // <8 x float> (bitcast from i32 mask)
-            std::string scale = gen_expr(*call.args[3]);   // i8
+            std::string base = gen_expr(*call.args[0]);     // ptr
+            std::string indices = gen_expr(*call.args[1]);  // <8 x i32>
+            std::string mask_vec = gen_expr(*call.args[2]); // <8 x i32> (as int mask)
+            std::string ptrs = fresh_reg();
+            emit_line("  " + ptrs + " = getelementptr float, ptr " + base + ", <8 x i32> " +
+                      indices);
+            std::string mask_cmp = fresh_reg();
+            emit_line("  " + mask_cmp + " = icmp ne <8 x i32> " + mask_vec + ", zeroinitializer");
             std::string result = fresh_reg();
-            emit_line(
-                "  " + result +
-                " = call <8 x float> @llvm.x86.avx2.gather.d.ps.256(<8 x float> zeroinitializer, "
-                "ptr " +
-                base + ", <8 x i32> " + indices + ", <8 x float> " + mask + ", i8 " + scale + ")");
+            emit_line("  " + result +
+                      " = call <8 x float> @llvm.masked.gather.v8f32.v8p0("
+                      "<8 x ptr> " +
+                      ptrs + ", i32 4, <8 x i1> " + mask_cmp + ", <8 x float> zeroinitializer)");
             last_expr_type_ = "<8 x float>";
             return result;
         }

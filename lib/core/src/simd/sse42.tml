@@ -18,7 +18,8 @@
 //! }
 //! ```
 
-use core::runtime::intrinsics::{sse42_crc32_u8, sse42_crc32_u64}
+use core::runtime::intrinsics::{sse42_crc32_u8, sse42_crc32_u64, sse42_cmpistri}
+use core::simd::i8x16::I8x16
 
 #if X86_64
 
@@ -52,6 +53,78 @@ pub func crc32c(data: Slice[U8]) -> U32 {
     }
 
     return result
+}
+
+/// Find the first occurrence of needle in haystack using SSE4.2 PCMPISTRI.
+///
+/// Uses the "equal ordered" comparison mode (imm8=0x0C) to find substrings.
+/// Handles needles up to 16 bytes. For longer needles, falls back to checking
+/// the first 16 bytes with PCMPISTRI and then verifying the full match.
+///
+/// Returns the byte offset of the first match, or Nothing if not found.
+/// Requires SSE4.2 support. Check with `detect::has_sse42()` before calling.
+pub func str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64] {
+    let hlen = haystack.len()
+    let nlen = needle.len()
+
+    if nlen == 0 { return Just(0) }
+    if nlen > hlen { return Nothing }
+
+    // Load needle into an I8x16 vector (pad with zeros for needles < 16 bytes)
+    var needle_vec = I8x16::zero()
+    var ni: I64 = 0
+    loop (ni < nlen and ni < 16) {
+        let b = needle.get(ni) as I8
+        needle_vec = needle_vec.set(ni as I32, b)
+        ni = ni + 1
+    }
+
+    // imm8 = 0x0C: equal ordered (substring match), unsigned bytes
+    let imm: I8 = 12 as I8
+
+    var pos: I64 = 0
+    loop (pos <= hlen - nlen) {
+        // Load 16 bytes from haystack at current position
+        var hay_vec = I8x16::zero()
+        var hi: I64 = 0
+        let remaining = hlen - pos
+        let load_len = if remaining < 16 { remaining } else { 16 }
+        loop (hi < load_len) {
+            let b = haystack.get(pos + hi) as I8
+            hay_vec = hay_vec.set(hi as I32, b)
+            hi = hi + 1
+        }
+
+        // PCMPISTRI returns index of first match (0-15) or 16 if no match
+        let idx: I32 = lowlevel { sse42_cmpistri(hay_vec, needle_vec, imm) }
+
+        if idx < 16 {
+            let candidate = pos + idx as I64
+            if candidate + nlen > hlen { return Nothing }
+
+            // For needles > 16 bytes, verify full match
+            if nlen > 16 {
+                var match_ok = true
+                var ci: I64 = 16
+                loop (ci < nlen and match_ok) {
+                    if haystack.get(candidate + ci) != needle.get(ci) {
+                        match_ok = false
+                    }
+                    ci = ci + 1
+                }
+                if match_ok { return Just(candidate) }
+                // No full match, advance past this candidate
+                pos = candidate + 1
+            } else {
+                return Just(candidate)
+            }
+        } else {
+            // No match in this 16-byte window, advance
+            pos = pos + 16
+        }
+    }
+
+    return Nothing
 }
 
 #endif

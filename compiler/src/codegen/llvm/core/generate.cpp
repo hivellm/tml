@@ -771,8 +771,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
         emit_string_constants();
 
         // Emit attributes section (needed for function definitions)
+        // Include target-features so LLVM can select AVX2/FMA/SSE4.2 intrinsics
         emit_line("");
-        emit_line("attributes #0 = { nounwind }");
+        emit_line("attributes #0 = { nounwind "
+                  "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\" }");
 
         // Emit loop metadata (generic instantiations may contain loops)
         emit_loop_metadata();
@@ -1538,9 +1540,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
     emit_line("");
     emit_line("; Function attributes for optimization");
     if (options_.coverage_enabled) {
-        emit_line("attributes #0 = { nounwind noinline }");
+        emit_line("attributes #0 = { nounwind noinline "
+                  "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\" }");
     } else {
-        emit_line("attributes #0 = { nounwind }");
+        emit_line("attributes #0 = { nounwind "
+                  "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\" }");
     }
 
     // Emit loop metadata at the end

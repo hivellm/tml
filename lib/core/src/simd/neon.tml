@@ -1,25 +1,16 @@
-//! ARM NEON portable stubs. // v3
+//! ARM NEON portable stubs. // v4
 //!
 //! These functions provide a NEON-like API using the portable SIMD types.
 //! On x86-64, they delegate to the same underlying LLVM vector operations
 //! that NEON would use on ARM64. When ARM64 target support is added,
 //! these can be replaced with actual NEON intrinsics for optimal codegen.
 //!
-//! # Coverage
-//!
-//! - 5.1 Arithmetic: add/sub/mul for i16/i32/i64, f32/f64
-//! - 5.2 FMA: fmla/fmls for f32/f64 (fused multiply-add/subtract)
-//! - 5.3 Comparison: ceq/cgt/cge/clt/cle for i16/i32, ceq/cgt for f32/f64
-//! - 5.4 Bitwise: and/or/xor/bsl/not for 128-bit vectors
-//! - 5.5 Horizontal: addv/maxv/minv for i16/i32
-//! - 5.6 Min/Max/Abs: lane-wise min/max for i16/i32/f32/f64, abs for i16/i32
-//! - 5.7 Memory: ld1/st1/ld2 for i16/i32/i64
-//!
-//! Note: I8x16-dependent functions are in neon_i8.tml (separate module,
-//! pending I8x16::get() codegen fix).
+//! All I8x16 functions use direct field access (not get()) to avoid
+//! a known I8x16::get() codegen bug with dynamic indices.
 
 use core::simd::i32x4::I32x4
 use core::simd::f32x4::F32x4
+use core::simd::i8x16::{I8x16, select}
 use core::simd::i64x2::I64x2
 use core::simd::f64x2::F64x2
 
@@ -27,11 +18,26 @@ use core::simd::f64x2::F64x2
 // 5.1 NEON Arithmetic
 // ============================================================
 
-// -- I16 (8 lanes, delegated to I32x4 reinterpreted as pairs) --
-// TML has no I16x8, so we use I32x4 to hold 4 I16 values via scalar ops.
+// -- I8 (16 lanes) --
 
-/// NEON VADD.8H equivalent — 4-lane I16 addition via I32x4 scalar delegation.
-/// Packs 4 I16 values into one I32x4 vector (in low 16 bits of each lane).
+/// NEON VADD.16B equivalent — 16-lane I8 addition.
+pub func neon_add_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.add(b)
+}
+
+/// NEON VSUB.16B equivalent — 16-lane I8 subtraction.
+pub func neon_sub_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.sub(b)
+}
+
+/// NEON VMUL.16B equivalent — 16-lane I8 multiplication.
+pub func neon_mul_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.mul(b)
+}
+
+// -- I16 (4 lanes via I32x4 carrier) --
+
+/// NEON VADD.8H equivalent — 4-lane I16 addition via I32x4 delegation.
 pub func neon_add_i16(a: I32x4, b: I32x4) -> I32x4 {
     return a.add(b)
 }
@@ -41,9 +47,8 @@ pub func neon_sub_i16(a: I32x4, b: I32x4) -> I32x4 {
     return a.sub(b)
 }
 
-/// NEON VMUL.8H equivalent — 4-lane I16 multiplication (lower 16 bits of I32).
+/// NEON VMUL.8H equivalent — 4-lane I16 multiplication (lower 16 bits).
 pub func neon_mul_i16(a: I32x4, b: I32x4) -> I32x4 {
-    // Multiply as I32 and mask to lower 16 bits per lane to emulate I16 wrapping.
     let r = a.mul(b)
     let mask = I32x4::splat(0xFFFF)
     return r.band(mask)
@@ -116,23 +121,22 @@ pub func neon_mul_f64(a: F64x2, b: F64x2) -> F64x2 {
 // 5.2 NEON FMA (Fused Multiply-Add / Multiply-Subtract)
 // ============================================================
 
-/// NEON VFMLA.4S equivalent — fused multiply-add: acc + (a * b) for 4 F32 lanes.
-/// On x86 with FMA3, LLVM may fold mul+add into a single VFMADD instruction.
+/// NEON VFMLA.4S equivalent — acc + (a * b) for 4 F32 lanes.
 pub func neon_fmla_f32(acc: F32x4, a: F32x4, b: F32x4) -> F32x4 {
     return acc.add(a.mul(b))
 }
 
-/// NEON VFMLA.2D equivalent — fused multiply-add: acc + (a * b) for 2 F64 lanes.
+/// NEON VFMLA.2D equivalent — acc + (a * b) for 2 F64 lanes.
 pub func neon_fmla_f64(acc: F64x2, a: F64x2, b: F64x2) -> F64x2 {
     return acc.add(a.mul(b))
 }
 
-/// NEON VFMLS.4S equivalent — fused multiply-subtract: acc - (a * b) for 4 F32 lanes.
+/// NEON VFMLS.4S equivalent — acc - (a * b) for 4 F32 lanes.
 pub func neon_fmls_f32(acc: F32x4, a: F32x4, b: F32x4) -> F32x4 {
     return acc.sub(a.mul(b))
 }
 
-/// NEON VFMLS.2D equivalent — fused multiply-subtract: acc - (a * b) for 2 F64 lanes.
+/// NEON VFMLS.2D equivalent — acc - (a * b) for 2 F64 lanes.
 pub func neon_fmls_f64(acc: F64x2, a: F64x2, b: F64x2) -> F64x2 {
     return acc.sub(a.mul(b))
 }
@@ -140,12 +144,33 @@ pub func neon_fmls_f64(acc: F64x2, a: F64x2, b: F64x2) -> F64x2 {
 // ============================================================
 // 5.3 NEON Comparison
 // Returns vector with -1 (all bits set) for true, 0 for false per lane.
-// Use pre-computed vars to avoid inline-if-in-constructor codegen bug.
+// I8x16: uses eq/gt/lt/ge/le methods + select (avoids get() codegen bug).
+// I32x4+: uses pre-computed vars (avoids inline-if-in-constructor bug).
 // ============================================================
 
-// -- I16 comparisons (use I32x4 as 4-lane I16 carrier) --
+// -- I8 comparisons --
 
-/// NEON VCEQ.4H equivalent — 4-lane I16 equality (I32x4 carrier). Returns I32x4 mask (-1/0).
+/// NEON VCEQ.16B — 16-lane I8 equality mask (-1/0 per lane).
+pub func neon_ceq_i8(a: I8x16, b: I8x16) -> I8x16 {
+    let mask = a.eq(b)
+    return select(mask, I8x16::splat(-1 as I8), I8x16::splat(0 as I8))
+}
+
+/// NEON VCGT.16B — 16-lane I8 signed greater-than mask (-1/0 per lane).
+pub func neon_cgt_i8(a: I8x16, b: I8x16) -> I8x16 {
+    let mask = a.gt(b)
+    return select(mask, I8x16::splat(-1 as I8), I8x16::splat(0 as I8))
+}
+
+/// NEON VCGE.16B — 16-lane I8 signed greater-or-equal mask (-1/0 per lane).
+pub func neon_cge_i8(a: I8x16, b: I8x16) -> I8x16 {
+    let mask = a.ge(b)
+    return select(mask, I8x16::splat(-1 as I8), I8x16::splat(0 as I8))
+}
+
+// -- I16 comparisons (I32x4 carrier) --
+
+/// NEON VCEQ.4H — 4-lane I16 equality (I32x4 carrier). Returns I32x4 mask (-1/0).
 pub func neon_ceq_i16(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) == b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) == b.get(1) { r1 = -1 }
@@ -154,7 +179,7 @@ pub func neon_ceq_i16(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCGT.4H equivalent — 4-lane I16 signed greater-than (I32x4 carrier). Returns I32x4 mask (-1/0).
+/// NEON VCGT.4H — 4-lane I16 signed greater-than (I32x4 carrier). Returns I32x4 mask (-1/0).
 pub func neon_cgt_i16(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) > b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) > b.get(1) { r1 = -1 }
@@ -163,7 +188,7 @@ pub func neon_cgt_i16(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCGE.4H equivalent — 4-lane I16 signed greater-or-equal (I32x4 carrier). Returns I32x4 mask (-1/0).
+/// NEON VCGE.4H — 4-lane I16 signed greater-or-equal (I32x4 carrier). Returns I32x4 mask (-1/0).
 pub func neon_cge_i16(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) >= b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) >= b.get(1) { r1 = -1 }
@@ -174,7 +199,7 @@ pub func neon_cge_i16(a: I32x4, b: I32x4) -> I32x4 {
 
 // -- I32 comparisons --
 
-/// NEON VCEQ.4S equivalent — 4-lane I32 equality comparison. Returns I32x4 mask (-1/0).
+/// NEON VCEQ.4S — 4-lane I32 equality comparison. Returns I32x4 mask (-1/0).
 pub func neon_ceq_i32(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) == b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) == b.get(1) { r1 = -1 }
@@ -183,7 +208,7 @@ pub func neon_ceq_i32(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCGT.4S equivalent — 4-lane I32 signed greater-than. Returns I32x4 mask (-1/0).
+/// NEON VCGT.4S — 4-lane I32 signed greater-than. Returns I32x4 mask (-1/0).
 pub func neon_cgt_i32(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) > b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) > b.get(1) { r1 = -1 }
@@ -192,7 +217,7 @@ pub func neon_cgt_i32(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCGE.4S equivalent — 4-lane I32 signed greater-or-equal. Returns I32x4 mask (-1/0).
+/// NEON VCGE.4S — 4-lane I32 signed greater-or-equal. Returns I32x4 mask (-1/0).
 pub func neon_cge_i32(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) >= b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) >= b.get(1) { r1 = -1 }
@@ -201,7 +226,7 @@ pub func neon_cge_i32(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCLT.4S equivalent — 4-lane I32 signed less-than. Returns I32x4 mask (-1/0).
+/// NEON VCLT.4S — 4-lane I32 signed less-than. Returns I32x4 mask (-1/0).
 pub func neon_clt_i32(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) < b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) < b.get(1) { r1 = -1 }
@@ -210,7 +235,7 @@ pub func neon_clt_i32(a: I32x4, b: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON VCLE.4S equivalent — 4-lane I32 signed less-or-equal. Returns I32x4 mask (-1/0).
+/// NEON VCLE.4S — 4-lane I32 signed less-or-equal. Returns I32x4 mask (-1/0).
 pub func neon_cle_i32(a: I32x4, b: I32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) <= b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) <= b.get(1) { r1 = -1 }
@@ -221,7 +246,7 @@ pub func neon_cle_i32(a: I32x4, b: I32x4) -> I32x4 {
 
 // -- F32 comparisons --
 
-/// NEON FCMEQ.4S equivalent — 4-lane F32 equality. Returns I32x4 mask (-1/0).
+/// NEON FCMEQ.4S — 4-lane F32 equality. Returns I32x4 mask (-1/0).
 pub func neon_ceq_f32(a: F32x4, b: F32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) == b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) == b.get(1) { r1 = -1 }
@@ -230,7 +255,7 @@ pub func neon_ceq_f32(a: F32x4, b: F32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-/// NEON FCMGT.4S equivalent — 4-lane F32 greater-than. Returns I32x4 mask (-1/0).
+/// NEON FCMGT.4S — 4-lane F32 greater-than. Returns I32x4 mask (-1/0).
 pub func neon_cgt_f32(a: F32x4, b: F32x4) -> I32x4 {
     var r0: I32 = 0; if a.get(0) > b.get(0) { r0 = -1 }
     var r1: I32 = 0; if a.get(1) > b.get(1) { r1 = -1 }
@@ -241,14 +266,14 @@ pub func neon_cgt_f32(a: F32x4, b: F32x4) -> I32x4 {
 
 // -- F64 comparisons --
 
-/// NEON FCMEQ.2D equivalent — 2-lane F64 equality. Returns I64x2 mask (-1/0).
+/// NEON FCMEQ.2D — 2-lane F64 equality. Returns I64x2 mask (-1/0).
 pub func neon_ceq_f64(a: F64x2, b: F64x2) -> I64x2 {
     var r0: I64 = 0 as I64; if a.get(0) == b.get(0) { r0 = -1 as I64 }
     var r1: I64 = 0 as I64; if a.get(1) == b.get(1) { r1 = -1 as I64 }
     return I64x2::new(r0, r1)
 }
 
-/// NEON FCMGT.2D equivalent — 2-lane F64 greater-than. Returns I64x2 mask (-1/0).
+/// NEON FCMGT.2D — 2-lane F64 greater-than. Returns I64x2 mask (-1/0).
 pub func neon_cgt_f64(a: F64x2, b: F64x2) -> I64x2 {
     var r0: I64 = 0 as I64; if a.get(0) > b.get(0) { r0 = -1 as I64 }
     var r1: I64 = 0 as I64; if a.get(1) > b.get(1) { r1 = -1 as I64 }
@@ -256,67 +281,163 @@ pub func neon_cgt_f64(a: F64x2, b: F64x2) -> I64x2 {
 }
 
 // ============================================================
-// 5.4 NEON Bitwise (128-bit, using I32x4 as the 128-bit carrier)
+// 5.4 NEON Bitwise
 // ============================================================
 
-/// NEON VAND equivalent — 128-bit bitwise AND (via I32x4).
+/// NEON VAND — 128-bit bitwise AND (I32x4 carrier).
 pub func neon_and_v128(a: I32x4, b: I32x4) -> I32x4 {
     return a.band(b)
 }
 
-/// NEON VORR equivalent — 128-bit bitwise OR (via I32x4).
+/// NEON VORR — 128-bit bitwise OR (I32x4 carrier).
 pub func neon_or_v128(a: I32x4, b: I32x4) -> I32x4 {
     return a.bor(b)
 }
 
-/// NEON VEOR equivalent — 128-bit bitwise XOR (via I32x4).
+/// NEON VEOR — 128-bit bitwise XOR (I32x4 carrier).
 pub func neon_xor_v128(a: I32x4, b: I32x4) -> I32x4 {
     return a.bxor(b)
 }
 
-/// NEON VBSL equivalent — bitwise select: for each bit, choose `a` if mask bit is 1, else `b`.
-/// mask=0xFFFFFFFF (all ones per lane) selects `a`; mask=0 selects `b`.
+/// NEON VBSL — bitwise select: (mask & a) | (~mask & b).
 pub func neon_bsl_v128(mask: I32x4, a: I32x4, b: I32x4) -> I32x4 {
-    // BSL: (mask AND a) OR (NOT mask AND b)
     let not_mask = mask.bxor(I32x4::splat(-1))
     return mask.band(a).bor(not_mask.band(b))
 }
 
-/// NEON VMVN equivalent — bitwise NOT (complement all bits).
+/// NEON VMVN — bitwise NOT (XOR with all-ones).
 pub func neon_not_v128(a: I32x4) -> I32x4 {
     return a.bxor(I32x4::splat(-1))
 }
 
+/// NEON VAND.16B — 16-lane I8 bitwise AND.
+pub func neon_and_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.band(b)
+}
+
+/// NEON VORR.16B — 16-lane I8 bitwise OR.
+pub func neon_or_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.bor(b)
+}
+
+/// NEON VEOR.16B — 16-lane I8 bitwise XOR.
+pub func neon_xor_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.bxor(b)
+}
+
 // ============================================================
-// 5.5 NEON Horizontal Reductions
+// 5.5 NEON Table Lookup & Horizontal Reductions
 // ============================================================
 
-/// NEON VADDV.4H equivalent — horizontal sum of 4 I16 lanes (I32x4 carrier), result as I32.
+/// NEON VTBL1.16B — byte table lookup. Each index byte selects from tbl (0-15); out-of-range = 0.
+/// Uses a scalar helper with direct field access to avoid I8x16::get() codegen bug.
+pub func neon_tbl1_i8(tbl: I8x16, idx: I8x16) -> I8x16 {
+    return I8x16::new(
+        tbl_select(tbl, idx.e0 as I32),
+        tbl_select(tbl, idx.e1 as I32),
+        tbl_select(tbl, idx.e2 as I32),
+        tbl_select(tbl, idx.e3 as I32),
+        tbl_select(tbl, idx.e4 as I32),
+        tbl_select(tbl, idx.e5 as I32),
+        tbl_select(tbl, idx.e6 as I32),
+        tbl_select(tbl, idx.e7 as I32),
+        tbl_select(tbl, idx.e8 as I32),
+        tbl_select(tbl, idx.e9 as I32),
+        tbl_select(tbl, idx.e10 as I32),
+        tbl_select(tbl, idx.e11 as I32),
+        tbl_select(tbl, idx.e12 as I32),
+        tbl_select(tbl, idx.e13 as I32),
+        tbl_select(tbl, idx.e14 as I32),
+        tbl_select(tbl, idx.e15 as I32)
+    )
+}
+
+// Scalar helper: select one I8 field from tbl by index 0-15 (direct field access, no get()).
+func tbl_select(tbl: I8x16, i: I32) -> I8 {
+    if i == 0 { return tbl.e0 }
+    if i == 1 { return tbl.e1 }
+    if i == 2 { return tbl.e2 }
+    if i == 3 { return tbl.e3 }
+    if i == 4 { return tbl.e4 }
+    if i == 5 { return tbl.e5 }
+    if i == 6 { return tbl.e6 }
+    if i == 7 { return tbl.e7 }
+    if i == 8 { return tbl.e8 }
+    if i == 9 { return tbl.e9 }
+    if i == 10 { return tbl.e10 }
+    if i == 11 { return tbl.e11 }
+    if i == 12 { return tbl.e12 }
+    if i == 13 { return tbl.e13 }
+    if i == 14 { return tbl.e14 }
+    if i == 15 { return tbl.e15 }
+    return 0 as I8
+}
+
+/// NEON VCNT.8B — popcount per byte (number of set bits in each I8 lane).
+pub func neon_cnt_i8(a: I8x16) -> I8x16 {
+    return I8x16 {
+        e0: i8_popcount(a.e0), e1: i8_popcount(a.e1),
+        e2: i8_popcount(a.e2), e3: i8_popcount(a.e3),
+        e4: i8_popcount(a.e4), e5: i8_popcount(a.e5),
+        e6: i8_popcount(a.e6), e7: i8_popcount(a.e7),
+        e8: i8_popcount(a.e8), e9: i8_popcount(a.e9),
+        e10: i8_popcount(a.e10), e11: i8_popcount(a.e11),
+        e12: i8_popcount(a.e12), e13: i8_popcount(a.e13),
+        e14: i8_popcount(a.e14), e15: i8_popcount(a.e15)
+    }
+}
+
+func i8_popcount(v: I8) -> I8 {
+    var x: I32 = v as I32 & 0xFF
+    var n: I32 = 0
+    loop (x != 0) {
+        n = n + (x & 1)
+        x = x >> 1
+    }
+    return n as I8
+}
+
+/// NEON VADDV.16B — horizontal sum of all 16 I8 lanes.
+pub func neon_addv_i8(a: I8x16) -> I8 {
+    return a.sum()
+}
+
+/// NEON VMAXV.16B — horizontal max of all 16 I8 lanes.
+pub func neon_maxv_i8(a: I8x16) -> I8 {
+    return a.hmax()
+}
+
+/// NEON VMINV.16B — horizontal min of all 16 I8 lanes.
+pub func neon_minv_i8(a: I8x16) -> I8 {
+    return a.hmin()
+}
+
+/// NEON VADDV.4H — horizontal sum of 4 I16 lanes (I32x4 carrier).
 pub func neon_addv_i16(a: I32x4) -> I32 {
     return a.sum()
 }
 
-/// NEON VMAXV.4H equivalent — horizontal max of 4 I16 lanes (I32x4 carrier).
+/// NEON VMAXV.4H — horizontal max of 4 I16 lanes (I32x4 carrier).
 pub func neon_maxv_i16(a: I32x4) -> I32 {
     return a.hmax()
 }
 
-/// NEON VMINV.4H equivalent — horizontal min of 4 I16 lanes (I32x4 carrier).
+/// NEON VMINV.4H — horizontal min of 4 I16 lanes (I32x4 carrier).
 pub func neon_minv_i16(a: I32x4) -> I32 {
     return a.hmin()
 }
 
-/// NEON VADDV.4S equivalent — horizontal sum of 4 I32 lanes.
+/// NEON VADDV.4S — horizontal sum of 4 I32 lanes.
 pub func neon_addv_i32(a: I32x4) -> I32 {
     return a.sum()
 }
 
-/// NEON VMAXV.4S equivalent — horizontal max of 4 I32 lanes.
+/// NEON VMAXV.4S — horizontal max of 4 I32 lanes.
 pub func neon_maxv_i32(a: I32x4) -> I32 {
     return a.hmax()
 }
 
-/// NEON VMINV.4S equivalent — horizontal min of 4 I32 lanes.
+/// NEON VMINV.4S — horizontal min of 4 I32 lanes.
 pub func neon_minv_i32(a: I32x4) -> I32 {
     return a.hmin()
 }
@@ -325,19 +446,36 @@ pub func neon_minv_i32(a: I32x4) -> I32 {
 // 5.6 NEON Min / Max / Abs (lane-wise)
 // ============================================================
 
-// -- I16 lane-wise min/max/abs (I32x4 carrier) --
+// -- I8 --
 
-/// NEON VMIN.4H equivalent — lane-wise I16 min (I32x4 carrier).
+/// NEON VMIN.16B — lane-wise signed I8 min.
+pub func neon_min_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.min(b)
+}
+
+/// NEON VMAX.16B — lane-wise signed I8 max.
+pub func neon_max_i8(a: I8x16, b: I8x16) -> I8x16 {
+    return a.max(b)
+}
+
+/// NEON VABS.16B — lane-wise I8 absolute value.
+pub func neon_abs_i8(a: I8x16) -> I8x16 {
+    return a.abs()
+}
+
+// -- I16 (I32x4 carrier) --
+
+/// NEON VMIN.4H — lane-wise I16 min (I32x4 carrier).
 pub func neon_min_i16(a: I32x4, b: I32x4) -> I32x4 {
     return a.min(b)
 }
 
-/// NEON VMAX.4H equivalent — lane-wise I16 max (I32x4 carrier).
+/// NEON VMAX.4H — lane-wise I16 max (I32x4 carrier).
 pub func neon_max_i16(a: I32x4, b: I32x4) -> I32x4 {
     return a.max(b)
 }
 
-/// NEON VABS.4H equivalent — lane-wise I16 absolute value (I32x4 carrier).
+/// NEON VABS.4H — lane-wise I16 abs (I32x4 carrier).
 pub func neon_abs_i16(a: I32x4) -> I32x4 {
     var r0: I32 = a.get(0); if r0 < 0 { r0 = 0 - r0 }
     var r1: I32 = a.get(1); if r1 < 0 { r1 = 0 - r1 }
@@ -346,19 +484,19 @@ pub func neon_abs_i16(a: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-// -- I32 lane-wise min/max/abs --
+// -- I32 --
 
-/// NEON VMIN.4S equivalent — lane-wise signed I32 min.
+/// NEON VMIN.4S — lane-wise signed I32 min.
 pub func neon_min_i32(a: I32x4, b: I32x4) -> I32x4 {
     return a.min(b)
 }
 
-/// NEON VMAX.4S equivalent — lane-wise signed I32 max.
+/// NEON VMAX.4S — lane-wise signed I32 max.
 pub func neon_max_i32(a: I32x4, b: I32x4) -> I32x4 {
     return a.max(b)
 }
 
-/// NEON VABS.4S equivalent — lane-wise I32 absolute value.
+/// NEON VABS.4S — lane-wise I32 absolute value.
 pub func neon_abs_i32(a: I32x4) -> I32x4 {
     var r0: I32 = a.get(0); if r0 < 0 { r0 = 0 - r0 }
     var r1: I32 = a.get(1); if r1 < 0 { r1 = 0 - r1 }
@@ -367,26 +505,26 @@ pub func neon_abs_i32(a: I32x4) -> I32x4 {
     return I32x4::new(r0, r1, r2, r3)
 }
 
-// -- F32 lane-wise min/max --
+// -- F32 --
 
-/// NEON FMIN.4S equivalent — lane-wise F32 min.
+/// NEON FMIN.4S — lane-wise F32 min.
 pub func neon_min_f32(a: F32x4, b: F32x4) -> F32x4 {
     return a.min(b)
 }
 
-/// NEON FMAX.4S equivalent — lane-wise F32 max.
+/// NEON FMAX.4S — lane-wise F32 max.
 pub func neon_max_f32(a: F32x4, b: F32x4) -> F32x4 {
     return a.max(b)
 }
 
-// -- F64 lane-wise min/max --
+// -- F64 --
 
-/// NEON FMIN.2D equivalent — lane-wise F64 min.
+/// NEON FMIN.2D — lane-wise F64 min.
 pub func neon_min_f64(a: F64x2, b: F64x2) -> F64x2 {
     return a.min(b)
 }
 
-/// NEON FMAX.2D equivalent — lane-wise F64 max.
+/// NEON FMAX.2D — lane-wise F64 max.
 pub func neon_max_f64(a: F64x2, b: F64x2) -> F64x2 {
     return a.max(b)
 }
@@ -395,38 +533,79 @@ pub func neon_max_f64(a: F64x2, b: F64x2) -> F64x2 {
 // 5.7 NEON Memory (Load / Store)
 // ============================================================
 
-// Since TML SIMD types are value types (not backed by raw pointers here),
-// ld1/st1 are simulated as constructors from individual scalar values.
-// In practice, callers would use the type constructors directly.
-// These functions serve as named stubs for API parity with NEON.
+/// NEON VLD1.16B — load 16 I8 values into an I8x16 vector.
+pub func neon_ld1_i8(
+    v0: I8, v1: I8, v2: I8, v3: I8,
+    v4: I8, v5: I8, v6: I8, v7: I8,
+    v8: I8, v9: I8, v10: I8, v11: I8,
+    v12: I8, v13: I8, v14: I8, v15: I8
+) -> I8x16 {
+    return I8x16::new(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15)
+}
 
-/// NEON VLD1.4H equivalent — load 4 I16 values into an I32x4 (I16 carrier).
+/// NEON VST1.16B — returns I8x16 unchanged (store simulation).
+pub func neon_st1_i8(v: I8x16) -> I8x16 {
+    return v
+}
+
+/// NEON VLD1.4H — load 4 I16 values into I32x4 (I16 carrier).
 pub func neon_ld1_i16(v0: I32, v1: I32, v2: I32, v3: I32) -> I32x4 {
     return I32x4::new(v0, v1, v2, v3)
 }
 
-/// NEON VLD1.4S equivalent — load 4 I32 values into an I32x4 vector.
+/// NEON VLD1.4S — load 4 I32 values into I32x4.
 pub func neon_ld1_i32(v0: I32, v1: I32, v2: I32, v3: I32) -> I32x4 {
     return I32x4::new(v0, v1, v2, v3)
 }
 
-/// NEON VLD1.2D equivalent — load 2 I64 values into an I64x2 vector.
+/// NEON VLD1.2D — load 2 I64 values into I64x2.
 pub func neon_ld1_i64(v0: I64, v1: I64) -> I64x2 {
     return I64x2::new(v0, v1)
 }
 
-/// NEON VST1.4S equivalent — extract all 4 I32 lanes from vector (store simulation).
-/// Returns the vector unchanged; caller uses .get(i) to extract lanes.
+/// NEON VST1.4S — returns I32x4 unchanged (store simulation).
 pub func neon_st1_i32(v: I32x4) -> I32x4 {
     return v
 }
 
-/// NEON VST1.2D equivalent — returns the I64x2 vector unchanged (store simulation).
+/// NEON VST1.2D — returns I64x2 unchanged (store simulation).
 pub func neon_st1_i64(v: I64x2) -> I64x2 {
     return v
 }
 
-/// NEON VLD2.4S equivalent — deinterleave even-indexed I32 values from 8 alternating values.
+/// NEON VLD2.16B even channel — even-indexed bytes from 16 interleaved pairs.
+pub func neon_ld2_i8_even(
+    a0: I8, b0: I8, a1: I8, b1: I8, a2: I8, b2: I8, a3: I8, b3: I8,
+    a4: I8, b4: I8, a5: I8, b5: I8, a6: I8, b6: I8, a7: I8, b7: I8
+) -> I8x16 {
+    return I8x16::new(a0, a1, a2, a3, a4, a5, a6, a7,
+                      0 as I8, 0 as I8, 0 as I8, 0 as I8,
+                      0 as I8, 0 as I8, 0 as I8, 0 as I8)
+}
+
+/// NEON VLD2.16B odd channel — odd-indexed bytes from 16 interleaved pairs.
+pub func neon_ld2_i8_odd(
+    a0: I8, b0: I8, a1: I8, b1: I8, a2: I8, b2: I8, a3: I8, b3: I8,
+    a4: I8, b4: I8, a5: I8, b5: I8, a6: I8, b6: I8, a7: I8, b7: I8
+) -> I8x16 {
+    return I8x16::new(b0, b1, b2, b3, b4, b5, b6, b7,
+                      0 as I8, 0 as I8, 0 as I8, 0 as I8,
+                      0 as I8, 0 as I8, 0 as I8, 0 as I8)
+}
+
+/// NEON VLD2.4H even channel (I32x4 carrier).
+pub func neon_ld2_i16_even(a0: I32, b0: I32, a1: I32, b1: I32,
+                            a2: I32, b2: I32, a3: I32, b3: I32) -> I32x4 {
+    return I32x4::new(a0, a1, a2, a3)
+}
+
+/// NEON VLD2.4H odd channel (I32x4 carrier).
+pub func neon_ld2_i16_odd(a0: I32, b0: I32, a1: I32, b1: I32,
+                           a2: I32, b2: I32, a3: I32, b3: I32) -> I32x4 {
+    return I32x4::new(b0, b1, b2, b3)
+}
+
+/// NEON VLD2.4S even channel.
 pub func neon_ld2_i32_even(
     a0: I32, b0: I32, a1: I32, b1: I32,
     a2: I32, b2: I32, a3: I32, b3: I32
@@ -434,7 +613,7 @@ pub func neon_ld2_i32_even(
     return I32x4::new(a0, a1, a2, a3)
 }
 
-/// NEON VLD2.4S odd channel — returns the odd-index vector from interleaved data.
+/// NEON VLD2.4S odd channel.
 pub func neon_ld2_i32_odd(
     a0: I32, b0: I32, a1: I32, b1: I32,
     a2: I32, b2: I32, a3: I32, b3: I32

@@ -142,6 +142,186 @@ impl I8x16 {
         }
     }
 
+    pub func gt(this, other: I8x16) -> Mask16 {
+        return Mask16 {
+            m0: this.e0 > other.e0, m1: this.e1 > other.e1,
+            m2: this.e2 > other.e2, m3: this.e3 > other.e3,
+            m4: this.e4 > other.e4, m5: this.e5 > other.e5,
+            m6: this.e6 > other.e6, m7: this.e7 > other.e7,
+            m8: this.e8 > other.e8, m9: this.e9 > other.e9,
+            m10: this.e10 > other.e10, m11: this.e11 > other.e11,
+            m12: this.e12 > other.e12, m13: this.e13 > other.e13,
+            m14: this.e14 > other.e14, m15: this.e15 > other.e15
+        }
+    }
+
+    pub func lt(this, other: I8x16) -> Mask16 {
+        return Mask16 {
+            m0: this.e0 < other.e0, m1: this.e1 < other.e1,
+            m2: this.e2 < other.e2, m3: this.e3 < other.e3,
+            m4: this.e4 < other.e4, m5: this.e5 < other.e5,
+            m6: this.e6 < other.e6, m7: this.e7 < other.e7,
+            m8: this.e8 < other.e8, m9: this.e9 < other.e9,
+            m10: this.e10 < other.e10, m11: this.e11 < other.e11,
+            m12: this.e12 < other.e12, m13: this.e13 < other.e13,
+            m14: this.e14 < other.e14, m15: this.e15 < other.e15
+        }
+    }
+
+    pub func ge(this, other: I8x16) -> Mask16 {
+        return Mask16 {
+            m0: this.e0 >= other.e0, m1: this.e1 >= other.e1,
+            m2: this.e2 >= other.e2, m3: this.e3 >= other.e3,
+            m4: this.e4 >= other.e4, m5: this.e5 >= other.e5,
+            m6: this.e6 >= other.e6, m7: this.e7 >= other.e7,
+            m8: this.e8 >= other.e8, m9: this.e9 >= other.e9,
+            m10: this.e10 >= other.e10, m11: this.e11 >= other.e11,
+            m12: this.e12 >= other.e12, m13: this.e13 >= other.e13,
+            m14: this.e14 >= other.e14, m15: this.e15 >= other.e15
+        }
+    }
+
+    pub func le(this, other: I8x16) -> Mask16 {
+        return Mask16 {
+            m0: this.e0 <= other.e0, m1: this.e1 <= other.e1,
+            m2: this.e2 <= other.e2, m3: this.e3 <= other.e3,
+            m4: this.e4 <= other.e4, m5: this.e5 <= other.e5,
+            m6: this.e6 <= other.e6, m7: this.e7 <= other.e7,
+            m8: this.e8 <= other.e8, m9: this.e9 <= other.e9,
+            m10: this.e10 <= other.e10, m11: this.e11 <= other.e11,
+            m12: this.e12 <= other.e12, m13: this.e13 <= other.e13,
+            m14: this.e14 <= other.e14, m15: this.e15 <= other.e15
+        }
+    }
+
+    /// Lane-wise signed min.
+    pub func min(this, other: I8x16) -> I8x16 {
+        var r0: I8 = this.e0; if other.e0 < r0 { r0 = other.e0 }
+        var r1: I8 = this.e1; if other.e1 < r1 { r1 = other.e1 }
+        var r2: I8 = this.e2; if other.e2 < r2 { r2 = other.e2 }
+        var r3: I8 = this.e3; if other.e3 < r3 { r3 = other.e3 }
+        var r4: I8 = this.e4; if other.e4 < r4 { r4 = other.e4 }
+        var r5: I8 = this.e5; if other.e5 < r5 { r5 = other.e5 }
+        var r6: I8 = this.e6; if other.e6 < r6 { r6 = other.e6 }
+        var r7: I8 = this.e7; if other.e7 < r7 { r7 = other.e7 }
+        var r8: I8 = this.e8; if other.e8 < r8 { r8 = other.e8 }
+        var r9: I8 = this.e9; if other.e9 < r9 { r9 = other.e9 }
+        var r10: I8 = this.e10; if other.e10 < r10 { r10 = other.e10 }
+        var r11: I8 = this.e11; if other.e11 < r11 { r11 = other.e11 }
+        var r12: I8 = this.e12; if other.e12 < r12 { r12 = other.e12 }
+        var r13: I8 = this.e13; if other.e13 < r13 { r13 = other.e13 }
+        var r14: I8 = this.e14; if other.e14 < r14 { r14 = other.e14 }
+        var r15: I8 = this.e15; if other.e15 < r15 { r15 = other.e15 }
+        return I8x16 {
+            e0: r0, e1: r1, e2: r2, e3: r3, e4: r4, e5: r5, e6: r6, e7: r7,
+            e8: r8, e9: r9, e10: r10, e11: r11, e12: r12, e13: r13, e14: r14, e15: r15
+        }
+    }
+
+    /// Lane-wise signed max.
+    pub func max(this, other: I8x16) -> I8x16 {
+        var r0: I8 = this.e0; if other.e0 > r0 { r0 = other.e0 }
+        var r1: I8 = this.e1; if other.e1 > r1 { r1 = other.e1 }
+        var r2: I8 = this.e2; if other.e2 > r2 { r2 = other.e2 }
+        var r3: I8 = this.e3; if other.e3 > r3 { r3 = other.e3 }
+        var r4: I8 = this.e4; if other.e4 > r4 { r4 = other.e4 }
+        var r5: I8 = this.e5; if other.e5 > r5 { r5 = other.e5 }
+        var r6: I8 = this.e6; if other.e6 > r6 { r6 = other.e6 }
+        var r7: I8 = this.e7; if other.e7 > r7 { r7 = other.e7 }
+        var r8: I8 = this.e8; if other.e8 > r8 { r8 = other.e8 }
+        var r9: I8 = this.e9; if other.e9 > r9 { r9 = other.e9 }
+        var r10: I8 = this.e10; if other.e10 > r10 { r10 = other.e10 }
+        var r11: I8 = this.e11; if other.e11 > r11 { r11 = other.e11 }
+        var r12: I8 = this.e12; if other.e12 > r12 { r12 = other.e12 }
+        var r13: I8 = this.e13; if other.e13 > r13 { r13 = other.e13 }
+        var r14: I8 = this.e14; if other.e14 > r14 { r14 = other.e14 }
+        var r15: I8 = this.e15; if other.e15 > r15 { r15 = other.e15 }
+        return I8x16 {
+            e0: r0, e1: r1, e2: r2, e3: r3, e4: r4, e5: r5, e6: r6, e7: r7,
+            e8: r8, e9: r9, e10: r10, e11: r11, e12: r12, e13: r13, e14: r14, e15: r15
+        }
+    }
+
+    /// Lane-wise absolute value.
+    pub func abs(this) -> I8x16 {
+        var r0: I8 = this.e0; if r0 < 0 as I8 { r0 = (0 as I8) - r0 }
+        var r1: I8 = this.e1; if r1 < 0 as I8 { r1 = (0 as I8) - r1 }
+        var r2: I8 = this.e2; if r2 < 0 as I8 { r2 = (0 as I8) - r2 }
+        var r3: I8 = this.e3; if r3 < 0 as I8 { r3 = (0 as I8) - r3 }
+        var r4: I8 = this.e4; if r4 < 0 as I8 { r4 = (0 as I8) - r4 }
+        var r5: I8 = this.e5; if r5 < 0 as I8 { r5 = (0 as I8) - r5 }
+        var r6: I8 = this.e6; if r6 < 0 as I8 { r6 = (0 as I8) - r6 }
+        var r7: I8 = this.e7; if r7 < 0 as I8 { r7 = (0 as I8) - r7 }
+        var r8: I8 = this.e8; if r8 < 0 as I8 { r8 = (0 as I8) - r8 }
+        var r9: I8 = this.e9; if r9 < 0 as I8 { r9 = (0 as I8) - r9 }
+        var r10: I8 = this.e10; if r10 < 0 as I8 { r10 = (0 as I8) - r10 }
+        var r11: I8 = this.e11; if r11 < 0 as I8 { r11 = (0 as I8) - r11 }
+        var r12: I8 = this.e12; if r12 < 0 as I8 { r12 = (0 as I8) - r12 }
+        var r13: I8 = this.e13; if r13 < 0 as I8 { r13 = (0 as I8) - r13 }
+        var r14: I8 = this.e14; if r14 < 0 as I8 { r14 = (0 as I8) - r14 }
+        var r15: I8 = this.e15; if r15 < 0 as I8 { r15 = (0 as I8) - r15 }
+        return I8x16 {
+            e0: r0, e1: r1, e2: r2, e3: r3, e4: r4, e5: r5, e6: r6, e7: r7,
+            e8: r8, e9: r9, e10: r10, e11: r11, e12: r12, e13: r13, e14: r14, e15: r15
+        }
+    }
+
+    /// Horizontal max of all 16 lanes.
+    pub func hmax(this) -> I8 {
+        var m: I8 = this.e0
+        if this.e1 > m { m = this.e1 }
+        if this.e2 > m { m = this.e2 }
+        if this.e3 > m { m = this.e3 }
+        if this.e4 > m { m = this.e4 }
+        if this.e5 > m { m = this.e5 }
+        if this.e6 > m { m = this.e6 }
+        if this.e7 > m { m = this.e7 }
+        if this.e8 > m { m = this.e8 }
+        if this.e9 > m { m = this.e9 }
+        if this.e10 > m { m = this.e10 }
+        if this.e11 > m { m = this.e11 }
+        if this.e12 > m { m = this.e12 }
+        if this.e13 > m { m = this.e13 }
+        if this.e14 > m { m = this.e14 }
+        if this.e15 > m { m = this.e15 }
+        return m
+    }
+
+    /// Horizontal min of all 16 lanes.
+    pub func hmin(this) -> I8 {
+        var m: I8 = this.e0
+        if this.e1 < m { m = this.e1 }
+        if this.e2 < m { m = this.e2 }
+        if this.e3 < m { m = this.e3 }
+        if this.e4 < m { m = this.e4 }
+        if this.e5 < m { m = this.e5 }
+        if this.e6 < m { m = this.e6 }
+        if this.e7 < m { m = this.e7 }
+        if this.e8 < m { m = this.e8 }
+        if this.e9 < m { m = this.e9 }
+        if this.e10 < m { m = this.e10 }
+        if this.e11 < m { m = this.e11 }
+        if this.e12 < m { m = this.e12 }
+        if this.e13 < m { m = this.e13 }
+        if this.e14 < m { m = this.e14 }
+        if this.e15 < m { m = this.e15 }
+        return m
+    }
+
+    /// Multiply lane-wise (scalar, since NEON has VMUL.16B).
+    pub func mul(this, other: I8x16) -> I8x16 {
+        return I8x16 {
+            e0: this.e0 * other.e0, e1: this.e1 * other.e1,
+            e2: this.e2 * other.e2, e3: this.e3 * other.e3,
+            e4: this.e4 * other.e4, e5: this.e5 * other.e5,
+            e6: this.e6 * other.e6, e7: this.e7 * other.e7,
+            e8: this.e8 * other.e8, e9: this.e9 * other.e9,
+            e10: this.e10 * other.e10, e11: this.e11 * other.e11,
+            e12: this.e12 * other.e12, e13: this.e13 * other.e13,
+            e14: this.e14 * other.e14, e15: this.e15 * other.e15
+        }
+    }
+
     // -- Horizontal --
 
     pub func sum(this) -> I8 {

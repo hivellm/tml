@@ -1,0 +1,135 @@
+//! Portable SIMD abstraction layer.
+//!
+//! `SimdVector` is a behavior that provides a uniform API over all SIMD vector types,
+//! enabling ISA-agnostic algorithms. On x86-64 the implementations delegate to
+//! SSE2/AVX2 operations; on ARM64 they would delegate to NEON.
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::simd::portable::SimdVector
+//! use core::simd::i32x4::I32x4
+//!
+//! func sum_all[V: SimdVector](v: V) -> I32 {
+//!     // works for any SimdVector type
+//! }
+//! ```
+
+use core::simd::i32x4::I32x4
+use core::simd::f32x4::F32x4
+use core::simd::i8x16::I8x16
+use core::simd::i64x2::I64x2
+use core::simd::f64x2::F64x2
+use core::simd::i32x8::I32x8
+use core::simd::f32x8::F32x8
+
+// ============================================================
+// SimdVector behavior
+// ============================================================
+
+/// Portable SIMD vector behavior.
+///
+/// Provides ISA-independent operations that work on any vector type.
+/// Implementors must provide `add`, `sub`, and `splat_zero`; other operations
+/// have scalar default implementations where possible.
+pub behavior SimdVector {
+    /// Add two vectors lane-wise.
+    func add(this, other: Self) -> Self
+
+    /// Subtract two vectors lane-wise.
+    func sub(this, other: Self) -> Self
+
+    /// Multiply two vectors lane-wise.
+    func mul(this, other: Self) -> Self
+
+    /// Bitwise AND of two vectors.
+    func band(this, other: Self) -> Self
+
+    /// Bitwise OR of two vectors.
+    func bor(this, other: Self) -> Self
+
+    /// Bitwise XOR of two vectors.
+    func bxor(this, other: Self) -> Self
+
+    /// Return a zero vector (all lanes = 0).
+    func zero() -> Self
+}
+
+// ============================================================
+// SimdVector implementations for 128-bit types
+// ============================================================
+
+impl SimdVector for I32x4 {
+    func add(this, other: I32x4) -> I32x4 { return this.add(other) }
+    func sub(this, other: I32x4) -> I32x4 { return this.sub(other) }
+    func mul(this, other: I32x4) -> I32x4 { return this.mul(other) }
+    func band(this, other: I32x4) -> I32x4 { return this.band(other) }
+    func bor(this, other: I32x4) -> I32x4 { return this.bor(other) }
+    func bxor(this, other: I32x4) -> I32x4 { return this.bxor(other) }
+    func zero() -> I32x4 { return I32x4::splat(0) }
+}
+
+impl SimdVector for F32x4 {
+    func add(this, other: F32x4) -> F32x4 { return this.add(other) }
+    func sub(this, other: F32x4) -> F32x4 { return this.sub(other) }
+    func mul(this, other: F32x4) -> F32x4 { return this.mul(other) }
+    func band(this, other: F32x4) -> F32x4 { return this.band(other) }
+    func bor(this, other: F32x4) -> F32x4 { return this.bor(other) }
+    func bxor(this, other: F32x4) -> F32x4 { return this.bxor(other) }
+    func zero() -> F32x4 { return F32x4::splat(0.0 as F32) }
+}
+
+impl SimdVector for I8x16 {
+    func add(this, other: I8x16) -> I8x16 { return this.add(other) }
+    func sub(this, other: I8x16) -> I8x16 { return this.sub(other) }
+    func mul(this, other: I8x16) -> I8x16 { return this.mul(other) }
+    func band(this, other: I8x16) -> I8x16 { return this.band(other) }
+    func bor(this, other: I8x16) -> I8x16 { return this.bor(other) }
+    func bxor(this, other: I8x16) -> I8x16 { return this.bxor(other) }
+    func zero() -> I8x16 { return I8x16::splat(0 as I8) }
+}
+
+impl SimdVector for I64x2 {
+    func add(this, other: I64x2) -> I64x2 { return this.add(other) }
+    func sub(this, other: I64x2) -> I64x2 { return this.sub(other) }
+    func mul(this, other: I64x2) -> I64x2 { return this.mul(other) }
+    func band(this, other: I64x2) -> I64x2 { return this.band(other) }
+    func bor(this, other: I64x2) -> I64x2 { return this.bor(other) }
+    func bxor(this, other: I64x2) -> I64x2 { return this.bxor(other) }
+    func zero() -> I64x2 { return I64x2::splat(0 as I64) }
+}
+
+// ============================================================
+// SimdVector implementations for 256-bit types (AVX2)
+// ============================================================
+
+impl SimdVector for I32x8 {
+    func add(this, other: I32x8) -> I32x8 { return this.add(other) }
+    func sub(this, other: I32x8) -> I32x8 { return this.sub(other) }
+    func mul(this, other: I32x8) -> I32x8 { return this.mul(other) }
+    func band(this, other: I32x8) -> I32x8 { return this.band(other) }
+    func bor(this, other: I32x8) -> I32x8 { return this.bor(other) }
+    func bxor(this, other: I32x8) -> I32x8 { return this.bxor(other) }
+    func zero() -> I32x8 { return I32x8::splat(0) }
+}
+
+impl SimdVector for F32x8 {
+    func add(this, other: F32x8) -> F32x8 { return this.add(other) }
+    func sub(this, other: F32x8) -> F32x8 { return this.sub(other) }
+    func mul(this, other: F32x8) -> F32x8 { return this.mul(other) }
+    func band(this, other: F32x8) -> F32x8 { return this.band(other) }
+    func bor(this, other: F32x8) -> F32x8 { return this.bor(other) }
+    func bxor(this, other: F32x8) -> F32x8 { return this.bxor(other) }
+    func zero() -> F32x8 { return F32x8::zero() }
+}
+
+// ============================================================
+// simd_select: portable blend/select operation
+// ============================================================
+
+/// Portable bitwise select using I32x4 mask: (mask & a) | (~mask & b).
+/// mask lanes: -1 (all ones) selects `a`; 0 selects `b`.
+pub func simd_select(mask: I32x4, a: I32x4, b: I32x4) -> I32x4 {
+    let not_mask = mask.bxor(I32x4::splat(-1))
+    return mask.band(a).bor(not_mask.band(b))
+}

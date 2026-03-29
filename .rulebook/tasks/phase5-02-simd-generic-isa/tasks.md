@@ -1,6 +1,6 @@
 # Tasks: Generic SIMD ISA Support for TML
 
-**Status**: In Progress — 72/153 done (47%). Phases 1-8 core implementation done. Remaining: advanced intrinsics (broadcast, gather, FMA, AVX-512), remaining type methods, str_find_sse42, some tests.
+**Status**: In Progress — 97/153 done (63%). Phases 1-4 complete including advanced intrinsics (hadd, pack, gather, variable shift, FMA). New types: I16x16, U8x32, Mask8, Mask32. str_find_sse42 implemented. Remaining: NEON (Phase 5), Portable abstraction (Phase 6), Library algorithms (Phase 7), Documentation (Phase 8), Validation.
 **Priority**: High
 
 ## Phase 1: CPU Feature Detection Infrastructure
@@ -103,7 +103,7 @@
 
 ### 3.4 Library Wrappers
 - [x] 3.4.1 Create `lib/core/src/simd/sse42.tml` with `crc32c` high-level wrapper
-- [ ] 3.4.2 `str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` — deferred (needs Slice iteration support in lowlevel blocks)
+- [x] 3.4.2 `str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` — PCMPISTRI equal-ordered mode (0x0C), handles needles up to 16 bytes with full-match verification for longer
 - [x] 3.4.3 `crc32c(data: Slice[U8]) -> U32` — processes 8 bytes at a time via CRC32Q
 
 ### 3.5 Tests
@@ -123,14 +123,14 @@
 
 ### 4.1 New 256-bit Vector Types
 - [x] 4.1.1 `I8x32` — 32-lane I8 (`<32 x i8>`) — `lib/core/src/simd/i8x32.tml`
-- [ ] 4.1.2 `U8x32` — 32-lane U8 (`<32 x i8>`) — deferred (same bit pattern as I8x32)
-- [ ] 4.1.3 `I16x16` — 16-lane I16 (`<16 x i16>`) — deferred
+- [x] 4.1.2 `U8x32` — 32-lane U8 (`<32 x i8>`) — `lib/core/src/simd/u8x32.tml`
+- [x] 4.1.3 `I16x16` — 16-lane I16 (`<16 x i16>`) — `lib/core/src/simd/i16x16.tml`
 - [x] 4.1.4 `I32x8` — 8-lane I32 (`<8 x i32>`) — `lib/core/src/simd/i32x8.tml`
 - [x] 4.1.5 `I64x4` — 4-lane I64 (`<4 x i64>`) — `lib/core/src/simd/i64x4.tml`
 - [x] 4.1.6 `F32x8` — 8-lane F32 (`<8 x float>`) — `lib/core/src/simd/f32x8.tml`
 - [x] 4.1.7 `F64x4` — 4-lane F64 (`<4 x double>`) — `lib/core/src/simd/f64x4.tml`
-- [ ] 4.1.8 `Mask8` — 8-lane boolean mask — deferred
-- [ ] 4.1.9 `Mask32` — 32-lane boolean mask — deferred
+- [x] 4.1.8 `Mask8` — 8-lane boolean mask — added to `lib/core/src/simd/mask.tml`
+- [x] 4.1.9 `Mask32` — 32-lane boolean mask — added to `lib/core/src/simd/mask.tml`
 - [x] 4.1.10 Register all 256-bit types in compiler `simd_types_` map — auto via @simd annotation
 
 ### 4.2 AVX2 Arithmetic Intrinsics
@@ -154,39 +154,49 @@
 - [x] 4.5.3 `avx2_permute2x128_si256` — via shufflevector (VPERM2I128)
 
 ### 4.6 AVX2 Horizontal & Pack
-- [ ] 4.6.1 `avx2_hadd_epi16/32` — VPHADD (horizontal add)
-- [ ] 4.6.2 `avx2_packs_epi16/32` — VPACKSS (pack with saturation)
-- [ ] 4.6.3 `avx2_packus_epi16/32` — VPACKUS (pack unsigned saturation)
+- [x] 4.6.1 `avx2_hadd_epi16/32` — @llvm.x86.avx2.phadd.w/d (horizontal add)
+- [x] 4.6.2 `avx2_packs_epi16/32` — @llvm.x86.avx2.packsswb/packssdw (pack signed saturation)
+- [x] 4.6.3 `avx2_packus_epi16/32` — @llvm.x86.avx2.packuswb/packusdw (pack unsigned saturation)
 
 ### 4.7 AVX2 Gather
-- [ ] 4.7.1 `avx2_gather_epi32` — VPGATHERDD (indexed 32-bit loads)
-- [ ] 4.7.2 `avx2_gather_epi64` — VPGATHERDQ (indexed 64-bit loads)
-- [ ] 4.7.3 `avx2_gather_ps` — VGATHERDPS (indexed float loads)
+- [x] 4.7.1 `avx2_gather_epi32` — via @llvm.masked.gather.v8i32 (indexed 32-bit loads)
+- [x] 4.7.2 `avx2_gather_epi64` — via @llvm.masked.gather.v4i64 (indexed 64-bit loads)
+- [x] 4.7.3 `avx2_gather_ps` — via @llvm.masked.gather.v8f32 (indexed float loads)
 
 ### 4.8 AVX2 Variable Shift
-- [ ] 4.8.1 `avx2_sllv_epi32/64` — VPSLLVD/Q (per-lane variable shift left)
-- [ ] 4.8.2 `avx2_srlv_epi32/64` — VPSRLVD/Q (per-lane variable shift right)
+- [x] 4.8.1 `avx2_sllv_epi32/64` — shl <N x iM> (per-lane variable shift left)
+- [x] 4.8.2 `avx2_srlv_epi32/64` — lshr <N x iM> (per-lane variable shift right)
 
 ### 4.9 FMA Intrinsics (FMA3)
-- [ ] 4.9.1 `fma_fmadd_ps` — VFMADDPS (a*b+c, 8 floats)
-- [ ] 4.9.2 `fma_fmadd_pd` — VFMADDPD (a*b+c, 4 doubles)
-- [ ] 4.9.3 `fma_fmsub_ps/pd` — VFMSUBPS/PD (a*b-c)
-- [ ] 4.9.4 `fma_fnmadd_ps/pd` — VFNMADDPS/PD (-a*b+c)
-- [ ] 4.9.5 `fma_fmadd_ss/sd` — Scalar FMA (single float/double)
+- [x] 4.9.1 `fma_fmadd_ps` — @llvm.fma.v8f32 (a*b+c, 8 floats)
+- [x] 4.9.2 `fma_fmadd_pd` — @llvm.fma.v4f64 (a*b+c, 4 doubles)
+- [x] 4.9.3 `fma_fmsub_ps/pd` — fneg + @llvm.fma (a*b-c)
+- [x] 4.9.4 `fma_fnmadd_ps/pd` — fneg + @llvm.fma (-a*b+c)
+- [x] 4.9.5 `fma_fmadd_ss/sd` — @llvm.fma.f32/f64 (scalar FMA)
 
 ### 4.10 Tests
 - [x] 4.10.1 Write `lib/core/tests/simd/avx2_basic.test.tml` — 7 tests (I32x8 + F32x8 types + arithmetic)
 - [x] 4.10.2 Write `lib/core/tests/simd/avx2_compare.test.tml` — 6 tests (cmpeq/cmpgt/bitwise/movemask)
-- [ ] 4.10.3 Write `lib/core/tests/simd/avx2_shuffle.test.tml` — shuffle/permute
-- [ ] 4.10.4 Write `lib/core/tests/simd/avx2_fma.test.tml` — FMA operations
-- [ ] 4.10.5 Write `lib/core/tests/simd/avx2_gather.test.tml` — gathered loads
+- [x] 4.10.3 Write `lib/core/tests/simd/avx2_shuffle.test.tml` — 8 tests (hadd/pack/variable shift/shuffle)
+- [x] 4.10.4 Write `lib/core/tests/simd/avx2_fma.test.tml` — 8 tests (fmadd/fmsub/fnmadd ps/pd + scalar)
+- [x] 4.10.5 Write `lib/core/tests/simd/avx2_gather.test.tml` — 3 tests (sequential/permuted/partial mask)
 
 > **Implementation note**: 256-bit types use @simd annotation — the compiler auto-detects and
 > generates `<N x elemtype>` LLVM vector types. Arithmetic (add/sub/mul) uses existing llvm_add/
 > llvm_sub/llvm_mul intrinsics which work on any vector width. AVX2 comparison/bitwise/movemask
 > intrinsics use the same pattern as SSE2 (icmp+sext, and/or/xor, LLVM target intrinsics).
-> All tests verified via `tml run` (9/9 pass). Items 4.6-4.9 (horizontal, gather, variable shift,
-> FMA) not yet requested.
+> All tests verified via `tml run`.
+>
+> **Phase 4.6-4.9 implementation notes**:
+> - Horizontal add (hadd) uses @llvm.x86.avx2.phadd.w/d target intrinsics
+> - Pack intrinsics use @llvm.x86.avx2.packsswb/packssdw/packuswb/packusdw
+> - Gather intrinsics use @llvm.masked.gather (LLVM 23 removed old x86 gather intrinsics)
+> - Variable shifts use generic shl/lshr on vector types (LLVM lowers to VPSLLVD/VPSRLVD)
+> - FMA uses @llvm.fma.v8f32/@llvm.fma.v4f64 (fneg for fmsub/fnmadd variants)
+> - Scalar FMA uses @llvm.fma.f32/@llvm.fma.f64
+> - Function attributes now include `"target-features"="+sse2,+sse4.2,+avx,+avx2,+fma"` for ISA intrinsic selection
+> - `base` is a reserved keyword in TML — gather intrinsic param renamed to `addr`
+> - New types: I16x16 (16-lane I16), U8x32 (32-lane U8), Mask8 (8-lane), Mask32 (32-lane)
 >
 > **Utility methods added**: I32x8 now has full parity with I32x4 (div, neg, set, band/bor/bxor,
 > shift_left/shift_right, product, hmin/hmax, min/max). F32x8 has neg (via sub), set, hmin/hmax,

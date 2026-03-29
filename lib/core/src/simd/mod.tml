@@ -20,6 +20,7 @@
 //!
 //! | Type | Lanes | Element | Description |
 //! |------|-------|---------|-------------|
+//! | `U8x32` | 32 | U8 | 32-lane unsigned 8-bit integer |
 //! | `I16x16` | 16 | I16 | 16-lane signed 16-bit integer |
 //! | `I32x8` | 8 | I32 | 8-lane signed 32-bit integer |
 //! | `F32x8` | 8 | F32 | 8-lane 32-bit float |
@@ -58,6 +59,7 @@ pub mod i8x16
 pub mod u8x16
 // 256-bit AVX2 types
 pub mod i8x32
+pub mod u8x32
 pub mod i16x16
 pub mod i32x8
 pub mod i64x4
