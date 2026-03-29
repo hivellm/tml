@@ -26,8 +26,8 @@
 - [x] 2.7 cmd_doc.cpp + cmd_doc.hpp — CLI command implemented
 - [x] 2.8 `tml doc` registered in dispatcher.cpp (line 596)
 - [x] 2.9 `tml doc --json` — JSON output via generators
-- [ ] 2.10 Implement `tml doc --serve` — Local documentation server
-- [ ] 2.11 Implement `tml doc <symbol>` — Terminal lookup with colored output
+- [x] 2.10 Implement `tml doc --serve` — Local HTTP server on localhost:8080, serves HTML docs with raw sockets, auto-opens browser
+- [x] 2.11 Implement `tml doc <symbol>` — Terminal lookup with ANSI colors, builds doc index from lib/core + lib/std, top-5 results
 - [ ] 2.12 Create HTML templates, CSS, JS in `compiler/runtime/doc_template/`
 - [x] 2.13 Register doc command in `dispatcher.cpp` (already done)
 - [x] 2.14 Verified: `tml doc option.tml --format=json` produces 27KB valid JSON

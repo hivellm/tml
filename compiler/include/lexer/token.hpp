@@ -251,6 +251,7 @@ enum class TokenKind : uint8_t {
     Bang,        ///< `!` logical NOT / unwrap
     At,          ///< `@` attributes/decorators
     Pipe,        ///< `|` pattern alternation
+    PipeRight,   ///< `|>` pipe operator (forward application)
     Dollar,      ///< `$` metaprogramming splice
     DollarBrace, ///< `${` splice block start
 

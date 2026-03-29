@@ -73,8 +73,8 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         bool is_infix =
             token_to_binary_op(next_kind).has_value() || next_kind == lexer::TokenKind::KwAs ||
             next_kind == lexer::TokenKind::KwIs || next_kind == lexer::TokenKind::Question ||
-            next_kind == lexer::TokenKind::KwTo || next_kind == lexer::TokenKind::KwThrough ||
-            next_kind == lexer::TokenKind::DotDot;
+            next_kind == lexer::TokenKind::PipeRight || next_kind == lexer::TokenKind::KwTo ||
+            next_kind == lexer::TokenKind::KwThrough || next_kind == lexer::TokenKind::DotDot;
 
         // Postfix operators (function calls, indexing, field access) should not
         // continue across newlines to avoid ambiguity
@@ -206,6 +206,54 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
                                                       .target = std::move(unwrap(target_type)),
                                                       .span = span},
                                        .span = span});
+            continue;
+        }
+
+        // Handle pipe operator: a |> f desugars to f(a), a |> f(b) desugars to f(a, b)
+        if (check(lexer::TokenKind::PipeRight)) {
+            advance(); // consume '|>'
+
+            // Parse the RHS at high precedence so we capture the full call expression.
+            // Use PIPE precedence (left-associative) so chaining works: a |> f |> g
+            auto rhs = parse_expr_with_precedence(precedence::PIPE);
+            if (is_err(rhs))
+                return rhs;
+
+            auto& rhs_expr = *unwrap(rhs);
+            auto span = SourceSpan::merge(unwrap(left)->span, rhs_expr.span);
+
+            // If RHS is already a call expr like f(b, c), prepend LHS as first arg
+            if (auto* call = std::get_if<CallExpr>(&rhs_expr.kind)) {
+                std::vector<ExprPtr> new_args;
+                new_args.reserve(call->args.size() + 1);
+                new_args.push_back(std::move(unwrap(left)));
+                for (auto& arg : call->args) {
+                    new_args.push_back(std::move(arg));
+                }
+                left = make_call_expr(std::move(call->callee), std::move(new_args), span);
+            }
+            // If RHS is a method call like obj.method(b), prepend LHS as first arg
+            else if (auto* mcall = std::get_if<MethodCallExpr>(&rhs_expr.kind)) {
+                std::vector<ExprPtr> new_args;
+                new_args.reserve(mcall->args.size() + 1);
+                new_args.push_back(std::move(unwrap(left)));
+                for (auto& arg : mcall->args) {
+                    new_args.push_back(std::move(arg));
+                }
+                left = make_box<Expr>(
+                    Expr{.kind = MethodCallExpr{.receiver = std::move(mcall->receiver),
+                                                .method = std::move(mcall->method),
+                                                .type_args = std::move(mcall->type_args),
+                                                .args = std::move(new_args),
+                                                .span = span},
+                         .span = span});
+            }
+            // If RHS is just an identifier or path, wrap as f(a)
+            else {
+                std::vector<ExprPtr> args;
+                args.push_back(std::move(unwrap(left)));
+                left = make_call_expr(std::move(unwrap(rhs)), std::move(args), span);
+            }
             continue;
         }
 

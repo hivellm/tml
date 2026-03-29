@@ -42,6 +42,9 @@ struct DocOptions {
     bool all_modules = false;             ///< Document all modules in project.
     bool open_browser = false;            ///< Open in browser after generation.
     bool verbose = false;                 ///< Verbose output.
+    bool serve = false;                   ///< Start local HTTP server after generation.
+    int serve_port = 8080;                ///< Port for the local HTTP server.
+    std::string symbol_lookup;            ///< Non-empty: look up this symbol and print to stdout.
 };
 
 /// Runs the doc command with the given options.

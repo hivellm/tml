@@ -429,6 +429,9 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
     case lexer::TokenKind::ShrAssign:
         return precedence::ASSIGN;
 
+    case lexer::TokenKind::PipeRight:
+        return precedence::PIPE;
+
     case lexer::TokenKind::Question:
         return precedence::TERNARY;
 

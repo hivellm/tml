@@ -1,7 +1,7 @@
 # Tasks: TML Language Completeness Roadmap
 
-**Status**: In Progress — 75% (122/162)
-**Last updated**: 2026-03-25
+**Status**: In Progress — 76% (123/162)
+**Last updated**: 2026-03-28
 
 ---
 
@@ -175,7 +175,7 @@ See [phase1-08-reflection](../phase1-08-reflection/tasks.md). Phases 1-2, 4 comp
 - [x] 4.3.4 `Subject[T]` — multicast observable
 - [x] 4.3.5-4.3.6 BehaviorSubject, ReplaySubject — documented in observable/mod.tml
 - [x] 4.3.7 Operators: take, skip, scan, distinct, merge, concat
-- [ ] 4.3.8 Pipe operator `|>` — not implemented (language-level feature)
+- [x] 4.3.8 Pipe operator `|>` — lexer emits `PipeRight` token, parser desugars `a |> f` to `f(a)` and `a |> f(b)` to `f(a, b)`. Chaining works: `a |> f |> g` = `g(f(a))`
 - [ ] 4.3.9 Backpressure handling — partial (WritableStream has cork/uncork)
 - [x] 4.3.10 Observable has known codegen bugs (closure symbols, struct GEP)
 

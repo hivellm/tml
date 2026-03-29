@@ -313,6 +313,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "@";
     case TokenKind::Pipe:
         return "|";
+    case TokenKind::PipeRight:
+        return "|>";
     case TokenKind::Dollar:
         return "$";
     case TokenKind::DollarBrace:

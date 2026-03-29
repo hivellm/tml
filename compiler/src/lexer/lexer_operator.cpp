@@ -194,6 +194,10 @@ auto Lexer::lex_operator() -> Token {
             advance();
             return make_token(TokenKind::OrOr);
         }
+        if (peek() == '>') {
+            advance();
+            return make_token(TokenKind::PipeRight);
+        }
         if (peek() == '=') {
             advance();
             return make_token(TokenKind::BitOrAssign);

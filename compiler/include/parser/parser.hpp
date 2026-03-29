@@ -54,20 +54,21 @@ namespace tml::parser {
 namespace precedence {
 constexpr int NONE = 0;       ///< No precedence (initial value).
 constexpr int ASSIGN = 1;     ///< `=`, `+=`, etc. (right-associative).
-constexpr int TERNARY = 2;    ///< `? :` ternary operator.
-constexpr int OR = 3;         ///< `or` / `||` logical OR.
-constexpr int AND = 4;        ///< `and` / `&&` logical AND.
-constexpr int COMPARISON = 5; ///< `==`, `!=`, `<`, `>`, `<=`, `>=`.
-constexpr int BITOR = 6;      ///< `|` bitwise OR.
-constexpr int BITXOR = 7;     ///< `^` / `xor` bitwise XOR.
-constexpr int BITAND = 8;     ///< `&` bitwise AND.
-constexpr int SHIFT = 9;      ///< `<<`, `>>` / `shl`, `shr`.
-constexpr int TERM = 10;      ///< `+`, `-` addition/subtraction.
-constexpr int FACTOR = 11;    ///< `*`, `/`, `%` multiplication/division.
-constexpr int CAST = 12;      ///< `as` type casting.
-constexpr int UNARY = 13;     ///< `-`, `not`, `~`, `ref`, `*`.
-constexpr int CALL = 14;      ///< `()`, `[]`, `.` call and access.
-constexpr int RANGE = 15;     ///< `to`, `through` ranges.
+constexpr int PIPE = 2;       ///< `|>` pipe forward (left-associative).
+constexpr int TERNARY = 3;    ///< `? :` ternary operator.
+constexpr int OR = 4;         ///< `or` / `||` logical OR.
+constexpr int AND = 5;        ///< `and` / `&&` logical AND.
+constexpr int COMPARISON = 6; ///< `==`, `!=`, `<`, `>`, `<=`, `>=`.
+constexpr int BITOR = 7;      ///< `|` bitwise OR.
+constexpr int BITXOR = 8;     ///< `^` / `xor` bitwise XOR.
+constexpr int BITAND = 9;     ///< `&` bitwise AND.
+constexpr int SHIFT = 10;     ///< `<<`, `>>` / `shl`, `shr`.
+constexpr int TERM = 11;      ///< `+`, `-` addition/subtraction.
+constexpr int FACTOR = 12;    ///< `*`, `/`, `%` multiplication/division.
+constexpr int CAST = 13;      ///< `as` type casting.
+constexpr int UNARY = 14;     ///< `-`, `not`, `~`, `ref`, `*`.
+constexpr int CALL = 15;      ///< `()`, `[]`, `.` call and access.
+constexpr int RANGE = 16;     ///< `to`, `through` ranges.
 } // namespace precedence
 
 /// A suggested fix for a parse error.
