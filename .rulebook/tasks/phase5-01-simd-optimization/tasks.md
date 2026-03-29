@@ -1,6 +1,6 @@
 # Tasks: SIMD Optimization Across TML Runtime and Compiler
 
-**Status**: Phase 1-6 Complete, Phase 7 Complete (7.1-7.3, 7.6 done; 7.4-7.5 skipped — CI/platform infra), Validation partial (V.1, V.9 verified; V.2-V.8, V.10-V.12 pending benchmark run)
+**Status**: In Progress — 67/107 items done (63%). Phases 1-2 done, Phase 3 partial (Text FFI pending), Phase 4 done, Phase 5 done, Phase 6 done, Phase 7 partial (benchmarks need running), Validation partial.
 **Priority**: High
 
 ## Phase 1: SIMD Infrastructure
