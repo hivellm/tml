@@ -2,8 +2,8 @@ use test::{assert_eq}
 
 @test
 func test_let_explicit_type() -> I32 {
-    let base: I64 = 42
-    assert_eq(base, 42, "let with explicit type")
+    let base_val: I64 = 42
+    assert_eq(base_val, 42, "let with explicit type")
     return 0
 }
 
