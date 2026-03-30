@@ -18,7 +18,7 @@
 //! ```
 
 use core::runtime::error::{IoError, IoErrorKind}
-use core::async::task::{Poll, Context}
+use core::task::{Poll, Context}
 use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::stream::async_io::{AsyncRead, AsyncWrite}
 

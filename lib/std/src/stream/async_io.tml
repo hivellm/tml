@@ -17,7 +17,7 @@
 //! ```tml
 //! use std::stream::async_io::{AsyncRead, AsyncWrite}
 //! use std::net::async_tcp::AsyncTcpStream
-//! use core::async::task::{Poll, Context}
+//! use core::task::{Poll, Context}
 //!
 //! func poll_echo(stream: mut ref AsyncTcpStream, cx: mut ref Context[Unit],
 //!                buf: mut ref [U8]) -> Poll[Outcome[I64, IoError]] {
@@ -27,7 +27,7 @@
 //! ```
 
 use core::runtime::error::{IoError, IoErrorKind}
-use core::async::task::{Poll, Context}
+use core::task::{Poll, Context}
 
 /// A non-blocking byte source that can be polled for readiness.
 ///

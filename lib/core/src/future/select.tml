@@ -34,7 +34,7 @@
 //! // result is Poll::Ready(IndexedResult { index: 2, value: 42 })
 //! ```
 
-use core::async::task::{Poll, Context}
+use core::task::{Poll, Context}
 use core::runtime::pin::Pin
 use core::future::Future
 

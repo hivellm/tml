@@ -5,7 +5,7 @@
 
 use test::{assert, assert_eq}
 use std::stream::async_io::{AsyncRead, AsyncWrite}
-use core::async::task::{Poll, Context}
+use core::task::{Poll, Context}
 use core::runtime::error::{IoError, IoErrorKind}
 
 // ============================================================================

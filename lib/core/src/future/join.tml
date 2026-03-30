@@ -8,14 +8,14 @@
 //!
 //! ```tml
 //! use core::future::join::Join2
-//! use core::async::task::{Ready}
+//! use core::task::{Ready}
 //!
 //! var a = Ready::new(10)
 //! var b = Ready::new(20)
 //! // join2 polls both and returns (10, 20) when both are ready
 //! ```
 
-use core::async::task::{Poll, Context}
+use core::task::{Poll, Context}
 use core::runtime::pin::Pin
 use core::future::Future
 
@@ -94,7 +94,7 @@ impl[A, B, C] Join3[A, B, C] {
 ///
 /// ```tml
 /// use core::future::join::join2
-/// use core::async::task::Ready
+/// use core::task::Ready
 ///
 /// let joined = join2(Ready::new(1), Ready::new(2))
 /// // When polled: returns (1, 2)
