@@ -1,7 +1,18 @@
 # TML Project — Task Index
 
-**Last updated**: 2026-03-28
-**Total tasks**: 45 active (5 archived)
+**Last updated**: 2026-03-30
+**Total tasks**: 49 active (5 archived)
+
+## Phase 0 — JIT Execution Engine
+
+LLVM ORC JIT integration for scripting and fast iteration. See `docs/analyses/jit-execution-analysis.md`.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 0-a | [JIT CMake Integration](phase0a_jit-cmake-integration/) | **NEW** | **CRITICAL** | 0% (0/7) |
+| 0-b | [JIT Engine Core](phase0b_jit-engine-core/) | **NEW** | **CRITICAL** | 0% (0/12) |
+| 0-c | [JIT Runtime Symbols](phase0c_jit-runtime-symbols/) | **NEW** | HIGH | 0% (0/10) |
+| 0-d | [JIT CLI Integration](phase0d_jit-cli-integration/) | **NEW** | HIGH | 0% (0/14) |
 
 ## Phase 1 — Foundation & Language
 
