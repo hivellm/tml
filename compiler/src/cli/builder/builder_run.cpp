@@ -27,6 +27,10 @@ TML_MODULE("compiler")
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
+#if TML_HAS_JIT
+#include "backend/jit_engine.hpp"
+#endif
+
 namespace tml::cli {
 
 // Using helpers from builder namespace
@@ -641,6 +645,42 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
                                  .lexically_normal()
                                  .string()
                            : opts.pipeline_output_dir;
+    }
+
+    // JIT execution path: compile to IR then execute in-process, skipping object/link/subprocess
+    if (opts.jit) {
+#if TML_HAS_JIT
+        auto compile =
+            compile_via_queries(path, opts.coverage, opts.no_cache, opts.backend, pipeline_dir);
+        if (!compile.success) {
+            TML_LOG_ERROR("build", compile.error_message);
+            return 1;
+        }
+
+        auto [create_result, engine] = backend::JitEngine::create();
+        if (!create_result.success) {
+            TML_LOG_ERROR("jit", create_result.error);
+            return 1;
+        }
+
+        auto add_result = engine->addModule(compile.llvm_ir);
+        if (!add_result.success) {
+            TML_LOG_ERROR("jit", add_result.error);
+            return 1;
+        }
+
+        auto exec_result = engine->executeMain(opts.args);
+        if (!exec_result.success) {
+            TML_LOG_ERROR("jit", exec_result.error);
+            return 1;
+        }
+        return exec_result.exit_code;
+#else
+        TML_LOG_ERROR("jit",
+                      "JIT mode requires LLVM ORC libraries. Rebuild with: scripts\\build.bat "
+                      "--jit");
+        return 1;
+#endif
     }
 
     return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend,

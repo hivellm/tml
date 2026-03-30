@@ -546,3 +546,5 @@ auto get_llvm_version() -> std::string {
 }
 
 } // namespace tml::backend
+
+// JIT execution support is in jit_engine.cpp (Phase 0b).

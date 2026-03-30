@@ -6,6 +6,7 @@ cmake_policy(SET CMP0091 NEW)
 
 # Declare LLVM option early so we can set CRT before project() targets are created.
 option(TML_USE_LLVM_BACKEND "Use LLVM C API for self-contained compilation (no clang needed)" ON)
+option(TML_USE_JIT "Enable LLVM ORC JIT for in-process execution" OFF)
 
 # When LLVM backend is enabled, use Release CRT (/MD) for ALL targets in ALL configs.
 # LLVM static libs are built with /MD; mixing /MDd causes LNK2038 linker errors.
@@ -1386,6 +1387,11 @@ if(TML_USE_LLVM_BACKEND)
             src/backend/llvm_backend.cpp
         )
 
+        # Add JIT engine source when JIT is enabled
+        if(TML_USE_JIT)
+            target_sources(tml_backend PRIVATE src/backend/jit_engine.cpp)
+        endif()
+
         # Include paths: source headers + generated headers
         set(LLVM_ALL_INCLUDE_DIRS ${LLVM_INCLUDE_DIRS})
         if(LLVM_GENERATED_INCLUDE_DIR)
@@ -1442,6 +1448,33 @@ if(TML_USE_LLVM_BACKEND)
                 )
                 message(STATUS "  Linking: individual static LLVM libraries")
 
+                # Check for ORC JIT libraries and link them when TML_USE_JIT is ON
+                if(TML_USE_JIT)
+                    set(HAS_JIT_LIBS FALSE)
+                    if(EXISTS "${LLVM_LIBRARY_DIRS}/LLVMOrcJIT.lib")
+                        set(HAS_JIT_LIBS TRUE)
+                    elseif(EXISTS "${LLVM_LIBRARY_DIRS}/libLLVMOrcJIT.a")
+                        set(HAS_JIT_LIBS TRUE)
+                    endif()
+
+                    if(HAS_JIT_LIBS)
+                        message(STATUS "  JIT: ORC JIT libraries found — JIT enabled")
+                        target_link_libraries(tml_backend PUBLIC
+                            LLVMOrcJIT
+                            LLVMJITLink
+                            LLVMOrcTargetProcess
+                            LLVMOrcShared
+                            LLVMOrcDebugging
+                            LLVMExecutionEngine
+                            LLVMRuntimeDyld
+                        )
+                        message(STATUS "  Linking: ORC JIT libraries (7 libs)")
+                    else()
+                        message(WARNING "TML_USE_JIT enabled but ORC JIT libraries not found in ${LLVM_LIBRARY_DIRS}")
+                        set(TML_USE_JIT OFF)
+                    endif()
+                endif()
+
                 # LLVM static libs are built in Release mode (/MD, _ITERATOR_DEBUG_LEVEL=0).
                 # When TML builds in Debug (/MDd, _ITERATOR_DEBUG_LEVEL=2), this causes
                 # LNK2038 mismatch errors. Fix: compile tml_backend with Release CRT
@@ -1471,6 +1504,10 @@ if(TML_USE_LLVM_BACKEND)
         endif()
 
         target_compile_definitions(tml_backend PUBLIC TML_HAS_LLVM_BACKEND=1)
+
+        if(TML_USE_JIT AND HAS_JIT_LIBS)
+            target_compile_definitions(tml_backend PUBLIC TML_HAS_JIT=1)
+        endif()
 
         set(TML_BACKEND_LIB tml_backend)
     else()
@@ -2046,10 +2083,11 @@ if(TML_BIN_DIR)
     copy_dll_if_exists("libssl-3-x64.dll")
 
     # Ensure plugins are built before the tml launcher's post-build copy step
-    add_dependencies(tml
-        tml_compiler_plugin tml_codegen_x86_plugin
-        tml_tools_plugin tml_test_plugin tml_mcp_plugin
-    )
+    set(_tml_plugin_deps tml_compiler_plugin tml_tools_plugin tml_test_plugin tml_mcp_plugin)
+    if(TARGET tml_codegen_x86_plugin)
+        list(APPEND _tml_plugin_deps tml_codegen_x86_plugin)
+    endif()
+    add_dependencies(tml ${_tml_plugin_deps})
 
     # Copy plugins next to tml.exe for modular build
     add_custom_command(TARGET tml POST_BUILD

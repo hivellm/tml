@@ -476,11 +476,39 @@ int tml_main(int argc, char* argv[]) {
         return run_fmt(fmt_path, check_only, verbose);
     }
 
+    if (command == "script") {
+        if (argc < 3) {
+            std::cerr << "Usage: tml script <file.tml> [args...] [--no-cache] [--backtrace]\n";
+            std::cerr << "\nExecutes a TML file using JIT compilation (no object files or "
+                         "linking).\n";
+            std::cerr << "\nOptions:\n";
+            std::cerr << "  --no-cache      Force recompilation (disable incremental cache)\n";
+            std::cerr << "  --backtrace     Print stack trace on panic\n";
+            return 1;
+        }
+        RunOptions opts;
+        opts.verbose = verbose;
+        opts.jit = true; // script always uses JIT
+        for (int i = 3; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--verbose" || arg == "-v") {
+                // Already handled
+            } else if (arg == "--no-cache") {
+                opts.no_cache = true;
+            } else if (arg == "--backtrace") {
+                CompilerOptions::backtrace = true;
+            } else {
+                opts.args.push_back(arg);
+            }
+        }
+        return run_run_ex(argv[2], opts);
+    }
+
     if (command == "run") {
         if (argc < 3) {
             std::cerr
-                << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
-                   "[--coverage-output=<file>] [--profile[=<file>]] [--backtrace]\n";
+                << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--jit] "
+                   "[--coverage] [--coverage-output=<file>] [--profile[=<file>]] [--backtrace]\n";
             std::cerr << "\nProfiling options:\n";
             std::cerr << "  --profile           Enable runtime profiling (output: "
                          "build/debug/profile.cpuprofile)\n";
@@ -518,6 +546,8 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg == "--backtrace") {
                 CompilerOptions::backtrace = true;
+            } else if (arg == "--jit") {
+                opts.jit = true;
             } else if (arg.starts_with("--backend=")) {
                 opts.backend = arg.substr(10);
                 if (opts.backend != "llvm" && opts.backend != "cranelift") {

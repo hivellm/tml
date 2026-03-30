@@ -336,7 +336,7 @@ TML_EXPORT int32_t tml_get_crash_backtrace(void** out_frames, int32_t max_frames
  *
  * @param message The null-terminated string to print. NULL is ignored.
  */
-void print(const char* message) {
+TML_EXPORT void print(const char* message) {
     if (tml_suppress_output)
         return;
     if (message)
@@ -351,7 +351,7 @@ void print(const char* message) {
  *
  * @param message The null-terminated string to print. NULL prints only newline.
  */
-void println(const char* message) {
+TML_EXPORT void println(const char* message) {
     if (tml_suppress_output)
         return;
     if (message)
@@ -371,7 +371,7 @@ void println(const char* message) {
  *
  * @param message The panic message. NULL is printed as "(null)".
  */
-void panic(const char* message) {
+TML_EXPORT void panic(const char* message) {
     // Call user-installed panic hook if present
     if (tml_panic_hook) {
         tml_panic_hook(message ? message : "(null)");
@@ -490,14 +490,14 @@ TML_EXPORT void assert_tml_loc(int32_t condition, const char* message, const cha
 // ============================================================================
 
 /** @brief Prints a 32-bit signed integer to stdout. */
-void print_i32(int32_t n) {
+TML_EXPORT void print_i32(int32_t n) {
     if (tml_suppress_output)
         return;
     printf("%d", n);
 }
 
 /** @brief Prints a 64-bit signed integer to stdout. */
-void print_i64(int64_t n) {
+TML_EXPORT void print_i64(int64_t n) {
     if (tml_suppress_output)
         return;
     printf("%lld", (long long)n);
@@ -506,14 +506,14 @@ void print_i64(int64_t n) {
 // print_f32 — REMOVED (Phase 37, dead code: no declare in runtime.cpp)
 
 /** @brief Prints a 64-bit floating point number to stdout. */
-void print_f64(double n) {
+TML_EXPORT void print_f64(double n) {
     if (tml_suppress_output)
         return;
     printf("%g", n);
 }
 
 /** @brief Prints a boolean as "true" or "false" to stdout. */
-void print_bool(int32_t b) {
+TML_EXPORT void print_bool(int32_t b) {
     if (tml_suppress_output)
         return;
     printf("%s", b ? "true" : "false");

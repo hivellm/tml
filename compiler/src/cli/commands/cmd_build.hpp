@@ -87,6 +87,7 @@ struct RunOptions {
     bool verbose = false;
     bool coverage = false;
     bool no_cache = false;
+    bool jit = false;              // Execute via ORC LLJIT (no object files or linking)
     bool profile = false;          // Enable runtime profiling
     std::string profile_output;    // Custom output path (default: profile.cpuprofile)
     std::vector<std::string> args; // Program arguments

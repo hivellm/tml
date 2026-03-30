@@ -32,6 +32,7 @@ set "ENABLE_PACK=0"
 set "BUILD_BENCH=OFF"
 set "USE_ZIG_CC=auto"
 set "USE_CLANG=0"
+set "ENABLE_JIT=OFF"
 
 :: Parse arguments
 :parse_args
@@ -56,6 +57,7 @@ if /i "%~1"=="--clang" set "USE_ZIG_CC=0" & set "USE_CLANG=1" & shift & goto :pa
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
+if /i "%~1"=="--jit" set "ENABLE_JIT=ON" & shift & goto :parse_args
 if /i "%~1"=="--ci" set "CI_MODE=1" & set "BUILD_TESTS=OFF" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
@@ -317,6 +319,7 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_USE_CRANELIFT_BACKEND=%ENABLE_CRANELIFT_BACKEND% ^
     -DTML_BUILD_MODULAR=%ENABLE_MODULAR% ^
     -DTML_BUILD_BENCH=%BUILD_BENCH% ^
+    -DTML_USE_JIT=%ENABLE_JIT% ^
     -DTML_PROFILE=%ENABLE_PROFILE% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^

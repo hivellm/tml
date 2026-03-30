@@ -42,6 +42,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Export symbols for JIT discovery (DynamicLibrarySearchGenerator)
+#ifdef _WIN32
+#define TML_EXPORT __declspec(dllexport)
+#else
+#define TML_EXPORT __attribute__((visibility("default")))
+#endif
+
 #ifdef TML_DEBUG_MEMORY
 #include "mem_track.h"
 #endif
@@ -58,7 +65,7 @@
  * @param size Number of bytes to allocate.
  * @return Pointer to allocated memory, or NULL on failure.
  */
-void* mem_alloc(int64_t size) {
+TML_EXPORT void* mem_alloc(int64_t size) {
 #ifdef TML_DEBUG_MEMORY
     void* ptr = malloc((size_t)size);
     tml_mem_track_alloc(ptr, (size_t)size, "mem_alloc");
@@ -76,7 +83,7 @@ void* mem_alloc(int64_t size) {
  * @param size Number of bytes to allocate.
  * @return Pointer to zero-initialized memory, or NULL on failure.
  */
-void* mem_alloc_zeroed(int64_t size) {
+TML_EXPORT void* mem_alloc_zeroed(int64_t size) {
 #ifdef TML_DEBUG_MEMORY
     void* ptr = calloc(1, (size_t)size);
     tml_mem_track_alloc(ptr, (size_t)size, "mem_alloc_zeroed");
@@ -95,7 +102,7 @@ void* mem_alloc_zeroed(int64_t size) {
  * @param new_size New size in bytes.
  * @return Pointer to reallocated memory, or NULL on failure.
  */
-void* mem_realloc(void* ptr, int64_t new_size) {
+TML_EXPORT void* mem_realloc(void* ptr, int64_t new_size) {
 #ifdef TML_DEBUG_MEMORY
     void* new_ptr = realloc(ptr, (size_t)new_size);
     tml_mem_track_realloc(ptr, new_ptr, (size_t)new_size);
@@ -112,7 +119,7 @@ void* mem_realloc(void* ptr, int64_t new_size) {
  *
  * @param ptr Pointer to memory to free. NULL is safe.
  */
-void mem_free(void* ptr) {
+TML_EXPORT void mem_free(void* ptr) {
 #ifdef TML_DEBUG_MEMORY
     tml_mem_track_free(ptr);
 #endif
@@ -133,7 +140,7 @@ void mem_free(void* ptr) {
  * @param src Source pointer.
  * @param size Number of bytes to copy.
  */
-void mem_copy(void* dest, const void* src, int64_t size) {
+TML_EXPORT void mem_copy(void* dest, const void* src, int64_t size) {
     memcpy(dest, src, (size_t)size);
 }
 
@@ -147,7 +154,7 @@ void mem_copy(void* dest, const void* src, int64_t size) {
  * @param src Source pointer.
  * @param size Number of bytes to move.
  */
-void mem_move(void* dest, const void* src, int64_t size) {
+TML_EXPORT void mem_move(void* dest, const void* src, int64_t size) {
     memmove(dest, src, (size_t)size);
 }
 
@@ -160,7 +167,7 @@ void mem_move(void* dest, const void* src, int64_t size) {
  * @param value Value to set (truncated to unsigned char).
  * @param size Number of bytes to set.
  */
-void mem_set(void* ptr, int32_t value, int64_t size) {
+TML_EXPORT void mem_set(void* ptr, int32_t value, int64_t size) {
     memset(ptr, value, (size_t)size);
 }
 
@@ -173,7 +180,7 @@ void mem_set(void* ptr, int32_t value, int64_t size) {
  * @param ptr Pointer to memory region.
  * @param size Number of bytes to zero.
  */
-void mem_zero(void* ptr, int64_t size) {
+TML_EXPORT void mem_zero(void* ptr, int64_t size) {
     memset(ptr, 0, (size_t)size);
 }
 
@@ -191,7 +198,7 @@ void mem_zero(void* ptr, int64_t size) {
  * @param size Number of bytes to compare.
  * @return <0 if a<b, 0 if equal, >0 if a>b.
  */
-int32_t mem_compare(const void* a, const void* b, int64_t size) {
+TML_EXPORT int32_t mem_compare(const void* a, const void* b, int64_t size) {
     return memcmp(a, b, (size_t)size);
 }
 
@@ -205,6 +212,6 @@ int32_t mem_compare(const void* a, const void* b, int64_t size) {
  * @param size Number of bytes to compare.
  * @return 1 if equal, 0 if not equal.
  */
-int32_t mem_eq(const void* a, const void* b, int64_t size) {
+TML_EXPORT int32_t mem_eq(const void* a, const void* b, int64_t size) {
     return memcmp(a, b, (size_t)size) == 0 ? 1 : 0;
 }
