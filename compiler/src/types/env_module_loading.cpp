@@ -45,6 +45,32 @@ namespace tml::types {
 // This is critical for performance: without caching, importing std::thread
 // triggers ~1365 fs::exists() calls across ~40 transitive module dependencies.
 
+#ifdef _WIN32
+// On Windows (NTFS/FAT), std::filesystem::exists() is case-insensitive.
+// This causes "List.tml" to match "list.tml", making the module resolver
+// treat "std::collections::List" as a module file instead of a symbol import
+// from "std::collections". That skips loading the parent module and its sibling
+// files (e.g., behaviors.tml containing ListIter[T]).
+// This helper verifies the filename matches case-sensitively.
+static bool exists_case_sensitive(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path))
+        return false;
+    std::string expected = path.filename().string();
+    auto parent = path.parent_path();
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(parent, ec)) {
+        if (entry.path().filename().string() == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+#else
+static bool exists_case_sensitive(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
+}
+#endif
+
 static std::shared_mutex s_path_cache_mutex;
 static std::unordered_map<std::string, std::string> s_resolved_paths; // module_path -> fs_path
 static std::unordered_set<std::string> s_not_found_paths;             // module_path -> not found
@@ -129,13 +155,15 @@ static std::string resolve_lib_module_path(const std::string& lib_subdir,
     fs::path base = fs::path(lib_root) / lib_subdir / src_subdir;
 
     // Try name.tml first, then name/mod.tml
+    // Use case-sensitive check to prevent Windows NTFS from matching
+    // "List.tml" to "list.tml" (which would skip parent module loading).
     fs::path candidate1 = base / (fs_module_path + ".tml");
-    if (fs::exists(candidate1)) {
+    if (exists_case_sensitive(candidate1)) {
         return candidate1.string();
     }
 
     fs::path candidate2 = base / fs_module_path / "mod.tml";
-    if (fs::exists(candidate2)) {
+    if (exists_case_sensitive(candidate2)) {
         return candidate2.string();
     }
 
@@ -406,7 +434,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         };
 
         for (const auto& module_file : search_paths) {
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 std::string resolved = module_file.string();
                 cache_resolved_path(module_path, resolved);
                 TML_DEBUG_LN("[MODULE] Found test module at: " << resolved);
@@ -466,7 +494,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                                                           << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
                 std::string res = module_file.string();
                 cache_resolved_path(module_path, res);
@@ -506,7 +534,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         };
 
         for (const auto& module_file : search_paths) {
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 std::string res = module_file.string();
                 cache_resolved_path(module_path, res);
                 return load_module_from_file(module_path, res);
@@ -567,7 +595,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                                                                << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
                 std::string res = module_file.string();
                 cache_resolved_path(module_path, res);
@@ -635,7 +663,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                                                           << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
                 std::string res = module_file.string();
                 cache_resolved_path(module_path, res);
@@ -702,7 +730,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                                                          << " (fs_path: " << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 TML_DEBUG_LN("[MODULE]   FOUND!");
                 std::string res = module_file.string();
                 cache_resolved_path(module_path, res);
@@ -739,7 +767,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         };
 
         for (const auto& module_file : search_paths) {
-            if (std::filesystem::exists(module_file)) {
+            if (exists_case_sensitive(module_file)) {
                 TML_DEBUG_LN("[MODULE] Found local module at: " << module_file);
                 return load_module_from_file(module_path, module_file.string());
             }
@@ -754,7 +782,7 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     };
 
     for (const auto& module_file : cwd_paths) {
-        if (std::filesystem::exists(module_file)) {
+        if (exists_case_sensitive(module_file)) {
             TML_DEBUG_LN("[MODULE] Found local module at: " << module_file);
             return load_module_from_file(module_path, module_file.string());
         }

@@ -2,7 +2,8 @@
 // Verifies that lookup_associated_type can find type bindings in imported impl blocks
 use test
 use core::iter::*
-use core::range::*
+use core::types::range::RangeIterI64
+use core::types::range::RangeInclusiveIterI64
 
 // ============================================================================
 // Test 1: RangeIterI64 - impl Iterator is in core::range module

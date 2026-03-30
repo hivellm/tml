@@ -19,13 +19,49 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Helper: Substitute inner type params in an associated type returned by lookup_associated_type.
+// For generic iterators like SliceIter[I32], lookup_associated_type("SliceIter", "Item")
+// returns the abstract form (ref T). This function substitutes T=I32 to get ref I32.
+static types::TypePtr substitute_inner_assoc_type(types::TypePtr item_type,
+                                                  const types::NamedType& arg_named,
+                                                  const types::TypeEnv& env) {
+    if (!item_type || arg_named.type_args.empty()) {
+        return item_type;
+    }
+    std::vector<std::string> inner_params;
+    auto inner_struct = env.lookup_struct(arg_named.name);
+    if (inner_struct.has_value()) {
+        inner_params = inner_struct->type_params;
+    } else if (env.module_registry()) {
+        for (const auto& [mn, m] : env.module_registry()->get_all_modules()) {
+            auto sit = m.structs.find(arg_named.name);
+            if (sit != m.structs.end()) {
+                inner_params = sit->second.type_params;
+                break;
+            }
+        }
+    }
+    if (inner_params.empty()) {
+        return item_type;
+    }
+    std::unordered_map<std::string, types::TypePtr> inner_subs;
+    for (size_t j = 0; j < inner_params.size() && j < arg_named.type_args.size(); ++j) {
+        inner_subs[inner_params[j]] = arg_named.type_args[j];
+    }
+    if (!inner_subs.empty()) {
+        item_type = types::substitute_type(item_type, inner_subs);
+    }
+    return item_type;
+}
+
 // Helper: Recursively match a parser type pattern against a concrete semantic type
 // to extract type parameter bindings. Handles nested generics like Maybe[T] -> Maybe[I32],
 // and reference types like ref T -> ref I32.
 static void match_where_pattern(const parser::Type& pattern, const types::TypePtr& concrete,
                                 std::unordered_map<std::string, types::TypePtr>& type_subs) {
-    if (!concrete)
+    if (!concrete) {
         return;
+    }
 
     // Handle RefType pattern: `ref T` matches against `RefType{inner=I32}` -> T = I32
     if (pattern.is<parser::RefType>()) {
@@ -39,11 +75,13 @@ static void match_where_pattern(const parser::Type& pattern, const types::TypePt
         return;
     }
 
-    if (!pattern.is<parser::NamedType>())
+    if (!pattern.is<parser::NamedType>()) {
         return;
+    }
     const auto& named = pattern.as<parser::NamedType>();
-    if (named.path.segments.empty())
+    if (named.path.segments.empty()) {
         return;
+    }
     const std::string& name = named.path.segments.back();
     bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
     if (!has_type_args) {
@@ -78,29 +116,106 @@ static void match_where_pattern(const parser::Type& pattern, const types::TypePt
     }
 }
 
+// Helper: Extract return type and params from a semantic type that may be FuncType or ClosureType.
+// Returns true if the type is a function-like type, populating ret and params.
+static bool extract_func_signature(const types::TypePtr& type, types::TypePtr& ret,
+                                   std::vector<types::TypePtr>& params) {
+    if (type->is<types::FuncType>()) {
+        const auto& func = type->as<types::FuncType>();
+        ret = func.return_type;
+        params = func.params;
+        return true;
+    }
+    if (type->is<types::ClosureType>()) {
+        const auto& clos = type->as<types::ClosureType>();
+        ret = clos.return_type;
+        params = clos.params;
+        return true;
+    }
+    return false;
+}
+
 // Helper: Resolve where clause type equalities from an impl's where clause.
 // Matches concrete types in type_subs against patterns to derive additional bindings.
+//
+// Handles three patterns:
+// 1. `where F = func() -> T` — simple type param → function type equality
+// 2. `where I::Item = ref T` — associated type path equality
+// 3. `where F = func(I::Item) -> Maybe[B]` — function with associated type params
 static void resolve_impl_where_clause(const parser::WhereClause& where_clause,
                                       std::unordered_map<std::string, types::TypePtr>& type_subs) {
     for (const auto& [lhs, rhs] : where_clause.type_equalities) {
-        if (!lhs || !rhs || !lhs->is<parser::NamedType>())
+        if (!lhs || !rhs || !lhs->is<parser::NamedType>()) {
             continue;
-        const auto& lhs_name = lhs->as<parser::NamedType>().path.segments.back();
-        auto sub_it = type_subs.find(lhs_name);
-        if (sub_it == type_subs.end() || !sub_it->second)
+        }
+        const auto& lhs_named = lhs->as<parser::NamedType>();
+        const auto& segments = lhs_named.path.segments;
+        if (segments.empty()) {
             continue;
-        const auto& concrete = sub_it->second;
-        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
-            const auto& pat = rhs->as<parser::FuncType>();
-            const auto& con = concrete->as<types::FuncType>();
-            if (pat.return_type && con.return_type) {
-                match_where_pattern(*pat.return_type, con.return_type, type_subs);
+        }
+
+        // Case 1: Associated type path (2+ segments), e.g., `I::Item = ref T`
+        // Resolve by looking up the first segment in type_subs, then finding
+        // its associated type to get the concrete value for matching against RHS.
+        if (segments.size() >= 2) {
+            const std::string& type_param = segments[0];
+            const std::string& assoc_name = segments[1];
+
+            // Check if the type parameter is resolved in type_subs
+            auto param_it = type_subs.find(type_param);
+            if (param_it == type_subs.end() || !param_it->second) {
+                continue;
             }
-            for (size_t pi = 0; pi < pat.params.size() && pi < con.params.size(); ++pi) {
-                if (pat.params[pi] && con.params[pi]) {
-                    match_where_pattern(*pat.params[pi], con.params[pi], type_subs);
+
+            // Also check if we already have the associated type key directly
+            // (e.g., "I::Item" already resolved from the generic param setup)
+            std::string assoc_key = type_param + "::" + assoc_name;
+            auto assoc_it = type_subs.find(assoc_key);
+            if (assoc_it != type_subs.end() && assoc_it->second) {
+                // We have the concrete associated type value — match it against RHS pattern
+                match_where_pattern(*rhs, assoc_it->second, type_subs);
+            }
+            continue;
+        }
+
+        // Case 2: Simple type param (1 segment), e.g., `F = func() -> T`
+        const std::string& lhs_name = segments.back();
+        auto sub_it = type_subs.find(lhs_name);
+        if (sub_it == type_subs.end() || !sub_it->second) {
+            continue;
+        }
+        const auto& concrete = sub_it->second;
+
+        // Match against FuncType pattern on the RHS
+        if (rhs->is<parser::FuncType>()) {
+            types::TypePtr con_ret;
+            std::vector<types::TypePtr> con_params;
+            if (extract_func_signature(concrete, con_ret, con_params)) {
+                const auto& pat = rhs->as<parser::FuncType>();
+                if (pat.return_type && con_ret) {
+                    match_where_pattern(*pat.return_type, con_ret, type_subs);
+                }
+                for (size_t pi = 0; pi < pat.params.size() && pi < con_params.size(); ++pi) {
+                    if (pat.params[pi] && con_params[pi]) {
+                        // If the param pattern is an associated type path (e.g., I::Item),
+                        // skip matching it — it's a constraint, not a type variable to resolve.
+                        // The concrete param type is already determined by the function signature.
+                        if (pat.params[pi]->is<parser::NamedType>()) {
+                            const auto& param_named = pat.params[pi]->as<parser::NamedType>();
+                            if (param_named.path.segments.size() >= 2) {
+                                // This is like `I::Item` — it's an associated type reference,
+                                // not a type variable. Don't try to match it as a binding.
+                                continue;
+                            }
+                        }
+                        match_where_pattern(*pat.params[pi], con_params[pi], type_subs);
+                    }
                 }
             }
+        }
+        // Match against non-function RHS (e.g., `where T = SomeType`)
+        else {
+            match_where_pattern(*rhs, concrete, type_subs);
         }
     }
 }
@@ -108,7 +223,7 @@ static void resolve_impl_where_clause(const parser::WhereClause& where_clause,
 auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                          const std::string& receiver,
                                          const std::string& receiver_ptr,
-                                         types::TypePtr receiver_type)
+                                         const types::TypePtr& receiver_type)
     -> std::optional<std::string> {
     const std::string& method = call.method;
 
@@ -276,7 +391,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                         if (param_type && param_type->is<types::GenericType>()) {
                             const auto& gen = param_type->as<types::GenericType>();
                             if (gen.name == type_param) {
-                                if (type_subs.find(type_param) == type_subs.end()) {
+                                if (!type_subs.contains(type_param)) {
                                     auto arg_type =
                                         infer_expr_type(*call.args[p_idx - param_offset]);
                                     if (arg_type) {
@@ -293,7 +408,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                             const auto& param_named = param_type->as<types::NamedType>();
                             // Case 1: Bare type parameter — param IS the type param (e.g., err: E)
                             if (param_named.name == type_param && param_named.type_args.empty()) {
-                                if (type_subs.find(type_param) == type_subs.end()) {
+                                if (!type_subs.contains(type_param)) {
                                     auto arg_type =
                                         infer_expr_type(*call.args[p_idx - param_offset]);
                                     if (arg_type) {
@@ -313,7 +428,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                     if (ta && ta->is<types::NamedType>()) {
                                         const auto& ta_named = ta->as<types::NamedType>();
                                         if (ta_named.name == type_param) {
-                                            if (type_subs.find(type_param) == type_subs.end()) {
+                                            if (!type_subs.contains(type_param)) {
                                                 auto arg_type = infer_expr_type(
                                                     *call.args[p_idx - param_offset]);
                                                 if (arg_type && arg_type->is<types::NamedType>()) {
@@ -359,7 +474,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                                     ret_named.name == type_param && ret_named.type_args.empty();
                             }
                             if (ret_matches_param) {
-                                if (type_subs.find(type_param) == type_subs.end()) {
+                                if (!type_subs.contains(type_param)) {
                                     // Infer from the argument's return type
                                     auto arg_type =
                                         infer_expr_type(*call.args[p_idx - param_offset]);
@@ -407,7 +522,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         bool inside_generic_impl = current_impl_type_.find("__") != std::string::npos;
         if (mangled_type_name != named.name && !inside_generic_impl) {
             std::string base_fn_check = "@" + mangle_impl_method(named.name, method);
-            if (generated_functions_.count(base_fn_check) > 0) {
+            if (generated_functions_.contains(base_fn_check)) {
                 mangled_type_name = named.name;
             }
         }
@@ -418,10 +533,26 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         }
         std::string mangled_method_name = mangle_impl_method(mangled_type_name, method_for_key);
 
-        // Check locally defined impls first
+        // Check locally defined impls first.
+        // Use pending_generic_impls_all_ to find the impl with the most matching
+        // generics. Types like Cloned have impl[I,T] Iterator (2 params) AND
+        // impl[I] Sync (1 param). The mangled type args may include extra params
+        // (e.g., Cloned[SliceIter, I32] = I + T), so we need the impl with the
+        // most generics to correctly map all type params.
         auto impl_it = pending_generic_impls_.find(named.name);
         if (impl_it != pending_generic_impls_.end()) {
-            const auto& impl = *impl_it->second;
+            const parser::ImplDecl* best_impl = impl_it->second;
+            // Check all impls for one with more matching generics
+            auto best_impl_it = pending_generic_impls_all_.find(named.name);
+            if (best_impl_it != pending_generic_impls_all_.end()) {
+                for (const auto* candidate : best_impl_it->second) {
+                    if (candidate->generics.size() > best_impl->generics.size() &&
+                        candidate->generics.size() <= named.type_args.size()) {
+                        best_impl = candidate;
+                    }
+                }
+            }
+            const auto& impl = *best_impl;
             for (size_t i = 0; i < impl.generics.size() && i < named.type_args.size(); ++i) {
                 type_subs[impl.generics[i].name] = named.type_args[i];
                 // Also resolve associated types for concrete type arguments
@@ -429,6 +560,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
                     const auto& arg_named = named.type_args[i]->as<types::NamedType>();
                     auto item_type = lookup_associated_type(arg_named.name, "Item");
+                    item_type = substitute_inner_assoc_type(item_type, arg_named, env_);
                     if (item_type) {
                         std::string assoc_key = impl.generics[i].name + "::Item";
                         type_subs[assoc_key] = item_type;
@@ -441,14 +573,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             // flat mapping above uses ENUM's T/E positions which gives wrong subs.
             // Check all registered impls for a specialized one that has the method,
             // and if found, use match_where_pattern to derive correct subs.
-            auto all_impl_it = pending_generic_impls_all_.find(named.name);
-            if (all_impl_it != pending_generic_impls_all_.end()) {
-                for (const auto* alt_impl : all_impl_it->second) {
-                    if (!alt_impl->self_type || !alt_impl->self_type->is<parser::NamedType>())
+            auto specialized_it = pending_generic_impls_all_.find(named.name);
+            if (specialized_it != pending_generic_impls_all_.end()) {
+                for (const auto* alt_impl : specialized_it->second) {
+                    if (!alt_impl->self_type || !alt_impl->self_type->is<parser::NamedType>()) {
                         continue;
+                    }
                     const auto& self_named = alt_impl->self_type->as<parser::NamedType>();
-                    if (!self_named.generics || self_named.generics->args.empty())
+                    if (!self_named.generics || self_named.generics->args.empty()) {
                         continue;
+                    }
                     // Is this a specialized impl? (type arg is not just a bare param)
                     bool is_specialized = false;
                     for (const auto& arg : self_named.generics->args) {
@@ -460,8 +594,9 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                             }
                         }
                     }
-                    if (!is_specialized)
+                    if (!is_specialized) {
                         continue;
+                    }
                     // Does this impl contain the method?
                     bool has_method = false;
                     for (const auto& m : alt_impl->methods) {
@@ -470,8 +605,9 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                             break;
                         }
                     }
-                    if (!has_method)
+                    if (!has_method) {
                         continue;
+                    }
                     // Derive correct type subs by matching self_type pattern against receiver
                     std::unordered_map<std::string, types::TypePtr> spec_subs;
                     match_where_pattern(*alt_impl->self_type, effective_receiver, spec_subs);
@@ -484,13 +620,100 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 }
             }
 
+            // Detect specialized impl nesting pattern. When the receiver is e.g.
+            // Maybe[Maybe[I32]], the naive mapping gives T=Maybe[I32]. But for a
+            // specialized impl like impl[T] Maybe[Maybe[T]], T should be I32.
+            //
+            // Detection heuristic: if type_subs[P] is a NamedType with the SAME
+            // name as the receiver's outer type, AND the func_sig return type after
+            // substitution equals the receiver type (indicating no unwrapping happened),
+            // then "unwrap" by re-mapping from the inner type's type_args.
+            //
+            // This safely avoids unwrapping for methods from the general impl
+            // (e.g., is_just, unwrap) because their return types don't match the
+            // receiver type after substitution.
+            if (func_sig && func_sig->return_type) {
+                // Check if any type_sub has nesting
+                bool has_nesting = false;
+                for (const auto& [param, concrete] : type_subs) {
+                    if (concrete && concrete->is<types::NamedType>()) {
+                        const auto& cn = concrete->as<types::NamedType>();
+                        if (cn.name == named.name && !cn.type_args.empty()) {
+                            has_nesting = true;
+                            break;
+                        }
+                    }
+                }
+                if (has_nesting) {
+                    // Tentatively substitute to see if the result matches the receiver type
+                    auto test_ret = types::substitute_type(func_sig->return_type, type_subs);
+                    bool ret_matches_receiver = false;
+                    if (test_ret && test_ret->is<types::NamedType>()) {
+                        const auto& test_named = test_ret->as<types::NamedType>();
+                        if (test_named.name == named.name &&
+                            test_named.type_args.size() == named.type_args.size()) {
+                            ret_matches_receiver = true;
+                            // Deep compare type_args
+                            for (size_t ti = 0; ti < named.type_args.size(); ++ti) {
+                                if (types::type_to_string(test_named.type_args[ti]) !=
+                                    types::type_to_string(named.type_args[ti])) {
+                                    ret_matches_receiver = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (ret_matches_receiver) {
+                        // The substituted return type equals the receiver type, meaning
+                        // the naive type_subs didn't unwrap. Apply the unwrapping.
+                        std::vector<std::string> base_type_params;
+                        auto base_enum = env_.lookup_enum(named.name);
+                        if (base_enum && !base_enum->type_params.empty()) {
+                            base_type_params = base_enum->type_params;
+                        }
+                        if (base_type_params.empty() && env_.module_registry()) {
+                            for (const auto& [mn, mm] : env_.module_registry()->get_all_modules()) {
+                                auto sit = mm.structs.find(named.name);
+                                if (sit != mm.structs.end() && !sit->second.type_params.empty()) {
+                                    base_type_params = sit->second.type_params;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!base_type_params.empty()) {
+                            for (size_t si = 0;
+                                 si < base_type_params.size() && si < named.type_args.size();
+                                 ++si) {
+                                auto sub_it = type_subs.find(base_type_params[si]);
+                                if (sub_it == type_subs.end() || !sub_it->second)
+                                    continue;
+                                const auto& concrete = sub_it->second;
+                                if (!concrete->is<types::NamedType>())
+                                    continue;
+                                const auto& concrete_named = concrete->as<types::NamedType>();
+                                if (concrete_named.name != named.name)
+                                    continue;
+                                if (concrete_named.type_args.empty())
+                                    continue;
+                                // Unwrap: re-map from inner type's type_args
+                                for (size_t ip = 0; ip < base_type_params.size() &&
+                                                    ip < concrete_named.type_args.size();
+                                     ++ip) {
+                                    type_subs[base_type_params[ip]] = concrete_named.type_args[ip];
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Check if this type is from an imported module (even though impl is in
             // pending_generic_impls_, it may have been registered from an imported module)
             if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
                 for (const auto& [mod_name, mod] : all_modules) {
-                    if (mod.structs.find(named.name) != mod.structs.end() ||
-                        mod.enums.find(named.name) != mod.enums.end()) {
+                    if (mod.structs.contains(named.name) || mod.enums.contains(named.name)) {
                         is_imported = true;
                         break;
                     }
@@ -519,6 +742,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                     if (named.type_args[i] && named.type_args[i]->is<types::NamedType>()) {
                         const auto& arg_named = named.type_args[i]->as<types::NamedType>();
                         auto item_type = lookup_associated_type(arg_named.name, "Item");
+                        item_type = substitute_inner_assoc_type(item_type, arg_named, env_);
                         if (item_type) {
                             std::string assoc_key = imported_type_params[i] + "::Item";
                             type_subs[assoc_key] = item_type;
@@ -531,10 +755,21 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             else if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
                 for (const auto& [mod_name, mod] : all_modules) {
-                    // Check structs
+                    // Check structs (public and internal)
+                    const types::StructDef* found_struct = nullptr;
                     auto struct_it = mod.structs.find(named.name);
                     if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
-                        imported_type_params = struct_it->second.type_params;
+                        found_struct = &struct_it->second;
+                    }
+                    if (!found_struct) {
+                        auto internal_it = mod.internal_structs.find(named.name);
+                        if (internal_it != mod.internal_structs.end() &&
+                            !internal_it->second.type_params.empty()) {
+                            found_struct = &internal_it->second;
+                        }
+                    }
+                    if (found_struct) {
+                        imported_type_params = found_struct->type_params;
                         for (size_t i = 0;
                              i < imported_type_params.size() && i < named.type_args.size(); ++i) {
                             type_subs[imported_type_params[i]] = named.type_args[i];
@@ -550,10 +785,21 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                         }
                         break;
                     }
-                    // Check enums
+                    // Check enums (public and internal)
+                    const types::EnumDef* found_enum = nullptr;
                     auto enum_it = mod.enums.find(named.name);
                     if (enum_it != mod.enums.end() && !enum_it->second.type_params.empty()) {
-                        imported_type_params = enum_it->second.type_params;
+                        found_enum = &enum_it->second;
+                    }
+                    if (!found_enum) {
+                        auto internal_enum_it = mod.internal_enums.find(named.name);
+                        if (internal_enum_it != mod.internal_enums.end() &&
+                            !internal_enum_it->second.type_params.empty()) {
+                            found_enum = &internal_enum_it->second;
+                        }
+                    }
+                    if (found_enum) {
+                        imported_type_params = found_enum->type_params;
                         for (size_t i = 0;
                              i < imported_type_params.size() && i < named.type_args.size(); ++i) {
                             type_subs[imported_type_params[i]] = named.type_args[i];
@@ -585,40 +831,64 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // Also handles nested patterns like `where F = func() -> Maybe[T]`.
         // Check local impls first, then imported modules.
         {
-            auto local_impl_it = pending_generic_impls_.find(named.name);
-            if (local_impl_it != pending_generic_impls_.end()) {
-                const auto& local_impl = *local_impl_it->second;
-                if (local_impl.where_clause) {
-                    resolve_impl_where_clause(*local_impl.where_clause, type_subs);
+            // Check ALL impls for where clauses, not just the single entry in
+            // pending_generic_impls_ (which only stores the LAST registered impl).
+            // Types like OnceWith have multiple impls (Iterator, Send, Sync),
+            // and the where clause (e.g., `where F = func() -> T`) may be on any of them.
+            auto all_impl_it = pending_generic_impls_all_.find(named.name);
+            if (all_impl_it != pending_generic_impls_all_.end()) {
+                for (const auto* local_impl : all_impl_it->second) {
+                    if (local_impl->where_clause) {
+                        resolve_impl_where_clause(*local_impl->where_clause, type_subs);
+                    }
                 }
             }
-            // For imported types, search module source for impl with where clause
-            else if (env_.module_registry()) {
+            // Also search imported module source for specialized impls,
+            // where clauses, and constraint-based type destructuring.
+            // This runs even when pending_generic_impls_all_ has entries,
+            // because those may only contain behavior impls (e.g., PartialEq,
+            // Clone) from other modules, while the specialized impl (e.g.,
+            // impl[T] Maybe[Maybe[T]] with flatten) is in a different module
+            // (e.g., core::types::option) that wasn't registered in
+            // pending_generic_impls_all_.
+            if (env_.module_registry()) {
                 const auto& all_modules = env_.module_registry()->get_all_modules();
+
                 for (const auto& [mod_name, mod] : all_modules) {
-                    auto struct_it2 = mod.structs.find(named.name);
-                    if (struct_it2 == mod.structs.end() || mod.source_code.empty())
+                    // Check structs (public + internal), enums (public + internal),
+                    // and also check if this module defines the method we're calling
+                    // (handles builtin enums like Maybe/Outcome whose impls are in
+                    // library modules but the enum itself is pre-registered in TypeEnv)
+                    bool type_in_module = mod.structs.count(named.name) > 0 ||
+                                          mod.internal_structs.count(named.name) > 0 ||
+                                          mod.enums.count(named.name) > 0 ||
+                                          mod.internal_enums.count(named.name) > 0 ||
+                                          mod.functions.count(named.name + "::" + method) > 0;
+                    if (!type_in_module || mod.source_code.empty()) {
                         continue;
+                    }
                     // Get parsed AST from cache or parse
                     const parser::Module* parsed_mod_ptr = nullptr;
                     parser::Module local_parsed_mod;
                     if (GlobalASTCache::should_cache(mod_name)) {
                         parsed_mod_ptr = GlobalASTCache::instance().get(mod_name);
                     }
-                    if (!parsed_mod_ptr) {
+                    if (parsed_mod_ptr == nullptr) {
                         auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
                         lexer::Lexer lex(source);
                         auto tokens = lex.tokenize();
-                        if (lex.has_errors())
+                        if (lex.has_errors()) {
                             continue;
+                        }
                         parser::Parser mod_parser(std::move(tokens));
                         auto module_name_stem = mod_name;
                         if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
                             module_name_stem = module_name_stem.substr(pos + 2);
                         }
                         auto parse_result = mod_parser.parse_module(module_name_stem);
-                        if (!std::holds_alternative<parser::Module>(parse_result))
+                        if (!std::holds_alternative<parser::Module>(parse_result)) {
                             continue;
+                        }
                         local_parsed_mod = std::get<parser::Module>(std::move(parse_result));
                         if (GlobalASTCache::should_cache(mod_name)) {
                             GlobalASTCache::instance().put(mod_name, std::move(local_parsed_mod));
@@ -627,24 +897,161 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                             parsed_mod_ptr = &local_parsed_mod;
                         }
                     }
-                    if (!parsed_mod_ptr)
+                    if (parsed_mod_ptr == nullptr) {
                         continue;
-                    // Find impl for our type with where clause
+                    }
+                    // Iterate all impl blocks for our type
                     for (const auto& decl : parsed_mod_ptr->decls) {
-                        if (!decl->is<parser::ImplDecl>())
+                        if (!decl->is<parser::ImplDecl>()) {
                             continue;
+                        }
                         const auto& imp = decl->as<parser::ImplDecl>();
-                        if (!imp.self_type || !imp.self_type->is<parser::NamedType>())
+                        if (!imp.self_type || !imp.self_type->is<parser::NamedType>()) {
                             continue;
+                        }
                         const auto& target = imp.self_type->as<parser::NamedType>();
                         if (target.path.segments.empty() ||
-                            target.path.segments.back() != named.name)
+                            target.path.segments.back() != named.name) {
                             continue;
-                        if (!imp.where_clause)
-                            continue;
-                        resolve_impl_where_clause(*imp.where_clause, type_subs);
+                        }
+
+                        // Check for specialized impl (e.g., impl[T] Maybe[Maybe[T]],
+                        // impl[T,E] Outcome[Outcome[T,E], E]). A specialized impl has
+                        // type args that contain nested generics, not just bare params.
+                        if (target.generics && !target.generics->args.empty()) {
+                            bool is_specialized = false;
+                            for (const auto& arg : target.generics->args) {
+                                if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
+                                    const auto& arg_named = arg.as_type()->as<parser::NamedType>();
+                                    if (arg_named.generics && !arg_named.generics->args.empty()) {
+                                        is_specialized = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (is_specialized) {
+                                // Does this specialized impl contain the method?
+                                bool has_method = false;
+                                for (const auto& m : imp.methods) {
+                                    if (m.name == method) {
+                                        has_method = true;
+                                        break;
+                                    }
+                                }
+                                if (has_method) {
+                                    // Derive correct type subs by matching self_type
+                                    // pattern against receiver type.
+                                    // e.g., Maybe[Maybe[T]] matched against Maybe[Maybe[I32]]
+                                    //        gives T = I32 (not T = Maybe[I32])
+                                    std::unordered_map<std::string, types::TypePtr> spec_subs;
+                                    match_where_pattern(*imp.self_type, effective_receiver,
+                                                        spec_subs);
+                                    if (!spec_subs.empty()) {
+                                        for (const auto& [k, v] : spec_subs) {
+                                            type_subs[k] = v;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Process where clause type equalities
+                        if (imp.where_clause) {
+                            resolve_impl_where_clause(*imp.where_clause, type_subs);
+
+                            // Also process where clause constraints for type destructuring.
+                            // e.g., `where T: Outcome[T, E]` on impl[T] Maybe[T]
+                            // When T = Outcome[I32, Str], matching against Outcome[T, E]
+                            // extracts T = I32, E = Str (overriding the outer T).
+                            for (const auto& [lhs, bounds] : imp.where_clause->constraints) {
+                                if (!lhs || !lhs->is<parser::NamedType>()) {
+                                    continue;
+                                }
+                                const auto& lhs_named = lhs->as<parser::NamedType>();
+                                if (lhs_named.path.segments.empty()) {
+                                    continue;
+                                }
+                                const std::string& param_name = lhs_named.path.segments.back();
+                                // Look up the concrete type for this parameter
+                                auto param_it = type_subs.find(param_name);
+                                if (param_it == type_subs.end() || !param_it->second) {
+                                    continue;
+                                }
+                                const auto& concrete = param_it->second;
+                                // Check each bound — if the bound is a generic type
+                                // (not a behavior), treat as destructuring pattern
+                                for (const auto& bound : bounds) {
+                                    if (!bound || !bound->is<parser::NamedType>()) {
+                                        continue;
+                                    }
+                                    const auto& bound_named = bound->as<parser::NamedType>();
+                                    if (!bound_named.generics ||
+                                        bound_named.generics->args.empty()) {
+                                        continue;
+                                    }
+                                    // This is a type destructuring constraint like T: Maybe[T]
+                                    // or T: Outcome[T, E]. Match the concrete type against
+                                    // the pattern to extract inner type params.
+                                    if (concrete->is<types::NamedType>()) {
+                                        const auto& concrete_named =
+                                            concrete->as<types::NamedType>();
+                                        if (concrete_named.name ==
+                                            bound_named.path.segments.back()) {
+                                            match_where_pattern(*bound, concrete, type_subs);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     break;
+                }
+            }
+        }
+
+        // Resolve any remaining unresolved method-level type params by extracting
+        // them from concrete types already in type_subs. This handles the pattern
+        // where a where-clause constraint destructures a type param, e.g.:
+        //   func transpose[E](this) -> Outcome[Maybe[T], E] where T: Outcome[T, E]
+        // When T = Outcome[I32, Str], E can be extracted from Outcome's type_args.
+        if (func_sig && !func_sig->type_params.empty()) {
+            for (const auto& tp : func_sig->type_params) {
+                if (type_subs.count(tp) > 0)
+                    continue; // Already resolved
+                // Try to extract from concrete types in type_subs
+                bool found = false;
+                for (const auto& [existing_param, existing_concrete] : type_subs) {
+                    if (!existing_concrete || !existing_concrete->is<types::NamedType>())
+                        continue;
+                    const auto& ec_named = existing_concrete->as<types::NamedType>();
+                    if (ec_named.type_args.empty())
+                        continue;
+                    // Look up the concrete type's type_params
+                    std::vector<std::string> ec_type_params;
+                    auto ec_enum = env_.lookup_enum(ec_named.name);
+                    if (ec_enum && !ec_enum->type_params.empty()) {
+                        ec_type_params = ec_enum->type_params;
+                    }
+                    if (ec_type_params.empty() && env_.module_registry()) {
+                        for (const auto& [mn, mm] : env_.module_registry()->get_all_modules()) {
+                            auto sit = mm.structs.find(ec_named.name);
+                            if (sit != mm.structs.end() && !sit->second.type_params.empty()) {
+                                ec_type_params = sit->second.type_params;
+                                break;
+                            }
+                        }
+                    }
+                    // Check if tp matches one of the concrete type's type_params
+                    for (size_t epi = 0;
+                         epi < ec_type_params.size() && epi < ec_named.type_args.size(); ++epi) {
+                        if (ec_type_params[epi] == tp) {
+                            type_subs[tp] = ec_named.type_args[epi];
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found)
+                        break;
                 }
             }
         }
@@ -665,7 +1072,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             type_subs["This"] = self_type;
         }
 
-        if (generated_impl_methods_.find(mangled_method_name) == generated_impl_methods_.end()) {
+        if (!generated_impl_methods_.contains(mangled_method_name)) {
             bool is_local = impl_it != pending_generic_impls_.end();
             if (is_local || is_imported) {
                 TML_DEBUG_LN("[IMPL_METHOD]   QUEUING PendingImplMethod: " << mangled_method_name);
@@ -698,7 +1105,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         std::string mangled_method_name =
             mangle_impl_method(mangled_type_name, full_method_for_key);
 
-        if (generated_impl_methods_.find(mangled_method_name) == generated_impl_methods_.end()) {
+        if (!generated_impl_methods_.contains(mangled_method_name)) {
             pending_impl_method_instantiations_.push_back(
                 PendingImplMethod{mangled_type_name, method, type_subs, named.name,
                                   method_type_suffix, /*is_library_type=*/is_imported});
@@ -743,8 +1150,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
 
         if (is_imported) {
             std::string mangled_method_name = mangle_impl_method(mangled_type_name, method);
-            if (generated_impl_methods_.find(mangled_method_name) ==
-                generated_impl_methods_.end()) {
+            if (!generated_impl_methods_.contains(mangled_method_name)) {
                 pending_impl_method_instantiations_.push_back(
                     PendingImplMethod{mangled_type_name, method, type_subs, named.name,
                                       /*method_type_suffix=*/"", /*is_library_type=*/true});
@@ -806,10 +1212,8 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // - For ptr types: use loaded pointer value
         // - For struct fields: use field pointer directly (mutations in place)
         // - Otherwise: spill struct to stack for method call
-        if (is_primitive_impl) {
-            // Primitive methods take `this` by value — use the loaded value
-            impl_receiver_val = receiver;
-        } else if (last_expr_type_ == "ptr") {
+        if (is_primitive_impl || last_expr_type_ == "ptr") {
+            // Primitive methods / ptr types — use loaded value
             impl_receiver_val = receiver;
         } else if (!receiver_ptr.empty()) {
             impl_receiver_val = receiver_ptr;
@@ -1129,10 +1533,8 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
         // - For ptr types: use loaded pointer value
         // - For struct fields: use field pointer directly (mutations in place)
         // - Otherwise: spill struct to stack for method call
-        if (is_primitive_impl) {
-            // Primitive methods take `this` by value — use the loaded value
-            impl_receiver_val = receiver;
-        } else if (last_expr_type_ == "ptr") {
+        if (is_primitive_impl || last_expr_type_ == "ptr") {
+            // Primitive methods / ptr types — use loaded value
             impl_receiver_val = receiver;
         } else if (!receiver_ptr.empty()) {
             impl_receiver_val = receiver_ptr;

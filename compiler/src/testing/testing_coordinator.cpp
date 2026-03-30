@@ -131,11 +131,10 @@ execute_suites_parallel(const std::vector<Suite>& suites,
 
     int max_concurrent = config.exec_concurrent;
     if (max_concurrent <= 0) {
-        // Cap at 4 concurrent test processes to avoid CPU saturation.
-        // Each test process compiles + runs, consuming significant CPU.
+        // Run up to 8 concurrent test subprocesses.
         // Users can override with --test-threads=N.
         int hw = static_cast<int>(std::thread::hardware_concurrency());
-        max_concurrent = std::max(1, std::min(4, hw / 2));
+        max_concurrent = std::max(1, std::min(8, hw));
     }
 
     // Build list of work items.
@@ -629,6 +628,25 @@ execute_suites_parallel(const std::vector<Suite>& suites,
         }
     }
 
+    // Clear test entries for suites that compiled OK but were never executed (fail-fast skip).
+    // A suite was skipped if it compiled successfully, has zero execution time, and none of its
+    // tests have any execution evidence. Reporting these as FAIL would be misleading.
+    for (auto& r : results) {
+        if (r.compile_ok && r.exec_time_us == 0) {
+            bool any_executed = false;
+            for (const auto& t : r.tests) {
+                if (t.duration_us > 0 || t.passed || t.exit_code != 0 || !t.error.empty()) {
+                    any_executed = true;
+                    break;
+                }
+            }
+            if (!any_executed) {
+                r.tests.clear();
+                r.test_count = 0;
+            }
+        }
+    }
+
     return results;
 }
 
@@ -1076,14 +1094,7 @@ TestRunResult run_tests(const TestConfig& config) {
     // Coverage mode keeps max_per_suite=1: each test .obj has internal linkage
     // for stdlib functions, and vtables (which are external/linkonce_odr) reference
     // those internal functions — linking multiple .objs causes undefined symbols.
-    int effective_max_per_suite = config.max_per_suite;
-    bool is_full_run = config.suite_filters.empty() && config.patterns.empty();
-    if (is_full_run && !config.coverage && effective_max_per_suite <= 10) {
-        effective_max_per_suite = 50; // ~30 suites instead of ~206
-        TML_LOG_INFO("test",
-                     "[coordinator] Full suite: using max_per_suite=50 for fewer link steps");
-    }
-    auto suites = group_into_suites(test_files, effective_max_per_suite);
+    auto suites = group_into_suites(test_files, config.max_per_suite);
     TML_LOG_DEBUG("test", "[coordinator] After grouping: " << suites.size() << " suites from "
                                                            << test_files.size() << " files");
     if (suites.empty()) {
@@ -1384,7 +1395,7 @@ TestRunResult run_tests(const TestConfig& config) {
                 // Only for non-coverage runs and when compiler/runtime has NOT changed.
                 // If compiler_changed, old EXEs have stale runtime baked in — must recompile.
                 if (!config.coverage && !compiler_changed) {
-                    auto exe_cache_dir = fs::current_path() / "build" / "debug" / "cache";
+                    auto exe_cache_dir = fs::current_path() / "build" / "debug" / "cache" / "tests";
                     auto disk_exe = exe_cache_dir / (suite.name + ".exe");
                     if (fs::exists(disk_exe)) {
                         TML_LOG_INFO("test", "  [cache] Suite "
@@ -1495,6 +1506,9 @@ TestRunResult run_tests(const TestConfig& config) {
             cr.exe_path = exe;
             reuse_compile_results.push_back(std::move(cr));
         }
+        if (should_stop.load(std::memory_order_relaxed)) {
+            return result;
+        }
         auto reuse_exec =
             execute_suites_parallel(reuse_exe_suites, reuse_compile_results, config, should_stop,
                                     config.coverage ? &all_covered_functions : nullptr);
@@ -1513,8 +1527,8 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.verbose = config.verbose;
         compile_config.coverage = config.coverage;
         compile_config.no_cache = config.no_cache;
-        // Default to 1 compile thread for stability; user can override.
-        compile_config.num_threads = config.compile_threads > 0 ? config.compile_threads : 1;
+        compile_config.fail_fast = config.fail_fast;
+        compile_config.num_threads = config.compile_threads; // 0 = auto (up to 8)
 
         // (incremental cache saves happen after each batch below)
 
@@ -1531,6 +1545,9 @@ TestRunResult run_tests(const TestConfig& config) {
         }
         std::vector<CompileResult> new_compile_results(uncached_suites.size());
         for (int batch_start = 0; batch_start < total; batch_start += batch_size) {
+            if (should_stop.load(std::memory_order_relaxed))
+                break;
+
             int batch_end = std::min(batch_start + batch_size, total);
             int batch_count = batch_end - batch_start;
 
@@ -1587,12 +1604,15 @@ TestRunResult run_tests(const TestConfig& config) {
             }
         }
 
-        // Count compilation errors
+        // Count compilation errors — only for suites that were actually attempted
         for (const auto& cr : new_compile_results) {
+            bool attempted =
+                cr.compile_time_us > 0 || !cr.error_message.empty() || !cr.exe_path.empty();
+            if (!attempted)
+                continue;
             if (!cr.success) {
                 result.compilation_errors++;
             } else if (!cr.per_file_errors.empty()) {
-                // Per-file SKIPs also count as errors for fail-fast purposes
                 result.compilation_errors += static_cast<int>(cr.per_file_errors.size());
             }
         }
@@ -1609,22 +1629,32 @@ TestRunResult run_tests(const TestConfig& config) {
                          "  [cache] Flushed " << cache.size() << " entries after compilation");
         }
 
-        // 7a. Parallel execution
-        auto new_exec_results =
-            execute_suites_parallel(uncached_suites, new_compile_results, config, should_stop,
-                                    config.coverage ? &all_covered_functions : nullptr);
+        // 7a. Parallel execution — skip if fail-fast triggered during compilation
+        if (!should_stop.load(std::memory_order_relaxed)) {
+            auto new_exec_results =
+                execute_suites_parallel(uncached_suites, new_compile_results, config, should_stop,
+                                        config.coverage ? &all_covered_functions : nullptr);
 
-        // Flush cache after execution (saves pass/fail results)
-        update_cache_entries(uncached_suites, &new_exec_results, new_compile_results);
-        TML_LOG_INFO("test", "  [cache] Flushed " << cache.size() << " entries after execution");
+            // Flush cache after execution (saves pass/fail results)
+            update_cache_entries(uncached_suites, &new_exec_results, new_compile_results);
+            TML_LOG_INFO("test",
+                         "  [cache] Flushed " << cache.size() << " entries after execution");
 
-        for (auto& r : new_exec_results) {
-            exec_results.push_back(std::move(r));
+            for (auto& r : new_exec_results) {
+                exec_results.push_back(std::move(r));
+            }
         }
-        for (auto& cr : new_compile_results) {
-            compile_results.push_back(std::move(cr));
+        // Only add compile results for suites that were actually attempted
+        for (int i = 0; i < static_cast<int>(new_compile_results.size()); ++i) {
+            if (new_compile_results[i].compile_time_us > 0 ||
+                !new_compile_results[i].exe_path.empty() ||
+                !new_compile_results[i].error_message.empty()) {
+                compile_results.push_back(std::move(new_compile_results[i]));
+            }
         }
     }
+
+    result.aborted_early = should_stop.load(std::memory_order_relaxed);
 
     // 8. Final cache save (all batches merged)
     TML_LOG_INFO("test",

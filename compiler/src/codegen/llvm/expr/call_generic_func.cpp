@@ -22,8 +22,9 @@ namespace tml::codegen {
 // e.g., pattern `ref T` matched against concrete `ref I32` derives T = I32.
 static void match_where_pattern_call(const parser::Type& pattern, const types::TypePtr& concrete,
                                      std::unordered_map<std::string, types::TypePtr>& type_subs) {
-    if (!concrete)
+    if (!concrete) {
         return;
+    }
     if (pattern.is<parser::RefType>()) {
         const auto& ref_pattern = pattern.as<parser::RefType>();
         if (ref_pattern.inner && concrete->is<types::RefType>()) {
@@ -69,11 +70,13 @@ static void match_where_pattern_call(const parser::Type& pattern, const types::T
         }
         return;
     }
-    if (!pattern.is<parser::NamedType>())
+    if (!pattern.is<parser::NamedType>()) {
         return;
+    }
     const auto& named = pattern.as<parser::NamedType>();
-    if (named.path.segments.empty())
+    if (named.path.segments.empty()) {
         return;
+    }
     const std::string& name = named.path.segments.back();
     bool has_type_args = named.generics.has_value() && !named.generics->args.empty();
     if (!has_type_args) {
@@ -110,10 +113,12 @@ static void match_where_pattern_call(const parser::Type& pattern, const types::T
 // This is used for nested generic type inference and avoids expensive std::function lambdas
 static types::TypePtr parse_mangled_type_string(const std::string& s) {
     // Primitives
-    if (s == "I64")
+    if (s == "I64") {
         return types::make_i64();
-    if (s == "I32")
+    }
+    if (s == "I32") {
         return types::make_i32();
+    }
     if (s == "I8") {
         auto t = std::make_shared<types::Type>();
         t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
@@ -159,15 +164,18 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
         t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
         return t;
     }
-    if (s == "F64")
+    if (s == "F64") {
         return types::make_f64();
-    if (s == "Bool")
+    }
+    if (s == "Bool") {
         return types::make_bool();
-    if (s == "Str")
+    }
+    if (s == "Str") {
         return types::make_str();
+    }
 
     // Check for pointer prefix (e.g., ptr_ChannelNode__I32 -> Ptr[ChannelNode[I32]])
-    if (s.substr(0, 4) == "ptr_") {
+    if (s.size() >= 4 && s.substr(0, 4) == "ptr_") {
         std::string inner_str = s.substr(4);
         auto inner = parse_mangled_type_string(inner_str);
         if (inner) {
@@ -217,10 +225,21 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
         // Determine the bare name to search for
         std::string search_name = fn_name;
         size_t last_sep = fn_name.rfind("::");
+        // Skip arity-based bare name lookup for Type::method patterns (e.g.,
+        // ManuallyDrop::take). The prefix starts with uppercase, indicating a struct
+        // static method — not a module-qualified standalone function. Without this
+        // check, ManuallyDrop::take(1 arg) incorrectly matches mem::take(1 param).
+        bool is_type_static = false;
         if (last_sep != std::string::npos) {
+            std::string prefix = fn_name.substr(0, last_sep);
             search_name = fn_name.substr(last_sep + 2);
+            is_type_static =
+                !prefix.empty() &&
+                static_cast<bool>(std::isupper(static_cast<unsigned char>(prefix[0]))) &&
+                prefix.find("::") == std::string::npos;
         }
-        auto all_it = pending_generic_funcs_all_.find(search_name);
+        auto all_it = is_type_static ? pending_generic_funcs_all_.end()
+                                     : pending_generic_funcs_all_.find(search_name);
         if (all_it != pending_generic_funcs_all_.end()) {
             for (const auto& [fdecl, mod_name] : all_it->second) {
                 if (fdecl->params.size() == call.args.size()) {
@@ -250,7 +269,9 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
         // Only do bare name fallback for module-qualified calls (lowercase prefix)
         // Skip for Type::method patterns where prefix is a type name (uppercase)
         bool is_type_static_method =
-            !prefix.empty() && std::isupper(prefix[0]) && prefix.find("::") == std::string::npos;
+            !prefix.empty() &&
+            static_cast<bool>(std::isupper(static_cast<unsigned char>(prefix[0]))) &&
+            prefix.find("::") == std::string::npos;
         if (!is_type_static_method) {
             auto candidate = pending_generic_funcs_.find(bare_name);
             if (candidate != pending_generic_funcs_.end()) {
@@ -324,14 +345,17 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
     // SliceIter[I32]) if the TypePtr is shared and later modified. Re-apply from
     // the saved arg types to ensure full type information is preserved.
     for (size_t i = 0; i < gen_func.params.size() && i < arg_types_for_where.size(); ++i) {
-        if (!gen_func.params[i].type->is<parser::NamedType>())
+        if (!gen_func.params[i].type->is<parser::NamedType>()) {
             continue;
+        }
         const auto& pt = gen_func.params[i].type->as<parser::NamedType>();
-        if (pt.path.segments.empty())
+        if (pt.path.segments.empty()) {
             continue;
+        }
         const std::string& param_name = pt.path.segments.back();
-        if (generic_names.count(param_name) == 0)
+        if (!generic_names.contains(param_name)) {
             continue;
+        }
         auto& bound = bindings[param_name];
         if (bound && arg_types_for_where[i] && arg_types_for_where[i]->is<types::NamedType>() &&
             bound->is<types::NamedType>()) {
@@ -352,7 +376,7 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
     {
         bool has_unbound = false;
         for (const auto& g : gen_func.generics) {
-            if (bindings.find(g.name) == bindings.end()) {
+            if (!bindings.contains(g.name)) {
                 has_unbound = true;
                 break;
             }
@@ -374,10 +398,12 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
     // then match pattern `ref T` to derive T = I32.
     if (gen_func.where_clause && !gen_func.where_clause->type_equalities.empty()) {
         for (const auto& [lhs, rhs] : gen_func.where_clause->type_equalities) {
-            if (!lhs || !rhs)
+            if (!lhs || !rhs) {
                 continue;
-            if (!lhs->is<parser::NamedType>())
+            }
+            if (!lhs->is<parser::NamedType>()) {
                 continue;
+            }
             const auto& lhs_named = lhs->as<parser::NamedType>();
             if (lhs_named.path.segments.size() >= 2) {
                 // Associated type equality: e.g., I::Item = ref T
@@ -399,11 +425,13 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
                 }
                 if (!concrete_param) {
                     auto param_it = bindings.find(param_name);
-                    if (param_it != bindings.end())
+                    if (param_it != bindings.end()) {
                         concrete_param = param_it->second;
+                    }
                 }
-                if (!concrete_param)
+                if (!concrete_param) {
                     continue;
+                }
                 types::TypePtr concrete_assoc =
                     resolve_assoc_type_for_concrete(concrete_param, assoc_name);
                 if (concrete_assoc) {
@@ -414,8 +442,9 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
                 // Simple equality: e.g., F = func() -> T
                 const std::string& param_name = lhs_named.path.segments[0];
                 auto param_it = bindings.find(param_name);
-                if (param_it == bindings.end() || !param_it->second)
+                if (param_it == bindings.end() || !param_it->second) {
                     continue;
+                }
                 match_where_pattern_call(*rhs, param_it->second, bindings);
             }
         }
@@ -505,8 +534,9 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
     if (ret_type == "void") {
         emit("  call void " + func_name + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0)
+            if (i > 0) {
                 emit(", ");
+            }
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")" + dbg_suffix);
@@ -516,8 +546,9 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
         std::string result = fresh_reg();
         emit("  " + result + " = call " + ret_type + " " + func_name + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0)
+            if (i > 0) {
                 emit(", ");
+            }
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")" + dbg_suffix);

@@ -54,6 +54,7 @@
 //! ```
 
 use core::ops::{Deref, DerefMut}
+use core::alloc::Heap
 
 // ============================================================================
 // Pin Type
@@ -142,6 +143,31 @@ impl[P] Pin[P] {
     /// ```
     pub func into_inner(this) -> P where P: Unpin {
         return this.pointer
+    }
+}
+
+// ============================================================================
+// Pin[Heap[T]] — Smart pointer pinning
+// ============================================================================
+
+impl[T] Pin[Heap[T]] {
+    /// Gets a shared reference to the value pinned on the heap.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let pinned: Pin[Heap[I32]] = Heap::new(42).into_pin()
+    /// assert_eq(*pinned.get_ref(), 42)
+    /// ```
+    pub func get_ref(this) -> ref T {
+        // Access the Heap's internal pointer without moving it out of Pin.
+        // Pin[Heap[T]] layout: { pointer: Heap[T] } where Heap[T] is { ptr: *T }.
+        // We read the *T directly. The `this.pointer` expression would MOVE
+        // the Heap, triggering Drop. Instead, use `this.pointer.ptr` via the
+        // field accessor which reads the raw pointer without ownership transfer.
+        let raw: *T = this.pointer.ptr
+        let addr: I64 = raw as I64
+        return lowlevel { addr as *T }
     }
 }
 

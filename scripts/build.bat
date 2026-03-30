@@ -18,6 +18,7 @@ if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "TARGET=aarch64-pc-windows-msvc"
 set "BUILD_TYPE=debug"
 set "CLEAN_BUILD=0"
 set "BUILD_TESTS=OFF"
+set "CI_MODE=0"
 set "ENABLE_ASAN=OFF"
 set "ENABLE_UBSAN=OFF"
 set "ENABLE_LLVM_BACKEND=ON"
@@ -55,6 +56,7 @@ if /i "%~1"=="--clang" set "USE_ZIG_CC=0" & set "USE_CLANG=1" & shift & goto :pa
 if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_args
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
+if /i "%~1"=="--ci" set "CI_MODE=1" & set "BUILD_TESTS=OFF" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -297,6 +299,12 @@ if "%USE_ZIG_CC%"=="1" (
 echo Configuring CMake...
 cd /d "%CACHE_DIR%"
 
+set "CMAKE_CI_FLAGS="
+if "%CI_MODE%"=="1" (
+    set "CMAKE_CI_FLAGS=-DTML_USE_LLVM_BACKEND=OFF -DTML_REQUIRE_OPENSSL=OFF"
+    echo CI mode: LLVM backend and OpenSSL disabled
+)
+
 cmake "%ROOT_DIR%\compiler" ^
     %CMAKE_GENERATOR_ARGS% ^
     %TOOLCHAIN_ARGS% ^
@@ -314,7 +322,8 @@ cmake "%ROOT_DIR%\compiler" ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%" ^
     -DTML_VERSION_MAJOR=!VER_MAJOR! ^
     -DTML_VERSION_MINOR=!VER_MINOR! ^
-    -DTML_VERSION_BUILD=!VER_BUILD!
+    -DTML_VERSION_BUILD=!VER_BUILD! ^
+    %CMAKE_CI_FLAGS%
 
 if errorlevel 1 (
     echo CMake configuration failed!

@@ -2,7 +2,8 @@
 // Tests the fix for I::Item not being substituted correctly in generic impl codegen
 use test
 use core::iter::*
-use core::range::*
+use core::types::range::RangeIterI64
+use core::types::range::RangeInclusiveIterI64
 
 // ============================================================================
 // Test 1: Basic RangeIterI64 - verifies Iterator::Item = I64 is resolved

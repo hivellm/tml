@@ -391,8 +391,8 @@ impl[T] Arc[T] {
             let new_ptr: Ptr[ArcInner[T]] = raw as Ptr[ArcInner[T]]
 
             // Initialize new inner with strong=1, weak=1
-            (*new_ptr).strong = AtomicU64::new(1)
-            (*new_ptr).weak = AtomicU64::new(1)
+            (*new_ptr).strong = AtomicUsize::new(1)
+            (*new_ptr).weak = AtomicUsize::new(1)
             (*new_ptr).data = old_data
 
             // Replace our pointer

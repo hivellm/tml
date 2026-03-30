@@ -150,7 +150,15 @@ std::any provide_tokenize(QueryContext& ctx, const QueryKey& key) {
 
     if (lex.has_errors()) {
         for (const auto& err : lex.errors()) {
-            result.errors.push_back(err.message);
+            std::string fmt;
+            if (err.span.start.line > 0) {
+                fmt = std::string(err.span.start.file) + ":" + std::to_string(err.span.start.line) +
+                      ":" + std::to_string(err.span.start.column) + ": ";
+            }
+            if (!err.code.empty())
+                fmt += "[" + err.code + "] ";
+            fmt += err.message;
+            result.errors.push_back(std::move(fmt));
         }
         return result;
     }
@@ -185,7 +193,17 @@ std::any provide_parse_module(QueryContext& ctx, const QueryKey& key) {
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& err : errors) {
-            result.errors.push_back(err.message);
+            std::string fmt;
+            if (err.span.start.line > 0) {
+                fmt = std::string(err.span.start.file) + ":" + std::to_string(err.span.start.line) +
+                      ":" + std::to_string(err.span.start.column) + ": ";
+            }
+            if (!err.code.empty())
+                fmt += "[" + err.code + "] ";
+            fmt += err.message;
+            for (const auto& note : err.notes)
+                fmt += "\n  note: " + note;
+            result.errors.push_back(std::move(fmt));
         }
         return result;
     }
@@ -236,7 +254,19 @@ std::any provide_typecheck_module(QueryContext& ctx, const QueryKey& key) {
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& err : errors) {
-            result.errors.push_back(err.message);
+            if (err.is_cascading)
+                continue; // suppress redundant follow-on errors
+            std::string fmt;
+            if (err.span.start.line > 0) {
+                fmt = std::string(err.span.start.file) + ":" + std::to_string(err.span.start.line) +
+                      ":" + std::to_string(err.span.start.column) + ": ";
+            }
+            if (!err.code.empty())
+                fmt += "[" + err.code + "] ";
+            fmt += err.message;
+            for (const auto& note : err.notes)
+                fmt += "\n  note: " + note;
+            result.errors.push_back(std::move(fmt));
         }
         return result;
     }

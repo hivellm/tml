@@ -182,22 +182,22 @@ impl[T: Ord] MutSlice[T] {
 
     /// Sift down element at index idx in a max-heap of size heap_size.
     /// All indices are relative to base offset in the slice.
-    func sift_down(mut this, base: I64, idx: I64, heap_size: I64) {
+    func sift_down(mut this, base_off: I64, idx: I64, heap_size: I64) {
         let mut root: I64 = idx
         loop (2 * root + 1 < heap_size) {
             let left: I64 = 2 * root + 1
             let right: I64 = left + 1
             let mut largest: I64 = root
 
-            let largest_ref: ref T = this.get(base + largest).unwrap()
-            let left_ref: ref T = this.get(base + left).unwrap()
+            let largest_ref: ref T = this.get(base_off + largest).unwrap()
+            let left_ref: ref T = this.get(base_off + left).unwrap()
             if left_ref.gt(largest_ref) {
                 largest = left
             }
 
             if right < heap_size {
-                let largest_ref2: ref T = this.get(base + largest).unwrap()
-                let right_ref: ref T = this.get(base + right).unwrap()
+                let largest_ref2: ref T = this.get(base_off + largest).unwrap()
+                let right_ref: ref T = this.get(base_off + right).unwrap()
                 if right_ref.gt(largest_ref2) {
                     largest = right
                 }
@@ -206,7 +206,7 @@ impl[T: Ord] MutSlice[T] {
             if largest == root {
                 return
             }
-            this.swap(base + root, base + largest)
+            this.swap(base_off + root, base_off + largest)
             root = largest
         }
     }
@@ -363,23 +363,23 @@ impl[T] MutSlice[T] {
     }
 
     /// Sift down with custom comparison.
-    func sift_down_by(mut this, base: I64, idx: I64, heap_size: I64, compare: func(ref T, ref T) -> Ordering) {
+    func sift_down_by(mut this, base_off: I64, idx: I64, heap_size: I64, compare: func(ref T, ref T) -> Ordering) {
         let mut root: I64 = idx
         loop (2 * root + 1 < heap_size) {
             let left: I64 = 2 * root + 1
             let right: I64 = left + 1
             let mut largest: I64 = root
 
-            let largest_ref: ref T = this.get(base + largest).unwrap()
-            let left_ref: ref T = this.get(base + left).unwrap()
+            let largest_ref: ref T = this.get(base_off + largest).unwrap()
+            let left_ref: ref T = this.get(base_off + left).unwrap()
             when compare(left_ref, largest_ref) {
                 Greater => { largest = left },
                 _ => {}
             }
 
             if right < heap_size {
-                let largest_ref2: ref T = this.get(base + largest).unwrap()
-                let right_ref: ref T = this.get(base + right).unwrap()
+                let largest_ref2: ref T = this.get(base_off + largest).unwrap()
+                let right_ref: ref T = this.get(base_off + right).unwrap()
                 when compare(right_ref, largest_ref2) {
                     Greater => { largest = right },
                     _ => {}
@@ -389,7 +389,7 @@ impl[T] MutSlice[T] {
             if largest == root {
                 return
             }
-            this.swap(base + root, base + largest)
+            this.swap(base_off + root, base_off + largest)
             root = largest
         }
     }

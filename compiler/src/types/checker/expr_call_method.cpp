@@ -77,8 +77,9 @@ static std::string primitive_to_string(PrimitiveKind kind) {
 static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_type,
                                 const std::vector<std::string>& type_params,
                                 std::unordered_map<std::string, TypePtr>& substitutions) {
-    if (!param_type || !arg_type)
+    if (!param_type || !arg_type) {
         return;
+    }
 
     // If param_type is a NamedType that matches a type parameter directly
     if (param_type->is<NamedType>()) {
@@ -203,34 +204,48 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         if (is_primitive_type && call.method == "default") {
             // Return the primitive type itself
-            if (type_name == "I8")
+            if (type_name == "I8") {
                 return make_primitive(PrimitiveKind::I8);
-            if (type_name == "I16")
+            }
+            if (type_name == "I16") {
                 return make_primitive(PrimitiveKind::I16);
-            if (type_name == "I32")
+            }
+            if (type_name == "I32") {
                 return make_primitive(PrimitiveKind::I32);
-            if (type_name == "I64")
+            }
+            if (type_name == "I64") {
                 return make_primitive(PrimitiveKind::I64);
-            if (type_name == "I128")
+            }
+            if (type_name == "I128") {
                 return make_primitive(PrimitiveKind::I128);
-            if (type_name == "U8")
+            }
+            if (type_name == "U8") {
                 return make_primitive(PrimitiveKind::U8);
-            if (type_name == "U16")
+            }
+            if (type_name == "U16") {
                 return make_primitive(PrimitiveKind::U16);
-            if (type_name == "U32")
+            }
+            if (type_name == "U32") {
                 return make_primitive(PrimitiveKind::U32);
-            if (type_name == "U64")
+            }
+            if (type_name == "U64") {
                 return make_primitive(PrimitiveKind::U64);
-            if (type_name == "U128")
+            }
+            if (type_name == "U128") {
                 return make_primitive(PrimitiveKind::U128);
-            if (type_name == "F32")
+            }
+            if (type_name == "F32") {
                 return make_primitive(PrimitiveKind::F32);
-            if (type_name == "F64")
+            }
+            if (type_name == "F64") {
                 return make_primitive(PrimitiveKind::F64);
-            if (type_name == "Bool")
+            }
+            if (type_name == "Bool") {
                 return make_primitive(PrimitiveKind::Bool);
-            if (type_name == "Str")
+            }
+            if (type_name == "Str") {
                 return make_primitive(PrimitiveKind::Str);
+            }
         }
 
         // Check for static method calls on class types (e.g., Counter.get_count())
@@ -406,10 +421,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         break;
                     }
                     // NamedType patterns are specialized only when they contain
-                    // MULTIPLE distinct type params (e.g., Outcome[T,E] in
-                    // impl[T,E] Outcome[Outcome[T,E], E]). A NamedType with a
-                    // single type param like Maybe[T] in impl[T] Maybe[Maybe[T]]
-                    // should use positional mapping (T → Maybe[I32], not T → I32).
+                    // NamedType patterns with type args containing impl type
+                    // params are specialized (e.g., Heap[T] in impl[T] Pin[Heap[T]],
+                    // Maybe[T] in impl[T] Maybe[Maybe[T]], Outcome[T,E] in
+                    // impl[T,E] Outcome[Outcome[T,E], E]). Pattern-based extraction
+                    // correctly decomposes the concrete type args to extract T.
                     if (sta->is<NamedType>()) {
                         const auto& sta_named = sta->as<NamedType>();
                         if (!sta_named.type_args.empty()) {
@@ -436,7 +452,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                             };
                             for (const auto& ta : sta_named.type_args)
                                 collect_params(ta);
-                            if (params_in_arg.size() > 1) {
+                            if (params_in_arg.size() >= 1) {
                                 has_specialized_patterns = true;
                                 break;
                             }
@@ -461,12 +477,45 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             }
         };
 
+        // For types with multiple specialized impls (e.g., Pin[ref T] and
+        // Pin[Heap[T]] both defining get_ref), try a discriminated key first.
+        // The key format is "Type[discriminator]::method", where the discriminator
+        // is extracted from the receiver's first type arg's structural wrapper.
+        if (!named.type_args.empty()) {
+            std::string discriminator;
+            for (const auto& ta : named.type_args) {
+                if (ta->is<NamedType>()) {
+                    discriminator = ta->as<NamedType>().name;
+                    break;
+                } else if (ta->is<RefType>()) {
+                    discriminator = ta->as<RefType>().is_mut ? "mut_ref" : "ref";
+                    break;
+                }
+            }
+            if (!discriminator.empty()) {
+                std::string spec_qualified = named.name + "[" + discriminator + "]::" + call.method;
+                auto spec_func = env_.lookup_func(spec_qualified);
+                if (spec_func && !spec_func->type_params.empty()) {
+                    std::unordered_map<std::string, TypePtr> subs;
+                    build_receiver_subs(*spec_func, subs);
+                    for (size_t i = 0; i < call.args.size() && i + 1 < spec_func->params.size();
+                         ++i) {
+                        TypePtr arg_type = check_expr(*call.args[i]);
+                        TypePtr param_type = spec_func->params[i + 1];
+                        extract_type_params(param_type, arg_type, spec_func->type_params, subs);
+                    }
+                    return substitute_type(spec_func->return_type, subs);
+                }
+            }
+        }
+
         auto func = env_.lookup_func(qualified);
         if (func) {
             // For generic impl methods, substitute type parameters from:
             // 1. The receiver's type arguments (e.g., T, E from Outcome[T, E])
             // 2. Inferred from function arguments (e.g., U in map_or[U])
             if (call.type_args.empty() && !func->type_params.empty()) {
+                // Fallback: use the first overload (original behavior)
                 std::unordered_map<std::string, TypePtr> subs;
 
                 // First, substitute from receiver's type_args
@@ -534,8 +583,33 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         // E.g., `impl PartialEq for List[T]` in std::collections::behaviors
         // while List is defined in std::collections::list
         {
+            // Build a specialized key for discriminated lookup (same format as above)
+            std::string spec_key;
+            if (!named.type_args.empty()) {
+                std::string disc;
+                for (const auto& ta : named.type_args) {
+                    if (ta->is<NamedType>()) {
+                        disc = ta->as<NamedType>().name;
+                        break;
+                    } else if (ta->is<RefType>()) {
+                        disc = ta->as<RefType>().is_mut ? "mut_ref" : "ref";
+                        break;
+                    }
+                }
+                if (!disc.empty()) {
+                    spec_key = named.name + "[" + disc + "]::" + call.method;
+                }
+            }
+
             auto all_modules = env_.get_all_modules();
             for (const auto& [mod_path, mod] : all_modules) {
+                // Try specialized key first to avoid name collisions
+                if (!spec_key.empty()) {
+                    auto func_it = mod.functions.find(spec_key);
+                    if (func_it != mod.functions.end()) {
+                        return apply_with_receiver_type_args(func_it->second);
+                    }
+                }
                 auto func_it = mod.functions.find(qualified);
                 if (func_it != mod.functions.end()) {
                     return apply_with_receiver_type_args(func_it->second);
@@ -544,6 +618,12 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             // Also search GlobalModuleCache for modules not yet loaded
             // into the local registry (e.g., sibling submodules)
             for (const auto& [mod_path, mod] : GlobalModuleCache::instance().get_all()) {
+                if (!spec_key.empty()) {
+                    auto func_it = mod.functions.find(spec_key);
+                    if (func_it != mod.functions.end()) {
+                        return apply_with_receiver_type_args(func_it->second);
+                    }
+                }
                 auto func_it = mod.functions.find(qualified);
                 if (func_it != mod.functions.end()) {
                     return apply_with_receiver_type_args(func_it->second);

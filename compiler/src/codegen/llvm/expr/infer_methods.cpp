@@ -18,6 +18,41 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Helper: Substitute inner type params in an associated type returned by lookup_associated_type.
+// For generic iterators like SliceIter[I32], lookup_associated_type("SliceIter", "Item")
+// returns the abstract form (ref T). This function substitutes T=I32 to get ref I32.
+static types::TypePtr substitute_inner_assoc_type(types::TypePtr item_type,
+                                                  const types::NamedType& arg_named,
+                                                  const types::TypeEnv& env) {
+    if (!item_type || arg_named.type_args.empty()) {
+        return item_type;
+    }
+    std::vector<std::string> inner_params;
+    auto inner_struct = env.lookup_struct(arg_named.name);
+    if (inner_struct.has_value()) {
+        inner_params = inner_struct->type_params;
+    } else if (env.module_registry()) {
+        for (const auto& [mn, m] : env.module_registry()->get_all_modules()) {
+            auto sit = m.structs.find(arg_named.name);
+            if (sit != m.structs.end()) {
+                inner_params = sit->second.type_params;
+                break;
+            }
+        }
+    }
+    if (inner_params.empty()) {
+        return item_type;
+    }
+    std::unordered_map<std::string, types::TypePtr> inner_subs;
+    for (size_t j = 0; j < inner_params.size() && j < arg_named.type_args.size(); ++j) {
+        inner_subs[inner_params[j]] = arg_named.type_args[j];
+    }
+    if (!inner_subs.empty()) {
+        item_type = types::substitute_type(item_type, inner_subs);
+    }
+    return item_type;
+}
+
 // Helper: Recursively match a parser type pattern against a concrete semantic type
 // to extract type parameter bindings for where-clause resolution in type inference.
 // For example: where F = func() -> T, with F -> func()->I32 derives T -> I32.
@@ -78,29 +113,93 @@ static void infer_match_where_pattern(const parser::Type& pattern, const types::
     }
 }
 
+// Helper: Extract return type and params from a semantic type that may be FuncType or ClosureType.
+static bool infer_extract_func_signature(const types::TypePtr& type, types::TypePtr& ret,
+                                         std::vector<types::TypePtr>& params) {
+    if (type->is<types::FuncType>()) {
+        const auto& func = type->as<types::FuncType>();
+        ret = func.return_type;
+        params = func.params;
+        return true;
+    }
+    if (type->is<types::ClosureType>()) {
+        const auto& clos = type->as<types::ClosureType>();
+        ret = clos.return_type;
+        params = clos.params;
+        return true;
+    }
+    return false;
+}
+
 // Helper: Resolve where clause type equalities to derive additional type substitutions
 // for type inference. Mirrors resolve_impl_where_clause in method_impl.cpp.
+//
+// Handles three patterns:
+// 1. `where F = func() -> T` — simple type param → function type equality
+// 2. `where I::Item = ref T` — associated type path equality
+// 3. `where F = func(I::Item) -> Maybe[B]` — function with associated type params
 static void infer_resolve_where_clause(const parser::WhereClause& where_clause,
                                        std::unordered_map<std::string, types::TypePtr>& type_subs) {
     for (const auto& [lhs, rhs] : where_clause.type_equalities) {
-        if (!lhs || !rhs || !lhs->is<parser::NamedType>())
+        if (!lhs || !rhs || !lhs->is<parser::NamedType>()) {
             continue;
-        const auto& lhs_name = lhs->as<parser::NamedType>().path.segments.back();
-        auto sub_it = type_subs.find(lhs_name);
-        if (sub_it == type_subs.end() || !sub_it->second)
+        }
+        const auto& lhs_named = lhs->as<parser::NamedType>();
+        const auto& segments = lhs_named.path.segments;
+        if (segments.empty()) {
             continue;
-        const auto& concrete = sub_it->second;
-        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
-            const auto& pat = rhs->as<parser::FuncType>();
-            const auto& con = concrete->as<types::FuncType>();
-            if (pat.return_type && con.return_type) {
-                infer_match_where_pattern(*pat.return_type, con.return_type, type_subs);
+        }
+
+        // Case 1: Associated type path (2+ segments), e.g., `I::Item = ref T`
+        if (segments.size() >= 2) {
+            const std::string& type_param = segments[0];
+            const std::string& assoc_name = segments[1];
+            auto param_it = type_subs.find(type_param);
+            if (param_it == type_subs.end() || !param_it->second) {
+                continue;
             }
-            for (size_t pi = 0; pi < pat.params.size() && pi < con.params.size(); ++pi) {
-                if (pat.params[pi] && con.params[pi]) {
-                    infer_match_where_pattern(*pat.params[pi], con.params[pi], type_subs);
+            std::string assoc_key = type_param + "::" + assoc_name;
+            auto assoc_it = type_subs.find(assoc_key);
+            if (assoc_it != type_subs.end() && assoc_it->second) {
+                infer_match_where_pattern(*rhs, assoc_it->second, type_subs);
+            }
+            continue;
+        }
+
+        // Case 2: Simple type param (1 segment), e.g., `F = func() -> T`
+        const std::string& lhs_name = segments.back();
+        auto sub_it = type_subs.find(lhs_name);
+        if (sub_it == type_subs.end() || !sub_it->second) {
+            continue;
+        }
+        const auto& concrete = sub_it->second;
+
+        // Match against FuncType pattern on the RHS
+        if (rhs->is<parser::FuncType>()) {
+            types::TypePtr con_ret;
+            std::vector<types::TypePtr> con_params;
+            if (infer_extract_func_signature(concrete, con_ret, con_params)) {
+                const auto& pat = rhs->as<parser::FuncType>();
+                if (pat.return_type && con_ret) {
+                    infer_match_where_pattern(*pat.return_type, con_ret, type_subs);
+                }
+                for (size_t pi = 0; pi < pat.params.size() && pi < con_params.size(); ++pi) {
+                    if (pat.params[pi] && con_params[pi]) {
+                        // Skip associated type paths in params (e.g., I::Item)
+                        if (pat.params[pi]->is<parser::NamedType>()) {
+                            const auto& param_named = pat.params[pi]->as<parser::NamedType>();
+                            if (param_named.path.segments.size() >= 2) {
+                                continue;
+                            }
+                        }
+                        infer_match_where_pattern(*pat.params[pi], con_params[pi], type_subs);
+                    }
                 }
             }
+        }
+        // Match against non-function RHS (e.g., `where T = SomeType`)
+        else {
+            infer_match_where_pattern(*rhs, concrete, type_subs);
         }
     }
 }
@@ -457,13 +556,26 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
             std::unordered_map<std::string, types::TypePtr> type_subs;
             std::vector<std::string> type_param_names;
             if (!named.type_args.empty()) {
-                // Look up the struct/impl to get generic parameter names
+                // Look up the struct/impl to get generic parameter names.
+                // Use pending_generic_impls_all_ to find the impl with the most matching
+                // generics, since types like Cloned have impl[I,T] Iterator (2 params)
+                // AND impl[I] Sync (1 param). pending_generic_impls_ stores only the LAST.
                 auto impl_it = pending_generic_impls_.find(named.name);
                 if (impl_it != pending_generic_impls_.end()) {
-                    for (size_t i = 0;
-                         i < impl_it->second->generics.size() && i < named.type_args.size(); ++i) {
-                        type_subs[impl_it->second->generics[i].name] = named.type_args[i];
-                        type_param_names.push_back(impl_it->second->generics[i].name);
+                    const parser::ImplDecl* best_impl = impl_it->second;
+                    auto all_impl_it = pending_generic_impls_all_.find(named.name);
+                    if (all_impl_it != pending_generic_impls_all_.end()) {
+                        for (const auto* candidate : all_impl_it->second) {
+                            if (candidate->generics.size() > best_impl->generics.size() &&
+                                candidate->generics.size() <= named.type_args.size()) {
+                                best_impl = candidate;
+                            }
+                        }
+                    }
+                    for (size_t i = 0; i < best_impl->generics.size() && i < named.type_args.size();
+                         ++i) {
+                        type_subs[best_impl->generics[i].name] = named.type_args[i];
+                        type_param_names.push_back(best_impl->generics[i].name);
                     }
                 } else if (env_.module_registry()) {
                     // Check imported structs for type params
@@ -489,15 +601,17 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
                     }
                 }
 
-                // Also add associated type mappings (e.g., I::Item -> I64)
+                // Also add associated type mappings (e.g., I::Item -> ref I32)
+                // For generic iterator types like SliceIter[I32], lookup_associated_type
+                // may return the abstract form (e.g., ref T). We need to substitute
+                // the inner type's type params to get the concrete associated type.
                 for (size_t i = 0; i < type_param_names.size() && i < named.type_args.size(); ++i) {
                     const auto& arg = named.type_args[i];
                     if (arg && arg->is<types::NamedType>()) {
                         const auto& arg_named = arg->as<types::NamedType>();
-                        // Look up Item associated type for this concrete type
                         auto item_type = lookup_associated_type(arg_named.name, "Item");
+                        item_type = substitute_inner_assoc_type(item_type, arg_named, env_);
                         if (item_type) {
-                            // Map both "I::Item" and "Item" to the concrete type
                             std::string assoc_key = type_param_names[i] + "::Item";
                             type_subs[assoc_key] = item_type;
                             type_subs["Item"] = item_type;
@@ -509,12 +623,17 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
             // Resolve where clause type equalities to derive additional type subs.
             // For example: `impl[F, T] Iterator for RepeatWith[F] where F = func() -> T`
             // With F already mapped to func() -> I32, this derives T -> I32.
+            // IMPORTANT: Use pending_generic_impls_all_ (NOT pending_generic_impls_) because
+            // pending_generic_impls_ only stores the LAST registered impl per type.
+            // Types like RepeatWith have multiple impls (Iterator, Send, Sync), and the
+            // where clause may be on any of them — not necessarily the last one.
             {
-                auto local_impl_it = pending_generic_impls_.find(named.name);
-                if (local_impl_it != pending_generic_impls_.end()) {
-                    const auto& local_impl = *local_impl_it->second;
-                    if (local_impl.where_clause) {
-                        infer_resolve_where_clause(*local_impl.where_clause, type_subs);
+                auto all_impl_it = pending_generic_impls_all_.find(named.name);
+                if (all_impl_it != pending_generic_impls_all_.end()) {
+                    for (const auto* local_impl : all_impl_it->second) {
+                        if (local_impl->where_clause) {
+                            infer_resolve_where_clause(*local_impl->where_clause, type_subs);
+                        }
                     }
                 } else if (env_.module_registry()) {
                     // For imported types, search module source for impl with where clause

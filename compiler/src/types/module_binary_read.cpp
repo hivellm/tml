@@ -24,6 +24,32 @@ namespace tml::types {
 
 namespace fs = std::filesystem;
 
+#ifdef _WIN32
+// On Windows (NTFS), fs::exists() is case-insensitive. This function verifies
+// that the filename component of a path matches case-sensitively. Without this,
+// "List.tml.meta" would match "list.tml.meta", causing module path confusion
+// where "std::collections::List" loads the list submodule instead of forcing
+// the fallback to the parent "std::collections" module.
+static bool exists_case_sensitive(const fs::path& path) {
+    if (!fs::exists(path))
+        return false;
+    // Check filename matches exactly
+    std::string expected = path.filename().string();
+    auto parent = path.parent_path();
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(parent, ec)) {
+        if (entry.path().filename().string() == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+#else
+static bool exists_case_sensitive(const fs::path& path) {
+    return fs::exists(path);
+}
+#endif
+
 // ============================================================================
 // Type Deserialization (string -> TypePtr)
 // ============================================================================
@@ -836,7 +862,7 @@ std::optional<Module> load_module_from_cache(const std::string& module_path,
     auto build_root = find_build_root();
     auto cache_path = get_module_cache_path(module_path, build_root);
 
-    if (!fs::exists(cache_path)) {
+    if (!exists_case_sensitive(cache_path)) {
         return std::nullopt;
     }
 
@@ -880,7 +906,7 @@ std::optional<Module> load_module_from_cache(const std::string& module_path) {
     auto build_root = find_build_root();
     auto cache_path = get_module_cache_path(module_path, build_root);
 
-    if (!fs::exists(cache_path)) {
+    if (!exists_case_sensitive(cache_path)) {
         return std::nullopt;
     }
 

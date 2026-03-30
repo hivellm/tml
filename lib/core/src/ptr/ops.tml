@@ -89,21 +89,21 @@ pub func align_of_val[T](val: ref T) -> I64 {
 /// # Note
 ///
 /// Returns 0 if `T` is a zero-sized type.
-pub func ptr_distance[T](start: RawPtr[T], end: RawPtr[T]) -> I64 {
+pub func ptr_distance[T](start: RawPtr[T], end_ptr: RawPtr[T]) -> I64 {
     let element_size: I64 = size_of[T]()
     if element_size == 0 {
         return 0
     }
-    return (end.addr() - start.addr()) / element_size
+    return (end_ptr.addr - start.addr) / element_size
 }
 
 /// Calculates the distance between two mutable pointers in elements.
-pub func ptr_distance_mut[T](start: RawMutPtr[T], end: RawMutPtr[T]) -> I64 {
+pub func ptr_distance_mut[T](start: RawMutPtr[T], end_ptr: RawMutPtr[T]) -> I64 {
     let element_size: I64 = size_of[T]()
     if element_size == 0 {
         return 0
     }
-    return (end.addr() - start.addr()) / element_size
+    return (end_ptr.addr - start.addr) / element_size
 }
 
 // ============================================================================
@@ -489,10 +489,10 @@ pub func from_addr_mut[T](addr: I64) -> RawMutPtr[T] {
 /// assert(eq(a, b))
 /// ```
 pub func eq[T](a: RawPtr[T], b: RawPtr[T]) -> Bool {
-    return a.addr() == b.addr()
+    return a.addr == b.addr
 }
 
 /// Returns `true` if two mutable pointers point to the same address.
 pub func eq_mut[T](a: RawMutPtr[T], b: RawMutPtr[T]) -> Bool {
-    return a.addr() == b.addr()
+    return a.addr == b.addr
 }

@@ -131,8 +131,9 @@ static constexpr size_t MAX_STACK_CLASS_SIZE = 256;
 /// Estimate the size of a type in bytes (for stack allocation eligibility).
 /// Returns 0 for unsized types (slices, dyn, etc.).
 static size_t estimate_type_size(const TypePtr& type) {
-    if (!type)
+    if (!type) {
         return 8; // Default pointer size
+    }
 
     return std::visit(
         [](const auto& kind) -> size_t {
@@ -160,19 +161,15 @@ static size_t estimate_type_size(const TypePtr& type) {
                 case PrimitiveKind::U128:
                     return 16;
                 case PrimitiveKind::Unit:
-                    return 0;
                 case PrimitiveKind::Never:
                     return 0;
                 case PrimitiveKind::Str:
                     return 24; // Str is typically ptr + len + capacity
                 }
                 return 8; // Default for any unknown primitives
-            } else if constexpr (std::is_same_v<T, PtrType> || std::is_same_v<T, RefType>) {
-                return 8; // Pointer size
-            } else if constexpr (std::is_same_v<T, ClassType>) {
-                return 8; // Class instances are stored by reference (pointer)
-            } else if constexpr (std::is_same_v<T, NamedType>) {
-                return 8; // Conservative estimate - actual size computed during codegen
+            } else if constexpr (std::is_same_v<T, PtrType> || std::is_same_v<T, RefType> ||
+                                 std::is_same_v<T, ClassType> || std::is_same_v<T, NamedType>) {
+                return 8; // Pointer-sized (actual size computed during codegen for NamedType)
             } else if constexpr (std::is_same_v<T, TupleType>) {
                 size_t total = 0;
                 for (const auto& elem : kind.elements) {
@@ -346,7 +343,7 @@ void TypeChecker::register_namespace_decl(const parser::NamespaceDecl& decl) {
 
 void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
     // Check if the behavior name is reserved (builtin behavior)
-    if (RESERVED_BEHAVIOR_NAMES.count(decl.name) > 0) {
+    if (RESERVED_BEHAVIOR_NAMES.contains(decl.name)) {
         error("Cannot redefine builtin behavior '" + decl.name +
                   "'. Use the builtin behavior instead of defining your own.",
               decl.span, "T038");
@@ -358,6 +355,7 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
     for (const auto& method : decl.methods) {
         std::vector<TypePtr> params;
+        params.reserve(method.params.size());
         for (const auto& p : method.params) {
             params.push_back(resolve_type(*p.type));
         }
@@ -458,7 +456,7 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
 void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
     // Check if the type alias name is reserved (builtin type)
-    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+    if (RESERVED_TYPE_NAMES.contains(decl.name)) {
         error("Cannot redefine builtin type '" + decl.name +
                   "'. Use the builtin type instead of defining your own.",
               decl.span, "T038");
@@ -466,6 +464,7 @@ void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
     }
 
     std::vector<std::string> generic_params;
+    generic_params.reserve(decl.generics.size());
     for (const auto& gp : decl.generics) {
         generic_params.push_back(gp.name);
     }
@@ -480,8 +479,9 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     // Build module path from segments
     std::string module_path;
     for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
-        if (i > 0)
+        if (i > 0) {
             module_path += "::";
+        }
         module_path += use_decl.path.segments[i];
     }
 
@@ -531,8 +531,9 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
                             break;
                         }
                     }
-                    if (needs_load)
+                    if (needs_load) {
                         break;
+                    }
                 }
             }
             if (needs_load) {
@@ -556,8 +557,9 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         // Try module path without last segment
         std::string base_module_path;
         for (size_t i = 0; i < use_decl.path.segments.size() - 1; ++i) {
-            if (i > 0)
+            if (i > 0) {
                 base_module_path += "::";
+            }
             base_module_path += use_decl.path.segments[i];
         }
 
@@ -1025,8 +1027,34 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     // so that method lookup works (Container::get, not Container[T]::get)
     auto resolved_self = resolve_type(*impl.self_type);
     std::string type_name;
+    std::string specialized_type_name; // Discriminated key for specialized impls
     if (resolved_self->is<NamedType>()) {
-        type_name = resolved_self->as<NamedType>().name;
+        const auto& named_self = resolved_self->as<NamedType>();
+        type_name = named_self.name;
+        // For specialized impls like impl[T] Pin[Heap[T]], build a discriminated
+        // key (e.g., "Pin[Heap]") to avoid collisions with other impls on the
+        // same base type (e.g., impl[T] Pin[ref T] → "Pin[ref]").
+        // The discriminator is the first non-bare-param type arg's wrapper name.
+        if (!named_self.type_args.empty() && !impl.generics.empty()) {
+            std::set<std::string> impl_params;
+            for (const auto& gp : impl.generics) {
+                impl_params.insert(gp.name);
+            }
+            for (const auto& ta : named_self.type_args) {
+                if (ta->is<NamedType>()) {
+                    const auto& n = ta->as<NamedType>();
+                    if (impl_params.count(n.name) && n.type_args.empty()) {
+                        continue; // Bare type param
+                    }
+                    specialized_type_name = type_name + "[" + n.name + "]";
+                    break;
+                } else if (ta->is<RefType>()) {
+                    const auto& r = ta->as<RefType>();
+                    specialized_type_name = type_name + "[" + (r.is_mut ? "mut_ref" : "ref") + "]";
+                    break;
+                }
+            }
+        }
     } else {
         type_name = type_to_string(resolved_self);
     }
@@ -1085,6 +1113,7 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     for (const auto& method : impl.methods) {
         std::string qualified_name = type_name + "::" + method.name;
         std::vector<TypePtr> params;
+        params.reserve(method.params.size());
         for (const auto& p : method.params) {
             params.push_back(resolve_type(*p.type));
         }
@@ -1098,12 +1127,26 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         }
 
         env_.define_func(FuncSig{.name = qualified_name,
-                                 .params = std::move(params),
-                                 .return_type = std::move(ret),
+                                 .params = params,
+                                 .return_type = ret,
                                  .type_params = method_type_params,
                                  .is_async = method.is_async,
                                  .span = method.span,
                                  .impl_self_type_args = impl_self_type_args});
+
+        // For specialized impls (e.g., impl[T] Pin[Heap[T]]), also register
+        // under the full type string key to avoid collision with other impls
+        // on the same base type. The call site will try the specialized key first.
+        if (!specialized_type_name.empty()) {
+            std::string spec_qualified = specialized_type_name + "::" + method.name;
+            env_.define_func(FuncSig{.name = spec_qualified,
+                                     .params = std::move(params),
+                                     .return_type = std::move(ret),
+                                     .type_params = method_type_params,
+                                     .is_async = method.is_async,
+                                     .span = method.span,
+                                     .impl_self_type_args = impl_self_type_args});
+        }
     }
 
     // Register default implementations from the behavior

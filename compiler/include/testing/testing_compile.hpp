@@ -44,6 +44,7 @@ struct CompileConfig {
     bool verbose = false;
     bool coverage = false;
     bool no_cache = false;
+    bool fail_fast = false; ///< Stop immediately on first compile error
     int optimization_level = 0;
     int num_threads = 0; ///< Parallel compile workers (0 = auto)
 };

@@ -111,6 +111,7 @@ option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(TML_ENABLE_LSAN "Enable LeakSanitizer (Linux/macOS only)" OFF)
 option(TML_ENABLE_MSAN "Enable MemorySanitizer (Linux Clang only)" OFF)
 option(TML_BUILD_MODULAR "Build as modular plugins (DLLs) instead of monolithic exe" ON)
+option(TML_REQUIRE_OPENSSL "Require OpenSSL (set OFF for CI without crypto)" ON)
 option(TML_BUILD_BENCH "Build SIMD benchmark harness" OFF)
 option(TML_PROFILE "Enable Tracy profiler integration" OFF)
 
@@ -445,10 +446,15 @@ if(NOT TML_OPENSSL_FOUND AND NOT WIN32)
     endif()
 endif()
 
-# OpenSSL is required - all crypto stubs have been removed
+# OpenSSL is required unless explicitly disabled for CI
 if(NOT TML_OPENSSL_FOUND)
-    message(FATAL_ERROR "OpenSSL not found. OpenSSL is required for TML crypto runtime. "
-        "Install OpenSSL via vcpkg (vcpkg install openssl:x64-windows) or system package manager.")
+    if(TML_REQUIRE_OPENSSL)
+        message(FATAL_ERROR "OpenSSL not found. OpenSSL is required for TML crypto runtime. "
+            "Install OpenSSL via vcpkg (vcpkg install openssl:x64-windows) or system package manager. "
+            "Or pass -DTML_REQUIRE_OPENSSL=OFF to build without crypto support.")
+    else()
+        message(WARNING "OpenSSL not found - crypto runtime disabled.")
+    endif()
 endif()
 
 # Tracy profiler client library (only built when TML_PROFILE=ON)

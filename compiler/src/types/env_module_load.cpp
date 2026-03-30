@@ -43,8 +43,9 @@ TML_MODULE("compiler")
 namespace tml::types {
 
 static std::string get_tml_type_name(const parser::TypePtr& type) {
-    if (!type)
+    if (!type) {
         return "I64"; // Default fallback
+    }
 
     if (type->is<parser::NamedType>()) {
         const auto& named = type->as<parser::NamedType>();
@@ -53,12 +54,14 @@ static std::string get_tml_type_name(const parser::TypePtr& type) {
         }
     } else if (type->is<parser::TupleType>()) {
         const auto& tuple = type->as<parser::TupleType>();
-        if (tuple.elements.empty())
+        if (tuple.elements.empty()) {
             return "()";
+        }
         std::string result = "(";
         for (size_t i = 0; i < tuple.elements.size(); ++i) {
-            if (i > 0)
+            if (i > 0) {
                 result += ", ";
+            }
             result += get_tml_type_name(tuple.elements[i]);
         }
         result += ")";
@@ -83,8 +86,9 @@ static std::string format_float_const(double val) {
 }
 
 static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
-    if (!expr)
+    if (expr == nullptr) {
         return "";
+    }
     if (expr->is<parser::CastExpr>()) {
         const auto& cast = expr->as<parser::CastExpr>();
         if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
@@ -93,10 +97,12 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
             const auto& unary = cast.expr->as<parser::UnaryExpr>();
             if (unary.op == parser::UnaryOp::Neg && unary.operand->is<parser::LiteralExpr>()) {
                 const auto& lit = unary.operand->as<parser::LiteralExpr>();
-                if (lit.token.kind == lexer::TokenKind::IntLiteral)
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
-                if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+                }
+                if (lit.token.kind == lexer::TokenKind::FloatLiteral) {
                     return format_float_const(-lit.token.float_value().value);
+                }
             }
             return "";
         } else {
@@ -107,19 +113,23 @@ static std::string try_extract_scalar_const_value(const parser::Expr* expr) {
         const auto& unary = expr->as<parser::UnaryExpr>();
         if (unary.op == parser::UnaryOp::Neg && unary.operand->is<parser::LiteralExpr>()) {
             const auto& lit = unary.operand->as<parser::LiteralExpr>();
-            if (lit.token.kind == lexer::TokenKind::IntLiteral)
+            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                 return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
-            if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+            }
+            if (lit.token.kind == lexer::TokenKind::FloatLiteral) {
                 return format_float_const(-lit.token.float_value().value);
+            }
         }
         if (unary.operand && unary.operand->is<parser::CastExpr>()) {
             const auto& cast = unary.operand->as<parser::CastExpr>();
             if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
                 const auto& lit = cast.expr->as<parser::LiteralExpr>();
-                if (lit.token.kind == lexer::TokenKind::IntLiteral)
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     return std::to_string(-static_cast<int64_t>(lit.token.int_value().value));
-                if (lit.token.kind == lexer::TokenKind::FloatLiteral)
+                }
+                if (lit.token.kind == lexer::TokenKind::FloatLiteral) {
                     return format_float_const(-lit.token.float_value().value);
+                }
             }
         }
         return "";
@@ -825,6 +835,41 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     // Create qualified function name: Type::method
                     std::string qualified_name = type_name + "::" + func.name;
 
+                    // For specialized impls (e.g., impl[T] Pin[Heap[T]]), build a
+                    // discriminated key to avoid name collisions with other impls
+                    // on the same base type (e.g., impl[T] Pin[ref T]).
+                    // The discriminator is extracted from the first non-bare-param
+                    // type arg: Heap[T]→"Heap", ref T→"ref", mut ref T→"mut_ref".
+                    std::string spec_qualified_name;
+                    if (!impl_self_type_args.empty()) {
+                        // Collect impl generic param names
+                        std::set<std::string> impl_params;
+                        for (const auto& gp : impl_decl.generics) {
+                            impl_params.insert(gp.name);
+                        }
+                        // Check if any type arg is specialized (not a bare param)
+                        std::string discriminator;
+                        for (const auto& arg : impl_self_type_args) {
+                            if (arg->is<NamedType>()) {
+                                const auto& n = arg->as<NamedType>();
+                                if (impl_params.count(n.name) && n.type_args.empty()) {
+                                    continue; // Bare type param, skip
+                                }
+                                // Specialized: use the wrapper name as discriminator
+                                discriminator = n.name;
+                                break;
+                            } else if (arg->is<RefType>()) {
+                                const auto& r = arg->as<RefType>();
+                                discriminator = r.is_mut ? "mut_ref" : "ref";
+                                break;
+                            }
+                        }
+                        if (!discriminator.empty()) {
+                            spec_qualified_name =
+                                type_name + "[" + discriminator + "]::" + func.name;
+                        }
+                    }
+
                     // Extract type parameters from impl block and method's generic declaration
                     // Impl block generics (e.g., T in impl[T] Cell[T]) are needed for methods
                     // that use the type parameter without declaring their own generics
@@ -850,7 +895,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                                 .is_lowlevel = func.is_unsafe};
                     sig.impl_self_type_args = impl_self_type_args;
 
+                    // Register under the base key (may overwrite a previous impl's entry)
                     mod.functions[qualified_name] = sig;
+
+                    // Also register under the specialized key so both impls survive
+                    // in the flat Module::functions map.
+                    if (!spec_qualified_name.empty()) {
+                        FuncSig spec_sig = sig; // copy
+                        spec_sig.name = spec_qualified_name;
+                        mod.functions[spec_qualified_name] = std::move(spec_sig);
+                    }
+
                     TML_DEBUG_LN("[MODULE] Registered impl method: "
                                  << qualified_name << " in module " << module_path);
                 }

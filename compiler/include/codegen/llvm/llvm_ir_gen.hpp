@@ -1744,7 +1744,8 @@ private:
 
     // Impl method helpers (extracted from gen_method_call)
     auto try_gen_impl_method_call(const parser::MethodCallExpr& call, const std::string& receiver,
-                                  const std::string& receiver_ptr, types::TypePtr receiver_type)
+                                  const std::string& receiver_ptr,
+                                  const types::TypePtr& receiver_type)
         -> std::optional<std::string>;
     auto
     try_gen_module_impl_method_call(const parser::MethodCallExpr& call, const std::string& receiver,

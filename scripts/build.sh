@@ -39,6 +39,7 @@ detect_target() {
 BUILD_TYPE="debug"
 CLEAN_BUILD=false
 BUILD_TESTS=true
+CI_MODE=false
 TARGET=$(detect_target)
 
 # Parse arguments
@@ -57,6 +58,11 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --no-tests)
+            BUILD_TESTS=false
+            shift
+            ;;
+        --ci)
+            CI_MODE=true
             BUILD_TESTS=false
             shift
             ;;
@@ -134,12 +140,19 @@ if [ "$BUILD_TYPE" = "release" ]; then
     CMAKE_BUILD_TYPE="Release"
 fi
 
+CMAKE_EXTRA_FLAGS=""
+if [ "$CI_MODE" = true ]; then
+    CMAKE_EXTRA_FLAGS="-DTML_USE_LLVM_BACKEND=OFF -DTML_REQUIRE_OPENSSL=OFF"
+    echo -e "${YELLOW}CI mode: LLVM backend and OpenSSL disabled${NC}"
+fi
+
 cmake "$ROOT_DIR/compiler" \
     -DTML_BUILD_TOKEN=tml_script_build_2026 \
     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
     -DTML_BUILD_TESTS="$BUILD_TESTS" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DTML_OUTPUT_DIR="$OUTPUT_DIR"
+    -DTML_OUTPUT_DIR="$OUTPUT_DIR" \
+    $CMAKE_EXTRA_FLAGS
 
 # Build
 echo ""

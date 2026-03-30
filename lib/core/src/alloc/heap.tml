@@ -184,6 +184,20 @@ impl[T] Heap[T] {
         return this.ptr
     }
 
+    /// Returns a shared reference to the heap-allocated value.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let boxed = Heap::new(42)
+    /// let r: ref I32 = boxed.as_ref()
+    /// assert_eq(*r, 42)
+    /// ```
+    pub func as_ref(this) -> ref T {
+        let addr: I64 = this.ptr as I64
+        return lowlevel { ptr_as_ref[T](addr) }
+    }
+
     /// Converts this `Heap[T]` into a `Pin[Heap[T]]`, pinning the value.
     ///
     /// After calling this, the value cannot be moved out of the heap.
@@ -195,8 +209,13 @@ impl[T] Heap[T] {
     /// let boxed = Heap::new(42)
     /// let pinned = boxed.into_pin()
     /// ```
-    pub func into_pin(this) -> core::runtime::pin::Pin[Heap[T]] {
-        return lowlevel { Pin::new_unchecked(this) }
+    pub func into_pin(mut this) -> core::runtime::pin::Pin[Heap[T]] {
+        let ptr_copy: *T = this.ptr
+        // Null the source to prevent the compiler's implicit drop from
+        // freeing the memory (move semantics workaround — the compiler
+        // may still emit a drop call for the moved-from value).
+        this.ptr = null
+        return core::runtime::pin::Pin { pointer: Heap { ptr: ptr_copy } }
     }
 
     /// Returns the raw pointer without freeing memory.
@@ -266,6 +285,15 @@ impl[T] Display for Heap[T] where T: Display {
     /// Returns the display string of the heap-allocated value.
     pub func to_string(this) -> Str {
         return "Heap"
+    }
+}
+
+impl[T] Deref for Heap[T] {
+    type Target = T
+
+    pub func deref(this) -> ref T {
+        let addr: I64 = this.ptr as I64
+        return lowlevel { ptr_as_ref[T](addr) }
     }
 }
 

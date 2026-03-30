@@ -77,9 +77,7 @@ public:
 private:
     ThreadBudget() {
         int hw = static_cast<int>(std::thread::hardware_concurrency());
-        // Use at most half of logical cores (≈ physical core count),
-        // leaving headroom for the OS, IDE, and other user processes.
-        max_ = std::max(2, hw / 2);
+        max_ = std::max(2, hw);
         available_ = max_;
     }
 
@@ -160,7 +158,7 @@ static std::string to_fwd_slashes(const std::string& s) {
 /// Get the cache directory for compiled test executables.
 static fs::path get_test_exe_cache_dir() {
     auto build_dir = cli::build::get_build_dir(false);
-    auto cache_dir = build_dir / "cache";
+    auto cache_dir = build_dir / "cache" / "tests";
     std::error_code ec;
     fs::create_directories(cache_dir, ec);
     return cache_dir;
@@ -213,16 +211,57 @@ static std::string build_runtime_archive(const CompileConfig& config) {
     init_compile_env();
 
     // Determine cache directory (same as suite cache dir) — use absolute paths
-    fs::path cache_dir = fs::absolute(
-        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / "cache");
+    fs::path cache_dir =
+        fs::absolute(fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") /
+                     "cache" / "tests");
     fs::create_directories(cache_dir);
 
     fs::path archive_path = cache_dir / "tml_test_runtime.lib";
+    fs::path deps_dir = cache_dir / "deps";
 
-    // Build runtime objects using empty registry (base runtime, no crypto/net conditionals)
+    // Fast path: check if archive is newer than all C source files — skip
+    // calling get_runtime_objects() (which compiles 17 C files) entirely.
+    if (fs::exists(archive_path)) {
+        auto archive_time = fs::last_write_time(archive_path);
+        bool archive_fresh = true;
+
+        // Find runtime source directory via find_runtime() which returns essential.c
+        std::string essential_path = cli::find_runtime();
+        if (!essential_path.empty()) {
+            fs::path runtime_dir = fs::path(essential_path).parent_path().parent_path();
+            std::error_code ec;
+            for (auto it = fs::recursive_directory_iterator(runtime_dir, ec);
+                 it != fs::recursive_directory_iterator(); ++it) {
+                if (!ec && it->path().extension() == ".c") {
+                    if (fs::last_write_time(it->path(), ec) > archive_time) {
+                        archive_fresh = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (archive_fresh) {
+            // Populate archive obj stems from the deps directory (cached .obj files)
+            g_archive_obj_stems.clear();
+            std::error_code ec2;
+            for (const auto& entry : fs::directory_iterator(deps_dir, ec2)) {
+                auto ext = entry.path().extension().string();
+                if (ext == ".obj" || ext == ".o") {
+                    g_archive_obj_stems.insert(entry.path().stem().string());
+                }
+            }
+            TML_LOG_INFO("test", "Using cached runtime archive: " << archive_path.string() << " ("
+                                                                  << g_archive_obj_stems.size()
+                                                                  << " objects)");
+            return archive_path.string();
+        }
+    }
+
+    // Archive missing or stale: compile runtime objects and rebuild.
     auto registry = std::make_shared<types::ModuleRegistry>();
     parser::Module empty_module;
-    std::string deps_cache = to_fwd_slashes((cache_dir / "deps").string());
+    std::string deps_cache = to_fwd_slashes(deps_dir.string());
 
     auto runtime_objs = cli::build::get_runtime_objects(registry, empty_module, deps_cache,
                                                         g_clang_path, config.verbose);
@@ -230,31 +269,6 @@ static std::string build_runtime_archive(const CompileConfig& config) {
     if (runtime_objs.empty()) {
         TML_LOG_ERROR("test", "No runtime objects found — cannot build archive");
         return "";
-    }
-
-    // Check if archive is up-to-date (newer than all .obj files)
-    if (fs::exists(archive_path)) {
-        auto archive_time = fs::last_write_time(archive_path);
-        bool all_older = true;
-        for (const auto& obj : runtime_objs) {
-            if (fs::exists(obj) && fs::last_write_time(obj) > archive_time) {
-                all_older = false;
-                break;
-            }
-        }
-        if (all_older) {
-            // Record which object stems are in the archive (same as when building)
-            g_archive_obj_stems.clear();
-            for (const auto& obj : runtime_objs) {
-                if (obj.extension() == ".obj" || obj.extension() == ".o") {
-                    g_archive_obj_stems.insert(obj.stem().string());
-                }
-            }
-            TML_LOG_INFO("test", "Using cached runtime archive: " << archive_path.string() << " ("
-                                                                  << runtime_objs.size()
-                                                                  << " objects)");
-            return archive_path.string();
-        }
     }
 
     // Build static archive using llvm-ar directly
@@ -341,8 +355,9 @@ static std::string build_runtime_archive(const CompileConfig& config) {
 static std::string build_stdlib_object(const CompileConfig& config) {
     init_compile_env();
 
-    fs::path cache_dir = fs::absolute(
-        fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") / "cache");
+    fs::path cache_dir =
+        fs::absolute(fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") /
+                     "cache" / "tests");
     fs::create_directories(cache_dir);
 
     // Cache key includes coverage mode (coverage instruments functions differently)
@@ -658,19 +673,31 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             }
 
             if (!codegen_result.success) {
-                std::string err = codegen_result.error_message;
-                if (err.empty()) {
+                // Collect all diagnostic errors (with file:line info from query_core)
+                std::vector<std::string> all_errors;
+                if (!codegen_result.error_message.empty()) {
+                    all_errors.push_back(codegen_result.error_message);
+                } else {
                     auto tc_r = qctx.cache().lookup<query::TypecheckResult>(
                         query::TypecheckModuleKey{file_path, module_name});
-                    if (tc_r && !tc_r->success && !tc_r->errors.empty())
-                        err = tc_r->errors[0];
-                    auto pr = qctx.cache().lookup<query::ParseModuleResult>(
-                        query::ParseModuleKey{file_path, module_name});
-                    if (pr && !pr->success && !pr->errors.empty())
-                        err = pr->errors[0];
+                    if (tc_r && !tc_r->success) {
+                        all_errors = tc_r->errors;
+                    }
+                    if (all_errors.empty()) {
+                        auto pr = qctx.cache().lookup<query::ParseModuleResult>(
+                            query::ParseModuleKey{file_path, module_name});
+                        if (pr && !pr->success) {
+                            all_errors = pr->errors;
+                        }
+                    }
                 }
-                TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << err);
-                fr.error_message = err;
+                std::string first_err = all_errors.empty() ? "unknown error" : all_errors[0];
+                TML_LOG_ERROR("test", "  [compile] SKIP " << file_path << ": " << first_err);
+                for (size_t ei = 1; ei < all_errors.size(); ++ei) {
+                    // Indent subsequent errors/notes under the SKIP line
+                    TML_LOG_ERROR("test", "    " << all_errors[ei]);
+                }
+                fr.error_message = first_err;
                 continue;
             }
 
@@ -1118,6 +1145,16 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     result.success = true;
     result.exe_path = link_result.output_file.string();
+
+    // Cleanup staging .obj files — obj_cache/ has the persistent copies
+    std::error_code rm_ec;
+    for (size_t i : compiled_indices) {
+        auto obj =
+            cache_dir / (suite.name + "_test_" + std::to_string(i) + cli::get_object_extension());
+        fs::remove(obj, rm_ec);
+    }
+    fs::remove(dispatcher_obj_path, rm_ec);
+
     return result;
 }
 
@@ -1240,21 +1277,43 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
 
     std::atomic<int> next_suite{0};
 
+    int total_suites = static_cast<int>(suites.size());
+    std::atomic<int> completed{0};
+
     auto worker = [&]() {
         while (!should_stop.load(std::memory_order_relaxed)) {
             int idx = next_suite.fetch_add(1, std::memory_order_relaxed);
             if (idx >= static_cast<int>(suites.size()))
                 break;
+            // Re-check after fetch_add: another worker may have set should_stop
+            // between our while-check and grabbing this index.
+            if (should_stop.load(std::memory_order_relaxed))
+                break;
+
+            const auto& suite_name = suites[idx].name;
+            TML_LOG_INFO("test", "[compile] Building " << suite_name << ".exe (" << (idx + 1) << "/"
+                                                       << total_suites << ")");
 
             results[idx] = compile_suite_safe(suites[idx], config);
+
+            int done = completed.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (results[idx].success) {
+                auto ms = results[idx].compile_time_us / 1000;
+                TML_LOG_INFO("test", "[compile] OK " << suite_name << ".exe " << ms << "ms ("
+                                                     << done << "/" << total_suites << ")");
+            } else {
+                TML_LOG_ERROR("test", "[compile] FAIL "
+                                          << suite_name << ".exe: " << results[idx].error_message
+                                          << " (" << done << "/" << total_suites << ")");
+            }
 
             if (on_complete) {
                 on_complete(idx, results[idx]);
             }
 
-            if (!results[idx].success && config.no_cache) {
-                // In fail-fast mode with no-cache, signal stop
-                // (with cache, we want all compilations to proceed for caching)
+            if (config.fail_fast &&
+                (!results[idx].success || !results[idx].per_file_errors.empty())) {
+                should_stop.store(true, std::memory_order_relaxed);
             }
         }
     };

@@ -187,6 +187,17 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     }
 
     auto it = locals_.find(ident.name);
+    // Fallback: get_param_name() in func.cpp/impl.cpp renames parameters that
+    // conflict with LLVM basic block labels (entry, return, end, loop, etc.)
+    // to "p_<name>". When the body references the original name, we must find
+    // the renamed version.
+    if (it == locals_.end()) {
+        const auto& n = ident.name;
+        if (n == "entry" || n == "return" || n == "then" || n == "else" || n == "end" ||
+            n == "loop" || n == "body" || n == "cleanup") {
+            it = locals_.find("p_" + n);
+        }
+    }
     if (it != locals_.end()) {
         const VarInfo& var = it->second;
         last_expr_type_ = var.type;

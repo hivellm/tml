@@ -1,7 +1,8 @@
 // Test for associated type lookup from concrete types
 // This tests the lookup_associated_type helper function
 use test
-use core::range::*
+use core::types::range::RangeIterI64
+use core::types::range::RangeInclusiveIterI64
 
 // This test uses the concrete RangeIterI64 type which has:
 // impl Iterator for RangeIterI64 { type Item = I64 }

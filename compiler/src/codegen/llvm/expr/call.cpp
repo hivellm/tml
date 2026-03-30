@@ -44,11 +44,37 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         const auto& path = call.callee->as<parser::PathExpr>().path;
         // Join segments with ::
         for (size_t i = 0; i < path.segments.size(); ++i) {
-            if (i > 0)
+            if (i > 0) {
                 fn_name += "::";
+            }
             fn_name += path.segments[i];
         }
     }
+
+    // Resolve behavior-qualified calls (e.g., Step::steps_between) to concrete type
+    // dispatch (e.g., I32::steps_between) early, so all downstream dispatch handlers
+    // see the resolved name. This handles generic impl bodies where a behavior method
+    // is called via its behavior name: `Step::steps_between(ref this.start, ref this.end)`.
+    if (!fn_name.empty() && fn_name.find("::") != std::string::npos &&
+        !current_type_subs_.empty()) {
+        size_t sep = fn_name.find("::");
+        std::string prefix = fn_name.substr(0, sep);
+        if (!prefix.empty() &&
+            static_cast<bool>(std::isupper(static_cast<unsigned char>(prefix[0]))) &&
+            env_.lookup_behavior(prefix).has_value()) {
+            // Find the generic type param whose concrete type implements this behavior
+            for (const auto& [param, concrete] : current_type_subs_) {
+                if (param == "Self" || param == "This") {
+                    continue;
+                }
+                std::string concrete_name = types::type_to_string(concrete);
+                concrete_name += fn_name.substr(sep);
+                fn_name = concrete_name;
+                break;
+            }
+        }
+    }
+
     if (!call.callee->is<parser::IdentExpr>() && !call.callee->is<parser::PathExpr>() &&
         !call.callee->is<parser::FieldExpr>()) {
         report_error("Complex callee not supported", call.span, "C002");
@@ -68,7 +94,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             const auto& ft = func_type->as<types::FuncType>();
 
             // Extract function pointer and environment pointer from fat pointer
-            std::string fn_ptr, env_ptr;
+            std::string fn_ptr;
+            std::string env_ptr;
             if (callee_type == "{ ptr, ptr }") {
                 fn_ptr = fresh_reg();
                 emit_line("  " + fn_ptr + " = extractvalue { ptr, ptr } " + fat_ptr_val + ", 0");
@@ -91,8 +118,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     std::string decl_type = llvm_type_from_semantic(ft.params[i]);
                     auto int_bits = [](const std::string& t) -> int {
                         if (t.size() > 1 && t[0] == 'i' &&
-                            std::isdigit(static_cast<unsigned char>(t[1])))
+                            std::isdigit(static_cast<unsigned char>(t[1]))) {
                             return std::stoi(t.substr(1));
+                        }
                         return -1;
                     };
                     int src_bits = int_bits(arg_type);
@@ -132,8 +160,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 emit_line(label_thin + ":");
                 std::string args_str_thin;
                 for (size_t i = 0; i < arg_vals.size(); ++i) {
-                    if (i > 0)
+                    if (i > 0) {
                         args_str_thin += ", ";
+                    }
                     args_str_thin += arg_types[i] + " " + arg_vals[i];
                 }
                 std::string thin_result;
@@ -180,8 +209,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 // Thin pointer fallback
                 std::string args_str;
                 for (size_t i = 0; i < arg_vals.size(); ++i) {
-                    if (i > 0)
+                    if (i > 0) {
                         args_str += ", ";
+                    }
                     args_str += arg_types[i] + " " + arg_vals[i];
                 }
                 if (ret_type == "void") {
@@ -285,7 +315,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             const auto& gen_args = path_expr.generics->args;
 
             // Check if this is a generic class static method
-            std::string method_key = class_name + "::" + method_name;
+            std::string method_key = class_name;
+            method_key += "::";
+            method_key += method_name;
             auto pending_it = pending_generic_class_methods_.find(method_key);
             if (pending_it != pending_generic_class_methods_.end()) {
                 const auto& pending = pending_it->second;
@@ -318,7 +350,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     "@" + mangle_impl_method(class_name, method_name + type_suffix);
 
                 // Queue the instantiation for later (after current function)
-                if (generated_functions_.find(mangled_func) == generated_functions_.end()) {
+                if (!generated_functions_.contains(mangled_func)) {
                     pending_generic_class_method_insts_.push_back(PendingGenericClassMethodInst{
                         pending.class_decl, &method, type_suffix, type_subs});
                     generated_functions_.insert(mangled_func);
@@ -345,8 +377,9 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 std::string call_str =
                     "  " + result + " = call " + ret_type + " " + mangled_func + "(";
                 for (size_t i = 0; i < args.size(); ++i) {
-                    if (i > 0)
+                    if (i > 0) {
                         call_str += ", ";
+                    }
                     call_str += arg_types[i] + " " + args[i];
                 }
                 call_str += ")";

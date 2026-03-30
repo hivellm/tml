@@ -163,7 +163,12 @@ void TerminalReporter::print_failure_details(const TestRunResult& result) const 
                                              << err);
         }
         for (const auto& test : suite.tests) {
-            if (!test.passed) {
+            // Skip tests that were never executed (fail-fast early abort): they have no
+            // duration, no error message, no non-zero exit code, and passed==false by default.
+            // Reporting these as FAIL would be misleading.
+            bool was_executed =
+                test.duration_us > 0 || test.exit_code != 0 || !test.error.empty() || test.passed;
+            if (!test.passed && was_executed) {
                 TML_LOG_ERROR("test", c.red()
                                           << "FAIL" << c.reset() << " " << suite.group << "/"
                                           << test.name << " (" << test.file << ")"
