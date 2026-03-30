@@ -42,10 +42,14 @@
 
 #include "json/json_rpc.hpp"
 #include "json/json_value.hpp"
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <functional>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -102,16 +106,25 @@ private:
     // Client info (set after initialization)
     std::optional<ClientInfo> client_info_;
     bool initialized_ = false;
-    bool running_ = false;
+    std::atomic<bool> running_{false};
 
     // Registered tools
     std::vector<Tool> tools_;
     std::unordered_map<std::string, ToolHandler> tool_handlers_;
 
+    // Thread safety
+    std::mutex response_mutex_; // serializes stdout writes (send_response)
+    std::mutex call_log_mutex_; // serializes call_log_fp_ writes
+
+    // Worker tracking — ensures run() drains pending tool threads before exit
+    std::atomic<int> active_workers_{0};
+    std::mutex workers_mutex_;
+    std::condition_variable workers_cv_;
+
     // Call logger (NDJSON) — uses C FILE* to avoid std::ofstream crash on some Windows configs
     std::FILE* call_log_fp_ = nullptr;
     std::string session_id_;
-    uint64_t call_sequence_ = 0;
+    std::atomic<uint64_t> call_sequence_{0};
     void init_call_logger();
     void log_tool_call(const std::string& tool_name, const std::string& params_json, bool is_error,
                        int64_t duration_ms);

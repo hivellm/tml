@@ -24,6 +24,7 @@ TML_MODULE("mcp")
 
 #include "json/json_parser.hpp"
 #include <cstdlib>
+#include <future>
 
 namespace tml::mcp {
 
@@ -70,6 +71,7 @@ void McpServer::init_call_logger() {
 
 void McpServer::log_tool_call(const std::string& tool_name, const std::string& params_json,
                               bool is_error, int64_t duration_ms) {
+    std::lock_guard<std::mutex> lock(call_log_mutex_);
     if (call_log_fp_ == nullptr) {
         init_call_logger();
     }
@@ -85,7 +87,7 @@ void McpServer::log_tool_call(const std::string& tool_name, const std::string& p
                  "{\"event\":\"tool_call\",\"session\":\"%s\",\"seq\":%llu,"
                  "\"ts\":%lld,\"tool\":\"%s\",\"params\":%s,"
                  "\"duration_ms\":%lld,\"is_error\":%s}\n",
-                 session_id_.c_str(), static_cast<unsigned long long>(call_sequence_++),
+                 session_id_.c_str(), static_cast<unsigned long long>(call_sequence_.fetch_add(1)),
                  static_cast<long long>(epoch_ms), tool_name.c_str(), params_json.c_str(),
                  static_cast<long long>(duration_ms), is_error ? "true" : "false");
     std::fflush(call_log_fp_);
@@ -146,6 +148,13 @@ void McpServer::run() {
         process_request(unwrap(request_result));
     }
 
+    // Drain all active tool worker threads before shutting down.
+    // Workers dispatch their responses directly; we just wait for them to finish.
+    {
+        std::unique_lock<std::mutex> lock(workers_mutex_);
+        workers_cv_.wait(lock, [this] { return active_workers_.load() == 0; });
+    }
+
     // Write session end marker
     if (call_log_fp_ != nullptr) {
         std::fprintf(call_log_fp_,
@@ -180,28 +189,34 @@ void McpServer::process_request(const json::JsonRpcRequest& request) {
         return;
     }
 
-    // Handle requests (have id)
-    json::JsonRpcResponse response;
-
     // Clone id for each handler since JsonValue is move-only
     auto id = request.id.value().clone();
 
     if (request.method == "initialize") {
         auto params = request.params.has_value() ? request.params->clone() : json::JsonValue();
-        response = handle_initialize(std::move(params), std::move(id));
+        send_response(handle_initialize(std::move(params), std::move(id)));
     } else if (request.method == "shutdown") {
-        response = handle_shutdown(std::move(id));
+        send_response(handle_shutdown(std::move(id)));
     } else if (request.method == "tools/list") {
-        response = handle_tools_list(std::move(id));
+        send_response(handle_tools_list(std::move(id)));
     } else if (request.method == "tools/call") {
+        // Dispatch to worker thread — main stdin loop stays responsive.
+        // If the tool hangs, it times out inside handle_tools_call and the
+        // worker thread eventually returns; stdin reading is never blocked.
         auto params = request.params.has_value() ? request.params->clone() : json::JsonValue();
-        response = handle_tools_call(std::move(params), std::move(id));
+        active_workers_.fetch_add(1);
+        std::thread([this, params = std::move(params), id = std::move(id)]() mutable {
+            send_response(handle_tools_call(std::move(params), std::move(id)));
+            {
+                std::lock_guard<std::mutex> lock(workers_mutex_);
+                active_workers_.fetch_sub(1);
+            }
+            workers_cv_.notify_all();
+        }).detach();
     } else {
-        response = json::JsonRpcResponse::failure(
-            json::JsonRpcError::from_code(json::JsonRpcErrorCode::MethodNotFound), std::move(id));
+        send_response(json::JsonRpcResponse::failure(
+            json::JsonRpcError::from_code(json::JsonRpcErrorCode::MethodNotFound), std::move(id)));
     }
-
-    send_response(response);
 }
 
 // ============================================================================
@@ -209,6 +224,7 @@ void McpServer::process_request(const json::JsonRpcRequest& request) {
 // ============================================================================
 
 void McpServer::send_response(const json::JsonRpcResponse& response) {
+    std::lock_guard<std::mutex> lock(response_mutex_);
     std::cout << response.to_json().to_string() << "\n" << std::flush;
 }
 
@@ -315,36 +331,48 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
         }
     }
 
-    // Call handler with timing for call logger
+    // Run tool handler in an inner thread with a hard timeout.
+    // This prevents any tool from hanging the worker thread indefinitely.
+    // The worker thread was already dispatched by process_request, so the
+    // main stdin loop is never blocked regardless of what happens here.
+    constexpr int TOOL_TIMEOUT_S = 300;
+
+    auto promise = std::make_shared<std::promise<ToolResult>>();
+    auto future = promise->get_future();
+    auto handler_fn = it->second; // copy handler for thread capture
+
+    std::thread([promise, handler_fn, args = std::move(args)]() mutable {
+        try {
+            promise->set_value(handler_fn(args));
+        } catch (const std::exception& e) {
+            promise->set_value(ToolResult::error(e.what()));
+        } catch (...) {
+            promise->set_value(ToolResult::error("Unknown exception in tool handler"));
+        }
+    }).detach();
+
     auto start = std::chrono::steady_clock::now();
-    try {
-        ToolResult result = it->second(args);
-        auto elapsed_ms =
-            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::steady_clock::now() - start)
-                                     .count());
-        log_tool_call(tool_name, params_json, result.is_error, elapsed_ms);
-        return json::JsonRpcResponse::success(result.to_json(), std::move(id));
-    } catch (const std::exception& e) {
-        auto elapsed_ms =
-            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::steady_clock::now() - start)
-                                     .count());
-        log_tool_call(tool_name, params_json, true, elapsed_ms);
-        log("Tool error (std::exception): " + std::string(e.what()));
-        return json::JsonRpcResponse::success(ToolResult::error(e.what()).to_json(), std::move(id));
-    } catch (...) {
-        auto elapsed_ms =
-            static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::steady_clock::now() - start)
-                                     .count());
-        log_tool_call(tool_name, params_json, true, elapsed_ms);
-        log("Tool error (unknown exception) in: " + tool_name);
-        return json::JsonRpcResponse::success(
-            ToolResult::error("Internal error: unknown exception in tool '" + tool_name + "'")
-                .to_json(),
-            std::move(id));
+    ToolResult result;
+
+    if (future.wait_for(std::chrono::seconds(TOOL_TIMEOUT_S)) == std::future_status::timeout) {
+        result = ToolResult::error("Tool '" + tool_name + "' timed out after " +
+                                   std::to_string(TOOL_TIMEOUT_S) + "s");
+        log("Tool timed out: " + tool_name);
+    } else {
+        try {
+            result = future.get();
+        } catch (const std::exception& e) {
+            result = ToolResult::error(e.what());
+        } catch (...) {
+            result = ToolResult::error("Unknown exception in tool '" + tool_name + "'");
+        }
     }
+
+    auto elapsed_ms = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::steady_clock::now() - start)
+                                               .count());
+    log_tool_call(tool_name, params_json, result.is_error, elapsed_ms);
+    return json::JsonRpcResponse::success(result.to_json(), std::move(id));
 }
 
 } // namespace tml::mcp
