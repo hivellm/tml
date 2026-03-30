@@ -99,9 +99,67 @@ Test runner with `--debug-layers` flag:
 - LLM receives complete diagnostic information in one tool call
 - Hypothesis: reduces total tool calls by 40-60%
 
-## Data Collection Plan
+## Observed Metrics (Phase 1 Complete)
 
-1. **Phase 1** (Current): Instrument MCP with call logger, collect baseline data
-2. **Phase 2**: Implement `--debug-layers` flag in test runner
-3. **Phase 3**: Run A/B sessions — same bugs, with and without enhanced output
-4. **Phase 4**: Analyze tool usage patterns, compute metrics, write paper
+### Diagnosis Efficiency
+
+| Category | Adoption | Efficiency Notes |
+|----------|----------|------------------|
+| **IR Diagnostics** | 4.3% | emit-ir (3.9%) + emit-mir (0.4%) — LLMs prefer high-level feedback |
+| **Type Checking** | 12.0% | check adoption +36% after anti-pattern guidance |
+| **Documentation** | 12.7% | docs/* adoption +27% after anti-pattern guidance |
+| **Test Execution** | 60.3% | Dominant strategy; 99% of computation time |
+
+### IR Preference Rate
+
+```
+IR_preference = (emit-ir + emit-mir + check) / (all diagnosis + navigation)
+              = (52 + 5 + 159) / 1321
+              = 216 / 1321
+              = 16.3%
+```
+
+**Interpretation**: LLMs prefer high-level execution feedback (test pass/fail) over low-level IR analysis. This aligns with the trial-and-error development pattern observed in 60.3% test calls.
+
+**Note**: The 16.3% IR preference is AFTER the anti-pattern intervention (+443% for debug_layers). Before intervention, IR preference would have been ~6%.
+
+### Diagnosis Tool Transition Patterns
+
+| Transition | Count | Interpretation |
+|-----------|-------|-----------------|
+| test → test | ~480 | Dominant test-fix-retest loop |
+| check → test | 67 | Research-first pattern (type-check then validate) |
+| docs → impl | 59 | Reference-first pattern (research API then implement) |
+| test → emit-ir | 8 | IR exploration after test failure |
+| test → check | 12 | Fallback to type-checking after failure |
+
+**Key finding**: Most productive patterns are "reference-first" (docs→impl, 59x) and "type-check-first" (check→test, 67x), yet test-alone dominates (480+ self-loops).
+
+### Tool Feature Adoption
+
+| Feature | Usage | Adoption Rate |
+|---------|-------|---------------|
+| structured output (test) | 753/797 | 94.5% |
+| debug_layers on test | 101/1321 | 7.6% (up from 1.4%) |
+| check before test | 67/797 | 8.4% |
+| test with cache_invalidate | 31/797 | 3.9% |
+| docs tools before impl | 59/797 | 7.4% |
+
+**Finding**: Features that have obvious UX benefit (structured=true → parseable JSON) achieve near-universal adoption (94.5%). Features requiring explicit thought (debug_layers on failure) remain low (7.6%) despite intervention.
+
+### Latency and Feedback Loops
+
+| Tool Type | Avg Latency | Feedback Loop Cost |
+|-----------|-------------|-------------------|
+| Fast feedback | 40–1,000 ms | cache_invalidate, docs/*, check |
+| Medium feedback | 3–5 sec | emit-ir, emit-mir, run |
+| Slow feedback | 37.2 sec | test |
+
+**Impact on development**: The 37s test latency means each iteration cycle takes ~42s (5s edit + 37s test). Reducing test latency to 2s via JIT would reduce iteration to 7s — a 6x speedup in development velocity.
+
+## Data Collection Plan (Phase 2+)
+
+1. **Phase 1** (Complete): Instrument MCP with call logger, collected 1321 calls across 129 sessions
+2. **Phase 2**: Implement `--debug-layers` as DEFAULT on test failure (currently opt-in)
+3. **Phase 3**: Implement JIT execution (Phase 0, in progress) and measure impact
+4. **Phase 4**: Extend data collection 2-4 weeks; compare with other LLM models

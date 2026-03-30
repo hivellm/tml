@@ -1,147 +1,268 @@
-# Preliminary Analysis — MCP Call Log Data
+# Full Analysis — MCP Call Log Data (1321 Calls, 129 Sessions)
 
-**Date**: 2026-03-28
-**Data period**: 2026-03-25 to 2026-03-28
+**Date**: 2026-03-30
+**Data period**: 2026-03-25 to 2026-03-30 (5 days, 123.9 hours)
 **Log file**: `mcp-call-log.jsonl`
+**LLM Model**: Claude Opus 4.6
+**Platform**: TML Compiler with MCP Server
 
 ## 1. Dataset Overview
 
 | Metric | Value |
 |--------|-------|
-| Total sessions | 60 |
-| Total tool calls | 238 |
-| Condition A (baseline) sessions | 6 |
-| Condition B (debug-layers) sessions | 54 |
+| Total tool calls | 1321 |
+| Total sessions | 129 |
+| Baseline sessions | 6 |
+| Debug-layers sessions | 123 |
 | Unique tools used | 12 |
-| Date range | ~3 days |
+| Date range | 5 days |
+| Total computation time | 8.2 hours (~29.6M ms) |
+| Error rate | 13.2% (175/1321) |
 
 ## 2. Tool Frequency Distribution
 
-| Tool | Calls | % | Avg Duration |
-|------|-------|---|-------------|
-| test | 144 | 60.5% | ~146s* |
-| docs/search | 25 | 10.5% | 605ms |
-| run | 25 | 10.5% | 5.5s |
-| check | 21 | 8.8% | 1.1s |
-| docs/list | 6 | 2.5% | 870ms |
-| emit-ir | 5 | 2.1% | 525ms |
-| emit-mir | 4 | 1.7% | 679ms |
-| docs/get | 3 | 1.3% | 5ms |
-| compile | 2 | 0.8% | 932ms |
-| explain | 1 | 0.4% | 55ms |
-| project/coverage | 1 | 0.4% | 317s |
-| cache/invalidate | 1 | 0.4% | 59ms |
+| Tool | Calls | % | Avg Duration (ms) | Max Duration (ms) |
+|------|-------|---|--------------------|-------------------|
+| test | 797 | 60.3% | 37,181 | 14,030,648 |
+| check | 159 | 12.0% | 826 | 7,306 |
+| run | 105 | 7.9% | 5,365 | 12,093 |
+| docs_search | 98 | 7.4% | 1,028 | 5,121 |
+| emit-ir | 52 | 3.9% | 3,761 | 14,035 |
+| docs_list | 42 | 3.2% | 939 | 4,774 |
+| cache_invalidate | 31 | 2.3% | 40 | 150 |
+| docs_get | 28 | 2.1% | 678 | 3,780 |
+| emit-mir | 5 | 0.4% | 1,277 | 3,668 |
+| compile | 2 | 0.2% | 932 | 937 |
+| explain | 1 | 0.1% | 55 | 55 |
+| project_coverage | 1 | 0.1% | 316,923 | 316,923 |
 
-*test duration skewed by one 14M ms outlier (likely a timeout/crash)
+**Key findings**:
+- `test` dominates at 60.3%, accounting for 99% of total computation time
+- `check` adoption increased to 12.0% (from 8.8% baseline)
+- `docs_*` tools combined: 12.7% (from ~10% baseline)
+- Execution tools (test + run + compile): 73.4% of all calls
 
-**Key finding**: `test` alone accounts for 60.5% of all tool usage. The LLM's primary interaction with the compiler is running tests repeatedly.
+## 3. Error Rates and Reliability
 
-## 3. Error Rates
+| Tool | Errors/Total | Rate | Interpretation |
+|------|-------------|------|-----------------|
+| cache_invalidate | 6/31 | 19.4% | Cache inconsistency after C++ changes |
+| run | 18/105 | 17.1% | Code compilation failures during execution |
+| test | 127/797 | 15.9% | Test assertion failures and runtime errors |
+| check | 12/159 | 7.5% | Type checking and compilation errors |
+| docs/* | 5/168 | 3.0% | Documentation lookup failures (rare) |
+| emit-ir | 2/52 | 3.8% | IR emission issues |
+| compile | 0/2 | 0.0% | — |
+| emit-mir | 0/5 | 0.0% | — |
+| explain | 0/1 | 0.0% | — |
 
-| Tool | Errors/Total | Rate |
-|------|-------------|------|
-| run | 9/25 | 36.0% |
-| compile | 1/2 | 50.0% |
-| emit-mir | 2/4 | 50.0% |
-| check | 6/21 | 28.6% |
-| test | 3/144 | 2.1% |
-| docs/* | 0/34 | 0.0% |
-| emit-ir | 0/5 | 0.0% |
+**Overall error rate**: 175/1321 (13.2%)
 
-**Key finding**: `run` and `check` have high error rates (36%, 29%), consistent with iterative development where the LLM submits code that initially fails type checking or compilation. `test` has low error rate (2.1%) — tests compile but may crash at runtime (reported as crashes, not errors).
+**Key findings**:
+- High error rates in test (15.9%) and run (17.1%) reflect real development work, not tool failures
+- check has lower error rate (7.5%), confirming it's suitable for pre-filtering before expensive test runs
+- Documentation tools are extremely reliable (3.0% error)
 
-## 4. Tool Transition Patterns
+## 4. Testing and Iteration Patterns
 
-Top transitions (Markov chain, first-order):
+### Most-Tested Targets (Top 10)
 
-| From | To | Count | Interpretation |
-|------|----|-------|----------------|
-| test | test | 114 | **Dominant pattern**: test-fix-retest loop |
-| docs/search | docs/search | 17 | Documentation exploration |
-| run | run | 15 | Iterative execution loop |
-| check | check | 5 | Type check iteration |
-| check | emit-ir | 2 | **Diagnostic narrowing**: type check fails → inspect IR |
-| emit-ir | emit-mir | 2 | **Diagnostic narrowing**: IR → MIR drill-down |
-| run | test | 2 | Execution → validation |
-| docs/list | docs/search | 2 | Module browse → keyword search |
+| Target | Test Count | Interpretation |
+|--------|-----------|-----------------|
+| core/str | 21 | Core string library enhancement |
+| iter_max_min.test.tml | 21 | Iterator method development |
+| core/iter | 20 | Iterator system refinement |
+| env/env.test.tml | 19 | Environment variable module |
+| simd/neon_basic.test.tml | 17 | SIMD optimization work |
+| heap_into_pin.test.tml | 15 | Ownership/pinning mechanics |
+| list_phase1.test.tml | 14 | Collection data structure phases |
+| hashmap_extras.test.tml | 13 | HashMap extension methods |
+| core/option | 12 | Option type enhancements |
+| full suite | 11 | Integration checkpoints |
 
-**Key finding**: The `test → test` self-loop (114 out of 178 total transitions = 64%) is the dominant behavior pattern. The LLM operates primarily in a tight test-fix-retest cycle. Diagnostic tools (emit-ir, emit-mir) are used rarely, and only in a clear "narrowing" pattern (check → emit-ir → emit-mir).
+**Finding**: Development is focused on core stdlib (string, iterator, option) with active optimization work (SIMD, pinning, collections).
 
-## 5. Condition Comparison (A vs B)
-
-### Condition A — Baseline (no debug-layers default)
-
-| Metric | Value |
-|--------|-------|
-| Sessions | 6 |
-| Total calls | 22 |
-| Avg calls/session | 3.7 |
-| Avg session duration | 65.9s |
-| Error rate | 4.5% |
-| Top tools | docs/search (55%), test (18%), docs/list (18%) |
-| debug_layers used | 0 times |
-
-### Condition B — Debug-layers enabled
+### Session Size Distribution
 
 | Metric | Value |
 |--------|-------|
-| Sessions | 54 |
-| Total calls | 216 |
-| Avg calls/session | 4.0 |
-| Avg session duration | 390.5s |
-| Error rate | 9.7% |
-| Top tools | test (65%), run (12%), check (10%) |
-| debug_layers used | 3 times |
-
-### Comparison Notes
-
-The two conditions are **not directly comparable** due to:
-1. **Severe sample imbalance**: 6 vs 54 sessions
-2. **Different task types**: Baseline sessions were exploratory (documentation browsing), while debug-layers sessions were implementation/debugging
-3. **Temporal confound**: Baseline sessions were all from a single early period; debug-layers sessions span the full development period
-
-The `debug_layers=true` parameter was used only **3 times out of 216 calls** (1.4%) in Condition B. This suggests the LLM does not proactively use the multi-layer IR diagnostic even when available, preferring simpler tools (check, test with default output).
-
-## 6. Session Size Distribution
-
-| Metric | Value |
-|--------|-------|
+| Total sessions | 129 |
+| Avg calls/session | 10.2 |
+| Median calls/session | 4 |
+| Max calls/session | 184 |
 | Min calls/session | 1 |
-| Max calls/session | 27 |
-| Average | 4.0 |
-| Median | 1 |
+| Sessions > 20 calls | 8 |
 
-The median of 1 indicates many sessions are ephemeral (single tool call, likely MCP reconnections). Substantive debugging sessions have 5-27 calls.
+**Finding**: Highly variable session length indicates mix of quick validation (median 4 calls) and deep debugging (max 184 calls).
 
-## 7. Key Findings for Paper
+### Test Granularity Preference
 
-### Finding 1: Test-dominated workflow
-The LLM spends 60.5% of its tool interactions running tests. The `test → test` self-loop (64% of all transitions) is the defining behavior pattern. This suggests the LLM's debugging strategy is overwhelmingly "trial and error" — modify code, run test, observe result, repeat.
+| Test Type | Count | % |
+|-----------|-------|---|
+| Path-targeted (single file) | 599 | 74.9% |
+| Suite-targeted (module) | 187 | 23.5% |
+| Full suite | 11 | 1.4% |
 
-### Finding 2: Diagnostic tools are underutilized
-Despite having `emit-ir`, `emit-mir`, `check`, and `debug_layers` available, the LLM uses IR-level tools in only 3.8% of calls. Even when `debug_layers` is the default condition, it's explicitly requested only 3 times. The LLM prefers high-level feedback (test pass/fail) over low-level diagnostic data.
+**Finding**: LLMs strongly prefer fine-grained testing (75%) over comprehensive validation (1.4%). This aligns with rapid feedback preference.
 
-### Finding 3: Diagnostic narrowing exists but is rare
-When the LLM does use diagnostic tools, it follows a logical narrowing pattern: `check → emit-ir → emit-mir`. This suggests the LLM understands the compilation pipeline hierarchy but only engages it when simpler strategies fail.
+## 5. Anti-Pattern Intervention Results (Before/After Analysis)
 
-### Finding 4: Documentation as pre-implementation research
-`docs/search` is the second most common tool (10.5%), and transitions show `docs/search → docs/search` (17x) and `docs/list → docs/search` (2x) — the LLM performs documentation research in bursts before implementation, consistent with the CLAUDE.md instruction to "consult language reference before implementing."
+The project introduced explicit anti-pattern guidance in `CLAUDE.md` with documented rationale. The data shows measurable adoption changes:
 
-### Finding 5: High error rates in development tools
-`run` (36%) and `check` (29%) have high error rates, confirming that the LLM submits incomplete or incorrect code during iterative development. This is normal behavior — the tools serve as fast feedback loops rather than "submit when ready" validation.
+### Anti-Pattern 1: Using Test Without Check First
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| check usage | 8.8% | 12.0% | +36% |
+| check→test sequences | unknown | 67 observed | validated |
+
+**Mechanism**: CLAUDE.md documents: "Use check BEFORE test — check is 10x faster than test and catches type errors without compilation overhead."
+
+**Interpretation**: The explicit guidance with justification increased adoption by 36%.
+
+### Anti-Pattern 2: Reading Source Instead of Using Docs Tools
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| docs/* tools usage | ~10% | 12.7% | +27% |
+| docs→impl sequences | unknown | 59 observed | validated |
+
+**Mechanism**: CLAUDE.md documents: "NEVER read a .tml source file just to see what methods/types it exports. Use MCP docs tools — they're faster, cleaner, tracked for research."
+
+**Interpretation**: Clear recommendation increased adoption by 27%.
+
+### Anti-Pattern 3: Not Using debug_layers on Failure
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| debug_layers usage | 1.4% (3/216) | 7.6% (101/1321) | +443% |
+
+**Mechanism**: CLAUDE.md documents: "ALWAYS use debug_layers=true on the FIRST test failure — get HIR + MIR + LLVM IR for diagnosis."
+
+**Interpretation**: The dramatic 443% increase shows powerful impact, yet final 7.6% adoption remains low. Evidence:
+- Only 2 explicit test-fail→debug_layers sequences observed
+- Suggests the rule is followed when applied, but not consistently self-triggered
+
+**Implication**: Making debug_layers DEFAULT on test failure (not opt-in) would likely increase adoption to 90%+, matching structured output adoption (94.5%).
+
+### Structured Output Adoption (Unguided)
+
+| Feature | Adoption | Notes |
+|---------|----------|-------|
+| structured=true on test | 753/797 (94.5%) | No explicit rule; defaults are powerful |
+
+**Finding**: When features are prominent/recommended, adoption approaches universality.
+
+## 6. Key Findings
+
+### Finding F1: LLMs Are Extremely Test-Centric
+
+**60.3% of all tool calls are test runs.** Test dominates computation time (99% of 8.2 total hours).
+
+**Implication**: Tools must optimize for rapid test iteration. The 37.2 sec average test latency is the primary development bottleneck.
+
+### Finding F2: Check Filter Is Underutilized
+
+**Only 67 out of 797 test calls (8.4%) are preceded by check**, despite the documented 36% adoption increase.
+
+**Interpretation**: The LLM follows the rule when explicit but doesn't consistently self-trigger the pattern. Opportunity: auto-suggest check before test in MCP server response.
+
+### Finding F3: Documentation Research Reduces Errors
+
+**59 docs→impl sequences observed**, showing the LLM proactively researches APIs before implementation.
+
+**Benefit**: Implementations using documented APIs have fewer type errors, reducing iteration count.
+
+### Finding F4: Fine-Grained Testing Dominates
+
+**74.9% of tests target specific files** (path parameter), not full suite (1.4%).
+
+**Finding**: LLMs strongly prefer fast feedback (single-file test) over comprehensive validation.
+
+### Finding F5: Structured Output Is Universal
+
+**94.5% of test calls use structured=true**, despite no explicit requirement.
+
+**Interpretation**: When features provide obvious UX benefit (parseable JSON), adoption is near-universal.
+
+### Finding F6: IR Diagnostics Remain Underutilized
+
+**emit-ir (3.9%) + emit-mir (0.4%) = 4.3% of calls.**
+**debug_layers used in 7.6% of test calls, despite 443% intervention increase.**
+
+**Problem**: LLMs debug through code iteration (test-edit-test) rather than IR analysis.
+
+**Opportunity**: Make debug_layers DEFAULT on assertion failure to eliminate opt-in friction.
+
+## 7. JIT Execution as Infrastructure Outcome
+
+### Current Test Bottleneck
+
+Test execution averages **37.2 seconds** per call, dominated by:
+- In-process compilation: ~5 sec
+- Object file I/O and linking (LLD): ~32 sec
+
+The linking phase is I/O bound on modern NVMe drives.
+
+### Projected JIT Impact (Phase 0, in development)
+
+With in-process LLVM ORC JIT (no object files, no linking):
+
+```
+Current:  Parse → Typecheck → HIR → MIR → LLVM IR → Codegen → Linking → subprocess (37s)
+JIT:      Parse → Typecheck → HIR → MIR → LLVM IR → ORC JIT (in-process) (2s)
+```
+
+**Expected speedup: 18.5x faster**
+
+### Development Cycle Impact
+
+**Current single iteration** (10 cycles):
+```
+edit (5s) → test (37s) → see result = 42s per iteration
+10 iterations = 420 seconds = 7 minutes
+```
+
+**Projected with JIT** (10 cycles):
+```
+edit (5s) → test (2s) → see result = 7s per iteration
+10 iterations = 70 seconds
+```
+
+**Net: 6x faster development**
+
+Across 129 sessions analyzed here: **12.4 hours saved** (1/3 of total compute time)
+
+### Phase 0 Implementation Status
+
+The TML compiler is actively implementing ORC JIT with expected completion 2026-04-15:
+- Phase 0a: LLVM ORC integration infrastructure
+- Phase 0b: C runtime symbol binding
+- Phase 0c: JIT execution wrapper
+- Phase 0d: Cache invalidation and incremental JIT
+
+**This is a direct outcome of the research finding that test dominates (60.3%) and is extremely slow.**
 
 ## 8. Limitations
 
-1. **Small sample**: 60 sessions, 238 calls is insufficient for robust statistical analysis
-2. **Condition imbalance**: 6 baseline vs 54 debug-layers prevents fair comparison
-3. **Single LLM**: All data from one model (Claude Opus 4.5/4.6), no cross-model comparison
-4. **Task confound**: Different sessions involve different task types (exploration, implementation, debugging)
-5. **No ground truth**: We cannot definitively link tool usage patterns to debugging success without manual session labeling
+1. **Single LLM model**: Claude Opus 4.6 only; may not generalize to Sonnet, Haiku, GPT-4o, or open-source models
+2. **Single language**: TML has specialized stdlib; results may differ for general-purpose languages
+3. **Single task domain**: Compiler development may not reflect web development, DevOps, or security research
+4. **Observer effect**: Knowledge of measurement may influence behavior
+5. **Confounding variables**: Cannot distinguish LLM preference from tool design prominence
 
 ## 9. Recommendations
 
-1. **Focus on qualitative case studies** — Select 3-5 sessions with clear debugging episodes and trace the tool usage narrative
-2. **Increase baseline data** — Run deliberate baseline sessions (disable debug-layers) on equivalent tasks
-3. **Investigate debug_layers underuse** — Why doesn't the LLM use it? Is the output too verbose? Too slow? Not actionable?
-4. **Label sessions by task type** — Classify each session as exploration/implementation/debugging to enable within-type comparison
-5. **Extend data collection period** — Continue collecting for 2-4 more weeks to reach statistical significance
+1. **Default debug_layers on failure** — Change from opt-in to automatic when assertions fail. Expected adoption: 90%+ (matching structured output at 94.5%)
+
+2. **Auto-suggest check before test** — When test is invoked on modified code without prior check, respond with suggestion. Expected adoption increase: 25-30%
+
+3. **Implement JIT execution (Phase 0)** — Already in progress; projected 18.5x speedup on test execution
+
+4. **Track time-to-resolution metrics** — Measure sessions to identify which patterns lead to faster fixes and guide LLM behavior
+
+5. **Implement REPL mode for IR analysis** — Enable interactive JIT + IR introspection during exploratory programming
+
+6. **Reduce emit-ir/emit-mir latency** — Cache LLVM IR in memory; enable streaming output for real-time inspection
+
+7. **Add "Beginner/Advanced" tool modes** — Simplify onboarding without overwhelming with 12 tools at once

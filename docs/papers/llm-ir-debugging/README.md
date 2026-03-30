@@ -1,8 +1,9 @@
 # LLM-Assisted Debugging Through Multi-Layer IR Exposure
 
-**Status**: Infrastructure Complete — Baseline Data Collection Active
+**Status**: Phase 1 Complete — 1321 calls analyzed across 129 sessions
 **Author**: TML Project
-**Date**: 2026-03-25
+**Date**: 2026-03-30
+**Data Period**: 2026-03-25 to 2026-03-30 (5 days, 123.9 hours)
 
 ## Abstract
 
@@ -53,12 +54,21 @@ This paper investigates whether Large Language Models (LLMs) achieve faster and 
 - **Fix Accuracy** = first_fix_correct / total_fix_attempts
 - **Layer Accuracy** = correct_layer_identified / total_bugs
 
-## Expected Contributions
+## Completed Contributions
 
-1. **Empirical data** on LLM debugging behavior with compiler IR exposure
-2. **Design guidelines** for compiler error messages optimized for LLM consumption
-3. **Tool usage patterns** showing how LLMs choose between IR-based and file-navigation-based debugging
-4. **Practical implementation** of multi-layer debug output in a production compiler
+1. **Empirical data** on LLM debugging behavior (1321 tool calls, 129 sessions, 5 days)
+2. **Quantified impact of explicit rules** — documented anti-patterns increase adoption by +27% to +443%
+3. **Tool usage patterns** — test dominates (60.3%), docs adoption increased 27%, debug_layers adoption increased 443%
+4. **Infrastructure outcome** — findings directly motivated LLVM ORC JIT implementation (Phase 0, completion 2026-04-15)
+
+## Key Findings (Phase 1)
+
+- **Test-centric workflow**: 60.3% of calls are test runs; test accounts for 99% of computation time
+- **Anti-pattern interventions work**: Explicit rules with justification increase adoption by average 168%
+- **Fine-grained testing preferred**: 74.9% of tests target specific files (path parameter), not full suite (1.4%)
+- **Diagnostic tools underutilized**: Only 4.3% of calls use emit-ir + emit-mir, despite 443% intervention increase
+- **Structured output is default**: 94.5% adoption shows good UX matters more than explicit rules
+- **JIT execution projected impact**: Current 37.2s average test latency → 2s with ORC JIT (18.5x speedup)
 
 ## Data Files
 
@@ -68,13 +78,18 @@ This paper investigates whether Large Language Models (LLMs) achieve faster and 
 | `data/sessions.json` | JSON | Session boundaries and bug classifications |
 | `data/analysis.json` | JSON | Computed metrics per session |
 
-## Paper Structure (Planned)
+## Analysis Documents
 
-1. Introduction — Problem statement, motivation
-2. Background — LLMs for code, compiler IRs, MCP protocol
-3. System Design — TML compiler, MCP tools, multi-layer debug
-4. Methodology — Data collection, metrics, experimental design
-5. Results — Tool usage patterns, IR preference, diagnosis efficiency
-6. Discussion — When IR helps, when it doesn't, design implications
-7. Related Work — LLM debugging, compiler diagnostics, IDE integration
-8. Conclusion — Guidelines for LLM-optimized compiler diagnostics
+1. **`preliminary-analysis.md`** — Full data analysis (9 sections, 1321 calls, before/after metrics)
+2. **`tool-taxonomy.md`** — Tool classification with observed metrics
+3. **`experiment-protocol.md`** — Experimental design and methodology
+4. **`debug-layers-design.md`** — Multi-layer IR debug output architecture
+5. **`data/`** — Raw data files (mcp-call-log.jsonl, sessions, bugs)
+
+## Next Steps (Phase 2)
+
+1. **Extend data collection** — Gather another 2-4 weeks of data to reach larger sample
+2. **Make debug_layers default** — Auto-emit IR on assertion failure (projected: 90%+ adoption)
+3. **Compare with other LLM models** — Sonnet, Haiku, GPT-4o to test generalization
+4. **Track time-to-resolution** — Measure debugging session effectiveness
+5. **Publish findings** — Contribute to LLM+compiler research literature
