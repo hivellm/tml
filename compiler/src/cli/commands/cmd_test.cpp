@@ -208,18 +208,32 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     tml::CompilerOptions::check_leaks = opts.check_leaks;
 
-    // When --verbose is active, add a filtered JSON file sink to the logger
+    // Determine log path (timestamped per-run file)
+    fs::path log_path;
     if (opts.verbose) {
-        fs::path log_path;
         if (!opts.log_path.empty()) {
             log_path = fs::path(opts.log_path);
             fs::create_directories(log_path.parent_path());
         } else {
-            fs::path log_dir = fs::path("build") / "debug";
-            fs::create_directories(log_dir);
-            log_path = log_dir / "test_log.json";
+            fs::path logs_dir = fs::path("build") / "debug" / "logs";
+            fs::create_directories(logs_dir);
+            // Timestamped filename: test_YYYYMMDD_HHMMSS.json
+            auto now = std::chrono::system_clock::now();
+            auto tt = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+#ifdef _WIN32
+            localtime_s(&tm, &tt);
+#else
+            localtime_r(&tt, &tm);
+#endif
+            char ts[32];
+            std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
+            log_path = logs_dir / (std::string("test_") + ts + ".json");
         }
+    }
 
+    // When --verbose is active, add a filtered JSON file sink to the logger
+    if (opts.verbose) {
         class TestLogSink : public tml::log::LogSink {
         public:
             TestLogSink(const std::string& path) : inner_(path, /*append=*/false) {
@@ -269,6 +283,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.timeout_seconds = opts.timeout_seconds;
     tc.no_cache = opts.no_cache;
     tc.verbose = opts.verbose;
+    tc.profile = opts.profile;
     tc.coverage = opts.coverage;
     tc.fail_fast = opts.coverage ? false : opts.fail_fast;
     tc.max_compile_suites = opts.max_compile_suites;
@@ -320,9 +335,12 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Flush log
     if (opts.verbose) {
         tml::log::Logger::instance().flush();
-        fs::path log_path = !opts.log_path.empty() ? fs::path(opts.log_path)
-                                                   : fs::path("build") / "debug" / "test_log.json";
         TML_LOG_INFO("test", c.dim() << "Test log: " << c.reset() << log_path.string());
+
+        // Copy timestamped log to test_log.json as "latest" pointer
+        fs::path latest = fs::path("build") / "debug" / "test_log.json";
+        std::error_code cp_ec;
+        fs::copy_file(log_path, latest, fs::copy_options::overwrite_existing, cp_ec);
     }
 
     return (result.failed > 0 || result.crashed > 0 || result.compilation_errors > 0) ? 1 : 0;

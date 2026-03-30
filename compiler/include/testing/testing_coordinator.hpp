@@ -47,12 +47,13 @@ namespace tml::testing {
 struct TestConfig {
     std::vector<std::string> patterns;      // Test file path filters
     std::vector<std::string> suite_filters; // Suite group filters (e.g. "core/str")
-    int max_per_suite = 8;                  // Tests per suite (1 = individual mode)
+    int max_per_suite = 1;                  // Tests per suite (1 = one EXE per file)
     int compile_threads = 0;                // Parallel compile workers (0 = auto)
     int exec_concurrent = 0;                // Max concurrent subprocesses (0 = auto)
     int timeout_seconds = 10;               // Per-suite subprocess timeout
     bool no_cache = false;                  // Force recompile everything
     bool verbose = false;
+    bool profile = false; // Show suite timing profile
     bool coverage = false;
     bool fail_fast = true;    // Stop on first failure
     bool run_all_mode = true; // Use --run-all per suite instead of --test-index per test
@@ -109,6 +110,7 @@ struct TestRunResult {
     int compilation_errors = 0;
     int64_t total_duration_us = 0;
     int covered_functions_count = 0; // Covered library functions (when --coverage)
+    bool aborted_early = false;      // True if fail-fast stopped the run
     std::vector<SuiteRunResult> suites;
 };
 

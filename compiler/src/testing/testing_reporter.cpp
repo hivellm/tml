@@ -76,7 +76,7 @@ void TerminalReporter::enable_ansi_colors() {
 // ============================================================================
 
 void TerminalReporter::on_run_start(const TestConfig& config) {
-    profile_mode = config.verbose;
+    profile_mode = config.profile;
 }
 
 void TerminalReporter::on_run_end(const TestRunResult& result) {
@@ -111,12 +111,10 @@ void TerminalReporter::print_summary_table(const TestRunResult& result) const {
         }
     }
 
-    TML_LOG_INFO("test", "  Suites:  " << result.suites.size()
-                                       << (cached_count > 0
-                                               ? " (" + std::to_string(cached_count) + " cached)"
-                                               : ""));
-    TML_LOG_INFO("test", "  Tests:   " << result.total_tests);
-    TML_LOG_INFO("test", "  " << c.green() << "Passed:  " << result.passed << c.reset());
+    if (result.total_tests > 0) {
+        TML_LOG_INFO("test", "  Tests:   " << result.total_tests);
+        TML_LOG_INFO("test", "  " << c.green() << "Passed:  " << result.passed << c.reset());
+    }
 
     if (result.failed > 0) {
         TML_LOG_INFO("test", "  " << c.red() << "Failed:  " << result.failed << c.reset());
@@ -128,8 +126,12 @@ void TerminalReporter::print_summary_table(const TestRunResult& result) const {
         TML_LOG_INFO("test", "  " << c.red() << "Timeout: " << result.timed_out << c.reset());
     }
     if (result.compilation_errors > 0) {
-        TML_LOG_INFO("test", "  " << c.yellow() << "Compile errors: " << result.compilation_errors
+        TML_LOG_INFO("test", "  " << c.red() << "Compile errors: " << result.compilation_errors
                                   << c.reset());
+    }
+    if (result.aborted_early) {
+        TML_LOG_INFO("test",
+                     "  " << c.red() << "ABORTED: stopped on first error (fail-fast)" << c.reset());
     }
     int skipped =
         result.total_tests - result.passed - result.failed - result.crashed - result.timed_out;
