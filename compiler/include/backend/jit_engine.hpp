@@ -87,6 +87,17 @@ public:
     /// @return JitResult::success=true on success, false on parse/add failure
     [[nodiscard]] auto addModule(const std::string& ir_text) -> JitResult;
 
+    /// Add a precompiled object file to the JIT.
+    ///
+    /// Reads the object file at `path` into memory and loads it into the main
+    /// JITDylib via the object layer. Used to provide function bodies for
+    /// `declare`-only stubs in user IR (e.g., List, HashMap, sync, etc. from
+    /// the stdlib runtime objects that are normally linked by LLD).
+    ///
+    /// @param path Absolute or relative path to the precompiled .obj/.o file
+    /// @return JitResult::success=true on success, false on read/load failure
+    [[nodiscard]] auto addObjectFile(const std::string& path) -> JitResult;
+
     /// Look up a symbol by IR name and return its address.
     ///
     /// Symbol must have been added via `addModule()` and compiled successfully.

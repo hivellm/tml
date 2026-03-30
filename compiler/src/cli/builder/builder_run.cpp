@@ -663,6 +663,28 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
             return 1;
         }
 
+        // Load runtime/stdlib object files into the JIT engine.
+        // These provide function bodies for `declare`-only stubs in user IR —
+        // List, HashMap, sync primitives, and other stdlib types that are
+        // normally supplied by LLD during the link step.
+        {
+            parser::Module empty_module;
+            const auto& mod = compile.module ? *compile.module : empty_module;
+            std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
+            std::string clang = find_clang();
+            auto runtime_objects =
+                get_runtime_objects(compile.registry, mod, deps_cache, clang, false);
+            for (const auto& obj_path : runtime_objects) {
+                auto obj_result = engine->addObjectFile(obj_path.string());
+                if (!obj_result.success) {
+                    TML_LOG_WARN("jit", "Failed to load runtime object "
+                                            << obj_path.filename() << ": " << obj_result.error);
+                    // Non-fatal: some objects may contain duplicate symbols or
+                    // be for features not exercised by this program.
+                }
+            }
+        }
+
         auto add_result = engine->addModule(compile.llvm_ir);
         if (!add_result.success) {
             TML_LOG_ERROR("jit", add_result.error);

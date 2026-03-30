@@ -18,6 +18,7 @@ TML_MODULE("codegen_x86")
 #include <llvm/IR/Module.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Error.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/TargetSelect.h>
 #include <mutex>
@@ -170,6 +171,30 @@ auto JitEngine::addModule(const std::string& ir_text) -> JitResult {
     if (auto err = impl_->jit->addIRModule(std::move(tsm))) {
         result.success = false;
         result.error = "[J003] Failed to add IR module: " + error_to_string(std::move(err));
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
+/// Read a precompiled object file and load it into the main JITDylib.
+auto JitEngine::addObjectFile(const std::string& path) -> JitResult {
+    JitResult result;
+
+    auto buf_or_err = llvm::MemoryBuffer::getFile(path);
+    if (!buf_or_err) {
+        result.success = false;
+        result.error =
+            "[J008] Failed to read object file '" + path + "': " + buf_or_err.getError().message();
+        return result;
+    }
+
+    if (auto err =
+            impl_->jit->addObjectFile(impl_->jit->getMainJITDylib(), std::move(*buf_or_err))) {
+        result.success = false;
+        result.error =
+            "[J009] Failed to add object file '" + path + "': " + error_to_string(std::move(err));
         return result;
     }
 
