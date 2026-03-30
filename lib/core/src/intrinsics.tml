@@ -1,0 +1,6 @@
+//! Compiler intrinsics — convenience re-export of `core::runtime::intrinsics`.
+//!
+//! Provides low-level compiler intrinsics for type metadata, size/alignment,
+//! field reflection, and other operations implemented directly by the compiler.
+
+pub use core::runtime::intrinsics::*

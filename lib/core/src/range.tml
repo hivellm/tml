@@ -1,0 +1,8 @@
+//! Range types — convenience re-export of `core::ops::range` and concrete iterators.
+//!
+//! Provides `Range`, `RangeInclusive`, `RangeFrom`, `RangeTo`, `RangeFull`
+//! and the concrete iterator types `RangeIterI64`, `RangeInclusiveIterI64`.
+
+pub use core::ops::range::*
+pub use core::types::range::RangeIterI64
+pub use core::types::range::RangeInclusiveIterI64

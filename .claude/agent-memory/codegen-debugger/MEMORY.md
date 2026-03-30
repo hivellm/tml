@@ -1,6 +1,10 @@
 # Codegen Debugger Memory
 
 ## Index
+- [nested-generic-typesubs-fix.md](nested-generic-typesubs-fix.md) - Nested generic type_subs: where-clause constraint destructuring for flatten/transpose (2026-03-30, PARTIAL — 2/5 fixed, 3 blocked by module registry gap)
+- [where-clause-type-resolution.md](where-clause-type-resolution.md) - Where clause type param resolution: ClosureType handling, best-impl selection, associated type substitution (2026-03-30, FIXED)
+- [listiter-case-sensitive-fix.md](listiter-case-sensitive-fix.md) - Windows NTFS case-insensitive fs::exists skipped parent module load, leaving ListIter unregistered (2026-03-30, FIXED)
+- [where-clause-overwrite-fix.md](where-clause-overwrite-fix.md) - pending_generic_impls_ single-entry map overwrites where clause impls — use pending_generic_impls_all_ (2026-03-30, FIXED)
 - [generic-instantiation-dispatch-fix.md](generic-instantiation-dispatch-fix.md) - Multiple generic instantiations (List[Str]+List[Violation]) stale last_semantic_type_ wrong dispatch (2026-03-25, FIXED)
 - [submodule-function-mangling-fix.md](submodule-function-mangling-fix.md) - Submodule free function name mangling mismatch: call site used parent module path, definition used submodule path (2026-03-25, FIXED)
 - [mcp-iostream-crash-fix.md](mcp-iostream-crash-fix.md) - MCP docs/search crash: iostream ABI incompatibility across DLL boundaries, replaced with C FILE* (2026-03-25, FIXED)

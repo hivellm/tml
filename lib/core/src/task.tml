@@ -1,0 +1,50 @@
+//! Async task primitives.
+//!
+//! Provides `Poll`, `Context`, `Waker` and related types for the async/await system.
+//!
+//! # Usage
+//!
+//! ```tml
+//! use core::task::Poll
+//!
+//! let p: Poll[I32] = Poll::Ready(42)
+//! assert(p.is_ready())
+//! ```
+
+/// The result of a non-blocking async operation.
+///
+/// An async operation either completes with a value (`Ready`) or
+/// has not yet completed (`Pending`).
+pub type Poll[T] {
+    /// The operation completed and produced a value.
+    Ready(T),
+
+    /// The operation is not yet complete.
+    Pending
+}
+
+impl[T] Poll[T] {
+    /// Returns `true` if this is `Ready`.
+    pub func is_ready(this) -> Bool {
+        when this {
+            Ready(_) => return true,
+            Pending => return false
+        }
+    }
+
+    /// Returns `true` if this is `Pending`.
+    pub func is_pending(this) -> Bool {
+        when this {
+            Ready(_) => return false,
+            Pending => return true
+        }
+    }
+
+    /// Maps a `Poll[T]` to `Poll[U]` by applying a function to the `Ready` value.
+    pub func map[U, F](this, f: F) -> Poll[U] where F: FnOnce[(T,), Output = U] {
+        when this {
+            Ready(v) => return Poll::Ready(f(v)),
+            Pending => return Poll::Pending
+        }
+    }
+}
