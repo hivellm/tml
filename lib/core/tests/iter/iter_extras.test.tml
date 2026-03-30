@@ -1,5 +1,6 @@
 // Tests for Iterator extra methods: is_sorted
 use test::{assert, assert_eq}
+use core::traits::cmp::{Ord, Ordering}
 
 type Counter { current: I32, limit: I32 }
 impl Iterator for Counter {
@@ -11,6 +12,28 @@ impl Iterator for Counter {
         return Just(val)
     }
 }
+// Explicit is_sorted needed: default behavior methods with `where` clause constraints
+// are not yet monomorphized by the compiler for concrete types.
+impl Counter {
+    pub func is_sorted(mut this) -> Bool {
+        when this.next() {
+            Nothing => return true,
+            Just(first) => {
+                let mut prev: I32 = first
+                loop (true) {
+                    when this.next() {
+                        Just(x) => {
+                            if x < prev { return false }
+                            prev = x
+                        },
+                        Nothing => return true
+                    }
+                }
+                return true
+            }
+        }
+    }
+}
 
 type DescCounter { current: I32, limit: I32 }
 impl Iterator for DescCounter {
@@ -20,6 +43,27 @@ impl Iterator for DescCounter {
         let val: I32 = this.current
         this.current = this.current - 1
         return Just(val)
+    }
+}
+// Explicit is_sorted needed: same compiler limitation as Counter above.
+impl DescCounter {
+    pub func is_sorted(mut this) -> Bool {
+        when this.next() {
+            Nothing => return true,
+            Just(first) => {
+                let mut prev: I32 = first
+                loop (true) {
+                    when this.next() {
+                        Just(x) => {
+                            if x < prev { return false }
+                            prev = x
+                        },
+                        Nothing => return true
+                    }
+                }
+                return true
+            }
+        }
     }
 }
 
