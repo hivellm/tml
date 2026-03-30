@@ -480,10 +480,12 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
                 if (!env_.type_implements(constrained_type_name, behavior_name))
                     return false;
 
-                // Extra safety: verify the method body can actually call methods on
-                // the constrained type. For non-primitive types, the legacy codegen
-                // may not find the required methods (e.g., cmp on Str).
-                // Only allow primitives and types with known complete impls.
+                // Only allow where-clause default methods for primitive types.
+                // Builtin types like Str/Bool have Eq/Ord registered for the type
+                // checker (enabling == and < operators), but the codegen handles
+                // these via special inline IR (str_eq, strcmp), NOT through behavior
+                // method dispatch. If we generate is_sorted() for Lines (Item=Str),
+                // the body calls x.cmp(ref prev) which the legacy codegen can't resolve.
                 static const std::unordered_set<std::string> safe_types = {
                     "I8",  "I16", "I32", "I64",  "U8",   "U16",   "U32",
                     "U64", "F32", "F64", "Bool", "Char", "Isize", "Usize"};
