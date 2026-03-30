@@ -24,6 +24,155 @@ TML_MODULE("mcp")
 namespace tml::mcp {
 
 // ============================================================================
+// Docs Hint Helpers
+// ============================================================================
+
+/// Extracts candidate type/identifier names from an error string.
+/// Finds single-quoted tokens and qualified module paths (containing "::").
+static auto extract_hint_candidates(const std::string& text) -> std::vector<std::string> {
+    std::vector<std::string> hints;
+
+    // Find single-quoted identifiers: 'Foo', 'bar', 'std::collections::List'
+    std::string::size_type pos = 0;
+    while ((pos = text.find('\'', pos)) != std::string::npos) {
+        auto end = text.find('\'', pos + 1);
+        if (end != std::string::npos && end - pos > 1 && end - pos < 60) {
+            hints.push_back(text.substr(pos + 1, end - pos - 1));
+        }
+        pos = (end != std::string::npos) ? end + 1 : text.size();
+    }
+
+    // Find qualified module paths like "std::collections::HashMap"
+    std::string::size_type mpos = 0;
+    while ((mpos = text.find("::", mpos)) != std::string::npos) {
+        // Walk backwards to the start of the path
+        auto start = mpos;
+        while (start > 0 && (std::isalnum(static_cast<unsigned char>(text[start - 1])) ||
+                             text[start - 1] == '_' || text[start - 1] == ':')) {
+            --start;
+        }
+        // Walk forwards to the end of the path
+        auto end = mpos + 2;
+        while (end < text.size() && (std::isalnum(static_cast<unsigned char>(text[end])) ||
+                                     text[end] == '_' || text[end] == ':')) {
+            ++end;
+        }
+        if (end - start > 4) {
+            hints.push_back(text.substr(start, end - start));
+        }
+        mpos = end;
+    }
+
+    // Deduplicate
+    std::sort(hints.begin(), hints.end());
+    hints.erase(std::unique(hints.begin(), hints.end()), hints.end());
+
+    return hints;
+}
+
+/// Builds docs hint lines from extracted candidates (max 5 hints).
+/// Returns empty string if no useful hints are found.
+static auto build_docs_hints(const std::string& error_text) -> std::string {
+    auto candidates = extract_hint_candidates(error_text);
+
+    std::string hints_section;
+
+    // Known type quick-reference for common patterns
+    bool mentioned_outcome = error_text.find("Outcome") != std::string::npos ||
+                             error_text.find("Result") != std::string::npos;
+    bool mentioned_maybe = error_text.find("Maybe") != std::string::npos ||
+                           error_text.find("Option") != std::string::npos;
+    bool mentioned_iterator = error_text.find("Iterator") != std::string::npos;
+
+    if (mentioned_outcome) {
+        hints_section += "  Outcome[T,E] variants: Ok(T) | Err(E)\n";
+        hints_section += "  Use: docs_get(id=\"core::error::Outcome\")\n";
+    }
+    if (mentioned_maybe) {
+        hints_section += "  Maybe[T] variants: Just(T) | Nothing\n";
+        hints_section += "  Use: docs_get(id=\"core::types::option::Maybe\")\n";
+    }
+    if (mentioned_iterator) {
+        hints_section += "  Iterator requires: type Item, func next(mut this) -> Maybe[Item]\n";
+        hints_section += "  Use: docs_list(module=\"core::iter\")\n";
+    }
+
+    // Add search hints for extracted candidates (up to 5 total, skip very short names)
+    int hint_count = 0;
+    for (const auto& hint : candidates) {
+        if (hint_count >= 5)
+            break;
+        if (hint.size() < 3 || hint.size() >= 60)
+            continue;
+        hints_section += "  Try: docs_search(query=\"" + hint + "\")\n";
+        ++hint_count;
+    }
+
+    if (hints_section.empty()) {
+        return {};
+    }
+    return "\n\n--- Docs Hints ---\n" + hints_section;
+}
+
+/// Parses a TML source file for top-level `use` statements and returns
+/// the module prefix of each import (e.g. "std::collections" from
+/// "use std::collections::List").
+static auto extract_imports(const std::string& file_path) -> std::vector<std::string> {
+    std::ifstream source(file_path);
+    if (!source.is_open()) {
+        return {};
+    }
+
+    std::vector<std::string> imports;
+    std::string src_line;
+    while (std::getline(source, src_line)) {
+        auto use_pos = src_line.find("use ");
+        if (use_pos == std::string::npos)
+            continue;
+
+        // Accept lines that start with "use " (allowing leading whitespace)
+        bool leading_ok = true;
+        for (std::string::size_type i = 0; i < use_pos; ++i) {
+            if (src_line[i] != ' ' && src_line[i] != '\t') {
+                leading_ok = false;
+                break;
+            }
+        }
+        if (!leading_ok)
+            continue;
+
+        // Extract the module path after "use "
+        auto mod_start = use_pos + 4;
+        // Skip leading whitespace
+        while (mod_start < src_line.size() && src_line[mod_start] == ' ')
+            ++mod_start;
+
+        // Collect up to the first "{" or end-of-line (skip trailing semicolons)
+        auto mod_end = src_line.find("::{", mod_start);
+        if (mod_end == std::string::npos)
+            mod_end = src_line.size();
+
+        std::string mod = src_line.substr(mod_start, mod_end - mod_start);
+
+        // Trim trailing whitespace, semicolons, and newline characters
+        while (!mod.empty() && (mod.back() == ' ' || mod.back() == '\t' || mod.back() == '\n' ||
+                                mod.back() == '\r' || mod.back() == ';')) {
+            mod.pop_back();
+        }
+
+        if (!mod.empty() && mod != "test") {
+            imports.push_back(mod);
+        }
+    }
+
+    // Deduplicate
+    std::sort(imports.begin(), imports.end());
+    imports.erase(std::unique(imports.begin(), imports.end()), imports.end());
+
+    return imports;
+}
+
+// ============================================================================
 // Tool Registration
 // ============================================================================
 
@@ -507,6 +656,17 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
 
     if (exit_code == 0) {
         std::string result = "Type check passed for: " + file_path;
+
+        // Show imported modules with docs_list suggestions so the LLM can
+        // quickly discover what APIs are available in the modules it is using.
+        auto imports = extract_imports(file_path);
+        if (!imports.empty()) {
+            result += "\n\n--- Imported Modules ---";
+            for (const auto& imp : imports) {
+                result += "\n  " + imp + " -> docs_list(module=\"" + imp + "\")";
+            }
+        }
+
         if (!clean_output.empty()) {
             result += "\n\n" + clean_output;
         }
@@ -517,6 +677,10 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
     if (!clean_output.empty()) {
         error_msg += "\n\n" + clean_output;
     }
+
+    // Append docs hints so the LLM can look up types that appear in the error.
+    error_msg += build_docs_hints(clean_output);
+
     return ToolResult::error(error_msg);
 }
 
@@ -1106,7 +1270,44 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
                 result << ",";
             result << "\"" << json_esc(diagnostics[i]) << "\"";
         }
-        result << "]";
+        result << "],";
+
+        // Build docs hints from the raw output so the LLM can look up types
+        // mentioned in compiler diagnostics without reading source files.
+        {
+            auto candidates = extract_hint_candidates(output);
+            std::vector<std::string> hint_items;
+            // Known type quick-reference hints
+            if (output.find("Outcome") != std::string::npos ||
+                output.find("Result") != std::string::npos) {
+                hint_items.push_back("docs_get(id=\\\"core::error::Outcome\\\")");
+            }
+            if (output.find("Maybe") != std::string::npos ||
+                output.find("Option") != std::string::npos) {
+                hint_items.push_back("docs_get(id=\\\"core::types::option::Maybe\\\")");
+            }
+            if (output.find("Iterator") != std::string::npos) {
+                hint_items.push_back("docs_list(module=\\\"core::iter\\\")");
+            }
+            // Per-candidate search hints (up to 5 additional)
+            int count = 0;
+            for (const auto& c : candidates) {
+                if (count >= 5)
+                    break;
+                if (c.size() < 3 || c.size() >= 60)
+                    continue;
+                hint_items.push_back("docs_search(query=\\\"" + json_esc(c) + "\\\")");
+                ++count;
+            }
+            result << "\"docs_hints\":[";
+            for (size_t i = 0; i < hint_items.size(); ++i) {
+                if (i > 0)
+                    result << ",";
+                result << "\"" << hint_items[i] << "\"";
+            }
+            result << "]";
+        }
+
         result << "}";
 
         return ToolResult::text(result.str());
@@ -1124,6 +1325,10 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
     }
 
     if (exit_code != 0) {
+        // Append docs hints for types mentioned in test output so the LLM
+        // can look up APIs that appear in compiler diagnostics.
+        std::string stripped = strip_ansi(output);
+        result << build_docs_hints(stripped);
         return ToolResult::error(result.str());
     }
 
