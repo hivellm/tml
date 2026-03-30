@@ -181,6 +181,24 @@ auto make_docs_search_tool() -> Tool {
 // ============================================================================
 
 auto read_source_file(const std::string& path) -> std::optional<std::string> {
+#ifdef _WIN32
+    // std::ifstream::rdbuf() can block on Windows in MCP server context (inherited handles).
+    // Use Win32 CreateFile/ReadFile instead.
+    HANDLE hf = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf == INVALID_HANDLE_VALUE) {
+        return std::nullopt;
+    }
+    LARGE_INTEGER file_size{};
+    GetFileSizeEx(hf, &file_size);
+    std::string content;
+    content.resize(static_cast<size_t>(file_size.QuadPart));
+    DWORD bytes_read = 0;
+    ReadFile(hf, content.data(), static_cast<DWORD>(file_size.QuadPart), &bytes_read, nullptr);
+    content.resize(bytes_read);
+    CloseHandle(hf);
+    return content;
+#else
     std::ifstream file(path);
     if (!file) {
         return std::nullopt;
@@ -188,6 +206,7 @@ auto read_source_file(const std::string& path) -> std::optional<std::string> {
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
+#endif
 }
 
 // ============================================================================
@@ -655,21 +674,9 @@ auto handle_emit_ir(const json::JsonValue& params) -> ToolResult {
     std::string module_name = fs::path(file_path).stem().string();
     std::string ll_path_str = "build/debug/" + module_name + ".ll";
 
-    // Read file back
-    std::string ir;
-    {
-        std::ifstream f(ll_path_str);
-        if (f.is_open()) {
-            std::stringstream buf;
-            buf << f.rdbuf();
-            ir = buf.str();
-        } else {
-            ir = "(could not read " + ll_path_str + ")";
-        }
-    }
+    auto ir_opt = read_source_file(ll_path_str);
+    std::string ir = ir_opt.has_value() ? *ir_opt : "(could not read " + ll_path_str + ")";
 
-    // Skip all filtering for now and return directly
-    return ToolResult::text(ir);
     if (ir.size() > 500000) {
         ir = ir.substr(0, 500000) + "\n\n[... truncated at 500KB ...]";
     }
@@ -801,7 +808,11 @@ auto handle_emit_mir(const json::JsonValue& params) -> ToolResult {
                                  mir_path.string());
     }
 
-    return ToolResult::text(*mir_opt);
+    std::string mir = *mir_opt;
+    if (mir.size() > 500000) {
+        mir = mir.substr(0, 500000) + "\n\n[... truncated at 500KB ...]";
+    }
+    return ToolResult::text(mir);
 }
 
 auto handle_test(const json::JsonValue& params) -> ToolResult {
@@ -909,6 +920,7 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         int total = 0, passed = 0, failed = 0, crashed = 0, compile_errors = 0;
         std::vector<std::string> failures;
         std::vector<std::string> timeouts;
+        std::vector<std::string> diagnostics; // full error messages with file:line:col
 
         auto extract_number = [](const std::string& l, const std::string& key) -> int {
             auto pos = l.find(key);
@@ -924,52 +936,138 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
             }
         };
 
+        // Strip ANSI escape codes (\033[...m) so diagnostics are clean text
+        auto strip_ansi = [](const std::string& s) -> std::string {
+            std::string r;
+            r.reserve(s.size());
+            for (size_t i = 0; i < s.size();) {
+                if (s[i] == '\033' && i + 1 < s.size() && s[i + 1] == '[') {
+                    i += 2;
+                    while (i < s.size() && s[i] != 'm')
+                        ++i;
+                    if (i < s.size())
+                        ++i;
+                } else {
+                    r += s[i++];
+                }
+            }
+            return r;
+        };
+
+        // Escape a string for JSON embedding
+        auto json_esc = [](const std::string& s) -> std::string {
+            std::string r;
+            for (char c : s) {
+                if (c == '"')
+                    r += "\\\"";
+                else if (c == '\\')
+                    r += "\\\\";
+                else if (c == '\n')
+                    r += "\\n";
+                else if (c == '\r') {
+                } else if (c == '\t')
+                    r += "\\t";
+                else
+                    r += c;
+            }
+            return r;
+        };
+
         std::istringstream stream(output);
         std::string line;
+        bool in_fail_detail = false; // collecting indented error lines after a test FAIL
         while (std::getline(stream, line)) {
+            std::string clean = strip_ansi(line);
+
             int v;
-            if ((v = extract_number(line, "Passed:")) >= 0)
+            if ((v = extract_number(clean, "Passed:")) >= 0)
                 passed = v;
-            if ((v = extract_number(line, "Failed:")) >= 0)
+            if ((v = extract_number(clean, "Failed:")) >= 0)
                 failed = v;
-            if ((v = extract_number(line, "Tests:")) >= 0)
+            if ((v = extract_number(clean, "Tests:")) >= 0)
                 total = v;
-            if ((v = extract_number(line, "Crashed:")) >= 0)
+            if ((v = extract_number(clean, "Crashed:")) >= 0)
                 crashed = v;
-            if ((v = extract_number(line, "Compile errors:")) >= 0)
+            if ((v = extract_number(clean, "Compile errors:")) >= 0)
                 compile_errors = v;
 
-            // Collect failure details from "FAIL group/name (file)" lines
-            if (line.find("FAIL") != std::string::npos &&
-                line.find("COMPILE") == std::string::npos) {
-                auto fail_pos = line.find("FAIL");
+            // ── Diagnostics: capture errors with file:line:col detail ──────
+            // [compile] SKIP file:line:col: error — per-file compile error
+            if (clean.find("[compile] SKIP ") != std::string::npos) {
+                auto pos = clean.find("[compile] SKIP ");
+                diagnostics.push_back(clean.substr(pos + 15));
+                in_fail_detail = false;
+            }
+            // [compile] FAIL suite.exe: error (N/M) — suite-level compile failure
+            else if (clean.find("[compile] FAIL ") != std::string::npos) {
+                auto pos = clean.find("[compile] FAIL ");
+                std::string d = clean.substr(pos + 15);
+                auto paren = d.rfind(" (");
+                if (paren != std::string::npos)
+                    d = d.substr(0, paren);
+                if (!d.empty())
+                    diagnostics.push_back(d);
+                in_fail_detail = false;
+            }
+            // COMPILE ERROR suite: error (from reporter — failed suites)
+            else if (clean.find("COMPILE ERROR") != std::string::npos) {
+                auto pos = clean.find("COMPILE ERROR");
+                diagnostics.push_back(clean.substr(pos));
+                in_fail_detail = false;
+            }
+            // FAIL group/name (file) [exit N] — test failure header
+            else if (clean.find("FAIL ") != std::string::npos &&
+                     clean.find("[compile]") == std::string::npos &&
+                     clean.find("COMPILE") == std::string::npos) {
+                auto fail_pos = clean.find("FAIL ");
+                diagnostics.push_back(clean.substr(fail_pos));
+                in_fail_detail = true;
+            }
+            // Indented error detail following a test FAIL line
+            else if (in_fail_detail) {
+                // Skip log prefix "HH:MM:SS.mmm LEVEL [module] " to reach message content
+                auto bracket = clean.find("] ");
+                std::string msg =
+                    (bracket != std::string::npos) ? clean.substr(bracket + 2) : clean;
+                if (!msg.empty() && msg[0] == ' ') {
+                    auto first = msg.find_first_not_of(' ');
+                    if (first != std::string::npos)
+                        diagnostics.push_back("  " + msg.substr(first));
+                } else {
+                    in_fail_detail = false;
+                }
+            } else {
+                in_fail_detail = false;
+            }
+            // ─────────────────────────────────────────────────────────────
+
+            // Collect failure names (backwards-compat field)
+            if (clean.find("FAIL") != std::string::npos &&
+                clean.find("COMPILE") == std::string::npos) {
+                auto fail_pos = clean.find("FAIL");
                 if (fail_pos != std::string::npos) {
-                    // Extract everything after "FAIL " until " ("
-                    auto name_start = line.find_first_not_of(' ', fail_pos + 4);
+                    auto name_start = clean.find_first_not_of(' ', fail_pos + 4);
                     if (name_start != std::string::npos) {
-                        auto paren_pos = line.find(" (", name_start);
-                        auto end_pos = (paren_pos != std::string::npos) ? paren_pos : line.size();
-                        std::string test_name = line.substr(name_start, end_pos - name_start);
-                        failures.push_back(test_name);
+                        auto paren_pos = clean.find(" (", name_start);
+                        auto end_pos = (paren_pos != std::string::npos) ? paren_pos : clean.size();
+                        failures.push_back(clean.substr(name_start, end_pos - name_start));
                     }
                 }
             }
-            // Collect timeout details from "TIMEOUT:" lines in error output
-            if (line.find("TIMEOUT:") != std::string::npos) {
-                auto timeout_pos = line.find("TIMEOUT:");
-                auto detail_start = line.find_first_not_of(' ', timeout_pos);
-                if (detail_start != std::string::npos) {
-                    timeouts.push_back(line.substr(detail_start));
-                }
+            // Collect timeout details
+            if (clean.find("TIMEOUT:") != std::string::npos) {
+                auto timeout_pos = clean.find("TIMEOUT:");
+                auto detail_start = clean.find_first_not_of(' ', timeout_pos);
+                if (detail_start != std::string::npos)
+                    timeouts.push_back(clean.substr(detail_start));
             }
-            // Also collect compile errors as failures
-            if (line.find("COMPILE ERROR") != std::string::npos) {
-                auto colon_pos = line.find("COMPILE ERROR");
+            // Compile errors also added to failures list
+            if (clean.find("COMPILE ERROR") != std::string::npos) {
+                auto colon_pos = clean.find("COMPILE ERROR");
                 if (colon_pos != std::string::npos) {
-                    auto name_start = line.find_first_not_of(' ', colon_pos + 13);
-                    if (name_start != std::string::npos) {
-                        failures.push_back("[compile] " + line.substr(name_start));
-                    }
+                    auto name_start = clean.find_first_not_of(' ', colon_pos + 13);
+                    if (name_start != std::string::npos)
+                        failures.push_back("[compile] " + clean.substr(name_start));
                 }
             }
         }
@@ -992,14 +1090,21 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
         for (size_t i = 0; i < failures.size(); ++i) {
             if (i > 0)
                 result << ",";
-            result << "\"" << failures[i] << "\"";
+            result << "\"" << json_esc(failures[i]) << "\"";
         }
         result << "],";
         result << "\"timeouts\":[";
         for (size_t i = 0; i < timeouts.size(); ++i) {
             if (i > 0)
                 result << ",";
-            result << "\"" << timeouts[i] << "\"";
+            result << "\"" << json_esc(timeouts[i]) << "\"";
+        }
+        result << "],";
+        result << "\"diagnostics\":[";
+        for (size_t i = 0; i < diagnostics.size(); ++i) {
+            if (i > 0)
+                result << ",";
+            result << "\"" << json_esc(diagnostics[i]) << "\"";
         }
         result << "]";
         result << "}";

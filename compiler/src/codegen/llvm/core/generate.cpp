@@ -619,10 +619,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         }
                     } else if (decl->is<parser::FuncDecl>()) {
                         const auto& func = decl->as<parser::FuncDecl>();
-                        if (!func.generics.empty() && pending_generic_funcs_.find(func.name) ==
-                                                          pending_generic_funcs_.end()) {
-                            pending_generic_funcs_[func.name] = &func;
-                            generic_func_modules_[func.name] = mod_name;
+                        if (!func.generics.empty()) {
+                            // Always append to the _all_ map for arity disambiguation
+                            pending_generic_funcs_all_[func.name].push_back({&func, mod_name});
+                            if (pending_generic_funcs_.find(func.name) ==
+                                pending_generic_funcs_.end()) {
+                                pending_generic_funcs_[func.name] = &func;
+                                generic_func_modules_[func.name] = mod_name;
+                            }
                         }
                     } else if (decl->is<parser::ImplDecl>()) {
                         const auto& impl = decl->as<parser::ImplDecl>();

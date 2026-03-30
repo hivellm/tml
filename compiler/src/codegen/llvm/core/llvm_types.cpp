@@ -37,6 +37,8 @@ TML_MODULE("codegen_x86")
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 
+#include <cctype>
+
 namespace tml::codegen {
 
 auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
@@ -1162,20 +1164,44 @@ auto LLVMIRGen::mangle_func_name(const std::string& base_name,
         return base_name;
     }
 
+    // Strip arity disambiguation suffix (___a<N>) if present.
+    // This suffix is used internally to distinguish same-named generic functions
+    // with different param counts (e.g., mem::take[T](1 param) vs iter::take[I](2 params)).
+    // The mangled symbol should use the real function name, not the arity key.
+    std::string real_name = base_name;
+    auto arity_pos = base_name.find("___a");
+    if (arity_pos != std::string::npos) {
+        // Verify the suffix is ___a followed by digits only
+        bool valid_suffix = true;
+        for (size_t i = arity_pos + 4; i < base_name.size(); ++i) {
+            if (!std::isdigit(base_name[i])) {
+                valid_suffix = false;
+                break;
+            }
+        }
+        if (valid_suffix && arity_pos + 4 < base_name.size()) {
+            real_name = base_name.substr(0, arity_pos);
+        }
+    }
+
     std::string type_suffix = "__" + mangle_type_args(type_args);
 
     // Phase 4: Add hierarchical path encoding + hash for library generic functions.
     // Look up the module that owns this generic function.
+    // Try both the original base_name (arity key) and the real name for lookup.
     auto mod_it = generic_func_modules_.find(base_name);
+    if (mod_it == generic_func_modules_.end() && real_name != base_name) {
+        mod_it = generic_func_modules_.find(real_name);
+    }
     if (mod_it != generic_func_modules_.end() && !mod_it->second.empty()) {
         // Use hierarchical mangling: N<path><name>E__<TypeArgs>_h<hash>
         // e.g., core::iter::take[I32] → N4core4iter4takeE__I32_h7f8a9b1c
         std::string hash = fnv1a_hash_hex(type_suffix);
-        return mangle_tml_symbol(mod_it->second, base_name) + type_suffix + "_h" + hash;
+        return mangle_tml_symbol(mod_it->second, real_name) + type_suffix + "_h" + hash;
     }
 
     // Local (non-library) generic functions use bare name
-    return base_name + type_suffix;
+    return real_name + type_suffix;
 }
 
 } // namespace tml::codegen

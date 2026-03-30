@@ -588,7 +588,34 @@ void LLVMIRGen::generate_pending_instantiations() {
 
                 auto it = pending_generic_funcs_.find(inst_it->second.base_name);
                 if (it != pending_generic_funcs_.end()) {
+                    // If the base_name is an arity-disambiguated key (contains "___a"),
+                    // temporarily set generic_func_modules_ for the real function name
+                    // so that gen_func_instantiation produces the correct mangled symbol.
+                    const std::string& base = inst_it->second.base_name;
+                    std::string saved_module;
+                    std::string real_func_name = it->second->name;
+                    bool needs_module_fix = false;
+                    auto arity_pos = base.find("___a");
+                    if (arity_pos != std::string::npos) {
+                        auto mod_it2 = generic_func_modules_.find(base);
+                        if (mod_it2 != generic_func_modules_.end()) {
+                            auto existing = generic_func_modules_.find(real_func_name);
+                            if (existing != generic_func_modules_.end()) {
+                                saved_module = existing->second;
+                            }
+                            generic_func_modules_[real_func_name] = mod_it2->second;
+                            needs_module_fix = true;
+                        }
+                    }
                     gen_func_instantiation(*it->second, inst_it->second.type_args);
+                    // Restore the original module mapping
+                    if (needs_module_fix) {
+                        if (saved_module.empty()) {
+                            generic_func_modules_.erase(real_func_name);
+                        } else {
+                            generic_func_modules_[real_func_name] = saved_module;
+                        }
+                    }
                     changed = true;
                 }
             }

@@ -178,6 +178,9 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Defer generic functions - they will be instantiated when called
     if (!func.generics.empty()) {
         pending_generic_funcs_[func.name] = &func;
+        // Always append to _all_ map for arity disambiguation
+        std::string mod_origin = current_module_name_;
+        pending_generic_funcs_all_[func.name].push_back({&func, mod_origin});
         // Track module origin for hierarchical mangling of instantiations (Phase 4)
         if (!current_module_name_.empty()) {
             generic_func_modules_[func.name] = current_module_name_;

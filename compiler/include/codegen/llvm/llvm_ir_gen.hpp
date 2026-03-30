@@ -1182,6 +1182,12 @@ private:
     // All struct declarations (for accessing default field values during codegen)
     std::unordered_map<std::string, const parser::StructDecl*> struct_decls_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+    /// All generic functions per bare name (for arity-based disambiguation).
+    /// When multiple generic functions share the same bare name (e.g., mem::take[T](1 param)
+    /// and iter::take[I](2 params)), the primary map stores only the first one registered.
+    /// This map stores ALL of them so arity-based lookup can find the correct one.
+    std::unordered_map<std::string, std::vector<std::pair<const parser::FuncDecl*, std::string>>>
+        pending_generic_funcs_all_;
     /// Maps generic function bare name → module path (e.g., "take" → "core::iter")
     /// Used by Phase 4 mangling to add hierarchical path to generic instantiations.
     std::unordered_map<std::string, std::string> generic_func_modules_;

@@ -248,13 +248,21 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
         return ToolResult::error("Failed to create temp file for build output.");
     }
 
+    // Open NUL for child's stdin — NEVER inherit MCP protocol stdin pipe
+    SECURITY_ATTRIBUTES sa_nul;
+    sa_nul.nLength = sizeof(sa_nul);
+    sa_nul.lpSecurityDescriptor = nullptr;
+    sa_nul.bInheritHandle = TRUE;
+    HANDLE hNul = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa_nul,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
     // Set up process startup info — redirect stdout+stderr to temp file
     STARTUPINFOA si = {};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = hFile;
     si.hStdError = hFile;
-    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdInput = (hNul != INVALID_HANDLE_VALUE) ? hNul : GetStdHandle(STD_INPUT_HANDLE);
 
     PROCESS_INFORMATION pi = {};
 
@@ -275,6 +283,11 @@ auto handle_project_build(const json::JsonValue& params) -> ToolResult {
                                   &si,                   // lpStartupInfo
                                   &pi                    // lpProcessInformation
     );
+
+    // Close NUL handle in parent after process creation (child has its own copy)
+    if (hNul != INVALID_HANDLE_VALUE) {
+        CloseHandle(hNul);
+    }
 
     if (!created) {
         CloseHandle(hFile);

@@ -209,6 +209,34 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
             pending_func_it = pending_generic_funcs_.end();
         }
     }
+    // Arity-based disambiguation: when the primary map entry has wrong arity,
+    // search the _all_ map for an alternative generic function with the same bare
+    // name and the correct param count. This handles cases like bare "take" where
+    // mem::take[T](1 param) was registered first but iter::take[I](2 params) is wanted.
+    if (pending_func_it == pending_generic_funcs_.end()) {
+        // Determine the bare name to search for
+        std::string search_name = fn_name;
+        size_t last_sep = fn_name.rfind("::");
+        if (last_sep != std::string::npos) {
+            search_name = fn_name.substr(last_sep + 2);
+        }
+        auto all_it = pending_generic_funcs_all_.find(search_name);
+        if (all_it != pending_generic_funcs_all_.end()) {
+            for (const auto& [fdecl, mod_name] : all_it->second) {
+                if (fdecl->params.size() == call.args.size()) {
+                    // Found a match with correct arity. Register under an arity-qualified
+                    // key so it doesn't conflict with the existing bare-name entry.
+                    // generate_pending_instantiations uses base_name to look up the
+                    // FuncDecl, so we must store it in pending_generic_funcs_ under this key.
+                    std::string arity_key = search_name + "___a" + std::to_string(call.args.size());
+                    pending_generic_funcs_[arity_key] = fdecl;
+                    generic_func_modules_[arity_key] = mod_name;
+                    pending_func_it = pending_generic_funcs_.find(arity_key);
+                    break;
+                }
+            }
+        }
+    }
     // For module-qualified calls like "mem::forget", also try the bare name "forget"
     // since module functions are registered by bare name during gen_func_decl
     // BUT: skip this for Type::method patterns (e.g., RawMutPtr::from_addr)
