@@ -118,14 +118,15 @@ static auto build_docs_hints(const std::string& error_text) -> std::string {
 /// the module prefix of each import (e.g. "std::collections" from
 /// "use std::collections::List").
 static auto extract_imports(const std::string& file_path) -> std::vector<std::string> {
-    std::ifstream source(file_path);
-    if (!source.is_open()) {
+    FILE* fp = fopen(file_path.c_str(), "r");
+    if (!fp) {
         return {};
     }
 
     std::vector<std::string> imports;
-    std::string src_line;
-    while (std::getline(source, src_line)) {
+    char line_buf[1024];
+    while (fgets(line_buf, sizeof(line_buf), fp) != nullptr) {
+        std::string src_line(line_buf);
         auto use_pos = src_line.find("use ");
         if (use_pos == std::string::npos)
             continue;
@@ -164,6 +165,8 @@ static auto extract_imports(const std::string& file_path) -> std::vector<std::st
             imports.push_back(mod);
         }
     }
+
+    fclose(fp);
 
     // Deduplicate
     std::sort(imports.begin(), imports.end());
@@ -432,19 +435,38 @@ auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<s
         HANDLE nul_handle = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                         &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
-        STARTUPINFOA si{};
-        si.cb = sizeof(si);
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdInput = nul_handle;
-        si.hStdOutput = write_pipe;
-        si.hStdError = write_pipe; // redirect stderr to stdout
+        // Use PROC_THREAD_ATTRIBUTE_LIST to inherit ONLY the specific handles the
+        // child needs (write_pipe, nul_handle), not ALL inheritable handles.  Without
+        // this, CreateProcess with bInheritHandle=TRUE passes the parent's stdout pipe
+        // to the child, keeping it open and preventing MCP responses from flushing.
+        SIZE_T attr_size = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &attr_size);
+        auto attr_buf = std::make_unique<char[]>(attr_size);
+        auto* attr_list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attr_buf.get());
+        InitializeProcThreadAttributeList(attr_list, 1, 0, &attr_size);
+
+        HANDLE inherit_handles[2] = {write_pipe, nul_handle};
+        int num_inherit = (nul_handle != INVALID_HANDLE_VALUE) ? 2 : 1;
+        UpdateProcThreadAttribute(attr_list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit_handles,
+                                  num_inherit * sizeof(HANDLE), nullptr, nullptr);
+
+        STARTUPINFOEXA siex{};
+        siex.StartupInfo.cb = sizeof(siex);
+        siex.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        siex.StartupInfo.hStdInput = nul_handle;
+        siex.StartupInfo.hStdOutput = write_pipe;
+        siex.StartupInfo.hStdError = write_pipe;
+        siex.lpAttributeList = attr_list;
 
         PROCESS_INFORMATION pi{};
         std::string full_cmd = cmd;
 
         std::cerr << "[exec] CreateProcess: " << full_cmd << std::endl;
-        BOOL ok = CreateProcessA(nullptr, full_cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-                                 nullptr, nullptr, &si, &pi);
+        BOOL ok = CreateProcessA(nullptr, full_cmd.data(), nullptr, nullptr, TRUE,
+                                 CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+                                 &siex.StartupInfo, &pi);
+
+        DeleteProcThreadAttributeList(attr_list);
 
         CloseHandle(write_pipe); // Close write end in parent
         if (nul_handle != INVALID_HANDLE_VALUE) {
@@ -657,13 +679,14 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
     if (exit_code == 0) {
         std::string result = "Type check passed for: " + file_path;
 
-        // Show imported modules with docs_list suggestions so the LLM can
-        // quickly discover what APIs are available in the modules it is using.
-        auto imports = extract_imports(file_path);
-        if (!imports.empty()) {
-            result += "\n\n--- Imported Modules ---";
-            for (const auto& imp : imports) {
-                result += "\n  " + imp + " -> docs_list(module=\"" + imp + "\")";
+        // Show imported modules with docs_list suggestions
+        {
+            auto imports = extract_imports(file_path);
+            if (!imports.empty()) {
+                result += "\n\n--- Imported Modules ---";
+                for (const auto& imp : imports) {
+                    result += "\n  " + imp + " -> docs_list(module=\"" + imp + "\")";
+                }
             }
         }
 
@@ -678,7 +701,6 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
         error_msg += "\n\n" + clean_output;
     }
 
-    // Append docs hints so the LLM can look up types that appear in the error.
     error_msg += build_docs_hints(clean_output);
 
     return ToolResult::error(error_msg);
