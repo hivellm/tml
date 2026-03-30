@@ -1,7 +1,7 @@
 // RawPtr tests
 use test
 use core::ptr::*
-use core::option::*
+// Maybe/Just/Nothing are in prelude — no import needed
 
 // ============================================================================
 // RawPtr[T] Tests

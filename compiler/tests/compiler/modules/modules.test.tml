@@ -1,5 +1,4 @@
-use test
-use core::mem
+use test::{assert_eq}
 
 // ============================================================================
 // Module Import Tests
