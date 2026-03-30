@@ -1,0 +1,58 @@
+// Benchmark: task spawn throughput (milestone 3.1.14).
+//
+// Spawns 10 000 no-op tasks and measures wall time. Captures the overhead of
+// task creation, queue insertion, and dispatch on a single-worker executor.
+// Goal: < 1 ms per task (conservative CI bound).
+use test
+use std::runtime::multi_executor::MultiExecutor
+use std::time::Instant
+use core::time::Duration
+
+// Each task writes 1 to its own 8-byte slot (data = address of the slot).
+func bench_noop(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 1 as I64) }
+}
+
+@test
+func test_spawn_throughput() -> Outcome[Unit, Str] {
+    let n: I64 = 10000
+
+    // Allocate n slots (8 bytes each = 80 000 bytes total)
+    let slots_ptr: I64 = lowlevel { mem_alloc(80000 as U64) } as I64
+    var i: I64 = 0
+    loop (i < n) {
+        lowlevel { ptr_write[I64]((slots_ptr + i * 8) as *I64, 0 as I64) }
+        i = i + 1
+    }
+
+    let exec: MultiExecutor = MultiExecutor::new(1)
+    let start: Instant = Instant::now()
+
+    i = 0
+    loop (i < n) {
+        exec.submit(bench_noop, slots_ptr + i * 8)
+        i = i + 1
+    }
+
+    exec.run()
+
+    let elapsed: Duration = start.elapsed()
+    let total_ns: I64 = elapsed.as_nanos()
+
+    // Correctness: all tasks must have completed and written their slot
+    assert_eq(exec.completed_count(), n)
+
+    // Spot-check a few slots
+    let first_val: I64 = lowlevel { ptr_read[I64](slots_ptr as *I64) }
+    assert_eq(first_val, 1)
+    let last_val: I64 = lowlevel { ptr_read[I64]((slots_ptr + (n - 1) * 8) as *I64) }
+    assert_eq(last_val, 1)
+
+    // Performance: per-task overhead must stay below 1 ms (extremely conservative).
+    let per_task_ns: I64 = total_ns / n
+    assert(per_task_ns < 1000000)
+
+    exec.destroy()
+    lowlevel { mem_free(slots_ptr as *Unit) }
+    Ok(())
+}

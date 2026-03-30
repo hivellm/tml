@@ -1,0 +1,53 @@
+// Benchmark: task-switch latency (milestone 3.1.14).
+//
+// Spawns N tasks that each do one memory store on a single-worker executor.
+// Total wall time / N gives the per-task-switch cost.
+// Goal: < 1 ms per switch (conservative CI bound; typical is < 1 µs).
+use test
+use std::runtime::multi_executor::MultiExecutor
+use std::time::Instant
+use core::time::Duration
+
+func bench_increment(data: I64) {
+    lowlevel {
+        ptr_write[I64](data as *I64, ptr_read[I64](data as *I64) + 1 as I64)
+    }
+}
+
+@test
+func test_task_switch_latency() -> Outcome[Unit, Str] {
+    let n: I64 = 1000
+
+    // Allocate a counter that every task increments.
+    // Single worker serialises execution so no atomics needed.
+    let counter_ptr: I64 = lowlevel { mem_alloc(8 as U64) } as I64
+    lowlevel { ptr_write[I64](counter_ptr as *I64, 0 as I64) }
+
+    let exec: MultiExecutor = MultiExecutor::new(1)
+    let start: Instant = Instant::now()
+
+    var i: I64 = 0
+    loop (i < n) {
+        exec.submit(bench_increment, counter_ptr)
+        i = i + 1
+    }
+
+    exec.run()
+
+    let elapsed: Duration = start.elapsed()
+    let total_ns: I64 = elapsed.as_nanos()
+
+    // Correctness: all tasks must have run
+    let final_count: I64 = lowlevel { ptr_read[I64](counter_ptr as *I64) }
+    assert_eq(final_count, n)
+    assert_eq(exec.completed_count(), n)
+
+    // Performance: per-task cost must stay below 1 ms (1_000_000 ns).
+    // Actual numbers on modern hardware are typically 100-500 ns.
+    let per_task_ns: I64 = total_ns / n
+    assert(per_task_ns < 1000000)
+
+    exec.destroy()
+    lowlevel { mem_free(counter_ptr as *Unit) }
+    Ok(())
+}

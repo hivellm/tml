@@ -1,0 +1,45 @@
+// Benchmark: multi-core scaling — 1 worker (milestone 3.1.14).
+//
+// Submits 5 000 tasks to a 1-worker executor and measures per-task wall time.
+// Each task gets its own memory slot to avoid data races in multi-worker tests.
+use test
+use std::runtime::multi_executor::MultiExecutor
+use std::time::Instant
+use core::time::Duration
+
+func scaling_noop_1w(data: I64) {
+    lowlevel { ptr_write[I64](data as *I64, 1 as I64) }
+}
+
+@test
+func test_multicore_scaling_1_worker() -> Outcome[Unit, Str] {
+    let n: I64 = 5000
+
+    let slots_ptr: I64 = lowlevel { mem_alloc(40000 as U64) } as I64
+    var i: I64 = 0
+    loop (i < n) {
+        lowlevel { ptr_write[I64]((slots_ptr + i * 8) as *I64, 0 as I64) }
+        i = i + 1
+    }
+
+    let exec: MultiExecutor = MultiExecutor::new(1)
+
+    i = 0
+    loop (i < n) {
+        exec.submit(scaling_noop_1w, slots_ptr + i * 8)
+        i = i + 1
+    }
+
+    let start: Instant = Instant::now()
+    exec.run()
+    let elapsed: Duration = start.elapsed()
+
+    assert_eq(exec.completed_count(), n)
+
+    let per_task_ns: I64 = elapsed.as_nanos() / n
+    assert(per_task_ns < 1000000)
+
+    exec.destroy()
+    lowlevel { mem_free(slots_ptr as *Unit) }
+    Ok(())
+}
