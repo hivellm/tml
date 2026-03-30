@@ -1009,50 +1009,67 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             }
         }
 
-        // Resolve any remaining unresolved method-level type params by extracting
-        // them from concrete types already in type_subs. This handles the pattern
-        // where a where-clause constraint destructures a type param, e.g.:
+        // Resolve unresolved method-level type params AND detect where-clause
+        // constraint destructuring patterns. Handles e.g.:
         //   func transpose[E](this) -> Outcome[Maybe[T], E] where T: Outcome[T, E]
-        // When T = Outcome[I32, Str], E can be extracted from Outcome's type_args.
+        // When T = Outcome[I32, Str], this extracts T = I32, E = Str from Outcome's
+        // type_args by matching against Outcome's type_params.
+        //
+        // The approach: for each concrete type in type_subs that is a NamedType
+        // with type_args, look up the concrete type's own type_params. If any of
+        // those type_params match an existing type_sub key or an unresolved type
+        // param in func_sig, extract the corresponding type_arg.
         if (func_sig && !func_sig->type_params.empty()) {
-            for (const auto& tp : func_sig->type_params) {
-                if (type_subs.count(tp) > 0)
-                    continue; // Already resolved
-                // Try to extract from concrete types in type_subs
-                bool found = false;
-                for (const auto& [existing_param, existing_concrete] : type_subs) {
-                    if (!existing_concrete || !existing_concrete->is<types::NamedType>())
-                        continue;
-                    const auto& ec_named = existing_concrete->as<types::NamedType>();
-                    if (ec_named.type_args.empty())
-                        continue;
-                    // Look up the concrete type's type_params
-                    std::vector<std::string> ec_type_params;
-                    auto ec_enum = env_.lookup_enum(ec_named.name);
-                    if (ec_enum && !ec_enum->type_params.empty()) {
-                        ec_type_params = ec_enum->type_params;
-                    }
-                    if (ec_type_params.empty() && env_.module_registry()) {
-                        for (const auto& [mn, mm] : env_.module_registry()->get_all_modules()) {
-                            auto sit = mm.structs.find(ec_named.name);
-                            if (sit != mm.structs.end() && !sit->second.type_params.empty()) {
-                                ec_type_params = sit->second.type_params;
-                                break;
-                            }
-                        }
-                    }
-                    // Check if tp matches one of the concrete type's type_params
-                    for (size_t epi = 0;
-                         epi < ec_type_params.size() && epi < ec_named.type_args.size(); ++epi) {
-                        if (ec_type_params[epi] == tp) {
-                            type_subs[tp] = ec_named.type_args[epi];
-                            found = true;
+            // Collect entries to update (can't modify type_subs while iterating)
+            std::unordered_map<std::string, types::TypePtr> new_subs;
+            for (const auto& [existing_param, existing_concrete] : type_subs) {
+                if (!existing_concrete || !existing_concrete->is<types::NamedType>())
+                    continue;
+                const auto& ec_named = existing_concrete->as<types::NamedType>();
+                if (ec_named.type_args.empty())
+                    continue;
+                // Look up the concrete type's type_params
+                std::vector<std::string> ec_type_params;
+                auto ec_enum = env_.lookup_enum(ec_named.name);
+                if (ec_enum && !ec_enum->type_params.empty()) {
+                    ec_type_params = ec_enum->type_params;
+                }
+                if (ec_type_params.empty() && env_.module_registry()) {
+                    for (const auto& [mn, mm] : env_.module_registry()->get_all_modules()) {
+                        auto sit = mm.structs.find(ec_named.name);
+                        if (sit != mm.structs.end() && !sit->second.type_params.empty()) {
+                            ec_type_params = sit->second.type_params;
                             break;
                         }
                     }
-                    if (found)
-                        break;
                 }
+                if (ec_type_params.empty())
+                    continue;
+                // For each of the concrete type's type_params, check if it matches
+                // a func_sig type_param (resolved or unresolved)
+                for (size_t epi = 0; epi < ec_type_params.size() && epi < ec_named.type_args.size();
+                     ++epi) {
+                    const std::string& inner_param = ec_type_params[epi];
+                    // Check if inner_param is in func_sig->type_params
+                    bool is_func_tp = false;
+                    for (const auto& ftp : func_sig->type_params) {
+                        if (ftp == inner_param) {
+                            is_func_tp = true;
+                            break;
+                        }
+                    }
+                    if (!is_func_tp)
+                        continue;
+                    // This inner_param is a type param that should be resolved
+                    // from the concrete type's type_args
+                    if (!new_subs.count(inner_param)) {
+                        new_subs[inner_param] = ec_named.type_args[epi];
+                    }
+                }
+            }
+            // Apply new subs
+            for (const auto& [k, v] : new_subs) {
+                type_subs[k] = v;
             }
         }
 
