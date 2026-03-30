@@ -428,11 +428,81 @@ bool LLVMIRGen::generate_default_method(const std::string& type_name,
             return false;
     }
 
-    // Skip methods with where clauses
-    if (trait_method.where_clause.has_value() &&
-        (!trait_method.where_clause->constraints.empty() ||
-         !trait_method.where_clause->type_equalities.empty()))
-        return false;
+    // Evaluate where clause constraints against the concrete type.
+    // Only skip if at least one constraint is NOT satisfied.
+    if (trait_method.where_clause.has_value()) {
+        const auto& wc = *trait_method.where_clause;
+
+        // Check behavior constraints: `This::Item: Ord`, `T: Clone`, etc.
+        for (const auto& constraint : wc.constraints) {
+            // constraint.first  = the constrained type (parser::TypePtr)
+            // constraint.second = required behaviors (vector<parser::TypePtr>)
+            if (!constraint.first)
+                return false;
+
+            auto resolved_constrained =
+                resolve_parser_type_with_subs(*constraint.first, current_type_subs_);
+            if (!resolved_constrained)
+                return false;
+
+            // Extract the type name from the resolved semantic type.
+            std::string constrained_type_name;
+            if (resolved_constrained->is<types::NamedType>()) {
+                constrained_type_name = resolved_constrained->as<types::NamedType>().name;
+            } else if (resolved_constrained->is<types::PrimitiveType>()) {
+                constrained_type_name = types::primitive_kind_to_string(
+                    resolved_constrained->as<types::PrimitiveType>().kind);
+            } else {
+                // Other non-nameable types (refs, pointers, tuples, etc.) — skip conservatively.
+                return false;
+            }
+
+            for (const auto& behavior_type_ptr : constraint.second) {
+                if (!behavior_type_ptr)
+                    return false;
+
+                // Resolve the behavior type to get its name.
+                auto resolved_behavior =
+                    resolve_parser_type_with_subs(*behavior_type_ptr, current_type_subs_);
+                std::string behavior_name;
+                if (resolved_behavior && resolved_behavior->is<types::NamedType>()) {
+                    behavior_name = resolved_behavior->as<types::NamedType>().name;
+                } else if (behavior_type_ptr->is<parser::NamedType>()) {
+                    // Fall back to parsing the name directly from the parser type.
+                    const auto& named = behavior_type_ptr->as<parser::NamedType>();
+                    if (!named.path.segments.empty())
+                        behavior_name = named.path.segments.back();
+                }
+
+                if (behavior_name.empty())
+                    return false;
+
+                if (!env_.type_implements(constrained_type_name, behavior_name))
+                    return false;
+            }
+        }
+
+        // Check type equalities: `T = U`.
+        for (const auto& eq : wc.type_equalities) {
+            if (!eq.first || !eq.second)
+                return false;
+
+            auto lhs = resolve_parser_type_with_subs(*eq.first, current_type_subs_);
+            auto rhs = resolve_parser_type_with_subs(*eq.second, current_type_subs_);
+            if (!lhs || !rhs)
+                return false;
+
+            // Compare type names for equality.
+            std::string lhs_name, rhs_name;
+            if (lhs->is<types::NamedType>())
+                lhs_name = lhs->as<types::NamedType>().name;
+            if (rhs->is<types::NamedType>())
+                rhs_name = rhs->as<types::NamedType>().name;
+
+            if (lhs_name != rhs_name)
+                return false;
+        }
+    }
 
     // NOTE: FuncType parameters (closures) are now supported.
     // resolve_parser_type_with_subs correctly maps func(T) -> types::FuncType,

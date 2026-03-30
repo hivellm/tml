@@ -1,8 +1,10 @@
-# Anti-Pattern: Default behavior methods with `where` clause constraints generate stubs, not real bodies
+# FIXED: Default behavior methods with `where` clause constraints — now monomorphized
 
-## Problem
+**Status: FIXED (2026-03-30)** — `generate_default_method()` in dyn.cpp now evaluates where-clause constraints via `resolve_parser_type_with_subs` + `env_.type_implements()` instead of unconditionally skipping.
 
-When a `behavior` defines a default method with a `where This::Item: SomeTrait` constraint (e.g., `is_sorted` on `Iterator`), the compiler generates a **stub** for concrete implementing types instead of monomorphizing the default body:
+## Problem (was)
+
+When a `behavior` defines a default method with a `where This::Item: SomeTrait` constraint (e.g., `is_sorted` on `Iterator`), the compiler generated a **stub** for concrete implementing types instead of monomorphizing the default body:
 
 ```llvm
 ; Stub for unimplemented default method is_sorted

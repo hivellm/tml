@@ -48,6 +48,8 @@ Target: ≥70% global coverage. Achieved: 92.2% (1633 tests).
 - [x] 1.6.5 Fix Reflect size/align computation — LLVM constant expr ptrtoint(gep) trick
 - [x] 1.6.6 Fix partial field drops — Added `emit_partial_field_drops()` in drop.cpp. When some fields are consumed (partial move), remaining non-consumed fields are now dropped individually instead of skipping the entire struct. Types with direct Drop impl are skipped (Rust semantics).
 - [x] 1.6.7 Fix cross-module behavior dispatch — `has_pure_tml_functions` required `pub` on impl methods but behavior impls omit `pub`. Fixed in `env_module_support.cpp`, meta version bumped v7→v8. Unblocks `std::json::serialize::ToJson` for primitives.
+- [x] 1.6.8 Fix where-clause default method monomorphization — `generate_default_method()` in dyn.cpp unconditionally skipped methods with where clauses. Now evaluates constraints via `resolve_parser_type_with_subs` + `env_.type_implements()`. Unblocks Iterator::is_sorted, any default method with `where This::Item: Trait`.
+- [x] 1.6.9 Fix bare `return`/`break` in when-arm parse error — `parse_return_expr()` and `parse_break_expr()` in parser_expr_complex.cpp didn't include Comma in stop-token list. Pattern `Ok(_) => return,` now parses correctly.
 
 **Gate M1**: ✅ Coverage ≥70%, collections working, env/path/datetime usable, regex done
 
@@ -229,7 +231,7 @@ SQLite already in stdlib (`lib/std/src/sqlite/`).
 
 | Milestone | Items | Done | Progress | Notes |
 |-----------|-------|------|----------|-------|
-| M1: Foundation | 37 | 37 | **100%** | 1 compiler bug left (1.6.1 generic cache) |
+| M1: Foundation | 39 | 38 | **97%** | 1 compiler bug left (1.6.1 generic cache) |
 | M2: Docs & Reflection | 27 | 24 | **89%** | Doc gen mostly done, serialize+deserialize working |
 | M3: Async & Networking | 28 | 26 | **93%** | AsyncMutex, thread-safe iterators, closure Send/Sync fixed |
 | M4: Web & HTTP | 30 | 27 | **90%** | 500K benchmark, pipe operator, backpressure |

@@ -383,7 +383,7 @@ auto Parser::parse_return_expr() -> Result<ExprPtr, ParseError> {
 
     std::optional<ExprPtr> value;
     if (!check(lexer::TokenKind::Semi) && !check(lexer::TokenKind::Newline) &&
-        !check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        !check(lexer::TokenKind::RBrace) && !check(lexer::TokenKind::Comma) && !is_at_end()) {
         auto v = parse_expr();
         if (is_err(v))
             return v;
@@ -417,7 +417,7 @@ auto Parser::parse_break_expr() -> Result<ExprPtr, ParseError> {
 
     std::optional<ExprPtr> value;
     if (!check(lexer::TokenKind::Semi) && !check(lexer::TokenKind::Newline) &&
-        !check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        !check(lexer::TokenKind::RBrace) && !check(lexer::TokenKind::Comma) && !is_at_end()) {
         auto v = parse_expr();
         if (is_err(v))
             return v;

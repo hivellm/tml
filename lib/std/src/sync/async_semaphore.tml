@@ -101,7 +101,7 @@ impl AsyncSemaphore {
                     Ordering::Acquire, Ordering::Relaxed,
                 )
                 when result {
-                    Ok(_) => { return },
+                    Ok(_) => return,
                     Err(_) => {},  // CAS failed — retry
                 }
             }
@@ -117,7 +117,7 @@ impl AsyncSemaphore {
                         Ordering::Acquire, Ordering::Relaxed,
                     )
                     when r {
-                        Ok(_) => { return },
+                        Ok(_) => return,
                         Err(_) => {},
                     }
                 }
