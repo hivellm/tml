@@ -16,6 +16,9 @@
 //! Run:
 //!   build/debug/bin/tml_bench.exe [--json path/to/output.json]
 
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "search/hnsw_index.hpp"
 #include "search/simd_distance.hpp"
 #include "simd/simd_charclass.h"
 #include "simd/simd_detect.hpp"
@@ -29,6 +32,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -548,6 +554,218 @@ static void bench_infrastructure() {
 }
 
 // ============================================================================
+// Lexer Benchmarks (Phase 5.3)
+// ============================================================================
+
+static void bench_lexer() {
+    bench::set_category("lexer");
+    std::printf("\n=== Lexer SIMD Throughput ===\n");
+
+    // --- skip_whitespace: heavily indented source ---
+    // 80 lines each indented with 16 spaces followed by a simple statement.
+    {
+        std::string src;
+        src.reserve(4096);
+        for (int i = 0; i < 80; ++i) {
+            src += "                let x = 42\n"; // 16 spaces + statement
+        }
+        const int byte_len = static_cast<int>(src.size());
+
+        bench::run_bench(
+            "skip_whitespace (indented 80 lines)", 500,
+            [&]() {
+                tml::lexer::Source source = tml::lexer::Source("<bench_ws>", src);
+                tml::lexer::Lexer lexer(source);
+                volatile size_t n = lexer.tokenize().size();
+                (void)n;
+            },
+            byte_len);
+    }
+
+    // --- lex_identifier: source full of long identifiers ---
+    // 200 declarations with 32-character identifiers.
+    {
+        std::string src;
+        src.reserve(8192);
+        for (int i = 0; i < 200; ++i) {
+            // 32-char identifier (ident_start + 31 ident_continue chars)
+            src += "let abcdefghijklmnopqrstuvwxyzAB = 0\n";
+        }
+        const int byte_len = static_cast<int>(src.size());
+
+        bench::run_bench(
+            "lex_identifier (200 x 32-char idents)", 500,
+            [&]() {
+                tml::lexer::Source source = tml::lexer::Source("<bench_ident>", src);
+                tml::lexer::Lexer lexer(source);
+                volatile size_t n = lexer.tokenize().size();
+                (void)n;
+            },
+            byte_len);
+    }
+
+    // --- lex_string: source full of long string literals ---
+    // 100 lines each with a ~60-char string literal.
+    {
+        std::string src;
+        src.reserve(8192);
+        for (int i = 0; i < 100; ++i) {
+            src += "let s = \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01\"\n";
+        }
+        const int byte_len = static_cast<int>(src.size());
+
+        bench::run_bench(
+            "lex_string (100 x 60-char string literals)", 500,
+            [&]() {
+                tml::lexer::Source source = tml::lexer::Source("<bench_str>", src);
+                tml::lexer::Lexer lexer(source);
+                volatile size_t n = lexer.tokenize().size();
+                (void)n;
+            },
+            byte_len);
+    }
+
+    // --- Full lexer throughput: real TML file ---
+    // Try to read lib/core/src/str.tml; fall back to a synthetic 4 KB block.
+    {
+        std::string file_src;
+        bool loaded = false;
+        {
+            std::ifstream f("lib/core/src/str.tml", std::ios::binary);
+            if (f) {
+                std::ostringstream ss;
+                ss << f.rdbuf();
+                file_src = ss.str();
+                loaded = true;
+            }
+        }
+        if (!loaded) {
+            // Synthetic fallback: mix of identifiers, numbers, strings, ops
+            file_src.reserve(4096);
+            for (int i = 0; i < 60; ++i) {
+                file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
+                            "    let s = \"hello world\"\n"
+                            "    z\n"
+                            "}\n";
+            }
+        }
+        const int byte_len = static_cast<int>(file_src.size());
+        const char* label = loaded ? "full_lex str.tml (real file)" : "full_lex synthetic 4KB";
+
+        bench::run_bench(
+            label, 200,
+            [&]() {
+                tml::lexer::Source source = tml::lexer::Source("<bench_file>", file_src);
+                tml::lexer::Lexer lexer(source);
+                volatile size_t n = lexer.tokenize().size();
+                (void)n;
+            },
+            byte_len);
+    }
+
+    // --- End-to-end tokenize() wall time ---
+    // Same file, measuring only the tokenize() call (Source construction outside loop).
+    {
+        std::string file_src;
+        {
+            std::ifstream f("lib/core/src/str.tml", std::ios::binary);
+            if (f) {
+                std::ostringstream ss;
+                ss << f.rdbuf();
+                file_src = ss.str();
+            } else {
+                for (int i = 0; i < 60; ++i) {
+                    file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
+                                "    z\n}\n";
+                }
+            }
+        }
+        const int byte_len = static_cast<int>(file_src.size());
+        tml::lexer::Source source = tml::lexer::Source("<bench_e2e>", file_src);
+
+        bench::run_bench(
+            "tokenize() call only (Source pre-built)", 500,
+            [&]() {
+                tml::lexer::Lexer lexer(source);
+                volatile size_t n = lexer.tokenize().size();
+                (void)n;
+            },
+            byte_len);
+    }
+}
+
+// ============================================================================
+// HNSW End-to-End Benchmark (Phase 2.4.5)
+// ============================================================================
+
+static void bench_hnsw() {
+    bench::set_category("hnsw");
+    std::printf("\n=== HNSW End-to-End ===\n");
+
+    constexpr size_t DIMS = 128;
+    constexpr size_t N_DOCS = 1000;
+    constexpr size_t K = 10;
+
+    // Pre-generate random vectors outside the timed region.
+    std::mt19937 rng(12345);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+
+    std::vector<std::vector<float>> corpus(N_DOCS, std::vector<float>(DIMS));
+    for (auto& vec : corpus) {
+        for (auto& v : vec)
+            v = dist(rng);
+    }
+
+    std::vector<float> query(DIMS);
+    for (auto& v : query)
+        v = dist(rng);
+
+    // --- Build benchmark: insert N_DOCS vectors ---
+    bench::run_bench(
+        "hnsw_build_1K_128d (full insert)", 10,
+        [&]() {
+            tml::search::HnswIndex idx(DIMS);
+            idx.set_params(16, 200, 50);
+            for (size_t i = 0; i < N_DOCS; ++i) {
+                idx.insert(static_cast<uint32_t>(i), corpus[i]);
+            }
+            volatile size_t s = idx.size();
+            (void)s;
+        },
+        static_cast<int>(N_DOCS * DIMS * sizeof(float)));
+
+    // Build a persistent index for query benchmarks.
+    tml::search::HnswIndex idx(DIMS);
+    idx.set_params(16, 200, 50);
+    for (size_t i = 0; i < N_DOCS; ++i) {
+        idx.insert(static_cast<uint32_t>(i), corpus[i]);
+    }
+
+    // --- Query benchmark: top-K search ---
+    bench::run_bench(
+        "hnsw_search_top10 (1K indexed, 128d)", 1000,
+        [&]() {
+            auto results = idx.search(query, K);
+            volatile size_t n = results.size();
+            (void)n;
+        },
+        static_cast<int>(DIMS * sizeof(float)));
+
+    // --- Varied query benchmark: different query vectors ---
+    bench::run_bench(
+        "hnsw_search_top10 (varied queries)", 1000,
+        [&]() {
+            // Rotate query slightly to avoid branch predictor lock-in.
+            static size_t qidx = 0;
+            auto results = idx.search(corpus[qidx % N_DOCS], K);
+            volatile size_t n = results.size();
+            (void)n;
+            ++qidx;
+        },
+        static_cast<int>(DIMS * sizeof(float)));
+}
+
+// ============================================================================
 // Entry point
 // ============================================================================
 
@@ -571,6 +789,8 @@ int main(int argc, char** argv) {
     bench_string();
     bench_math();
     bench_infrastructure();
+    bench_lexer();
+    bench_hnsw();
 
     // Print summary
     bench::print_summary();
