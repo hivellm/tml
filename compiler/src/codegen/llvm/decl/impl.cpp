@@ -97,41 +97,19 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
         }
     }
 
-    // Check for nested generic (e.g., Mutex__I32, ChannelNode__I32)
+    // Nested generic: treat the entire suffix after the first "__" as a single
+    // (possibly nested) type argument.  This handles cases like
+    // "Shared__PromiseState__I32" -> Shared[PromiseState[I32]] correctly.
     auto delim = s.find("__");
     if (delim != std::string::npos) {
         std::string base = s.substr(0, delim);
         std::string arg_str = s.substr(delim + 2);
-
-        // Parse all type arguments (separated by __)
-        std::vector<types::TypePtr> type_args;
-        size_t pos = 0;
-        while (pos < arg_str.size()) {
-            // Find next __ delimiter
-            auto next_delim = arg_str.find("__", pos);
-            std::string arg_part;
-            if (next_delim == std::string::npos) {
-                arg_part = arg_str.substr(pos);
-                pos = arg_str.size();
-            } else {
-                arg_part = arg_str.substr(pos, next_delim - pos);
-                pos = next_delim + 2;
-            }
-
-            auto arg_type = parse_mangled_type_string(arg_part);
-            if (arg_type) {
-                type_args.push_back(arg_type);
-            } else {
-                // Fallback: create NamedType
-                auto t = std::make_shared<types::Type>();
-                t->kind = types::NamedType{arg_part, "", {}};
-                type_args.push_back(t);
-            }
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
         }
-
-        auto t = std::make_shared<types::Type>();
-        t->kind = types::NamedType{base, "", std::move(type_args)};
-        return t;
     }
 
     // Simple struct type (no generics, no prefix)
@@ -503,26 +481,51 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             }
             if (!built_from_subs && sep_pos != std::string::npos) {
                 std::string base_name = current_impl_type_.substr(0, sep_pos);
-                std::string args_str = current_impl_type_.substr(sep_pos + 2);
+                std::string suffix = current_impl_type_.substr(sep_pos + 2);
 
-                // Parse type args from mangled suffix (naive __ splitting - works for
-                // simple cases like Arc__I32, Maybe__I32__Str)
-                std::vector<types::TypePtr> type_args;
-                size_t pos = 0;
-                while (pos < args_str.size()) {
-                    auto next_sep = args_str.find("__", pos);
-                    std::string arg = (next_sep == std::string::npos)
-                                          ? args_str.substr(pos)
-                                          : args_str.substr(pos, next_sep - pos);
-                    auto arg_type = parse_mangled_type_string(arg);
-                    type_args.push_back(arg_type);
-                    if (next_sep == std::string::npos)
-                        break;
-                    pos = next_sep + 2;
+                // Try to use pending_generic_impls_ to know the exact param count
+                auto impl_it = pending_generic_impls_.find(base_name);
+                if (impl_it != pending_generic_impls_.end() &&
+                    impl_it->second->generics.size() == 1) {
+                    // Single-param generic: parse entire suffix as one nested type arg
+                    auto type_arg = parse_mangled_type_string(suffix);
+                    if (type_arg) {
+                        impl_semantic_type->kind = types::NamedType{base_name, "", {type_arg}};
+                    } else {
+                        impl_semantic_type->kind = types::NamedType{base_name, "", {}};
+                    }
+                } else if (impl_it != pending_generic_impls_.end() &&
+                           impl_it->second->generics.size() > 1) {
+                    // Multi-param generic: split by "__" but parse each part
+                    std::vector<std::string> parts;
+                    size_t pos = 0;
+                    while (pos < suffix.size()) {
+                        size_t next = suffix.find("__", pos);
+                        if (next == std::string::npos) {
+                            parts.push_back(suffix.substr(pos));
+                            break;
+                        }
+                        parts.push_back(suffix.substr(pos, next - pos));
+                        pos = next + 2;
+                    }
+                    std::vector<types::TypePtr> type_args;
+                    for (const auto& part : parts) {
+                        type_args.push_back(parse_mangled_type_string(part));
+                    }
+                    impl_semantic_type->kind =
+                        types::NamedType{base_name, "", std::move(type_args)};
+                } else {
+                    // Unknown param count: use parse_mangled_type_string on full name
+                    // which handles nested single-param generics correctly
+                    auto parsed = parse_mangled_type_string(current_impl_type_);
+                    if (parsed) {
+                        impl_semantic_type = parsed;
+                    } else {
+                        impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+                    }
                 }
-                impl_semantic_type->kind = types::NamedType{base_name, "", type_args};
-            } else {
-                // Parse the mangled type name properly
+            } else if (!built_from_subs) {
+                // No "__" separator — non-generic type or parse the whole thing
                 auto parsed = parse_mangled_type_string(current_impl_type_);
                 if (parsed) {
                     impl_semantic_type = parsed;

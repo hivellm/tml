@@ -1019,7 +1019,33 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // with type_args, look up the concrete type's own type_params. If any of
         // those type_params match an existing type_sub key or an unresolved type
         // param in func_sig, extract the corresponding type_arg.
+        //
+        // IMPORTANT: Do NOT override impl-level type params that were already resolved
+        // from named.type_args. When Shared[T] has T=PromiseState[I32], and
+        // PromiseState itself also has a param named "T", the inner "T" must NOT
+        // override the outer impl-level "T". Only destructure into params that are
+        // genuinely unresolved (method-level type params, not impl-level ones).
         if (func_sig && !func_sig->type_params.empty()) {
+            // Collect impl-level generic param names — these must NOT be overridden
+            // by the destructuring logic below, since they were already correctly
+            // resolved from the receiver's type_args at line 556-557.
+            std::unordered_set<std::string> impl_level_params;
+            if (impl_it != pending_generic_impls_.end()) {
+                auto best_impl_it2 = pending_generic_impls_all_.find(named.name);
+                const parser::ImplDecl* best_impl2 = impl_it->second;
+                if (best_impl_it2 != pending_generic_impls_all_.end()) {
+                    for (const auto* candidate : best_impl_it2->second) {
+                        if (candidate->generics.size() > best_impl2->generics.size() &&
+                            candidate->generics.size() <= named.type_args.size()) {
+                            best_impl2 = candidate;
+                        }
+                    }
+                }
+                for (const auto& g : best_impl2->generics) {
+                    impl_level_params.insert(g.name);
+                }
+            }
+
             // Collect entries to update (can't modify type_subs while iterating)
             std::unordered_map<std::string, types::TypePtr> new_subs;
             for (const auto& [existing_param, existing_concrete] : type_subs) {
@@ -1050,6 +1076,14 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 for (size_t epi = 0; epi < ec_type_params.size() && epi < ec_named.type_args.size();
                      ++epi) {
                     const std::string& inner_param = ec_type_params[epi];
+                    // Skip if this inner param would override the SAME outer param
+                    // it was derived from. E.g., Shared[T] has T=PromiseState[I32],
+                    // and PromiseState also has a param "T". Extracting inner "T"=I32
+                    // would overwrite the outer T=PromiseState[I32] — wrong!
+                    // But for transpose where T=Outcome[I32,Str] and we extract E=Str
+                    // from Outcome's params, that's a DIFFERENT key — allowed.
+                    if (inner_param == existing_param && impl_level_params.count(inner_param))
+                        continue;
                     // Check if inner_param is in func_sig->type_params
                     bool is_func_tp = false;
                     for (const auto& ftp : func_sig->type_params) {

@@ -216,41 +216,19 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
         }
     }
 
-    // Check for nested generic (e.g., Mutex__I32, ChannelNode__I32)
+    // Nested generic: treat the entire suffix after the first "__" as a single
+    // (possibly nested) type argument.  This handles cases like
+    // "Shared__PromiseState__I32" -> Shared[PromiseState[I32]] correctly.
     auto delim = s.find("__");
     if (delim != std::string::npos) {
         std::string base = s.substr(0, delim);
         std::string arg_str = s.substr(delim + 2);
-
-        // Parse all type arguments (separated by __)
-        std::vector<types::TypePtr> type_args;
-        size_t pos = 0;
-        while (pos < arg_str.size()) {
-            // Find next __ delimiter
-            auto next_delim = arg_str.find("__", pos);
-            std::string arg_part;
-            if (next_delim == std::string::npos) {
-                arg_part = arg_str.substr(pos);
-                pos = arg_str.size();
-            } else {
-                arg_part = arg_str.substr(pos, next_delim - pos);
-                pos = next_delim + 2;
-            }
-
-            auto arg_type = parse_mangled_type_string(arg_part);
-            if (arg_type) {
-                type_args.push_back(arg_type);
-            } else {
-                // Fallback: create NamedType
-                auto t = std::make_shared<types::Type>();
-                t->kind = types::NamedType{arg_part, "", {}};
-                type_args.push_back(t);
-            }
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
         }
-
-        auto t = std::make_shared<types::Type>();
-        t->kind = types::NamedType{base, "", std::move(type_args)};
-        return t;
     }
 
     // Simple struct type (no generics, no prefix)
@@ -301,9 +279,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         if (ident.name == "this" && !current_impl_type_.empty()) {
             // When current_type_subs_ is available (from gen_impl_method's type sub setup),
             // use it with the struct definition to build the correct semantic type.
-            // This handles nested generics like Take[Repeat[I32]] correctly,
-            // where parse_mangled_type_string("Take__Repeat__I32") would
-            // incorrectly produce Take[Repeat, I32].
+            // This is the most accurate path since it uses the actual type substitutions.
             auto sep_pos = current_impl_type_.find("__");
             if (sep_pos != std::string::npos && !current_type_subs_.empty()) {
                 std::string base_name = current_impl_type_.substr(0, sep_pos);
@@ -323,93 +299,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     }
                 }
             }
-            auto result = std::make_shared<types::Type>();
-            // auto sep_pos already declared above
-            if (sep_pos != std::string::npos) {
-                // Parse mangled name: Maybe__I32 -> Maybe[I32]
-                std::string base_name = current_impl_type_.substr(0, sep_pos);
-                std::string type_args_str = current_impl_type_.substr(sep_pos + 2);
-
-                // Split type args by __ and create nested types
-                std::vector<types::TypePtr> type_args;
-                size_t pos = 0;
-                while (pos < type_args_str.size()) {
-                    auto next_sep = type_args_str.find("__", pos);
-                    std::string arg = (next_sep == std::string::npos)
-                                          ? type_args_str.substr(pos)
-                                          : type_args_str.substr(pos, next_sep - pos);
-
-                    // Create type for this arg
-                    types::TypePtr arg_type;
-                    if (arg == "I32")
-                        arg_type = types::make_i32();
-                    else if (arg == "I64")
-                        arg_type = types::make_i64();
-                    else if (arg == "Bool")
-                        arg_type = types::make_bool();
-                    else if (arg == "Str")
-                        arg_type = types::make_str();
-                    else if (arg == "F32")
-                        arg_type = types::make_primitive(types::PrimitiveKind::F32);
-                    else if (arg == "F64")
-                        arg_type = types::make_f64();
-                    else if (arg.starts_with("tuple_")) {
-                        // Parse tuple type: tuple_Layout_I64 -> TupleType{Layout, I64}
-                        std::string tuple_args = arg.substr(6); // Remove "tuple_"
-                        std::vector<types::TypePtr> elements;
-                        size_t tuple_pos = 0;
-                        while (tuple_pos < tuple_args.size()) {
-                            auto next_underscore = tuple_args.find('_', tuple_pos);
-                            std::string elem_name =
-                                (next_underscore == std::string::npos)
-                                    ? tuple_args.substr(tuple_pos)
-                                    : tuple_args.substr(tuple_pos, next_underscore - tuple_pos);
-
-                            // Create type for this element
-                            types::TypePtr elem_type;
-                            if (elem_name == "I32")
-                                elem_type = types::make_i32();
-                            else if (elem_name == "I64")
-                                elem_type = types::make_i64();
-                            else if (elem_name == "Bool")
-                                elem_type = types::make_bool();
-                            else if (elem_name == "Str")
-                                elem_type = types::make_str();
-                            else if (elem_name == "F32")
-                                elem_type = types::make_primitive(types::PrimitiveKind::F32);
-                            else if (elem_name == "F64")
-                                elem_type = types::make_f64();
-                            else {
-                                // Named type (struct)
-                                auto et = std::make_shared<types::Type>();
-                                et->kind = types::NamedType{elem_name, "", {}};
-                                elem_type = et;
-                            }
-                            elements.push_back(elem_type);
-
-                            if (next_underscore == std::string::npos)
-                                break;
-                            tuple_pos = next_underscore + 1;
-                        }
-                        arg_type = types::make_tuple(std::move(elements));
-                    } else {
-                        // Unknown type, use as named type
-                        auto t = std::make_shared<types::Type>();
-                        t->kind = types::NamedType{arg, "", {}};
-                        arg_type = t;
-                    }
-                    type_args.push_back(arg_type);
-
-                    if (next_sep == std::string::npos)
-                        break;
-                    pos = next_sep + 2;
-                }
-
-                result->kind = types::NamedType{base_name, "", std::move(type_args)};
-            } else {
-                // Non-generic type
-                result->kind = types::NamedType{current_impl_type_, "", {}};
+            // Fallback: use parse_mangled_type_string which handles nested
+            // generics correctly (e.g., Shared__PromiseState__I32 -> Shared[PromiseState[I32]])
+            auto parsed = parse_mangled_type_string(current_impl_type_);
+            if (parsed) {
+                return parsed;
             }
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::NamedType{current_impl_type_, "", {}};
             return result;
         }
 

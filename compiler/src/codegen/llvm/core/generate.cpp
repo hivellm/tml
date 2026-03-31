@@ -23,6 +23,121 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Helper: Parse a mangled type string back into a semantic type.
+// Handles nested generics correctly by treating the entire suffix after
+// the first "__" as a single (possibly nested) type argument.
+// e.g., "Shared__PromiseState__I32" -> Shared[PromiseState[I32]]
+static types::TypePtr parse_mangled_type_string(const std::string& s) {
+    if (s == "I64")
+        return types::make_i64();
+    if (s == "I32")
+        return types::make_i32();
+    if (s == "I8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I8};
+        return t;
+    }
+    if (s == "I16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I16};
+        return t;
+    }
+    if (s == "U8") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U8};
+        return t;
+    }
+    if (s == "U16") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U16};
+        return t;
+    }
+    if (s == "U32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U32};
+        return t;
+    }
+    if (s == "U64") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "U128") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U128};
+        return t;
+    }
+    if (s == "I128") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I128};
+        return t;
+    }
+    if (s == "Usize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::U64};
+        return t;
+    }
+    if (s == "Isize") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::I64};
+        return t;
+    }
+    if (s == "F32") {
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::PrimitiveType{types::PrimitiveKind::F32};
+        return t;
+    }
+    if (s == "F64")
+        return types::make_f64();
+    if (s == "Bool")
+        return types::make_bool();
+    if (s == "Str")
+        return types::make_str();
+    if (s == "Unit")
+        return types::make_unit();
+
+    if (s.substr(0, 4) == "ptr_") {
+        std::string inner_str = s.substr(4);
+        auto inner = parse_mangled_type_string(inner_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::PtrType{.inner = inner};
+            return t;
+        }
+    }
+
+    // Check if s is a numeric string (const generic value like "3")
+    if (!s.empty() && (std::isdigit(s[0]) || (s[0] == '-' && s.size() > 1 && std::isdigit(s[1])))) {
+        try {
+            int64_t val = std::stoll(s);
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::ConstGenericType{s, types::make_i64(), val};
+            return t;
+        } catch (...) {
+            // Not a valid number, fall through
+        }
+    }
+
+    // Nested generic: treat the entire suffix after the first "__" as a single
+    // (possibly nested) type argument.  This is the KEY difference from the naive
+    // splitting approach that breaks nested generics.
+    auto delim = s.find("__");
+    if (delim != std::string::npos) {
+        std::string base = s.substr(0, delim);
+        std::string arg_str = s.substr(delim + 2);
+        auto inner = parse_mangled_type_string(arg_str);
+        if (inner) {
+            auto t = std::make_shared<types::Type>();
+            t->kind = types::NamedType{base, "", {inner}};
+            return t;
+        }
+    }
+
+    auto t = std::make_shared<types::Type>();
+    t->kind = types::NamedType{s, "", {}};
+    return t;
+}
+
 // Helper: Convert a parser::Type to a string for name mangling
 // Used to extract behavior type parameters for impl method names
 static std::string parser_type_to_string(const parser::Type& type) {
@@ -723,7 +838,66 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 current_submodule_name_ = info.submodule_name;
                 options_.lazy_library_defs = false;
                 generated_functions_.erase(fn);
+
+                // For generic type methods (e.g., Shared__PromiseState__I32::get),
+                // set up type substitutions so the body can resolve type params.
+                auto saved_type_subs = current_type_subs_;
+                auto saved_const_generic_values = current_const_generic_values_;
+                auto dunder = info.type_name.find("__");
+                if (dunder != std::string::npos) {
+                    std::string base = info.type_name.substr(0, dunder);
+                    std::string suffix = info.type_name.substr(dunder + 2);
+                    auto impl_it = pending_generic_impls_.find(base);
+                    if (impl_it != pending_generic_impls_.end()) {
+                        const auto& impl_block = *impl_it->second;
+                        if (impl_block.generics.size() == 1) {
+                            auto type_arg = parse_mangled_type_string(suffix);
+                            if (type_arg) {
+                                current_type_subs_[impl_block.generics[0].name] = type_arg;
+                                if (impl_block.generics[0].is_const &&
+                                    type_arg->is<types::ConstGenericType>()) {
+                                    const auto& cgt = type_arg->as<types::ConstGenericType>();
+                                    if (cgt.resolved_value.has_value()) {
+                                        current_const_generic_values_[impl_block.generics[0].name] =
+                                            *cgt.resolved_value;
+                                    }
+                                }
+                            }
+                        } else if (impl_block.generics.size() > 1) {
+                            std::vector<std::string> parts;
+                            size_t pos = 0;
+                            while (pos < suffix.size()) {
+                                size_t next = suffix.find("__", pos);
+                                if (next == std::string::npos) {
+                                    parts.push_back(suffix.substr(pos));
+                                    break;
+                                }
+                                parts.push_back(suffix.substr(pos, next - pos));
+                                pos = next + 2;
+                            }
+                            for (size_t gi = 0;
+                                 gi < impl_block.generics.size() && gi < parts.size(); ++gi) {
+                                auto type_arg = parse_mangled_type_string(parts[gi]);
+                                if (type_arg) {
+                                    current_type_subs_[impl_block.generics[gi].name] = type_arg;
+                                    if (impl_block.generics[gi].is_const &&
+                                        type_arg->is<types::ConstGenericType>()) {
+                                        const auto& cgt = type_arg->as<types::ConstGenericType>();
+                                        if (cgt.resolved_value.has_value()) {
+                                            current_const_generic_values_[impl_block.generics[gi]
+                                                                              .name] =
+                                                *cgt.resolved_value;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 gen_impl_method(info.type_name, *info.method);
+                current_type_subs_ = saved_type_subs;
+                current_const_generic_values_ = saved_const_generic_values;
                 options_.lazy_library_defs = true;
             }
 
