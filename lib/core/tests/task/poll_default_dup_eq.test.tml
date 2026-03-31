@@ -1,6 +1,6 @@
 // Tests for Poll::default, Poll::duplicate
 use test::{assert, assert_eq}
-use core::async::task::Poll
+use core::task::Poll
 
 @test
 func test_poll_default_i32() -> I32 {

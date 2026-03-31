@@ -1,5 +1,5 @@
 use test::{assert_eq}
-use core::async::async_iter::{FromIter, from_iter}
+use core::async_iter::{FromIter, from_iter}
 use core::iter::*
 
 // Test FromIter::new with OnceI64

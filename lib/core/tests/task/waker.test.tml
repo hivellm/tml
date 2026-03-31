@@ -1,7 +1,7 @@
 // Tests for Waker::from_raw, will_wake, as_raw
 // wake, wake_by_ref, duplicate are stub panics — untestable
 use test::{assert}
-use core::async::task::{Waker, RawWaker, RawWakerVTable}
+use core::task::{Waker, RawWaker, RawWakerVTable}
 use core::ptr::RawPtr
 
 func noop_clone(p: RawPtr[Unit]) -> RawWaker {
