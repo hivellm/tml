@@ -2035,6 +2035,7 @@ if(TML_BUILD_BENCH)
         tml_search
         tml_simd_string
         tml_simd_math
+        tml_lexer
     )
 
     # Optimize benchmarks even in debug builds — need realistic timings

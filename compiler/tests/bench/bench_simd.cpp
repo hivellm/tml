@@ -32,9 +32,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <random>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -560,6 +558,7 @@ static void bench_infrastructure() {
 static void bench_lexer() {
     bench::set_category("lexer");
     std::printf("\n=== Lexer SIMD Throughput ===\n");
+    std::fflush(stdout);
 
     // --- skip_whitespace: heavily indented source ---
     // 80 lines each indented with 16 spaces followed by a simple statement.
@@ -570,16 +569,20 @@ static void bench_lexer() {
             src += "                let x = 42\n"; // 16 spaces + statement
         }
         const int byte_len = static_cast<int>(src.size());
-
-        bench::run_bench(
-            "skip_whitespace (indented 80 lines)", 500,
-            [&]() {
-                tml::lexer::Source source = tml::lexer::Source("<bench_ws>", src);
+        (void)byte_len;
+        {
+            auto t0 = bench::now_ns();
+            for (int ti = 0; ti < 100; ++ti) {
+                tml::lexer::Source source("<bench_ws>", src);
                 tml::lexer::Lexer lexer(source);
-                volatile size_t n = lexer.tokenize().size();
-                (void)n;
-            },
-            byte_len);
+                auto tokens = lexer.tokenize();
+            }
+            auto t1 = bench::now_ns();
+            double per_iter_us = static_cast<double>(t1 - t0) / 100.0 / 1000.0;
+            std::printf("  skip_whitespace (80 lines, 2160B): %.1f us/iter (100 iters)\n",
+                        per_iter_us);
+            std::fflush(stdout);
+        }
     }
 
     // --- lex_identifier: source full of long identifiers ---
@@ -592,16 +595,21 @@ static void bench_lexer() {
             src += "let abcdefghijklmnopqrstuvwxyzAB = 0\n";
         }
         const int byte_len = static_cast<int>(src.size());
-
-        bench::run_bench(
-            "lex_identifier (200 x 32-char idents)", 500,
-            [&]() {
-                tml::lexer::Source source = tml::lexer::Source("<bench_ident>", src);
+        (void)byte_len;
+        {
+            const int N = 100;
+            auto t0 = bench::now_ns();
+            for (int ti = 0; ti < N; ++ti) {
+                tml::lexer::Source source("<bench_ident>", src);
                 tml::lexer::Lexer lexer(source);
-                volatile size_t n = lexer.tokenize().size();
-                (void)n;
-            },
-            byte_len);
+                auto tokens = lexer.tokenize();
+            }
+            auto t1 = bench::now_ns();
+            double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+            std::printf("  %-40s  %.1f us/iter (%d iters)\n",
+                        "lex_identifier (200 x 32-char idents)", per_iter_us, N);
+            std::fflush(stdout);
+        }
     }
 
     // --- lex_string: source full of long string literals ---
@@ -613,84 +621,79 @@ static void bench_lexer() {
             src += "let s = \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01\"\n";
         }
         const int byte_len = static_cast<int>(src.size());
-
-        bench::run_bench(
-            "lex_string (100 x 60-char string literals)", 500,
-            [&]() {
-                tml::lexer::Source source = tml::lexer::Source("<bench_str>", src);
+        (void)byte_len;
+        {
+            const int N = 100;
+            auto t0 = bench::now_ns();
+            for (int ti = 0; ti < N; ++ti) {
+                tml::lexer::Source source("<bench_str>", src);
                 tml::lexer::Lexer lexer(source);
-                volatile size_t n = lexer.tokenize().size();
-                (void)n;
-            },
-            byte_len);
+                auto tokens = lexer.tokenize();
+            }
+            auto t1 = bench::now_ns();
+            double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+            std::printf("  %-40s  %.1f us/iter (%d iters)\n",
+                        "lex_string (100 x 60-char string literals)", per_iter_us, N);
+            std::fflush(stdout);
+        }
     }
 
-    // --- Full lexer throughput: real TML file ---
-    // Try to read lib/core/src/str.tml; fall back to a synthetic 4 KB block.
+    // --- Full lexer throughput: synthetic 4KB TML source ---
     {
         std::string file_src;
+        file_src.reserve(8192);
+        for (int i = 0; i < 60; ++i) {
+            file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
+                        "    let s = \"hello world\"\n"
+                        "    z\n"
+                        "}\n";
+        }
         bool loaded = false;
-        {
-            std::ifstream f("lib/core/src/str.tml", std::ios::binary);
-            if (f) {
-                std::ostringstream ss;
-                ss << f.rdbuf();
-                file_src = ss.str();
-                loaded = true;
-            }
-        }
-        if (!loaded) {
-            // Synthetic fallback: mix of identifiers, numbers, strings, ops
-            file_src.reserve(4096);
-            for (int i = 0; i < 60; ++i) {
-                file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
-                            "    let s = \"hello world\"\n"
-                            "    z\n"
-                            "}\n";
-            }
-        }
         const int byte_len = static_cast<int>(file_src.size());
+        (void)byte_len;
         const char* label = loaded ? "full_lex str.tml (real file)" : "full_lex synthetic 4KB";
 
-        bench::run_bench(
-            label, 200,
-            [&]() {
-                tml::lexer::Source source = tml::lexer::Source("<bench_file>", file_src);
+        {
+            const int N = 100;
+            auto t0 = bench::now_ns();
+            for (int ti = 0; ti < N; ++ti) {
+                tml::lexer::Source source("<bench_file>", file_src);
                 tml::lexer::Lexer lexer(source);
-                volatile size_t n = lexer.tokenize().size();
-                (void)n;
-            },
-            byte_len);
+                auto tokens = lexer.tokenize();
+            }
+            auto t1 = bench::now_ns();
+            double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+            std::printf("  %-40s  %.1f us/iter (%d iters)\n", label, per_iter_us, N);
+            std::fflush(stdout);
+        }
     }
 
     // --- End-to-end tokenize() wall time ---
-    // Same file, measuring only the tokenize() call (Source construction outside loop).
+    // Synthetic source, measuring only tokenize() (Source construction outside loop).
     {
         std::string file_src;
-        {
-            std::ifstream f("lib/core/src/str.tml", std::ios::binary);
-            if (f) {
-                std::ostringstream ss;
-                ss << f.rdbuf();
-                file_src = ss.str();
-            } else {
-                for (int i = 0; i < 60; ++i) {
-                    file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
-                                "    z\n}\n";
-                }
-            }
+        file_src.reserve(8192);
+        for (int i = 0; i < 60; ++i) {
+            file_src += "func foo(x: I64, y: I64) -> I64 { let z = x + y\n"
+                        "    z\n}\n";
         }
         const int byte_len = static_cast<int>(file_src.size());
+        (void)byte_len;
         tml::lexer::Source source = tml::lexer::Source("<bench_e2e>", file_src);
 
-        bench::run_bench(
-            "tokenize() call only (Source pre-built)", 500,
-            [&]() {
+        {
+            const int N = 100;
+            auto t0 = bench::now_ns();
+            for (int ti = 0; ti < N; ++ti) {
                 tml::lexer::Lexer lexer(source);
-                volatile size_t n = lexer.tokenize().size();
-                (void)n;
-            },
-            byte_len);
+                auto tokens = lexer.tokenize();
+            }
+            auto t1 = bench::now_ns();
+            double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+            std::printf("  %-40s  %.1f us/iter (%d iters)\n",
+                        "tokenize() call only (Source pre-built)", per_iter_us, N);
+            std::fflush(stdout);
+        }
     }
 }
 
@@ -721,18 +724,22 @@ static void bench_hnsw() {
         v = dist(rng);
 
     // --- Build benchmark: insert N_DOCS vectors ---
-    bench::run_bench(
-        "hnsw_build_1K_128d (full insert)", 10,
-        [&]() {
+    {
+        const int N = 10;
+        auto t0 = bench::now_ns();
+        for (int ti = 0; ti < N; ++ti) {
             tml::search::HnswIndex idx(DIMS);
             idx.set_params(16, 200, 50);
             for (size_t i = 0; i < N_DOCS; ++i) {
                 idx.insert(static_cast<uint32_t>(i), corpus[i]);
             }
-            volatile size_t s = idx.size();
-            (void)s;
-        },
-        static_cast<int>(N_DOCS * DIMS * sizeof(float)));
+        }
+        auto t1 = bench::now_ns();
+        double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+        std::printf("  %-40s  %.1f us/iter (%d iters)\n", "hnsw_build_1K_128d (full insert)",
+                    per_iter_us, N);
+        std::fflush(stdout);
+    }
 
     // Build a persistent index for query benchmarks.
     tml::search::HnswIndex idx(DIMS);
@@ -742,27 +749,34 @@ static void bench_hnsw() {
     }
 
     // --- Query benchmark: top-K search ---
-    bench::run_bench(
-        "hnsw_search_top10 (1K indexed, 128d)", 1000,
-        [&]() {
+    {
+        const int N = 100;
+        auto t0 = bench::now_ns();
+        for (int ti = 0; ti < N; ++ti) {
             auto results = idx.search(query, K);
-            volatile size_t n = results.size();
-            (void)n;
-        },
-        static_cast<int>(DIMS * sizeof(float)));
+        }
+        auto t1 = bench::now_ns();
+        double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+        std::printf("  %-40s  %.1f us/iter (%d iters)\n", "hnsw_search_top10 (1K indexed, 128d)",
+                    per_iter_us, N);
+        std::fflush(stdout);
+    }
 
     // --- Varied query benchmark: different query vectors ---
-    bench::run_bench(
-        "hnsw_search_top10 (varied queries)", 1000,
-        [&]() {
-            // Rotate query slightly to avoid branch predictor lock-in.
-            static size_t qidx = 0;
+    {
+        const int N = 100;
+        size_t qidx = 0;
+        auto t0 = bench::now_ns();
+        for (int ti = 0; ti < N; ++ti) {
             auto results = idx.search(corpus[qidx % N_DOCS], K);
-            volatile size_t n = results.size();
-            (void)n;
             ++qidx;
-        },
-        static_cast<int>(DIMS * sizeof(float)));
+        }
+        auto t1 = bench::now_ns();
+        double per_iter_us = static_cast<double>(t1 - t0) / N / 1000.0;
+        std::printf("  %-40s  %.1f us/iter (%d iters)\n", "hnsw_search_top10 (varied queries)",
+                    per_iter_us, N);
+        std::fflush(stdout);
+    }
 }
 
 // ============================================================================
