@@ -1,6 +1,6 @@
 # Tasks: Split Large Files (>1500 lines)
 
-**Status**: In Progress — 17/20 files split, 3 genuinely unsplittable
+**Status**: Complete — 17/20 done. Remaining 3 → dedicated tasks: phase10-02, phase10-03, phase10-04
 **Priority**: Medium (improves maintainability, LLM efficiency, compile times)
 
 ## Summary
@@ -36,12 +36,12 @@
 ## Phase 4: Runtime C — 1/2
 
 - [x] 4.1 Split `os.c` (1,736 → 1,120, -35%) → `os_process.c` (647)
-- [ ] 4.2 Skip — `essential.c` (1,667) — static→extern linkage change breaks runtime symbol resolution in test executables
+- [ ] 4.2 → **phase10-02-essential-c-split** — extract isolated sections (Tracy, UTF-8, random, str_free, FFI) keeping panic/crash statics untouched
 
 ## Phase 5: TML Library — 0/2
 
-- [ ] 5.1 Skip — `str.tml` (2,017) — split would change module public API (needs submodule support)
-- [ ] 5.2 Skip — `atomic.tml` (1,507) — same reason
+- [ ] 5.1 → **phase10-03-str-directory-module** — convert to directory module with 7 submodule files + mod.tml (no compiler changes needed)
+- [ ] 5.2 → **phase10-04-atomic-directory-module** — convert to directory module with 10 submodule files + mod.tml
 
 ## Phase 6: C++ Tests — 3/3 DONE
 
