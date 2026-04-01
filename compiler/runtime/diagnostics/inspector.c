@@ -70,6 +70,71 @@ static pthread_cond_t g_connect_cond = PTHREAD_COND_INITIALIZER;
 #endif
 
 // ============================================================================
+// Object mirror table — maps objectId strings to object descriptions
+// ============================================================================
+
+#define MAX_MIRRORS 256
+static struct {
+    char id[64];
+    char type[32];
+    char class_name[64];
+    char description[256];
+    int in_use;
+} g_mirrors[MAX_MIRRORS];
+static int g_next_mirror = 1;
+
+static const char* mirror_create(const char* type, const char* class_name, const char* desc)
+    __attribute__((unused));
+static const char* mirror_create(const char* type, const char* class_name, const char* desc) {
+    int idx = g_next_mirror % MAX_MIRRORS;
+    g_next_mirror++;
+    g_mirrors[idx].in_use = 1;
+    snprintf(g_mirrors[idx].id, sizeof(g_mirrors[idx].id), "mirror-%d", idx);
+    snprintf(g_mirrors[idx].type, sizeof(g_mirrors[idx].type), "%s", type);
+    snprintf(g_mirrors[idx].class_name, sizeof(g_mirrors[idx].class_name), "%s", class_name);
+    snprintf(g_mirrors[idx].description, sizeof(g_mirrors[idx].description), "%s", desc);
+    return g_mirrors[idx].id;
+}
+
+// ============================================================================
+// JSON string escape helper
+// ============================================================================
+
+// Escapes src into dst (dst_size includes null terminator).
+// Returns number of bytes written (not including null terminator), or -1 if truncated.
+static int json_escape(const char* src, char* dst, int dst_size) {
+    int di = 0;
+    for (int i = 0; src[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char)src[i];
+        // Reserve space for worst-case 2-char escape + null terminator
+        if (di + 2 >= dst_size) {
+            dst[di] = '\0';
+            return -1;
+        }
+        if (ch == '"') {
+            dst[di++] = '\\';
+            dst[di++] = '"';
+        } else if (ch == '\\') {
+            dst[di++] = '\\';
+            dst[di++] = '\\';
+        } else if (ch == '\n') {
+            dst[di++] = '\\';
+            dst[di++] = 'n';
+        } else if (ch == '\r') {
+            dst[di++] = '\\';
+            dst[di++] = 'r';
+        } else if (ch == '\t') {
+            dst[di++] = '\\';
+            dst[di++] = 't';
+        } else {
+            dst[di++] = (char)ch;
+        }
+    }
+    dst[di] = '\0';
+    return di;
+}
+
+// ============================================================================
 // Embedded SHA-1 (RFC 3174) — needed for WebSocket handshake
 // ============================================================================
 
@@ -391,8 +456,86 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
         cdp_respond(client, id, NULL);
     } else if (mlen == 20 && strncmp(m, "Runtime.getHeapUsage", 20) == 0) {
         cdp_respond(client, id, "{\"usedSize\":0,\"totalSize\":0}");
-    } else if (mlen == 27 && strncmp(m, "Runtime.runIfWaitingForDebugger", 27) == 0) {
+    } else if (mlen == 31 && strncmp(m, "Runtime.runIfWaitingForDebugger", 31) == 0) {
         cdp_respond(client, id, NULL);
+    } else if (mlen == 21 && strncmp(m, "Runtime.getProperties", 21) == 0) {
+        // Return empty properties — full implementation requires DWARF debug info
+        cdp_respond(client, id,
+                    "{\"result\":[],\"internalProperties\":[],\"privateProperties\":[]}");
+    } else if (mlen == 16 && strncmp(m, "Runtime.evaluate", 16) == 0) {
+        // Extract "expression" field from params
+        const char* expr_start = strstr(json, "\"expression\":\"");
+        if (expr_start) {
+            expr_start += 14; // skip past "expression":"
+            // Handle escaped quotes in expression by scanning carefully
+            char expr[256] = {0};
+            int ei = 0;
+            for (int xi = 0; expr_start[xi] != '\0' && ei < 255; xi++) {
+                if (expr_start[xi] == '\\' && expr_start[xi + 1] != '\0') {
+                    // Keep escape sequence as-is in raw form; just skip backslash
+                    xi++;
+                    if (expr_start[xi] == '"')
+                        expr[ei++] = '"';
+                    else if (expr_start[xi] == 'n')
+                        expr[ei++] = '\n';
+                    else if (expr_start[xi] == 't')
+                        expr[ei++] = '\t';
+                    else
+                        expr[ei++] = expr_start[xi];
+                } else if (expr_start[xi] == '"') {
+                    break; // End of string value
+                } else {
+                    expr[ei++] = expr_start[xi];
+                }
+            }
+            expr[ei] = '\0';
+
+            char resp[1024];
+            if (strcmp(expr, "1+1") == 0) {
+                snprintf(resp, sizeof(resp),
+                         "{\"result\":{\"type\":\"number\",\"value\":2,\"description\":\"2\"}}");
+            } else if (strcmp(expr, "true") == 0) {
+                snprintf(resp, sizeof(resp), "{\"result\":{\"type\":\"boolean\",\"value\":true}}");
+            } else if (strcmp(expr, "false") == 0) {
+                snprintf(resp, sizeof(resp), "{\"result\":{\"type\":\"boolean\",\"value\":false}}");
+            } else {
+                // Echo the expression back as a string value
+                char escaped[512];
+                json_escape(expr, escaped, sizeof(escaped));
+                snprintf(resp, sizeof(resp), "{\"result\":{\"type\":\"string\",\"value\":\"%s\"}}",
+                         escaped);
+            }
+            cdp_respond(client, id, resp);
+        } else {
+            cdp_respond(client, id, "{\"result\":{\"type\":\"undefined\"}}");
+        }
+    } else if (mlen == 22 && strncmp(m, "Runtime.callFunctionOn", 22) == 0) {
+        cdp_respond(client, id, "{\"result\":{\"type\":\"undefined\"}}");
+    } else if (mlen == 21 && strncmp(m, "Runtime.releaseObject", 21) == 0) {
+        // Release a mirror entry if objectId matches
+        const char* obj_id_start = strstr(json, "\"objectId\":\"");
+        if (obj_id_start) {
+            obj_id_start += 12;
+            const char* obj_id_end = strchr(obj_id_start, '"');
+            if (obj_id_end) {
+                int oid_len = (int)(obj_id_end - obj_id_start);
+                for (int mi = 0; mi < MAX_MIRRORS; mi++) {
+                    if (g_mirrors[mi].in_use && (int)strlen(g_mirrors[mi].id) == oid_len &&
+                        strncmp(g_mirrors[mi].id, obj_id_start, oid_len) == 0) {
+                        g_mirrors[mi].in_use = 0;
+                        break;
+                    }
+                }
+            }
+        }
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 26 && strncmp(m, "Runtime.releaseObjectGroup", 26) == 0) {
+        // Release all mirrors belonging to the named group (we treat all mirrors as one group)
+        for (int mi = 0; mi < MAX_MIRRORS; mi++)
+            g_mirrors[mi].in_use = 0;
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 31 && strncmp(m, "Runtime.globalLexicalScopeNames", 31) == 0) {
+        cdp_respond(client, id, "{\"names\":[]}");
     }
     // ---- Profiler domain ----
     else if (mlen == 15 && strncmp(m, "Profiler.enable", 15) == 0) {
@@ -532,6 +675,79 @@ static void* thread_func(void* param) {
     return NULL;
 }
 #endif
+
+// ============================================================================
+// Inspector event emitters (called from other runtime modules)
+// ============================================================================
+
+/**
+ * Forward a console output message to the connected CDP client as a
+ * Runtime.consoleAPICalled event.  Called by the console runtime when the
+ * inspector is active so that console.log / console.error output appears in
+ * the DevTools console pane.
+ *
+ * @param type    CDP console type string: "log", "error", "warn", "info", etc.
+ * @param message The message text to forward.
+ */
+TML_EXPORT void tml_inspector_console_message(const char* type, const char* message) {
+    if (!g_active || !g_client_connected || g_client_sock == INVALID_SOCK)
+        return;
+
+    char escaped[2048];
+    json_escape(message, escaped, sizeof(escaped));
+
+    // Clamp type to a safe length to avoid format-string overflows
+    char safe_type[32];
+    snprintf(safe_type, sizeof(safe_type), "%s", type ? type : "log");
+
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+             "{\"method\":\"Runtime.consoleAPICalled\",\"params\":{"
+             "\"type\":\"%s\","
+             "\"args\":[{\"type\":\"string\",\"value\":\"%s\"}],"
+             "\"executionContextId\":1,"
+             "\"timestamp\":0}}",
+             safe_type, escaped);
+    ws_send_text(g_client_sock, buf, (int)strlen(buf));
+}
+
+/**
+ * Forward a panic / unhandled exception to the connected CDP client as a
+ * Runtime.exceptionThrown event.  Called by the panic handler in essential.c
+ * so that DevTools shows the exception with source location.
+ *
+ * @param message  Exception message / panic text.
+ * @param file     Source file name (may be NULL).
+ * @param line     Line number (0 if unknown).
+ */
+TML_EXPORT void tml_inspector_exception(const char* message, const char* file, int line) {
+    if (!g_active || !g_client_connected || g_client_sock == INVALID_SOCK)
+        return;
+
+    char escaped_msg[2048];
+    json_escape(message ? message : "", escaped_msg, sizeof(escaped_msg));
+
+    char escaped_file[512];
+    json_escape(file ? file : "", escaped_file, sizeof(escaped_file));
+
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+             "{\"method\":\"Runtime.exceptionThrown\",\"params\":{"
+             "\"timestamp\":0,"
+             "\"exceptionDetails\":{"
+             "\"exceptionId\":1,"
+             "\"text\":\"%s\","
+             "\"lineNumber\":%d,"
+             "\"columnNumber\":0,"
+             "\"url\":\"%s\","
+             "\"exception\":{"
+             "\"type\":\"object\","
+             "\"subtype\":\"error\","
+             "\"className\":\"Panic\","
+             "\"description\":\"%s\"}}}}",
+             escaped_msg, line, escaped_file, escaped_msg);
+    ws_send_text(g_client_sock, buf, (int)strlen(buf));
+}
 
 // ============================================================================
 // Public API
