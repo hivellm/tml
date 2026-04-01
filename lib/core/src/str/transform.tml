@@ -1,0 +1,304 @@
+//! String transformation operations: trim, case conversion, and related utilities.
+
+use core::str::basic::{len, substring}
+
+// ============================================================================
+// Whitespace helper
+// ============================================================================
+
+/// Returns true if a byte value is ASCII whitespace (space, tab, newline, carriage return).
+func is_whitespace(b: I32) -> Bool {
+    return b == 32 or b == 9 or b == 10 or b == 13
+}
+
+// ============================================================================
+// Trimming
+// ============================================================================
+
+/// Removes leading and trailing whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim("  hello  ") == "hello")
+/// assert(trim("\n\thello\t\n") == "hello")
+/// ```
+@allocates
+pub func trim(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var st: I64 = 0
+    loop (st < s_len) {
+        let p: *U8 = (src + st) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        st = st + 1
+    }
+    var en: I64 = s_len
+    loop (en > st) {
+        let p: *U8 = (src + en - 1) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        en = en - 1
+    }
+    if st >= en {
+        return ""
+    }
+    return substring(s, st, en)
+}
+
+/// Removes leading whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim_start("  hello  ") == "hello  ")
+/// ```
+@allocates
+pub func trim_start(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var st: I64 = 0
+    loop (st < s_len) {
+        let p: *U8 = (src + st) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        st = st + 1
+    }
+    if st == 0 {
+        return s
+    }
+    return substring(s, st, s_len)
+}
+
+/// Removes trailing whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim_end("  hello  ") == "  hello")
+/// ```
+@allocates
+pub func trim_end(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let src: I64 = s as I64
+    var en: I64 = s_len
+    loop (en > 0) {
+        let p: *U8 = (src + en - 1) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if not is_whitespace(b as I32) {
+            break
+        }
+        en = en - 1
+    }
+    if en == s_len {
+        return s
+    }
+    if en == 0 {
+        return ""
+    }
+    return substring(s, 0, en)
+}
+
+/// Trims all leading and trailing bytes that appear in `chars`.
+///
+/// `chars` is treated as a set of individual byte characters to trim.
+/// Each byte in `chars` is a candidate for removal.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim_matches("##hello##", "#") == "hello")
+/// assert(trim_matches("***world***", "*") == "world")
+/// assert(trim_matches("xyzHELLOzyx", "xyz") == "HELLO")
+/// ```
+pub func trim_matches(s: Str, chars: Str) -> Str {
+    let s_len: I64 = len(s)
+    let c_len: I64 = len(chars)
+    if s_len == 0 or c_len == 0 {
+        return s
+    }
+    let src: I64 = s as I64
+    let chs: I64 = chars as I64
+    // Find the left boundary — skip bytes that appear in chars
+    var left: I64 = 0
+    var searching: Bool = true
+    loop (left < s_len and searching) {
+        let bp: *U8 = (src + left) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](bp) }
+        var found: Bool = false
+        var ci: I64 = 0
+        loop (ci < c_len and not found) {
+            let cp: *U8 = (chs + ci) as *U8
+            let cb: U8 = lowlevel { ptr_read[U8](cp) }
+            if b == cb {
+                found = true
+            }
+            ci = ci + 1
+        }
+        if found {
+            left = left + 1
+        } else {
+            searching = false
+        }
+    }
+    // Find the right boundary — skip bytes that appear in chars
+    var right: I64 = s_len - 1
+    var searching2: Bool = true
+    loop (right >= left and searching2) {
+        let bp: *U8 = (src + right) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](bp) }
+        var found: Bool = false
+        var ci: I64 = 0
+        loop (ci < c_len and not found) {
+            let cp: *U8 = (chs + ci) as *U8
+            let cb: U8 = lowlevel { ptr_read[U8](cp) }
+            if b == cb {
+                found = true
+            }
+            ci = ci + 1
+        }
+        if found {
+            right = right - 1
+        } else {
+            searching2 = false
+        }
+    }
+    if left > right {
+        return ""
+    }
+    return substring(s, left, right + 1)
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+/// Converts all characters to uppercase.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(to_uppercase("hello") == "HELLO")
+/// assert(to_uppercase("Hello World") == "HELLO WORLD")
+/// ```
+@allocates
+pub func to_uppercase(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let src: I64 = s as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        var ch: I32 = b as I32
+        // ASCII lowercase a-z: 97-122 -> 65-90
+        if ch >= 97 and ch <= 122 {
+            ch = ch - 32
+        }
+        let dp: *U8 = (dst + i) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        i = i + 1
+    }
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+/// Converts all characters to lowercase.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(to_lowercase("HELLO") == "hello")
+/// assert(to_lowercase("Hello World") == "hello world")
+/// ```
+@allocates
+pub func to_lowercase(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let src: I64 = s as I64
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        var ch: I32 = b as I32
+        // ASCII uppercase A-Z: 65-90 -> 97-122
+        if ch >= 65 and ch <= 90 {
+            ch = ch + 32
+        }
+        let dp: *U8 = (dst + i) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        i = i + 1
+    }
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+// ============================================================================
+// Case-Insensitive Comparison
+// ============================================================================
+
+/// Compares two strings for equality, ignoring ASCII case.
+///
+/// Non-ASCII bytes are compared literally (case-sensitive).
+///
+/// # Examples
+///
+/// ```tml
+/// assert(eq_ignore_ascii_case("Hello", "hello") == true)
+/// assert(eq_ignore_ascii_case("WORLD", "world") == true)
+/// assert(eq_ignore_ascii_case("abc", "xyz") == false)
+/// ```
+pub func eq_ignore_ascii_case(s: Str, other: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let o_len: I64 = len(other)
+    if s_len != o_len {
+        return false
+    }
+    let src: I64 = s as I64
+    let orc: I64 = other as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let sp: *U8 = (src + i) as *U8
+        let op: *U8 = (orc + i) as *U8
+        var sb: I32 = (lowlevel { ptr_read[U8](sp) }) as I32
+        var ob: I32 = (lowlevel { ptr_read[U8](op) }) as I32
+        // Normalize ASCII letters to lowercase
+        if sb >= 65 and sb <= 90 {
+            sb = sb + 32
+        }
+        if ob >= 65 and ob <= 90 {
+            ob = ob + 32
+        }
+        if sb != ob {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}

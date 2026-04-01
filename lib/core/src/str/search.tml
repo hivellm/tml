@@ -1,0 +1,206 @@
+//! String search operations: contains, starts_with, ends_with, find, rfind, is_ascii, matches.
+
+use core::str::basic::{len, substring}
+
+// ============================================================================
+// FFI declarations for optimized C library string functions
+// ============================================================================
+
+@extern("memcmp")
+func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
+
+// ============================================================================
+// Search Operations
+// ============================================================================
+
+/// Returns `true` if the string contains the given substring.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(contains("hello world", "world") == true)
+/// assert(contains("hello", "xyz") == false)
+/// ```
+pub func contains(s: Str, pattern: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return true
+    }
+    if p_len > s_len {
+        return false
+    }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Returns `true` if the string starts with the given prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(starts_with("hello", "hel") == true)
+/// assert(starts_with("hello", "lo") == false)
+/// ```
+pub func starts_with(s: Str, prefix: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(prefix)
+    if p_len > s_len {
+        return false
+    }
+    if p_len == 0 {
+        return true
+    }
+    return c_memcmp(s as *U8, prefix as *U8, p_len) == 0
+}
+
+/// Returns `true` if the string ends with the given suffix.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(ends_with("hello", "lo") == true)
+/// assert(ends_with("hello", "hel") == false)
+/// ```
+pub func ends_with(s: Str, suffix: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let x_len: I64 = len(suffix)
+    if x_len > s_len {
+        return false
+    }
+    if x_len == 0 {
+        return true
+    }
+    let offset: I64 = s_len - x_len
+    return c_memcmp((s as I64 + offset) as *U8, suffix as *U8, x_len) == 0
+}
+
+/// Returns the byte index of the first occurrence of the pattern.
+///
+/// Returns `Nothing` if the pattern is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(find("hello", "ll") == Just(2))
+/// assert(find("hello", "xyz") == Nothing)
+/// ```
+pub func find(s: Str, pattern: Str) -> Maybe[I64] {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return Just(0)
+    }
+    if p_len > s_len {
+        return Nothing
+    }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
+            return Just(i)
+        }
+        i = i + 1
+    }
+    return Nothing
+}
+
+/// Returns the byte index of the last occurrence of the pattern.
+///
+/// Returns `Nothing` if the pattern is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(rfind("hello hello", "hello") == Just(6))
+/// assert(rfind("hello", "xyz") == Nothing)
+/// ```
+pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 {
+        return Just(s_len)
+    }
+    if p_len > s_len {
+        return Nothing
+    }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    var i: I64 = s_len - p_len
+    loop (i >= 0) {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
+            return Just(i)
+        }
+        i = i - 1
+    }
+    return Nothing
+}
+
+/// Returns `true` if all bytes in the string are valid ASCII (< 128).
+///
+/// An empty string returns `true`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_ascii("hello") == true)
+/// assert(is_ascii("") == true)
+/// assert(is_ascii("caf\xc3\xa9") == false)  // UTF-8 é
+/// ```
+pub func is_ascii(s: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if (b as I32) >= 128 {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+/// Returns a list of all non-overlapping matches of `pat` in the string.
+///
+/// # Examples
+///
+/// ```tml
+/// let ms = matches("hello world hello", "hello")
+/// assert(ms.len() == 2)
+/// assert(ms.get(0) == "hello")
+/// assert(ms.get(1) == "hello")
+/// ```
+pub func matches(s: Str, pat: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pat)
+    if p_len == 0 or p_len > s_len {
+        return result
+    }
+    let s_base: I64 = s as I64
+    let p_base: I64 = pat as I64
+    var pos: I64 = 0
+    let limit: I64 = s_len - p_len
+    loop (pos <= limit) {
+        if c_memcmp((s_base + pos) as *U8, p_base as *U8, p_len) == 0 {
+            result.push(substring(s, pos, pos + p_len))
+            pos = pos + p_len
+        } else {
+            pos = pos + 1
+        }
+    }
+    return result
+}

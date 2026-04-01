@@ -1,0 +1,315 @@
+//! String splitting operations: split, split_whitespace, lines, split_once, rsplit_once, splitn, rsplit.
+
+use core::str::basic::{len, substring}
+use core::str::search::{find, rfind}
+
+// ============================================================================
+// FFI declarations for optimized C library string functions
+// ============================================================================
+
+@extern("strlen")
+func c_strlen(s: Str) -> I64
+
+@extern("memcmp")
+func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
+
+@extern("memchr")
+func c_memchr(s: *U8, c: I32, n: I64) -> *U8
+
+// ============================================================================
+// Whitespace helper
+// ============================================================================
+
+/// Returns true if a byte value is ASCII whitespace (space, tab, newline, carriage return).
+func is_whitespace(b: I32) -> Bool {
+    return b == 32 or b == 9 or b == 10 or b == 13
+}
+
+// ============================================================================
+// Splitting
+// ============================================================================
+
+/// Splits a string by the given delimiter.
+///
+/// Returns a list of substrings. Empty strings are included if there are
+/// consecutive delimiters.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = split("a,b,c", ",")
+/// assert(parts.len() == 3)
+/// assert(parts[0] == "a")
+///
+/// let parts2 = split("a::b", "::")
+/// assert(parts2.len() == 2)
+/// ```
+pub func split(s: Str, delimiter: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    let d_len: I64 = len(delimiter)
+    if s_len == 0 {
+        result.push("")
+        return result
+    }
+    if d_len == 0 {
+        result.push(s)
+        return result
+    }
+    let s_base: I64 = s as I64
+    let d_base: I64 = delimiter as I64
+    var start: I64 = 0
+    var pos: I64 = 0
+    loop (pos <= s_len - d_len) {
+        if c_memcmp((s_base + pos) as *U8, d_base as *U8, d_len) == 0 {
+            result.push(substring(s, start, pos))
+            start = pos + d_len
+            pos = start
+        } else {
+            pos = pos + 1
+        }
+    }
+    // Push remainder
+    result.push(substring(s, start, s_len))
+    return result
+}
+
+/// Splits a string by whitespace.
+///
+/// Multiple consecutive whitespace characters are treated as a single
+/// delimiter. Leading and trailing whitespace is ignored.
+///
+/// # Examples
+///
+/// ```tml
+/// let words = split_whitespace("  hello   world  ")
+/// assert(words.len() == 2)
+/// assert(words[0] == "hello")
+/// assert(words[1] == "world")
+/// ```
+pub func split_whitespace(s: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        // Skip whitespace
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if is_whitespace(b as I32) {
+            i = i + 1
+        } else {
+            // Find end of word
+            let word_start: I64 = i
+            loop (i < s_len) {
+                let wp: *U8 = (src + i) as *U8
+                let wb: U8 = lowlevel { ptr_read[U8](wp) }
+                if is_whitespace(wb as I32) {
+                    break
+                }
+                i = i + 1
+            }
+            result.push(substring(s, word_start, i))
+        }
+    }
+    return result
+}
+
+/// Splits a string into lines.
+///
+/// Handles both `\n` and `\r\n` line endings.
+///
+/// # Examples
+///
+/// ```tml
+/// let lns = lines("line1\nline2\nline3")
+/// assert(lns.len() == 3)
+/// ```
+pub func lines(s: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var start: I64 = 0
+    loop (start <= s_len) {
+        let remaining: I64 = s_len - start
+        if remaining <= 0 { break }
+        let found: *U8 = c_memchr((src + start) as *U8, 10, remaining)
+        let found_addr: I64 = found as I64
+        if found_addr == 0 {
+            // No more newlines — push the rest
+            var end: I64 = s_len
+            if end > start {
+                let last_b: U8 = lowlevel { ptr_read[U8]((src + end - 1) as *U8) }
+                if (last_b as I32) == 13 { end = end - 1 }
+            }
+            result.push(substring(s, start, end))
+            break
+        }
+        let i: I64 = found_addr - src
+        // Check for \r\n
+        var line_end: I64 = i
+        if line_end > start {
+            let prev_b: U8 = lowlevel { ptr_read[U8]((src + line_end - 1) as *U8) }
+            if (prev_b as I32) == 13 { line_end = line_end - 1 }
+        }
+        result.push(substring(s, start, line_end))
+        start = i + 1
+    }
+    return result
+}
+
+/// Splits the string at the first occurrence of `delim`.
+///
+/// Returns `Just((before, after))` where `before` is the part before the
+/// delimiter and `after` is the part after it. Returns `Nothing` if the
+/// delimiter is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(split_once("key=value", "=") == Just(("key", "value")))
+/// assert(split_once("a::b::c", "::") == Just(("a", "b::c")))
+/// assert(split_once("hello", "=") == Nothing)
+/// ```
+pub func split_once(s: Str, delim: Str) -> Maybe[(Str, Str)] {
+    let result: Maybe[I64] = find(s, delim)
+    if result.is_nothing() {
+        return Nothing
+    }
+    let pos: I64 = result.unwrap()
+    let d_len: I64 = len(delim)
+    let s_len: I64 = len(s)
+    let before: Str = substring(s, 0, pos)
+    let after: Str = substring(s, pos + d_len, s_len)
+    return Just((before, after))
+}
+
+/// Splits the string at the last occurrence of `delim`.
+///
+/// Returns `Just((before, after))` where `before` is the part before the
+/// last delimiter and `after` is the part after it. Returns `Nothing` if
+/// the delimiter is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(rsplit_once("a::b::c", "::") == Just(("a::b", "c")))
+/// assert(rsplit_once("key=value", "=") == Just(("key", "value")))
+/// assert(rsplit_once("hello", "=") == Nothing)
+/// ```
+pub func rsplit_once(s: Str, delim: Str) -> Maybe[(Str, Str)] {
+    let result: Maybe[I64] = rfind(s, delim)
+    if result.is_nothing() {
+        return Nothing
+    }
+    let pos: I64 = result.unwrap()
+    let d_len: I64 = len(delim)
+    let s_len: I64 = len(s)
+    let before: Str = substring(s, 0, pos)
+    let after: Str = substring(s, pos + d_len, s_len)
+    return Just((before, after))
+}
+
+/// Splits the string by `delim` with a maximum of `n` parts.
+///
+/// Splits at most `n - 1` times, so the result has at most `n` elements.
+/// The last element contains the remainder of the string, including any
+/// unsplit delimiters.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = splitn("a,b,c,d", 3, ",")
+/// assert(parts.len() == 3)
+/// assert(parts.get(0) == "a")
+/// assert(parts.get(1) == "b")
+/// assert(parts.get(2) == "c,d")
+/// ```
+pub func splitn(s: Str, n: I64, delim: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    if n <= 0 {
+        return result
+    }
+    let s_len: I64 = len(s)
+    let d_len: I64 = len(delim)
+    if s_len == 0 {
+        result.push("")
+        return result
+    }
+    if d_len == 0 or n == 1 or d_len > s_len {
+        result.push(s)
+        return result
+    }
+    let s_base: I64 = s as I64
+    let d_base: I64 = delim as I64
+    var start: I64 = 0
+    var pos: I64 = 0
+    var count: I64 = 1
+    let limit: I64 = s_len - d_len
+    loop (pos <= limit) {
+        if count >= n {
+            break
+        }
+        if c_memcmp((s_base + pos) as *U8, d_base as *U8, d_len) == 0 {
+            result.push(substring(s, start, pos))
+            start = pos + d_len
+            pos = start
+            count = count + 1
+        } else {
+            pos = pos + 1
+        }
+    }
+    // Push the remainder
+    result.push(substring(s, start, s_len))
+    return result
+}
+
+/// Splits the string by `delim`, iterating from the right.
+///
+/// Similar to `split` but produces tokens in reverse order relative to the
+/// original string. The last delimited segment appears first in the result.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = rsplit("a,b,c", ",")
+/// assert(parts.len() == 3)
+/// assert(parts.get(0) == "c")
+/// assert(parts.get(1) == "b")
+/// assert(parts.get(2) == "a")
+/// ```
+pub func rsplit(s: Str, delim: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8)
+    let s_len: I64 = len(s)
+    let d_len: I64 = len(delim)
+    if s_len == 0 {
+        result.push("")
+        return result
+    }
+    if d_len == 0 or d_len > s_len {
+        result.push(s)
+        return result
+    }
+    let s_base: I64 = s as I64
+    let d_base: I64 = delim as I64
+    var end_pos: I64 = s_len
+    var pos: I64 = s_len - d_len
+    loop (pos >= 0) {
+        if c_memcmp((s_base + pos) as *U8, d_base as *U8, d_len) == 0 {
+            result.push(substring(s, pos + d_len, end_pos))
+            end_pos = pos
+            pos = pos - d_len
+        } else {
+            pos = pos - 1
+        }
+    }
+    // Push the leftmost remainder
+    result.push(substring(s, 0, end_pos))
+    return result
+}

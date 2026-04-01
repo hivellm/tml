@@ -1,0 +1,274 @@
+//! String parsing operations: parse_i32, parse_i64, parse_f64, parse_bool.
+
+use core::str::basic::len
+use core::str::transform::to_lowercase
+
+// ============================================================================
+// Parsing
+// ============================================================================
+
+/// Parses a string as a 32-bit signed integer.
+///
+/// Attempts to parse the entire string as an integer. Leading and trailing
+/// whitespace should be trimmed before calling.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_i32("42") == Just(42))
+/// assert(parse_i32("-17") == Just(-17))
+/// assert(parse_i32("0") == Just(0))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
+pub func parse_i32(s: Str) -> Maybe[I32] {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    // Check sign
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        // '-'
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        // '+'
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    var result: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch < 48 or ch > 57 {
+            return Nothing
+        }
+        result = result * 10 + (ch - 48) as I64
+        i = i + 1
+    }
+    if negative {
+        result = 0 - result
+    }
+    return Just(result as I32)
+}
+
+/// Parses a string as a 64-bit signed integer.
+///
+/// Attempts to parse the entire string as an integer. Leading and trailing
+/// whitespace should be trimmed before calling.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_i64("9223372036854775807") == Just(9223372036854775807))
+/// assert(parse_i64("-42") == Just(-42))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
+pub func parse_i64(s: Str) -> Maybe[I64] {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    var result: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch < 48 or ch > 57 {
+            return Nothing
+        }
+        result = result * 10 + (ch - 48) as I64
+        i = i + 1
+    }
+    if negative {
+        result = 0 - result
+    }
+    return Just(result)
+}
+
+/// Parses a string as a 64-bit floating point number.
+///
+/// Accepts standard decimal notation and scientific notation.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_f64("3.14") == Just(3.14))
+/// assert(parse_f64("-0.5") == Just(-0.5))
+/// assert(parse_f64("1e10") == Just(1e10))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
+pub func parse_f64(s: Str) -> Maybe[F64] {
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return Nothing
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {
+        negative = true
+        i = 1
+    } else if first_ch == 43 {
+        i = 1
+    }
+    if i >= s_len {
+        return Nothing
+    }
+    // Integer part
+    var int_part: F64 = 0.0
+    var has_digits: Bool = false
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch >= 48 and ch <= 57 {
+            int_part = int_part * 10.0 + (ch - 48) as F64
+            has_digits = true
+            i = i + 1
+        } else {
+            break
+        }
+    }
+    var frac_part: F64 = 0.0
+    // Decimal part
+    if i < s_len {
+        let dp: *U8 = (src + i) as *U8
+        let db: U8 = lowlevel { ptr_read[U8](dp) }
+        if (db as I32) == 46 {
+            // '.'
+            i = i + 1
+            var divisor: F64 = 10.0
+            loop (i < s_len) {
+                let p: *U8 = (src + i) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](p) }
+                let ch: I32 = b as I32
+                if ch >= 48 and ch <= 57 {
+                    frac_part = frac_part + (ch - 48) as F64 / divisor
+                    divisor = divisor * 10.0
+                    has_digits = true
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+        }
+    }
+    if not has_digits {
+        return Nothing
+    }
+    var result: F64 = int_part + frac_part
+    // Exponent part (e/E)
+    if i < s_len {
+        let ep: *U8 = (src + i) as *U8
+        let eb: U8 = lowlevel { ptr_read[U8](ep) }
+        let ech: I32 = eb as I32
+        if ech == 101 or ech == 69 {
+            // 'e' or 'E'
+            i = i + 1
+            var exp_negative: Bool = false
+            if i < s_len {
+                let esp: *U8 = (src + i) as *U8
+                let esb: U8 = lowlevel { ptr_read[U8](esp) }
+                let esch: I32 = esb as I32
+                if esch == 45 {
+                    exp_negative = true
+                    i = i + 1
+                } else if esch == 43 {
+                    i = i + 1
+                }
+            }
+            var exp_val: I64 = 0
+            loop (i < s_len) {
+                let p: *U8 = (src + i) as *U8
+                let b: U8 = lowlevel { ptr_read[U8](p) }
+                let ch: I32 = b as I32
+                if ch >= 48 and ch <= 57 {
+                    exp_val = exp_val * 10 + (ch - 48) as I64
+                    i = i + 1
+                } else {
+                    break
+                }
+            }
+            var multiplier: F64 = 1.0
+            var ei: I64 = 0
+            loop (ei < exp_val) {
+                multiplier = multiplier * 10.0
+                ei = ei + 1
+            }
+            if exp_negative {
+                result = result / multiplier
+            } else {
+                result = result * multiplier
+            }
+        }
+    }
+    if negative {
+        result = 0.0 - result
+    }
+    return Just(result)
+}
+
+/// Parses a string as a boolean value.
+///
+/// Accepts the following values (case insensitive):
+/// - `"true"` or `"1"` → `Just(true)`
+/// - `"false"` or `"0"` → `Just(false)`
+/// - Any other value → `Nothing`
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_bool("true") == Just(true))
+/// assert(parse_bool("FALSE") == Just(false))
+/// assert(parse_bool("1") == Just(true))
+/// assert(parse_bool("yes") == Nothing)
+/// ```
+pub func parse_bool(s: Str) -> Maybe[Bool] {
+    let lower: Str = to_lowercase(s)
+    if lower == "true" or lower == "1" {
+        return Just(true)
+    }
+    if lower == "false" or lower == "0" {
+        return Just(false)
+    }
+    return Nothing
+}

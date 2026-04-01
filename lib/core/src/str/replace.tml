@@ -1,0 +1,206 @@
+//! String replacement operations: replace, replace_first, replacen.
+
+use core::str::basic::{len, substring}
+use core::str::search::find
+
+// ============================================================================
+// FFI declarations for optimized C library string functions
+// ============================================================================
+
+@extern("memcmp")
+func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
+
+// ============================================================================
+// Replacement
+// ============================================================================
+
+/// Replaces all occurrences of a substring with another string.
+///
+/// # Arguments
+///
+/// * `s` - The source string
+/// * `from` - The pattern to search for
+/// * `to` - The replacement string
+///
+/// # Examples
+///
+/// ```tml
+/// assert(replace("hello world", "world", "TML") == "hello TML")
+/// assert(replace("aaa", "a", "b") == "bbb")
+/// assert(replace("hello", "x", "y") == "hello")  // No match
+/// ```
+@allocates
+pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    let r_len: I64 = len(replacement)
+    if p_len == 0 or s_len == 0 {
+        return s
+    }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    // First pass: count occurrences using memcmp
+    var count: I64 = 0
+    var pos: I64 = 0
+    loop (pos <= s_len - p_len) {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
+            count = count + 1
+            pos = pos + p_len
+        } else {
+            pos = pos + 1
+        }
+    }
+    if count == 0 {
+        return s
+    }
+    // Allocate result
+    let new_len: I64 = s_len + count * (r_len - p_len)
+    let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+    let dst: I64 = buf as I64
+    var si: I64 = 0
+    var di: I64 = 0
+    loop (si <= s_len - p_len) {
+        if c_memcmp((s_base + si) as *U8, p_ptr, p_len) == 0 {
+            // Copy replacement using memcpy
+            if r_len > 0 {
+                lowlevel { copy_nonoverlapping(replacement as *U8, (dst + di) as *U8, r_len) }
+            }
+            di = di + r_len
+            si = si + p_len
+        } else {
+            let sp: *U8 = (s_base + si) as *U8
+            let dp: *U8 = (dst + di) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            si = si + 1
+            di = di + 1
+        }
+    }
+    // Copy remaining bytes after the last possible match position
+    if si < s_len {
+        let remaining: I64 = s_len - si
+        lowlevel { copy_nonoverlapping((s_base + si) as *U8, (dst + di) as *U8, remaining) }
+        di = di + remaining
+    }
+    let null_p: *U8 = (dst + di) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+/// Replaces only the first occurrence of a substring.
+///
+/// # Arguments
+///
+/// * `s` - The source string
+/// * `from` - The pattern to search for
+/// * `to` - The replacement string
+///
+/// # Examples
+///
+/// ```tml
+/// assert(replace_first("aaa", "a", "b") == "baa")
+/// assert(replace_first("hello hello", "hello", "hi") == "hi hello")
+/// ```
+@allocates
+pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
+    let result: Maybe[I64] = find(s, pattern)
+    if result.is_just() {
+        let pos: I64 = result.unwrap()
+        let s_len: I64 = len(s)
+        let p_len: I64 = len(pattern)
+        let r_len: I64 = len(replacement)
+        let new_len: I64 = s_len - p_len + r_len
+        let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+        let dst: I64 = buf as I64
+        // Copy before match
+        if pos > 0 {
+            lowlevel { copy_nonoverlapping(s as *U8, dst as *U8, pos) }
+        }
+        // Copy replacement
+        if r_len > 0 {
+            lowlevel { copy_nonoverlapping(replacement as *U8, (dst + pos) as *U8, r_len) }
+        }
+        // Copy after match
+        let after_len: I64 = s_len - pos - p_len
+        if after_len > 0 {
+            lowlevel { copy_nonoverlapping((s as I64 + pos + p_len) as *U8, (dst + pos + r_len) as *U8, after_len) }
+        }
+        lowlevel { ptr_write[U8]((dst + new_len) as *U8, 0 as U8) }
+        return buf as Str
+    }
+    return s
+}
+
+/// Replaces at most `count` occurrences of `pat` with `to`.
+///
+/// If `count` is 0, the original string is returned unchanged.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(replacen("aaa", "a", "b", 2) == "bba")
+/// assert(replacen("hello hello hello", "hello", "hi", 2) == "hi hi hello")
+/// ```
+pub func replacen(s: Str, pat: Str, repl: Str, count: I64) -> Str {
+    if count <= 0 {
+        return s
+    }
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pat)
+    let r_len: I64 = len(repl)
+    if p_len == 0 or s_len == 0 or p_len > s_len {
+        return s
+    }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pat as *U8
+    // First pass: count matches up to `count` replacements
+    var hits: I64 = 0
+    var pos: I64 = 0
+    let limit: I64 = s_len - p_len
+    loop (pos <= limit and hits < count) {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
+            hits = hits + 1
+            pos = pos + p_len
+        } else {
+            pos = pos + 1
+        }
+    }
+    if hits == 0 {
+        return s
+    }
+    // Allocate output buffer
+    let new_len: I64 = s_len + hits * (r_len - p_len)
+    let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+    let dst: I64 = buf as I64
+    let r_ptr: *U8 = repl as *U8
+    var si: I64 = 0
+    var di: I64 = 0
+    var replaced: I64 = 0
+    loop (si <= limit and replaced < count) {
+        if c_memcmp((s_base + si) as *U8, p_ptr, p_len) == 0 {
+            if r_len > 0 {
+                lowlevel { copy_nonoverlapping(r_ptr, (dst + di) as *U8, r_len) }
+            }
+            di = di + r_len
+            si = si + p_len
+            replaced = replaced + 1
+        } else {
+            let sp: *U8 = (s_base + si) as *U8
+            let dp: *U8 = (dst + di) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](sp) }
+            lowlevel { ptr_write[U8](dp, b) }
+            si = si + 1
+            di = di + 1
+        }
+    }
+    // Copy the remaining tail
+    if si < s_len {
+        let remaining: I64 = s_len - si
+        lowlevel { copy_nonoverlapping((s_base + si) as *U8, (dst + di) as *U8, remaining) }
+        di = di + remaining
+    }
+    // Null-terminate
+    let nullp: *U8 = (dst + di) as *U8
+    lowlevel { ptr_write[U8](nullp, 0) }
+    return buf as Str
+}

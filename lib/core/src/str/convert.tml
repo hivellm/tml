@@ -1,0 +1,309 @@
+//! String conversion utilities: repeat, padding, join, concatenation, chars, bytes, strip_prefix, strip_suffix.
+
+use core::str::basic::{len, substring, substring_from}
+use core::str::search::{starts_with, ends_with}
+
+// ============================================================================
+// Repetition and Padding
+// ============================================================================
+
+/// Repeats the string `n` times.
+///
+/// # Arguments
+///
+/// * `s` - The string to repeat
+/// * `n` - Number of times to repeat (must be non-negative)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(repeat("ab", 3) == "ababab")
+/// assert(repeat("x", 5) == "xxxxx")
+/// assert(repeat("hello", 0) == "")
+/// ```
+@allocates
+pub func repeat(s: Str, n: I64) -> Str {
+    if n <= 0 {
+        return ""
+    }
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return ""
+    }
+    let total: I64 = s_len * n
+    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    let dst: I64 = buf as I64
+    var i: I64 = 0
+    loop (i < n) {
+        lowlevel { copy_nonoverlapping(s as *U8, (dst + i * s_len) as *U8, s_len) }
+        i = i + 1
+    }
+    lowlevel { ptr_write[U8]((dst + total) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+/// Pads the string on the left to reach the given width.
+///
+/// If the string is already at least `width` bytes long, it is returned
+/// unchanged.
+///
+/// # Arguments
+///
+/// * `s` - The string to pad
+/// * `width` - The target width in bytes
+/// * `pad_char` - The padding string (typically a single character)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(pad_left("42", 5, "0") == "00042")
+/// assert(pad_left("hello", 10, " ") == "     hello")
+/// assert(pad_left("long", 2, "x") == "long")  // Already long enough
+/// ```
+@allocates
+pub func pad_left(s: Str, width: I64, pad_char: Str) -> Str {
+    let current_len: I64 = len(s)
+    if current_len >= width {
+        return s
+    }
+    let padding: Str = repeat(pad_char, width - current_len)
+    return padding + s
+}
+
+/// Pads the string on the right to reach the given width.
+///
+/// If the string is already at least `width` bytes long, it is returned
+/// unchanged.
+///
+/// # Arguments
+///
+/// * `s` - The string to pad
+/// * `width` - The target width in bytes
+/// * `pad_char` - The padding string (typically a single character)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(pad_right("42", 5, "0") == "42000")
+/// assert(pad_right("hello", 10, " ") == "hello     ")
+/// assert(pad_right("long", 2, "x") == "long")  // Already long enough
+/// ```
+@allocates
+pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
+    let current_len: I64 = len(s)
+    if current_len >= width {
+        return s
+    }
+    let padding: Str = repeat(pad_char, width - current_len)
+    return s + padding
+}
+
+// ============================================================================
+// Joining
+// ============================================================================
+
+/// Joins a list of strings with the given separator.
+///
+/// Creates a single string by concatenating all elements with the separator
+/// between each pair of adjacent elements.
+///
+/// # Arguments
+///
+/// * `parts` - The list of strings to join
+/// * `separator` - The string to insert between elements
+///
+/// # Examples
+///
+/// ```tml
+/// let words = ["hello", "world"]
+/// assert(join(words, " ") == "hello world")
+///
+/// let nums = ["1", "2", "3"]
+/// assert(join(nums, ", ") == "1, 2, 3")
+///
+/// let empty: List[Str] = []
+/// assert(join(empty, ",") == "")
+/// ```
+@allocates
+pub func join(parts: List[Str], separator: Str) -> Str {
+    let count: I64 = parts.len()
+    if count == 0 {
+        return ""
+    }
+    let sep_len: I64 = len(separator)
+    // Calculate total length
+    var total: I64 = 0
+    var idx: I64 = 0
+    loop (idx < count) {
+        total = total + len(parts.get(idx))
+        if idx < count - 1 {
+            total = total + sep_len
+        }
+        idx = idx + 1
+    }
+    if total == 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    let dst: I64 = buf as I64
+    var di: I64 = 0
+    idx = 0
+    loop (idx < count) {
+        let part: Str = parts.get(idx)
+        let p_len: I64 = len(part)
+        if p_len > 0 {
+            lowlevel { copy_nonoverlapping(part as *U8, (dst + di) as *U8, p_len) }
+            di = di + p_len
+        }
+        if idx < count - 1 and sep_len > 0 {
+            lowlevel { copy_nonoverlapping(separator as *U8, (dst + di) as *U8, sep_len) }
+            di = di + sep_len
+        }
+        idx = idx + 1
+    }
+    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
+    return buf as Str
+}
+
+// ============================================================================
+// Concatenation
+// ============================================================================
+
+/// Concatenates two strings.
+///
+/// This is equivalent to using the `+` operator on strings.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(concat("Hello, ", "World!") == "Hello, World!")
+/// assert(concat("", "x") == "x")
+/// ```
+@allocates
+pub func concat(a: Str, b: Str) -> Str {
+    let result = a + b
+    return result
+}
+
+/// Concatenates multiple strings without a separator.
+///
+/// This is equivalent to `join(parts, "")`.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = ["a", "b", "c"]
+/// assert(concat_all(parts) == "abc")
+///
+/// let words = ["Hello", " ", "World"]
+/// assert(concat_all(words) == "Hello World")
+/// ```
+@allocates
+pub func concat_all(parts: List[Str]) -> Str {
+    return join(parts, "")
+}
+
+// ============================================================================
+// Character Iteration
+// ============================================================================
+
+/// Returns a list of character (byte) values from the string.
+///
+/// # Examples
+///
+/// ```tml
+/// let cs = chars("abc")
+/// assert(cs.len() == 3)
+/// assert(cs.get(0) == 97)  // 'a'
+/// ```
+pub func chars(s: Str) -> List[I32] {
+    let result: List[I32] = List[I32]::new(8)
+    let s_len: I64 = len(s)
+    if s_len == 0 {
+        return result
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        result.push(b as I32)
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Prefix / Suffix Stripping
+// ============================================================================
+
+/// Removes a prefix from the string, returning the remainder.
+///
+/// Returns `Just(rest)` if the string starts with `prefix`, or `Nothing`
+/// if it does not.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(strip_prefix("hello world", "hello ") == Just("world"))
+/// assert(strip_prefix("hello", "world") == Nothing)
+/// assert(strip_prefix("hello", "") == Just("hello"))
+/// ```
+pub func strip_prefix(s: Str, prefix: Str) -> Maybe[Str] {
+    let p_len: I64 = len(prefix)
+    if not starts_with(s, prefix) {
+        return Nothing
+    }
+    let s_len: I64 = len(s)
+    return Just(substring(s, p_len, s_len))
+}
+
+/// Removes a suffix from the string, returning the remainder.
+///
+/// Returns `Just(rest)` if the string ends with `suffix`, or `Nothing`
+/// if it does not.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(strip_suffix("hello world", " world") == Just("hello"))
+/// assert(strip_suffix("hello", "world") == Nothing)
+/// assert(strip_suffix("hello", "") == Just("hello"))
+/// ```
+pub func strip_suffix(s: Str, suffix: Str) -> Maybe[Str] {
+    let x_len: I64 = len(suffix)
+    if not ends_with(s, suffix) {
+        return Nothing
+    }
+    let s_len: I64 = len(s)
+    return Just(substring(s, 0, s_len - x_len))
+}
+
+// ============================================================================
+// Byte Access
+// ============================================================================
+
+/// Returns the bytes of the string as a list of U8 values.
+///
+/// # Examples
+///
+/// ```tml
+/// let bs = bytes("abc")
+/// assert(bs.len() == 3)
+/// assert(bs.get(0) == 97)
+/// assert(bs.get(1) == 98)
+/// assert(bs.get(2) == 99)
+/// ```
+pub func bytes(s: Str) -> List[U8] {
+    let s_len: I64 = len(s)
+    let result: List[U8] = List[U8]::new(s_len)
+    let src: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        result.push(b)
+        i = i + 1
+    }
+    return result
+}
