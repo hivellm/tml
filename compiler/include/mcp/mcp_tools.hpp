@@ -512,4 +512,72 @@ auto make_project_slow_tests_tool() -> Tool;
 /// Result with slowest test files, suite breakdowns, and timing analysis.
 auto handle_project_slow_tests(const json::JsonValue& params) -> ToolResult;
 
+/// Returns the `inspect` tool definition.
+///
+/// Runs a TML program with the Chrome DevTools inspector enabled.
+///
+/// Parameters:
+/// - `file` (string, required): Path to the source file
+/// - `port` (number, optional): Inspector port (default: 9229)
+/// - `brk` (boolean, optional): Break before user code (wait for debugger)
+auto make_inspect_tool() -> Tool;
+
+/// Handles the `inspect` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (file, port, brk)
+///
+/// # Returns
+///
+/// Result with inspector status and WebSocket URL.
+auto handle_inspect(const json::JsonValue& params) -> ToolResult;
+
+/// Returns the `profile` tool definition.
+///
+/// Runs a TML program with CPU profiling enabled, generating a .cpuprofile
+/// file compatible with Chrome DevTools. Optionally produces a flame graph.
+///
+/// Parameters:
+/// - `file` (string, required): Path to the source file
+/// - `output` (string, optional): Output path for .cpuprofile (default:
+/// build/debug/profile.cpuprofile)
+/// - `flamegraph` (boolean, optional): Also generate an ASCII flame graph from the profile
+/// - `svg` (string, optional): Generate SVG flame graph to this path
+auto make_profile_tool() -> Tool;
+
+/// Handles the `profile` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (file, output, flamegraph, svg)
+///
+/// # Returns
+///
+/// Result with profiling status, output path, and optional flame graph.
+auto handle_profile(const json::JsonValue& params) -> ToolResult;
+
+/// Returns the `debug` tool definition.
+///
+/// Runs a TML program with debug info and backtrace enabled.
+/// Shows stack traces on panics and optionally checks for memory leaks.
+///
+/// Parameters:
+/// - `file` (string, required): Path to the source file
+/// - `args` (array, optional): Arguments to pass to the program
+/// - `backtrace` (boolean, optional): Enable backtrace on panic (default: true)
+/// - `check_leaks` (boolean, optional): Enable memory leak checking
+auto make_debug_tool() -> Tool;
+
+/// Handles the `debug` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (file, args, backtrace, check_leaks)
+///
+/// # Returns
+///
+/// Result with program output, exit code, and any panic backtraces.
+auto handle_debug(const json::JsonValue& params) -> ToolResult;
+
 } // namespace tml::mcp
