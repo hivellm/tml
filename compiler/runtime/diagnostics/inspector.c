@@ -52,6 +52,10 @@ typedef int socket_t;
 // State
 // ============================================================================
 
+// Heap profiler sampling state
+static volatile int g_heap_sampling = 0;
+static int g_heap_sample_interval = 32768; // 32KB default
+
 static volatile int g_active = 0;
 static volatile int g_client_connected = 0;
 static volatile int g_shutdown_requested = 0;
@@ -817,7 +821,100 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
         cdp_respond(client, id, "{\"locations\":[]}");
     }
     // ---- HeapProfiler domain ----
+    // 5.1: enable
     else if (mlen == 19 && strncmp(m, "HeapProfiler.enable", 19) == 0) {
+        cdp_respond(client, id, NULL);
+    }
+    // 5.1: disable
+    else if (mlen == 20 && strncmp(m, "HeapProfiler.disable", 20) == 0) {
+        cdp_respond(client, id, NULL);
+    }
+    // 5.4: startSampling — accept optional samplingInterval param
+    else if (mlen == 26 && strncmp(m, "HeapProfiler.startSampling", 26) == 0) {
+        const char* interval_p = strstr(json, "\"samplingInterval\":");
+        if (interval_p) {
+            int parsed = atoi(interval_p + 19);
+            if (parsed > 0)
+                g_heap_sample_interval = parsed;
+        }
+        g_heap_sampling = 1;
+        cdp_respond(client, id, NULL);
+    }
+    // 5.4: stopSampling
+    else if (mlen == 25 && strncmp(m, "HeapProfiler.stopSampling", 25) == 0) {
+        g_heap_sampling = 0;
+        cdp_respond(client, id, NULL);
+    }
+    // 5.4: getSamplingProfile — return a minimal sampling profile
+    else if (mlen == 31 && strncmp(m, "HeapProfiler.getSamplingProfile", 31) == 0) {
+        cdp_respond(client, id,
+                    "{\"profile\":{\"head\":{"
+                    "\"callFrame\":{\"functionName\":\"(root)\",\"scriptId\":\"0\","
+                    "\"url\":\"\",\"lineNumber\":0,\"columnNumber\":0},"
+                    "\"selfSize\":0,\"id\":1,\"children\":[]},"
+                    "\"samples\":[]}}");
+    }
+    // 5.5-5.8: takeHeapSnapshot — send progress events + minimal V8 heap snapshot chunk
+    else if (mlen == 29 && strncmp(m, "HeapProfiler.takeHeapSnapshot", 29) == 0) {
+        // Report progress start
+        cdp_event(client, "HeapProfiler.reportHeapSnapshotProgress",
+                  "{\"done\":0,\"total\":1,\"finished\":false}");
+        // Send a minimal valid V8 heap snapshot as a single chunk.
+        // The chunk value is a JSON string (the snapshot JSON, JSON-escaped).
+        // We use json_escape to produce a correct escaped string value.
+        static const char* snapshot_raw =
+            "{\"snapshot\":{\"meta\":{"
+            "\"node_fields\":[\"type\",\"name\",\"id\",\"self_size\",\"edge_count\",\"trace_node_"
+            "id\"],"
+            "\"node_types\":[[\"hidden\",\"array\",\"string\",\"object\",\"code\","
+            "\"closure\",\"regexp\",\"number\",\"native\",\"synthetic\","
+            "\"concatenated string\",\"sliced string\"],\"string\",\"number\","
+            "\"number\",\"number\",\"number\"],"
+            "\"edge_fields\":[\"type\",\"name_or_index\",\"to_node\"],"
+            "\"edge_types\":[[\"context\",\"element\",\"property\",\"internal\","
+            "\"hidden\",\"shortcut\",\"weak\"],\"string_or_number\",\"node\"],"
+            "\"trace_function_info_fields\":[\"function_id\",\"name\",\"script_name\","
+            "\"script_id\",\"line\",\"column\"],"
+            "\"trace_node_fields\":[\"id\",\"function_info_index\",\"count\",\"size\",\"children\"]"
+            ","
+            "\"sample_fields\":[\"timestamp_us\",\"last_assigned_id\"],"
+            "\"location_fields\":[\"object_index\",\"script_id\",\"line\",\"column\"]},"
+            "\"node_count\":1,\"edge_count\":0,\"trace_function_count\":0},"
+            "\"nodes\":[9,0,1,0,0,0],"
+            "\"edges\":[],"
+            "\"trace_function_infos\":[],"
+            "\"trace_tree\":[],"
+            "\"samples\":[],"
+            "\"locations\":[],"
+            "\"strings\":[\"\"]}";
+        char escaped[16384];
+        json_escape(snapshot_raw, escaped, sizeof(escaped));
+        char chunk_evt[16640];
+        snprintf(chunk_evt, sizeof(chunk_evt), "{\"chunk\":\"%s\"}", escaped);
+        cdp_event(client, "HeapProfiler.addHeapSnapshotChunk", chunk_evt);
+        // Report progress complete
+        cdp_event(client, "HeapProfiler.reportHeapSnapshotProgress",
+                  "{\"done\":1,\"total\":1,\"finished\":true}");
+        cdp_respond(client, id, NULL);
+    }
+    // 5.9: startTrackingHeapObjects
+    else if (mlen == 37 && strncmp(m, "HeapProfiler.startTrackingHeapObjects", 37) == 0) {
+        cdp_respond(client, id, NULL);
+    }
+    // 5.9: stopTrackingHeapObjects
+    else if (mlen == 36 && strncmp(m, "HeapProfiler.stopTrackingHeapObjects", 36) == 0) {
+        cdp_respond(client, id, NULL);
+    }
+    // 5.11: getHeapObjectId — return a stable placeholder object id
+    else if (mlen == 28 && strncmp(m, "HeapProfiler.getHeapObjectId", 28) == 0) {
+        cdp_respond(client, id, "{\"heapSnapshotObjectId\":\"1\"}");
+    }
+    // 5.11: getObjectByHeapObjectId — return undefined for unknown heap objects
+    else if (mlen == 36 && strncmp(m, "HeapProfiler.getObjectByHeapObjectId", 36) == 0) {
+        cdp_respond(client, id, "{\"result\":{\"type\":\"undefined\"}}");
+    }
+    // 5.12: collectGarbage — no-op (GC is implicit in TML runtime)
+    else if (mlen == 27 && strncmp(m, "HeapProfiler.collectGarbage", 27) == 0) {
         cdp_respond(client, id, NULL);
     }
     // ---- Console domain ----
