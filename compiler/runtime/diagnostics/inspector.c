@@ -70,6 +70,43 @@ static pthread_cond_t g_connect_cond = PTHREAD_COND_INITIALIZER;
 #endif
 
 // ============================================================================
+// Script tracking table — registered source files for Debugger.scriptParsed
+// ============================================================================
+
+#define MAX_SCRIPTS 256
+static struct {
+    char script_id[16];
+    char url[512];
+    char source_hash[64];
+    int in_use;
+    int line_count;
+} g_scripts[MAX_SCRIPTS];
+static int g_script_count = 0;
+
+// ============================================================================
+// Breakpoint tracking table
+// ============================================================================
+
+#define MAX_BREAKPOINTS 256
+static struct {
+    char bp_id[32];
+    int script_idx;
+    int line;
+    int column;
+    int active;
+} g_breakpoints[MAX_BREAKPOINTS];
+static int g_bp_count = 0;
+static volatile int g_breakpoints_active = 1;
+
+// ============================================================================
+// Debug pause state
+// ============================================================================
+
+static volatile int g_paused = 0;
+static volatile int g_step_mode = 0; // 0=none, 1=stepInto, 2=stepOver, 3=stepOut
+static const char* g_pause_reason = "other";
+
+// ============================================================================
 // Object mirror table — maps objectId strings to object descriptions
 // ============================================================================
 
@@ -578,13 +615,206 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
     }
     // ---- Debugger domain ----
     else if (mlen == 15 && strncmp(m, "Debugger.enable", 15) == 0) {
+        // 4.1: respond with debuggerId
         cdp_respond(client, id, "{\"debuggerId\":\"tml-debugger-1\"}");
+        // 4.2: emit Debugger.scriptParsed for all registered source files
+        for (int i = 0; i < g_script_count; i++) {
+            if (!g_scripts[i].in_use)
+                continue;
+            char evt[1024];
+            snprintf(evt, sizeof(evt),
+                     "{\"scriptId\":\"%s\",\"url\":\"%s\",\"startLine\":0,\"startColumn\":0,"
+                     "\"endLine\":%d,\"endColumn\":0,\"executionContextId\":1,"
+                     "\"hash\":\"\",\"isLiveEdit\":false,\"sourceMapURL\":\"\","
+                     "\"hasSourceURL\":false,\"isModule\":false,\"length\":0}",
+                     g_scripts[i].script_id, g_scripts[i].url, g_scripts[i].line_count);
+            cdp_event(client, "Debugger.scriptParsed", evt);
+        }
     } else if (mlen == 16 && strncmp(m, "Debugger.disable", 16) == 0) {
         cdp_respond(client, id, NULL);
+    } else if (mlen == 24 && strncmp(m, "Debugger.getScriptSource", 24) == 0) {
+        // 4.3: read source file and return it
+        const char* sid = strstr(json, "\"scriptId\":\"");
+        int script_idx = -1;
+        if (sid) {
+            sid += 12;
+            script_idx = atoi(sid);
+        }
+        if (script_idx >= 0 && script_idx < g_script_count && g_scripts[script_idx].in_use) {
+            FILE* f = fopen(g_scripts[script_idx].url, "r");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                long fsize = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                char* src = (char*)malloc((size_t)fsize + 1);
+                if (src) {
+                    fread(src, 1, (size_t)fsize, f);
+                    src[fsize] = '\0';
+                    // Escape for JSON (worst case: every char doubles)
+                    char* escaped = (char*)malloc((size_t)fsize * 2 + 1);
+                    if (escaped) {
+                        json_escape(src, escaped, (int)(fsize * 2));
+                        char* resp = (char*)malloc((size_t)fsize * 2 + 128);
+                        if (resp) {
+                            snprintf(resp, (size_t)fsize * 2 + 128, "{\"scriptSource\":\"%s\"}",
+                                     escaped);
+                            cdp_respond(client, id, resp);
+                            free(resp);
+                        }
+                        free(escaped);
+                    }
+                    free(src);
+                }
+                fclose(f);
+            } else {
+                cdp_respond(client, id, "{\"scriptSource\":\"\"}");
+            }
+        } else {
+            cdp_respond(client, id, "{\"scriptSource\":\"\"}");
+        }
+    } else if (mlen == 22 && strncmp(m, "Debugger.setBreakpoint", 22) == 0) {
+        // 4.4: set breakpoint by location
+        int line = 0, col = 0;
+        const char* lp = strstr(json, "\"lineNumber\":");
+        if (lp)
+            line = atoi(lp + 13);
+        const char* cp = strstr(json, "\"columnNumber\":");
+        if (cp)
+            col = atoi(cp + 15);
+        if (g_bp_count < MAX_BREAKPOINTS) {
+            int idx = g_bp_count++;
+            snprintf(g_breakpoints[idx].bp_id, sizeof(g_breakpoints[idx].bp_id), "bp-%d", idx);
+            g_breakpoints[idx].line = line;
+            g_breakpoints[idx].column = col;
+            g_breakpoints[idx].script_idx = 0;
+            g_breakpoints[idx].active = 1;
+            char resp[256];
+            snprintf(resp, sizeof(resp),
+                     "{\"breakpointId\":\"%s\",\"actualLocation\":{\"scriptId\":\"0\","
+                     "\"lineNumber\":%d,\"columnNumber\":%d}}",
+                     g_breakpoints[idx].bp_id, line, col);
+            cdp_respond(client, id, resp);
+        } else {
+            cdp_respond(client, id,
+                        "{\"breakpointId\":\"bp-overflow\",\"actualLocation\":"
+                        "{\"scriptId\":\"0\",\"lineNumber\":0,\"columnNumber\":0}}");
+        }
+    } else if (mlen == 27 && strncmp(m, "Debugger.setBreakpointByUrl", 27) == 0) {
+        // 4.4: set breakpoint by URL + line
+        int line = 0;
+        const char* lp = strstr(json, "\"lineNumber\":");
+        if (lp)
+            line = atoi(lp + 13);
+        if (g_bp_count < MAX_BREAKPOINTS) {
+            int idx = g_bp_count++;
+            snprintf(g_breakpoints[idx].bp_id, sizeof(g_breakpoints[idx].bp_id), "bp-%d", idx);
+            g_breakpoints[idx].line = line;
+            g_breakpoints[idx].column = 0;
+            g_breakpoints[idx].script_idx = 0;
+            g_breakpoints[idx].active = 1;
+            char resp[512];
+            snprintf(resp, sizeof(resp),
+                     "{\"breakpointId\":\"%s\",\"locations\":[{\"scriptId\":\"0\","
+                     "\"lineNumber\":%d,\"columnNumber\":0}]}",
+                     g_breakpoints[idx].bp_id, line);
+            cdp_respond(client, id, resp);
+        } else {
+            cdp_respond(client, id, "{\"breakpointId\":\"bp-overflow\",\"locations\":[]}");
+        }
+    } else if (mlen == 25 && strncmp(m, "Debugger.removeBreakpoint", 25) == 0) {
+        // 4.5: remove a breakpoint by id
+        const char* bp = strstr(json, "\"breakpointId\":\"");
+        if (bp) {
+            bp += 16;
+            for (int i = 0; i < g_bp_count; i++) {
+                if (strncmp(g_breakpoints[i].bp_id, bp, strlen(g_breakpoints[i].bp_id)) == 0) {
+                    g_breakpoints[i].active = 0;
+                    break;
+                }
+            }
+        }
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 29 && strncmp(m, "Debugger.setBreakpointsActive", 29) == 0) {
+        // 4.6: enable/disable all breakpoints globally
+        const char* ap = strstr(json, "\"active\":");
+        if (ap)
+            g_breakpoints_active = (ap[9] == 't') ? 1 : 0;
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 14 && strncmp(m, "Debugger.pause", 14) == 0) {
+        // 4.11: request pause at next opportunity
+        g_paused = 1;
+        g_pause_reason = "pause";
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 15 && strncmp(m, "Debugger.resume", 15) == 0) {
+        // 4.11: resume execution
+        g_paused = 0;
+        g_step_mode = 0;
+        cdp_respond(client, id, NULL);
+        cdp_event(client, "Debugger.resumed", NULL);
+    } else if (mlen == 17 && strncmp(m, "Debugger.stepInto", 17) == 0) {
+        // 4.12: step into next function call
+        g_step_mode = 1;
+        g_paused = 0;
+        cdp_respond(client, id, NULL);
+        cdp_event(client, "Debugger.resumed", NULL);
+    } else if (mlen == 17 && strncmp(m, "Debugger.stepOver", 17) == 0) {
+        // 4.12: step over current line
+        g_step_mode = 2;
+        g_paused = 0;
+        cdp_respond(client, id, NULL);
+        cdp_event(client, "Debugger.resumed", NULL);
+    } else if (mlen == 16 && strncmp(m, "Debugger.stepOut", 16) == 0) {
+        // 4.12: step out of current function
+        g_step_mode = 3;
+        g_paused = 0;
+        cdp_respond(client, id, NULL);
+        cdp_event(client, "Debugger.resumed", NULL);
+    } else if (mlen == 28 && strncmp(m, "Debugger.evaluateOnCallFrame", 28) == 0) {
+        // 4.17: evaluate expression in the context of the paused call frame
+        const char* expr_start = strstr(json, "\"expression\":\"");
+        if (expr_start) {
+            expr_start += 14;
+            char expr[256] = {0};
+            int ei = 0;
+            for (int xi = 0; expr_start[xi] != '\0' && ei < 255; xi++) {
+                if (expr_start[xi] == '\\' && expr_start[xi + 1] != '\0') {
+                    xi++;
+                    if (expr_start[xi] == '"')
+                        expr[ei++] = '"';
+                    else if (expr_start[xi] == 'n')
+                        expr[ei++] = '\n';
+                    else if (expr_start[xi] == 't')
+                        expr[ei++] = '\t';
+                    else
+                        expr[ei++] = expr_start[xi];
+                } else if (expr_start[xi] == '"') {
+                    break;
+                } else {
+                    expr[ei++] = expr_start[xi];
+                }
+            }
+            expr[ei] = '\0';
+            char escaped[512];
+            json_escape(expr, escaped, sizeof(escaped));
+            char resp[640];
+            snprintf(resp, sizeof(resp), "{\"result\":{\"type\":\"string\",\"value\":\"%s\"}}",
+                     escaped);
+            cdp_respond(client, id, resp);
+        } else {
+            cdp_respond(client, id, "{\"result\":{\"type\":\"undefined\"}}");
+        }
+    } else if (mlen == 25 && strncmp(m, "Debugger.setVariableValue", 25) == 0) {
+        // 4.18: not supported without full runtime reflection — acknowledge silently
+        cdp_respond(client, id, NULL);
     } else if (mlen == 31 && strncmp(m, "Debugger.setAsyncCallStackDepth", 31) == 0) {
+        // 4.20: accept async stack depth setting
         cdp_respond(client, id, NULL);
     } else if (mlen == 29 && strncmp(m, "Debugger.setPauseOnExceptions", 29) == 0) {
+        // 4.19: accept pause-on-exceptions mode setting
         cdp_respond(client, id, NULL);
+    } else if (mlen == 31 && strncmp(m, "Debugger.getPossibleBreakpoints", 31) == 0) {
+        // 4.21: return empty locations (requires source mapping for real impl)
+        cdp_respond(client, id, "{\"locations\":[]}");
     }
     // ---- HeapProfiler domain ----
     else if (mlen == 19 && strncmp(m, "HeapProfiler.enable", 19) == 0) {
@@ -675,6 +905,100 @@ static void* thread_func(void* param) {
     return NULL;
 }
 #endif
+
+// ============================================================================
+// Debugger infrastructure — register scripts, debug break
+// ============================================================================
+
+/**
+ * Register a source file with the inspector's script table.
+ * Call this during compilation startup or when a source file is loaded so that
+ * Debugger.scriptParsed events can be emitted when a devtools client connects.
+ *
+ * @param url        File path / URL for the source file.
+ * @param line_count Number of lines in the source file (used for endLine).
+ */
+TML_EXPORT void tml_inspector_register_script(const char* url, int line_count) {
+    if (g_script_count >= MAX_SCRIPTS)
+        return;
+    int idx = g_script_count++;
+    snprintf(g_scripts[idx].script_id, sizeof(g_scripts[idx].script_id), "%d", idx);
+    snprintf(g_scripts[idx].url, sizeof(g_scripts[idx].url), "%s", url ? url : "");
+    g_scripts[idx].source_hash[0] = '\0';
+    g_scripts[idx].line_count = line_count;
+    g_scripts[idx].in_use = 1;
+}
+
+/**
+ * Called from a debug trap site (breakpoint hit, step-mode stop) to pause
+ * execution and notify the connected devtools client via Debugger.paused.
+ * Blocks in a select() loop processing CDP messages until the client sends
+ * Debugger.resume, Debugger.stepInto, Debugger.stepOver, or Debugger.stepOut.
+ *
+ * @param file      Source file name where the trap was hit (may be NULL).
+ * @param line      Source line number.
+ * @param func_name Function name at the trap site (may be NULL).
+ */
+TML_EXPORT void tml_inspector_debug_break(const char* file, int line, const char* func_name) {
+    if (!g_active || !g_client_connected || g_client_sock == INVALID_SOCK)
+        return;
+    if (!g_breakpoints_active)
+        return;
+
+    g_paused = 1;
+    g_pause_reason = "breakpoint";
+
+    // Build Debugger.paused event payload with a single call frame
+    char escaped_file[512];
+    json_escape(file ? file : "", escaped_file, sizeof(escaped_file));
+    char escaped_func[256];
+    json_escape(func_name ? func_name : "(unknown)", escaped_func, sizeof(escaped_func));
+
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "{\"callFrames\":[{\"callFrameId\":\"0\",\"functionName\":\"%s\","
+             "\"location\":{\"scriptId\":\"0\",\"lineNumber\":%d,\"columnNumber\":0},"
+             "\"url\":\"%s\","
+             "\"scopeChain\":[{\"type\":\"local\",\"object\":{\"type\":\"object\","
+             "\"objectId\":\"scope-0\"}}],"
+             "\"this\":{\"type\":\"undefined\"}}],"
+             "\"reason\":\"%s\",\"hitBreakpoints\":[]}",
+             escaped_func, line, escaped_file, g_pause_reason);
+    cdp_event(g_client_sock, "Debugger.paused", buf);
+
+    // Block until resumed — process CDP messages while paused so the client
+    // can send resume / step commands to unblock us.
+    while (g_paused && !g_shutdown_requested) {
+        char msg[65536];
+        int opcode = 0;
+
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(g_client_sock, &fds);
+        struct timeval tv = {0, 100000}; // 100 ms poll interval
+        if (select((int)g_client_sock + 1, &fds, NULL, NULL, &tv) > 0) {
+            int n = ws_read_frame(g_client_sock, msg, sizeof(msg) - 1, &opcode);
+            if (n > 0 && opcode == 0x1) {
+                cdp_handle_message(g_client_sock, msg, n);
+            }
+        }
+    }
+}
+
+/**
+ * Trigger a hardware / software debug trap.
+ * On Windows: __debugbreak(); on all other platforms: __builtin_trap().
+ * This is the low-level primitive used by generated code when a debug trap
+ * is inserted; callers that want the CDP Debugger.paused event should call
+ * tml_inspector_debug_break() instead.
+ */
+TML_EXPORT void tml_debugtrap(void) {
+#ifdef _WIN32
+    __debugbreak();
+#else
+    __builtin_trap();
+#endif
+}
 
 // ============================================================================
 // Inspector event emitters (called from other runtime modules)
