@@ -71,3 +71,41 @@ func do_work() {
 ```
 
 Open the resulting `.cpuprofile` file in Chrome DevTools (Performance tab) or VS Code to visualize the call tree and timing data.
+
+---
+
+## Flame Graph Generation
+
+Use the CLI to convert any `.cpuprofile` into a flame graph without opening a browser:
+
+```bash
+# ASCII output (terminal)
+tml profile flamegraph my_program.cpuprofile
+
+# Interactive SVG with dark theme and tooltips
+tml profile flamegraph my_program.cpuprofile -o flamegraph.svg
+```
+
+---
+
+## Automatic MIR Instrumentation
+
+Build with `--profile` to instrument every function automatically — no manual `enter`/`exit` calls required:
+
+```bash
+tml run my_program.tml --profile
+```
+
+The compiler emits `tml_profiler_enter` / `tml_profiler_exit` calls at every function boundary during MIR codegen. A `tml_profiler_is_active()` guard ensures zero overhead when the profiler is inactive.
+
+---
+
+## positionTicks
+
+`.cpuprofile` files produced by TML include a `positionTicks` array on every call frame, recording per-line sample counts. This enables line-level hotspot highlighting in Chrome DevTools and VS Code.
+
+---
+
+## Inspector Integration
+
+The profiler domain is also accessible through the Chrome DevTools Protocol inspector. See [PROFILING.md](../PROFILING.md) for how to use `tml inspect` and `--inspect` / `--inspect-brk` flags.

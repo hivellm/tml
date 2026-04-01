@@ -361,7 +361,9 @@ Source: `lib/std/src/`
 | `std::search` | BM25, HNSW, SIMD distance | [packages/29-SEARCH.md](packages/29-SEARCH.md) |
 | `std::events` | Event emitter/listener | [packages/25-EVENTS.md](packages/25-EVENTS.md) |
 | `std::sqlite` | SQLite3 embedded database | [packages/24-SQLITE.md](packages/24-SQLITE.md) |
-| `std::profiler` | Performance profiling | [packages/38-PROFILER.md](packages/38-PROFILER.md) |
+| `std::profiler` | Performance profiling, flame graphs, MIR instrumentation | [packages/38-PROFILER.md](packages/38-PROFILER.md) |
+| `std::console` | Structured console output: `log`, `warn`, `error`, `debug`, `trace`, `time`/`time_end`, `count`, `group`, `assert`, `table` | — |
+| `std::inspector` | Chrome DevTools Protocol inspector: `open`, `close`, `wait_for_debugger`, `url`, `is_active` | — |
 | `std::types` | Helpers for `Maybe[T]`, `Outcome[T, E]` | — |
 | `std::traits` | Re-exports from core | — |
 | `std::iter` | Re-exports and extras | — |

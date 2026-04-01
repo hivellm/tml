@@ -84,6 +84,79 @@ When profiling an HTTP server:
 | `http::connection` | Full connection lifecycle (accept → close) |
 | `http::request` | Per-request processing (parse → route → handler → response) |
 
+## Flame Graphs
+
+The `tml profile flamegraph` command converts a `.cpuprofile` file into a visual flame graph.
+
+```bash
+# ASCII flame graph printed to terminal
+tml profile flamegraph my_program.cpuprofile
+
+# Interactive SVG with tooltips and dark theme
+tml profile flamegraph my_program.cpuprofile -o flamegraph.svg
+```
+
+Open the SVG in a browser to explore the call tree interactively — hover over frames to see function names, self time, and total time.
+
+## MIR Codegen Instrumentation
+
+When `--profile` is passed at compile time, the compiler emits `tml_profiler_enter` / `tml_profiler_exit` calls at every function boundary in the MIR codegen stage. These calls are gated by a `tml_profiler_is_active()` runtime check and compile to a single branch — zero overhead when the profiler is not running.
+
+This replaces the need for manual `profiler::enter` / `profiler::exit` calls in most programs: building with `--profile` instruments all functions automatically.
+
+```bash
+tml run my_program.tml --profile
+```
+
+## positionTicks in .cpuprofile
+
+The `.cpuprofile` output now includes a `positionTicks` array on every call frame. Each entry records the source line number and the number of profiler samples that hit that line, enabling line-level hotspot identification in Chrome DevTools and VS Code.
+
+## Chrome DevTools Inspector
+
+For interactive debugging with the Chrome DevTools UI, use the inspector:
+
+```bash
+# Start with inspector enabled (port 9229)
+tml run my_program.tml --inspect
+
+# Break before user code and wait for debugger to attach
+tml run my_program.tml --inspect-brk
+
+# Custom port
+tml run my_program.tml --inspect-port=9230
+```
+
+Open `chrome://inspect` in Chrome and click "inspect" next to the TML process. The Runtime, Profiler, Debugger, HeapProfiler, and Console CDP domains are all available.
+
+## `tml inspect` Terminal Debugger
+
+The `tml inspect` command provides a built-in terminal REPL debugger without requiring a browser:
+
+```bash
+tml inspect my_program.tml
+```
+
+Available REPL commands:
+
+| Command | Description |
+|---------|-------------|
+| `break <file:line>` | Set a breakpoint |
+| `continue` | Resume execution |
+| `step` | Step into next call |
+| `next` | Step over next statement |
+| `out` | Step out of current function |
+| `backtrace` | Print call stack |
+| `print <expr>` | Evaluate and print expression |
+| `locals` | List local variables |
+| `watch <expr>` | Add watch expression |
+| `heap` | Show heap usage |
+| `profile start/stop` | Start or stop profiler |
+| `help` | Show all commands |
+| `quit` | Exit debugger |
+
+Source lines are displayed with ANSI highlighting at each breakpoint pause.
+
 ## Example
 
 See `examples/profiling_demo.tml` for a complete example.

@@ -21,6 +21,7 @@ src/vcpkg/
 
 # Common
 .claude/settings.local.json
+.claude/agent-memory
 *.log
 *.cpuprofile
 *.swo

@@ -18,6 +18,29 @@
 #include <string.h>
 
 /* ================================================================
+ * Inspector integration — console output forwarding
+ * ================================================================
+ *
+ * When the TML inspector (CDP WebSocket server) is active, console output
+ * should also be forwarded to connected DevTools clients as
+ * Runtime.consoleAPICalled events.  To avoid a hard link dependency on
+ * inspector.c inside test executables, we use a callback registered at
+ * runtime by the inspector when it initialises.
+ */
+
+typedef void (*console_forward_fn_t)(const char* type, const char* message);
+static console_forward_fn_t g_console_forward = NULL;
+
+/**
+ * Register a callback that receives (type, message) pairs for every console
+ * output call.  Called by tml_inspector_init() when the inspector starts.
+ * Pass NULL to deregister (inspector shutdown).
+ */
+void rt_console_set_forward(console_forward_fn_t fn) {
+    g_console_forward = fn;
+}
+
+/* ================================================================
  * Configuration
  * ================================================================ */
 
