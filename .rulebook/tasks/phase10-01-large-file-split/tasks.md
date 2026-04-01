@@ -1,6 +1,6 @@
 # Tasks: Split Large Files (>1500 lines)
 
-**Status**: Complete — 15/20 files split, 5 not splittable
+**Status**: Complete — 16/20 files split, 4 not splittable
 **Priority**: Medium (improves maintainability, LLM efficiency, compile times)
 
 ## Summary
@@ -8,16 +8,16 @@
 | Metric | Value |
 |--------|-------|
 | Files split/refactored | 15 |
-| New files created | 28 |
+| New files created | 31 |
 | Total lines reduced | ~9,500 lines removed from originals |
 | Largest reduction | `env_module_load.cpp` 1,543 → 487 (-68%) |
 | Skipped (not splittable) | 5 |
 
-## Phase 1: Codegen — 6/7
+## Phase 1: Codegen — 7/7
 
 - [x] 1.1 Split `intrinsics_slice_simd.cpp` (2,123 → 609, -71%) → `intrinsics_simd_vector.cpp` (249) + `intrinsics_simd_sse.cpp` (768) + `intrinsics_simd_avx.cpp` (614)
 - [x] 1.2 Split `runtime_modules.cpp` (1,986 → 1,110, -44%) → `runtime_modules_strings.cpp` (55) + `runtime_modules_library.cpp` (660)
-- [ ] 1.3 Skip — `llvm_ir_gen.hpp` (1,909 lines) is a class header with 366 members + 210 methods + 531 comments. Needs PIMPL or architectural redesign, not mechanical split.
+- [x] 1.3 Split `llvm_ir_gen.hpp` (1,909 → 1,268, -34%) → `llvm_ir_gen_oop.inc` (433) + `llvm_ir_gen_generics.inc` (220) + `llvm_ir_gen_debug.inc` (444) via textual #include
 - [x] 1.4 Split `method_impl.cpp` (1,811 → 1,449, -20%) → `method_impl_module.cpp` (555)
 - [x] 1.5 Refactor `generate.cpp` (1,787 → 1,002, -44%) → `generate_library_only.cpp` (318) + `generate_first_pass.cpp` (310) + `generate_function_bodies.cpp` (544)
 - [x] 1.6 Refactor `generic_instantiate.cpp` (1,738 → 663, -62%) → `generic_instantiate_impl.cpp` (1,552)
@@ -56,4 +56,5 @@
 1. `8ebdb28e` — Split 11 large files into focused modules (17 new files)
 2. `8f5d97b5` — Extract 3 methods from generate() — 1787→1002 lines
 3. `cd724ee8` — Extract impl method instantiation loop — 1738→663 lines
-4. (pending) — Split testing_compile + env_module_load
+4. `50002b8f` — Split testing_compile + env_module_load
+5. (pending) — Split llvm_ir_gen.hpp into .inc sub-headers
