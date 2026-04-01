@@ -151,6 +151,10 @@ private:
     // ValueId -> integer constant value (for zero-initialization detection)
     std::unordered_map<mir::ValueId, int64_t> value_int_constants_;
 
+    // Coverage: mangled func name -> clean display name for coverage reporting.
+    // Populated during string constant collection, consumed by emit_function().
+    std::unordered_map<std::string, std::string> coverage_name_map_;
+
     // sret function tracking (func_name -> original return type as LLVM string)
     std::unordered_map<std::string, std::string> sret_functions_;
 

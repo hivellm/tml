@@ -44,6 +44,87 @@ TML_MODULE("compiler")
 
 namespace tml::codegen {
 
+// ============================================================================
+// TML name demangler for coverage reporting
+// ============================================================================
+
+/// Demangle a TML mangled function name to a human-readable form.
+///
+/// TML mangling uses Itanium-style nested names:
+///   "tml_N<len>seg<len>seg...E"          → "seg::seg::..."
+///   "tml_N<len>seg<len>seg...E_<params>"  → "seg::seg::..."  (params stripped)
+///   "s0_tml_N<len>seg...E"               → "seg::..."        (suite prefix stripped)
+///   "\"tml_N...E\""                      → demangled          (quoted names)
+///   "plain_name"                         → "plain_name"       (passthrough)
+///
+/// The last two segments are used as "Type::method" when there are 3+ segments,
+/// matching the legacy codegen's coverage format (e.g., "Str::len", "List::push").
+/// For 2 segments like "core::len", the full path is returned.
+/// For 1 segment, the bare name is returned.
+static std::string demangle_tml_name(const std::string& mangled) {
+    // Find the start of "tml_N" — may be preceded by suite prefix "sN_" or quote
+    size_t tml_pos = mangled.find("tml_N");
+    if (tml_pos == std::string::npos) {
+        // Not a mangled name — strip suite prefix if present (e.g., "s0_main" → "main")
+        if (mangled.size() > 2 && mangled[0] == 's' &&
+            std::isdigit(static_cast<unsigned char>(mangled[1]))) {
+            size_t us = mangled.find('_');
+            if (us != std::string::npos && us + 1 < mangled.size()) {
+                return mangled.substr(us + 1);
+            }
+        }
+        return mangled;
+    }
+
+    size_t pos = tml_pos + 5; // skip "tml_N"
+
+    // Parse Itanium-style nested name segments: <len><chars><len><chars>...E
+    std::vector<std::string> segments;
+    while (pos < mangled.size()) {
+        if (!std::isdigit(static_cast<unsigned char>(mangled[pos])))
+            break;
+
+        // Read decimal length prefix
+        size_t len_start = pos;
+        while (pos < mangled.size() && std::isdigit(static_cast<unsigned char>(mangled[pos])))
+            ++pos;
+        int seg_len = std::stoi(mangled.substr(len_start, pos - len_start));
+
+        if (seg_len <= 0 || pos + static_cast<size_t>(seg_len) > mangled.size())
+            break;
+
+        segments.push_back(mangled.substr(pos, static_cast<size_t>(seg_len)));
+        pos += static_cast<size_t>(seg_len);
+
+        // 'E' marks end of nested name; '_' starts param suffix; '"' for quoted names
+        if (pos < mangled.size() && (mangled[pos] == 'E' || mangled[pos] == '"'))
+            break;
+    }
+
+    if (segments.empty())
+        return mangled;
+
+    // The legacy codegen uses "Type::method" format for impl methods.
+    // MIR mangled names include the full module path: core::str::Str::len
+    // We want to match the legacy format:
+    //   3+ segments ending in [Type, method] → "Type::method"
+    //   2 segments → "seg0::seg1" (e.g., module-level function)
+    //   1 segment  → bare name
+    if (segments.size() >= 3) {
+        // Check if the second-to-last segment starts with uppercase (type name)
+        const auto& maybe_type = segments[segments.size() - 2];
+        if (!maybe_type.empty() && std::isupper(static_cast<unsigned char>(maybe_type[0]))) {
+            return maybe_type + "::" + segments.back();
+        }
+        // Otherwise return last two segments (module::func)
+        return segments[segments.size() - 2] + "::" + segments.back();
+    }
+    if (segments.size() == 2) {
+        return segments[0] + "::" + segments[1];
+    }
+    return segments[0];
+}
+
 MirCodegen::MirCodegen(MirCodegenOptions options) : options_(std::move(options)) {}
 
 void MirCodegen::emit(const std::string& s) {
@@ -85,6 +166,7 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     emitted_vtables_.clear();
     emitted_dyn_types_.clear();
     value_dyn_behavior_.clear();
+    coverage_name_map_.clear();
 
     // First pass: collect string constants, enum types, and generic enum defs
     generic_enum_defs_.clear();
@@ -179,12 +261,16 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         }
     }
 
-    // Collect coverage string constants (function names) for tml_cover_func instrumentation
+    // Collect coverage string constants (function names) for tml_cover_func instrumentation.
+    // Use demangled names so coverage report can match against source-extracted names.
+    // Legacy codegen uses clean names like "Str::len", "List::push", "assert_true".
     if (options_.coverage_enabled) {
         for (const auto& func : module.functions) {
             if (!func.blocks.empty()) {
-                if (string_constants_.find(func.name) == string_constants_.end()) {
-                    string_constants_[func.name] =
+                std::string clean_name = demangle_tml_name(func.name);
+                coverage_name_map_[func.name] = clean_name;
+                if (string_constants_.find(clean_name) == string_constants_.end()) {
+                    string_constants_[clean_name] =
                         "@.str." + std::to_string(string_constants_.size());
                 }
             }
@@ -298,6 +384,7 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     value_string_contents_.clear();
     used_enum_types_.clear();
     used_struct_types_.clear();
+    coverage_name_map_.clear();
 
     // Build index set for O(1) lookup
     std::unordered_set<size_t> included(function_indices.begin(), function_indices.end());
@@ -392,13 +479,16 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         }
     }
 
-    // Collect coverage string constants (function names) for tml_cover_func — CGU path
+    // Collect coverage string constants (function names) for tml_cover_func — CGU path.
+    // Use demangled names for coverage report matching (same as generate() path).
     if (options_.coverage_enabled) {
         for (size_t i = 0; i < module.functions.size(); ++i) {
             const auto& func = module.functions[i];
             if (included.count(i) && !func.blocks.empty()) {
-                if (string_constants_.find(func.name) == string_constants_.end()) {
-                    string_constants_[func.name] =
+                std::string clean_name = demangle_tml_name(func.name);
+                coverage_name_map_[func.name] = clean_name;
+                if (string_constants_.find(clean_name) == string_constants_.end()) {
+                    string_constants_[clean_name] =
                         "@.str." + std::to_string(string_constants_.size());
                 }
             }
@@ -1389,13 +1479,17 @@ void MirCodegen::emit_function(const mir::Function& func) {
     }
 
     // Prepare coverage instrumentation for the entry block.
-    // When coverage_enabled, inject a call to tml_cover_func() with the function name
-    // at the start of every function body. This is simpler than profiler — no active check.
+    // When coverage_enabled, inject a call to tml_cover_func() with the demangled function
+    // name so coverage data matches source-extracted names (e.g., "Str::len" not mangled).
     coverage_entry_ir_.clear();
     if (options_.coverage_enabled && !func.blocks.empty()) {
-        auto fname_it = string_constants_.find(func.name);
-        if (fname_it != string_constants_.end()) {
-            coverage_entry_ir_ = "  call void @tml_cover_func(ptr " + fname_it->second + ")\n";
+        // Look up the clean name via coverage_name_map_, then find its string constant
+        auto cov_it = coverage_name_map_.find(func.name);
+        if (cov_it != coverage_name_map_.end()) {
+            auto fname_it = string_constants_.find(cov_it->second);
+            if (fname_it != string_constants_.end()) {
+                coverage_entry_ir_ = "  call void @tml_cover_func(ptr " + fname_it->second + ")\n";
+            }
         }
     }
 

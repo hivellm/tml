@@ -657,6 +657,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             // Use MIR codegen for LLVM IR generation
             codegen::MirCodegenOptions mir_options;
             mir_options.emit_comments = verbose;
+            mir_options.coverage_enabled = CompilerOptions::coverage;
             mir_options.instrument_profiler = CompilerOptions::profile;
             codegen::MirCodegen mir_codegen(mir_options);
             llvm_ir = mir_codegen.generate(mir_module);

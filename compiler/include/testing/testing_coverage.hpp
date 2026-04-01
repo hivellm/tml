@@ -54,4 +54,19 @@ struct PreviousCoverage {
 /// Used for regression detection — prevents overwriting a higher-coverage report.
 PreviousCoverage get_previous_coverage_from_json(const std::string& html_path);
 
+// ============================================================================
+// Coverage Cache — per-module caching of coverage data
+// ============================================================================
+
+/// Load cached coverage data for modules whose source files haven't changed.
+/// Returns a set of function names that were covered in previous runs and whose
+/// source modules are still unchanged (by content hash).
+/// Cache file: build/coverage/coverage_cache.json
+std::set<std::string> load_coverage_cache();
+
+/// Save coverage data to the cache file after a successful coverage run.
+/// Stores per-module: content hash of source files, list of covered functions.
+/// Only updates modules that were actually tested in this run.
+void save_coverage_cache(const std::set<std::string>& covered_functions);
+
 } // namespace tml::testing

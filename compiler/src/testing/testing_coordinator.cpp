@@ -1302,6 +1302,17 @@ TestRunResult run_tests(const TestConfig& config) {
         std::chrono::duration_cast<std::chrono::microseconds>(total_end - total_start).count();
 
     // 10. Coverage report generation (independent)
+    //
+    // 10a. Load coverage cache — merge cached data for unchanged modules
+    // so partial runs (--suite) still show full coverage.
+    if (config.coverage && !all_covered_functions.empty()) {
+        auto cached = load_coverage_cache();
+        if (!cached.empty()) {
+            for (const auto& fn : cached) {
+                all_covered_functions.insert(fn);
+            }
+        }
+    }
     if (config.coverage && !all_covered_functions.empty()) {
         CoverageStats cov_stats;
         cov_stats.total_tests = result.total_tests;
@@ -1398,6 +1409,9 @@ TestRunResult run_tests(const TestConfig& config) {
                     write_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
                                         cov_stats);
                     TML_LOG_INFO("test", "\033[1;32m[Coverage report updated successfully]\033[0m");
+
+                    // 10b. Save coverage cache for future partial runs
+                    save_coverage_cache(all_covered_functions);
                 }
             }
         }

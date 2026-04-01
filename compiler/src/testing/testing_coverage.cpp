@@ -799,4 +799,355 @@ PreviousCoverage get_previous_coverage_from_json(const std::string& html_path) {
     return result;
 }
 
+// ============================================================================
+// Coverage Cache — per-module caching of coverage data
+// ============================================================================
+//
+// The cache stores per-module coverage data indexed by a content hash of the
+// module's source files. When source files haven't changed, previously
+// recorded covered functions are still valid and can be merged into the
+// current run's results.
+//
+// Cache format (JSON):
+// {
+//   "version": 1,
+//   "modules": {
+//     "core/str": {
+//       "hash": "<sha256-hex>",
+//       "covered": ["Str::len", "Str::trim", ...]
+//     },
+//     ...
+//   }
+// }
+
+static const std::string CACHE_VERSION = "1";
+
+/// Compute a simple content hash for a set of files (FNV-1a 64-bit).
+/// Uses file content, not mtime, for reliability across rebuilds.
+static std::string hash_files(const std::vector<fs::path>& files) {
+    uint64_t hash = 0xcbf29ce484222325ULL; // FNV-1a offset basis
+    for (const auto& file : files) {
+        std::ifstream ifs(file, std::ios::binary);
+        if (!ifs.is_open())
+            continue;
+        char buf[8192];
+        while (ifs.read(buf, sizeof(buf)) || ifs.gcount() > 0) {
+            auto n = static_cast<size_t>(ifs.gcount());
+            for (size_t i = 0; i < n; ++i) {
+                hash ^= static_cast<uint64_t>(static_cast<unsigned char>(buf[i]));
+                hash *= 0x100000001b3ULL; // FNV-1a prime
+            }
+        }
+    }
+    // Convert to hex string
+    char hex[17];
+    snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
+    return std::string(hex);
+}
+
+/// Collect all .tml source files for a module directory.
+static std::vector<fs::path> collect_module_files(const fs::path& module_dir) {
+    std::vector<fs::path> files;
+    if (!fs::exists(module_dir))
+        return files;
+
+    if (fs::is_regular_file(module_dir) && module_dir.extension() == ".tml") {
+        files.push_back(module_dir);
+        return files;
+    }
+
+    for (const auto& entry : fs::recursive_directory_iterator(module_dir)) {
+        if (!entry.is_regular_file())
+            continue;
+        auto name = entry.path().filename().string();
+        if (name.size() >= 4 && name.substr(name.size() - 4) == ".tml" &&
+            name.find(".test.tml") == std::string::npos) {
+            files.push_back(entry.path());
+        }
+    }
+    std::sort(files.begin(), files.end()); // Deterministic order
+    return files;
+}
+
+/// Simple JSON string escaper.
+static std::string json_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            out += c;
+            break;
+        }
+    }
+    return out;
+}
+
+/// Get the cache file path.
+static fs::path get_cache_path() {
+    return fs::current_path() / "build" / "coverage" / "coverage_cache.json";
+}
+
+/// Build a map: module_name -> (hash, source_files) for all library modules.
+static std::unordered_map<std::string, std::pair<std::string, std::vector<fs::path>>>
+build_module_hash_map() {
+    fs::path cwd = fs::current_path();
+    std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
+                                      cwd / "lib" / "test"};
+
+    std::unordered_map<std::string, std::pair<std::string, std::vector<fs::path>>> result;
+
+    for (const auto& lib_dir : lib_dirs) {
+        if (!fs::exists(lib_dir))
+            continue;
+
+        // Walk the src/ subdirectory to find module directories
+        fs::path src_dir = lib_dir / "src";
+        if (!fs::exists(src_dir))
+            continue;
+
+        for (const auto& entry : fs::recursive_directory_iterator(src_dir)) {
+            if (!entry.is_regular_file())
+                continue;
+            auto filename = entry.path().filename().string();
+            if (filename.size() < 4 || filename.substr(filename.size() - 4) != ".tml")
+                continue;
+            if (filename.find(".test.tml") != std::string::npos)
+                continue;
+
+            std::string path_str = entry.path().string();
+            std::replace(path_str.begin(), path_str.end(), '\\', '/');
+            if (path_str.find("/tests/") != std::string::npos)
+                continue;
+
+            auto module_name = get_module_name(entry.path(), lib_dir);
+            result[module_name].second.push_back(entry.path());
+        }
+    }
+
+    // Compute hashes
+    for (auto& [name, pair] : result) {
+        std::sort(pair.second.begin(), pair.second.end());
+        pair.first = hash_files(pair.second);
+    }
+
+    return result;
+}
+
+std::set<std::string> load_coverage_cache() {
+    std::set<std::string> cached_coverage;
+    fs::path cache_path = get_cache_path();
+
+    if (!fs::exists(cache_path))
+        return cached_coverage;
+
+    std::ifstream file(cache_path);
+    if (!file.is_open())
+        return cached_coverage;
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    // Build current hash map to validate cache entries
+    auto current_hashes = build_module_hash_map();
+
+    // Simple JSON parsing — extract module entries and compare hashes.
+    // Format: "module_name": { "hash": "xxx", "covered": ["fn1", "fn2", ...] }
+    // We parse this with basic string scanning since we don't have a JSON library.
+
+    // Find "modules" object
+    auto modules_pos = content.find("\"modules\"");
+    if (modules_pos == std::string::npos)
+        return cached_coverage;
+
+    // Find opening brace of modules object
+    auto brace_pos = content.find('{', modules_pos + 9);
+    if (brace_pos == std::string::npos)
+        return cached_coverage;
+
+    size_t pos = brace_pos + 1;
+    int modules_loaded = 0;
+
+    while (pos < content.size()) {
+        // Find next module name (quoted string)
+        auto quote1 = content.find('"', pos);
+        if (quote1 == std::string::npos || quote1 >= content.size() - 1)
+            break;
+
+        auto quote2 = content.find('"', quote1 + 1);
+        if (quote2 == std::string::npos)
+            break;
+
+        std::string module_name = content.substr(quote1 + 1, quote2 - quote1 - 1);
+        pos = quote2 + 1;
+
+        // Find the hash value
+        auto hash_pos = content.find("\"hash\"", pos);
+        if (hash_pos == std::string::npos)
+            break;
+
+        // Find hash value
+        auto hash_val_start = content.find('"', hash_pos + 6);
+        if (hash_val_start == std::string::npos)
+            break;
+        hash_val_start++; // skip opening quote
+        // Skip colon and whitespace between "hash" and the value
+        auto hash_colon = content.find(':', hash_pos + 6);
+        if (hash_colon == std::string::npos)
+            break;
+        hash_val_start = content.find('"', hash_colon + 1);
+        if (hash_val_start == std::string::npos)
+            break;
+        hash_val_start++;
+        auto hash_val_end = content.find('"', hash_val_start);
+        if (hash_val_end == std::string::npos)
+            break;
+
+        std::string cached_hash = content.substr(hash_val_start, hash_val_end - hash_val_start);
+        pos = hash_val_end + 1;
+
+        // Validate hash against current source
+        auto it = current_hashes.find(module_name);
+        if (it == current_hashes.end() || it->second.first != cached_hash) {
+            // Source changed — skip this module's cached data
+            // Advance past the covered array
+            auto next_bracket = content.find(']', pos);
+            if (next_bracket != std::string::npos)
+                pos = next_bracket + 1;
+            continue;
+        }
+
+        // Parse covered functions array
+        auto arr_start = content.find('[', pos);
+        if (arr_start == std::string::npos)
+            break;
+        auto arr_end = content.find(']', arr_start);
+        if (arr_end == std::string::npos)
+            break;
+
+        std::string arr_content = content.substr(arr_start + 1, arr_end - arr_start - 1);
+        pos = arr_end + 1;
+
+        // Extract function names from array
+        size_t fn_pos = 0;
+        while (fn_pos < arr_content.size()) {
+            auto fn_q1 = arr_content.find('"', fn_pos);
+            if (fn_q1 == std::string::npos)
+                break;
+            auto fn_q2 = arr_content.find('"', fn_q1 + 1);
+            if (fn_q2 == std::string::npos)
+                break;
+
+            std::string fn_name = arr_content.substr(fn_q1 + 1, fn_q2 - fn_q1 - 1);
+            if (!fn_name.empty()) {
+                cached_coverage.insert(fn_name);
+            }
+            fn_pos = fn_q2 + 1;
+        }
+
+        modules_loaded++;
+
+        // Skip past closing brace of this module entry
+        auto close_brace = content.find('}', pos);
+        if (close_brace != std::string::npos)
+            pos = close_brace + 1;
+    }
+
+    if (modules_loaded > 0) {
+        TML_LOG_INFO("test", "[coverage-cache] Loaded " << cached_coverage.size()
+                                                        << " cached covered functions from "
+                                                        << modules_loaded << " unchanged modules");
+    }
+
+    return cached_coverage;
+}
+
+void save_coverage_cache(const std::set<std::string>& covered_functions) {
+    fs::path cache_path = get_cache_path();
+
+    // Ensure directory exists
+    std::error_code ec;
+    fs::create_directories(cache_path.parent_path(), ec);
+
+    // Build module hash map
+    auto module_hashes = build_module_hash_map();
+
+    // Scan library to get function→module mapping
+    fs::path cwd = fs::current_path();
+    std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
+                                      cwd / "lib" / "test"};
+    auto modules = scan_library(lib_dirs);
+
+    // For each module, determine which of its functions are covered
+    std::ofstream out(cache_path);
+    if (!out.is_open()) {
+        TML_LOG_ERROR("test", "[coverage-cache] Cannot write " << cache_path);
+        return;
+    }
+
+    out << "{\n";
+    out << "  \"version\": " << CACHE_VERSION << ",\n";
+    out << "  \"modules\": {\n";
+
+    bool first_mod = true;
+    int modules_saved = 0;
+
+    for (const auto& mod : modules) {
+        // Get hash for this module
+        auto hash_it = module_hashes.find(mod.name);
+        if (hash_it == module_hashes.end())
+            continue;
+
+        // Find covered functions in this module
+        std::vector<std::string> mod_covered;
+        for (const auto& func : mod.functions) {
+            if (covered_functions.count(func) > 0) {
+                mod_covered.push_back(func);
+            }
+        }
+
+        // Only cache modules that have at least one covered function
+        if (mod_covered.empty())
+            continue;
+
+        if (!first_mod)
+            out << ",\n";
+        first_mod = false;
+
+        out << "    \"" << json_escape(mod.name) << "\": {\n";
+        out << "      \"hash\": \"" << hash_it->second.first << "\",\n";
+        out << "      \"covered\": [";
+        for (size_t i = 0; i < mod_covered.size(); ++i) {
+            if (i > 0)
+                out << ", ";
+            out << "\"" << json_escape(mod_covered[i]) << "\"";
+        }
+        out << "]\n";
+        out << "    }";
+        modules_saved++;
+    }
+
+    out << "\n  }\n";
+    out << "}\n";
+    out.close();
+
+    TML_LOG_INFO("test", "[coverage-cache] Saved " << modules_saved << " modules to "
+                                                   << cache_path.string());
+}
+
 } // namespace tml::testing
