@@ -48,6 +48,12 @@ typedef int socket_t;
 // Actual profiling is handled separately via --profile flag and profiler.cpp.
 // This avoids a link dependency on the C++ profiler in test executables.
 
+// Forward declaration for console.c forwarding callback registration.
+// When the inspector starts, we register tml_inspector_console_message as the
+// forwarding callback so that console.c can route output to the CDP client.
+typedef void (*console_forward_fn_t)(const char* type, const char* message);
+extern void rt_console_set_forward(console_forward_fn_t fn);
+
 // ============================================================================
 // State
 // ============================================================================
@@ -919,6 +925,10 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
     }
     // ---- Console domain ----
     else if (mlen == 14 && strncmp(m, "Console.enable", 14) == 0) {
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 15 && strncmp(m, "Console.disable", 15) == 0) {
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 21 && strncmp(m, "Console.clearMessages", 21) == 0) {
         cdp_respond(client, id, NULL);
     }
     // ---- Default: empty result for unknown methods ----

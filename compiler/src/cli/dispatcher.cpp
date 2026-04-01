@@ -54,6 +54,7 @@ TML_MODULE("compiler")
 #include "commands/cmd_explain.hpp"
 #include "commands/cmd_format.hpp"
 #include "commands/cmd_init.hpp"
+#include "commands/cmd_inspect.hpp"
 #include "commands/cmd_lint.hpp"
 #include "commands/cmd_mcp.hpp"
 #include "commands/cmd_pkg.hpp"
@@ -668,6 +669,38 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "profile") {
         return run_profile(argc, argv, verbose);
+    }
+
+    if (command == "inspect") {
+        if (argc < 3) {
+            std::cerr << "Usage: tml inspect <file.tml> [--port=PORT] [--verbose]\n";
+            std::cerr << "\nLaunches the target program with --inspect-brk and connects a\n";
+            std::cerr << "terminal debugger over the TML WebSocket inspector.\n";
+            std::cerr << "\nOptions:\n";
+            std::cerr << "  --port=PORT    Inspector WebSocket port (default: 9229)\n";
+            std::cerr << "  --verbose, -v  Enable verbose output\n";
+            std::cerr << "\nREPL commands: break, continue, step, next, out,\n";
+            std::cerr << "               backtrace, print, locals, heap, profile, quit\n";
+            return 1;
+        }
+        int inspect_port = 9229;
+        std::vector<std::string> inspect_args;
+        for (int i = 3; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg.starts_with("--port=")) {
+                try {
+                    inspect_port = std::stoi(arg.substr(7));
+                } catch (...) {
+                    std::cerr << "Error: invalid port value in '" << arg << "'\n";
+                    return 1;
+                }
+            } else if (arg == "--verbose" || arg == "-v") {
+                // Already captured in the global `verbose` flag above
+            } else {
+                inspect_args.push_back(arg);
+            }
+        }
+        return cli::run_inspect(argv[2], inspect_port, verbose, inspect_args);
     }
 
     if (command == "mcp") {
