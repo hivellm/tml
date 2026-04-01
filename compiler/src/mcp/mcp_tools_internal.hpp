@@ -72,4 +72,61 @@ auto parse_kind_filter(const std::string& kind) -> std::optional<tml::doc::DocIt
 /// Discovers the TML project root by walking up from cwd or executable location.
 auto find_tml_root() -> fs::path;
 
+// ============================================================================
+// Docs Hint Helpers (mcp_tools.cpp)
+// ============================================================================
+
+/// Extracts candidate type/identifier names from an error string.
+/// Finds single-quoted tokens and qualified module paths (containing "::").
+auto extract_hint_candidates(const std::string& text) -> std::vector<std::string>;
+
+/// Builds docs hint lines from extracted candidates (max 5 hints).
+/// Returns empty string if no useful hints are found.
+auto build_docs_hints(const std::string& error_text) -> std::string;
+
+/// Parses a TML source file for top-level `use` statements and returns
+/// the module prefix of each import.
+auto extract_imports(const std::string& file_path) -> std::vector<std::string>;
+
+// ============================================================================
+// Codegen Handlers (mcp_tools_codegen.cpp)
+// ============================================================================
+
+/// Emits LLVM IR for a TML source file.
+auto handle_emit_ir(const json::JsonValue& params) -> ToolResult;
+
+/// Emits MIR for a TML source file.
+auto handle_emit_mir(const json::JsonValue& params) -> ToolResult;
+
+/// Runs TML tests.
+auto handle_test(const json::JsonValue& params) -> ToolResult;
+
+/// Formats a TML source file.
+auto handle_format(const json::JsonValue& params) -> ToolResult;
+
+/// Lints a TML source file.
+auto handle_lint(const json::JsonValue& params) -> ToolResult;
+
+// ============================================================================
+// Debug/Inspector Tools (mcp_tools_debug.cpp)
+// ============================================================================
+
+/// Creates the inspect tool definition.
+auto make_inspect_tool() -> Tool;
+
+/// Handles the inspect tool request.
+auto handle_inspect(const json::JsonValue& params) -> ToolResult;
+
+/// Creates the profile tool definition.
+auto make_profile_tool() -> Tool;
+
+/// Handles the profile tool request.
+auto handle_profile(const json::JsonValue& params) -> ToolResult;
+
+/// Creates the debug tool definition.
+auto make_debug_tool() -> Tool;
+
+/// Handles the debug tool request.
+auto handle_debug(const json::JsonValue& params) -> ToolResult;
+
 } // namespace tml::mcp
