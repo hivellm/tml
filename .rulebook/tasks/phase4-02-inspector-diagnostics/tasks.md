@@ -1,6 +1,6 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: Done (~97%) — All phases complete. Only DWARF debug info (4.22-4.24) deferred to future codegen work.
+**Status**: Done (100%) — All phases complete including DWARF debug info (4.22-4.24).
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
@@ -73,9 +73,9 @@
 - [x] 4.19 `Debugger.setPauseOnExceptions` — handler present
 - [x] 4.20 `Debugger.setAsyncCallStackDepth` — handler present
 - [x] 4.21 `Debugger.getPossibleBreakpoints` — returns empty locations
-- [ ] 4.22 Enhance DWARF debug info: emit `DICompositeType` for structs/enums (deferred — needs codegen changes)
-- [ ] 4.23 Enhance DWARF debug info: emit `DIDerivedType` for references, pointers, slices (deferred)
-- [ ] 4.24 Enhance DWARF debug info: emit proper scope nesting for block-level variables (deferred)
+- [x] 4.22 Enhance DWARF debug info: emit `DICompositeType` for structs/enums — implemented in debug_info.cpp `get_or_create_type_debug_info`
+- [x] 4.23 Enhance DWARF debug info: emit `DIDerivedType` for references, pointers, slices — implemented in debug_info.cpp `get_or_create_type_debug_info`
+- [x] 4.24 Enhance DWARF debug info: emit proper scope nesting for block-level variables — `create_lexical_block` + `pop_debug_scope` in debug_info.cpp
 - [x] 4.25 Debugger infrastructure verified — all handlers respond, inspector tests pass
 
 ## Phase 5: HeapProfiler Domain (Memory Inspection)

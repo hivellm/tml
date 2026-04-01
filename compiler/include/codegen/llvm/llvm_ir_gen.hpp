@@ -727,7 +727,7 @@ private:
     // ============ Debug Info Support ============
     // LLVM debug metadata for DWARF generation
     int debug_metadata_counter_ = 0;          // Counter for unique metadata IDs
-    int current_scope_id_ = 0;                // Current debug scope (function)
+    int current_scope_id_ = 0;                // Current debug scope (function or lexical block)
     int current_debug_loc_id_ = 0;            // Current debug location ID for instructions
     int file_id_ = 0;                         // File metadata ID
     int compile_unit_id_ = 0;                 // Compile unit metadata ID
@@ -735,6 +735,7 @@ private:
     std::unordered_map<std::string, int> func_debug_scope_; // function name -> scope ID
     std::unordered_map<std::string, int> var_debug_info_;   // var name -> debug info ID
     std::unordered_map<std::string, int> type_debug_info_;  // type name -> debug info ID
+    std::vector<int> debug_scope_stack_; // Stack of debug scopes for lexical block nesting
 
     // Debug info generation helpers
     int fresh_debug_id();
@@ -745,6 +746,13 @@ private:
     std::string get_debug_loc_suffix(); // Returns ", !dbg !N" if in debug scope, else ""
     int create_debug_location(uint32_t line,
                               uint32_t column); // Create and register a debug location
+
+    /// Create a lexical block scope for nested variable visibility in debugger.
+    /// Pushes the current scope onto the stack and sets the new block as current scope.
+    int create_lexical_block(uint32_t line, uint32_t column);
+
+    /// Restore the parent scope after exiting a lexical block.
+    void pop_debug_scope();
 
     // Variable debug info
     int create_local_variable_debug_info(const std::string& var_name, const std::string& llvm_type,

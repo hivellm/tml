@@ -202,6 +202,129 @@ int LLVMIRGen::get_or_create_type_debug_info(const std::string& type_name,
     int type_id = fresh_debug_id();
     std::ostringstream meta;
 
+    // ---- Pointer / reference types → DIDerivedType ----
+    if (llvm_type == "ptr" || (!llvm_type.empty() && llvm_type.back() == '*')) {
+        // Reserve the type_id in the map early to prevent infinite recursion
+        // when the base type circularly references this pointer type.
+        type_debug_info_[type_name] = type_id;
+
+        // Determine the base type name by stripping pointer/ref indicators
+        std::string base_type_name = type_name;
+        if (base_type_name.starts_with("mut ref ")) {
+            base_type_name = base_type_name.substr(8);
+        } else if (base_type_name.starts_with("ref ")) {
+            base_type_name = base_type_name.substr(4);
+        } else if (base_type_name.starts_with("*")) {
+            base_type_name = base_type_name.substr(1);
+        }
+
+        // Get or create the pointee type debug info
+        int base_type_id = 0;
+        if (!base_type_name.empty() && base_type_name != type_name) {
+            // Use i64 as a fallback LLVM type for the base — the actual layout
+            // is determined by the pointee, but we need a valid type string.
+            base_type_id = get_or_create_type_debug_info(base_type_name, "i64");
+        }
+
+        meta << "!" << type_id << " = !DIDerivedType("
+             << "tag: DW_TAG_pointer_type, "
+             << "name: \"" << type_name << "\", "
+             << "baseType: " << (base_type_id > 0 ? "!" + std::to_string(base_type_id) : "null")
+             << ", size: 64)\n";
+        debug_metadata_.push_back(meta.str());
+
+        return type_id;
+    }
+
+    // ---- Struct / enum / class / union types → DICompositeType ----
+    if (llvm_type.starts_with("%struct.") || llvm_type.starts_with("%enum.") ||
+        llvm_type.starts_with("%class.") || llvm_type.starts_with("%union.")) {
+
+        // Reserve the type_id in the map early — member DIDerivedType nodes
+        // reference the parent composite via `scope: !<type_id>`, so this
+        // must be registered before we recurse into field types.
+        type_debug_info_[type_name] = type_id;
+
+        // Extract struct name from LLVM type: "%struct.List__I32" → "List__I32"
+        std::string struct_name = llvm_type.substr(llvm_type.find('.') + 1);
+
+        // Look up field info from the struct_fields_ registry
+        auto fields_it = struct_fields_.find(struct_name);
+
+        // Create DIDerivedType(DW_TAG_member) for each field
+        std::vector<int> member_ids;
+        int offset_bits = 0;
+
+        if (fields_it != struct_fields_.end()) {
+            for (const auto& field : fields_it->second) {
+                int member_type_id = get_or_create_type_debug_info(field.name, field.llvm_type);
+                int member_id = fresh_debug_id();
+
+                // Determine field size in bits from LLVM type
+                int field_size = 64; // default for ptr, i64, structs
+                if (field.llvm_type == "i1" || field.llvm_type == "i8") {
+                    field_size = 8;
+                } else if (field.llvm_type == "i16") {
+                    field_size = 16;
+                } else if (field.llvm_type == "i32" || field.llvm_type == "float") {
+                    field_size = 32;
+                } else if (field.llvm_type == "i64" || field.llvm_type == "double" ||
+                           field.llvm_type == "ptr" ||
+                           field.llvm_type.find('*') != std::string::npos) {
+                    field_size = 64;
+                } else if (field.llvm_type == "i128") {
+                    field_size = 128;
+                }
+
+                std::ostringstream m;
+                m << "!" << member_id << " = !DIDerivedType("
+                  << "tag: DW_TAG_member, "
+                  << "name: \"" << field.name << "\", "
+                  << "scope: !" << type_id << ", "
+                  << "file: !" << file_id_ << ", "
+                  << "baseType: !" << member_type_id << ", "
+                  << "size: " << field_size << ", "
+                  << "offset: " << offset_bits << ")\n";
+                debug_metadata_.push_back(m.str());
+                member_ids.push_back(member_id);
+                offset_bits += field_size;
+            }
+        }
+
+        // Create the elements tuple referencing all member nodes
+        int elements_id = fresh_debug_id();
+        {
+            std::ostringstream m;
+            m << "!" << elements_id << " = !{";
+            for (size_t i = 0; i < member_ids.size(); i++) {
+                if (i > 0)
+                    m << ", ";
+                m << "!" << member_ids[i];
+            }
+            m << "}\n";
+            debug_metadata_.push_back(m.str());
+        }
+
+        // Choose the DWARF tag based on the LLVM type prefix
+        std::string tag = "DW_TAG_structure_type";
+        if (llvm_type.starts_with("%enum.") || llvm_type.starts_with("%union.")) {
+            tag = "DW_TAG_union_type";
+        }
+
+        meta << "!" << type_id << " = distinct !DICompositeType("
+             << "tag: " << tag << ", "
+             << "name: \"" << type_name << "\", "
+             << "scope: !" << file_id_ << ", "
+             << "file: !" << file_id_ << ", "
+             << "size: " << offset_bits << ", "
+             << "elements: !" << elements_id << ")\n";
+        debug_metadata_.push_back(meta.str());
+
+        return type_id;
+    }
+
+    // ---- Primitive / fallback types → DIBasicType ----
+
     // Determine size and encoding based on LLVM type
     int size_bits = 0;
     std::string encoding;
@@ -230,11 +353,8 @@ int LLVMIRGen::get_or_create_type_debug_info(const std::string& type_name,
     } else if (llvm_type == "double") {
         size_bits = 64;
         encoding = "DW_ATE_float";
-    } else if (llvm_type == "i8*" || llvm_type.find("*") != std::string::npos) {
-        size_bits = 64; // Pointer size (64-bit)
-        encoding = "DW_ATE_address";
     } else {
-        // Default to 64-bit for unknown types (structs, etc.)
+        // Default to 64-bit for unknown types
         size_bits = 64;
         encoding = "DW_ATE_signed";
     }
@@ -296,6 +416,35 @@ void LLVMIRGen::emit_debug_declare(const std::string& alloca_reg, int var_debug_
     emit_line("  call void @llvm.dbg.declare(metadata ptr " + alloca_reg + ", metadata !" +
               std::to_string(var_debug_id) + ", metadata !DIExpression()), !dbg !" +
               std::to_string(loc_id));
+}
+
+int LLVMIRGen::create_lexical_block(uint32_t line, uint32_t column) {
+    if (!options_.emit_debug_info || current_scope_id_ == 0) {
+        return 0;
+    }
+
+    // Push current scope onto the stack so pop_debug_scope() can restore it
+    debug_scope_stack_.push_back(current_scope_id_);
+
+    int block_id = fresh_debug_id();
+    std::ostringstream meta;
+    meta << "!" << block_id << " = distinct !DILexicalBlock("
+         << "scope: !" << current_scope_id_ << ", "
+         << "file: !" << file_id_ << ", "
+         << "line: " << line << ", "
+         << "column: " << column << ")\n";
+    debug_metadata_.push_back(meta.str());
+
+    current_scope_id_ = block_id;
+    return block_id;
+}
+
+void LLVMIRGen::pop_debug_scope() {
+    if (!options_.emit_debug_info || debug_scope_stack_.empty()) {
+        return;
+    }
+    current_scope_id_ = debug_scope_stack_.back();
+    debug_scope_stack_.pop_back();
 }
 
 } // namespace tml::codegen
