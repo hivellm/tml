@@ -831,7 +831,7 @@ void MirCodegen::emit_preamble() {
         emitln("declare dso_local void @tml_cover_func(ptr)");
         emitln("declare dso_local void @tml_coverage_write_file(ptr)");
         emitln("declare dso_local ptr @getenv(ptr)");
-        emitln("@.tml_cov_file_env = private constant [19 x i8] c\"TML_COVERAGE_FILE\\00\"");
+        emitln("@.tml_cov_file_env = private constant [18 x i8] c\"TML_COVERAGE_FILE\\00\"");
     }
     emitln();
 
