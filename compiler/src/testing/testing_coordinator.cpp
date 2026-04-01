@@ -1339,12 +1339,12 @@ TestRunResult run_tests(const TestConfig& config) {
         // the coverage report — this is a hard rule from the old system.
         bool is_partial_run = !config.suite_filters.empty() || !config.patterns.empty();
 
-        if (is_partial_run) {
+        if (is_partial_run && CompilerOptions::coverage_output.empty()) {
             TML_LOG_INFO(
                 "test",
                 "\033[33m[Coverage] Partial run detected (suite filter or pattern active)\033[0m");
             TML_LOG_INFO("test", "\033[33m[Coverage] HTML/JSON files will NOT be saved — run full "
-                                 "suite for persistent coverage\033[0m");
+                                 "suite or use --coverage-output=<path>\033[0m");
         } else if (!CompilerOptions::coverage_output.empty()) {
             int current_covered = static_cast<int>(all_covered_functions.size());
 
