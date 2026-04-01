@@ -286,7 +286,7 @@ configure_file(
 set(TML_RUNTIME_SOURCES
     # core/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential.c
-    # cpuid functions are in essential.c (CPUID/XGETBV for CPU feature detection)
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_cpuid.c
     # memory/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/mem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
@@ -542,6 +542,8 @@ add_library(tml_types STATIC
     src/types/checker/core_oop.cpp
     src/types/checker/const_eval.cpp
     src/types/checker/expr.cpp
+    src/types/checker/expr_ops.cpp
+    src/types/checker/expr_special.cpp
     src/types/checker/stmt.cpp
     src/types/checker/control.cpp
     src/types/checker/types_checker.cpp
@@ -666,6 +668,7 @@ add_library(tml_mir STATIC
     # THIR to MIR builder (uses THIR with explicit coercions)
     src/mir/thir_mir_builder.cpp
     src/mir/thir_mir_builder_expr.cpp
+    src/mir/thir_mir_builder_control.cpp
     # Serializer modules (split from mir_serialize.cpp for maintainability)
     src/mir/serializer/binary_writer.cpp
     src/mir/serializer/binary_reader.cpp
@@ -779,6 +782,8 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/core/generic_instantiate.cpp
     src/codegen/llvm/core/runtime.cpp
     src/codegen/llvm/core/runtime_modules.cpp
+    src/codegen/llvm/core/runtime_modules_strings.cpp
+    src/codegen/llvm/core/runtime_modules_library.cpp
     src/codegen/llvm/core/dyn.cpp
     src/codegen/llvm/core/generate.cpp
     src/codegen/llvm/core/generate_cache.cpp
@@ -826,6 +831,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/expr/method_outcome.cpp
     src/codegen/llvm/expr/method_array.cpp
     src/codegen/llvm/expr/method_impl.cpp
+    src/codegen/llvm/expr/method_impl_module.cpp
     src/codegen/llvm/expr/method_dyn.cpp
     src/codegen/llvm/expr/method_class.cpp
     src/codegen/llvm/expr/method_prim_behavior.cpp
@@ -843,7 +849,12 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/builtins/async.cpp
     src/codegen/llvm/builtins/intrinsics.cpp
     src/codegen/llvm/builtins/intrinsics_extended.cpp
+    src/codegen/llvm/builtins/intrinsics_extended_reflect.cpp
+    src/codegen/llvm/builtins/intrinsics_extended_dyncall.cpp
     src/codegen/llvm/builtins/intrinsics_slice_simd.cpp
+    src/codegen/llvm/builtins/intrinsics_simd_vector.cpp
+    src/codegen/llvm/builtins/intrinsics_simd_sse.cpp
+    src/codegen/llvm/builtins/intrinsics_simd_avx.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)
@@ -1712,6 +1723,7 @@ add_library(tml_cli STATIC
     src/testing/testing_protocol.cpp
     src/testing/testing_dispatcher_gen.cpp
     src/testing/testing_coordinator.cpp
+    src/testing/testing_coordinator_debug.cpp
     src/testing/testing_test_cache.cpp
     src/testing/testing_discovery.cpp
     src/testing/testing_compile.cpp
@@ -1944,7 +1956,9 @@ if(TML_BUILD_TESTS)
         # IR
         tests/ir/ir_test.cpp
         tests/ir/hir_test.cpp
+        tests/ir/hir_test_advanced.cpp
         tests/ir/mir_test.cpp
+        tests/ir/mir_test_advanced.cpp
         # MIR Optimization Passes
         tests/mir/constant_folding_test.cpp
         tests/mir/constant_propagation_test.cpp
@@ -1968,6 +1982,7 @@ if(TML_BUILD_TESTS)
         tests/codegen/codegen_builtins_test.cpp
         tests/codegen/text_test.cpp
         tests/codegen/oop_test.cpp
+        tests/codegen/oop_test_advanced.cpp
         tests/codegen/expr_codegen_test.cpp
         tests/codegen/derive_codegen_test.cpp
         tests/codegen/codegen_core_test.cpp

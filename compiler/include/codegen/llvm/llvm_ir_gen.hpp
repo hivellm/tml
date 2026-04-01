@@ -1808,8 +1808,23 @@ private:
         -> std::optional<std::string>;
     auto try_gen_intrinsic_slice_simd(const std::string& intrinsic_name, const std::string& fn_name,
                                       const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_simd_vector_intrinsic(const std::string& intrinsic_name,
+                                       const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_simd_sse_intrinsic(const std::string& intrinsic_name, const std::string& fn_name,
+                                    const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_simd_avx_intrinsic(const std::string& intrinsic_name, const std::string& fn_name,
+                                    const parser::CallExpr& call) -> std::optional<std::string>;
     auto try_gen_intrinsic_extended(const std::string& intrinsic_name, const parser::CallExpr& call,
                                     const std::string& fn_name) -> std::optional<std::string>;
+    auto try_gen_intrinsic_extended_reflect(const std::string& intrinsic_name,
+                                            const std::string& fn_name,
+                                            const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_intrinsic_extended_dyncall(const std::string& intrinsic_name,
+                                            const std::string& fn_name,
+                                            const parser::CallExpr& call)
+        -> std::optional<std::string>;
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
