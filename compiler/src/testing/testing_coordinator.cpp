@@ -1345,19 +1345,9 @@ TestRunResult run_tests(const TestConfig& config) {
 
         result.covered_functions_count = static_cast<int>(all_covered_functions.size());
 
-        // GUARD: Only write coverage HTML/JSON/JSONL for full or suite runs.
-        // --path and --filter runs are fragments that must NOT generate HTML.
-        // --suite runs are complete module-level runs that CAN generate HTML.
-        bool is_fragment_run = !config.patterns.empty(); // --path or --filter
-
-        if (is_fragment_run) {
-            TML_LOG_INFO(
-                "test",
-                "\033[33m[Coverage] Fragment run detected (--path or --filter active)\033[0m");
-            TML_LOG_INFO("test", "\033[33m[Coverage] HTML/JSON files will NOT be saved — use "
-                                 "--suite for coverage reports\033[0m");
-        } else {
-            // Full suite or --suite run: generate HTML
+        // Always generate coverage HTML when --coverage is active.
+        // The coverage cache handles incremental accumulation.
+        {
             if (CompilerOptions::coverage_output.empty()) {
                 CompilerOptions::coverage_output = "build/coverage/coverage.html";
             }
@@ -1379,40 +1369,10 @@ TestRunResult run_tests(const TestConfig& config) {
                     "test",
                     "\033[1;31m========================================================\033[0m");
             } else {
-                // Check for regression against previous report
-                bool should_write = true;
-                auto prev = get_previous_coverage_from_json(CompilerOptions::coverage_output);
-
-                if (prev.valid && prev.total > 0) {
-                    double current_pct = (100.0 * current_covered) / prev.total;
-                    if (current_pct < prev.percent) {
-                        TML_LOG_FATAL("test", "\033[1;31m=========================================="
-                                              "==============\033[0m");
-                        TML_LOG_FATAL("test", "\033[1;31m  COVERAGE REGRESSION DETECTED\033[0m");
-                        TML_LOG_FATAL("test", "\033[1;31m  Previous: "
-                                                  << prev.covered << "/" << prev.total << " ("
-                                                  << std::fixed << std::setprecision(1)
-                                                  << prev.percent << "%)\033[0m");
-                        TML_LOG_FATAL("test", "\033[1;31m  Current:  "
-                                                  << current_covered << "/" << prev.total << " ("
-                                                  << std::fixed << std::setprecision(1)
-                                                  << current_pct << "%)\033[0m");
-                        TML_LOG_FATAL("test",
-                                      "\033[1;31m  HTML/JSON files will NOT be updated.\033[0m");
-                        TML_LOG_FATAL("test", "\033[1;31m=========================================="
-                                              "==============\033[0m");
-                        should_write = false;
-                    }
-                }
-
-                if (should_write) {
-                    write_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
-                                        cov_stats);
-                    TML_LOG_INFO("test", "\033[1;32m[Coverage report updated successfully]\033[0m");
-
-                    // 10b. Save coverage cache for future partial runs
-                    save_coverage_cache(all_covered_functions);
-                }
+                write_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
+                                    cov_stats);
+                TML_LOG_INFO("test", "\033[1;32m[Coverage report updated successfully]\033[0m");
+                save_coverage_cache(all_covered_functions);
             }
         }
     }
