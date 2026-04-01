@@ -56,6 +56,7 @@ struct MirCodegenOptions {
     bool generate_exe_main = false;      ///< Emit @main(argc,argv) C entry point
                                          ///< (renames user `main` to `tml_main`).
     bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
+    bool instrument_profiler = false;    ///< Emit tml_profiler_enter/exit calls (--profile).
     std::string test_entry_name;         ///< When non-empty, rename test main to this
                                          ///< (e.g. "tml_test_0") instead of @main.
     std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
@@ -90,6 +91,10 @@ private:
     // Current function context
     std::string current_func_;
     std::string current_func_ret_type_; // LLVM return type of the current function
+
+    // Profiler entry IR snippet to inject at the start of the entry block.
+    // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
+    std::string profiler_entry_ir_;
 
     // Value ID to LLVM register mapping
     std::unordered_map<mir::ValueId, std::string> value_regs_;

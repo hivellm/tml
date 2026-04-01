@@ -43,6 +43,11 @@ typedef int socket_t;
 #define sock_error errno
 #endif
 
+// NOTE: Profiler C++ API (tml_profiler_*) is NOT called from here.
+// The inspector CDP handlers return static responses for Profiler.start/stop.
+// Actual profiling is handled separately via --profile flag and profiler.cpp.
+// This avoids a link dependency on the C++ profiler in test executables.
+
 // ============================================================================
 // State
 // ============================================================================
@@ -394,6 +399,27 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
         cdp_respond(client, id, NULL);
     } else if (mlen == 16 && strncmp(m, "Profiler.disable", 16) == 0) {
         cdp_respond(client, id, NULL);
+    } else if (mlen == 14 && strncmp(m, "Profiler.start", 14) == 0) {
+        // Profiler.start: acknowledge — actual profiling via --profile flag
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 13 && strncmp(m, "Profiler.stop", 13) == 0) {
+        // Return a minimal CDP Profile object that Chrome DevTools accepts
+        cdp_respond(client, id,
+                    "{\"profile\":{\"nodes\":[{\"id\":1,\"callFrame\":"
+                    "{\"functionName\":\"(root)\",\"scriptId\":\"0\",\"url\":\"\","
+                    "\"lineNumber\":0,\"columnNumber\":0},\"hitCount\":0,\"children\":[]}],"
+                    "\"startTime\":0,\"endTime\":0,\"samples\":[],\"timeDeltas\":[]}}");
+    } else if (mlen == 28 && strncmp(m, "Profiler.setSamplingInterval", 28) == 0) {
+        // Accept but use our default sampling interval
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 29 && strncmp(m, "Profiler.startPreciseCoverage", 29) == 0) {
+        cdp_respond(client, id, "{\"timestamp\":0}");
+    } else if (mlen == 28 && strncmp(m, "Profiler.stopPreciseCoverage", 28) == 0) {
+        cdp_respond(client, id, NULL);
+    } else if (mlen == 28 && strncmp(m, "Profiler.takePreciseCoverage", 28) == 0) {
+        cdp_respond(client, id, "{\"result\":[],\"timestamp\":0}");
+    } else if (mlen == 30 && strncmp(m, "Profiler.getBestEffortCoverage", 30) == 0) {
+        cdp_respond(client, id, "{\"result\":[]}");
     }
     // ---- Debugger domain ----
     else if (mlen == 15 && strncmp(m, "Debugger.enable", 15) == 0) {

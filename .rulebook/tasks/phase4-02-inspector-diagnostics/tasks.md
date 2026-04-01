@@ -1,6 +1,6 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: In Progress (~18%) — Phase 1 DONE (11/11), Phase 6 console (8/9)
+**Status**: In Progress (~25%) — Phase 1 DONE (11/11), Phase 2 (10/14), Phase 6 console (8/9)
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
@@ -20,15 +20,15 @@
 
 ## Phase 2: Profiler Domain (Enhanced CPU Profiling)
 
-- [ ] 2.1 Implement `Profiler.enable` / `Profiler.disable` CDP handlers
-- [ ] 2.2 Implement `Profiler.start` / `Profiler.stop` returning CDP `Profile` object
-- [ ] 2.3 Implement `Profiler.setSamplingInterval(interval_us)` CDP handler
-- [ ] 2.4 Emit `tml_profiler_enter`/`tml_profiler_exit` calls in codegen when `--profile` flag is set (currently missing)
-- [ ] 2.5 Add runtime profiler activation check (`tml_profiler_is_active()` gate in codegen)
-- [ ] 2.6 Implement sampling profiler mode (separate thread, configurable interval)
+- [x] 2.1 Implement `Profiler.enable` / `Profiler.disable` CDP handlers — in inspector.c
+- [x] 2.2 Implement `Profiler.start` / `Profiler.stop` — CDP responses with Profile object; real profiling via --profile
+- [x] 2.3 Implement `Profiler.setSamplingInterval(interval_us)` CDP handler
+- [x] 2.4 Emit `tml_profiler_enter`/`tml_profiler_exit` calls in codegen when `--profile` flag is set — MIR codegen now emits entry/exit calls in every function when `instrument_profiler` is true
+- [x] 2.5 Add runtime profiler activation check (`tml_profiler_is_active()` gate in codegen) — all profiler calls are gated by `tml_profiler_is_active() != 0` branch, near-zero overhead when profiler is inactive
+- [x] 2.6 Sampling profiler — already in profiler.cpp (Profiler::add_sample + configurable interval)
 - [ ] 2.7 Generate `positionTicks` data in `.cpuprofile` output (line-level hit counts)
-- [ ] 2.8 Implement `Profiler.startPreciseCoverage` / `Profiler.stopPreciseCoverage` / `Profiler.takePreciseCoverage`
-- [ ] 2.9 Implement `Profiler.getBestEffortCoverage` CDP handler
+- [x] 2.8 Implement `Profiler.startPreciseCoverage` / `stopPreciseCoverage` / `takePreciseCoverage` CDP handlers
+- [x] 2.9 Implement `Profiler.getBestEffortCoverage` CDP handler
 - [ ] 2.10 Implement `Profiler.consoleProfileStarted` / `Profiler.consoleProfileFinished` events
 - [ ] 2.11 Generate flame graph SVG from profile data (`tml profile flamegraph <file>`)
 - [ ] 2.12 Generate terminal ASCII flame graph

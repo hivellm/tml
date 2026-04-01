@@ -161,6 +161,24 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         }
     }
 
+    // Collect profiler string constants (function names) for instrumentation
+    if (options_.instrument_profiler) {
+        for (const auto& func : module.functions) {
+            if (!func.blocks.empty()) {
+                // Register function name as a string constant for profiler_enter
+                if (string_constants_.find(func.name) == string_constants_.end()) {
+                    string_constants_[func.name] =
+                        "@.str." + std::to_string(string_constants_.size());
+                }
+            }
+        }
+        // Register a placeholder file name (MIR functions don't carry source file info)
+        static const std::string unknown_file = "<tml>";
+        if (string_constants_.find(unknown_file) == string_constants_.end()) {
+            string_constants_[unknown_file] = "@.str." + std::to_string(string_constants_.size());
+        }
+    }
+
     emit_preamble();
 
     // Emit string constants after preamble
@@ -342,6 +360,23 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
                     collect_enum_types_from_type(inst.type);
                 }
             }
+        }
+    }
+
+    // Collect profiler string constants (function names) for instrumentation — CGU path
+    if (options_.instrument_profiler) {
+        for (size_t i = 0; i < module.functions.size(); ++i) {
+            const auto& func = module.functions[i];
+            if (included.count(i) && !func.blocks.empty()) {
+                if (string_constants_.find(func.name) == string_constants_.end()) {
+                    string_constants_[func.name] =
+                        "@.str." + std::to_string(string_constants_.size());
+                }
+            }
+        }
+        static const std::string unknown_file = "<tml>";
+        if (string_constants_.find(unknown_file) == string_constants_.end()) {
+            string_constants_[unknown_file] = "@.str." + std::to_string(string_constants_.size());
         }
     }
 
@@ -726,6 +761,13 @@ void MirCodegen::emit_preamble() {
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
+
+    // CPU profiler instrumentation declarations (tml_profiler_enter/exit from profiler.cpp)
+    if (options_.instrument_profiler) {
+        emitln("declare dso_local void @tml_profiler_enter(ptr, ptr, i32)");
+        emitln("declare dso_local void @tml_profiler_exit()");
+        emitln("declare dso_local i32 @tml_profiler_is_active()");
+    }
     emitln();
 
     // str_concat_opt: null-safe string concatenation (inlined from runtime.cpp)
@@ -1252,6 +1294,35 @@ void MirCodegen::emit_function(const mir::Function& func) {
 #endif
     emitln(")" + inline_attr + personality + " {");
 
+    // Prepare profiler entry instrumentation for the entry block (item 2.4).
+    // When instrument_profiler is enabled, we inject a tml_profiler_is_active() check
+    // (item 2.5) at the start of the entry block, and only call tml_profiler_enter()
+    // if the profiler is actually running. This keeps overhead near-zero otherwise.
+    profiler_entry_ir_.clear();
+    if (options_.instrument_profiler && !func.blocks.empty()) {
+        // Use func.name (original user-visible name) for profiler, not emit_name
+        // (which may be mangled to tml_main).
+        auto fname_it = string_constants_.find(func.name);
+        auto ffile_it = string_constants_.find("<tml>");
+        if (fname_it != string_constants_.end() && ffile_it != string_constants_.end()) {
+            std::string t_active = new_temp();
+            std::string t_cond = new_temp();
+            std::string lbl_enter = "prof.enter." + std::to_string(temp_counter_);
+            std::string lbl_skip = "prof.skip." + std::to_string(temp_counter_);
+            temp_counter_++;
+
+            profiler_entry_ir_ += "  " + t_active + " = call i32 @tml_profiler_is_active()\n";
+            profiler_entry_ir_ += "  " + t_cond + " = icmp ne i32 " + t_active + ", 0\n";
+            profiler_entry_ir_ +=
+                "  br i1 " + t_cond + ", label %" + lbl_enter + ", label %" + lbl_skip + "\n";
+            profiler_entry_ir_ += lbl_enter + ":\n";
+            profiler_entry_ir_ += "  call void @tml_profiler_enter(ptr " + fname_it->second +
+                                  ", ptr " + ffile_it->second + ", i32 0)\n";
+            profiler_entry_ir_ += "  br label %" + lbl_skip + "\n";
+            profiler_entry_ir_ += lbl_skip + ":\n";
+        }
+    }
+
     // Emit basic blocks
     for (const auto& block : func.blocks) {
         emit_block(block);
@@ -1263,6 +1334,13 @@ void MirCodegen::emit_function(const mir::Function& func) {
 
 void MirCodegen::emit_block(const mir::BasicBlock& block) {
     emitln(block.name + ":");
+
+    // Inject profiler entry instrumentation at the start of the entry block.
+    // profiler_entry_ir_ is prepared by emit_function() and consumed here once.
+    if (!profiler_entry_ir_.empty()) {
+        emit(profiler_entry_ir_);
+        profiler_entry_ir_.clear();
+    }
 
     // Track current block ID for exit label updates (bounds check injection etc.)
     // NOTE: block_exit_labels_[block.id] was pre-populated in emit_function() pre-scan.

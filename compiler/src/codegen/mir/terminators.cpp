@@ -22,6 +22,24 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
             using T = std::decay_t<decltype(t)>;
 
             if constexpr (std::is_same_v<T, mir::ReturnTerm>) {
+                // Profiler exit instrumentation (item 2.4): emit tml_profiler_exit()
+                // before every return, gated by tml_profiler_is_active() (item 2.5).
+                if (options_.instrument_profiler) {
+                    std::string t_active = new_temp();
+                    std::string t_cond = new_temp();
+                    std::string lbl_exit = "prof.exit." + std::to_string(temp_counter_);
+                    std::string lbl_retskip = "prof.retskip." + std::to_string(temp_counter_);
+                    temp_counter_++;
+                    emitln("  " + t_active + " = call i32 @tml_profiler_is_active()");
+                    emitln("  " + t_cond + " = icmp ne i32 " + t_active + ", 0");
+                    emitln("  br i1 " + t_cond + ", label %" + lbl_exit + ", label %" +
+                           lbl_retskip);
+                    emitln(lbl_exit + ":");
+                    emitln("  call void @tml_profiler_exit()");
+                    emitln("  br label %" + lbl_retskip);
+                    emitln(lbl_retskip + ":");
+                }
+
                 if (t.value.has_value()) {
                     std::string val = get_value_reg(*t.value);
                     // Get type from the value itself, with fallback to value_types_ map

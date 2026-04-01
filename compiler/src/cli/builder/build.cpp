@@ -496,6 +496,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         // Generate LLVM IR from optimized MIR
         codegen::MirCodegenOptions mir_opts;
         mir_opts.emit_comments = verbose;
+        mir_opts.instrument_profiler = CompilerOptions::profile;
 #ifdef _WIN32
         mir_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
         mir_opts.target_triple = "x86_64-pc-windows-msvc";

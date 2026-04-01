@@ -155,6 +155,18 @@ struct CompilerOptions {
     /// Default: enabled in debug mode (O0), disabled at O1+.
     /// Use --checked-math / --no-checked-math to override.
     static inline bool checked_math = false;
+
+    /// Enable Chrome DevTools Protocol inspector.
+    /// When enabled, the compiled program starts a WebSocket server that
+    /// speaks CDP and prints a devtools:// URL to stderr.
+    static inline bool inspect = false;
+
+    /// Break before user code (for --inspect-brk).
+    /// When enabled, the program pauses and waits for a debugger to connect.
+    static inline bool inspect_brk = false;
+
+    /// Inspector WebSocket server port (default: 9229).
+    static inline int inspect_port = 9229;
 };
 
 // ============================================================================

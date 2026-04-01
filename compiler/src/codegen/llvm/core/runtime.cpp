@@ -165,6 +165,11 @@ void LLVMIRGen::init_runtime_catalog() {
     // --- Random seed ---
     add("tml_random_seed", "declare dso_local i64 @tml_random_seed()");
 
+    // --- CPU Profiler instrumentation (tml_profiler_enter/exit from profiler.cpp) ---
+    add("tml_profiler_enter", "declare dso_local void @tml_profiler_enter(ptr, ptr, i32)");
+    add("tml_profiler_exit", "declare dso_local void @tml_profiler_exit()");
+    add("tml_profiler_is_active", "declare dso_local i32 @tml_profiler_is_active()");
+
     // --- Memory functions ---
     add("mem_alloc", "declare dso_local ptr @mem_alloc(i64)");
     add("mem_alloc_zeroed", "declare dso_local ptr @mem_alloc_zeroed(i64)");
