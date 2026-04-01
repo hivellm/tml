@@ -786,6 +786,9 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/core/runtime_modules_library.cpp
     src/codegen/llvm/core/dyn.cpp
     src/codegen/llvm/core/generate.cpp
+    src/codegen/llvm/core/generate_library_only.cpp
+    src/codegen/llvm/core/generate_first_pass.cpp
+    src/codegen/llvm/core/generate_function_bodies.cpp
     src/codegen/llvm/core/generate_cache.cpp
     src/codegen/llvm/core/generate_entry.cpp
     src/codegen/llvm/core/generate_support.cpp

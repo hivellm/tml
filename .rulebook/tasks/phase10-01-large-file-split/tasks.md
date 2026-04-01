@@ -10,7 +10,7 @@
 - [x] 1.2 Split `runtime_modules.cpp` (1,986→1,110) → `runtime_modules_strings.cpp` (55) + `runtime_modules_library.cpp` (660)
 - [ ] 1.3 Skip — `llvm_ir_gen.hpp` (1,873 lines) is a header, needs architectural redesign not mechanical split
 - [x] 1.4 Split `method_impl.cpp` (1,811→1,449) → `method_impl_module.cpp` (555)
-- [ ] 1.5 Skip — `generate.cpp` (1,787 lines) is one giant function, needs helper extraction (future refactor)
+- [x] 1.5 Refactor `generate.cpp` (1,787→1,002) → `generate_library_only.cpp` (318) + `generate_first_pass.cpp` (310) + `generate_function_bodies.cpp` (544)
 - [ ] 1.6 Skip — `generic_instantiate.cpp` (1,738 lines) is one giant function, needs helper extraction (future refactor)
 - [x] 1.7 Split `intrinsics_extended.cpp` (1,534→925) → `intrinsics_extended_reflect.cpp` (576) + `intrinsics_extended_dyncall.cpp` (97)
 

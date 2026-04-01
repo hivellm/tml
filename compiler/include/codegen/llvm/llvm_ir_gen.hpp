@@ -1498,6 +1498,23 @@ private:
     auto require_class_instantiation(const std::string& base_name,
                                      const std::vector<types::TypePtr>& type_args) -> std::string;
     void generate_pending_instantiations();
+
+    /// Library-only IR path: flush all pending lazy library methods/functions,
+    /// emit instantiations, and return the complete library IR.
+    /// Called from generate() when options_.library_ir_only is true.
+    auto generate_library_only_ir(const parser::Module& module)
+        -> Result<std::string, std::vector<LLVMGenError>>;
+
+    /// First pass over module declarations: register const values, struct/enum/class types,
+    /// trait declarations, and pre-register local function signatures.
+    /// Called from generate() before function body codegen.
+    void generate_first_pass(const parser::Module& module);
+
+    /// Second pass over module declarations: generate all function and impl-method bodies.
+    /// Writes generated IR into output_ (the caller saves it to func_output afterwards).
+    /// Called from generate() after generate_first_pass().
+    void generate_function_bodies(const parser::Module& module);
+
     /// Generate main entry point, test/bench/fuzz harness, and HTTP route registration.
     /// Called from generate() after all function bodies have been emitted.
     void generate_main_and_test_harness(const parser::Module& module);
