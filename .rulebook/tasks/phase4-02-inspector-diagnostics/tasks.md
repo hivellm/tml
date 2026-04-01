@@ -1,21 +1,21 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: In Progress (~8%) — Phase 6 console module done, std::log covers 6.10/6.11
+**Status**: In Progress (~15%) — Phase 1 core (9/11), Phase 6 console (8/9)
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
 ## Phase 1: Inspector Core & WebSocket Server
 
-- [ ] 1.1 Add `--inspect`, `--inspect-brk`, `--inspect-port=PORT` CLI flags to `cmd_run` and `cmd_build`
-- [ ] 1.2 Implement minimal WebSocket server in C (RFC 6455: handshake, frame encode/decode, ping/pong)
-- [ ] 1.3 Implement CDP JSON-RPC message router (method dispatch, id tracking, event emission)
-- [ ] 1.4 Implement session management (connect/disconnect, multiple clients)
-- [ ] 1.5 Implement `tml_inspector_init(port, host)` C API called at program startup
-- [ ] 1.6 Implement `tml_inspector_shutdown()` C API called at program exit
-- [ ] 1.7 Implement `tml_inspector_wait_for_debugger()` for `--inspect-brk` mode
-- [ ] 1.8 Create `std::inspector` TML module with `Inspector.open()`, `.close()`, `.url()`, `.wait_for_debugger()`
+- [x] 1.1 Add `--inspect`, `--inspect-brk`, `--inspect-port=PORT` CLI flags to RunOptions + dispatcher
+- [x] 1.2 Implement minimal WebSocket server in C (RFC 6455: handshake, frame encode/decode, ping/pong) — inspector.c 540 lines
+- [x] 1.3 Implement CDP JSON-RPC message router (method dispatch, id tracking, event emission)
+- [x] 1.4 Implement session management (connect/disconnect, background thread, single client)
+- [x] 1.5 Implement `tml_inspector_init(port)` C API — creates server socket, starts background thread
+- [x] 1.6 Implement `tml_inspector_shutdown()` C API — signals thread, closes sockets, joins thread
+- [x] 1.7 Implement `tml_inspector_wait_for_debugger()` — blocks on event/condvar until client connects
+- [x] 1.8 Create `std::inspector` TML module — open, close, url, wait_for_debugger, is_active
 - [ ] 1.9 Auto-enable `-g` debug info when `--inspect` is used
-- [ ] 1.10 Print inspector URL on startup: `Debugger listening on ws://127.0.0.1:9229/...`
+- [x] 1.10 Print inspector URL on startup: `Debugger listening on ws://127.0.0.1:PORT/tml`
 - [ ] 1.11 Verify Chrome DevTools connects and receives initial handshake
 
 ## Phase 2: Profiler Domain (Enhanced CPU Profiling)

@@ -1,0 +1,61 @@
+//! Runtime inspector for Chrome DevTools Protocol integration.
+//!
+//! Enables connecting Chrome DevTools to a running TML program for
+//! profiling, debugging, and memory inspection.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::inspector
+//!
+//! // Open inspector on default port
+//! inspector::open(9229)
+//!
+//! // Wait for debugger to attach
+//! inspector::wait_for_debugger()
+//!
+//! // ... your code runs with DevTools connected ...
+//!
+//! inspector::close()
+//! ```
+
+@extern("tml_inspector_init")
+func c_inspector_init(port: I64) -> I64
+
+@extern("tml_inspector_shutdown")
+func c_inspector_shutdown()
+
+@extern("tml_inspector_wait_for_debugger")
+func c_inspector_wait()
+
+@extern("tml_inspector_url")
+func c_inspector_url() -> Str
+
+@extern("tml_inspector_is_active")
+func c_inspector_is_active() -> I64
+
+/// Open the inspector on the given port.
+/// Returns true if the server started successfully.
+pub func open(port: I64) -> Bool {
+    return c_inspector_init(port) != 0
+}
+
+/// Close the inspector and disconnect all clients.
+pub func close() {
+    c_inspector_shutdown()
+}
+
+/// Block until a debugger client connects.
+pub func wait_for_debugger() {
+    c_inspector_wait()
+}
+
+/// Get the WebSocket URL for connecting a debugger.
+pub func url() -> Str {
+    return c_inspector_url()
+}
+
+/// Check if the inspector is currently active.
+pub func is_active() -> Bool {
+    return c_inspector_is_active() != 0
+}

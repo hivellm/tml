@@ -96,6 +96,11 @@ struct RunOptions {
     // Emit all pipeline stages to a directory (same as --emit-pipeline for build)
     bool emit_pipeline = false;
     std::string pipeline_output_dir;
+
+    // Inspector (Chrome DevTools Protocol)
+    bool inspect = false;     // Enable inspector (--inspect)
+    bool inspect_brk = false; // Break on start (--inspect-brk)
+    int inspect_port = 9229;  // Inspector port (--inspect-port=PORT)
 };
 
 // Build commands

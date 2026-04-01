@@ -515,6 +515,10 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --profile=<file>    Enable profiling with custom output path\n";
             std::cerr << "\nDebugging options:\n";
             std::cerr << "  --backtrace         Print stack trace on panic\n";
+            std::cerr << "\nInspector options (Chrome DevTools Protocol):\n";
+            std::cerr << "  --inspect           Enable Chrome DevTools inspector on port 9229\n";
+            std::cerr << "  --inspect-brk       Enable inspector and break before user code\n";
+            std::cerr << "  --inspect-port=PORT Set inspector port (default: 9229)\n";
             std::cerr << "\nThe .cpuprofile file can be loaded in Chrome DevTools or VS Code.\n";
             return 1;
         }
@@ -564,6 +568,14 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--emit-pipeline=")) {
                 opts.emit_pipeline = true;
                 opts.pipeline_output_dir = arg.substr(16);
+            } else if (arg == "--inspect") {
+                opts.inspect = true;
+            } else if (arg == "--inspect-brk") {
+                opts.inspect = true;
+                opts.inspect_brk = true;
+            } else if (arg.starts_with("--inspect-port=")) {
+                opts.inspect_port = std::stoi(arg.substr(15));
+                opts.inspect = true;
             } else {
                 opts.args.push_back(arg);
             }

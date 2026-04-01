@@ -1,0 +1,18 @@
+use test::*
+use std::inspector
+
+@test
+func test_inspector_not_active() -> I32 {
+    assert_eq(inspector::is_active(), false)
+    return 0
+}
+
+@test
+func test_inspector_open_close() -> I32 {
+    let ok = inspector::open(19229)
+    assert_eq(ok, true)
+    assert_eq(inspector::is_active(), true)
+    inspector::close()
+    assert_eq(inspector::is_active(), false)
+    return 0
+}

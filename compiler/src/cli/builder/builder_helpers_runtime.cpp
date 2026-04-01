@@ -77,6 +77,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including console runtime: " << console_obj);
             }
 
+            // diagnostics/ - inspector.c (Chrome DevTools Protocol inspector)
+            fs::path inspector_c = runtime_dir / "diagnostics" / "inspector.c";
+            if (fs::exists(inspector_c)) {
+                std::string inspector_obj = ensure_c_compiled(
+                    to_forward_slashes(inspector_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(inspector_obj));
+                TML_LOG_DEBUG("build", "Including inspector runtime: " << inspector_obj);
+            }
+
             // string.c removed — all functions migrated to inline LLVM IR (Phase 31)
 
             // Determine if memory tracking is enabled
