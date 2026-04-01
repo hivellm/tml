@@ -717,6 +717,12 @@ public:
     /// Loads and registers a module from a TML source file.
     bool load_module_from_file(const std::string& module_path, const std::string& file_path);
 
+    /// Extract public declarations from parsed files into a module.
+    /// Called by load_module_from_file() after parsing.
+    void extract_module_declarations(const std::string& module_path, const std::string& file_path,
+                                     const std::vector<struct ParsedModuleFile>& all_parsed,
+                                     Module& mod);
+
     // ========================================================================
     // Type Utilities
     // ========================================================================

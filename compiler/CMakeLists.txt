@@ -535,6 +535,7 @@ add_library(tml_types STATIC
     src/types/module.cpp
     src/types/env_module_support.cpp
     src/types/env_module_load.cpp
+    src/types/env_module_load_decls.cpp
     src/types/env_module_loading.cpp
     # Checker modules (split from checker.cpp)
     src/types/checker/helpers.cpp
@@ -1731,6 +1732,7 @@ add_library(tml_cli STATIC
     src/testing/testing_test_cache.cpp
     src/testing/testing_discovery.cpp
     src/testing/testing_compile.cpp
+    src/testing/testing_compile_parallel.cpp
     src/testing/testing_coverage.cpp
     src/testing/testing_coverage_html.cpp
     src/testing/testing_reporter.cpp
