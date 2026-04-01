@@ -96,6 +96,10 @@ private:
     // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
     std::string profiler_entry_ir_;
 
+    // Coverage entry IR snippet to inject at the start of the entry block.
+    // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
+    std::string coverage_entry_ir_;
+
     // Value ID to LLVM register mapping
     std::unordered_map<mir::ValueId, std::string> value_regs_;
 

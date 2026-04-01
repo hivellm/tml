@@ -179,6 +179,18 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         }
     }
 
+    // Collect coverage string constants (function names) for tml_cover_func instrumentation
+    if (options_.coverage_enabled) {
+        for (const auto& func : module.functions) {
+            if (!func.blocks.empty()) {
+                if (string_constants_.find(func.name) == string_constants_.end()) {
+                    string_constants_[func.name] =
+                        "@.str." + std::to_string(string_constants_.size());
+                }
+            }
+        }
+    }
+
     emit_preamble();
 
     // Emit string constants after preamble
@@ -380,6 +392,19 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         }
     }
 
+    // Collect coverage string constants (function names) for tml_cover_func — CGU path
+    if (options_.coverage_enabled) {
+        for (size_t i = 0; i < module.functions.size(); ++i) {
+            const auto& func = module.functions[i];
+            if (included.count(i) && !func.blocks.empty()) {
+                if (string_constants_.find(func.name) == string_constants_.end()) {
+                    string_constants_[func.name] =
+                        "@.str." + std::to_string(string_constants_.size());
+                }
+            }
+        }
+    }
+
     emit_preamble();
 
     // Emit string constants after preamble
@@ -555,9 +580,26 @@ void MirCodegen::emit_main_wrapper(const mir::Module& module) {
     emitln("entry:");
     if (returns_void) {
         emitln("  call void @tml_main()");
-        emitln("  ret i32 0");
     } else {
         emitln("  %ret = call i32 @tml_main()");
+    }
+
+    // Write coverage data before exiting (standalone EXE mode).
+    if (options_.coverage_enabled) {
+        emitln("  %cov_file_env = call ptr @getenv(ptr @.tml_cov_file_env)");
+        emitln("  %cov_file_not_null = icmp ne ptr %cov_file_env, null");
+        emitln("  br i1 %cov_file_not_null, label %write_cov_file, label %cov_file_done");
+        emitln("");
+        emitln("write_cov_file:");
+        emitln("  call void @tml_coverage_write_file(ptr %cov_file_env)");
+        emitln("  br label %cov_file_done");
+        emitln("");
+        emitln("cov_file_done:");
+    }
+
+    if (returns_void) {
+        emitln("  ret i32 0");
+    } else {
         emitln("  ret i32 %ret");
     }
     emitln("}");
@@ -611,6 +653,21 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
         } else {
             emitln("  call i32 @tml_main()");
         }
+    }
+
+    // Write coverage data to file before returning.
+    // The test coordinator sets TML_COVERAGE_FILE env var; we read it and write
+    // the coverage data if the env var is set.
+    if (options_.coverage_enabled) {
+        emitln("  %cov_file_env = call ptr @getenv(ptr @.tml_cov_file_env)");
+        emitln("  %cov_file_not_null = icmp ne ptr %cov_file_env, null");
+        emitln("  br i1 %cov_file_not_null, label %write_cov_file, label %cov_file_done");
+        emitln("");
+        emitln("write_cov_file:");
+        emitln("  call void @tml_coverage_write_file(ptr %cov_file_env)");
+        emitln("  br label %cov_file_done");
+        emitln("");
+        emitln("cov_file_done:");
     }
 
     emitln("  ret i32 0");
@@ -767,6 +824,14 @@ void MirCodegen::emit_preamble() {
         emitln("declare dso_local void @tml_profiler_enter(ptr, ptr, i32)");
         emitln("declare dso_local void @tml_profiler_exit()");
         emitln("declare dso_local i32 @tml_profiler_is_active()");
+    }
+
+    // Coverage instrumentation declarations (tml_cover_func/tml_coverage_write_file)
+    if (options_.coverage_enabled) {
+        emitln("declare dso_local void @tml_cover_func(ptr)");
+        emitln("declare dso_local void @tml_coverage_write_file(ptr)");
+        emitln("declare dso_local ptr @getenv(ptr)");
+        emitln("@.tml_cov_file_env = private constant [19 x i8] c\"TML_COVERAGE_FILE\\00\"");
     }
     emitln();
 
@@ -1323,6 +1388,17 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
     }
 
+    // Prepare coverage instrumentation for the entry block.
+    // When coverage_enabled, inject a call to tml_cover_func() with the function name
+    // at the start of every function body. This is simpler than profiler — no active check.
+    coverage_entry_ir_.clear();
+    if (options_.coverage_enabled && !func.blocks.empty()) {
+        auto fname_it = string_constants_.find(func.name);
+        if (fname_it != string_constants_.end()) {
+            coverage_entry_ir_ = "  call void @tml_cover_func(ptr " + fname_it->second + ")\n";
+        }
+    }
+
     // Emit basic blocks
     for (const auto& block : func.blocks) {
         emit_block(block);
@@ -1340,6 +1416,13 @@ void MirCodegen::emit_block(const mir::BasicBlock& block) {
     if (!profiler_entry_ir_.empty()) {
         emit(profiler_entry_ir_);
         profiler_entry_ir_.clear();
+    }
+
+    // Inject coverage instrumentation at the start of the entry block.
+    // coverage_entry_ir_ is prepared by emit_function() and consumed here once.
+    if (!coverage_entry_ir_.empty()) {
+        emit(coverage_entry_ir_);
+        coverage_entry_ir_.clear();
     }
 
     // Track current block ID for exit label updates (bounds check injection etc.)
