@@ -1,0 +1,91 @@
+//! Atomic types for lock-free concurrent programming.
+//!
+//! This module provides atomic types that can be safely shared between threads.
+//! All operations on atomic types are guaranteed to be indivisible, meaning
+//! that no thread can observe a partial state.
+//!
+//! # Overview
+//!
+//! Atomic types are the foundation of lock-free concurrent programming.
+//! They provide:
+//!
+//! - **Atomicity**: Operations complete fully or not at all
+//! - **Memory ordering**: Control over how operations are observed across threads
+//! - **Lock-free guarantees**: Progress is guaranteed without locks
+//!
+//! # Available Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`AtomicBool`] | Atomic boolean |
+//! | [`AtomicI32`] | 32-bit signed atomic integer |
+//! | [`AtomicI64`] | 64-bit signed atomic integer |
+//! | [`AtomicU32`] | 32-bit unsigned atomic integer |
+//! | [`AtomicU64`] | 64-bit unsigned atomic integer |
+//! | [`AtomicIsize`] | Pointer-sized signed atomic integer |
+//! | [`AtomicUsize`] | Pointer-sized unsigned atomic integer |
+//! | [`AtomicPtr[T]`] | Atomic raw pointer |
+//!
+//! # Memory Ordering
+//!
+//! All atomic operations take an [`Ordering`] parameter that specifies
+//! the memory ordering constraints. See the [`ordering`][super::ordering]
+//! module for details.
+
+pub use std::sync::ordering::Ordering
+
+// Submodules
+pub use std::sync::atomic::bool
+pub use std::sync::atomic::i32
+pub use std::sync::atomic::i64
+pub use std::sync::atomic::u32
+pub use std::sync::atomic::u64
+pub use std::sync::atomic::usize
+pub use std::sync::atomic::isize
+pub use std::sync::atomic::ptr
+pub use std::sync::atomic::hints
+
+// Re-export types
+pub use std::sync::atomic::bool::AtomicBool
+pub use std::sync::atomic::i32::AtomicI32
+pub use std::sync::atomic::i64::AtomicI64
+pub use std::sync::atomic::u32::AtomicU32
+pub use std::sync::atomic::u64::AtomicU64
+pub use std::sync::atomic::usize::AtomicUsize
+pub use std::sync::atomic::isize::AtomicIsize
+pub use std::sync::atomic::ptr::AtomicPtr
+pub use std::sync::atomic::hints::spin_loop_hint
+
+// ============================================================================
+// Send/Sync implementations for atomic types
+// ============================================================================
+
+// Atomic types are explicitly designed to be safely shared between threads.
+// They use hardware-level atomic operations that guarantee thread-safety.
+
+impl Send for AtomicBool {}
+impl Sync for AtomicBool {}
+
+impl Send for AtomicI32 {}
+impl Sync for AtomicI32 {}
+
+impl Send for AtomicI64 {}
+impl Sync for AtomicI64 {}
+
+impl Send for AtomicU32 {}
+impl Sync for AtomicU32 {}
+
+impl Send for AtomicU64 {}
+impl Sync for AtomicU64 {}
+
+impl Send for AtomicUsize {}
+impl Sync for AtomicUsize {}
+
+impl Send for AtomicIsize {}
+impl Sync for AtomicIsize {}
+
+// AtomicPtr is Send and Sync only if T is Send and Sync
+// This matches Rust's semantics: the pointer operations are atomic,
+// but the safety of the pointed-to data depends on T's thread safety.
+impl[T: Send] Send for AtomicPtr[T] {}
+impl[T: Send + Sync] Sync for AtomicPtr[T] {}

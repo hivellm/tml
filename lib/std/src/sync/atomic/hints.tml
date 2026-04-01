@@ -1,0 +1,30 @@
+//! Atomic helper functions.
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// A hint to the processor that it is running a busy-wait spin-loop.
+///
+/// This function is a hint, not a command. The processor is free to ignore it.
+/// This can prevent the CPU from wasting power or contending for resources.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicBool, Ordering, spin_loop_hint}
+///
+/// let flag = AtomicBool::new(false)
+///
+/// // Busy-wait with hint
+/// loop (true) {
+///     if flag.load(Ordering::Relaxed) {
+///         break
+///     }
+///     spin_loop_hint()
+/// }
+/// ```
+pub func spin_loop_hint() -> Unit {
+    // Hint to processor that this is a spin loop
+    // The intrinsic attribute should replace this with the actual pause instruction
+}

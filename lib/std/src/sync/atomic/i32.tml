@@ -1,0 +1,198 @@
+//! Atomic 32-bit signed integer type.
+
+pub use std::sync::ordering::Ordering
+
+// ============================================================================
+// AtomicI32
+// ============================================================================
+
+/// A 32-bit signed integer which can be safely shared between threads.
+///
+/// This type has the same size and alignment as an [`I32`].
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicI32, Ordering}
+///
+/// let counter = AtomicI32::new(0)
+/// counter.fetch_add(1, Ordering::SeqCst)
+/// ```
+@repr(transparent)
+pub type AtomicI32 {
+    value: I32
+}
+
+impl AtomicI32 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
+    /// Creates a new `AtomicI32` with the given initial value.
+    pub func new(v: I32) -> AtomicI32 {
+        return AtomicI32 { value: v }
+    }
+
+    /// Loads a value from the atomic integer.
+    pub func load(this, order: Ordering) -> I32 {
+        lowlevel { return this.value }
+    }
+
+    /// Stores a value into the atomic integer.
+    pub func store(mut this, val: I32, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
+
+    /// Stores a value into the atomic integer, returning the previous value.
+    pub func swap(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = val
+            return old
+        }
+    }
+
+    /// Stores a value into the atomic integer if the current value equals `current`.
+    ///
+    /// Returns `Ok(current)` if the exchange succeeded, `Err(actual)` otherwise.
+    pub func compare_exchange(
+        mut this,
+        current: I32,
+        new: I32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I32, I32] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
+
+    /// Stores a value into the atomic integer if the current value equals `current`.
+    ///
+    /// May spuriously fail even when comparison succeeds.
+    pub func compare_exchange_weak(
+        mut this,
+        current: I32,
+        new: I32,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[I32, I32] {
+        return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: I32, new: I32, order: Ordering) -> I32 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
+    }
+
+    /// Adds to the current value, returning the previous value.
+    ///
+    /// This operation wraps around on overflow.
+    pub func fetch_add(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
+
+    /// Subtracts from the current value, returning the previous value.
+    ///
+    /// This operation wraps around on overflow.
+    pub func fetch_sub(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
+
+    /// Bitwise "and" with the current value, returning the previous value.
+    pub func fetch_and(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
+
+    /// Bitwise "or" with the current value, returning the previous value.
+    pub func fetch_or(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
+
+    /// Bitwise "xor" with the current value, returning the previous value.
+    pub func fetch_xor(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
+
+    /// Fetches the value, and applies a function to it that returns an optional
+    /// new value. Returns a `Result` of `Ok(previous_value)` if the function
+    /// returned `Some(_)`, else `Err(previous_value)`.
+    ///
+    /// Note: This may call the function multiple times if the value has been
+    /// changed from another thread in the meantime, as long as the function
+    /// returns `Some(_)`, but the function will have been applied only once
+    /// to the stored value.
+    pub func fetch_update(
+        mut this,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: func(I32) -> Maybe[I32]
+    ) -> Outcome[I32, I32] {
+        var prev: I32 = this.load(fetch_order)
+        loop (true) {
+            when f(prev) {
+                Just(next) => {
+                    when this.compare_exchange_weak(prev, next, set_order, fetch_order) {
+                        Ok(x) => return Ok(x),
+                        Err(next_prev) => prev = next_prev,
+                    }
+                },
+                Nothing => return Err(prev),
+            }
+        }
+    }
+
+    /// Maximum with the current value, returning the previous value.
+    pub func fetch_max(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
+
+    /// Minimum with the current value, returning the previous value.
+    pub func fetch_min(mut this, val: I32, order: Ordering) -> I32 {
+        lowlevel {
+            let old: I32 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
+
+    /// Returns `true` if operations on this type are lock-free.
+    pub func is_lock_free(this) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained value.
+    pub func into_inner(this) -> I32 {
+        return this.value
+    }
+}

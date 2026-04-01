@@ -1,0 +1,108 @@
+//! Atomic raw pointer type.
+
+pub use std::sync::ordering::Ordering
+
+// ============================================================================
+// AtomicPtr[T]
+// ============================================================================
+
+/// A raw pointer which can be safely shared between threads.
+///
+/// This type has the same size and alignment as a `Ptr[T]`.
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicPtr, Ordering}
+///
+/// let data = 42
+/// let ptr = AtomicPtr::new(raw data)
+///
+/// let loaded = ptr.load(Ordering::SeqCst)
+/// ```
+@repr(transparent)
+pub type AtomicPtr[T] {
+    ptr: Ptr[T]
+}
+
+impl[T] AtomicPtr[T] {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
+    /// Creates a new `AtomicPtr` from a raw pointer.
+    pub func new(p: Ptr[T]) -> AtomicPtr[T] {
+        return AtomicPtr { ptr: p }
+    }
+
+    /// Creates a new null `AtomicPtr`.
+    pub func new_null() -> AtomicPtr[T] {
+        return AtomicPtr { ptr: null }
+    }
+
+    /// Loads a value from the atomic pointer.
+    pub func load(this, order: Ordering) -> Ptr[T] {
+        lowlevel { return this.ptr }
+    }
+
+    /// Stores a value into the atomic pointer.
+    pub func store(mut this, val: Ptr[T], order: Ordering) -> Unit {
+        lowlevel { this.ptr = val }
+    }
+
+    /// Stores a value into the atomic pointer, returning the previous value.
+    pub func swap(mut this, val: Ptr[T], order: Ordering) -> Ptr[T] {
+        lowlevel {
+            let old: Ptr[T] = this.ptr
+            this.ptr = val
+            return old
+        }
+    }
+
+    /// Stores a value into the atomic pointer if the current value equals `current`.
+    pub func compare_exchange(
+        mut this,
+        current: Ptr[T],
+        new: Ptr[T],
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Ptr[T], Ptr[T]] {
+        lowlevel {
+            if this.ptr == current {
+                this.ptr = new
+                return Ok(current)
+            }
+            return Err(this.ptr)
+        }
+    }
+
+    /// Stores a value into the atomic pointer if the current value equals `current`.
+    ///
+    /// May spuriously fail.
+    pub func compare_exchange_weak(
+        mut this,
+        current: Ptr[T],
+        new: Ptr[T],
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Ptr[T], Ptr[T]] {
+        return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: Ptr[T], new: Ptr[T], order: Ordering) -> Ptr[T] {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
+    }
+
+    /// Returns `true` if operations on this type are lock-free.
+    pub func is_lock_free(this) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained pointer.
+    pub func into_inner(this) -> Ptr[T] {
+        return this.ptr
+    }
+}

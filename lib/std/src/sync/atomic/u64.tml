@@ -1,0 +1,151 @@
+//! Atomic 64-bit unsigned integer type.
+
+pub use std::sync::ordering::Ordering
+
+// ============================================================================
+// AtomicU64
+// ============================================================================
+
+/// A 64-bit unsigned integer which can be safely shared between threads.
+@repr(transparent)
+pub type AtomicU64 {
+    value: U64
+}
+
+impl AtomicU64 {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
+    /// Creates a new AtomicU64 with the given initial value.
+    pub func new(v: U64) -> AtomicU64 {
+        return AtomicU64 { value: v }
+    }
+
+    /// Loads the current value atomically.
+    pub func load(this, order: Ordering) -> U64 {
+        lowlevel { return this.value }
+    }
+
+    /// Stores a value atomically.
+    pub func store(mut this, val: U64, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
+
+    /// Atomically swaps the value, returning the previous value.
+    pub func swap(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = val
+            return old
+        }
+    }
+
+    /// Atomically compares and swaps if equal, returning the previous value.
+    pub func compare_exchange(
+        mut this,
+        current: U64,
+        new: U64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U64, U64] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
+
+    /// Atomically compares and swaps if equal, returning the previous value.
+    pub func compare_exchange_weak(
+        mut this,
+        current: U64,
+        new: U64,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[U64, U64] {
+        return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value if the current value equals `current`, returning the previous value.
+    pub func compare_and_swap(mut this, current: U64, new: U64, order: Ordering) -> U64 {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
+    }
+
+    /// Atomically adds to the value, returning the previous value.
+    pub func fetch_add(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value + val
+            return old
+        }
+    }
+
+    /// Atomically subtracts from the value, returning the previous value.
+    pub func fetch_sub(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value - val
+            return old
+        }
+    }
+
+    /// Atomically performs bitwise AND, returning the previous value.
+    pub func fetch_and(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value & val
+            return old
+        }
+    }
+
+    /// Atomically performs bitwise OR, returning the previous value.
+    pub func fetch_or(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value | val
+            return old
+        }
+    }
+
+    /// Atomically performs bitwise XOR, returning the previous value.
+    pub func fetch_xor(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            this.value = this.value ^ val
+            return old
+        }
+    }
+
+    /// Atomically computes the maximum, returning the previous value.
+    pub func fetch_max(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            if val > this.value { this.value = val }
+            return old
+        }
+    }
+
+    /// Atomically computes the minimum, returning the previous value.
+    pub func fetch_min(mut this, val: U64, order: Ordering) -> U64 {
+        lowlevel {
+            let old: U64 = this.value
+            if val < this.value { this.value = val }
+            return old
+        }
+    }
+
+    /// Returns `true` if operations on this type are lock-free.
+    pub func is_lock_free(this) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained value.
+    pub func into_inner(this) -> U64 {
+        return this.value
+    }
+}

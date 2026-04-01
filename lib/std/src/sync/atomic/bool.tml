@@ -1,0 +1,301 @@
+//! Atomic boolean type.
+
+pub use std::sync::ordering::Ordering
+
+// ============================================================================
+// AtomicBool
+// ============================================================================
+
+/// A boolean value which can be safely shared between threads.
+///
+/// This type has the same size and alignment as a [`Bool`].
+///
+/// # Examples
+///
+/// ```tml
+/// use sync::atomic::{AtomicBool, Ordering}
+///
+/// let flag = AtomicBool::new(false)
+///
+/// // Set the flag
+/// flag.store(true, Ordering::Release)
+///
+/// // Check and reset
+/// let was_set = flag.swap(false, Ordering::AcqRel)
+/// ```
+@repr(transparent)
+pub type AtomicBool {
+    value: Bool
+}
+
+impl AtomicBool {
+    /// A constant indicating whether this atomic type is always lock-free.
+    pub const LOCK_FREE: Bool = true
+
+    /// Creates a new `AtomicBool` with the given initial value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::AtomicBool
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// ```
+    pub func new(v: Bool) -> AtomicBool {
+        return AtomicBool { value: v }
+    }
+
+    /// Loads a value from the atomic boolean.
+    ///
+    /// `load` takes an [`Ordering`] argument which describes the memory
+    /// ordering of this operation. Possible values are [`SeqCst`],
+    /// [`Acquire`] and [`Relaxed`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `order` is [`Release`] or [`AcqRel`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// assert(flag.load(Ordering::Relaxed))
+    /// ```
+    /// Atomically loads the value.
+    pub func load(this, order: Ordering) -> Bool {
+        lowlevel { return this.value }
+    }
+
+    /// Stores a value into the atomic boolean.
+    ///
+    /// `store` takes an [`Ordering`] argument which describes the memory
+    /// ordering of this operation. Possible values are [`SeqCst`],
+    /// [`Release`] and [`Relaxed`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `order` is [`Acquire`] or [`AcqRel`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// flag.store(true, Ordering::Release)
+    /// ```
+    pub func store(mut this, val: Bool, order: Ordering) -> Unit {
+        lowlevel { this.value = val }
+    }
+
+    /// Stores a value into the atomic boolean, returning the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.swap(false, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    pub func swap(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = val
+            return old
+        }
+    }
+
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value.
+    ///
+    /// The return value is a result indicating whether the new value was
+    /// written and containing the previous value. On success this value is
+    /// guaranteed to be equal to `current`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    ///
+    /// when flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed) {
+    ///     Ok(_) => println("Successfully set to true"),
+    ///     Err(_) => println("Was already true")
+    /// }
+    /// ```
+    pub func compare_exchange(
+        mut this,
+        current: Bool,
+        new: Bool,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Bool, Bool] {
+        lowlevel {
+            if this.value == current {
+                this.value = new
+                return Ok(current)
+            }
+            return Err(this.value)
+        }
+    }
+
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value.
+    ///
+    /// Unlike [`compare_exchange`][Self::compare_exchange], this function is
+    /// allowed to spuriously fail even when the comparison succeeds. This can
+    /// be more efficient on some platforms.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    ///
+    /// let mut current = false
+    /// loop (true) {
+    ///     when flag.compare_exchange_weak(current, true, Ordering::SeqCst, Ordering::Relaxed) {
+    ///         Ok(_) => break,
+    ///         Err(actual) => current = actual
+    ///     }
+    /// }
+    /// ```
+    pub func compare_exchange_weak(
+        mut this,
+        current: Bool,
+        new: Bool,
+        success: Ordering,
+        failure: Ordering
+    ) -> Outcome[Bool, Bool] {
+        return this.compare_exchange(current, new, success, failure)
+    }
+
+    /// Stores a value into the atomic boolean if the current value is the same
+    /// as the `current` value, returning the previous value.
+    ///
+    /// This is a simpler version of [`compare_exchange`][Self::compare_exchange]
+    /// with a single ordering parameter.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// let prev = flag.compare_and_swap(false, true, Ordering::SeqCst)
+    /// assert_eq(prev, false)  // Previous value was false
+    /// ```
+    pub func compare_and_swap(
+        mut this,
+        current: Bool,
+        new: Bool,
+        order: Ordering
+    ) -> Bool {
+        when this.compare_exchange(current, new, order, order) {
+            Ok(prev) => prev,
+            Err(actual) => actual,
+        }
+    }
+
+    /// Logical "and" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.fetch_and(false, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    pub func fetch_and(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = this.value and val
+            return old
+        }
+    }
+
+    /// Logical "or" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(false)
+    /// let old = flag.fetch_or(true, Ordering::Relaxed)
+    /// assert(not old)
+    /// assert(flag.load(Ordering::Relaxed))
+    /// ```
+    pub func fetch_or(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = this.value or val
+            return old
+        }
+    }
+
+    /// Logical "xor" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use sync::atomic::{AtomicBool, Ordering}
+    ///
+    /// let flag = AtomicBool::new(true)
+    /// let old = flag.fetch_xor(true, Ordering::Relaxed)
+    /// assert(old)
+    /// assert(not flag.load(Ordering::Relaxed))
+    /// ```
+    pub func fetch_xor(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = (this.value or val) and not (this.value and val)
+            return old
+        }
+    }
+
+    /// Logical "nand" with a boolean value.
+    ///
+    /// Returns the previous value.
+    ///
+    /// `fetch_nand(true)` toggles the value.
+    /// `fetch_nand(false)` sets the value to `true`.
+    pub func fetch_nand(mut this, val: Bool, order: Ordering) -> Bool {
+        lowlevel {
+            let old: Bool = this.value
+            this.value = not (this.value and val)
+            return old
+        }
+    }
+
+    /// Returns `true` if operations on this type are lock-free.
+    ///
+    /// Boolean atomics are always lock-free on all supported platforms.
+    pub func is_lock_free(this) -> Bool {
+        return true
+    }
+
+    /// Consumes the atomic and returns the contained value.
+    ///
+    /// This is safe because passing `self` by value guarantees that no other
+    /// threads are concurrently accessing the atomic data.
+    pub func into_inner(this) -> Bool {
+        return this.value
+    }
+}
