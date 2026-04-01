@@ -330,6 +330,7 @@ set(TML_RUNTIME_SOURCES
     # diagnostics/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/backtrace.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/log.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/diagnostics/console.c
     # search/ — search.c removed in Phase 35 (migrated to pure TML in distance.tml)
 )
 

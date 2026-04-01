@@ -1,0 +1,39 @@
+// Tests for console counting functions (count, count_reset)
+use test
+use std::console
+
+@test
+func test_console_count_basic() -> I32 {
+    // count should increment and print without crashing
+    console::count("test_counter")
+    console::count("test_counter")
+    console::count("test_counter")
+    0
+}
+
+@test
+func test_console_count_reset() -> I32 {
+    // count_reset should reset the counter
+    console::count("reset_me")
+    console::count("reset_me")
+    console::count_reset("reset_me")
+    console::count("reset_me")  // should print 1 again
+    0
+}
+
+@test
+func test_console_count_reset_nonexistent() -> I32 {
+    // Resetting a counter that doesn't exist should not crash
+    console::count_reset("nonexistent")
+    0
+}
+
+@test
+func test_console_count_multiple_labels() -> I32 {
+    // Multiple independent counters
+    console::count("alpha")
+    console::count("beta")
+    console::count("alpha")
+    console::count("beta")
+    0
+}

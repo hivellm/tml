@@ -1,0 +1,347 @@
+//! Developer console utilities for debugging and profiling.
+//!
+//! Provides a simple, unstructured logging API similar to JavaScript's
+//! `console` object. For production logging with levels and filtering,
+//! use [`std::log`] instead.
+//!
+//! # Functions
+//!
+//! | Category | Functions |
+//! |----------|-----------|
+//! | Output   | `log`, `warn`, `error`, `debug`, `trace` |
+//! | Timing   | `time`, `time_end` |
+//! | Counting | `count`, `count_reset` |
+//! | Grouping | `group`, `group_end` |
+//! | Assert   | `assert` |
+//! | Display  | `table` |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::console
+//!
+//! console::log("hello world")
+//! console::warn("this might be a problem")
+//! console::error("something went wrong")
+//!
+//! console::time("operation")
+//! // ... do work ...
+//! console::time_end("operation")  // prints: operation: 42ms
+//!
+//! console::count("loop")  // prints: loop: 1
+//! console::count("loop")  // prints: loop: 2
+//! console::count_reset("loop")
+//!
+//! console::group("Section")
+//! console::log("indented message")
+//! console::group_end()
+//! ```
+
+use std::time::Instant
+use std::collections::List
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Build the current indentation prefix string.
+/// Each indent level adds two spaces.
+func indent_prefix() -> Str {
+    let level: I64 = lowlevel { rt_console_indent_get() }
+    if level <= 0 {
+        return ""
+    }
+    if level == 1 {
+        return "  "
+    }
+    if level == 2 {
+        return "    "
+    }
+    if level == 3 {
+        return "      "
+    }
+    if level == 4 {
+        return "        "
+    }
+    if level == 5 {
+        return "          "
+    }
+    // For deeper nesting, use 12 spaces (6 levels max visual indent)
+    return "            "
+}
+
+// ============================================================================
+// Basic Output
+// ============================================================================
+
+/// Print a message to stdout.
+///
+/// The simplest console output function. Messages are prefixed with
+/// the current indentation level (set by `group`/`group_end`).
+///
+/// # Examples
+///
+/// ```tml
+/// console::log("Server started on port 8080")
+/// ```
+pub func log(message: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}{message}`)
+}
+
+/// Print a warning message to stdout.
+///
+/// Prefixes the message with `[WARN]` to distinguish it from
+/// normal log output.
+///
+/// # Examples
+///
+/// ```tml
+/// console::warn("Connection pool is 80% full")
+/// ```
+pub func warn(message: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}[WARN] {message}`)
+}
+
+/// Print an error message to stdout.
+///
+/// Prefixes the message with `[ERROR]` to indicate a problem.
+///
+/// # Examples
+///
+/// ```tml
+/// console::error("Failed to connect to database")
+/// ```
+pub func error(message: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}[ERROR] {message}`)
+}
+
+/// Print a debug message to stdout.
+///
+/// Prefixes the message with `[DEBUG]` for development-time
+/// diagnostic output.
+///
+/// # Examples
+///
+/// ```tml
+/// console::debug("Cache miss for key: users")
+/// ```
+pub func debug(message: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}[DEBUG] {message}`)
+}
+
+/// Print a trace message to stdout.
+///
+/// Prefixes the message with `[TRACE]` for fine-grained tracing
+/// of program execution.
+///
+/// # Examples
+///
+/// ```tml
+/// console::trace("Entering parse_expression()")
+/// ```
+pub func trace(message: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}[TRACE] {message}`)
+}
+
+// ============================================================================
+// Timing
+// ============================================================================
+
+/// Start a named timer.
+///
+/// Records the current monotonic time under the given label.
+/// Call `time_end` with the same label to print the elapsed time.
+/// If a timer with the same label already exists, it is restarted.
+///
+/// # Examples
+///
+/// ```tml
+/// console::time("database_query")
+/// // ... perform query ...
+/// console::time_end("database_query")  // prints: database_query: 127ms
+/// ```
+pub func time(label: Str) {
+    let now_ns: I64 = Instant::now().as_nanos()
+    lowlevel { rt_console_timer_start(label, now_ns) }
+}
+
+/// Stop a named timer and print the elapsed time.
+///
+/// Looks up the timer started with `time(label)`, computes the
+/// elapsed duration, and prints it in milliseconds. If no timer
+/// with the given label exists, prints a warning instead.
+///
+/// # Examples
+///
+/// ```tml
+/// console::time("parse")
+/// // ... do work ...
+/// console::time_end("parse")  // prints: parse: 3ms
+/// ```
+pub func time_end(label: Str) {
+    let now_ns: I64 = Instant::now().as_nanos()
+    let elapsed_ns: I64 = lowlevel { rt_console_timer_end(label, now_ns) }
+    if elapsed_ns < 0 {
+        let prefix = indent_prefix()
+        println(`{prefix}Timer '{label}' does not exist`)
+        return
+    }
+    let elapsed_ms = elapsed_ns / 1000000
+    let prefix = indent_prefix()
+    println(`{prefix}{label}: {elapsed_ms}ms`)
+}
+
+// ============================================================================
+// Counting
+// ============================================================================
+
+/// Increment and print a named counter.
+///
+/// Each call increments the counter for the given label by 1 and
+/// prints the current count. The counter starts at 1 on first call.
+/// Use `count_reset` to reset a counter to 0.
+///
+/// # Examples
+///
+/// ```tml
+/// console::count("requests")  // prints: requests: 1
+/// console::count("requests")  // prints: requests: 2
+/// console::count("requests")  // prints: requests: 3
+/// ```
+pub func count(label: Str) {
+    let n: I64 = lowlevel { rt_console_count_inc(label) }
+    let prefix = indent_prefix()
+    if n < 0 {
+        println(`{prefix}{label}: <counter table full>`)
+        return
+    }
+    println(`{prefix}{label}: {n}`)
+}
+
+/// Reset a named counter to 0.
+///
+/// After calling this, the next `count(label)` will print 1 again.
+/// If the label does not exist, this is a no-op.
+///
+/// # Examples
+///
+/// ```tml
+/// console::count("x")        // prints: x: 1
+/// console::count("x")        // prints: x: 2
+/// console::count_reset("x")
+/// console::count("x")        // prints: x: 1
+/// ```
+pub func count_reset(label: Str) {
+    lowlevel { rt_console_count_reset(label) }
+}
+
+// ============================================================================
+// Grouping
+// ============================================================================
+
+/// Start a new indentation group.
+///
+/// Prints the label and increases the indentation level by one.
+/// All subsequent output from `log`, `warn`, `error`, etc. will
+/// be indented until `group_end` is called.
+///
+/// Groups can be nested up to 6 levels deep (visual indent caps
+/// at 12 spaces).
+///
+/// # Examples
+///
+/// ```tml
+/// console::group("Processing items")
+/// console::log("Item 1: OK")
+/// console::log("Item 2: OK")
+/// console::group_end()
+/// ```
+pub func group(label: Str) {
+    let prefix = indent_prefix()
+    println(`{prefix}{label}`)
+    lowlevel { rt_console_indent_inc() }
+}
+
+/// End the current indentation group.
+///
+/// Decreases the indentation level by one. If the indentation
+/// is already at 0, this is a no-op.
+///
+/// # Examples
+///
+/// ```tml
+/// console::group("Section A")
+/// console::log("inside group")
+/// console::group_end()
+/// console::log("back to normal")
+/// ```
+pub func group_end() {
+    lowlevel { rt_console_indent_dec() }
+}
+
+// ============================================================================
+// Assert
+// ============================================================================
+
+/// Assert a condition, printing a failure message if false.
+///
+/// If `condition` is `true`, does nothing. If `condition` is `false`,
+/// prints `"Assertion failed: <message>"` to stdout.
+///
+/// This does NOT abort the program — it is a diagnostic tool for
+/// development, not a hard assertion. For hard assertions that
+/// panic, use `core::assert`.
+///
+/// # Examples
+///
+/// ```tml
+/// console::assert(x > 0, "x must be positive")
+/// console::assert(list.len() < 100, "list too large")
+/// ```
+pub func assert(condition: Bool, message: Str) {
+    if not condition {
+        let prefix = indent_prefix()
+        println(`{prefix}Assertion failed: {message}`)
+    }
+}
+
+// ============================================================================
+// Table
+// ============================================================================
+
+/// Print a list of strings in a simple table format.
+///
+/// Displays items as a numbered list with index and value columns.
+/// For simple debugging output of list contents.
+///
+/// # Examples
+///
+/// ```tml
+/// let items = List[Str].new()
+/// items.push("Alice")
+/// items.push("Bob")
+/// items.push("Charlie")
+/// console::table(items)
+/// // Output:
+/// // (index) | Value
+/// // --------|------
+/// //       0 | Alice
+/// //       1 | Bob
+/// //       2 | Charlie
+/// ```
+pub func table(items: List[Str]) {
+    let prefix = indent_prefix()
+    println(`{prefix}(index) | Value`)
+    println(`{prefix}--------|------`)
+    let mut i: I64 = 0
+    loop (i < items.len()) {
+        let val = items.get(i)
+        println(`{prefix}      {i} | {val}`)
+        i = i + 1
+    }
+}

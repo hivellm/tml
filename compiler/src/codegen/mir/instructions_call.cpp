@@ -161,8 +161,27 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         "round", "trunc", "fma", "fabs", "minnum", "maxnum", "copysign"};
 
     if (llvm_intrinsics.count(base_name) > 0 && !i.args.empty()) {
-        emit_llvm_intrinsic_call(i, base_name, result_reg, inst);
-        return;
+        // Only treat as LLVM math intrinsic if the first argument is a float/double type.
+        // Functions like std::console::log(Str) have base_name "log" but take ptr args —
+        // those must NOT be routed to @llvm.log.
+        std::string first_arg_type;
+        if (i.args[0].type) {
+            first_arg_type = mir_type_to_llvm(i.args[0].type);
+        }
+        if (first_arg_type.empty()) {
+            auto it = value_types_.find(i.args[0].id);
+            if (it != value_types_.end()) {
+                first_arg_type = it->second;
+            }
+        }
+        bool is_numeric = first_arg_type == "float" || first_arg_type == "double" ||
+                          first_arg_type == "half" || first_arg_type == "fp128" ||
+                          first_arg_type == "i32" || first_arg_type == "i64";
+        if (is_numeric || first_arg_type.empty()) {
+            emit_llvm_intrinsic_call(i, base_name, result_reg, inst);
+            return;
+        }
+        // Fall through to normal function call for non-numeric types (e.g., ptr)
     }
 
     // Handle black_box intrinsics - prevent optimization

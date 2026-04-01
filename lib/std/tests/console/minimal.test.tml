@@ -1,0 +1,9 @@
+// Minimal test - just import and call warn (avoids 'log' name collision)
+use test
+use std::console
+
+@test
+func test_console_warn_only() -> I32 {
+    console::warn("test warning")
+    0
+}

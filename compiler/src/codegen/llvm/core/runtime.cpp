@@ -245,6 +245,15 @@ void LLVMIRGen::init_runtime_catalog() {
     add("rt_log_close_file", "declare dso_local void @rt_log_close_file()");
     add("rt_log_init_from_env", "declare dso_local i32 @rt_log_init_from_env()");
 
+    // --- Console runtime (diagnostics/console.c) ---
+    add("rt_console_timer_start", "declare dso_local i64 @rt_console_timer_start(ptr, i64)");
+    add("rt_console_timer_end", "declare dso_local i64 @rt_console_timer_end(ptr, i64)");
+    add("rt_console_count_inc", "declare dso_local i64 @rt_console_count_inc(ptr)");
+    add("rt_console_count_reset", "declare dso_local i64 @rt_console_count_reset(ptr)");
+    add("rt_console_indent_inc", "declare dso_local i64 @rt_console_indent_inc()");
+    add("rt_console_indent_dec", "declare dso_local i64 @rt_console_indent_dec()");
+    add("rt_console_indent_get", "declare dso_local i64 @rt_console_indent_get()");
+
     // --- Inline IR definitions (multi-line, with dependencies) ---
 
     // str_eq depends on strcmp
@@ -429,6 +438,7 @@ void LLVMIRGen::emit_runtime_decls() {
     // because the shared lib is linked against multiple workers with varying imports.
     bool needs_sync_atomics = options_.library_ir_only;
     bool needs_logging = options_.library_ir_only;
+    bool needs_console = options_.library_ir_only;
     bool needs_collections = options_.library_ir_only;
     bool needs_thread = options_.library_ir_only;
 
@@ -442,6 +452,8 @@ void LLVMIRGen::emit_runtime_decls() {
                 needs_sync_atomics = true;
             if (!needs_logging && path.find("std::log") == 0)
                 needs_logging = true;
+            if (!needs_console && path.find("std::console") == 0)
+                needs_console = true;
             if (!needs_collections && path.find("std::collections") == 0)
                 needs_collections = true;
             if (!needs_thread && path.find("std::thread") == 0)
@@ -554,6 +566,39 @@ void LLVMIRGen::emit_runtime_decls() {
         functions_["rt_log_open_file"] = FuncInfo{"@rt_log_open_file", "i32 (ptr)", "i32", {"ptr"}};
         functions_["rt_log_close_file"] = FuncInfo{"@rt_log_close_file", "void ()", "void", {}};
         functions_["rt_log_init_from_env"] = FuncInfo{"@rt_log_init_from_env", "i32 ()", "i32", {}};
+    }
+
+    if (needs_console) {
+        require_runtime_decl("rt_console_timer_start");
+        require_runtime_decl("rt_console_timer_end");
+        require_runtime_decl("rt_console_count_inc");
+        require_runtime_decl("rt_console_count_reset");
+        require_runtime_decl("rt_console_indent_inc");
+        require_runtime_decl("rt_console_indent_dec");
+        require_runtime_decl("rt_console_indent_get");
+        declared_externals_.insert("rt_console_timer_start");
+        declared_externals_.insert("rt_console_timer_end");
+        declared_externals_.insert("rt_console_count_inc");
+        declared_externals_.insert("rt_console_count_reset");
+        declared_externals_.insert("rt_console_indent_inc");
+        declared_externals_.insert("rt_console_indent_dec");
+        declared_externals_.insert("rt_console_indent_get");
+
+        // Register console functions in functions_ map for lowlevel calls
+        functions_["rt_console_timer_start"] =
+            FuncInfo{"@rt_console_timer_start", "i64 (ptr, i64)", "i64", {"ptr", "i64"}};
+        functions_["rt_console_timer_end"] =
+            FuncInfo{"@rt_console_timer_end", "i64 (ptr, i64)", "i64", {"ptr", "i64"}};
+        functions_["rt_console_count_inc"] =
+            FuncInfo{"@rt_console_count_inc", "i64 (ptr)", "i64", {"ptr"}};
+        functions_["rt_console_count_reset"] =
+            FuncInfo{"@rt_console_count_reset", "i64 (ptr)", "i64", {"ptr"}};
+        functions_["rt_console_indent_inc"] =
+            FuncInfo{"@rt_console_indent_inc", "i64 ()", "i64", {}};
+        functions_["rt_console_indent_dec"] =
+            FuncInfo{"@rt_console_indent_dec", "i64 ()", "i64", {}};
+        functions_["rt_console_indent_get"] =
+            FuncInfo{"@rt_console_indent_get", "i64 ()", "i64", {}};
     }
 
     // Register functions_ map entries for lowlevel calls (lightweight, no IR emitted)

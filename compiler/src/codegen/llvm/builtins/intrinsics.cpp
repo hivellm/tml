@@ -207,6 +207,26 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         return std::nullopt;
     }
 
+    // Guard: Math intrinsics like "log", "exp", "sin" etc. can collide with
+    // user-defined functions (e.g., std::console::log). Only treat as an intrinsic
+    // if the call is to a known intrinsic module or an unqualified name.
+    // Qualified calls from non-intrinsic modules (e.g., "console::log") are skipped.
+    static const std::unordered_set<std::string> math_intrinsic_names = {
+        "sqrt",  "sin",   "cos", "log",  "exp",    "pow",    "floor",   "ceil",
+        "round", "trunc", "fma", "fabs", "minnum", "maxnum", "copysign"};
+    if (math_intrinsic_names.count(base_name) > 0 && fn_name.find("::") != std::string::npos) {
+        // Allow intrinsic paths: unqualified names, core::intrinsics::*,
+        // core::runtime::intrinsics::*, std::math::*, and math::* (common qualified intrinsic call
+        // patterns)
+        bool is_intrinsic_path =
+            (fn_name.find("intrinsics::") != std::string::npos ||
+             fn_name.find("std::math::") != std::string::npos || fn_name.find("math::") == 0);
+        if (!is_intrinsic_path) {
+            // This is a module-qualified call like "console::log" — not a math intrinsic
+            return std::nullopt;
+        }
+    }
+
     // Use base_name for all subsequent intrinsic checks
     const std::string& intrinsic_name = base_name;
 

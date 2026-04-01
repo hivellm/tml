@@ -1,0 +1,66 @@
+// Tests for console grouping, assert, and table functions
+use test
+use std::console
+use std::collections::List
+
+@test
+func test_console_group_basic() -> I32 {
+    console::group("Test Group")
+    console::log("inside group")
+    console::group_end()
+    console::log("back to normal")
+    0
+}
+
+@test
+func test_console_group_nested() -> I32 {
+    console::group("Level 1")
+    console::log("at level 1")
+    console::group("Level 2")
+    console::log("at level 2")
+    console::group_end()
+    console::log("back at level 1")
+    console::group_end()
+    console::log("back at level 0")
+    0
+}
+
+@test
+func test_console_group_end_at_zero() -> I32 {
+    // group_end at indent level 0 should be a no-op
+    console::group_end()
+    console::group_end()
+    console::log("still at level 0")
+    0
+}
+
+@test
+func test_console_assert_true() -> I32 {
+    // assert with true condition should not print anything
+    console::assert(true, "this should not print")
+    0
+}
+
+@test
+func test_console_assert_false() -> I32 {
+    // assert with false condition should print failure message
+    console::assert(false, "expected failure")
+    0
+}
+
+@test
+func test_console_table_basic() -> I32 {
+    let items = List[Str].new()
+    items.push("Alice")
+    items.push("Bob")
+    items.push("Charlie")
+    console::table(items)
+    0
+}
+
+@test
+func test_console_table_empty() -> I32 {
+    let items = List[Str].new()
+    console::table(items)
+    0
+}

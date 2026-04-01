@@ -68,6 +68,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including log runtime: " << log_obj);
             }
 
+            // diagnostics/ - console.c (global state for std::console timers/counters)
+            fs::path console_c = runtime_dir / "diagnostics" / "console.c";
+            if (fs::exists(console_c)) {
+                std::string console_obj = ensure_c_compiled(to_forward_slashes(console_c.string()),
+                                                            deps_cache, clang, verbose);
+                objects.push_back(fs::path(console_obj));
+                TML_LOG_DEBUG("build", "Including console runtime: " << console_obj);
+            }
+
             // string.c removed — all functions migrated to inline LLVM IR (Phase 31)
 
             // Determine if memory tracking is enabled

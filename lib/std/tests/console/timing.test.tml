@@ -1,0 +1,27 @@
+// Tests for console timing functions (time, time_end)
+use test
+use std::console
+
+@test
+func test_console_time_basic() -> I32 {
+    // time and time_end should not crash
+    console::time("test_timer")
+    console::time_end("test_timer")
+    0
+}
+
+@test
+func test_console_time_end_nonexistent() -> I32 {
+    // time_end for a timer that was never started should print warning, not crash
+    console::time_end("nonexistent_timer")
+    0
+}
+
+@test
+func test_console_time_restart() -> I32 {
+    // Starting a timer with the same label should restart it
+    console::time("restart_test")
+    console::time("restart_test")
+    console::time_end("restart_test")
+    0
+}

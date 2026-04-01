@@ -1,6 +1,6 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: Proposed (0%)
+**Status**: In Progress (~8%) — Phase 6 console module done, std::log covers 6.10/6.11
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
@@ -99,15 +99,15 @@
 
 - [ ] 6.1 Implement `Console.enable` / `Console.disable` CDP handlers
 - [ ] 6.2 Implement `Console.clearMessages` CDP handler
-- [ ] 6.3 Create `std::console` TML module with `log`, `error`, `warn`, `debug`, `trace` functions
-- [ ] 6.4 Implement `console.time(label)` / `console.time_end(label)` timing helpers
-- [ ] 6.5 Implement `console.count(label)` / `console.count_reset(label)` call counting
-- [ ] 6.6 Implement `console.group(label)` / `console.group_end()` output grouping
-- [ ] 6.7 Implement `console.table(data)` tabular output
-- [ ] 6.8 Implement `console.assert(condition, message)` conditional logging
+- [x] 6.3 Create `std::console` TML module — log, error, warn, debug, trace + C runtime state
+- [x] 6.4 console.time/time_end — named timers via C runtime (64 slots, nanosecond precision)
+- [x] 6.5 console.count/count_reset — named counters via C runtime (64 slots)
+- [x] 6.6 console.group/group_end — indentation management via C runtime
+- [x] 6.7 console.table — numbered table output for List[Str]
+- [x] 6.8 console.assert — conditional failure message (non-fatal)
 - [ ] 6.9 Forward all console output to CDP `Runtime.consoleAPICalled` event when inspector active
-- [ ] 6.10 Implement log level filtering via `TML_LOG` environment variable
-- [ ] 6.11 Implement `--log-format=json` flag for structured JSON log output
+- [x] 6.10 Log level filtering — already in std::log (set_level, set_filter, init_from_env with TML_LOG)
+- [x] 6.11 Structured JSON log output — already in std::log (set_format(FORMAT_JSON))
 - [ ] 6.12 Verify console output visible in Chrome DevTools Console tab
 
 ## Phase 7: `tml inspect` CLI Tool
