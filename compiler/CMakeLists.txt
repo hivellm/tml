@@ -780,6 +780,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm/core/types_resolve.cpp
     src/codegen/llvm/core/generic.cpp
     src/codegen/llvm/core/generic_instantiate.cpp
+    src/codegen/llvm/core/generic_instantiate_impl.cpp
     src/codegen/llvm/core/runtime.cpp
     src/codegen/llvm/core/runtime_modules.cpp
     src/codegen/llvm/core/runtime_modules_strings.cpp

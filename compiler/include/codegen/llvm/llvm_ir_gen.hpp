@@ -1499,6 +1499,10 @@ private:
                                      const std::vector<types::TypePtr>& type_args) -> std::string;
     void generate_pending_instantiations();
 
+    /// Process all pending impl method instantiations until queue is empty.
+    /// Returns true if any methods were generated (triggers outer loop to continue).
+    bool generate_pending_impl_method_instantiations();
+
     /// Library-only IR path: flush all pending lazy library methods/functions,
     /// emit instantiations, and return the complete library IR.
     /// Called from generate() when options_.library_ir_only is true.
