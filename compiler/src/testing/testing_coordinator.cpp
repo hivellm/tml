@@ -1334,18 +1334,22 @@ TestRunResult run_tests(const TestConfig& config) {
 
         result.covered_functions_count = static_cast<int>(all_covered_functions.size());
 
-        // GUARD: Only write coverage HTML/JSON/JSONL for FULL suite runs.
-        // Partial runs (filtered by --suite or patterns) must NOT overwrite
-        // the coverage report — this is a hard rule from the old system.
-        bool is_partial_run = !config.suite_filters.empty() || !config.patterns.empty();
+        // GUARD: Only write coverage HTML/JSON/JSONL for full or suite runs.
+        // --path and --filter runs are fragments that must NOT generate HTML.
+        // --suite runs are complete module-level runs that CAN generate HTML.
+        bool is_fragment_run = !config.patterns.empty(); // --path or --filter
 
-        if (is_partial_run && CompilerOptions::coverage_output.empty()) {
+        if (is_fragment_run) {
             TML_LOG_INFO(
                 "test",
-                "\033[33m[Coverage] Partial run detected (suite filter or pattern active)\033[0m");
-            TML_LOG_INFO("test", "\033[33m[Coverage] HTML/JSON files will NOT be saved — run full "
-                                 "suite or use --coverage-output=<path>\033[0m");
-        } else if (!CompilerOptions::coverage_output.empty()) {
+                "\033[33m[Coverage] Fragment run detected (--path or --filter active)\033[0m");
+            TML_LOG_INFO("test", "\033[33m[Coverage] HTML/JSON files will NOT be saved — use "
+                                 "--suite for coverage reports\033[0m");
+        } else {
+            // Full suite or --suite run: generate HTML
+            if (CompilerOptions::coverage_output.empty()) {
+                CompilerOptions::coverage_output = "build/coverage/coverage.html";
+            }
             int current_covered = static_cast<int>(all_covered_functions.size());
 
             if (current_covered == 0) {
