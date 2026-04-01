@@ -1,6 +1,6 @@
 # Tasks: Split Large Files (>1500 lines)
 
-**Status**: Complete — 11/20 files split, 9 not mechanically splittable (need refactoring)
+**Status**: Complete — 13/20 files split (including 2 refactored), 7 not splittable
 **Priority**: Medium (improves maintainability, LLM efficiency, compile times)
 **Rule**: Each split is mechanical — move functions to new .cpp, same header, update CMake. No logic changes.
 
