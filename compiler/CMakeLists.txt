@@ -1918,7 +1918,7 @@ if(TML_BUILD_MODULAR)
     # Increase stack size on Windows to handle deep recursion during test execution
     # Default is 1MB, increase to 32MB for running large test suites with coverage.
     if(MSVC)
-        target_link_options(tml PRIVATE /STACK:33554432)
+        target_link_options(tml PRIVATE /STACK:67108864)
     endif()
 else()
     # Monolithic build — unchanged from before
@@ -1927,7 +1927,7 @@ else()
 
     # Increase stack size on Windows to handle deep recursion during test execution
     if(MSVC)
-        target_link_options(tml PRIVATE /STACK:33554432)
+        target_link_options(tml PRIVATE /STACK:67108864)
     endif()
 endif()
 
