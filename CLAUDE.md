@@ -244,6 +244,25 @@ Test failing?
 └─ Unknown error → use explain with the error code
 ```
 
+### Runtime Debug Tools (USE PROACTIVELY)
+
+**When writing or debugging TML code, USE these tools — don't guess at bugs:**
+
+| Scenario | Tool | How |
+|----------|------|-----|
+| New TML module created | `mcp__tml__debug` | `debug(file, check_leaks=true)` — catch memory leaks early |
+| Program crashes/panics | `mcp__tml__debug` | `debug(file, backtrace=true)` — get stack trace before investigating |
+| Wrong output/logic bug | `std::console` | Add `console.log`/`console.time`/`console.assert` to trace values |
+| Performance issue | `mcp__tml__profile` | `profile(file, flamegraph=true)` — ASCII flame graph shows hotspots |
+| Inspector integration | `mcp__tml__inspect` | `inspect(file, port=N)` — start WebSocket inspector for DevTools |
+
+**Rules:**
+
+1. **After implementing any TML module** — run `mcp__tml__debug(file, check_leaks=true)` to verify no leaks
+2. **When a test crashes** — run `mcp__tml__debug(file, backtrace=true)` BEFORE reading source code
+3. **When debugging logic** — add `use std::console` + `console.log(value)` to the TML code, run, observe
+4. **NEVER guess at crash causes** — always get the backtrace first
+
 ### Workflow Rules (data-driven — measured via mcp-call-log.jsonl)
 
 **These rules address observed anti-patterns in LLM tool usage:**
