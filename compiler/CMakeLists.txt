@@ -1692,6 +1692,7 @@ add_library(tml_cli STATIC
     src/cli/explain/lexer_errors.cpp
     src/cli/explain/parser_errors.cpp
     src/cli/explain/type_errors.cpp
+    src/cli/explain/type_errors_ext.cpp
     src/cli/explain/borrow_errors.cpp
     src/cli/explain/codegen_errors.cpp
     src/cli/explain/general_errors.cpp

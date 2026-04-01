@@ -55,6 +55,7 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         const auto& lexer = explain::get_lexer_explanations();
         const auto& parser = explain::get_parser_explanations();
         const auto& type = explain::get_type_explanations();
+        const auto& type2 = explain::get_type_explanations_part2();
         const auto& borrow = explain::get_borrow_explanations();
         const auto& codegen = explain::get_codegen_explanations();
         const auto& general = explain::get_general_explanations();
@@ -70,6 +71,7 @@ static const std::unordered_map<std::string, std::string>& get_all_explanations(
         merged.insert(lexer.begin(), lexer.end());
         merged.insert(parser.begin(), parser.end());
         merged.insert(type.begin(), type.end());
+        merged.insert(type2.begin(), type2.end());
         merged.insert(borrow.begin(), borrow.end());
         merged.insert(codegen.begin(), codegen.end());
         merged.insert(general.begin(), general.end());

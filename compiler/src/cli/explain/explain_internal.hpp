@@ -36,8 +36,11 @@ const std::unordered_map<std::string, std::string>& get_lexer_explanations();
 /// Get explanations for Parser errors (P001-P065)
 const std::unordered_map<std::string, std::string>& get_parser_explanations();
 
-/// Get explanations for Type errors (T001-T054)
+/// Get explanations for Type errors (T001-T049)
 const std::unordered_map<std::string, std::string>& get_type_explanations();
+
+/// Get explanations for Type errors (T050-T085)
+const std::unordered_map<std::string, std::string>& get_type_explanations_part2();
 
 /// Get explanations for Borrow errors (B001-B030)
 const std::unordered_map<std::string, std::string>& get_borrow_explanations();
