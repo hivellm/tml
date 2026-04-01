@@ -13,6 +13,7 @@
  *   tml_inspector_is_active()         — check if server is running
  */
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,9 @@ typedef int socket_t;
 #define sock_close close
 #define sock_error errno
 #endif
+
+// Forward declarations for functions used in CDP handlers before they're defined
+TML_EXPORT int64_t tml_inspector_check_deadlock(void);
 
 // NOTE: Profiler C++ API (tml_profiler_*) is NOT called from here.
 // The inspector CDP handlers return static responses for Profiler.start/stop.
@@ -80,6 +84,35 @@ static pthread_cond_t g_connect_cond = PTHREAD_COND_INITIALIZER;
 #endif
 
 // ============================================================================
+// Thread tracking table (Phase 8.1-8.2)
+// ============================================================================
+
+#define MAX_THREADS 64
+static struct {
+    int64_t thread_id;
+    char name[64];
+    char state[32];          // "running", "blocked", "waiting", "sleeping"
+    int64_t waiting_on_lock; // lock_id this thread is blocked on (0 = none)
+    int in_use;
+} g_threads[MAX_THREADS];
+static int g_thread_count = 0;
+
+// ============================================================================
+// Lock tracking table (Phase 8.3)
+// ============================================================================
+
+#define MAX_LOCKS 128
+static struct {
+    int64_t lock_id;
+    int64_t owner_thread;
+    int64_t wait_count;
+    int64_t contention_count;
+    char name[64];
+    int in_use;
+} g_locks[MAX_LOCKS];
+static int g_lock_count = 0;
+
+// ============================================================================
 // Script tracking table — registered source files for Debugger.scriptParsed
 // ============================================================================
 
@@ -104,6 +137,7 @@ static struct {
     int line;
     int column;
     int active;
+    int64_t thread_id; // 0 = all threads, non-zero = thread-specific (Phase 8.6)
 } g_breakpoints[MAX_BREAKPOINTS];
 static int g_bp_count = 0;
 static volatile int g_breakpoints_active = 1;
@@ -931,6 +965,67 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
     } else if (mlen == 21 && strncmp(m, "Console.clearMessages", 21) == 0) {
         cdp_respond(client, id, NULL);
     }
+    // ---- Concurrency domain (Phase 8) ----
+    // 8.1: list all registered threads with their current state
+    else if (mlen == 21 && strncmp(m, "Concurrency.getThreads", 21) == 0) {
+        char buf[8192];
+        int pos = 0;
+        pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, "{\"threads\":[");
+        int first = 1;
+        for (int i = 0; i < g_thread_count; i++) {
+            if (!g_threads[i].in_use)
+                continue;
+            if (!first)
+                pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, ",");
+            first = 0;
+            char esc_name[128];
+            json_escape(g_threads[i].name, esc_name, sizeof(esc_name));
+            char esc_state[64];
+            json_escape(g_threads[i].state, esc_state, sizeof(esc_state));
+            pos +=
+                snprintf(buf + pos, sizeof(buf) - (size_t)pos,
+                         "{\"threadId\":%" PRId64 ",\"name\":\"%s\",\"state\":\"%s\","
+                         "\"waitingOnLock\":%" PRId64 "}",
+                         g_threads[i].thread_id, esc_name, esc_state, g_threads[i].waiting_on_lock);
+        }
+        pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, "]}");
+        cdp_respond(client, id, buf);
+    }
+    // 8.3: list all registered locks with contention statistics
+    else if (mlen == 19 && strncmp(m, "Concurrency.getLocks", 19) == 0) {
+        char buf[8192];
+        int pos = 0;
+        pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, "{\"locks\":[");
+        int first = 1;
+        for (int i = 0; i < g_lock_count; i++) {
+            if (!g_locks[i].in_use)
+                continue;
+            if (!first)
+                pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, ",");
+            first = 0;
+            char esc_name[128];
+            json_escape(g_locks[i].name, esc_name, sizeof(esc_name));
+            pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos,
+                            "{\"lockId\":%" PRId64 ",\"name\":\"%s\",\"ownerThread\":%" PRId64
+                            ",\"waitCount\":%" PRId64 ",\"contentionCount\":%" PRId64 "}",
+                            g_locks[i].lock_id, esc_name, g_locks[i].owner_thread,
+                            g_locks[i].wait_count, g_locks[i].contention_count);
+        }
+        pos += snprintf(buf + pos, sizeof(buf) - (size_t)pos, "]}");
+        cdp_respond(client, id, buf);
+    }
+    // 8.4-8.5: check for deadlocks
+    else if (mlen == 27 && strncmp(m, "Concurrency.checkDeadlocks", 27) == 0) {
+        int64_t deadlocked = tml_inspector_check_deadlock();
+        char buf[128];
+        if (deadlocked != 0) {
+            snprintf(buf, sizeof(buf), "{\"deadlocked\":true,\"threadId\":%" PRId64 "}",
+                     deadlocked);
+        } else {
+            snprintf(buf, sizeof(buf), "{\"deadlocked\":false,\"threadId\":0}");
+        }
+        cdp_respond(client, id, buf);
+    }
     // ---- Default: empty result for unknown methods ----
     else {
         cdp_respond(client, id, NULL);
@@ -1178,6 +1273,239 @@ TML_EXPORT void tml_inspector_exception(const char* message, const char* file, i
              "\"description\":\"%s\"}}}}",
              escaped_msg, line, escaped_file, escaped_msg);
     ws_send_text(g_client_sock, buf, (int)strlen(buf));
+}
+
+// ============================================================================
+// Concurrency Inspection API (Phase 8.1-8.6)
+// ============================================================================
+
+/**
+ * Register a thread with the inspector for concurrency inspection.
+ * Call this when a new thread starts to make it visible in DevTools.
+ *
+ * @param thread_id  Platform thread identifier (e.g. GetCurrentThreadId on Windows).
+ * @param name       Human-readable thread name, or NULL for a default name.
+ */
+TML_EXPORT void tml_inspector_register_thread(int64_t thread_id, const char* name) {
+    if (g_thread_count >= MAX_THREADS)
+        return;
+    int idx = g_thread_count++;
+    g_threads[idx].thread_id = thread_id;
+    snprintf(g_threads[idx].name, sizeof(g_threads[idx].name), "%s", name ? name : "thread");
+    snprintf(g_threads[idx].state, sizeof(g_threads[idx].state), "running");
+    g_threads[idx].waiting_on_lock = 0;
+    g_threads[idx].in_use = 1;
+}
+
+/**
+ * Update the state of a registered thread.
+ *
+ * @param thread_id  Thread identifier supplied to tml_inspector_register_thread.
+ * @param state      One of "running", "blocked", "waiting", "sleeping", or "unknown".
+ */
+TML_EXPORT void tml_inspector_update_thread_state(int64_t thread_id, const char* state) {
+    for (int i = 0; i < g_thread_count; i++) {
+        if (g_threads[i].thread_id == thread_id && g_threads[i].in_use) {
+            snprintf(g_threads[i].state, sizeof(g_threads[i].state), "%s",
+                     state ? state : "unknown");
+            return;
+        }
+    }
+}
+
+/**
+ * Unregister a thread that has exited.
+ *
+ * @param thread_id  Thread identifier to remove from the tracking table.
+ */
+TML_EXPORT void tml_inspector_unregister_thread(int64_t thread_id) {
+    for (int i = 0; i < g_thread_count; i++) {
+        if (g_threads[i].thread_id == thread_id) {
+            g_threads[i].in_use = 0;
+            return;
+        }
+    }
+}
+
+/**
+ * Register a synchronization lock for contention tracking.
+ *
+ * @param lock_id  Unique identifier for the lock (e.g. address of the mutex object).
+ * @param name     Human-readable name, or NULL for a default name.
+ */
+TML_EXPORT void tml_inspector_register_lock(int64_t lock_id, const char* name) {
+    if (g_lock_count >= MAX_LOCKS)
+        return;
+    int idx = g_lock_count++;
+    g_locks[idx].lock_id = lock_id;
+    snprintf(g_locks[idx].name, sizeof(g_locks[idx].name), "%s", name ? name : "lock");
+    g_locks[idx].owner_thread = 0;
+    g_locks[idx].wait_count = 0;
+    g_locks[idx].contention_count = 0;
+    g_locks[idx].in_use = 1;
+}
+
+/**
+ * Record that a thread has acquired a lock.
+ * Updates the lock's owner and clears the waiting_on_lock field of the thread.
+ *
+ * @param lock_id    Lock identifier supplied to tml_inspector_register_lock.
+ * @param thread_id  Thread that acquired the lock.
+ */
+TML_EXPORT void tml_inspector_lock_acquired(int64_t lock_id, int64_t thread_id) {
+    for (int i = 0; i < g_lock_count; i++) {
+        if (g_locks[i].lock_id == lock_id && g_locks[i].in_use) {
+            g_locks[i].owner_thread = thread_id;
+            break;
+        }
+    }
+    // Clear the thread's waiting_on_lock so it no longer appears blocked
+    for (int i = 0; i < g_thread_count; i++) {
+        if (g_threads[i].thread_id == thread_id && g_threads[i].in_use) {
+            g_threads[i].waiting_on_lock = 0;
+            break;
+        }
+    }
+}
+
+/**
+ * Record that a thread is contending on a lock (trying to acquire but blocked).
+ * Increments the contention counter and marks the thread as blocked.
+ *
+ * @param lock_id    Lock that is contended.
+ * @param thread_id  Thread that is being blocked (0 if unknown).
+ */
+TML_EXPORT void tml_inspector_lock_contention(int64_t lock_id, int64_t thread_id) {
+    for (int i = 0; i < g_lock_count; i++) {
+        if (g_locks[i].lock_id == lock_id && g_locks[i].in_use) {
+            g_locks[i].contention_count++;
+            g_locks[i].wait_count++;
+            break;
+        }
+    }
+    if (thread_id != 0) {
+        for (int i = 0; i < g_thread_count; i++) {
+            if (g_threads[i].thread_id == thread_id && g_threads[i].in_use) {
+                snprintf(g_threads[i].state, sizeof(g_threads[i].state), "blocked");
+                g_threads[i].waiting_on_lock = lock_id;
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * Record that a lock has been released.
+ * Clears the owner and decrements the wait count.
+ *
+ * @param lock_id  Lock that was released.
+ */
+TML_EXPORT void tml_inspector_lock_released(int64_t lock_id) {
+    for (int i = 0; i < g_lock_count; i++) {
+        if (g_locks[i].lock_id == lock_id && g_locks[i].in_use) {
+            g_locks[i].owner_thread = 0;
+            if (g_locks[i].wait_count > 0)
+                g_locks[i].wait_count--;
+            return;
+        }
+    }
+}
+
+/**
+ * Detect deadlocks using simple O(n^2) cycle detection.
+ * A deadlock exists when thread A is blocked on lock L1 held by thread B,
+ * and thread B is blocked on lock L2 held by thread A (or any cycle of length >= 2).
+ *
+ * @return thread_id of the first thread involved in a deadlock cycle, or 0 if none.
+ */
+TML_EXPORT int64_t tml_inspector_check_deadlock(void) {
+    // For each blocked thread, follow the "waiting_on_lock -> owner_thread -> waiting_on_lock"
+    // chain and check if we return to the starting thread — that is a cycle.
+    for (int i = 0; i < g_thread_count; i++) {
+        if (!g_threads[i].in_use)
+            continue;
+        if (g_threads[i].waiting_on_lock == 0)
+            continue;
+
+        // Follow the ownership chain for up to MAX_THREADS steps to detect a cycle.
+        int64_t current_thread = g_threads[i].thread_id;
+        int64_t start_thread = current_thread;
+
+        for (int depth = 0; depth < MAX_THREADS; depth++) {
+            // Find the lock this thread is waiting on
+            int64_t waiting_lock = 0;
+            for (int t = 0; t < g_thread_count; t++) {
+                if (g_threads[t].thread_id == current_thread && g_threads[t].in_use) {
+                    waiting_lock = g_threads[t].waiting_on_lock;
+                    break;
+                }
+            }
+            if (waiting_lock == 0)
+                break; // Thread is not blocked — no cycle through this path
+
+            // Find the owner of that lock
+            int64_t owner = 0;
+            for (int l = 0; l < g_lock_count; l++) {
+                if (g_locks[l].lock_id == waiting_lock && g_locks[l].in_use) {
+                    owner = g_locks[l].owner_thread;
+                    break;
+                }
+            }
+            if (owner == 0)
+                break; // Lock has no owner — no cycle
+
+            if (owner == start_thread) {
+                // Cycle detected: we returned to the starting thread
+                return start_thread;
+            }
+
+            current_thread = owner;
+        }
+    }
+    return 0; // No deadlock detected
+}
+
+/**
+ * Set a thread-specific breakpoint at file:line that only triggers for a
+ * given thread.  Pass thread_id=0 to make it hit all threads (default).
+ *
+ * @param file       Source file path.
+ * @param line       Line number (1-based).
+ * @param thread_id  Thread to restrict this breakpoint to (0 = all threads).
+ * @return bp_id index of the new breakpoint, or -1 if the table is full.
+ */
+TML_EXPORT int64_t tml_inspector_set_thread_breakpoint(const char* file, int line,
+                                                       int64_t thread_id) {
+    if (g_bp_count >= MAX_BREAKPOINTS)
+        return -1;
+
+    int idx = g_bp_count++;
+    snprintf(g_breakpoints[idx].bp_id, sizeof(g_breakpoints[idx].bp_id), "bp-%d", idx);
+    g_breakpoints[idx].line = line;
+    g_breakpoints[idx].column = 0;
+    g_breakpoints[idx].script_idx = 0;
+    g_breakpoints[idx].active = 1;
+    g_breakpoints[idx].thread_id = thread_id;
+
+    // Link to script table entry if the file is registered
+    for (int s = 0; s < g_script_count; s++) {
+        if (g_scripts[s].in_use && file && strstr(g_scripts[s].url, file)) {
+            g_breakpoints[idx].script_idx = s;
+            break;
+        }
+    }
+
+    // Notify the connected client so DevTools shows the breakpoint
+    if (g_active && g_client_connected && g_client_sock != INVALID_SOCK) {
+        char evt[512];
+        snprintf(evt, sizeof(evt),
+                 "{\"breakpointId\":\"%s\",\"locations\":[{\"scriptId\":\"%d\","
+                 "\"lineNumber\":%d,\"columnNumber\":0}]}",
+                 g_breakpoints[idx].bp_id, g_breakpoints[idx].script_idx, line - 1);
+        cdp_event(g_client_sock, "Debugger.breakpointResolved", evt);
+    }
+
+    return idx;
 }
 
 // ============================================================================
