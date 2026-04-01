@@ -172,9 +172,10 @@ void Profiler::enter_function(const char* func_name, const char* file_name, uint
         }
         data_.samples.push_back(sample);
 
-        // Increment hit count
+        // Increment hit count and track line ticks
         if (node_id > 0 && node_id <= data_.nodes.size()) {
             data_.nodes[node_id - 1].hit_count++;
+            data_.nodes[node_id - 1].position_ticks[line]++;
         }
     }
 }
@@ -327,8 +328,18 @@ auto Profiler::to_cpuprofile_json() const -> std::string {
         }
         ss << "]";
 
-        // Position ticks (optional, we include timing info)
-        if (node.total_time_us > 0) {
+        // Position ticks — line-level tick counts for Chrome DevTools flame graphs
+        if (!node.position_ticks.empty()) {
+            ss << ",\n      \"positionTicks\": [";
+            bool first_tick = true;
+            for (const auto& [tick_line, ticks] : node.position_ticks) {
+                if (!first_tick)
+                    ss << ", ";
+                ss << "{\"line\": " << tick_line << ", \"ticks\": " << ticks << "}";
+                first_tick = false;
+            }
+            ss << "]";
+        } else if (node.total_time_us > 0) {
             ss << ",\n      \"positionTicks\": []";
         }
 

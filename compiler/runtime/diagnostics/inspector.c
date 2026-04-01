@@ -402,7 +402,19 @@ static void cdp_handle_message(socket_t client, const char* json, int len) {
     } else if (mlen == 14 && strncmp(m, "Profiler.start", 14) == 0) {
         // Profiler.start: acknowledge — actual profiling via --profile flag
         cdp_respond(client, id, NULL);
+        // Emit consoleProfileStarted event so Chrome DevTools shows profiling as active
+        cdp_event(client, "Profiler.consoleProfileStarted",
+                  "{\"id\":\"1\",\"location\":{\"scriptId\":\"0\",\"lineNumber\":0,"
+                  "\"columnNumber\":0},\"title\":\"TML Profile\"}");
     } else if (mlen == 13 && strncmp(m, "Profiler.stop", 13) == 0) {
+        // Emit consoleProfileFinished event before responding so DevTools finalizes the profile
+        cdp_event(client, "Profiler.consoleProfileFinished",
+                  "{\"id\":\"1\",\"location\":{\"scriptId\":\"0\",\"lineNumber\":0,"
+                  "\"columnNumber\":0},\"title\":\"TML Profile\","
+                  "\"profile\":{\"nodes\":[{\"id\":1,\"callFrame\":"
+                  "{\"functionName\":\"(root)\",\"scriptId\":\"0\",\"url\":\"\","
+                  "\"lineNumber\":0,\"columnNumber\":0},\"hitCount\":0,\"children\":[]}],"
+                  "\"startTime\":0,\"endTime\":0,\"samples\":[],\"timeDeltas\":[]}}");
         // Return a minimal CDP Profile object that Chrome DevTools accepts
         cdp_respond(client, id,
                     "{\"profile\":{\"nodes\":[{\"id\":1,\"callFrame\":"

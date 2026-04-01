@@ -1716,6 +1716,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_lint.cpp
     src/cli/commands/cmd_mcp.cpp
     src/cli/commands/cmd_pkg.cpp
+    src/cli/commands/cmd_profile.cpp
     src/cli/commands/cmd_rlib.cpp
     # Builder modules
     src/cli/builder/build.cpp

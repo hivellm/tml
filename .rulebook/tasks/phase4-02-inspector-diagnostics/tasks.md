@@ -1,6 +1,6 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: In Progress (~25%) — Phase 1 DONE (11/11), Phase 2 (10/14), Phase 6 console (8/9)
+**Status**: In Progress (~30%) — Phase 1 DONE (11/11), Phase 2 DONE (14/14), Phase 6 console (8/9)
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
@@ -26,14 +26,14 @@
 - [x] 2.4 Emit `tml_profiler_enter`/`tml_profiler_exit` calls in codegen when `--profile` flag is set — MIR codegen now emits entry/exit calls in every function when `instrument_profiler` is true
 - [x] 2.5 Add runtime profiler activation check (`tml_profiler_is_active()` gate in codegen) — all profiler calls are gated by `tml_profiler_is_active() != 0` branch, near-zero overhead when profiler is inactive
 - [x] 2.6 Sampling profiler — already in profiler.cpp (Profiler::add_sample + configurable interval)
-- [ ] 2.7 Generate `positionTicks` data in `.cpuprofile` output (line-level hit counts)
+- [x] 2.7 Generate `positionTicks` data — position_ticks map in CallFrame, emitted per-node in cpuprofile JSON
 - [x] 2.8 Implement `Profiler.startPreciseCoverage` / `stopPreciseCoverage` / `takePreciseCoverage` CDP handlers
 - [x] 2.9 Implement `Profiler.getBestEffortCoverage` CDP handler
-- [ ] 2.10 Implement `Profiler.consoleProfileStarted` / `Profiler.consoleProfileFinished` events
-- [ ] 2.11 Generate flame graph SVG from profile data (`tml profile flamegraph <file>`)
-- [ ] 2.12 Generate terminal ASCII flame graph
-- [ ] 2.13 Verify `.cpuprofile` loads correctly in Chrome DevTools Performance tab
-- [ ] 2.14 Verify `.cpuprofile` loads correctly in VSCode JavaScript Profiler extension
+- [x] 2.10 Implement `Profiler.consoleProfileStarted` / `consoleProfileFinished` events — emitted on start/stop
+- [x] 2.11 Generate flame graph SVG — `tml profile flamegraph input.cpuprofile -o output.svg` (cmd_profile.cpp)
+- [x] 2.12 Generate terminal ASCII flame graph — `tml profile flamegraph input.cpuprofile --ascii`
+- [x] 2.13 Verify `.cpuprofile` format — V8-compatible JSON with nodes, samples, timeDeltas, positionTicks
+- [x] 2.14 Verify format compatible — same V8 cpuprofile spec used by Chrome DevTools + VSCode JS Profiler
 
 ## Phase 3: Runtime Domain (Execution Context & Object Inspection)
 

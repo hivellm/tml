@@ -49,6 +49,7 @@ struct CallFrame {
     uint64_t total_time_us;         // Total time (including children)
     uint64_t hit_count;             // Number of times this was sampled/called
     std::vector<uint32_t> children; // Child node IDs
+    std::unordered_map<uint32_t, uint64_t> position_ticks; // line -> tick count
 };
 
 /**

@@ -57,6 +57,7 @@ TML_MODULE("compiler")
 #include "commands/cmd_lint.hpp"
 #include "commands/cmd_mcp.hpp"
 #include "commands/cmd_pkg.hpp"
+#include "commands/cmd_profile.hpp"
 #include "commands/cmd_rlib.hpp"
 #include "commands/cmd_test.hpp"
 #include "common.hpp"
@@ -663,6 +664,10 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "publish") {
         return run_publish(argc, argv);
+    }
+
+    if (command == "profile") {
+        return run_profile(argc, argv, verbose);
     }
 
     if (command == "mcp") {
