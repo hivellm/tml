@@ -1,6 +1,6 @@
 # Tasks: Developer Tooling (LSP + VSCode + Documentation)
 
-**Status**: In Progress — ~65% real progress. LSP has NO implementation in compiler C++.
+**Status**: In Progress — ~80% complete. LSP TypeScript server has all core features. C++ native LSP deferred.
 **Priority**: Medium
 **Consolidates**: `developer-tooling` (original) + `create-vscode-extension` + `implement-tml-doc`
 
@@ -28,7 +28,7 @@
 - [x] 2.9 `tml doc --json` — JSON output via generators
 - [x] 2.10 Implement `tml doc --serve` — Local HTTP server on localhost:8080, serves HTML docs with raw sockets, auto-opens browser
 - [x] 2.11 Implement `tml doc <symbol>` — Terminal lookup with ANSI colors, builds doc index from lib/core + lib/std, top-5 results
-- [ ] 2.12 Create HTML templates, CSS, JS in `compiler/runtime/doc_template/`
+- [x] 2.12 HTML templates/CSS/JS — embedded in generators_html_assets.cpp (875 lines, dark theme, search UI)
 - [x] 2.13 Register doc command in `dispatcher.cpp` (already done)
 - [x] 2.14 Verified: `tml doc option.tml --format=json` produces 27KB valid JSON
 
@@ -56,10 +56,10 @@
 - [x] 4.3 Implement `textDocument/completion` — Keywords, types, snippets (50+)
 - [x] 4.4 Implement `textDocument/hover` — Type info and documentation
 - [x] 4.5 Go-to-definition — definitionProvider:true in server.ts, symbol index
-- [ ] 4.6 Implement `textDocument/references` — Find all references to a symbol
-- [ ] 4.7 Implement `textDocument/rename` — Rename symbol across files
+- [x] 4.6 Implement `textDocument/references` — Whole-word search across open documents, respects includeDeclaration
+- [x] 4.7 Implement `textDocument/rename` — WorkspaceEdit with TextEdit.replace across all open documents
 - [x] 4.8 Implement `textDocument/diagnostic` — Real-time syntax validation
-- [ ] 4.9 Implement `workspace/symbol` — Search symbols across workspace
+- [x] 4.9 Implement `workspace/symbol` — Searches classIndex, interfaceIndex + scans docs for func/type/behavior/enum
 - [ ] 4.10 Integrate with `tml doc` model for hover documentation content
 - [ ] 4.11 Implement incremental document sync for fast response
 - [ ] 4.12 Verify <100ms response time for common operations

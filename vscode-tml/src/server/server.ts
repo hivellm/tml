@@ -26,7 +26,13 @@ import {
     TypeHierarchyItem,
     TypeHierarchyPrepareParams,
     TypeHierarchySupertypesParams,
-    TypeHierarchySubtypesParams
+    TypeHierarchySubtypesParams,
+    ReferenceParams,
+    RenameParams,
+    WorkspaceEdit,
+    TextEdit,
+    SymbolInformation,
+    WorkspaceSymbolParams
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -989,7 +995,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             },
             definitionProvider: true,
             implementationProvider: true,
-            typeHierarchyProvider: true
+            typeHierarchyProvider: true,
+            referencesProvider: true,
+            renameProvider: true,
+            workspaceSymbolProvider: true
         }
     };
 });
@@ -2032,6 +2041,227 @@ connection.languages.typeHierarchy.onSubtypes((params: TypeHierarchySubtypesPara
             }
         }
     }
+
+    return results;
+});
+
+// ============================================================================
+// Find References
+// ============================================================================
+
+// Helper to escape regex special characters
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+connection.onReferences((params: ReferenceParams): Location[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return [];
+    }
+
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const word = getWordAtPosition(text, offset);
+
+    if (!word) {
+        return [];
+    }
+
+    const locations: Location[] = [];
+
+    // Search all open documents for references to this symbol
+    documents.all().forEach(doc => {
+        const docText = doc.getText();
+        const lines = docText.split('\n');
+
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+            // Find all occurrences of the word on this line (whole word match)
+            const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'g');
+            let match;
+            while ((match = regex.exec(line)) !== null) {
+                // Skip if includeDeclaration is false and this IS the declaration
+                if (!params.context.includeDeclaration) {
+                    // Check if this is a declaration (type, func, behavior, let, var)
+                    const beforeWord = line.substring(0, match.index).trimEnd();
+                    if (beforeWord.endsWith('type') || beforeWord.endsWith('func') ||
+                        beforeWord.endsWith('behavior') || beforeWord.endsWith('let') ||
+                        beforeWord.endsWith('var') || beforeWord.endsWith('pub func') ||
+                        beforeWord.endsWith('pub type') || beforeWord.endsWith('pub behavior')) {
+                        continue;
+                    }
+                }
+                locations.push(Location.create(doc.uri, Range.create(
+                    Position.create(lineNum, match.index),
+                    Position.create(lineNum, match.index + word.length)
+                )));
+            }
+        }
+    });
+
+    return locations;
+});
+
+// ============================================================================
+// Rename Symbol
+// ============================================================================
+
+connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return null;
+    }
+
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const word = getWordAtPosition(text, offset);
+
+    if (!word) {
+        return null;
+    }
+
+    const newName = params.newName;
+    const changes: { [uri: string]: TextEdit[] } = {};
+
+    // Find and replace all occurrences across open documents
+    documents.all().forEach(doc => {
+        const docText = doc.getText();
+        const lines = docText.split('\n');
+        const edits: TextEdit[] = [];
+
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+            const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, 'g');
+            let match;
+            while ((match = regex.exec(line)) !== null) {
+                edits.push(TextEdit.replace(
+                    Range.create(
+                        Position.create(lineNum, match.index),
+                        Position.create(lineNum, match.index + word.length)
+                    ),
+                    newName
+                ));
+            }
+        }
+
+        if (edits.length > 0) {
+            changes[doc.uri] = edits;
+        }
+    });
+
+    return { changes };
+});
+
+// ============================================================================
+// Workspace Symbol Search
+// ============================================================================
+
+connection.onWorkspaceSymbol((params: WorkspaceSymbolParams): SymbolInformation[] => {
+    const query = params.query.toLowerCase();
+    const results: SymbolInformation[] = [];
+
+    // Search indexed classes
+    for (const [name, info] of classIndex) {
+        if (name.toLowerCase().includes(query)) {
+            results.push({
+                name,
+                kind: SymbolKind.Class,
+                location: Location.create(info.uri, Range.create(
+                    Position.create(info.range.start.line, info.range.start.character),
+                    Position.create(info.range.end.line, info.range.end.character)
+                ))
+            });
+        }
+        // Also search methods within classes
+        for (const method of info.methods) {
+            if (method.name.toLowerCase().includes(query)) {
+                results.push({
+                    name: `${name}.${method.name}`,
+                    kind: SymbolKind.Method,
+                    location: Location.create(info.uri, Range.create(
+                        Position.create(method.line, 0),
+                        Position.create(method.line, 0)
+                    )),
+                    containerName: name
+                });
+            }
+        }
+    }
+
+    // Search indexed interfaces (behaviors)
+    for (const [name, info] of interfaceIndex) {
+        if (name.toLowerCase().includes(query)) {
+            results.push({
+                name,
+                kind: SymbolKind.Interface,
+                location: Location.create(info.uri, Range.create(
+                    Position.create(info.range.start.line, info.range.start.character),
+                    Position.create(info.range.end.line, info.range.end.character)
+                ))
+            });
+        }
+    }
+
+    // Also search all open documents for func/type/behavior/enum declarations
+    documents.all().forEach(doc => {
+        const lines = doc.getText().split('\n');
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+
+            // Match function declarations
+            const funcMatch = line.match(/^\s*(?:pub\s+)?func\s+(\w+)/);
+            if (funcMatch && funcMatch[1].toLowerCase().includes(query)) {
+                results.push({
+                    name: funcMatch[1],
+                    kind: SymbolKind.Function,
+                    location: Location.create(doc.uri, Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, line.length)
+                    ))
+                });
+            }
+
+            // Match type declarations
+            const typeMatch = line.match(/^\s*(?:pub\s+)?type\s+(\w+)/);
+            if (typeMatch && typeMatch[1].toLowerCase().includes(query) && !classIndex.has(typeMatch[1])) {
+                results.push({
+                    name: typeMatch[1],
+                    kind: SymbolKind.Struct,
+                    location: Location.create(doc.uri, Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, line.length)
+                    ))
+                });
+            }
+
+            // Match behavior declarations
+            const behaviorMatch = line.match(/^\s*(?:pub\s+)?behavior\s+(\w+)/);
+            if (behaviorMatch && behaviorMatch[1].toLowerCase().includes(query) && !interfaceIndex.has(behaviorMatch[1])) {
+                results.push({
+                    name: behaviorMatch[1],
+                    kind: SymbolKind.Interface,
+                    location: Location.create(doc.uri, Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, line.length)
+                    ))
+                });
+            }
+
+            // Match enum declarations
+            const enumMatch = line.match(/^\s*(?:pub\s+)?enum\s+(\w+)/);
+            if (enumMatch && enumMatch[1].toLowerCase().includes(query)) {
+                results.push({
+                    name: enumMatch[1],
+                    kind: SymbolKind.Enum,
+                    location: Location.create(doc.uri, Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, line.length)
+                    ))
+                });
+            }
+        }
+    });
 
     return results;
 });
