@@ -287,9 +287,14 @@ set(TML_RUNTIME_SOURCES
     # core/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_cpuid.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_tracy.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_utf8.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_random.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/core/essential_ffi.c
     # memory/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/mem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/pool.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/memory/str_free.c
     # text/
     # string.c deleted (Phase 31) — all functions migrated to inline LLVM IR or pure TML
     # text.c deleted (Phase 30) — Text migrated to pure TML (Phase 22)

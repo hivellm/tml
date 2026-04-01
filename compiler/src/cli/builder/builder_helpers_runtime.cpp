@@ -98,6 +98,69 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 }
             }
 
+            // core/ - essential_cpuid.c (CPUID/XGETBV detection)
+            fs::path cpuid_c = runtime_dir / "core" / "essential_cpuid.c";
+            if (fs::exists(cpuid_c)) {
+                std::string cpuid_obj = ensure_c_compiled(to_forward_slashes(cpuid_c.string()),
+                                                          deps_cache, clang, verbose);
+                objects.push_back(fs::path(cpuid_obj));
+                TML_LOG_DEBUG("build", "Including cpuid runtime: " << cpuid_obj);
+            }
+
+            // core/ - essential_tracy.c (Tracy profiler FFI bindings)
+            fs::path tracy_c = runtime_dir / "core" / "essential_tracy.c";
+            if (fs::exists(tracy_c)) {
+                std::string tracy_obj = ensure_c_compiled(to_forward_slashes(tracy_c.string()),
+                                                          deps_cache, clang, verbose);
+                objects.push_back(fs::path(tracy_obj));
+                TML_LOG_DEBUG("build", "Including tracy runtime: " << tracy_obj);
+            }
+
+            // core/ - essential_utf8.c (UTF-8 byte-to-string encoding)
+            fs::path utf8_c = runtime_dir / "core" / "essential_utf8.c";
+            if (fs::exists(utf8_c)) {
+                std::string utf8_obj = ensure_c_compiled(to_forward_slashes(utf8_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(utf8_obj));
+                TML_LOG_DEBUG("build", "Including utf8 runtime: " << utf8_obj);
+            }
+
+            // core/ - essential_random.c (random seed generation)
+            fs::path random_c = runtime_dir / "core" / "essential_random.c";
+            if (fs::exists(random_c)) {
+                std::string random_obj = ensure_c_compiled(to_forward_slashes(random_c.string()),
+                                                           deps_cache, clang, verbose);
+                objects.push_back(fs::path(random_obj));
+                TML_LOG_DEBUG("build", "Including random runtime: " << random_obj);
+            }
+
+            // core/ - essential_ffi.c (FFI utility functions: tml_str_from_cstr, tml_free)
+            fs::path ffi_c = runtime_dir / "core" / "essential_ffi.c";
+            if (fs::exists(ffi_c)) {
+                std::string ffi_obj = ensure_c_compiled(to_forward_slashes(ffi_c.string()),
+                                                        deps_cache, clang, verbose);
+                objects.push_back(fs::path(ffi_obj));
+                TML_LOG_DEBUG("build", "Including ffi runtime: " << ffi_obj);
+            }
+
+            // memory/ - pool.c (memory pool allocator)
+            fs::path pool_c = runtime_dir / "memory" / "pool.c";
+            if (fs::exists(pool_c)) {
+                std::string pool_obj = ensure_c_compiled(to_forward_slashes(pool_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(pool_obj));
+                TML_LOG_DEBUG("build", "Including pool runtime: " << pool_obj);
+            }
+
+            // memory/ - str_free.c (safe string deallocation with PE image range check)
+            fs::path str_free_c = runtime_dir / "memory" / "str_free.c";
+            if (fs::exists(str_free_c)) {
+                std::string str_free_obj = ensure_c_compiled(
+                    to_forward_slashes(str_free_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(str_free_obj));
+                TML_LOG_DEBUG("build", "Including str_free runtime: " << str_free_obj);
+            }
+
             // time/ - time.c
             fs::path time_c = runtime_dir / "time" / "time.c";
             if (fs::exists(time_c)) {
