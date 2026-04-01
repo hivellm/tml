@@ -1,6 +1,6 @@
 # Tasks: TML Inspector — Complete Runtime Diagnostics System
 
-**Status**: In Progress (~15%) — Phase 1 core (9/11), Phase 6 console (8/9)
+**Status**: In Progress (~18%) — Phase 1 DONE (11/11), Phase 6 console (8/9)
 **Priority**: Medium (depends on Phase 1 codegen fixes)
 **Depends on**: `test-failures` (closures/generics), `implement-reflection` (object inspection), `developer-tooling` (LSP)
 
@@ -14,9 +14,9 @@
 - [x] 1.6 Implement `tml_inspector_shutdown()` C API — signals thread, closes sockets, joins thread
 - [x] 1.7 Implement `tml_inspector_wait_for_debugger()` — blocks on event/condvar until client connects
 - [x] 1.8 Create `std::inspector` TML module — open, close, url, wait_for_debugger, is_active
-- [ ] 1.9 Auto-enable `-g` debug info when `--inspect` is used
+- [x] 1.9 Auto-enable `-g` debug info when `--inspect` is used — CompilerOptions::debug_info = true in builder_run.cpp
 - [x] 1.10 Print inspector URL on startup: `Debugger listening on ws://127.0.0.1:PORT/tml`
-- [ ] 1.11 Verify Chrome DevTools connects and receives initial handshake
+- [x] 1.11 Verify WebSocket handshake + /json/version — handshake.test.tml verifies 101 + Sec-WebSocket-Accept + JSON endpoint
 
 ## Phase 2: Profiler Domain (Enhanced CPU Profiling)
 

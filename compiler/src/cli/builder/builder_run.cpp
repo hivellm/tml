@@ -638,6 +638,15 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
         TML_LOG_INFO("build", "For manual profiling, use std::profiler module in your code.");
     }
 
+    if (opts.inspect) {
+        // Set global inspector flags — the runtime init code reads these via env vars
+        CompilerOptions::inspect = true;
+        CompilerOptions::inspect_brk = opts.inspect_brk;
+        CompilerOptions::inspect_port = opts.inspect_port;
+        // Auto-enable debug info for source mapping in DevTools
+        CompilerOptions::debug_info = true;
+    }
+
     std::string pipeline_dir;
     if (opts.emit_pipeline) {
         pipeline_dir = opts.pipeline_output_dir.empty()

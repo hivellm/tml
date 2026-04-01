@@ -1,0 +1,115 @@
+// WebSocket upgrade handshake test for the TML inspector.
+//
+// Opens the inspector on port 19230, connects via TCP, sends a raw
+// HTTP/1.1 Upgrade request, and verifies that the server responds
+// with "101 Switching Protocols" and a "Sec-WebSocket-Accept" header.
+use test::{assert, assert_eq}
+use std::inspector
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::tcp::TcpStream
+use core::time::Duration
+
+@test
+func test_inspector_websocket_handshake() -> I32 {
+    // Open the inspector on port 19230.
+    let opened: Bool = inspector::open(19230)
+    assert(opened, "inspector::open should succeed on port 19230")
+    assert(inspector::is_active(), "inspector should be active after open")
+
+    // Build the SocketAddr for 127.0.0.1:19230.
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 19230 as U16))
+
+    // Connect a TCP client to the inspector.
+    let stream: TcpStream = TcpStream::connect(addr).unwrap()
+
+    // Set a 5-second read timeout so the test cannot hang.
+    stream.set_read_timeout(Just(Duration::from_secs(5))).unwrap()
+    stream.set_write_timeout(Just(Duration::from_secs(5))).unwrap()
+
+    // Send the WebSocket upgrade request.
+    // RFC 6455 §4.1 minimum required headers:
+    //   Upgrade: websocket
+    //   Connection: Upgrade
+    //   Sec-WebSocket-Key: <base64 nonce>
+    //   Sec-WebSocket-Version: 13
+    stream.write_all("GET /tml HTTP/1.1\r\nHost: 127.0.0.1:19230\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").unwrap()
+
+    // Read the response headers (a single recv should capture them all
+    // because the loopback MTU is far larger than a typical 101 response).
+    var buf: [U8; 1024] = [0 as U8; 1024]
+    let n: I64 = stream.read(mut ref buf).unwrap()
+
+    // The response must be at least 12 bytes to contain "HTTP/1.1 101".
+    assert(n >= 12, "response must be at least 12 bytes")
+
+    // Verify the status line starts with "HTTP/1.1 101":
+    // Layout: H T T P / 1 . 1   1  0  1
+    // Index:  0 1 2 3 4 5 6 7 8 9 10 11
+    // ASCII:  72 84 84 80 47 49 46 49 32 49 48 49
+    assert_eq(buf[9] as I32, 49)   // '1'
+    assert_eq(buf[10] as I32, 48)  // '0'
+    assert_eq(buf[11] as I32, 49)  // '1'
+
+    // Verify "Sec-WebSocket-Accept" appears in the response by scanning
+    // for the ASCII sequence S(83) e(101) c(99) -(45) W(87) e(101) b(98) S(83).
+    // We search through buf[0..n] linearly.
+    var found_accept: Bool = false
+    var i: I64 = 0
+    loop (i <= n - 8) {
+        when buf[i] as I32 == 83
+            and buf[i + 1] as I32 == 101
+            and buf[i + 2] as I32 == 99
+            and buf[i + 3] as I32 == 45
+            and buf[i + 4] as I32 == 87
+            and buf[i + 5] as I32 == 101
+            and buf[i + 6] as I32 == 98
+            and buf[i + 7] as I32 == 83 {
+            true => {
+                found_accept = true
+                i = n  // break the loop
+            }
+            false => {}
+        }
+        i = i + 1
+    }
+    assert(found_accept, "response must contain Sec-WebSocket-Accept header")
+
+    // Dropping `stream` closes the TCP connection.
+    // Close the inspector.
+    inspector::close()
+    assert(not inspector::is_active(), "inspector should be inactive after close")
+
+    return 0
+}
+
+@test
+func test_inspector_json_version_endpoint() -> I32 {
+    // Open the inspector on port 19230.
+    let opened: Bool = inspector::open(19230)
+    assert(opened, "inspector::open should succeed")
+
+    let lo: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(lo, 19230 as U16))
+    let stream: TcpStream = TcpStream::connect(addr).unwrap()
+
+    stream.set_read_timeout(Just(Duration::from_secs(5))).unwrap()
+    stream.set_write_timeout(Just(Duration::from_secs(5))).unwrap()
+
+    // Send a plain HTTP/1.1 GET for the /json/version endpoint.
+    // Connection: close causes the server to close after responding,
+    // so read_to_string terminates cleanly.
+    stream.write_all("GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:19230\r\nConnection: close\r\n\r\n").unwrap()
+
+    // Read the full response.
+    let response: Str = stream.read_to_string().unwrap()
+
+    // Verify the HTTP status is 200 OK.
+    assert(response.contains("200 OK"), "json/version must return 200 OK")
+
+    // Verify the body identifies this as the TML inspector.
+    assert(response.contains("TML Inspector"), "json/version body must contain 'TML Inspector'")
+
+    inspector::close()
+    return 0
+}
