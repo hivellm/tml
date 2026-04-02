@@ -1,5 +1,11 @@
 # TML Library Engineer Memory
 
+## std::console Module (2026-04-01) — COMPLETE
+- `lib/std/src/console.tml` — log, warn, error, debug, trace, time/time_end, count/count_reset, group/group_end, assert, table
+- `compiler/runtime/diagnostics/console.c` — global state for timers, counters, indent level
+- 5 test files all passing in `lib/std/tests/console/`
+- [Intrinsic name collision fix](codegen_intrinsic_name_collision.md) — `log` collided with `@llvm.log`
+
 ## HTTP/2 Module (Sprint 8+9, 2026-03-19) — COMPLETE
 See [h2_module_notes.md](h2_module_notes.md)
 - `lib/std/src/http/h2/` — frame.tml, hpack.tml, stream.tml, connection.tml, server.tml
