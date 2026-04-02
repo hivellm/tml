@@ -1,0 +1,189 @@
+// Tests for std::db::orm — field, query_set, relation, sql_builder, mapper
+use test::{assert, assert_eq}
+use std::db::orm::field::{FieldType, FieldMapping}
+use std::db::orm::query_set::QuerySet
+use std::db::orm::relation::{Relation, RelationType}
+use std::db::orm::sql_builder
+use std::db::orm::mapper
+
+@test
+func test_field_type_sql() -> I32 {
+    assert_eq(FieldType::Integer.to_sql(), "INTEGER", "integer")
+    assert_eq(FieldType::Text.to_sql(), "TEXT", "text")
+    assert_eq(FieldType::Real.to_sql(), "REAL", "real")
+    return 0
+}
+
+@test
+func test_field_type_sql_all() -> I32 {
+    assert_eq(FieldType::Blob.to_sql(), "BLOB", "blob")
+    assert_eq(FieldType::Boolean.to_sql(), "INTEGER", "boolean as integer")
+    return 0
+}
+
+@test
+func test_field_mapping_basic() -> I32 {
+    let f = FieldMapping::new("name", "name", FieldType::Text)
+    assert_eq(f.field_name, "name", "field name")
+    assert_eq(f.column_name, "name", "column name")
+    assert(not f.primary_key, "not pk")
+    assert(not f.nullable, "not nullable by default")
+    return 0
+}
+
+@test
+func test_field_mapping_pk() -> I32 {
+    let f = FieldMapping::pk("id", "id")
+    assert(f.primary_key, "is pk")
+    assert_eq(f.field_name, "id", "field name")
+    assert_eq(f.column_name, "id", "column name")
+    return 0
+}
+
+@test
+func test_query_set_simple() -> I32 {
+    let qs = QuerySet::new("users")
+    assert_eq(qs.to_sql(), "SELECT * FROM users", "simple select all")
+    return 0
+}
+
+@test
+func test_query_set_filter() -> I32 {
+    let qs = QuerySet::new("users").filter("age > 18")
+    assert_eq(qs.to_sql(), "SELECT * FROM users WHERE age > 18", "filter")
+    return 0
+}
+
+@test
+func test_query_set_chain() -> I32 {
+    let qs = QuerySet::new("users").filter("active = 1").order_by("name ASC").limit(10)
+    let sql = qs.to_sql()
+    assert(sql.contains("WHERE active = 1"), "has where")
+    assert(sql.contains("ORDER BY name ASC"), "has order")
+    assert(sql.contains("LIMIT 10"), "has limit")
+    return 0
+}
+
+@test
+func test_query_set_multi_filter() -> I32 {
+    let qs = QuerySet::new("orders").filter("status = 'paid'").filter("total > 100")
+    let sql = qs.to_sql()
+    assert(sql.contains("WHERE status = 'paid' AND total > 100"), "chained AND filters")
+    return 0
+}
+
+@test
+func test_query_set_offset() -> I32 {
+    let qs = QuerySet::new("products").limit(20).offset(40)
+    let sql = qs.to_sql()
+    assert(sql.contains("LIMIT 20"), "has limit")
+    assert(sql.contains("OFFSET 40"), "has offset")
+    return 0
+}
+
+@test
+func test_query_set_count_sql() -> I32 {
+    let qs = QuerySet::new("users").filter("status = 'active'")
+    assert_eq(qs.count_sql(), "SELECT COUNT(*) FROM users WHERE status = 'active'", "count with where")
+    return 0
+}
+
+@test
+func test_query_set_count_no_filter() -> I32 {
+    let qs = QuerySet::new("items")
+    assert_eq(qs.count_sql(), "SELECT COUNT(*) FROM items", "count without filter")
+    return 0
+}
+
+@test
+func test_relation_has_many() -> I32 {
+    let r = Relation::has_many("orders", "orders", "user_id")
+    let sql = r.join_sql("users")
+    assert(sql.contains("LEFT JOIN orders"), "has join keyword")
+    assert(sql.contains("users.id = orders.user_id"), "has join condition")
+    return 0
+}
+
+@test
+func test_relation_belongs_to() -> I32 {
+    let r = Relation::belongs_to("author", "users", "author_id")
+    let sql = r.join_sql("posts")
+    assert(sql.contains("LEFT JOIN users"), "has join keyword")
+    assert(sql.contains("posts.author_id"), "has local FK")
+    return 0
+}
+
+@test
+func test_relation_has_one() -> I32 {
+    let r = Relation::has_one("profile", "profiles", "user_id")
+    assert_eq(r.name, "profile", "relation name")
+    assert_eq(r.foreign_table, "profiles", "foreign table")
+    assert_eq(r.foreign_key, "user_id", "foreign key")
+    assert_eq(r.local_key, "id", "local key default")
+    return 0
+}
+
+@test
+func test_relation_type_strings() -> I32 {
+    assert_eq(RelationType::HasOne.to_string(), "has_one", "has_one")
+    assert_eq(RelationType::HasMany.to_string(), "has_many", "has_many")
+    assert_eq(RelationType::BelongsTo.to_string(), "belongs_to", "belongs_to")
+    assert_eq(RelationType::ManyToMany.to_string(), "many_to_many", "many_to_many")
+    return 0
+}
+
+@test
+func test_sql_builder_find_all() -> I32 {
+    assert_eq(sql_builder::find_all_sql("products"), "SELECT * FROM products", "find all")
+    return 0
+}
+
+@test
+func test_sql_builder_find_by_id() -> I32 {
+    let sql = sql_builder::find_by_id_sql("users", "id", 42)
+    assert(sql.contains("SELECT * FROM users"), "has select")
+    assert(sql.contains("WHERE id = 42"), "has pk filter")
+    return 0
+}
+
+@test
+func test_sql_builder_insert() -> I32 {
+    let sql = sql_builder::insert_sql("users", "name, email", "'alice', 'alice@x.com'")
+    assert(sql.contains("INSERT INTO users"), "has insert")
+    assert(sql.contains("(name, email)"), "has columns")
+    assert(sql.contains("VALUES"), "has values")
+    return 0
+}
+
+@test
+func test_sql_builder_update() -> I32 {
+    let sql = sql_builder::update_sql("users", "name='bob'", "id", 7)
+    assert(sql.contains("UPDATE users SET name='bob'"), "has update set")
+    assert(sql.contains("WHERE id = 7"), "has pk filter")
+    return 0
+}
+
+@test
+func test_sql_builder_delete() -> I32 {
+    let sql = sql_builder::delete_sql("sessions", "id", 99)
+    assert_eq(sql, "DELETE FROM sessions WHERE id = 99", "delete by id")
+    return 0
+}
+
+@test
+func test_sql_builder_count() -> I32 {
+    assert_eq(sql_builder::count_sql("orders"), "SELECT COUNT(*) FROM orders", "count all")
+    return 0
+}
+
+@test
+func test_quote_str() -> I32 {
+    assert_eq(mapper::quote_str("hello"), "'hello'", "basic quoted string")
+    return 0
+}
+
+@test
+func test_quote_str_empty() -> I32 {
+    assert_eq(mapper::quote_str(""), "''", "empty string quoted")
+    return 0
+}

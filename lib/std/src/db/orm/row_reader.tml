@@ -1,0 +1,26 @@
+//! SQLite row reading helpers for ORM mapping.
+//!
+//! These functions wrap `SqliteStatement` column accessors with named helpers
+//! for use in `from_row` implementations of the [`Model`] behavior.
+
+use std::db::sqlite::statement::SqliteStatement
+
+/// Reads an I64 column at the given 0-based index from the current row.
+pub func read_i64(stmt: ref SqliteStatement, idx: I32) -> I64 {
+    return stmt.column_i64(idx)
+}
+
+/// Reads a Str column at the given 0-based index from the current row.
+pub func read_str(stmt: ref SqliteStatement, idx: I32) -> Str {
+    return stmt.column_str(idx)
+}
+
+/// Reads an F64 column at the given 0-based index from the current row.
+pub func read_f64(stmt: ref SqliteStatement, idx: I32) -> F64 {
+    return stmt.column_f64(idx)
+}
+
+/// Reads a Bool (stored as INTEGER 0/1) from the current row.
+pub func read_bool(stmt: ref SqliteStatement, idx: I32) -> Bool {
+    return stmt.column_i64(idx) != 0
+}

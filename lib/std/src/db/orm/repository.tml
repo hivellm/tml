@@ -1,0 +1,52 @@
+//! Repository — executes CRUD operations against a live SQLite connection.
+//!
+//! For pure SQL string construction without a connection, see `sql_builder`.
+
+use std::db::sqlite::connection::SqliteConnection
+use std::db::sqlite::statement::SqliteStatement
+use std::db::error::{DbError, DbErrorKind}
+use std::db::orm::sql_builder
+
+/// Inserts a row into `table`.
+///
+/// `columns` — comma-separated column list (from Model::columns)
+/// `values`  — comma-separated value list  (from Model::to_values)
+///
+/// Returns the number of rows affected on success.
+pub func insert(conn: ref SqliteConnection, table: Str, columns: Str, values: Str) -> Outcome[I64, DbError] {
+    let sql = sql_builder::insert_sql(table, columns, values)
+    return conn.execute(sql)
+}
+
+/// Updates rows matching `pk_col = pk_val` using a pre-built SET clause.
+///
+/// `set_clause` — comma-separated `col=value` assignments (from Model::to_set_clause)
+pub func update(conn: ref SqliteConnection, table: Str, set_clause: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+    let sql = sql_builder::update_sql(table, set_clause, pk_col, pk_val)
+    return conn.execute(sql)
+}
+
+/// Deletes the row with `pk_col = pk_val` from `table`.
+pub func delete(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+    let sql = sql_builder::delete_sql(table, pk_col, pk_val)
+    return conn.execute(sql)
+}
+
+/// Counts all rows in `table`.
+pub func count(conn: ref SqliteConnection, table: Str) -> Outcome[I64, DbError] {
+    let sql = sql_builder::count_sql(table)
+    let stmt_result = conn.prepare(sql)
+    when stmt_result {
+        Ok(raw_stmt) => {
+            let mut stmt = SqliteStatement::new(raw_stmt)
+            if stmt.step() {
+                let n = stmt.column_i64(0)
+                stmt.finalize()
+                return Ok(n)
+            }
+            stmt.finalize()
+            return Ok(0)
+        },
+        Err(e) => return Err(e),
+    }
+}

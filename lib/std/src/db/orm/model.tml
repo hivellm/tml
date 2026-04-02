@@ -1,0 +1,23 @@
+//! ORM model behavior — defines the contract for database-mapped types.
+
+/// A database-mapped model. Types implementing this can be persisted
+/// to and loaded from database tables.
+pub behavior Model {
+    /// Returns the table name for this model.
+    func table_name(this) -> Str
+
+    /// Returns comma-separated column names (excluding auto-increment PK).
+    func columns(this) -> Str
+
+    /// Returns the primary key column name.
+    func primary_key_name(this) -> Str
+
+    /// Returns the primary key value as I64.
+    func primary_key_value(this) -> I64
+
+    /// Returns comma-separated values for INSERT (matching columns() order).
+    func to_values(this) -> Str
+
+    /// Returns comma-separated SET assignments for UPDATE (col='val' pairs).
+    func to_set_clause(this) -> Str
+}

@@ -1,0 +1,53 @@
+//! ORM field type mapping.
+
+/// SQL field types for schema generation.
+pub type FieldType {
+    Integer,
+    Text,
+    Real,
+    Blob,
+    Boolean
+}
+
+impl FieldType {
+    pub func to_sql(this) -> Str {
+        when this {
+            FieldType::Integer => "INTEGER",
+            FieldType::Text    => "TEXT",
+            FieldType::Real    => "REAL",
+            FieldType::Blob    => "BLOB",
+            FieldType::Boolean => "INTEGER",
+        }
+    }
+}
+
+/// A field-to-column mapping entry.
+pub type FieldMapping {
+    field_name: Str,
+    column_name: Str,
+    field_type: FieldType,
+    nullable: Bool,
+    primary_key: Bool,
+}
+
+impl FieldMapping {
+    pub func new(field: Str, column: Str, ftype: FieldType) -> FieldMapping {
+        return FieldMapping {
+            field_name: field,
+            column_name: column,
+            field_type: ftype,
+            nullable: false,
+            primary_key: false,
+        }
+    }
+
+    pub func pk(field: Str, column: Str) -> FieldMapping {
+        return FieldMapping {
+            field_name: field,
+            column_name: column,
+            field_type: FieldType::Integer,
+            nullable: false,
+            primary_key: true,
+        }
+    }
+}

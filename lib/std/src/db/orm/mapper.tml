@@ -1,0 +1,11 @@
+//! ORM row mapping utilities.
+//!
+//! Contains pure SQL helper utilities that have no dependency on a specific
+//! database driver. For SQLite-specific row reading helpers see `row_reader.tml`.
+
+/// Quotes a string value for SQL (wraps in single quotes).
+///
+/// Note: for parameterised queries prefer bind_str() on a PreparedStatement.
+pub func quote_str(value: Str) -> Str {
+    return "'" + value + "'"
+}

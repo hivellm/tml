@@ -1,0 +1,22 @@
+//! ORM (Object-Relational Mapping) layer.
+//!
+//! Provides a lightweight ORM over the database driver layer.
+//!
+//! # Modules
+//!
+//! | Module       | Contents                                                  |
+//! |--------------|-----------------------------------------------------------|
+//! | `model`      | [`Model`] behavior — contract for database-mapped types   |
+//! | `field`      | [`FieldType`], [`FieldMapping`] — column type mapping     |
+//! | `mapper`     | Row-reading helpers (`read_i64`, `read_str`, `quote_str`) |
+//! | `repository` | CRUD helpers (`insert`, `update`, `delete`, `count`)      |
+//! | `query_set`  | [`QuerySet`] — fluent query builder                       |
+//! | `relation`   | [`Relation`], [`RelationType`] — relationship definitions  |
+pub mod model
+pub mod field
+pub mod mapper
+pub mod row_reader
+pub mod sql_builder
+pub mod repository
+pub mod query_set
+pub mod relation

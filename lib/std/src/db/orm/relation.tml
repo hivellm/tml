@@ -1,0 +1,69 @@
+//! ORM relationship types.
+
+/// Relationship types between models.
+pub type RelationType {
+    HasOne,
+    HasMany,
+    BelongsTo,
+    ManyToMany,
+}
+
+impl RelationType {
+    pub func to_string(this) -> Str {
+        when this {
+            RelationType::HasOne     => "has_one",
+            RelationType::HasMany    => "has_many",
+            RelationType::BelongsTo  => "belongs_to",
+            RelationType::ManyToMany => "many_to_many",
+        }
+    }
+}
+
+/// A relationship definition between two tables.
+pub type Relation {
+    name: Str,
+    rel_type: RelationType,
+    foreign_table: Str,
+    foreign_key: Str,
+    local_key: Str,
+}
+
+impl Relation {
+    /// Creates a new relationship definition.
+    pub func new(name: Str, rel_type: RelationType, foreign_table: Str, foreign_key: Str, local_key: Str) -> Relation {
+        return Relation {
+            name: name,
+            rel_type: rel_type,
+            foreign_table: foreign_table,
+            foreign_key: foreign_key,
+            local_key: local_key,
+        }
+    }
+
+    /// Creates a has_one relationship: this table's `id` is referenced by `fk` in `table`.
+    pub func has_one(name: Str, table: Str, fk: Str) -> Relation {
+        return Relation::new(name, RelationType::HasOne, table, fk, "id")
+    }
+
+    /// Creates a has_many relationship: this table's `id` is referenced by `fk` in `table`.
+    pub func has_many(name: Str, table: Str, fk: Str) -> Relation {
+        return Relation::new(name, RelationType::HasMany, table, fk, "id")
+    }
+
+    /// Creates a belongs_to relationship: this table has `fk` pointing to `table.id`.
+    pub func belongs_to(name: Str, table: Str, fk: Str) -> Relation {
+        return Relation::new(name, RelationType::BelongsTo, table, "id", fk)
+    }
+
+    /// Generates the LEFT JOIN SQL for eager loading this relation from `base_table`.
+    pub func join_sql(this, base_table: Str) -> Str {
+        when this.rel_type {
+            RelationType::BelongsTo => {
+                return "LEFT JOIN " + this.foreign_table + " ON " + base_table + "." + this.local_key + " = " + this.foreign_table + "." + this.foreign_key
+            },
+            _ => {
+                return "LEFT JOIN " + this.foreign_table + " ON " + base_table + "." + this.local_key + " = " + this.foreign_table + "." + this.foreign_key
+            },
+        }
+    }
+}
