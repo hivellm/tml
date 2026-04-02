@@ -360,6 +360,18 @@ static std::vector<ModuleCoverage> scan_library(const std::vector<fs::path>& lib
             if (path_str.find("/tests/") != std::string::npos)
                 continue;
 
+            // Exclude platform-specific modules that can't be tested on this architecture
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+            // Skip ARM NEON stubs on x86 — they're compile-time stubs, not real functions
+            if (path_str.find("/neon") != std::string::npos)
+                continue;
+#elif defined(__aarch64__) || defined(_M_ARM64)
+            // Skip x86 SSE/AVX intrinsics on ARM
+            if (path_str.find("/sse42") != std::string::npos ||
+                path_str.find("/avx") != std::string::npos)
+                continue;
+#endif
+
             auto funcs = extract_functions(entry.path());
             if (!funcs.empty()) {
                 auto module = get_module_name(entry.path(), lib_dir);
