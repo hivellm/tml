@@ -1,6 +1,6 @@
 # Tasks: Database Library — Foundation (Core Types + SQLite Adapter)
 
-**Status**: Complete. 100% (23/24). Item 3.4 (SQLite ColumnType mapping) deferred — not needed for basic adapter. Added ConnectionPool (pool.tml), pool tests, sqlite/dialect.tml, query/raw.tml.
+**Status**: Complete. 100% (24/24). All items implemented.
 **Reference**: docs/analyses/db/00-strategic-plan.md
 
 ## Phase 1: Core Error & Value Types
@@ -30,7 +30,7 @@
 - [x] 3.1 `db/sqlite/driver.tml` — SqliteDriver zero-size marker type
 - [x] 3.2 `db/sqlite/connection.tml` — SqliteConnection wrapping sqlite::Database, impl Connection
 - [x] 3.3 `db/sqlite/statement.tml` — SqliteStatement wrapping sqlite::Statement, impl PreparedStatement
-- [ ] 3.4 `db/sqlite/types.tml` — SQLite ColumnType mapping
+- [x] 3.4 `db/sqlite/types.tml` — SQLite ColumnType mapping (from_sqlite_type, from_sqlite_decltype, to_sqlite_type)
 - [x] 3.5 `db/sqlite/mod.tml` — SQLite driver exports
 
 ## Phase 4: Module Root + Tests

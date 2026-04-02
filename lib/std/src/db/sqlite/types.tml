@@ -1,0 +1,77 @@
+//! SQLite column type mapping.
+//!
+//! Maps between SQLite's 5 storage classes and the abstract ColumnType enum.
+
+use std::sqlite::constants::{SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT, SQLITE_BLOB, SQLITE_NULL}
+use std::db::types::ColumnType
+
+/// Maps a SQLite type code (from sqlite3_column_type) to a ColumnType.
+///
+/// SQLite has 5 storage classes: INTEGER, FLOAT, TEXT, BLOB, NULL.
+/// NULL maps to Text as a fallback (nullable columns have a declared type).
+pub func from_sqlite_type(code: I32) -> ColumnType {
+    if code == SQLITE_INTEGER {
+        return ColumnType::Integer
+    }
+    if code == SQLITE_FLOAT {
+        return ColumnType::Float
+    }
+    if code == SQLITE_TEXT {
+        return ColumnType::Text
+    }
+    if code == SQLITE_BLOB {
+        return ColumnType::Blob
+    }
+    // SQLITE_NULL and unknown codes default to Text
+    return ColumnType::Text
+}
+
+/// Maps a SQLite declared type string (e.g. "INTEGER", "VARCHAR(255)")
+/// to a ColumnType.
+///
+/// Uses prefix matching to handle SQLite's type affinity rules:
+/// - "INT" prefix → Integer
+/// - "REAL", "FLOAT", "DOUBLE" → Float
+/// - "BLOB" → Blob
+/// - "BOOL" → Boolean
+/// - "TIME", "DATE" → Timestamp
+/// - Everything else → Text
+pub func from_sqlite_decl_type(decl_type: Str) -> ColumnType {
+    if decl_type == "" {
+        return ColumnType::Text
+    }
+    // Use uppercase comparison via prefix matching
+    if decl_type.starts_with("INT") or decl_type.starts_with("int") {
+        return ColumnType::Integer
+    }
+    if decl_type.starts_with("REAL") or decl_type.starts_with("real") or
+       decl_type.starts_with("FLOAT") or decl_type.starts_with("float") or
+       decl_type.starts_with("DOUBLE") or decl_type.starts_with("double") {
+        return ColumnType::Float
+    }
+    if decl_type.starts_with("BLOB") or decl_type.starts_with("blob") {
+        return ColumnType::Blob
+    }
+    if decl_type.starts_with("BOOL") or decl_type.starts_with("bool") {
+        return ColumnType::Boolean
+    }
+    if decl_type.starts_with("TIME") or decl_type.starts_with("time") or
+       decl_type.starts_with("DATE") or decl_type.starts_with("date") {
+        return ColumnType::Timestamp
+    }
+    // TEXT, VARCHAR, CHAR, CLOB, and everything else → Text
+    return ColumnType::Text
+}
+
+/// Maps a ColumnType back to a SQLite type name string.
+pub func to_sqlite_type(col_type: ColumnType) -> Str {
+    when col_type {
+        ColumnType::Integer   => "INTEGER",
+        ColumnType::Float     => "REAL",
+        ColumnType::Text      => "TEXT",
+        ColumnType::Blob      => "BLOB",
+        ColumnType::Boolean   => "INTEGER",
+        ColumnType::Timestamp => "INTEGER",
+        ColumnType::Uuid      => "TEXT"
+    }
+}
