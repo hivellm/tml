@@ -227,6 +227,7 @@ struct FuncDecl {
 struct StructField {
     std::optional<std::string> doc;       ///< Documentation comment (from `///`).
     Visibility vis;                       ///< Field visibility.
+    std::vector<Decorator> decorators;    ///< Field-level decorators (e.g., @column, @nullable).
     std::string name;                     ///< Field name.
     TypePtr type;                         ///< Field type.
     std::optional<ExprPtr> default_value; ///< Optional default value expression.

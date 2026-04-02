@@ -504,6 +504,7 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
     return ClassField{.doc = std::move(doc),
                       .vis = vis,
                       .is_static = is_static,
+                      .decorators = std::move(decorators),
                       .name = std::move(field_name),
                       .type = std::move(field_type),
                       .init = std::move(init),

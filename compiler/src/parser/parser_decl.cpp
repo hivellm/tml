@@ -543,6 +543,13 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
         // Collect doc comment for field
         auto field_doc = collect_doc_comment();
+
+        // Parse field-level decorators (e.g., @column, @primary_column, @nullable)
+        auto field_decos_result = parse_decorators();
+        if (is_err(field_decos_result))
+            return unwrap_err(field_decos_result);
+        auto field_decorators = std::move(unwrap(field_decos_result));
+
         auto field_vis = parse_visibility();
 
         auto field_name_result =
@@ -577,6 +584,7 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         fields.push_back(StructField{
             .doc = std::move(field_doc),
             .vis = field_vis,
+            .decorators = std::move(field_decorators),
             .name = std::move(field_name),
             .type = std::move(unwrap(field_type_result)),
             .default_value = std::move(default_value),

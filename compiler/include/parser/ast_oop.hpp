@@ -81,13 +81,14 @@ enum class MemberVisibility {
 /// }
 /// ```
 struct ClassField {
-    std::optional<std::string> doc; ///< Documentation comment.
-    MemberVisibility vis;           ///< Visibility modifier.
-    bool is_static;                 ///< True for `static` fields.
-    std::string name;               ///< Field name.
-    TypePtr type;                   ///< Field type.
-    std::optional<ExprPtr> init;    ///< Default value initializer.
-    SourceSpan span;                ///< Source location.
+    std::optional<std::string> doc;    ///< Documentation comment.
+    MemberVisibility vis;              ///< Visibility modifier.
+    bool is_static;                    ///< True for `static` fields.
+    std::vector<Decorator> decorators; ///< Field-level decorators (e.g., @column, @nullable).
+    std::string name;                  ///< Field name.
+    TypePtr type;                      ///< Field type.
+    std::optional<ExprPtr> init;       ///< Default value initializer.
+    SourceSpan span;                   ///< Source location.
 };
 
 /// Class method declaration.
