@@ -1,5 +1,23 @@
 # TML Library Engineer Memory
 
+## db Schema & Migration Module (2026-04-02) — COMPLETE
+- `lib/std/src/db/schema/` — table.tml (ColumnDef, IndexDef, ForeignKeyDef), introspect.tml
+- `lib/std/src/db/query/` — create_table.tml, alter_table.tml, drop_table.tml
+- `lib/std/src/db/migration/` — migration.tml, history.tml, runner.tml, mod.tml
+- Tests: db_schema.test.tml, db_ddl.test.tml, db_migration.test.tml — 12/12 suite passing
+- **CRITICAL**: `Str::len()` returns `()` when called on a param that shadows a struct field of same name
+- **CRITICAL**: `use core::str::basic::len as str_len` → `@tml_str_len` undefined at link time. Use local `@extern("strlen")` instead, or avoid string length entirely in pure schema/SQL code
+
+## Type Alias Breaks Static Method Resolution (2026-04-02)
+`use Foo::Bar as Alias` + `Alias::static_method()` → T069 "Pattern expects enum type" on `when` of result.
+Fix: import by original name `use Foo::Bar` and call `Bar::static_method()`. Confirmed for `sqlite::Database`.
+
+## db Foundation Module (2026-04-02) — Phase 1-3 Complete (item 3.4 pending)
+- `lib/std/src/db/driver/` — Connection, PreparedStatement, Transaction behaviors + DbRow type
+- `lib/std/src/db/sqlite/` — SqliteConnection (impl Connection), SqliteStatement (impl PreparedStatement), SqliteDriver
+- `lib/std/src/db/mod.tml` — now exports driver + sqlite
+- All 11 new files pass type check. Tasks: `.rulebook/tasks/phase8_db-foundation/tasks.md`
+
 ## std::console Module (2026-04-01) — COMPLETE
 - `lib/std/src/console.tml` — log, warn, error, debug, trace, time/time_end, count/count_reset, group/group_end, assert, table
 - `compiler/runtime/diagnostics/console.c` — global state for timers, counters, indent level

@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [closure-ref-param-inference-fix.md](closure-ref-param-inference-fix.md) - Closure ref T param inference: type checker + AST codegen + auto-deref for inferred refs (2026-04-02, FIXED)
 - [nested-generic-typesubs-fix.md](nested-generic-typesubs-fix.md) - Nested generic type_subs: where-clause constraint destructuring for flatten/transpose (2026-03-30, PARTIAL — 2/5 fixed, 3 blocked by module registry gap)
 - [where-clause-type-resolution.md](where-clause-type-resolution.md) - Where clause type param resolution: ClosureType handling, best-impl selection, associated type substitution (2026-03-30, FIXED)
 - [listiter-case-sensitive-fix.md](listiter-case-sensitive-fix.md) - Windows NTFS case-insensitive fs::exists skipped parent module load, leaving ListIter unregistered (2026-03-30, FIXED)
