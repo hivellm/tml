@@ -825,6 +825,56 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
             is_imported = !imported_type_params.empty();
         }
 
+        // Fallback: if type_subs only has Self/This but the mangled name has type args,
+        // extract substitutions from the mangled name using struct_decls_/pending_generic_structs_.
+        // This handles types like MaybeIter[I32] where neither pending_generic_impls_ nor the
+        // module registry had the struct's type params, but the struct was found via
+        // GlobalASTCache.
+        if (mangled_type_name != named.name && type_subs.find("T") == type_subs.end()) {
+            auto dunder_pos = mangled_type_name.find("__");
+            if (dunder_pos != std::string::npos) {
+                std::string suffix = mangled_type_name.substr(dunder_pos + 2);
+                // Parse type args from suffix
+                std::vector<std::string> arg_parts;
+                size_t pos = 0;
+                while (pos < suffix.size()) {
+                    auto next = suffix.find("__", pos);
+                    if (next == std::string::npos) {
+                        arg_parts.push_back(suffix.substr(pos));
+                        break;
+                    }
+                    arg_parts.push_back(suffix.substr(pos, next - pos));
+                    pos = next + 2;
+                }
+                // Find type param names from the struct definition
+                const parser::StructDecl* sd = nullptr;
+                auto pg = pending_generic_structs_.find(named.name);
+                if (pg != pending_generic_structs_.end()) {
+                    sd = pg->second;
+                }
+                if (!sd) {
+                    auto sd_it = struct_decls_.find(named.name);
+                    if (sd_it != struct_decls_.end()) {
+                        sd = sd_it->second;
+                    }
+                }
+                if (sd && !sd->generics.empty()) {
+                    for (size_t i = 0; i < sd->generics.size() && i < arg_parts.size(); ++i) {
+                        auto type_arg =
+                            std::make_shared<types::Type>(types::NamedType{arg_parts[i], "", {}});
+                        type_subs[sd->generics[i].name] = type_arg;
+                    }
+                    is_imported = true;
+                } else if (arg_parts.size() == 1) {
+                    // Common fallback: single generic param T
+                    auto type_arg =
+                        std::make_shared<types::Type>(types::NamedType{arg_parts[0], "", {}});
+                    type_subs["T"] = type_arg;
+                    is_imported = true;
+                }
+            }
+        }
+
         // Resolve where clause type equalities to derive additional type substitutions.
         // For example: `impl[F, T] Iterator for OnceWith[F] where F = func() -> T`
         // With F already mapped to func() -> I32, this derives T -> I32.
