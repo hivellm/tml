@@ -1,0 +1,195 @@
+// Tests for Outcome methods: also, alt, contains, contains_err,
+// expect, expect_err, inspect_err, is_err_and, unwrap_or, unwrap_or_default
+use test::{assert, assert_eq}
+
+// =============================================================================
+// Outcome::unwrap_or
+// =============================================================================
+
+@test
+func test_outcome_unwrap_or_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert_eq(ok.unwrap_or(0), 42, "unwrap_or on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_err() -> I32 {
+    let err: Outcome[I32, Str] = Err("fail")
+    assert_eq(err.unwrap_or(0), 0, "unwrap_or on Err returns default")
+    return 0
+}
+
+// =============================================================================
+// Outcome::unwrap_or_default
+// =============================================================================
+
+@test
+func test_outcome_unwrap_or_default_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(99)
+    assert_eq(ok.unwrap_or_default(), 99, "unwrap_or_default on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_unwrap_or_default_err() -> I32 {
+    let err: Outcome[I32, Str] = Err("fail")
+    assert_eq(err.unwrap_or_default(), 0, "unwrap_or_default on Err returns zero default")
+    return 0
+}
+
+// =============================================================================
+// Outcome::expect / expect_err
+// =============================================================================
+
+@test
+func test_outcome_expect_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert_eq(ok.expect("should be ok"), 42, "expect on Ok returns value")
+    return 0
+}
+
+@test
+func test_outcome_expect_err_val() -> I32 {
+    let err: Outcome[I32, Str] = Err("bad")
+    assert_eq(err.expect_err("should be err"), "bad", "expect_err on Err returns error")
+    return 0
+}
+
+// =============================================================================
+// Outcome::contains / contains_err
+// =============================================================================
+
+@test
+func test_outcome_contains_match() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert(ok.contains(42), "Ok(42) contains 42")
+    return 0
+}
+
+@test
+func test_outcome_contains_no_match() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert(not ok.contains(99), "Ok(42) does not contain 99")
+    return 0
+}
+
+@test
+func test_outcome_contains_on_err() -> I32 {
+    let err: Outcome[I32, Str] = Err("fail")
+    assert(not err.contains(42), "Err does not contain any Ok value")
+    return 0
+}
+
+@test
+func test_outcome_contains_err_match() -> I32 {
+    let err: Outcome[I32, Str] = Err("fail")
+    assert(err.contains_err("fail"), "Err contains_err matching string")
+    return 0
+}
+
+@test
+func test_outcome_contains_err_no_match() -> I32 {
+    let err: Outcome[I32, Str] = Err("fail")
+    assert(not err.contains_err("other"), "Err does not contain_err non-matching string")
+    return 0
+}
+
+@test
+func test_outcome_contains_err_on_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert(not ok.contains_err("fail"), "Ok does not contain_err anything")
+    return 0
+}
+
+// =============================================================================
+// Outcome::is_err_and
+// =============================================================================
+
+@test
+func test_outcome_is_err_and_true() -> I32 {
+    let err: Outcome[I32, Str] = Err("not found")
+    assert(err.is_err_and(do(e: Str) -> Bool { return e.len() > 0 }), "is_err_and true on non-empty error")
+    return 0
+}
+
+@test
+func test_outcome_is_err_and_false() -> I32 {
+    let err: Outcome[I32, Str] = Err("not found")
+    assert(not err.is_err_and(do(e: Str) -> Bool { return e.len() > 100 }), "is_err_and false when predicate fails")
+    return 0
+}
+
+@test
+func test_outcome_is_err_and_on_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(10)
+    assert(not ok.is_err_and(do(e: Str) -> Bool { return e.len() > 0 }), "is_err_and false on Ok")
+    return 0
+}
+
+// =============================================================================
+// Outcome::inspect_err
+// =============================================================================
+
+func noop_err_inspector(x: ref Str) {}
+
+@test
+func test_outcome_inspect_err_passes_through_err() -> I32 {
+    let err: Outcome[I32, Str] = Err("oops")
+    let result = err.inspect_err(noop_err_inspector)
+    assert(result.is_err(), "inspect_err passes through Err")
+    return 0
+}
+
+@test
+func test_outcome_inspect_err_passes_through_ok() -> I32 {
+    let ok: Outcome[I32, Str] = Ok(10)
+    let result = ok.inspect_err(noop_err_inspector)
+    assert(result.is_ok(), "inspect_err passes through Ok unchanged")
+    return 0
+}
+
+// =============================================================================
+// Outcome::also
+// =============================================================================
+
+@test
+func test_outcome_also_ok_ok() -> I32 {
+    let x: Outcome[I32, Str] = Ok(1)
+    let y: Outcome[I64, Str] = Ok(99 as I64)
+    let r: Outcome[I64, Str] = x.also(y)
+    assert(r.is_ok(), "also(Ok, Ok) is Ok")
+    assert_eq(r.unwrap(), 99 as I64, "also(Ok, Ok) returns second value")
+    return 0
+}
+
+@test
+func test_outcome_also_err_propagates() -> I32 {
+    let x: Outcome[I32, Str] = Err("first failed")
+    let y: Outcome[I64, Str] = Ok(99 as I64)
+    let r: Outcome[I64, Str] = x.also(y)
+    assert(r.is_err(), "also(Err, Ok) propagates first error")
+    return 0
+}
+
+// =============================================================================
+// Outcome::alt
+// =============================================================================
+
+@test
+func test_outcome_alt_ok_keeps_first() -> I32 {
+    let x: Outcome[I32, Str] = Ok(1)
+    let y: Outcome[I32, Str] = Ok(2)
+    let r: Outcome[I32, Str] = x.alt(y)
+    assert_eq(r.unwrap(), 1, "alt on Ok keeps first")
+    return 0
+}
+
+@test
+func test_outcome_alt_err_takes_second() -> I32 {
+    let x: Outcome[I32, Str] = Err("fail")
+    let y: Outcome[I32, Str] = Ok(99)
+    let r: Outcome[I32, Str] = x.alt(y)
+    assert_eq(r.unwrap(), 99, "alt on Err takes second")
+    return 0
+}

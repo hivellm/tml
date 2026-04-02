@@ -1,0 +1,38 @@
+// Tests for Maybe methods: get_or_insert, replace
+use test::{assert, assert_eq}
+
+@test
+func test_maybe_get_or_insert_nothing() -> I32 {
+    var x: Maybe[I32] = Nothing
+    x.get_or_insert(5)
+    assert(x.is_just(), "get_or_insert on Nothing sets value")
+    assert_eq(x.unwrap(), 5)
+    return 0
+}
+
+@test
+func test_maybe_get_or_insert_just() -> I32 {
+    var x: Maybe[I32] = Just(3)
+    x.get_or_insert(99)
+    assert_eq(x.unwrap(), 3)
+    return 0
+}
+
+@test
+func test_maybe_replace_just() -> I32 {
+    var x: Maybe[I32] = Just(2)
+    let old: Maybe[I32] = x.replace(5)
+    assert(old.is_just())
+    assert_eq(old.unwrap(), 2)
+    assert_eq(x.unwrap(), 5)
+    return 0
+}
+
+@test
+func test_maybe_replace_nothing() -> I32 {
+    var x: Maybe[I32] = Nothing
+    let old: Maybe[I32] = x.replace(3)
+    assert(old.is_nothing())
+    assert_eq(x.unwrap(), 3)
+    return 0
+}
