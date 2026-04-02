@@ -1,0 +1,94 @@
+// Tests for std::db::value::DbValue — type coercion edge cases
+// Note: DbValue::Bool(v) causes a codegen crash (Bool payload type issue),
+// so those tests are excluded.
+use test::{assert, assert_eq}
+use std::db::value::DbValue
+
+@test
+func test_integer_as_str_is_nothing() -> I32 {
+    let v = DbValue::Integer(42)
+    assert(v.as_str().is_nothing(), "int as str = nothing")
+    return 0
+}
+
+@test
+func test_float_as_str_is_nothing() -> I32 {
+    let v = DbValue::Float(3.14)
+    assert(v.as_str().is_nothing(), "float as str = nothing")
+    return 0
+}
+
+@test
+func test_text_as_bool_is_nothing() -> I32 {
+    let v = DbValue::Text("yes")
+    assert(v.as_bool().is_nothing(), "text as bool = nothing")
+    return 0
+}
+
+@test
+func test_null_as_bool_is_nothing() -> I32 {
+    let v = DbValue::Null
+    assert(v.as_bool().is_nothing(), "null as bool = nothing")
+    return 0
+}
+
+@test
+func test_null_predicates() -> I32 {
+    let v = DbValue::Null
+    assert(v.is_null(), "is_null")
+    assert(not v.is_integer(), "not integer")
+    assert(not v.is_text(), "not text")
+    assert(not v.is_float(), "not float")
+    return 0
+}
+
+@test
+func test_bytes_predicates() -> I32 {
+    let v = DbValue::Bytes(99)
+    assert(v.is_bytes(), "is bytes")
+    assert(not v.is_null(), "not null")
+    assert(not v.is_integer(), "not integer")
+    return 0
+}
+
+@test
+func test_timestamp_predicates() -> I32 {
+    let v = DbValue::Timestamp(1000)
+    assert(v.is_timestamp(), "is timestamp")
+    assert(not v.is_float(), "not float")
+    assert(not v.is_null(), "not null")
+    return 0
+}
+
+@test
+func test_integer_as_f64() -> I32 {
+    let v = DbValue::Integer(10)
+    let f = v.as_f64()
+    assert(f.is_just(), "integer coerces to f64")
+    return 0
+}
+
+@test
+func test_null_as_i64_is_nothing() -> I32 {
+    let v = DbValue::Null
+    assert(v.as_i64().is_nothing(), "null as i64 = nothing")
+    return 0
+}
+
+@test
+func test_float_as_i64_truncates() -> I32 {
+    let v = DbValue::Float(9.99)
+    let n = v.as_i64()
+    assert(n.is_just(), "float coerces to i64")
+    assert_eq(n.unwrap(), 9, "9.99 truncates to 9")
+    return 0
+}
+
+@test
+func test_timestamp_as_i64() -> I32 {
+    let v = DbValue::Timestamp(1700000000)
+    let n = v.as_i64()
+    assert(n.is_just(), "timestamp coerces to i64")
+    assert_eq(n.unwrap(), 1700000000, "value matches")
+    return 0
+}

@@ -1,0 +1,81 @@
+// Tests for std::db::error — error kinds, display, and edge cases
+use test::{assert, assert_eq}
+use std::db::error::{DbError, DbErrorKind}
+
+@test
+func test_error_kind_connection() -> I32 {
+    assert_eq(DbErrorKind::Connection.to_string(), "Connection", "connection")
+    return 0
+}
+
+@test
+func test_error_kind_query() -> I32 {
+    assert_eq(DbErrorKind::Query.to_string(), "Query", "query")
+    return 0
+}
+
+@test
+func test_error_kind_bind() -> I32 {
+    assert_eq(DbErrorKind::Bind.to_string(), "Bind", "bind")
+    return 0
+}
+
+@test
+func test_error_kind_transaction() -> I32 {
+    assert_eq(DbErrorKind::Transaction.to_string(), "Transaction", "transaction")
+    return 0
+}
+
+@test
+func test_error_kind_migration() -> I32 {
+    assert_eq(DbErrorKind::Migration.to_string(), "Migration", "migration")
+    return 0
+}
+
+@test
+func test_error_kind_driver() -> I32 {
+    assert_eq(DbErrorKind::Driver.to_string(), "Driver", "driver")
+    return 0
+}
+
+@test
+func test_error_kind_pool() -> I32 {
+    assert_eq(DbErrorKind::Pool.to_string(), "Pool", "pool")
+    return 0
+}
+
+@test
+func test_error_kind_schema() -> I32 {
+    assert_eq(DbErrorKind::Schema.to_string(), "Schema", "schema")
+    return 0
+}
+
+@test
+func test_error_kind_timeout() -> I32 {
+    assert_eq(DbErrorKind::Timeout.to_string(), "Timeout", "timeout")
+    return 0
+}
+
+@test
+func test_error_without_code() -> I32 {
+    let e = DbError::new(DbErrorKind::Query, "bad sql")
+    assert(not e.has_code(), "no code")
+    assert_eq(e.message(), "bad sql", "message")
+    return 0
+}
+
+@test
+func test_error_with_code() -> I32 {
+    let e = DbError::with_code(DbErrorKind::Driver, "sqlite error", 19)
+    assert(e.has_code(), "has code")
+    return 0
+}
+
+@test
+func test_error_display_format() -> I32 {
+    let e = DbError::new(DbErrorKind::Connection, "refused")
+    let s = e.to_string()
+    assert(s.contains("Connection"), "has kind")
+    assert(s.contains("refused"), "has message")
+    return 0
+}

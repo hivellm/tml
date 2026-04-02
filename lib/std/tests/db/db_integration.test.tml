@@ -1,0 +1,101 @@
+// Cross-module integration tests for std::db
+// Tests that combine multiple db modules together.
+use test::{assert, assert_eq}
+use std::db::orm::entity::{Column, EntityMeta}
+use std::db::orm::query_set::QuerySet
+use std::db::orm::relation::Relation
+use std::db::query::expression::Expr
+use std::db::query::delete_query::DeleteQuery
+use std::db::query::select::SelectQuery
+use std::db::types::ColumnType
+
+@test
+func test_column_type_integer() -> I32 {
+    assert_eq(ColumnType::Integer.to_string(), "INTEGER", "int")
+    return 0
+}
+
+@test
+func test_column_type_text() -> I32 {
+    assert_eq(ColumnType::Text.to_string(), "TEXT", "text")
+    return 0
+}
+
+@test
+func test_column_type_boolean() -> I32 {
+    assert_eq(ColumnType::Boolean.to_string(), "BOOLEAN", "bool")
+    return 0
+}
+
+@test
+func test_column_type_float() -> I32 {
+    assert_eq(ColumnType::Float.to_string(), "FLOAT", "float")
+    return 0
+}
+
+@test
+func test_column_type_blob() -> I32 {
+    assert_eq(ColumnType::Blob.to_string(), "BLOB", "blob")
+    return 0
+}
+
+@test
+func test_column_type_timestamp() -> I32 {
+    assert_eq(ColumnType::Timestamp.to_string(), "TIMESTAMP", "timestamp")
+    return 0
+}
+
+@test
+func test_column_type_uuid() -> I32 {
+    assert_eq(ColumnType::Uuid.to_string(), "UUID", "uuid")
+    return 0
+}
+
+@test
+func test_queryset_count_sql() -> I32 {
+    let qs = QuerySet::new("users").filter("active = 1")
+    let sql = qs.count_sql()
+    assert(sql.contains("COUNT(*)"), "has count")
+    assert(sql.contains("FROM users"), "has table")
+    assert(sql.contains("WHERE"), "has where")
+    return 0
+}
+
+@test
+func test_queryset_order_by() -> I32 {
+    let qs = QuerySet::new("products").order_by("price ASC")
+    let sql = qs.to_sql()
+    assert(sql.contains("FROM products"), "has table")
+    assert(sql.contains("ORDER BY price ASC"), "has order")
+    return 0
+}
+
+@test
+func test_delete_with_expr() -> I32 {
+    let q = DeleteQuery::new("sessions").where_expr(
+        Expr::column("expires_at").lt(Expr::raw("CURRENT_TIMESTAMP"))
+    )
+    let sql = q.to_sql()
+    assert(sql.contains("DELETE FROM sessions"), "has delete")
+    assert(sql.contains("WHERE"), "has where")
+    assert(sql.contains("CURRENT_TIMESTAMP"), "has raw expr")
+    return 0
+}
+
+@test
+func test_relation_join_with_entity() -> I32 {
+    let r = Relation::has_many("items", "order_items", "order_id")
+    let join = r.join_sql("orders")
+    assert(join.contains("LEFT JOIN order_items"), "join table")
+    assert(join.contains("orders.id = order_items.order_id"), "condition")
+    return 0
+}
+
+@test
+func test_entity_column_text_ddl() -> I32 {
+    let col = Column::text("email")
+    let ddl = col.to_ddl()
+    assert(ddl.contains("email TEXT"), "has name and type")
+    assert(ddl.contains("NOT NULL"), "not null by default")
+    return 0
+}

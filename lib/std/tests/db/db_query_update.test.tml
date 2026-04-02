@@ -1,0 +1,100 @@
+// Tests for std::db::query::expression — extended coverage for SQL expressions
+// Note: UpdateQuery uses List internally which is not testable here due to List timeout.
+// These tests cover Expr combinators not already in db_query_select.test.tml.
+use test::{assert, assert_eq}
+use std::db::query::expression::{Expr, col}
+
+@test
+func test_expr_ne() -> I32 {
+    let e = Expr::column("status").ne(Expr::str("deleted"))
+    assert_eq(e.to_sql(), "status != 'deleted'", "ne expr")
+    return 0
+}
+
+@test
+func test_expr_gt() -> I32 {
+    let e = Expr::column("age").gt(Expr::int(18))
+    assert_eq(e.to_sql(), "age > 18", "gt expr")
+    return 0
+}
+
+@test
+func test_expr_lt() -> I32 {
+    let e = Expr::column("price").lt(Expr::int(100))
+    assert_eq(e.to_sql(), "price < 100", "lt expr")
+    return 0
+}
+
+@test
+func test_expr_gte() -> I32 {
+    let e = Expr::column("score").gte(Expr::int(90))
+    assert_eq(e.to_sql(), "score >= 90", "gte expr")
+    return 0
+}
+
+@test
+func test_expr_lte() -> I32 {
+    let e = Expr::column("rank").lte(Expr::int(10))
+    assert_eq(e.to_sql(), "rank <= 10", "lte expr")
+    return 0
+}
+
+@test
+func test_expr_like() -> I32 {
+    let e = Expr::column("name").like(Expr::str("%alice%"))
+    assert_eq(e.to_sql(), "name LIKE '%alice%'", "like expr")
+    return 0
+}
+
+@test
+func test_expr_and() -> I32 {
+    let left = Expr::column("active").eq(Expr::int(1))
+    let right = Expr::column("age").gt(Expr::int(0))
+    let e = left.and_expr(right)
+    let sql = e.to_sql()
+    assert(sql.contains("AND"), "has AND")
+    assert(sql.contains("active = 1"), "has left")
+    assert(sql.contains("age > 0"), "has right")
+    return 0
+}
+
+@test
+func test_expr_or() -> I32 {
+    let left = Expr::column("role").eq(Expr::str("admin"))
+    let right = Expr::column("role").eq(Expr::str("owner"))
+    let e = left.or_expr(right)
+    let sql = e.to_sql()
+    assert(sql.contains("OR"), "has OR")
+    assert(sql.contains("'admin'"), "has admin")
+    assert(sql.contains("'owner'"), "has owner")
+    return 0
+}
+
+@test
+func test_expr_is_null() -> I32 {
+    let e = Expr::column("deleted_at").is_null_expr()
+    assert_eq(e.to_sql(), "deleted_at IS NULL", "is null")
+    return 0
+}
+
+@test
+func test_expr_is_not_null() -> I32 {
+    let e = Expr::column("confirmed_at").is_not_null()
+    assert_eq(e.to_sql(), "confirmed_at IS NOT NULL", "is not null")
+    return 0
+}
+
+@test
+func test_expr_float() -> I32 {
+    let e = Expr::float(3.14)
+    let sql = e.to_sql()
+    assert(sql.contains("3.14"), "float literal")
+    return 0
+}
+
+@test
+func test_col_shorthand() -> I32 {
+    let e = col("id").eq(Expr::int(1))
+    assert_eq(e.to_sql(), "id = 1", "col shorthand")
+    return 0
+}
