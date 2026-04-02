@@ -1,0 +1,96 @@
+// Tests: TypeORM-style entity definitions with decorators
+use test::{assert, assert_eq}
+use std::db::orm::entity::{Column, EntityMeta}
+use std::db::orm::query_set::QuerySet
+use std::db::orm::relation::{Relation, RelationType}
+use std::db::query::expression::Expr
+
+// === Entity type declarations with decorators ===
+
+@entity("users")
+type User {
+    @primary_column
+    id: I64,
+
+    @column
+    name: Str,
+
+    @column @nullable
+    age: I64,
+
+    @column
+    email: Str
+}
+
+@entity("posts")
+type Post {
+    @primary_column
+    id: I64,
+
+    @column
+    title: Str,
+
+    @column
+    user_id: I64
+}
+
+// === Tests ===
+
+@test
+func test_decorator_entity_creates_table() -> I32 {
+    let users = EntityMeta::new("users", "id")
+        .column(Column::primary("id"))
+        .column(Column::text("name"))
+        .column(Column::integer("age").set_nullable())
+        .column(Column::text("email"))
+    let sql = users.create_table_sql()
+    assert(sql.contains("CREATE TABLE IF NOT EXISTS users"), "has create table")
+    assert(sql.contains("id INTEGER PRIMARY KEY AUTOINCREMENT"), "has pk")
+    assert(sql.contains("name TEXT NOT NULL"), "name not null")
+    return 0
+}
+
+@test
+func test_decorator_entity_instantiation() -> I32 {
+    // Decorated types work as normal structs
+    let u = User { id: 1, name: "alice", age: 30, email: "alice@test.com" }
+    assert_eq(u.id, 1, "id")
+    assert_eq(u.name, "alice", "name")
+    assert_eq(u.age, 30, "age")
+    return 0
+}
+
+@test
+func test_decorator_entity_queryset() -> I32 {
+    let qs = QuerySet::new("users")
+        .where_expr(Expr::column("age").gt(Expr::int(18)))
+        .limit(10)
+    let sql = qs.to_sql()
+    assert(sql.contains("SELECT * FROM users"), "select from users")
+    assert(sql.contains("WHERE"), "has where")
+    assert(sql.contains("LIMIT 10"), "has limit")
+    return 0
+}
+
+@test
+func test_decorator_entity_relation() -> I32 {
+    // User has many Posts
+    let r = Relation::has_many("posts", "posts", "user_id")
+    let sql = r.join_sql("users")
+    assert(sql.contains("LEFT JOIN posts"), "join posts")
+    assert(sql.contains("users.id = posts.user_id"), "join condition")
+    return 0
+}
+
+@test
+func test_post_entity_definition() -> I32 {
+    let posts = EntityMeta::new("posts", "id")
+        .column(Column::primary("id"))
+        .column(Column::text("title"))
+        .column(Column::integer("user_id"))
+    let sql = posts.create_table_sql()
+    assert(sql.contains("posts"), "has table name")
+    assert(sql.contains("title TEXT"), "has title")
+    assert(sql.contains("user_id INTEGER"), "has fk")
+    return 0
+}
