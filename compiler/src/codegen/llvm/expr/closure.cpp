@@ -142,10 +142,15 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     std::vector<std::string> param_llvm_types;
     std::vector<std::string> param_names;
     for (size_t i = 0; i < closure.params.size(); ++i) {
-        // Get parameter type
+        // Get parameter type: prefer explicit annotation, then inferred type from type checker
         std::string param_type = "i32"; // default
         if (closure.params[i].second.has_value()) {
             param_type = llvm_type(*closure.params[i].second.value());
+        } else if (i < closure.inferred_param_types.size() && closure.inferred_param_types[i]) {
+            auto inferred = std::static_pointer_cast<types::Type>(closure.inferred_param_types[i]);
+            if (inferred) {
+                param_type = llvm_type_from_semantic(inferred);
+            }
         }
         param_llvm_types.push_back(param_type);
 
@@ -182,6 +187,11 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     std::string ret_type = "i32";
     if (closure.return_type.has_value()) {
         ret_type = llvm_type(*closure.return_type.value());
+    } else if (closure.inferred_return_type) {
+        auto inferred_ret = std::static_pointer_cast<types::Type>(closure.inferred_return_type);
+        if (inferred_ret) {
+            ret_type = llvm_type_from_semantic(inferred_ret);
+        }
     } else if (closure.body) {
         types::TypePtr inferred = infer_expr_type(*closure.body);
         if (inferred) {
@@ -277,17 +287,39 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
 
     // Bind closure parameters to local scope
     for (size_t i = 0; i < param_names.size(); ++i) {
-        std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + param_llvm_types[i]);
-        emit_line("  store " + param_llvm_types[i] + " %" + param_names[i] + ", ptr " + alloca_reg);
-        // Resolve semantic type from annotation so infer_expr_type can dispatch methods correctly
-        // (e.g. `do(e: Str) -> Bool { e.len() > 0 }` requires Str semantic type to find len)
+        // Resolve semantic type from annotation or inferred types
         types::TypePtr sem_type = nullptr;
         if (closure.params[i].second.has_value()) {
             sem_type = resolve_parser_type_with_subs(*closure.params[i].second.value(),
                                                      current_type_subs_);
+        } else if (i < closure.inferred_param_types.size() && closure.inferred_param_types[i]) {
+            sem_type = std::static_pointer_cast<types::Type>(closure.inferred_param_types[i]);
         }
-        locals_[param_names[i]] = VarInfo{alloca_reg, param_llvm_types[i], sem_type, std::nullopt};
+
+        // For INFERRED ref T parameters (ptr in LLVM) where the user did NOT write
+        // an explicit type annotation, auto-deref: register the ptr directly with
+        // the inner type and is_ptr_to_value=true, so gen_ident does
+        // `load inner_type, ptr %param` to get the value.
+        // For EXPLICIT ref T annotations, the user expects a reference and will
+        // deref manually with `*v`, so we keep the ptr type as-is.
+        bool is_inferred_ref = !closure.params[i].second.has_value() &&
+                               param_llvm_types[i] == "ptr" && sem_type &&
+                               sem_type->is<types::RefType>();
+        if (is_inferred_ref) {
+            const auto& ref_type = sem_type->as<types::RefType>();
+            std::string inner_type =
+                ref_type.inner ? llvm_type_from_semantic(ref_type.inner) : "i64";
+            VarInfo vi{"%" + param_names[i], inner_type, ref_type.inner, std::nullopt};
+            vi.is_ptr_to_value = true;
+            locals_[param_names[i]] = vi;
+        } else {
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + param_llvm_types[i]);
+            emit_line("  store " + param_llvm_types[i] + " %" + param_names[i] + ", ptr " +
+                      alloca_reg);
+            locals_[param_names[i]] =
+                VarInfo{alloca_reg, param_llvm_types[i], sem_type, std::nullopt};
+        }
     }
 
     // Begin alloca hoisting for closure body

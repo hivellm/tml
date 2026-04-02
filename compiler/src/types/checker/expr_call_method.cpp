@@ -500,8 +500,9 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                     build_receiver_subs(*spec_func, subs);
                     for (size_t i = 0; i < call.args.size() && i + 1 < spec_func->params.size();
                          ++i) {
-                        TypePtr arg_type = check_expr(*call.args[i]);
                         TypePtr param_type = spec_func->params[i + 1];
+                        TypePtr expected_param = substitute_type(param_type, subs);
+                        TypePtr arg_type = check_expr(*call.args[i], expected_param);
                         extract_type_params(param_type, arg_type, spec_func->type_params, subs);
                     }
                     return substitute_type(spec_func->return_type, subs);
@@ -525,8 +526,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 // Check arguments and match against parameter types
                 // Note: func->params[0] is 'this', so we offset by 1
                 for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
-                    TypePtr arg_type = check_expr(*call.args[i]);
                     TypePtr param_type = func->params[i + 1]; // Skip 'this' parameter
+                    // Substitute known type params to get concrete expected type
+                    // This allows closure params to be inferred (e.g., ref I32 from ref T)
+                    TypePtr expected_param = substitute_type(param_type, subs);
+                    TypePtr arg_type = check_expr(*call.args[i], expected_param);
                     extract_type_params(param_type, arg_type, func->type_params, subs);
                 }
 
@@ -542,8 +546,9 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 std::unordered_map<std::string, TypePtr> subs;
                 build_receiver_subs(func_sig, subs);
                 for (size_t i = 0; i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
-                    TypePtr arg_type = check_expr(*call.args[i]);
                     TypePtr param_type = func_sig.params[i + 1];
+                    TypePtr expected_param = substitute_type(param_type, subs);
+                    TypePtr arg_type = check_expr(*call.args[i], expected_param);
                     extract_type_params(param_type, arg_type, func_sig.type_params, subs);
                 }
                 return substitute_type(func_sig.return_type, subs);
@@ -1104,8 +1109,9 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                             // Also infer from function arguments
                             for (size_t i = 0;
                                  i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
-                                TypePtr arg_type = check_expr(*call.args[i]);
                                 TypePtr param_type = func_sig.params[i + 1];
+                                TypePtr expected_param = substitute_type(param_type, subs);
+                                TypePtr arg_type = check_expr(*call.args[i], expected_param);
                                 extract_type_params(param_type, arg_type, func_sig.type_params,
                                                     subs);
                             }
