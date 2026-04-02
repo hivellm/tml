@@ -1,69 +1,109 @@
-//! ORM relationship types.
+//! ORM relations — defines relationships between entities.
+//!
+//! Uses JoinClause from the query builder to generate JOIN SQL,
+//! rather than duplicating SQL generation logic.
+//!
+//! Inspired by TypeORM's @OneToOne, @OneToMany, @ManyToOne, @ManyToMany.
 
-/// Relationship types between models.
-pub type RelationType {
+use std::db::query::join::{JoinClause, JoinType}
+
+/// Relationship types between entities.
+pub enum RelationType {
     HasOne,
     HasMany,
     BelongsTo,
-    ManyToMany,
+    ManyToMany
 }
 
 impl RelationType {
+    /// Returns the string representation of this relation type.
     pub func to_string(this) -> Str {
         when this {
             RelationType::HasOne     => "has_one",
             RelationType::HasMany    => "has_many",
             RelationType::BelongsTo  => "belongs_to",
-            RelationType::ManyToMany => "many_to_many",
+            RelationType::ManyToMany => "many_to_many"
         }
     }
 }
 
-/// A relationship definition between two tables.
+/// A relationship definition between two entities (tables).
+///
+/// `foreign_table` is the target table of the relationship.
+/// `foreign_key` is the column on the "many" side (or target for belongs_to).
+/// `local_key` is the column on the source side (defaults to "id").
 pub type Relation {
     name: Str,
     rel_type: RelationType,
     foreign_table: Str,
     foreign_key: Str,
-    local_key: Str,
+    local_key: Str
 }
 
 impl Relation {
-    /// Creates a new relationship definition.
+    /// Creates a new relationship definition with all fields explicit.
     pub func new(name: Str, rel_type: RelationType, foreign_table: Str, foreign_key: Str, local_key: Str) -> Relation {
         return Relation {
             name: name,
             rel_type: rel_type,
             foreign_table: foreign_table,
             foreign_key: foreign_key,
-            local_key: local_key,
+            local_key: local_key
         }
     }
 
-    /// Creates a has_one relationship: this table's `id` is referenced by `fk` in `table`.
+    /// Creates a has-one relation (like TypeORM's @OneToOne).
+    ///
+    /// Source table's `id` is referenced by `fk` in the target `table`.
     pub func has_one(name: Str, table: Str, fk: Str) -> Relation {
         return Relation::new(name, RelationType::HasOne, table, fk, "id")
     }
 
-    /// Creates a has_many relationship: this table's `id` is referenced by `fk` in `table`.
+    /// Creates a has-many relation (like TypeORM's @OneToMany).
+    ///
+    /// Source table's `id` is referenced by `fk` in the target `table`.
     pub func has_many(name: Str, table: Str, fk: Str) -> Relation {
         return Relation::new(name, RelationType::HasMany, table, fk, "id")
     }
 
-    /// Creates a belongs_to relationship: this table has `fk` pointing to `table.id`.
+    /// Creates a belongs-to relation (like TypeORM's @ManyToOne).
+    ///
+    /// Source table has column `fk` pointing to target `table.id`.
     pub func belongs_to(name: Str, table: Str, fk: Str) -> Relation {
         return Relation::new(name, RelationType::BelongsTo, table, "id", fk)
     }
 
-    /// Generates the LEFT JOIN SQL for eager loading this relation from `base_table`.
-    pub func join_sql(this, base_table: Str) -> Str {
-        when this.rel_type {
-            RelationType::BelongsTo => {
-                return "LEFT JOIN " + this.foreign_table + " ON " + base_table + "." + this.local_key + " = " + this.foreign_table + "." + this.foreign_key
-            },
-            _ => {
-                return "LEFT JOIN " + this.foreign_table + " ON " + base_table + "." + this.local_key + " = " + this.foreign_table + "." + this.foreign_key
-            },
-        }
+    /// Creates a many-to-many relation.
+    ///
+    /// Requires a join table; `fk` is the foreign key in the join table
+    /// pointing to the target table.
+    pub func many_to_many(name: Str, table: Str, fk: Str) -> Relation {
+        return Relation::new(name, RelationType::ManyToMany, table, fk, "id")
     }
+
+    /// Generates a JoinClause for eager loading this relation.
+    ///
+    /// Uses the query builder's JoinClause::left to produce a LEFT JOIN,
+    /// which is the standard for ORM eager loading (preserves rows with
+    /// no matching related records).
+    pub func to_join(this, source_table: Str) -> JoinClause {
+        let condition = source_table + "." + this.local_key + " = " + this.foreign_table + "." + this.foreign_key
+        return JoinClause::left(this.foreign_table, condition)
+    }
+
+    /// Generates the JOIN SQL string for this relation.
+    ///
+    /// Convenience method that calls `to_join` and renders it to SQL.
+    pub func join_sql(this, source_table: Str) -> Str {
+        return this.to_join(source_table).to_sql()
+    }
+
+    /// Returns the relation name.
+    pub func rel_name(this) -> Str { return this.name }
+
+    /// Returns the target table name.
+    pub func target(this) -> Str { return this.foreign_table }
+
+    /// Returns the relation type.
+    pub func kind(this) -> RelationType { return this.rel_type }
 }

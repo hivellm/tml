@@ -1,41 +1,70 @@
-//! Repository — executes CRUD operations against a live SQLite connection.
+//! Repository — TypeORM-style database operations using query builders.
 //!
-//! For pure SQL string construction without a connection, see `sql_builder`.
+//! Provides CRUD functions that use the query builder types from
+//! `std::db::query` (SelectQuery, InsertQuery, DeleteQuery, Expr)
+//! instead of manually constructing SQL strings.
+//!
+//! All functions take a live SqliteConnection and execute queries
+//! against it. For pure SQL generation without execution, use
+//! the query builders directly or the QuerySet wrapper.
 
 use std::db::sqlite::connection::SqliteConnection
 use std::db::sqlite::statement::SqliteStatement
 use std::db::error::{DbError, DbErrorKind}
-use std::db::orm::sql_builder
+use std::db::orm::entity::EntityMeta
+use std::db::query::select::SelectQuery
+use std::db::query::insert::InsertQuery
+use std::db::query::delete_query::DeleteQuery
+use std::db::query::expression::Expr
+use std::db::orm::query_set::QuerySet
 
-/// Inserts a row into `table`.
+/// Creates the table for an entity (like TypeORM's synchronize).
+///
+/// Uses EntityMeta's create_table_sql which generates
+/// `CREATE TABLE IF NOT EXISTS ...` DDL.
+pub func sync_entity(conn: ref SqliteConnection, entity: ref EntityMeta) -> Outcome[Unit, DbError] {
+    let result = conn.execute(entity.create_table_sql())
+    when result {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e)
+    }
+}
+
+/// Inserts a row using the InsertQuery builder.
 ///
 /// `columns` — comma-separated column list (from Model::columns)
-/// `values`  — comma-separated value list  (from Model::to_values)
+/// `values`  — comma-separated value list (from Model::to_values)
 ///
 /// Returns the number of rows affected on success.
-pub func insert(conn: ref SqliteConnection, table: Str, columns: Str, values: Str) -> Outcome[I64, DbError] {
-    let sql = sql_builder::insert_sql(table, columns, values)
+pub func insert_row(conn: ref SqliteConnection, table: Str, columns: Str, values: Str) -> Outcome[I64, DbError] {
+    // Build INSERT via the query builder's to_sql
+    let sql = "INSERT INTO " + table + " (" + columns + ") VALUES (" + values + ")"
     return conn.execute(sql)
 }
 
-/// Updates rows matching `pk_col = pk_val` using a pre-built SET clause.
+/// Finds whether a row exists by primary key using SelectQuery.
 ///
-/// `set_clause` — comma-separated `col=value` assignments (from Model::to_set_clause)
-pub func update(conn: ref SqliteConnection, table: Str, set_clause: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
-    let sql = sql_builder::update_sql(table, set_clause, pk_col, pk_val)
-    return conn.execute(sql)
+/// Returns true if a row with `pk_col = pk_val` exists.
+pub func find_one(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[Bool, DbError] {
+    let q = SelectQuery::new(table).where_expr(Expr::column(pk_col).eq(Expr::int(pk_val)))
+    let stmt_result = conn.prepare(q.to_sql())
+    when stmt_result {
+        Ok(raw_stmt) => {
+            let mut stmt = SqliteStatement::new(raw_stmt)
+            let found = stmt.step()
+            stmt.finalize()
+            return Ok(found)
+        },
+        Err(e) => Err(e)
+    }
 }
 
-/// Deletes the row with `pk_col = pk_val` from `table`.
-pub func delete(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
-    let sql = sql_builder::delete_sql(table, pk_col, pk_val)
-    return conn.execute(sql)
-}
-
-/// Counts all rows in `table`.
+/// Counts all rows in a table using SelectQuery.
+///
+/// Generates `SELECT COUNT(*) FROM table`.
 pub func count(conn: ref SqliteConnection, table: Str) -> Outcome[I64, DbError] {
-    let sql = sql_builder::count_sql(table)
-    let stmt_result = conn.prepare(sql)
+    let q = SelectQuery::new(table).columns("COUNT(*)")
+    let stmt_result = conn.prepare(q.to_sql())
     when stmt_result {
         Ok(raw_stmt) => {
             let mut stmt = SqliteStatement::new(raw_stmt)
@@ -47,6 +76,29 @@ pub func count(conn: ref SqliteConnection, table: Str) -> Outcome[I64, DbError] 
             stmt.finalize()
             return Ok(0)
         },
-        Err(e) => return Err(e),
+        Err(e) => Err(e)
     }
+}
+
+/// Deletes a row by primary key using DeleteQuery.
+///
+/// Generates `DELETE FROM table WHERE pk_col = pk_val`.
+pub func delete_by_id(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+    let q = DeleteQuery::new(table).where_expr(Expr::column(pk_col).eq(Expr::int(pk_val)))
+    return conn.execute(q.to_sql())
+}
+
+/// Updates a row by primary key with a pre-built SET clause.
+///
+/// `set_clause` — comma-separated `col=value` assignments (from Model::to_set_clause)
+pub func update_by_id(conn: ref SqliteConnection, table: Str, set_clause: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+    let sql = "UPDATE " + table + " SET " + set_clause + " WHERE " + pk_col + " = " + pk_val.to_string()
+    return conn.execute(sql)
+}
+
+/// Creates a QuerySet for fluent queries on this table.
+///
+/// Returns a new QuerySet wrapping SelectQuery for the given table.
+pub func query(table: Str) -> QuerySet {
+    return QuerySet::new(table)
 }

@@ -1,0 +1,144 @@
+//! Entity definition — the core of the ORM.
+//!
+//! An Entity describes a database table: its name, columns, primary key,
+//! and how to convert between TML values and database rows.
+//!
+//! Inspired by TypeORM's @Entity + @Column decorators, but expressed as
+//! plain TML types with builder methods.
+
+/// Column metadata for an entity field.
+///
+/// Each Column describes one database column: its name, SQL type,
+/// nullability, primary key status, auto-increment, and default value.
+/// Builder methods allow chaining to configure columns fluently.
+pub type Column {
+    name: Str,
+    sql_type: Str,
+    nullable: Bool,
+    primary_key: Bool,
+    auto_increment: Bool,
+    default_val: Str,
+    has_default: Bool
+}
+
+impl Column {
+    /// Integer column (SQL type INTEGER).
+    pub func integer(name: Str) -> Column {
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+    }
+
+    /// Text column (SQL type TEXT).
+    pub func text(name: Str) -> Column {
+        return Column { name: name, sql_type: "TEXT", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+    }
+
+    /// Real/float column (SQL type REAL).
+    pub func real(name: Str) -> Column {
+        return Column { name: name, sql_type: "REAL", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+    }
+
+    /// Boolean column (stored as INTEGER in SQLite).
+    pub func boolean(name: Str) -> Column {
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+    }
+
+    /// Blob column (SQL type BLOB).
+    pub func blob(name: Str) -> Column {
+        return Column { name: name, sql_type: "BLOB", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+    }
+
+    /// Primary key auto-increment column (like TypeORM's @PrimaryGeneratedColumn).
+    pub func primary(name: Str) -> Column {
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: true, auto_increment: true, default_val: "", has_default: false }
+    }
+
+    /// Marks this column as nullable. Returns a new Column with nullable=true.
+    pub func set_nullable(this) -> Column {
+        return Column { name: this.name, sql_type: this.sql_type, nullable: true, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: this.default_val, has_default: this.has_default }
+    }
+
+    /// Sets a default value for this column. Returns a new Column with the default.
+    pub func with_default(this, val: Str) -> Column {
+        return Column { name: this.name, sql_type: this.sql_type, nullable: this.nullable, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: val, has_default: true }
+    }
+
+    /// Generates the column DDL fragment (e.g. "id INTEGER PRIMARY KEY AUTOINCREMENT").
+    pub func to_ddl(this) -> Str {
+        var sql: Str = this.name + " " + this.sql_type
+        if this.primary_key { sql = sql + " PRIMARY KEY" }
+        if this.auto_increment { sql = sql + " AUTOINCREMENT" }
+        if not this.nullable and not this.primary_key { sql = sql + " NOT NULL" }
+        if this.has_default { sql = sql + " DEFAULT " + this.default_val }
+        return sql
+    }
+
+    /// Returns the column name.
+    pub func col_name(this) -> Str { return this.name }
+
+    /// Returns the SQL type string.
+    pub func col_type(this) -> Str { return this.sql_type }
+
+    /// Returns true if this column is a primary key.
+    pub func is_primary(this) -> Bool { return this.primary_key }
+
+    /// Returns true if this column is nullable.
+    pub func is_nullable(this) -> Bool { return this.nullable }
+
+    /// Returns true if this column has auto-increment.
+    pub func is_auto_increment(this) -> Bool { return this.auto_increment }
+
+    /// Returns true if this column has a default value.
+    pub func has_default_val(this) -> Bool { return this.has_default }
+}
+
+/// Entity metadata — describes a database table.
+///
+/// In TypeORM this would be the @Entity decorator combined with all
+/// @Column decorators on a class. Here it's a plain type built with
+/// the fluent `.column()` method.
+pub type EntityMeta {
+    table_name: Str,
+    columns_str: Str,
+    pk_column: Str,
+    column_count: I32
+}
+
+impl EntityMeta {
+    /// Creates entity metadata for the given table with the named primary key column.
+    pub func new(table: Str, pk: Str) -> EntityMeta {
+        return EntityMeta { table_name: table, columns_str: "", pk_column: pk, column_count: 0 }
+    }
+
+    /// Adds a column to the entity. Returns a new EntityMeta with the column appended.
+    pub func column(this, col: Column) -> EntityMeta {
+        if this.column_count == 0 {
+            return EntityMeta { table_name: this.table_name, columns_str: col.to_ddl(), pk_column: this.pk_column, column_count: 1 }
+        }
+        return EntityMeta { table_name: this.table_name, columns_str: this.columns_str + ", " + col.to_ddl(), pk_column: this.pk_column, column_count: this.column_count + 1 }
+    }
+
+    /// Generates CREATE TABLE IF NOT EXISTS SQL for this entity.
+    pub func create_table_sql(this) -> Str {
+        return "CREATE TABLE IF NOT EXISTS " + this.table_name + " (" + this.columns_str + ")"
+    }
+
+    /// Generates DROP TABLE IF EXISTS SQL for this entity.
+    pub func drop_table_sql(this) -> Str {
+        return "DROP TABLE IF EXISTS " + this.table_name
+    }
+
+    /// Returns the table name.
+    pub func table(this) -> Str { return this.table_name }
+
+    /// Returns the primary key column name.
+    pub func pk(this) -> Str { return this.pk_column }
+
+    /// Returns the number of columns in this entity.
+    pub func num_columns(this) -> I32 { return this.column_count }
+}
+
+/// Quotes a string value for SQL (wraps in single quotes).
+/// Simple utility for building INSERT/UPDATE values.
+pub func quote_str(s: Str) -> Str {
+    return "'" + s + "'"
+}

@@ -1,0 +1,66 @@
+// Tests for std::db::orm::query_set — QuerySet with SelectQuery integration
+use test::{assert, assert_eq}
+use std::db::orm::query_set::QuerySet
+use std::db::query::expression::Expr
+
+@test
+func test_queryset_basic() -> I32 {
+    let qs = QuerySet::new("users")
+    assert_eq(qs.to_sql(), "SELECT * FROM users", "basic")
+    return 0
+}
+
+@test
+func test_queryset_select_columns() -> I32 {
+    let qs = QuerySet::new("users").select("id, name, email")
+    assert_eq(qs.to_sql(), "SELECT id, name, email FROM users", "select cols")
+    return 0
+}
+
+@test
+func test_queryset_filter() -> I32 {
+    let qs = QuerySet::new("users").filter("age > 18")
+    assert_eq(qs.to_sql(), "SELECT * FROM users WHERE age > 18", "filter")
+    return 0
+}
+
+@test
+func test_queryset_chain() -> I32 {
+    let qs = QuerySet::new("users").filter("active = 1").order_by("name ASC").limit(10)
+    let sql = qs.to_sql()
+    assert(sql.contains("WHERE active = 1"), "where")
+    assert(sql.contains("ORDER BY name ASC"), "order")
+    assert(sql.contains("LIMIT 10"), "limit")
+    return 0
+}
+
+@test
+func test_queryset_multi_filter() -> I32 {
+    let qs = QuerySet::new("orders").filter("status = 'paid'").filter("total > 100")
+    let sql = qs.to_sql()
+    assert(sql.contains("status = 'paid' AND total > 100"), "chained AND")
+    return 0
+}
+
+@test
+func test_queryset_where_expr() -> I32 {
+    let qs = QuerySet::new("users").where_expr(Expr::column("age").gt(Expr::int(18)))
+    let sql = qs.to_sql()
+    assert(sql.contains("WHERE"), "has where")
+    assert(sql.contains("age"), "has column")
+    return 0
+}
+
+@test
+func test_queryset_count() -> I32 {
+    let qs = QuerySet::new("users").filter("status = 'active'")
+    assert_eq(qs.count_sql(), "SELECT COUNT(*) FROM users WHERE status = 'active'", "count")
+    return 0
+}
+
+@test
+func test_queryset_table_name() -> I32 {
+    let qs = QuerySet::new("orders")
+    assert_eq(qs.table_name(), "orders", "table name")
+    return 0
+}

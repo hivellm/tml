@@ -1,0 +1,85 @@
+// Tests for std::db::orm::entity — Column + EntityMeta
+use test::{assert, assert_eq}
+use std::db::orm::entity::{Column, EntityMeta, quote_str}
+
+@test
+func test_column_integer() -> I32 {
+    let col = Column::integer("age")
+    assert_eq(col.col_name(), "age", "name")
+    assert_eq(col.col_type(), "INTEGER", "type")
+    assert(not col.is_nullable(), "not nullable")
+    assert(not col.is_primary(), "not pk")
+    return 0
+}
+
+@test
+func test_column_text() -> I32 {
+    let col = Column::text("name")
+    assert_eq(col.col_name(), "name", "name")
+    assert_eq(col.col_type(), "TEXT", "type")
+    return 0
+}
+
+@test
+func test_column_primary() -> I32 {
+    let col = Column::primary("id")
+    assert(col.is_primary(), "is pk")
+    assert(col.is_auto_increment(), "auto increment")
+    let ddl = col.to_ddl()
+    assert(ddl.contains("PRIMARY KEY"), "has pk")
+    assert(ddl.contains("AUTOINCREMENT"), "has auto")
+    return 0
+}
+
+@test
+func test_column_nullable() -> I32 {
+    let col = Column::text("bio").set_nullable()
+    assert(col.is_nullable(), "is nullable")
+    let ddl = col.to_ddl()
+    assert(not ddl.contains("NOT NULL"), "no NOT NULL")
+    return 0
+}
+
+@test
+func test_column_default() -> I32 {
+    let col = Column::integer("status").with_default("0")
+    let ddl = col.to_ddl()
+    assert(ddl.contains("DEFAULT 0"), "has default")
+    return 0
+}
+
+@test
+func test_entity_create_table() -> I32 {
+    let users = EntityMeta::new("users", "id")
+        .column(Column::primary("id"))
+        .column(Column::text("name"))
+        .column(Column::integer("age").set_nullable())
+    let sql = users.create_table_sql()
+    assert(sql.contains("CREATE TABLE IF NOT EXISTS users"), "create table")
+    assert(sql.contains("id INTEGER PRIMARY KEY AUTOINCREMENT"), "pk")
+    assert(sql.contains("name TEXT NOT NULL"), "name not null")
+    return 0
+}
+
+@test
+func test_entity_drop() -> I32 {
+    let e = EntityMeta::new("temp", "id")
+    assert_eq(e.drop_table_sql(), "DROP TABLE IF EXISTS temp", "drop")
+    return 0
+}
+
+@test
+func test_entity_accessors() -> I32 {
+    let e = EntityMeta::new("posts", "post_id").column(Column::primary("post_id")).column(Column::text("title"))
+    assert_eq(e.table(), "posts", "table")
+    assert_eq(e.pk(), "post_id", "pk")
+    assert_eq(e.num_columns(), 2, "cols")
+    return 0
+}
+
+@test
+func test_quote_str() -> I32 {
+    assert_eq(quote_str("hello"), "'hello'", "quoted")
+    assert_eq(quote_str(""), "''", "empty")
+    return 0
+}

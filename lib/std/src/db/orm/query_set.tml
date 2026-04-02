@@ -1,121 +1,142 @@
-//! QuerySet — fluent query builder for ORM queries.
+//! QuerySet — TypeORM-style fluent query builder for ORM entities.
+//!
+//! Wraps `SelectQuery` from `std::db::query::select` with ORM-friendly
+//! methods like `filter`, `select`, `limit`, `offset`, and `count_sql`.
+//!
+//! Multiple calls to `filter` are ANDed together automatically,
+//! mimicking Django/TypeORM's chainable query builder pattern.
 
-/// A chainable query builder for model queries.
+use std::db::query::select::SelectQuery
+use std::db::query::expression::Expr
+
+/// A fluent query builder for entity queries (like TypeORM's createQueryBuilder).
+///
+/// Internally delegates to SelectQuery for WHERE/LIMIT/OFFSET generation,
+/// and adds ORDER BY support (which SelectQuery doesn't have natively).
 pub type QuerySet {
+    inner: SelectQuery,
     table: Str,
-    where_clause: Str,
-    order_clause: Str,
-    limit_val: I64,
-    offset_val: I64,
+    where_str: Str,
     has_where: Bool,
-    has_order: Bool,
-    has_limit: Bool,
-    has_offset: Bool,
+    order_str: Str,
+    has_order: Bool
 }
 
 impl QuerySet {
-    /// Creates a new QuerySet targeting `table`.
+    /// Creates a new QuerySet for the given table, selecting all columns.
     pub func new(table: Str) -> QuerySet {
         return QuerySet {
+            inner: SelectQuery::new(table),
             table: table,
-            where_clause: "",
-            order_clause: "",
-            limit_val: 0,
-            offset_val: 0,
+            where_str: "",
             has_where: false,
-            has_order: false,
-            has_limit: false,
-            has_offset: false,
+            order_str: "",
+            has_order: false
         }
     }
 
-    /// Adds a WHERE condition (ANDed with any existing conditions).
-    pub func filter(this, condition: Str) -> QuerySet {
+    /// Select specific columns (comma-separated string).
+    pub func select(this, cols: Str) -> QuerySet {
+        return QuerySet {
+            inner: this.inner.columns(cols),
+            table: this.table,
+            where_str: this.where_str,
+            has_where: this.has_where,
+            order_str: this.order_str,
+            has_order: this.has_order
+        }
+    }
+
+    /// Add a WHERE condition using an Expr.
+    ///
+    /// Multiple calls are ANDed together automatically.
+    pub func where_expr(this, expr: Expr) -> QuerySet {
+        let expr_sql = expr.to_sql()
         if this.has_where {
+            let new_where = this.where_str + " AND " + expr_sql
             return QuerySet {
+                inner: SelectQuery::new(this.table).where_expr(Expr::raw(new_where)),
                 table: this.table,
-                where_clause: this.where_clause + " AND " + condition,
-                order_clause: this.order_clause,
-                limit_val: this.limit_val,
-                offset_val: this.offset_val,
+                where_str: new_where,
                 has_where: true,
-                has_order: this.has_order,
-                has_limit: this.has_limit,
-                has_offset: this.has_offset,
+                order_str: this.order_str,
+                has_order: this.has_order
             }
         }
         return QuerySet {
+            inner: this.inner.where_expr(expr),
             table: this.table,
-            where_clause: condition,
-            order_clause: this.order_clause,
-            limit_val: this.limit_val,
-            offset_val: this.offset_val,
+            where_str: expr_sql,
             has_where: true,
-            has_order: this.has_order,
-            has_limit: this.has_limit,
-            has_offset: this.has_offset,
+            order_str: this.order_str,
+            has_order: this.has_order
         }
     }
 
-    /// Sets the ORDER BY clause.
+    /// Add a WHERE condition from a raw SQL string (convenience).
+    ///
+    /// Multiple calls to filter are ANDed together.
+    pub func filter(this, condition: Str) -> QuerySet {
+        return this.where_expr(Expr::raw(condition))
+    }
+
+    /// Set ORDER BY clause (raw SQL string, e.g. "name ASC").
     pub func order_by(this, clause: Str) -> QuerySet {
         return QuerySet {
+            inner: this.inner,
             table: this.table,
-            where_clause: this.where_clause,
-            order_clause: clause,
-            limit_val: this.limit_val,
-            offset_val: this.offset_val,
+            where_str: this.where_str,
             has_where: this.has_where,
-            has_order: true,
-            has_limit: this.has_limit,
-            has_offset: this.has_offset,
+            order_str: clause,
+            has_order: true
         }
     }
 
-    /// Sets a LIMIT on the number of rows returned.
+    /// Set the LIMIT clause.
     pub func limit(this, n: I64) -> QuerySet {
         return QuerySet {
+            inner: this.inner.limit(n),
             table: this.table,
-            where_clause: this.where_clause,
-            order_clause: this.order_clause,
-            limit_val: n,
-            offset_val: this.offset_val,
+            where_str: this.where_str,
             has_where: this.has_where,
-            has_order: this.has_order,
-            has_limit: true,
-            has_offset: this.has_offset,
+            order_str: this.order_str,
+            has_order: this.has_order
         }
     }
 
-    /// Sets a row OFFSET for pagination.
+    /// Set the OFFSET clause.
     pub func offset(this, n: I64) -> QuerySet {
         return QuerySet {
+            inner: this.inner.offset(n),
             table: this.table,
-            where_clause: this.where_clause,
-            order_clause: this.order_clause,
-            limit_val: this.limit_val,
-            offset_val: n,
+            where_str: this.where_str,
             has_where: this.has_where,
-            has_order: this.has_order,
-            has_limit: this.has_limit,
-            has_offset: true,
+            order_str: this.order_str,
+            has_order: this.has_order
         }
     }
 
-    /// Renders the full SELECT SQL for this query.
+    /// Renders the full SELECT query to a SQL string.
+    ///
+    /// Appends ORDER BY after the base SelectQuery output (since
+    /// SelectQuery doesn't support ORDER BY natively yet).
     pub func to_sql(this) -> Str {
-        var sql: Str = "SELECT * FROM " + this.table
-        if this.has_where  { sql = sql + " WHERE "    + this.where_clause }
-        if this.has_order  { sql = sql + " ORDER BY " + this.order_clause }
-        if this.has_limit  { sql = sql + " LIMIT "    + this.limit_val.to_string() }
-        if this.has_offset { sql = sql + " OFFSET "   + this.offset_val.to_string() }
+        var sql: Str = this.inner.to_sql()
+        if this.has_order {
+            sql = sql + " ORDER BY " + this.order_str
+        }
         return sql
     }
 
-    /// Renders COUNT(*) SQL honoring the current WHERE clause.
+    /// Renders a COUNT(*) query with the same WHERE clause.
     pub func count_sql(this) -> Str {
         var sql: Str = "SELECT COUNT(*) FROM " + this.table
-        if this.has_where { sql = sql + " WHERE " + this.where_clause }
+        if this.has_where {
+            sql = sql + " WHERE " + this.where_str
+        }
         return sql
     }
+
+    /// Returns the table name this QuerySet operates on.
+    pub func table_name(this) -> Str { return this.table }
 }

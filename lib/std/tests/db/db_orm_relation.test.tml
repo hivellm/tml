@@ -1,0 +1,47 @@
+// Tests for std::db::orm::relation — Relations with JoinClause
+use test::{assert, assert_eq}
+use std::db::orm::relation::{Relation, RelationType}
+
+@test
+func test_has_one() -> I32 {
+    let r = Relation::has_one("profile", "profiles", "user_id")
+    assert_eq(r.rel_name(), "profile", "name")
+    assert_eq(r.foreign_table, "profiles", "target")
+    assert_eq(r.local_key, "id", "local key")
+    return 0
+}
+
+@test
+func test_has_many_join() -> I32 {
+    let r = Relation::has_many("orders", "orders", "user_id")
+    let sql = r.join_sql("users")
+    assert(sql.contains("LEFT JOIN orders"), "join")
+    assert(sql.contains("users.id = orders.user_id"), "condition")
+    return 0
+}
+
+@test
+func test_belongs_to_join() -> I32 {
+    let r = Relation::belongs_to("author", "users", "author_id")
+    let sql = r.join_sql("posts")
+    assert(sql.contains("LEFT JOIN users"), "join")
+    assert(sql.contains("posts.author_id = users.id"), "fk")
+    return 0
+}
+
+@test
+func test_relation_types() -> I32 {
+    assert_eq(RelationType::HasOne.to_string(), "has_one", "one")
+    assert_eq(RelationType::HasMany.to_string(), "has_many", "many")
+    assert_eq(RelationType::BelongsTo.to_string(), "belongs_to", "belongs")
+    assert_eq(RelationType::ManyToMany.to_string(), "many_to_many", "m2m")
+    return 0
+}
+
+@test
+func test_many_to_many() -> I32 {
+    let r = Relation::many_to_many("tags", "tags", "tag_id")
+    assert_eq(r.target(), "tags", "target")
+    assert_eq(r.foreign_key, "tag_id", "fk")
+    return 0
+}
