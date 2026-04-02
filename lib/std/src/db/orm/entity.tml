@@ -1,10 +1,41 @@
 //! Entity definition — the core of the ORM.
 //!
-//! An Entity describes a database table: its name, columns, primary key,
-//! and how to convert between TML values and database rows.
+//! # TypeORM-Style Entity Definition
 //!
-//! Inspired by TypeORM's @Entity + @Column decorators, but expressed as
-//! plain TML types with builder methods.
+//! Use field-level decorators to declare database entities:
+//!
+//! ```tml
+//! @entity("users")
+//! type User {
+//!     @primary_column
+//!     id: I64,
+//!
+//!     @column
+//!     name: Str,
+//!
+//!     @column @nullable
+//!     age: I64,
+//!
+//!     @column
+//!     email: Str
+//! }
+//! ```
+//!
+//! Then register the entity metadata at runtime:
+//!
+//! ```tml
+//! let users = EntityMeta::new("users", "id")
+//!     .column(Column::primary("id"))
+//!     .column(Column::text("name"))
+//!     .column(Column::integer("age").set_nullable())
+//!     .column(Column::text("email"))
+//!
+//! sync_entity(conn, ref users)  // CREATE TABLE IF NOT EXISTS users (...)
+//! ```
+//!
+//! The `@entity`, `@column`, `@primary_column`, and `@nullable` decorators
+//! are parsed by the compiler and stored in the AST. They serve as the
+//! canonical way to declare which types are database entities.
 
 /// Column metadata for an entity field.
 ///
