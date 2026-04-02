@@ -437,6 +437,41 @@ auto LLVMIRGen::find_module_for_type(const std::string& type_name) const -> std:
             return mod_name;
         }
     }
+
+    // Fallback: check pending_generic_structs_ which may have been populated from
+    // GlobalASTCache during impl method instantiation. These structs are from library
+    // modules that weren't loaded into the registry but whose ASTs were cached.
+    if (pending_generic_structs_.find(base_name) != pending_generic_structs_.end() ||
+        struct_decls_.find(base_name) != struct_decls_.end()) {
+        // Try to determine the module from the imported symbol resolution
+        auto import_path = env_.resolve_imported_symbol(base_name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                return import_path->substr(0, pos);
+            }
+        }
+        // Fallback: use "core" as the default module for library generic structs
+        // since most come from the core library (MaybeIter, RangeIter, etc.)
+        return "core";
+    }
+
+    // Last resort: check if the type exists in the type environment's struct registry.
+    // This catches types that are imported via use statements but not yet in the
+    // module registry or pending_generic_structs_ (e.g., first time this type is seen).
+    auto env_struct = env_.lookup_struct(base_name);
+    if (env_struct.has_value()) {
+        // Found in the type environment — determine module from import resolution
+        auto import_path = env_.resolve_imported_symbol(base_name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                return import_path->substr(0, pos);
+            }
+        }
+        return "core";
+    }
+
     return "";
 }
 
