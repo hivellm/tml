@@ -884,6 +884,33 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
 
                     const auto& parsed_mod = *parsed_mod_ptr;
 
+                    // Register any generic structs/enums from this module into
+                    // pending_generic_structs_ so that require_struct_instantiation
+                    // can find them. This is needed when the method being instantiated
+                    // references a generic struct from its own module (e.g., MaybeIter[T]
+                    // returned by Maybe[T]::iter()).
+                    for (const auto& d : parsed_mod.decls) {
+                        if (d->is<parser::StructDecl>()) {
+                            const auto& s = d->as<parser::StructDecl>();
+                            if (!s.generics.empty() &&
+                                pending_generic_structs_.find(s.name) ==
+                                    pending_generic_structs_.end() &&
+                                local_generic_struct_names_.find(s.name) ==
+                                    local_generic_struct_names_.end()) {
+                                pending_generic_structs_[s.name] = &s;
+                                if (struct_decls_.find(s.name) == struct_decls_.end()) {
+                                    struct_decls_[s.name] = &s;
+                                }
+                            }
+                        } else if (d->is<parser::EnumDecl>()) {
+                            const auto& e = d->as<parser::EnumDecl>();
+                            if (!e.generics.empty() && pending_generic_enums_.find(e.name) ==
+                                                           pending_generic_enums_.end()) {
+                                pending_generic_enums_[e.name] = &e;
+                            }
+                        }
+                    }
+
                     // Find the impl block for this type
                     for (const auto& decl : parsed_mod.decls) {
                         if (!decl->is<parser::ImplDecl>())

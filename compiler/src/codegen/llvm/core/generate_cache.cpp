@@ -56,6 +56,12 @@ void GlobalASTCache::put(const std::string& module_path, parser::Module module) 
     }
 }
 
+const std::unordered_map<std::string, parser::Module>& GlobalASTCache::get_all() const {
+    // NOTE: caller must hold no conflicting lock. In practice this is fine because
+    // codegen is single-threaded per compilation unit.
+    return cache_;
+}
+
 void GlobalASTCache::clear() {
     std::unique_lock lock(mutex_);
     cache_.clear();

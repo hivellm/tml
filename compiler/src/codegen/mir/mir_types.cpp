@@ -48,7 +48,18 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                 return result;
 
             } else if constexpr (std::is_same_v<T, mir::MirStructType>) {
-                return "%struct." + t.name;
+                // Mangle name with type args to match enum mangling convention
+                // e.g., MaybeIter + [I32] -> MaybeIter__I32
+                std::string mangled = t.name;
+                if (!t.type_args.empty()) {
+                    mangled += "__";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            mangled += "_";
+                        mangled += mangle_mir_type_arg(t.type_args[i]);
+                    }
+                }
+                return "%struct." + mangled;
 
             } else if constexpr (std::is_same_v<T, mir::MirEnumType>) {
                 // Mangle name with type args to match legacy codegen convention

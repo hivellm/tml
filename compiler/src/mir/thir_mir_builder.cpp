@@ -309,21 +309,29 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
 
     if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
+        std::vector<mir::MirTypePtr> type_args;
+        for (const auto& arg : named.type_args) {
+            type_args.push_back(convert_type(arg));
+        }
         // Check if it's an enum or struct
         if (env_.lookup_enum(named.name)) {
-            return make_enum_type(named.name);
+            return make_enum_type(named.name, std::move(type_args));
         }
-        return make_struct_type(named.name);
+        return make_struct_type(named.name, std::move(type_args));
     }
 
     if (type->is<types::ClassType>()) {
         const auto& cls = type->as<types::ClassType>();
+        std::vector<mir::MirTypePtr> type_args;
+        for (const auto& arg : cls.type_args) {
+            type_args.push_back(convert_type(arg));
+        }
         // Classes (including sealed classes) are struct-like value types in MIR.
         // Check if this class name is actually an enum (defensive), else make struct.
         if (env_.lookup_enum(cls.name)) {
-            return make_enum_type(cls.name);
+            return make_enum_type(cls.name, std::move(type_args));
         }
-        return make_struct_type(cls.name);
+        return make_struct_type(cls.name, std::move(type_args));
     }
 
     // impl Behavior types are opaque — lower to pointer (fat pointer in future)

@@ -95,6 +95,9 @@ public:
     /// Check if a module path should be cached (library modules only).
     static bool should_cache(const std::string& module_path);
 
+    /// Get all cached modules (for searching by struct name).
+    const std::unordered_map<std::string, parser::Module>& get_all() const;
+
 private:
     GlobalASTCache() = default;
     ~GlobalASTCache() = default;

@@ -222,6 +222,9 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (!current_type_subs_.empty()) {
             auto resolved_ret =
                 resolve_parser_type_with_subs(**method.return_type, current_type_subs_);
+            // Ensure generic struct/enum types in the return type have their
+            // %struct.X / %enum.X definitions emitted before we reference them.
+            ensure_generic_types_instantiated(resolved_ret);
             ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/false);
         } else {
             ret_type = llvm_type_ptr(*method.return_type);
@@ -330,6 +333,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (!current_type_subs_.empty() && method.params[i].type) {
             auto resolved =
                 resolve_parser_type_with_subs(*method.params[i].type, current_type_subs_);
+            // Ensure generic struct/enum types in parameter types are instantiated.
+            ensure_generic_types_instantiated(resolved);
             param_type = llvm_type_from_semantic(resolved, /*for_data=*/true);
             if (resolved && resolved->is<types::FuncType>()) {
                 param_type = "{ ptr, ptr }";
@@ -951,6 +956,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string ret_type = "void";
     if (method.return_type.has_value()) {
         auto resolved_ret = resolve_parser_type_with_subs(**method.return_type, full_type_subs);
+        // Ensure generic struct/enum types in the return type have their
+        // %struct.X / %enum.X definitions emitted before we reference them.
+        ensure_generic_types_instantiated(resolved_ret);
         // Use for_data=true: return types in data context — Unit should be "{}" not "void"
         ret_type = llvm_type_from_semantic(resolved_ret, /*for_data=*/true);
     }
@@ -1001,6 +1009,8 @@ void LLVMIRGen::gen_impl_method_instantiation(
             param_types += ", ";
         }
         auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, full_type_subs);
+        // Ensure generic struct/enum types in parameter types are instantiated.
+        ensure_generic_types_instantiated(resolved_param);
         // Use for_data=true: param types are data context — Unit should be "{}" not "void"
         std::string param_type = llvm_type_from_semantic(resolved_param, /*for_data=*/true);
         // Function-typed parameters use fat pointer { ptr, ptr } to support closures

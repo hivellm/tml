@@ -268,10 +268,17 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
     // Generate mangled name
     std::string mangled = mangle_struct_name(base_name, final_type_args);
 
-    // Check if already registered
+    // Check if already registered AND type definition was actually generated
     auto it = struct_instantiations_.find(mangled);
     if (it != struct_instantiations_.end()) {
-        return mangled; // Already queued or generated
+        // Only skip if the type definition was actually emitted.
+        // A previous call may have registered the name but failed to find the
+        // struct definition (e.g., module not yet parsed). Re-process if needed.
+        if (struct_types_.find(mangled) != struct_types_.end()) {
+            return mangled; // Already generated — skip
+        }
+        // Type was registered but definition not emitted — remove and re-process
+        struct_instantiations_.erase(it);
     }
 
     // If the base (unmangled) type already exists in struct_types_ (e.g., library code
@@ -578,6 +585,48 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& raw_name,
             }
         } // end pass loop
 
+        if (!found_in_registry) {
+            // Fallback: search GlobalASTCache for any module containing a generic
+            // struct with this name. This handles cases where a method returns a
+            // generic struct type (e.g., MaybeIter[T] from Maybe[T]::iter()) but
+            // the module wasn't loaded into the registry because it was only accessed
+            // indirectly through pending_generic_impls_.
+            const auto& all_cached = GlobalASTCache::instance().get_all();
+            for (const auto& [cache_key, cached_ast] : all_cached) {
+                if (found_in_registry)
+                    break;
+                for (const auto& d : cached_ast.decls) {
+                    if (d->is<parser::StructDecl>()) {
+                        const auto& s = d->as<parser::StructDecl>();
+                        if (s.name == base_name && !s.generics.empty()) {
+                            // Found the generic struct AST — register it
+                            pending_generic_structs_[s.name] = &s;
+                            if (struct_decls_.find(s.name) == struct_decls_.end()) {
+                                struct_decls_[s.name] = &s;
+                            }
+                            // Now use the pending_generic path to generate the type def
+                            std::unordered_map<std::string, types::TypePtr> subs;
+                            for (size_t i = 0; i < s.generics.size() && i < final_type_args.size();
+                                 ++i) {
+                                subs[s.generics[i].name] = final_type_args[i];
+                            }
+                            std::vector<FieldInfo> fields;
+                            for (size_t i = 0; i < s.fields.size(); ++i) {
+                                types::TypePtr field_type =
+                                    resolve_parser_type_with_subs(*s.fields[i].type, subs);
+                                std::string ft = llvm_type_from_semantic(field_type, true);
+                                fields.push_back(
+                                    {s.fields[i].name, static_cast<int>(i), ft, field_type});
+                            }
+                            struct_fields_[mangled] = fields;
+                            gen_struct_instantiation(s, final_type_args);
+                            found_in_registry = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         // Fallback: if not found in registry, check if it's a known runtime-backed collection type
         // These types have well-defined layouts regardless of their type parameter
         if (!found_in_registry) {
