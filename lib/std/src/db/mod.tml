@@ -18,3 +18,4 @@ pub mod value
 pub mod types
 pub mod driver
 pub mod sqlite
+pub mod query

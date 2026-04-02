@@ -1,0 +1,71 @@
+//! JOIN clause types.
+
+/// The kind of SQL JOIN to perform.
+pub enum JoinType {
+    Inner,
+    Left,
+    Right,
+    Full,
+    Cross
+}
+
+impl JoinType {
+    /// Renders the JOIN keyword(s) for this join type.
+    pub func to_sql(this) -> Str {
+        when this {
+            JoinType::Inner => "INNER JOIN",
+            JoinType::Left  => "LEFT JOIN",
+            JoinType::Right => "RIGHT JOIN",
+            JoinType::Full  => "FULL OUTER JOIN",
+            JoinType::Cross => "CROSS JOIN"
+        }
+    }
+}
+
+/// A single JOIN clause specifying the join type, table, and ON condition.
+pub type JoinClause {
+    join_type: JoinType,
+    table: Str,
+    on_condition: Str
+}
+
+impl JoinClause {
+    /// Creates a new JOIN clause.
+    pub func new(join_type: JoinType, table: Str, on_condition: Str) -> JoinClause {
+        return JoinClause { join_type: join_type, table: table, on_condition: on_condition }
+    }
+
+    /// Creates an INNER JOIN clause.
+    pub func inner(table: Str, on_condition: Str) -> JoinClause {
+        return JoinClause { join_type: JoinType::Inner, table: table, on_condition: on_condition }
+    }
+
+    /// Creates a LEFT JOIN clause.
+    pub func left(table: Str, on_condition: Str) -> JoinClause {
+        return JoinClause { join_type: JoinType::Left, table: table, on_condition: on_condition }
+    }
+
+    /// Creates a RIGHT JOIN clause.
+    pub func right(table: Str, on_condition: Str) -> JoinClause {
+        return JoinClause { join_type: JoinType::Right, table: table, on_condition: on_condition }
+    }
+
+    /// Creates a FULL OUTER JOIN clause.
+    pub func full(table: Str, on_condition: Str) -> JoinClause {
+        return JoinClause { join_type: JoinType::Full, table: table, on_condition: on_condition }
+    }
+
+    /// Creates a CROSS JOIN clause (no ON condition required).
+    pub func cross(table: Str) -> JoinClause {
+        return JoinClause { join_type: JoinType::Cross, table: table, on_condition: "" }
+    }
+
+    /// Renders this clause to a SQL string (e.g. `"INNER JOIN orders ON orders.user_id = users.id"`).
+    pub func to_sql(this) -> Str {
+        let join_type = this.join_type
+        when join_type {
+            JoinType::Cross => return this.join_type.to_sql() + " " + this.table,
+            _ => return this.join_type.to_sql() + " " + this.table + " ON " + this.on_condition
+        }
+    }
+}

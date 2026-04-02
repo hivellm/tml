@@ -7,3 +7,4 @@ pub mod connection
 pub mod statement
 pub mod result
 pub mod transaction
+pub mod pool

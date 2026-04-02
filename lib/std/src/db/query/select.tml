@@ -1,0 +1,102 @@
+//! SELECT query builder.
+
+use std::db::query::expression::Expr
+
+/// A SELECT query builder.
+pub type SelectQuery {
+    table: Str,
+    columns: Str,
+    where_clause: Str,
+    limit_val: I64,
+    offset_val: I64,
+    has_limit: Bool,
+    has_offset: Bool,
+    has_where: Bool
+}
+
+impl SelectQuery {
+    /// Creates a new SELECT query for the given table, selecting all columns.
+    pub func new(table: Str) -> SelectQuery {
+        return SelectQuery {
+            table: table,
+            columns: "*",
+            where_clause: "",
+            limit_val: 0,
+            offset_val: 0,
+            has_limit: false,
+            has_offset: false,
+            has_where: false
+        }
+    }
+
+    /// Sets the column list (comma-separated string).
+    pub func columns(this, cols: Str) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: cols,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: this.has_where
+        }
+    }
+
+    /// Adds a WHERE clause from an expression.
+    pub func where_expr(this, expr: Expr) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: expr.to_sql(),
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: true
+        }
+    }
+
+    /// Sets the LIMIT clause.
+    pub func limit(this, n: I64) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: n,
+            offset_val: this.offset_val,
+            has_limit: true,
+            has_offset: this.has_offset,
+            has_where: this.has_where
+        }
+    }
+
+    /// Sets the OFFSET clause.
+    pub func offset(this, n: I64) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: n,
+            has_limit: this.has_limit,
+            has_offset: true,
+            has_where: this.has_where
+        }
+    }
+
+    /// Renders the query to a SQL string.
+    pub func to_sql(this) -> Str {
+        var sql: Str = "SELECT " + this.columns + " FROM " + this.table
+        if this.has_where {
+            sql = sql + " WHERE " + this.where_clause
+        }
+        if this.has_limit {
+            sql = sql + " LIMIT " + this.limit_val.to_string()
+        }
+        if this.has_offset {
+            sql = sql + " OFFSET " + this.offset_val.to_string()
+        }
+        return sql
+    }
+}

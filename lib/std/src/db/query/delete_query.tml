@@ -1,0 +1,31 @@
+//! DELETE query builder.
+
+use std::db::query::expression::Expr
+
+/// A DELETE query builder.
+pub type DeleteQuery {
+    table: Str,
+    where_clause: Str,
+    has_where: Bool
+}
+
+impl DeleteQuery {
+    /// Creates a new DELETE query for the given table.
+    pub func new(table: Str) -> DeleteQuery {
+        return DeleteQuery { table: table, where_clause: "", has_where: false }
+    }
+
+    /// Adds a WHERE clause restricting which rows to delete.
+    pub func where_expr(this, expr: Expr) -> DeleteQuery {
+        return DeleteQuery { table: this.table, where_clause: expr.to_sql(), has_where: true }
+    }
+
+    /// Renders the query to a SQL string.
+    pub func to_sql(this) -> Str {
+        var sql: Str = "DELETE FROM " + this.table
+        if this.has_where {
+            sql = sql + " WHERE " + this.where_clause
+        }
+        return sql
+    }
+}

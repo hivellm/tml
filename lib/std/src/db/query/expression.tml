@@ -1,0 +1,201 @@
+//! SQL expression types for building queries.
+
+/// Binary comparison operators.
+pub enum CompareOp {
+    Eq,
+    Ne,
+    Gt,
+    Lt,
+    Gte,
+    Lte,
+    Like
+}
+
+impl CompareOp {
+    pub func to_sql(this) -> Str {
+        when this {
+            CompareOp::Eq   => "=",
+            CompareOp::Ne   => "!=",
+            CompareOp::Gt   => ">",
+            CompareOp::Lt   => "<",
+            CompareOp::Gte  => ">=",
+            CompareOp::Lte  => "<=",
+            CompareOp::Like => "LIKE"
+        }
+    }
+}
+
+/// Logical operators for combining conditions.
+pub enum LogicOp {
+    And,
+    Or
+}
+
+impl LogicOp {
+    pub func to_sql(this) -> Str {
+        when this {
+            LogicOp::And => "AND",
+            LogicOp::Or  => "OR"
+        }
+    }
+}
+
+/// Sort direction for ORDER BY clauses.
+pub enum SortDir {
+    Asc,
+    Desc
+}
+
+impl SortDir {
+    pub func to_sql(this) -> Str {
+        when this {
+            SortDir::Asc  => "ASC",
+            SortDir::Desc => "DESC"
+        }
+    }
+}
+
+/// A SQL expression that can be rendered to a SQL string.
+///
+/// Uses a flat struct with an integer tag instead of a recursive enum
+/// to avoid nested-generic codegen issues in the current compiler.
+///
+/// Tag values:
+///   0 = Column reference (`text` holds the column name)
+///   1 = Integer literal  (`int_val` holds the value)
+///   2 = Float literal    (`float_val` holds the value)
+///   3 = String literal   (`text` holds the value)
+///   4 = NULL literal
+///   5 = Comparison       (`op` 0-6, `left_sql`/`right_sql` pre-rendered)
+///   6 = Logic (AND/OR)   (`op` 0=AND 1=OR, `left_sql`/`right_sql` pre-rendered)
+///   8 = IS NULL          (`left_sql` pre-rendered)
+///   9 = IS NOT NULL      (`left_sql` pre-rendered)
+///  10 = Raw SQL          (`text` holds the raw fragment)
+pub type Expr {
+    tag: I32,
+    text: Str,
+    int_val: I64,
+    float_val: F64,
+    op: I32,
+    left_sql: Str,
+    right_sql: Str
+}
+
+impl Expr {
+    /// Creates a column reference expression.
+    pub func column(name: Str) -> Expr {
+        return Expr { tag: 0, text: name, int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates an integer literal expression.
+    pub func int(value: I64) -> Expr {
+        return Expr { tag: 1, text: "", int_val: value, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a float literal expression.
+    pub func float(value: F64) -> Expr {
+        return Expr { tag: 2, text: "", int_val: 0, float_val: value, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a string literal expression (single-quoted in SQL output).
+    pub func str(value: Str) -> Expr {
+        return Expr { tag: 3, text: value, int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a NULL literal expression.
+    pub func null_val() -> Expr {
+        return Expr { tag: 4, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a raw SQL fragment (emitted verbatim).
+    pub func raw(sql: Str) -> Expr {
+        return Expr { tag: 10, text: sql, int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Returns `col = other` as a new expression.
+    pub func eq(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col != other` as a new expression.
+    pub func ne(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 1, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col > other` as a new expression.
+    pub func gt(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 2, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col < other` as a new expression.
+    pub func lt(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 3, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col >= other` as a new expression.
+    pub func gte(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 4, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col <= other` as a new expression.
+    pub func lte(this, other: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 5, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col LIKE pattern` as a new expression.
+    pub func like(this, pattern: Expr) -> Expr {
+        return Expr { tag: 5, text: "", int_val: 0, float_val: 0.0, op: 6, left_sql: this.to_sql(), right_sql: pattern.to_sql() }
+    }
+
+    /// Returns `left AND right` as a new expression.
+    pub func and_expr(this, other: Expr) -> Expr {
+        return Expr { tag: 6, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `left OR right` as a new expression.
+    pub func or_expr(this, other: Expr) -> Expr {
+        return Expr { tag: 6, text: "", int_val: 0, float_val: 0.0, op: 1, left_sql: this.to_sql(), right_sql: other.to_sql() }
+    }
+
+    /// Returns `col IS NULL` as a new expression.
+    pub func is_null_expr(this) -> Expr {
+        return Expr { tag: 8, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: this.to_sql(), right_sql: "" }
+    }
+
+    /// Returns `col IS NOT NULL` as a new expression.
+    pub func is_not_null(this) -> Expr {
+        return Expr { tag: 9, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: this.to_sql(), right_sql: "" }
+    }
+
+    /// Renders this expression to a SQL string.
+    pub func to_sql(this) -> Str {
+        if this.tag == 0 { return this.text }
+        if this.tag == 1 { return this.int_val.to_string() }
+        if this.tag == 2 { return this.float_val.to_string() }
+        if this.tag == 3 { return "'" + this.text + "'" }
+        if this.tag == 4 { return "NULL" }
+        if this.tag == 10 { return this.text }
+        if this.tag == 5 {
+            let op_str = if this.op == 0 { "=" }
+                else if this.op == 1 { "!=" }
+                else if this.op == 2 { ">" }
+                else if this.op == 3 { "<" }
+                else if this.op == 4 { ">=" }
+                else if this.op == 5 { "<=" }
+                else { "LIKE" }
+            return this.left_sql + " " + op_str + " " + this.right_sql
+        }
+        if this.tag == 6 {
+            let op_str = if this.op == 0 { "AND" } else { "OR" }
+            return "(" + this.left_sql + " " + op_str + " " + this.right_sql + ")"
+        }
+        if this.tag == 8 { return this.left_sql + " IS NULL" }
+        if this.tag == 9 { return this.left_sql + " IS NOT NULL" }
+        return "?"
+    }
+}
+
+/// Shorthand for creating a column reference expression.
+pub func col(name: Str) -> Expr {
+    return Expr::column(name)
+}

@@ -1,0 +1,66 @@
+// Tests for std::db::query::select — SelectQuery builder
+use test::{assert, assert_eq}
+use std::db::query::select::SelectQuery
+use std::db::query::expression::Expr
+
+@test
+func test_simple_select() -> I32 {
+    let q = SelectQuery::new("users")
+    assert_eq(q.to_sql(), "SELECT * FROM users", "simple select")
+    return 0
+}
+
+@test
+func test_select_columns() -> I32 {
+    let q = SelectQuery::new("users").columns("id, name")
+    assert_eq(q.to_sql(), "SELECT id, name FROM users", "select columns")
+    return 0
+}
+
+@test
+func test_select_with_limit() -> I32 {
+    let q = SelectQuery::new("users").limit(10)
+    assert_eq(q.to_sql(), "SELECT * FROM users LIMIT 10", "limit")
+    return 0
+}
+
+@test
+func test_select_with_offset() -> I32 {
+    let q = SelectQuery::new("users").limit(10).offset(20)
+    let sql = q.to_sql()
+    assert(sql.contains("OFFSET 20"), "should have OFFSET 20")
+    assert(sql.contains("LIMIT 10"), "should have LIMIT 10")
+    return 0
+}
+
+@test
+func test_select_with_where() -> I32 {
+    // Use column comparison to column (avoids template-literal int rendering)
+    let expr = Expr::column("status").eq(Expr::str("active"))
+    let q = SelectQuery::new("users").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE"), "should have WHERE")
+    assert(sql.contains("status"), "should have column name")
+    return 0
+}
+
+@test
+func test_select_where_null() -> I32 {
+    let expr = Expr::column("deleted_at").is_null_expr()
+    let q = SelectQuery::new("users").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE"), "should have WHERE")
+    assert(sql.contains("IS NULL"), "should have IS NULL")
+    return 0
+}
+
+@test
+func test_select_combined() -> I32 {
+    let expr = Expr::column("role").eq(Expr::str("admin"))
+    let q = SelectQuery::new("orders").columns("id, total").where_expr(expr).limit(5)
+    let sql = q.to_sql()
+    assert(sql.contains("SELECT id, total FROM orders"), "should have select and table")
+    assert(sql.contains("WHERE"), "should have WHERE")
+    assert(sql.contains("LIMIT 5"), "should have LIMIT 5")
+    return 0
+}

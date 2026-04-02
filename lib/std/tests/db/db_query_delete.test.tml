@@ -1,0 +1,51 @@
+// Tests for std::db::query::delete_query — DeleteQuery builder
+use test::{assert, assert_eq}
+use std::db::query::delete_query::DeleteQuery
+use std::db::query::expression::Expr
+
+@test
+func test_delete_all() -> I32 {
+    let q = DeleteQuery::new("temp_data")
+    assert_eq(q.to_sql(), "DELETE FROM temp_data", "delete all")
+    return 0
+}
+
+@test
+func test_delete_with_where_str() -> I32 {
+    let expr = Expr::column("status").eq(Expr::str("inactive"))
+    let q = DeleteQuery::new("users").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("DELETE FROM users"), "has table")
+    assert(sql.contains("WHERE"), "has WHERE")
+    assert(sql.contains("status"), "has column")
+    return 0
+}
+
+@test
+func test_delete_with_is_null() -> I32 {
+    let expr = Expr::column("deleted_at").is_null_expr()
+    let q = DeleteQuery::new("sessions").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("DELETE FROM sessions"), "has table")
+    assert(sql.contains("WHERE"), "has WHERE")
+    assert(sql.contains("IS NULL"), "has IS NULL")
+    return 0
+}
+
+@test
+func test_delete_with_is_not_null() -> I32 {
+    let expr = Expr::column("archived_at").is_not_null()
+    let q = DeleteQuery::new("drafts").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("IS NOT NULL"), "has IS NOT NULL")
+    return 0
+}
+
+@test
+func test_delete_with_raw_where() -> I32 {
+    let expr = Expr::raw("id IN (1, 2, 3)")
+    let q = DeleteQuery::new("items").where_expr(expr)
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE id IN (1, 2, 3)"), "has raw where clause")
+    return 0
+}

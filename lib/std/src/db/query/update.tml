@@ -1,0 +1,72 @@
+//! UPDATE query builder.
+
+use std::collections::List
+use std::db::query::expression::Expr
+
+/// A column-value assignment for an UPDATE statement.
+pub type UpdateAssignment {
+    column: Str,
+    expr: Expr
+}
+
+/// An UPDATE query builder.
+pub type UpdateQuery {
+    table: Str,
+    assignments: List[UpdateAssignment],
+    where_clause: Str,
+    has_where: Bool
+}
+
+impl UpdateQuery {
+    /// Creates a new UPDATE query for the given table.
+    pub func new(table: Str) -> UpdateQuery {
+        return UpdateQuery {
+            table: table,
+            assignments: List::new(),
+            where_clause: "",
+            has_where: false
+        }
+    }
+
+    /// Adds a SET assignment.
+    pub func set(this, column: Str, expr: Expr) -> UpdateQuery {
+        let ua = UpdateAssignment { column: column, expr: expr }
+        this.assignments.push(ua)
+        return UpdateQuery {
+            table: this.table,
+            assignments: this.assignments,
+            where_clause: this.where_clause,
+            has_where: this.has_where
+        }
+    }
+
+    /// Adds a WHERE clause.
+    pub func where_expr(this, expr: Expr) -> UpdateQuery {
+        return UpdateQuery {
+            table: this.table,
+            assignments: this.assignments,
+            where_clause: expr.to_sql(),
+            has_where: true
+        }
+    }
+
+    /// Renders the query to a SQL string.
+    pub func to_sql(this) -> Str {
+        var sets: Str = ""
+        let n = this.assignments.len()
+        var i: I64 = 0
+        loop (i < n) {
+            let ua = this.assignments.get(i)
+            if i > 0 {
+                sets = sets + ", "
+            }
+            sets = sets + ua.column + " = " + ua.expr.to_sql()
+            i = i + 1
+        }
+        var sql: Str = "UPDATE " + this.table + " SET " + sets
+        if this.has_where {
+            sql = sql + " WHERE " + this.where_clause
+        }
+        return sql
+    }
+}

@@ -1,0 +1,88 @@
+// Tests for std::db::query — OrderByClause, JoinClause, aggregate helpers
+use test::{assert, assert_eq}
+use std::db::query::order::OrderByClause
+use std::db::query::join::JoinClause
+use std::db::query::aggregate
+
+@test
+func test_order_asc() -> I32 {
+    let o = OrderByClause::asc("name")
+    assert_eq(o.to_sql(), "name ASC", "order asc")
+    return 0
+}
+
+@test
+func test_order_desc() -> I32 {
+    let o = OrderByClause::desc("created_at")
+    assert_eq(o.to_sql(), "created_at DESC", "order desc")
+    return 0
+}
+
+@test
+func test_inner_join() -> I32 {
+    let j = JoinClause::inner("orders", "users.id = orders.user_id")
+    assert_eq(j.to_sql(), "INNER JOIN orders ON users.id = orders.user_id", "inner join")
+    return 0
+}
+
+@test
+func test_left_join() -> I32 {
+    let j = JoinClause::left("profiles", "u.id = p.user_id")
+    let sql = j.to_sql()
+    assert(sql.contains("LEFT JOIN"), "has left join keyword")
+    assert(sql.contains("profiles"), "has table name")
+    assert(sql.contains("ON"), "has ON keyword")
+    return 0
+}
+
+@test
+func test_right_join() -> I32 {
+    let j = JoinClause::right("categories", "p.cat_id = c.id")
+    let sql = j.to_sql()
+    assert(sql.contains("RIGHT JOIN"), "has right join keyword")
+    assert(sql.contains("categories"), "has table name")
+    return 0
+}
+
+@test
+func test_cross_join() -> I32 {
+    let j = JoinClause::cross("sizes")
+    assert_eq(j.to_sql(), "CROSS JOIN sizes", "cross join has no ON clause")
+    return 0
+}
+
+@test
+func test_count_all() -> I32 {
+    assert_eq(aggregate::count_all(), "COUNT(*)", "count all")
+    return 0
+}
+
+@test
+func test_aggregate_count_column() -> I32 {
+    assert_eq(aggregate::count("id"), "COUNT(id)", "count column")
+    return 0
+}
+
+@test
+func test_aggregate_sum() -> I32 {
+    assert_eq(aggregate::sum("amount"), "SUM(amount)", "sum")
+    return 0
+}
+
+@test
+func test_aggregate_avg() -> I32 {
+    assert_eq(aggregate::avg("score"), "AVG(score)", "avg")
+    return 0
+}
+
+@test
+func test_aggregate_min() -> I32 {
+    assert_eq(aggregate::min_val("price"), "MIN(price)", "min")
+    return 0
+}
+
+@test
+func test_aggregate_max() -> I32 {
+    assert_eq(aggregate::max_val("price"), "MAX(price)", "max")
+    return 0
+}

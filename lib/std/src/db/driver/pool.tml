@@ -1,0 +1,82 @@
+//! Database connection pool.
+//!
+//! Manages a pool of reusable database connections for efficient resource usage.
+
+use std::db::error::{DbError, DbErrorKind}
+
+/// Configuration for the connection pool.
+pub type PoolConfig {
+    /// Minimum number of connections to keep.
+    min_connections: I32,
+    /// Maximum number of connections allowed.
+    max_connections: I32,
+    /// Idle timeout in milliseconds (connections idle longer are closed).
+    idle_timeout_ms: I64,
+    /// Connection timeout in milliseconds (max wait for a connection).
+    connect_timeout_ms: I64
+}
+
+impl PoolConfig {
+    /// Creates a default pool configuration.
+    pub func default() -> PoolConfig {
+        return PoolConfig {
+            min_connections: 1,
+            max_connections: 10,
+            idle_timeout_ms: 30000,
+            connect_timeout_ms: 5000
+        }
+    }
+
+    /// Creates a pool configuration with custom min/max.
+    pub func new(min_conn: I32, max_conn: I32) -> PoolConfig {
+        return PoolConfig {
+            min_connections: min_conn,
+            max_connections: max_conn,
+            idle_timeout_ms: 30000,
+            connect_timeout_ms: 5000
+        }
+    }
+
+    /// Returns the minimum number of connections.
+    pub func min_connections(this) -> I32 { return this.min_connections }
+
+    /// Returns the maximum number of connections.
+    pub func max_connections(this) -> I32 { return this.max_connections }
+
+    /// Returns the idle timeout in milliseconds.
+    pub func idle_timeout_ms(this) -> I64 { return this.idle_timeout_ms }
+
+    /// Returns the connection timeout in milliseconds.
+    pub func connect_timeout_ms(this) -> I64 { return this.connect_timeout_ms }
+}
+
+/// Statistics about the connection pool.
+pub type PoolStats {
+    /// Number of connections currently in use.
+    active: I32,
+    /// Number of idle connections available.
+    idle: I32,
+    /// Total number of connections (active + idle).
+    total: I32,
+    /// Number of times a connection was waited for.
+    wait_count: I64
+}
+
+impl PoolStats {
+    /// Creates an empty stats snapshot.
+    pub func new() -> PoolStats {
+        return PoolStats { active: 0, idle: 0, total: 0, wait_count: 0 }
+    }
+
+    /// Returns the number of active (in-use) connections.
+    pub func active(this) -> I32 { return this.active }
+
+    /// Returns the number of idle connections.
+    pub func idle(this) -> I32 { return this.idle }
+
+    /// Returns the total number of managed connections.
+    pub func total(this) -> I32 { return this.total }
+
+    /// Returns how many times a caller had to wait for a connection.
+    pub func wait_count(this) -> I64 { return this.wait_count }
+}

@@ -1,0 +1,53 @@
+//! SQL aggregate function helpers.
+
+/// Named SQL aggregate functions.
+pub enum AggregateFunc {
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max
+}
+
+impl AggregateFunc {
+    /// Renders this aggregate function applied to the given column as a SQL string.
+    pub func to_sql(this, column: Str) -> Str {
+        when this {
+            AggregateFunc::Count => "COUNT(" + column + ")",
+            AggregateFunc::Sum   => "SUM(" + column + ")",
+            AggregateFunc::Avg   => "AVG(" + column + ")",
+            AggregateFunc::Min   => "MIN(" + column + ")",
+            AggregateFunc::Max   => "MAX(" + column + ")"
+        }
+    }
+}
+
+/// Returns `COUNT(column)`.
+pub func count(column: Str) -> Str {
+    return "COUNT(" + column + ")"
+}
+
+/// Returns `COUNT(*)`.
+pub func count_all() -> Str {
+    return "COUNT(*)"
+}
+
+/// Returns `SUM(column)`.
+pub func sum(column: Str) -> Str {
+    return "SUM(" + column + ")"
+}
+
+/// Returns `AVG(column)`.
+pub func avg(column: Str) -> Str {
+    return "AVG(" + column + ")"
+}
+
+/// Returns `MIN(column)`.
+pub func min_val(column: Str) -> Str {
+    return "MIN(" + column + ")"
+}
+
+/// Returns `MAX(column)`.
+pub func max_val(column: Str) -> Str {
+    return "MAX(" + column + ")"
+}

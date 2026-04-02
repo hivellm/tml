@@ -1,0 +1,52 @@
+//! INSERT query builder.
+
+use std::collections::List
+use std::db::query::expression::Expr
+
+/// A column-value pair for an INSERT statement.
+pub type InsertValue {
+    column: Str,
+    expr: Expr
+}
+
+/// An INSERT query builder.
+pub type InsertQuery {
+    table: Str,
+    values: List[InsertValue]
+}
+
+impl InsertQuery {
+    /// Creates a new INSERT query for the given table.
+    pub func new(table: Str) -> InsertQuery {
+        return InsertQuery { table: table, values: List::new() }
+    }
+
+    /// Adds a column-value pair to the INSERT.
+    pub func value(this, column: Str, expr: Expr) -> InsertQuery {
+        let iv = InsertValue { column: column, expr: expr }
+        this.values.push(iv)
+        return InsertQuery { table: this.table, values: this.values }
+    }
+
+    /// Renders the query to a SQL string.
+    pub func to_sql(this) -> Str {
+        if this.values.len() == 0 {
+            return "INSERT INTO " + this.table + " DEFAULT VALUES"
+        }
+        var cols: Str = ""
+        var vals: Str = ""
+        let n = this.values.len()
+        var i: I64 = 0
+        loop (i < n) {
+            let iv = this.values.get(i)
+            if i > 0 {
+                cols = cols + ", "
+                vals = vals + ", "
+            }
+            cols = cols + iv.column
+            vals = vals + iv.expr.to_sql()
+            i = i + 1
+        }
+        return "INSERT INTO " + this.table + " (" + cols + ") VALUES (" + vals + ")"
+    }
+}

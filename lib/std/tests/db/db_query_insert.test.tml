@@ -1,0 +1,61 @@
+// Tests for std::db::query::insert — InsertQuery builder
+use test::{assert, assert_eq}
+use std::db::query::insert::InsertQuery
+use std::db::query::expression::Expr
+
+@test
+func test_insert_default_values() -> I32 {
+    let q = InsertQuery::new("users")
+    assert_eq(q.to_sql(), "INSERT INTO users DEFAULT VALUES", "default values")
+    return 0
+}
+
+@test
+func test_insert_single_string_value() -> I32 {
+    let q = InsertQuery::new("users").value("name", Expr::str("alice"))
+    let sql = q.to_sql()
+    assert(sql.contains("INSERT INTO users"), "has table")
+    assert(sql.contains("name"), "has column")
+    assert(sql.contains("'alice'"), "has quoted value")
+    return 0
+}
+
+@test
+func test_insert_column_reference() -> I32 {
+    let q = InsertQuery::new("logs").value("source", Expr::column("users.name"))
+    let sql = q.to_sql()
+    assert(sql.contains("INSERT INTO logs"), "has table")
+    assert(sql.contains("source"), "has column")
+    return 0
+}
+
+@test
+func test_insert_null_value() -> I32 {
+    let q = InsertQuery::new("users").value("deleted_at", Expr::null_val())
+    let sql = q.to_sql()
+    assert(sql.contains("NULL"), "has NULL value")
+    assert(sql.contains("deleted_at"), "has column name")
+    return 0
+}
+
+@test
+func test_insert_multiple_values() -> I32 {
+    let q = InsertQuery::new("users")
+        .value("name", Expr::str("bob"))
+        .value("role", Expr::str("admin"))
+    let sql = q.to_sql()
+    assert(sql.contains("INSERT INTO users"), "has table")
+    assert(sql.contains("name"), "has name column")
+    assert(sql.contains("role"), "has role column")
+    assert(sql.contains("'bob'"), "has bob value")
+    assert(sql.contains("'admin'"), "has admin value")
+    return 0
+}
+
+@test
+func test_insert_raw_expression() -> I32 {
+    let q = InsertQuery::new("events").value("created_at", Expr::raw("CURRENT_TIMESTAMP"))
+    let sql = q.to_sql()
+    assert(sql.contains("CURRENT_TIMESTAMP"), "has raw expression")
+    return 0
+}

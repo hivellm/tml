@@ -1,0 +1,39 @@
+//! SQL dialect behavior for database-specific query rendering.
+
+/// A SQL dialect defines database-specific SQL rendering rules,
+/// such as identifier quoting and parameter placeholder syntax.
+pub behavior Dialect {
+    /// Quotes an identifier (table or column name) for this dialect.
+    func quote_identifier(this, name: Str) -> Str
+
+    /// Returns the parameter placeholder for the given 1-based index.
+    /// SQLite uses `?`, PostgreSQL uses `$1`, `$2`, etc.
+    func placeholder(this, index: I32) -> Str
+
+    /// Returns true if this dialect supports the RETURNING clause.
+    func supports_returning(this) -> Bool
+}
+
+/// SQLite dialect — uses `"name"` quoting and `?` placeholders.
+pub type SqliteDialect {}
+
+impl SqliteDialect {
+    /// Creates a new SQLite dialect instance.
+    pub func new() -> SqliteDialect {
+        return SqliteDialect {}
+    }
+}
+
+impl Dialect for SqliteDialect {
+    pub func quote_identifier(this, name: Str) -> Str {
+        return "\"" + name + "\""
+    }
+
+    pub func placeholder(this, index: I32) -> Str {
+        return "?"
+    }
+
+    pub func supports_returning(this) -> Bool {
+        return true
+    }
+}
