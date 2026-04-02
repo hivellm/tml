@@ -1,0 +1,41 @@
+//! Prepared statement behavior.
+//!
+//! The `PreparedStatement` behavior defines the abstract interface for a
+//! compiled SQL statement that can be bound with parameters and executed.
+
+use std::db::error::DbError
+
+/// A prepared SQL statement that can be bound with parameters and executed.
+///
+/// Parameter indices are **1-based** (matching the SQL standard and SQLite
+/// convention).  Column indices returned by column accessors are **0-based**.
+pub behavior PreparedStatement {
+    /// Binds an I64 integer value to the parameter at the given 1-based index.
+    func bind_i64(this, idx: I32, value: I64) -> Outcome[Unit, DbError]
+
+    /// Binds an F64 float value to the parameter at the given 1-based index.
+    func bind_f64(this, idx: I32, value: F64) -> Outcome[Unit, DbError]
+
+    /// Binds a string value to the parameter at the given 1-based index.
+    func bind_str(this, idx: I32, value: Str) -> Outcome[Unit, DbError]
+
+    /// Binds a SQL NULL to the parameter at the given 1-based index.
+    func bind_null(this, idx: I32) -> Outcome[Unit, DbError]
+
+    /// Executes the statement (for INSERT / UPDATE / DELETE).
+    ///
+    /// Returns the number of rows affected on success.
+    func run(this) -> Outcome[I64, DbError]
+
+    /// Resets the statement so it can be re-executed with new bindings.
+    func reset(mut this) -> Outcome[Unit, DbError]
+
+    /// Returns the number of columns in the result set.
+    func column_count(this) -> I32
+
+    /// Returns the column name at the given 0-based index.
+    func column_name(this, idx: I32) -> Str
+
+    /// Releases all resources held by the statement.
+    func finalize(this)
+}

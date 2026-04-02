@@ -1,0 +1,29 @@
+//! Database connection behavior.
+//!
+//! The `Connection` behavior defines the abstract interface for a live database
+//! connection.  Concrete implementations (e.g. `SqliteConnection`) wrap the
+//! underlying driver and translate its errors into [`DbError`].
+
+use std::db::error::DbError
+
+/// A database connection that can execute queries and manage transactions.
+///
+/// Every driver must implement this behavior to participate in the db
+/// abstraction layer.  Methods that do not return rows use `execute`;
+/// methods that produce a result set are handled via `prepare` on the
+/// concrete connection type.
+pub behavior Connection {
+    /// Executes a SQL statement that does not return rows (INSERT, UPDATE, DELETE, DDL).
+    ///
+    /// Returns the number of rows affected by the statement.
+    func execute(this, sql: Str) -> Outcome[I64, DbError]
+
+    /// Tests whether the connection is still alive.
+    ///
+    /// Returns `true` if the underlying driver reports the connection as open
+    /// and usable, `false` otherwise.
+    func is_alive(this) -> Bool
+
+    /// Closes the connection and releases any associated resources.
+    func close(mut this)
+}

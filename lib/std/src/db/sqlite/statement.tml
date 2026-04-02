@@ -1,0 +1,126 @@
+//! SQLite prepared statement adapter.
+//!
+//! [`SqliteStatement`] wraps a [`sqlite::Statement`] and maps its
+//! `Outcome[_, Str]` errors into [`DbError`] values, providing a
+//! driver-agnostic interface over SQLite prepared statements.
+
+use std::sqlite::Statement
+use std::db::error::{DbError, DbErrorKind}
+use std::db::driver::statement::PreparedStatement
+
+/// A prepared statement backed by SQLite.
+///
+/// Obtain one via [`SqliteConnection::prepare`].  Use `step()` to iterate
+/// over result rows and `column_*` methods to read column values.
+/// Call `finalize()` when done to release resources.
+pub type SqliteStatement {
+    stmt: Statement,
+}
+
+impl SqliteStatement {
+    /// Creates a new `SqliteStatement` wrapping an existing `sqlite::Statement`.
+    pub func new(stmt: Statement) -> SqliteStatement {
+        SqliteStatement { stmt: stmt }
+    }
+
+    /// Steps to the next row in the result set.
+    ///
+    /// Returns `true` if a row is available, `false` when the statement is
+    /// done or has encountered an error.
+    pub func step(mut this) -> Bool {
+        this.stmt.step()
+    }
+
+    /// Returns the I64 value at the given 0-based column index.
+    pub func column_i64(this, idx: I32) -> I64 {
+        this.stmt.column_i64(idx)
+    }
+
+    /// Returns the F64 value at the given 0-based column index.
+    pub func column_f64(this, idx: I32) -> F64 {
+        this.stmt.column_f64(idx)
+    }
+
+    /// Returns the string value at the given 0-based column index.
+    pub func column_str(this, idx: I32) -> Str {
+        this.stmt.column_str(idx)
+    }
+
+    /// Returns `true` if the column at the given 0-based index is NULL.
+    pub func column_is_null(this, idx: I32) -> Bool {
+        this.stmt.column_is_null(idx)
+    }
+}
+
+impl PreparedStatement for SqliteStatement {
+    /// Binds an I64 value to the parameter at the given 1-based index.
+    pub func bind_i64(this, idx: I32, value: I64) -> Outcome[Unit, DbError] {
+        let result = this.stmt.bind_i64(idx, value)
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Bind, msg)),
+        }
+    }
+
+    /// Binds an F64 value to the parameter at the given 1-based index.
+    pub func bind_f64(this, idx: I32, value: F64) -> Outcome[Unit, DbError] {
+        let result = this.stmt.bind_f64(idx, value)
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Bind, msg)),
+        }
+    }
+
+    /// Binds a string value to the parameter at the given 1-based index.
+    pub func bind_str(this, idx: I32, value: Str) -> Outcome[Unit, DbError] {
+        let result = this.stmt.bind_str(idx, value)
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Bind, msg)),
+        }
+    }
+
+    /// Binds NULL to the parameter at the given 1-based index.
+    pub func bind_null(this, idx: I32) -> Outcome[Unit, DbError] {
+        let result = this.stmt.bind_null(idx)
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Bind, msg)),
+        }
+    }
+
+    /// Executes the statement (for INSERT / UPDATE / DELETE).
+    ///
+    /// Returns the number of rows affected on success.
+    pub func run(this) -> Outcome[I64, DbError] {
+        let result = this.stmt.run()
+        when result {
+            Ok(n)    => return Ok(n as I64),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
+        }
+    }
+
+    /// Resets the statement for re-execution with new bindings.
+    pub func reset(mut this) -> Outcome[Unit, DbError] {
+        let result = this.stmt.reset()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
+        }
+    }
+
+    /// Returns the number of columns in the result set.
+    pub func column_count(this) -> I32 {
+        this.stmt.columns()
+    }
+
+    /// Returns the column name at the given 0-based index.
+    pub func column_name(this, idx: I32) -> Str {
+        this.stmt.column_name(idx)
+    }
+
+    /// Finalizes the statement and releases all resources.
+    pub func finalize(this) {
+        this.stmt.finalize()
+    }
+}

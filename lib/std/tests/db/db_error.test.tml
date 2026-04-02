@@ -1,0 +1,78 @@
+// Tests for std::db::error
+use test::{assert, assert_eq}
+use std::db::error::{DbError, DbErrorKind}
+
+@test
+func test_error_kind_connection_display() -> I32 {
+    let kind = DbErrorKind::Connection
+    assert_eq(kind.to_string(), "Connection", "Connection kind display")
+    return 0
+}
+
+@test
+func test_error_kind_query_display() -> I32 {
+    let kind = DbErrorKind::Query
+    assert_eq(kind.to_string(), "Query", "Query kind display")
+    return 0
+}
+
+@test
+func test_error_kind_timeout_display() -> I32 {
+    let kind = DbErrorKind::Timeout
+    assert_eq(kind.to_string(), "Timeout", "Timeout kind display")
+    return 0
+}
+
+@test
+func test_error_creation() -> I32 {
+    let err = DbError::new(DbErrorKind::Query, "syntax error")
+    assert_eq(err.message(), "syntax error", "error message")
+    return 0
+}
+
+@test
+func test_error_kind_accessor() -> I32 {
+    let err = DbError::new(DbErrorKind::Connection, "refused")
+    let k = err.kind()
+    assert_eq(k.to_string(), "Connection", "kind accessor")
+    return 0
+}
+
+@test
+func test_error_without_code_has_no_code() -> I32 {
+    let err = DbError::new(DbErrorKind::Query, "failed")
+    assert(not err.has_code(), "new error should have no code")
+    return 0
+}
+
+@test
+func test_error_with_code() -> I32 {
+    let err = DbError::with_code(DbErrorKind::Driver, "driver error", 42)
+    assert(err.has_code(), "should have code")
+    return 0
+}
+
+@test
+func test_error_with_code_accessor() -> I32 {
+    let err = DbError::with_code(DbErrorKind::Driver, "driver error", 99)
+    let c = err.code()
+    assert(c.is_just(), "code should be Just")
+    assert_eq(c.unwrap(), 99, "code value should be 99")
+    return 0
+}
+
+@test
+func test_error_display_format() -> I32 {
+    let err = DbError::new(DbErrorKind::Timeout, "timed out")
+    let s = err.to_string()
+    assert_eq(s, "[Timeout] timed out", "display format should be [Kind] message")
+    return 0
+}
+
+@test
+func test_error_display_connection() -> I32 {
+    let err = DbError::new(DbErrorKind::Connection, "connection refused")
+    let s = err.to_string()
+    assert_eq(s, "[Connection] connection refused", "connection error display")
+    return 0
+}

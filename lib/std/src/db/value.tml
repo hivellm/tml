@@ -1,0 +1,189 @@
+//! Database value type.
+//!
+//! [`DbValue`] is a dynamically-typed value that can represent any column
+//! value returned by a database query.  It extends the SQLite value type
+//! with `Bool`, `Bytes`, and `Timestamp` variants for richer driver support.
+
+/// A dynamically-typed database column value.
+///
+/// # Variants
+///
+/// | Variant     | Meaning                                      |
+/// |-------------|----------------------------------------------|
+/// | Null        | SQL NULL                                     |
+/// | Bool(v)     | Boolean true/false                           |
+/// | Integer(v)  | 64-bit signed integer                        |
+/// | Float(v)    | 64-bit IEEE 754 float                        |
+/// | Text(v)     | UTF-8 string                                 |
+/// | Bytes(v)    | Raw byte blob (stored as opaque I64 handle)  |
+/// | Timestamp(v)| Unix epoch milliseconds                      |
+pub type DbValue {
+    /// SQL NULL.
+    Null,
+    /// A boolean value.
+    Bool(Bool),
+    /// A 64-bit signed integer.
+    Integer(I64),
+    /// A 64-bit IEEE 754 floating-point number.
+    Float(F64),
+    /// A UTF-8 text string.
+    Text(Str),
+    /// A raw byte blob, stored as an opaque driver handle (I64).
+    Bytes(I64),
+    /// A point in time as Unix epoch milliseconds (I64).
+    Timestamp(I64),
+}
+
+impl DbValue {
+    /// Returns `true` if this value is `Null`.
+    pub func is_null(this) -> Bool {
+        when this {
+            DbValue::Null => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is a boolean.
+    pub func is_bool(this) -> Bool {
+        when this {
+            DbValue::Bool(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is an integer.
+    pub func is_integer(this) -> Bool {
+        when this {
+            DbValue::Integer(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is a float.
+    pub func is_float(this) -> Bool {
+        when this {
+            DbValue::Float(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is text.
+    pub func is_text(this) -> Bool {
+        when this {
+            DbValue::Text(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is a byte blob.
+    pub func is_bytes(this) -> Bool {
+        when this {
+            DbValue::Bytes(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if this value is a timestamp.
+    pub func is_timestamp(this) -> Bool {
+        when this {
+            DbValue::Timestamp(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the integer value wrapped in `Just`, or `Nothing` if the
+    /// value is not an integer, boolean, or float.
+    ///
+    /// Booleans are coerced to 1 (true) or 0 (false).
+    /// Floats are truncated toward zero.
+    /// Timestamps return their epoch-millisecond count.
+    pub func as_i64(this) -> Maybe[I64] {
+        when this {
+            DbValue::Integer(v)   => Just(v),
+            DbValue::Bool(v)      => Just(if v { 1 } else { 0 }),
+            DbValue::Float(v)     => Just(v as I64),
+            DbValue::Timestamp(v) => Just(v),
+            _ => Nothing,
+        }
+    }
+
+    /// Returns the float value wrapped in `Just`, or `Nothing` if the
+    /// value is not a float or integer.
+    ///
+    /// Integers are widened to F64.
+    pub func as_f64(this) -> Maybe[F64] {
+        when this {
+            DbValue::Float(v)   => Just(v),
+            DbValue::Integer(v) => Just(v as F64),
+            _ => Nothing,
+        }
+    }
+
+    /// Returns the text value wrapped in `Just`, or `Nothing` if the
+    /// value is not a `Text` variant.
+    pub func as_str(this) -> Maybe[Str] {
+        when this {
+            DbValue::Text(v) => Just(v),
+            _ => Nothing,
+        }
+    }
+
+    /// Returns the boolean value wrapped in `Just`, or `Nothing` if the
+    /// value is not a `Bool` variant.
+    ///
+    /// Integer `1` and `0` are NOT automatically coerced; callers should
+    /// use `as_i64` and compare if they need that behaviour.
+    pub func as_bool(this) -> Maybe[Bool] {
+        when this {
+            DbValue::Bool(v) => Just(v),
+            _ => Nothing,
+        }
+    }
+
+    /// Returns the epoch-millisecond timestamp wrapped in `Just`, or
+    /// `Nothing` if the value is not a `Timestamp` variant.
+    pub func as_timestamp(this) -> Maybe[I64] {
+        when this {
+            DbValue::Timestamp(v) => Just(v),
+            _ => Nothing,
+        }
+    }
+
+    /// Returns a short type name for use in diagnostics.
+    pub func type_name(this) -> Str {
+        when this {
+            DbValue::Null         => "NULL",
+            DbValue::Bool(_)      => "BOOL",
+            DbValue::Integer(_)   => "INTEGER",
+            DbValue::Float(_)     => "FLOAT",
+            DbValue::Text(_)      => "TEXT",
+            DbValue::Bytes(_)     => "BYTES",
+            DbValue::Timestamp(_) => "TIMESTAMP",
+        }
+    }
+}
+
+impl Display for DbValue {
+    /// Human-readable representation of the value.
+    ///
+    /// | Variant     | Example output  |
+    /// |-------------|-----------------|
+    /// | Null        | `"NULL"`        |
+    /// | Bool(true)  | `"true"`        |
+    /// | Integer(42) | `"42"`          |
+    /// | Float(3.14) | `"3.14"`        |
+    /// | Text("hi")  | `"hi"`          |
+    /// | Bytes(h)    | `"<bytes>"`     |
+    /// | Timestamp(t)| `"<ts:…>"`      |
+    pub func to_string(this) -> Str {
+        when this {
+            DbValue::Null         => "NULL",
+            DbValue::Bool(v)      => if v { "true" } else { "false" },
+            DbValue::Integer(v)   => v.to_string(),
+            DbValue::Float(v)     => v.to_string(),
+            DbValue::Text(v)      => v,
+            DbValue::Bytes(_)     => "<bytes>",
+            DbValue::Timestamp(v) => "<ts:" + v.to_string() + ">",
+        }
+    }
+}

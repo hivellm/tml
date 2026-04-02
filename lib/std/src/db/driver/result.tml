@@ -1,0 +1,40 @@
+//! Result set types.
+//!
+//! Provides [`DbRow`], a lightweight wrapper that records how many columns a
+//! row has and carries an opaque driver handle for value retrieval.
+
+/// A single row from a database query result.
+///
+/// `DbRow` is a value type that records the column count for the current row
+/// and carries an opaque driver-specific handle (stored as `I64`) that
+/// concrete driver implementations use to read column values.
+///
+/// # Notes
+///
+/// The `handle` field is intentionally typed as `I64` rather than a raw
+/// pointer so that `DbRow` can be stored in collections and passed across
+/// module boundaries without requiring `lowlevel` blocks.  Each driver
+/// adapter is responsible for interpreting this field correctly.
+pub type DbRow {
+    /// The number of columns available in this row.
+    column_count: I32,
+    /// Opaque driver-specific handle for accessing column values.
+    handle: I64,
+}
+
+impl DbRow {
+    /// Creates a new `DbRow` from a column count and a driver handle.
+    pub func new(column_count: I32, handle: I64) -> DbRow {
+        DbRow { column_count: column_count, handle: handle }
+    }
+
+    /// Returns the number of columns available in this row.
+    pub func columns(this) -> I32 {
+        this.column_count
+    }
+
+    /// Returns the opaque driver handle.
+    pub func handle(this) -> I64 {
+        this.handle
+    }
+}

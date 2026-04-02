@@ -1,0 +1,9 @@
+//! Database driver behaviors.
+//!
+//! These behaviors define the abstract interface that all database drivers must implement.
+//! Concrete driver adapters (e.g. `db::sqlite`) provide implementations.
+
+pub mod connection
+pub mod statement
+pub mod result
+pub mod transaction

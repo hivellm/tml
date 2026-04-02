@@ -1,0 +1,25 @@
+//! Transaction behavior.
+//!
+//! The `Transaction` behavior defines commit/rollback semantics for database
+//! transactions.  Concrete driver adapters implement this on a transaction
+//! handle type that they produce from a `begin` call on their connection.
+
+use std::db::error::DbError
+
+/// A database transaction with commit/rollback semantics.
+///
+/// Implementations must guarantee that exactly one of `commit` or `rollback`
+/// is called before the transaction handle is dropped.  Drivers that support
+/// nested savepoints may expose additional methods on their concrete type.
+pub behavior Transaction {
+    /// Commits all changes made during this transaction.
+    ///
+    /// Returns `Ok(())` on success or `Err(DbError)` if the commit fails
+    /// (e.g. due to a constraint violation or a lost connection).
+    func commit(this) -> Outcome[Unit, DbError]
+
+    /// Rolls back all changes made during this transaction.
+    ///
+    /// Returns `Ok(())` on success or `Err(DbError)` if the rollback fails.
+    func rollback(this) -> Outcome[Unit, DbError]
+}

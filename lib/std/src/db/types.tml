@@ -1,0 +1,147 @@
+//! Column and table metadata types.
+//!
+//! Provides [`ColumnType`], [`ColumnInfo`], and [`TableInfo`] for describing
+//! the shape of database tables in a driver-agnostic way.
+
+/// The declared SQL type of a table column.
+pub type ColumnType {
+    /// An integer column (maps to I64 in TML).
+    Integer,
+    /// A floating-point column (maps to F64 in TML).
+    Float,
+    /// A text / VARCHAR column (maps to Str in TML).
+    Text,
+    /// A binary large-object column.
+    Blob,
+    /// A boolean column.
+    Boolean,
+    /// A timestamp column (stored as epoch milliseconds).
+    Timestamp,
+    /// A UUID column (stored as text).
+    Uuid,
+}
+
+impl ColumnType {
+    /// Returns a short SQL-style type name for display purposes.
+    pub func to_string(this) -> Str {
+        when this {
+            ColumnType::Integer   => "INTEGER",
+            ColumnType::Float     => "FLOAT",
+            ColumnType::Text      => "TEXT",
+            ColumnType::Blob      => "BLOB",
+            ColumnType::Boolean   => "BOOLEAN",
+            ColumnType::Timestamp => "TIMESTAMP",
+            ColumnType::Uuid      => "UUID",
+        }
+    }
+}
+
+impl Display for ColumnType {
+    pub func to_string(this) -> Str {
+        when this {
+            ColumnType::Integer   => "INTEGER",
+            ColumnType::Float     => "FLOAT",
+            ColumnType::Text      => "TEXT",
+            ColumnType::Blob      => "BLOB",
+            ColumnType::Boolean   => "BOOLEAN",
+            ColumnType::Timestamp => "TIMESTAMP",
+            ColumnType::Uuid      => "UUID",
+        }
+    }
+}
+
+/// Metadata for a single table column.
+///
+/// Returned by schema-introspection APIs so callers can inspect
+/// column names, types, and constraints without running raw SQL.
+pub type ColumnInfo {
+    /// The column name as it appears in the schema.
+    name: Str,
+    /// The declared SQL type of the column.
+    column_type: ColumnType,
+    /// `true` if the column accepts `NULL` values.
+    nullable: Bool,
+    /// `true` if this column is (part of) the primary key.
+    primary_key: Bool,
+}
+
+impl ColumnInfo {
+    /// Creates a new `ColumnInfo`.
+    pub func new(name: Str, column_type: ColumnType, nullable: Bool, primary_key: Bool) -> ColumnInfo {
+        ColumnInfo {
+            name: name,
+            column_type: column_type,
+            nullable: nullable,
+            primary_key: primary_key,
+        }
+    }
+
+    /// Returns the column name.
+    pub func name(this) -> Str {
+        this.name
+    }
+
+    /// Returns the declared column type.
+    pub func column_type(this) -> ColumnType {
+        this.column_type
+    }
+
+    /// Returns `true` if the column is nullable.
+    pub func nullable(this) -> Bool {
+        this.nullable
+    }
+
+    /// Returns `true` if the column is part of the primary key.
+    pub func primary_key(this) -> Bool {
+        this.primary_key
+    }
+}
+
+impl Display for ColumnInfo {
+    /// Formats as `"name TYPE [NOT NULL] [PK]"`.
+    pub func to_string(this) -> Str {
+        this.name + " " + this.column_type.to_string() +
+            (if not this.nullable { " NOT NULL" } else { "" }) +
+            (if this.primary_key { " PK" } else { "" })
+    }
+}
+
+/// High-level metadata for a database table.
+///
+/// Contains the table name and the number of columns.  Full column
+/// details are available via the schema-introspection API, which
+/// returns individual [`ColumnInfo`] values.
+///
+/// Note: `columns` is stored as a count (I64) rather than a `List[ColumnInfo]`
+/// because generic List instantiation is not yet resolved at the module
+/// boundary.  The schema-introspection API returns column details separately.
+pub type TableInfo {
+    /// The table name.
+    name: Str,
+    /// The number of columns in the table.
+    columns: I64,
+}
+
+impl TableInfo {
+    /// Creates a new `TableInfo`.
+    pub func new(name: Str, columns: I64) -> TableInfo {
+        TableInfo { name: name, columns: columns }
+    }
+
+    /// Returns the table name.
+    pub func name(this) -> Str {
+        this.name
+    }
+
+    /// Returns the column count.
+    pub func columns(this) -> I64 {
+        this.columns
+    }
+}
+
+impl Display for TableInfo {
+    /// Formats as `"table_name (N columns)"`.
+    pub func to_string(this) -> Str {
+        this.name + " (" + this.columns.to_string() + " columns)"
+    }
+}

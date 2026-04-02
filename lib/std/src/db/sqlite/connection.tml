@@ -1,0 +1,111 @@
+//! SQLite connection adapter.
+//!
+//! [`SqliteConnection`] wraps a [`sqlite::Database`] and maps its
+//! `Outcome[_, Str]` errors into [`DbError`] values, providing a
+//! driver-agnostic interface over SQLite.
+
+use std::sqlite::Database
+use std::sqlite::Statement
+use std::db::error::{DbError, DbErrorKind}
+use std::db::driver::connection::Connection
+
+/// A database connection backed by SQLite.
+///
+/// Obtain one via [`SqliteConnection::open`] or [`SqliteConnection::open_in_memory`].
+/// The underlying `sqlite::Database` is closed when `close()` is called.
+pub type SqliteConnection {
+    db: Database,
+}
+
+impl SqliteConnection {
+    /// Opens a SQLite database file at `path`.
+    ///
+    /// Creates the file if it does not yet exist.  Returns a `DbError` with
+    /// kind `Connection` if the file cannot be opened.
+    pub func open(path: Str) -> Outcome[SqliteConnection, DbError] {
+        let result = Database::open(path)
+        when result {
+            Ok(db)   => return Ok(SqliteConnection { db: db }),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Connection, msg)),
+        }
+    }
+
+    /// Opens an in-memory SQLite database.
+    ///
+    /// The database is destroyed when the connection is closed.
+    pub func open_in_memory() -> Outcome[SqliteConnection, DbError] {
+        let result = Database::open_in_memory()
+        when result {
+            Ok(db)   => return Ok(SqliteConnection { db: db }),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Connection, msg)),
+        }
+    }
+
+    /// Prepares a SQL statement for parameterized execution.
+    ///
+    /// Returns a [`Statement`] so callers can wrap it in a [`SqliteStatement`]
+    /// or use it directly via the sqlite API.
+    pub func prepare(this, sql: Str) -> Outcome[Statement, DbError] {
+        let result = this.db.prepare(sql)
+        when result {
+            Ok(stmt) => return Ok(stmt),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
+        }
+    }
+
+    /// Begins a deferred transaction.
+    pub func begin(this) -> Outcome[Unit, DbError] {
+        let result = this.db.begin()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Commits the current transaction.
+    pub func commit(this) -> Outcome[Unit, DbError] {
+        let result = this.db.commit()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Rolls back the current transaction.
+    pub func rollback(this) -> Outcome[Unit, DbError] {
+        let result = this.db.rollback()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Returns a reference to the underlying `Database` for advanced or
+    /// driver-specific usage.
+    pub func raw_database(this) -> ref Database {
+        ref this.db
+    }
+}
+
+impl Connection for SqliteConnection {
+    /// Executes a SQL statement that does not return rows.
+    ///
+    /// Returns the number of rows affected.
+    pub func execute(this, sql: Str) -> Outcome[I64, DbError] {
+        let result = this.db.exec(sql)
+        when result {
+            Ok(_)    => return Ok(this.db.changes() as I64),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
+        }
+    }
+
+    /// Returns `true` if the connection is currently open.
+    pub func is_alive(this) -> Bool {
+        this.db.is_open()
+    }
+
+    /// Closes the database connection and releases all SQLite resources.
+    pub func close(mut this) {
+        this.db.close()
+    }
+}

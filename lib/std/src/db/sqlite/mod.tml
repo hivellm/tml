@@ -1,0 +1,19 @@
+//! SQLite driver adapter for the database abstraction layer.
+//!
+//! This module bridges `std::sqlite` with the `std::db` driver behaviors,
+//! wrapping [`sqlite::Database`] and [`sqlite::Statement`] in types that
+//! implement [`Connection`] and [`PreparedStatement`] respectively.
+//!
+//! # Quick start
+//!
+//! ```tml
+//! use std::db::sqlite::connection::SqliteConnection
+//!
+//! let conn = SqliteConnection::open_in_memory()!
+//! conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, val TEXT)")!
+//! conn.execute("INSERT INTO t VALUES (1, 'hello')")!
+//! ```
+
+pub mod driver
+pub mod connection
+pub mod statement

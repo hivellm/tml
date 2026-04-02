@@ -1,0 +1,24 @@
+// Tests for std::db::value — extra types
+use test::{assert, assert_eq}
+use std::db::value::DbValue
+
+@test
+func test_bytes_is_bytes() -> I32 {
+    let v = DbValue::Bytes(12345)
+    assert(v.is_bytes(), "should be bytes")
+    return 0
+}
+
+@test
+func test_timestamp_value() -> I32 {
+    let v = DbValue::Timestamp(1700000000000)
+    assert(v.is_timestamp(), "should be timestamp")
+    return 0
+}
+
+@test
+func test_cross_type_nothing() -> I32 {
+    let v = DbValue::Text("abc")
+    assert(v.as_i64().is_nothing(), "text as i64 should be Nothing")
+    return 0
+}

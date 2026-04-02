@@ -1,0 +1,73 @@
+// Tests for std::db::types
+use test::{assert, assert_eq}
+use std::db::types::{ColumnType, ColumnInfo, TableInfo}
+
+@test
+func test_column_type_integer_to_string() -> I32 {
+    assert_eq(ColumnType::Integer.to_string(), "INTEGER", "integer display")
+    return 0
+}
+
+@test
+func test_column_type_text_to_string() -> I32 {
+    assert_eq(ColumnType::Text.to_string(), "TEXT", "text display")
+    return 0
+}
+
+@test
+func test_column_type_float_to_string() -> I32 {
+    assert_eq(ColumnType::Float.to_string(), "FLOAT", "float display")
+    return 0
+}
+
+@test
+func test_column_type_blob_to_string() -> I32 {
+    assert_eq(ColumnType::Blob.to_string(), "BLOB", "blob display")
+    return 0
+}
+
+@test
+func test_column_type_boolean_to_string() -> I32 {
+    assert_eq(ColumnType::Boolean.to_string(), "BOOLEAN", "boolean display")
+    return 0
+}
+
+@test
+func test_column_info_creation() -> I32 {
+    let col = ColumnInfo::new("id", ColumnType::Integer, false, true)
+    assert_eq(col.name(), "id", "name should be id")
+    assert(col.primary_key(), "should be primary key")
+    assert(not col.nullable(), "should not be nullable")
+    return 0
+}
+
+@test
+func test_column_info_nullable() -> I32 {
+    let col = ColumnInfo::new("email", ColumnType::Text, true, false)
+    assert_eq(col.name(), "email", "name should be email")
+    assert(col.nullable(), "should be nullable")
+    assert(not col.primary_key(), "should not be primary key")
+    return 0
+}
+
+@test
+func test_column_info_column_type() -> I32 {
+    let col = ColumnInfo::new("score", ColumnType::Float, true, false)
+    assert_eq(col.column_type().to_string(), "FLOAT", "column type should be FLOAT")
+    return 0
+}
+
+@test
+func test_table_info_creation() -> I32 {
+    let table = TableInfo::new("users", 3)
+    assert_eq(table.name(), "users", "name should be users")
+    assert_eq(table.columns(), 3, "column count should be 3")
+    return 0
+}
+
+@test
+func test_table_info_name() -> I32 {
+    let table = TableInfo::new("orders", 5)
+    assert_eq(table.name(), "orders", "name should be orders")
+    return 0
+}

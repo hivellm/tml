@@ -1,0 +1,20 @@
+//! Database abstraction layer.
+//!
+//! Provides driver-agnostic database access with adapters for SQLite,
+//! PostgreSQL, MongoDB, Redis, and MySQL.
+//!
+//! # Modules
+//!
+//! | Module   | Contents                                               |
+//! |----------|--------------------------------------------------------|
+//! | `error`  | [`DbError`], [`DbErrorKind`] — error hierarchy        |
+//! | `value`  | [`DbValue`] — dynamic column value type               |
+//! | `types`  | [`ColumnType`], [`ColumnInfo`], [`TableInfo`]         |
+//! | `driver` | [`Connection`], [`PreparedStatement`], [`Transaction`] |
+//! | `sqlite` | [`SqliteConnection`], [`SqliteStatement`]             |
+
+pub mod error
+pub mod value
+pub mod types
+pub mod driver
+pub mod sqlite

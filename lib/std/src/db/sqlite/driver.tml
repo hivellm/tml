@@ -1,0 +1,18 @@
+//! SQLite driver type.
+//!
+//! `SqliteDriver` is a zero-size token type that identifies the SQLite backend.
+//! Construct it with `SqliteDriver::new()` and pass it to connection-factory
+//! functions that accept a driver value.
+
+/// The SQLite database driver.
+///
+/// This is a zero-size value type used as a marker for the SQLite backend.
+/// It carries no state — all state lives in [`SqliteConnection`].
+pub type SqliteDriver {}
+
+impl SqliteDriver {
+    /// Creates a new `SqliteDriver` instance.
+    pub func new() -> SqliteDriver {
+        SqliteDriver {}
+    }
+}

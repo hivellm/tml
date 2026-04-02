@@ -1,0 +1,128 @@
+//! Database error types.
+//!
+//! Provides a driver-agnostic error hierarchy for all database operations.
+//! Errors carry a [`DbErrorKind`] variant, a human-readable message, and an
+//! optional numeric driver error code.
+
+/// The category of a database error.
+pub type DbErrorKind {
+    /// Could not connect to the database server.
+    Connection,
+    /// A query failed to execute or returned unexpected results.
+    Query,
+    /// A parameter binding failed (type mismatch, out of range, etc.).
+    Bind,
+    /// A transaction operation failed (begin/commit/rollback).
+    Transaction,
+    /// A schema migration failed.
+    Migration,
+    /// An underlying driver or FFI error.
+    Driver,
+    /// A connection-pool error (exhausted, timeout, poisoned).
+    Pool,
+    /// A schema introspection or validation error.
+    Schema,
+    /// An operation exceeded its time limit.
+    Timeout,
+}
+
+impl DbErrorKind {
+    /// Returns a short string label for the error kind.
+    pub func to_string(this) -> Str {
+        when this {
+            DbErrorKind::Connection  => "Connection",
+            DbErrorKind::Query       => "Query",
+            DbErrorKind::Bind        => "Bind",
+            DbErrorKind::Transaction => "Transaction",
+            DbErrorKind::Migration   => "Migration",
+            DbErrorKind::Driver      => "Driver",
+            DbErrorKind::Pool        => "Pool",
+            DbErrorKind::Schema      => "Schema",
+            DbErrorKind::Timeout     => "Timeout",
+        }
+    }
+}
+
+impl Display for DbErrorKind {
+    pub func to_string(this) -> Str {
+        when this {
+            DbErrorKind::Connection  => "Connection",
+            DbErrorKind::Query       => "Query",
+            DbErrorKind::Bind        => "Bind",
+            DbErrorKind::Transaction => "Transaction",
+            DbErrorKind::Migration   => "Migration",
+            DbErrorKind::Driver      => "Driver",
+            DbErrorKind::Pool        => "Pool",
+            DbErrorKind::Schema      => "Schema",
+            DbErrorKind::Timeout     => "Timeout",
+        }
+    }
+}
+
+/// A driver-agnostic database error.
+///
+/// Every error carries a [`DbErrorKind`] classifying the failure,
+/// a human-readable message, and an optional numeric code from the
+/// underlying driver (e.g. SQLite error codes, PostgreSQL SQLSTATE).
+///
+/// # Examples
+///
+/// ```tml
+/// let err = DbError::new(DbErrorKind::Connection, "refused")
+/// println(err.to_string())  // "[Connection] refused"
+/// ```
+pub type DbError {
+    /// The category of this error.
+    kind: DbErrorKind,
+    /// A human-readable description of the error.
+    message: Str,
+    /// An optional numeric driver error code.
+    code: Maybe[I32],
+}
+
+impl DbError {
+    /// Creates a new `DbError` with no driver code attached.
+    pub func new(kind: DbErrorKind, message: Str) -> DbError {
+        DbError { kind: kind, message: message, code: Nothing }
+    }
+
+    /// Creates a new `DbError` with an explicit driver error code.
+    pub func with_code(kind: DbErrorKind, message: Str, code: I32) -> DbError {
+        DbError { kind: kind, message: message, code: Just(code) }
+    }
+
+    /// Returns the error kind.
+    pub func kind(this) -> DbErrorKind {
+        this.kind
+    }
+
+    /// Returns the error message.
+    pub func message(this) -> Str {
+        this.message
+    }
+
+    /// Returns the optional driver error code.
+    pub func code(this) -> Maybe[I32] {
+        this.code
+    }
+
+    /// Returns `true` if a driver error code is present.
+    pub func has_code(this) -> Bool {
+        when this.code {
+            Just(_) => true,
+            Nothing => false,
+        }
+    }
+}
+
+impl Display for DbError {
+    /// Formats as `"[Kind] message"`, e.g. `"[Connection] connection refused"`.
+    pub func to_string(this) -> Str {
+        "[" + this.kind.to_string() + "] " + this.message
+    }
+}
+
+// DbResult[T] = Outcome[T, DbError]
+//
+// TML does not yet support cross-module type aliases; callers should write
+// `Outcome[T, DbError]` directly.  The alias is documented here for clarity.

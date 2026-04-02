@@ -1,0 +1,58 @@
+// Tests for std::db::value — basic types
+use test::{assert, assert_eq}
+use std::db::value::DbValue
+
+@test
+func test_null_is_null() -> I32 {
+    let v = DbValue::Null
+    assert(v.is_null(), "should be null")
+    assert(v.as_i64().is_nothing(), "null as i64 should be Nothing")
+    return 0
+}
+
+@test
+func test_integer_value() -> I32 {
+    let v = DbValue::Integer(42)
+    assert(v.is_integer(), "should be integer")
+    let n = v.as_i64()
+    assert(n.is_just(), "should have i64 value")
+    assert_eq(n.unwrap(), 42, "value should be 42")
+    return 0
+}
+
+@test
+func test_float_value() -> I32 {
+    let v = DbValue::Float(3.14)
+    assert(v.is_float(), "should be float")
+    let f = v.as_f64()
+    assert(f.is_just(), "should have f64 value")
+    return 0
+}
+
+@test
+func test_text_value() -> I32 {
+    let v = DbValue::Text("hello")
+    assert(v.is_text(), "should be text")
+    let s = v.as_str()
+    assert(s.is_just(), "should have str value")
+    assert_eq(s.unwrap(), "hello", "value should be hello")
+    return 0
+}
+
+@test
+func test_bool_value() -> I32 {
+    let v = DbValue::Bool(true)
+    assert(v.is_bool(), "should be bool")
+    let b = v.as_bool()
+    assert(b.is_just(), "should have bool value")
+    assert_eq(b.unwrap(), true, "value should be true")
+    return 0
+}
+
+@test
+func test_type_names() -> I32 {
+    assert_eq(DbValue::Null.type_name(), "NULL", "null type")
+    assert_eq(DbValue::Integer(1).type_name(), "INTEGER", "int type")
+    assert_eq(DbValue::Text("x").type_name(), "TEXT", "text type")
+    return 0
+}
