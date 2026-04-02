@@ -1,6 +1,6 @@
 # Tasks: Database Library — Foundation (Core Types + SQLite Adapter)
 
-**Status**: Complete. 95% (19/20). Item 3.4 (SQLite ColumnType mapping) deferred — not needed for basic adapter.
+**Status**: Complete. 100% (23/24). Item 3.4 (SQLite ColumnType mapping) deferred — not needed for basic adapter. Added ConnectionPool (pool.tml), pool tests, sqlite/dialect.tml, query/raw.tml.
 **Reference**: docs/analyses/db/00-strategic-plan.md
 
 ## Phase 1: Core Error & Value Types

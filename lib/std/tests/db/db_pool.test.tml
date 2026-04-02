@@ -1,0 +1,48 @@
+use test::{assert, assert_eq}
+use std::db::driver::pool::{ConnectionPool, PoolConfig, PoolStats}
+
+@test
+func test_pool_creation() -> I32 {
+    let pool = ConnectionPool::with_defaults()
+    assert(not pool.is_closed(), "should not be closed")
+    let s = pool.stats()
+    assert_eq(s.active(), 0, "no active")
+    assert_eq(s.idle(), 0, "no idle")
+    return 0
+}
+
+@test
+func test_pool_acquire_release() -> I32 {
+    let mut pool = ConnectionPool::with_defaults()
+    let result = pool.acquire()
+    assert(result.is_ok(), "should acquire")
+    let s = pool.stats()
+    assert_eq(s.active(), 1, "one active")
+    pool.release()
+    let s2 = pool.stats()
+    assert_eq(s2.active(), 0, "none active after release")
+    assert_eq(s2.idle(), 1, "one idle after release")
+    return 0
+}
+
+@test
+func test_pool_max_connections() -> I32 {
+    let config = PoolConfig::new(1, 2)
+    let mut pool = ConnectionPool::new(config)
+    pool.acquire()
+    pool.acquire()
+    let result = pool.acquire()
+    assert(result.is_err(), "should fail when exhausted")
+    return 0
+}
+
+@test
+func test_pool_close() -> I32 {
+    let mut pool = ConnectionPool::with_defaults()
+    pool.acquire()
+    pool.close_all()
+    assert(pool.is_closed(), "should be closed")
+    let result = pool.acquire()
+    assert(result.is_err(), "should fail after close")
+    return 0
+}

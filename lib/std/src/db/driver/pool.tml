@@ -80,3 +80,91 @@ impl PoolStats {
     /// Returns how many times a caller had to wait for a connection.
     pub func wait_count(this) -> I64 { return this.wait_count }
 }
+
+/// A database connection pool that manages reusable connections.
+///
+/// Uses a simple counter-based approach: tracks how many connections
+/// are active vs idle. Actual connection objects are managed externally.
+pub type ConnectionPool {
+    config: PoolConfig,
+    active_count: I32,
+    idle_count: I32,
+    total_count: I32,
+    wait_count: I64,
+    is_closed: Bool
+}
+
+impl ConnectionPool {
+    /// Creates a new connection pool with the given configuration.
+    pub func new(config: PoolConfig) -> ConnectionPool {
+        return ConnectionPool {
+            config: config,
+            active_count: 0,
+            idle_count: 0,
+            total_count: 0,
+            wait_count: 0,
+            is_closed: false
+        }
+    }
+
+    /// Creates a pool with default configuration.
+    pub func with_defaults() -> ConnectionPool {
+        return ConnectionPool::new(PoolConfig::default())
+    }
+
+    /// Acquires a connection from the pool.
+    /// Returns Ok(true) if a connection is available, Err if pool is exhausted or closed.
+    pub func acquire(mut this) -> Outcome[Bool, DbError] {
+        if this.is_closed {
+            return Err(DbError::new(DbErrorKind::Pool, "pool is closed"))
+        }
+        if this.idle_count > 0 {
+            this.idle_count = this.idle_count - 1
+            this.active_count = this.active_count + 1
+            return Ok(true)
+        }
+        if this.total_count < this.config.max_connections() {
+            this.total_count = this.total_count + 1
+            this.active_count = this.active_count + 1
+            return Ok(true)
+        }
+        this.wait_count = this.wait_count + 1
+        return Err(DbError::new(DbErrorKind::Pool, "pool exhausted"))
+    }
+
+    /// Releases a connection back to the pool.
+    pub func release(mut this) {
+        if this.active_count > 0 {
+            this.active_count = this.active_count - 1
+            this.idle_count = this.idle_count + 1
+        }
+    }
+
+    /// Closes all connections in the pool.
+    pub func close_all(mut this) {
+        this.active_count = 0
+        this.idle_count = 0
+        this.total_count = 0
+        this.is_closed = true
+    }
+
+    /// Returns current pool statistics.
+    pub func stats(this) -> PoolStats {
+        return PoolStats {
+            active: this.active_count,
+            idle: this.idle_count,
+            total: this.total_count,
+            wait_count: this.wait_count
+        }
+    }
+
+    /// Returns the pool configuration.
+    pub func config(this) -> PoolConfig {
+        return this.config
+    }
+
+    /// Returns true if the pool is closed.
+    pub func is_closed(this) -> Bool {
+        return this.is_closed
+    }
+}

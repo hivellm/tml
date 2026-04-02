@@ -1,0 +1,21 @@
+//! Raw SQL escape hatch.
+//!
+//! For cases where the query builder is insufficient, RawSql allows
+//! embedding arbitrary SQL strings directly.
+
+/// A raw SQL fragment that bypasses the query builder.
+pub type RawSql {
+    sql: Str
+}
+
+impl RawSql {
+    /// Creates a new raw SQL fragment.
+    pub func new(sql: Str) -> RawSql {
+        return RawSql { sql: sql }
+    }
+
+    /// Returns the raw SQL string.
+    pub func to_sql(this) -> Str {
+        return this.sql
+    }
+}

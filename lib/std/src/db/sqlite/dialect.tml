@@ -1,0 +1,27 @@
+//! SQLite-specific SQL dialect.
+use std::db::query::dialect::Dialect
+
+/// SQLite SQL dialect implementation.
+pub type SqliteDialect {}
+
+impl SqliteDialect {
+    /// Creates a new SQLite dialect instance.
+    pub func new() -> SqliteDialect {
+        return SqliteDialect {}
+    }
+
+    /// Quotes an identifier with double quotes (SQLite convention).
+    pub func quote_identifier(this, name: Str) -> Str {
+        return "\"" + name + "\""
+    }
+
+    /// Returns "?" as SQLite uses positional placeholders.
+    pub func placeholder(this, index: I32) -> Str {
+        return "?"
+    }
+
+    /// SQLite 3.35+ supports RETURNING.
+    pub func supports_returning(this) -> Bool {
+        return true
+    }
+}

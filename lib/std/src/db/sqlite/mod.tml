@@ -17,3 +17,4 @@
 pub mod driver
 pub mod connection
 pub mod statement
+pub mod dialect
