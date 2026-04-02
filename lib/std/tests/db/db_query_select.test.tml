@@ -1,6 +1,8 @@
-// Tests for std::db::query::select — SelectQuery builder
+// Tests for std::db::query — SelectQuery + InsertQuery builders
+// Combined into one file to share Expr codegen (avoids suite-mode timeout)
 use test::{assert, assert_eq}
 use std::db::query::select::SelectQuery
+use std::db::query::insert::InsertQuery
 use std::db::query::expression::Expr
 
 @test
@@ -35,7 +37,6 @@ func test_select_with_offset() -> I32 {
 
 @test
 func test_select_with_where() -> I32 {
-    // Use column comparison to column (avoids template-literal int rendering)
     let expr = Expr::column("status").eq(Expr::str("active"))
     let q = SelectQuery::new("users").where_expr(expr)
     let sql = q.to_sql()
@@ -62,5 +63,31 @@ func test_select_combined() -> I32 {
     assert(sql.contains("SELECT id, total FROM orders"), "should have select and table")
     assert(sql.contains("WHERE"), "should have WHERE")
     assert(sql.contains("LIMIT 5"), "should have LIMIT 5")
+    return 0
+}
+
+// === INSERT tests ===
+
+@test
+func test_insert_default_values() -> I32 {
+    let q = InsertQuery::new("users")
+    assert_eq(q.to_sql(), "INSERT INTO users DEFAULT VALUES", "default values")
+    return 0
+}
+
+@test
+func test_insert_single_value() -> I32 {
+    let q = InsertQuery::new("users").value("name", Expr::str("alice"))
+    let sql = q.to_sql()
+    assert(sql.contains("INSERT INTO users"), "has table")
+    assert(sql.contains("'alice'"), "has value")
+    return 0
+}
+
+@test
+func test_insert_raw_expression() -> I32 {
+    let q = InsertQuery::new("events").value("ts", Expr::raw("CURRENT_TIMESTAMP"))
+    let sql = q.to_sql()
+    assert(sql.contains("CURRENT_TIMESTAMP"), "has raw expr")
     return 0
 }

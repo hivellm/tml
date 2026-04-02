@@ -1,52 +1,52 @@
 //! INSERT query builder.
+//!
+//! Uses string accumulation instead of List[T] to avoid heavy generic
+//! instantiation that causes suite-mode compilation timeouts.
 
-use std::collections::List
 use std::db::query::expression::Expr
-
-/// A column-value pair for an INSERT statement.
-pub type InsertValue {
-    column: Str,
-    expr: Expr
-}
 
 /// An INSERT query builder.
 pub type InsertQuery {
     table: Str,
-    values: List[InsertValue]
+    columns_str: Str,
+    values_str: Str,
+    count: I32
 }
 
 impl InsertQuery {
     /// Creates a new INSERT query for the given table.
     pub func new(table: Str) -> InsertQuery {
-        return InsertQuery { table: table, values: List::new() }
+        return InsertQuery { table: table, columns_str: "", values_str: "", count: 0 }
     }
 
     /// Adds a column-value pair to the INSERT.
     pub func value(this, column: Str, expr: Expr) -> InsertQuery {
-        let iv = InsertValue { column: column, expr: expr }
-        this.values.push(iv)
-        return InsertQuery { table: this.table, values: this.values }
+        if this.count == 0 {
+            return InsertQuery {
+                table: this.table,
+                columns_str: column,
+                values_str: expr.to_sql(),
+                count: 1
+            }
+        }
+        return InsertQuery {
+            table: this.table,
+            columns_str: this.columns_str + ", " + column,
+            values_str: this.values_str + ", " + expr.to_sql(),
+            count: this.count + 1
+        }
     }
 
     /// Renders the query to a SQL string.
     pub func to_sql(this) -> Str {
-        if this.values.len() == 0 {
+        if this.count == 0 {
             return "INSERT INTO " + this.table + " DEFAULT VALUES"
         }
-        var cols: Str = ""
-        var vals: Str = ""
-        let n = this.values.len()
-        var i: I64 = 0
-        loop (i < n) {
-            let iv = this.values.get(i)
-            if i > 0 {
-                cols = cols + ", "
-                vals = vals + ", "
-            }
-            cols = cols + iv.column
-            vals = vals + iv.expr.to_sql()
-            i = i + 1
-        }
-        return "INSERT INTO " + this.table + " (" + cols + ") VALUES (" + vals + ")"
+        return "INSERT INTO " + this.table + " (" + this.columns_str + ") VALUES (" + this.values_str + ")"
+    }
+
+    /// Returns the number of column-value pairs.
+    pub func len(this) -> I32 {
+        return this.count
     }
 }
