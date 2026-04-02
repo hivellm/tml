@@ -1,0 +1,92 @@
+// Extra coverage tests for CStr — from_ptr, as_ptr, to_str, to_owned_str, len, is_empty, byte_at, eq, to_string
+use test::{assert, assert_eq}
+use core::ffi::cstr::CStr
+use std::ffi::cstring::CString
+
+@test
+func test_cstr_from_ptr_and_as_ptr() -> I32 {
+    let cs = CString::new("hello").unwrap()
+    let raw: *U8 = cs.as_ptr()
+    let cstr: CStr = CStr::from_ptr(raw)
+    let back: *U8 = cstr.as_ptr()
+    assert(back as I64 != 0, "as_ptr should return non-null")
+    return 0
+}
+
+@test
+func test_cstr_to_str() -> I32 {
+    let cs = CString::new("world").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    let s: Str = cstr.to_str()
+    assert_eq(s, "world", "to_str should return world")
+    return 0
+}
+
+@test
+func test_cstr_to_owned_str() -> I32 {
+    let cs = CString::new("owned").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    let owned: Str = cstr.to_owned_str()
+    assert_eq(owned, "owned", "to_owned_str should return owned")
+    return 0
+}
+
+@test
+func test_cstr_len() -> I32 {
+    let cs = CString::new("abc").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    assert_eq(cstr.len(), 3, "len should be 3")
+    return 0
+}
+
+@test
+func test_cstr_is_empty() -> I32 {
+    let cs_empty = CString::new("").unwrap()
+    let cstr_empty: CStr = cs_empty.as_cstr()
+    assert(cstr_empty.is_empty(), "empty cstr should be empty")
+
+    let cs_nonempty = CString::new("x").unwrap()
+    let cstr_nonempty: CStr = cs_nonempty.as_cstr()
+    assert(not cstr_nonempty.is_empty(), "nonempty cstr should not be empty")
+    return 0
+}
+
+@test
+func test_cstr_byte_at() -> I32 {
+    let cs = CString::new("XYZ").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    assert_eq(cstr.byte_at(0) as I64, 88, "X = 88")
+    assert_eq(cstr.byte_at(1) as I64, 89, "Y = 89")
+    assert_eq(cstr.byte_at(2) as I64, 90, "Z = 90")
+    return 0
+}
+
+@test
+func test_cstr_eq() -> I32 {
+    let cs1 = CString::new("same").unwrap()
+    let cs2 = CString::new("same").unwrap()
+    let cs3 = CString::new("diff").unwrap()
+    let cstr1: CStr = cs1.as_cstr()
+    let cstr2: CStr = cs2.as_cstr()
+    let cstr3: CStr = cs3.as_cstr()
+    assert(cstr1.eq(ref cstr2), "equal cstrs should be eq")
+    assert(not cstr1.eq(ref cstr3), "different cstrs should not be eq")
+    return 0
+}
+
+@test
+func test_cstr_to_string() -> I32 {
+    let cs = CString::new("display").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    let s: Str = cstr.to_string()
+    assert_eq(s, "display", "to_string should return display")
+    return 0
+}
+
+@test
+func test_cstr_empty_len() -> I32 {
+    let cs = CString::new("").unwrap()
+    let cstr: CStr = cs.as_cstr()
+    assert_eq(cstr.len(), 0, "empty cstr len should be 0")
+    return 0
+}
