@@ -471,6 +471,15 @@ auto LLVMIRGen::contains_unresolved_generic(const types::TypePtr& type) -> bool 
             return true;
         }
 
+        // Check if this is a bare type parameter name (e.g., "T", "U", "E")
+        // that should be substituted. Type parameters appear as NamedType, not
+        // GenericType, when they come from parser types. If current_type_subs_
+        // has a mapping for this name, it's an unresolved generic parameter.
+        if (named.type_args.empty() && !named.name.empty() &&
+            current_type_subs_.find(named.name) != current_type_subs_.end()) {
+            return true;
+        }
+
         // Check if this is a known generic struct being used without type arguments
         // e.g., ChannelNode (which requires T) being used without [I32]
         if (named.type_args.empty()) {
