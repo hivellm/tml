@@ -1,0 +1,27 @@
+//! DROP TABLE query builder.
+
+/// A DROP TABLE query builder.
+pub type DropTableQuery {
+    table_name: Str,
+    if_exists: Bool
+}
+
+impl DropTableQuery {
+    /// Creates a new DROP TABLE builder for the given table.
+    pub func new(table: Str) -> DropTableQuery {
+        return DropTableQuery { table_name: table, if_exists: false }
+    }
+
+    /// Adds an IF EXISTS guard to the statement.
+    pub func if_exists(this) -> DropTableQuery {
+        return DropTableQuery { table_name: this.table_name, if_exists: true }
+    }
+
+    /// Renders the DROP TABLE statement to SQL.
+    pub func to_sql(this) -> Str {
+        if this.if_exists {
+            return "DROP TABLE IF EXISTS " + this.table_name
+        }
+        return "DROP TABLE " + this.table_name
+    }
+}

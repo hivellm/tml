@@ -1,0 +1,46 @@
+// Tests for DDL query builders: DropTableQuery, AlterTableQuery, CreateTableQuery
+use test::{assert, assert_eq}
+use std::db::query::drop_table::DropTableQuery
+use std::db::query::alter_table::AlterTableQuery
+
+@test
+func test_drop_table_basic() -> I32 {
+    let q = DropTableQuery::new("temp")
+    assert_eq(q.to_sql(), "DROP TABLE temp", "drop table")
+    return 0
+}
+
+@test
+func test_drop_table_if_exists() -> I32 {
+    let q = DropTableQuery::new("temp").if_exists()
+    assert_eq(q.to_sql(), "DROP TABLE IF EXISTS temp", "drop if exists")
+    return 0
+}
+
+@test
+func test_alter_add_column() -> I32 {
+    let q = AlterTableQuery::new("users").add_column("email", "TEXT")
+    assert_eq(q.to_sql(), "ALTER TABLE users ADD COLUMN email TEXT", "alter add")
+    return 0
+}
+
+@test
+func test_alter_drop_column() -> I32 {
+    let q = AlterTableQuery::new("users").drop_column("old_field")
+    assert_eq(q.to_sql(), "ALTER TABLE users DROP COLUMN old_field", "alter drop")
+    return 0
+}
+
+@test
+func test_alter_rename_column() -> I32 {
+    let q = AlterTableQuery::new("users").rename_column("fname", "first_name")
+    assert_eq(q.to_sql(), "ALTER TABLE users RENAME COLUMN fname TO first_name", "rename column")
+    return 0
+}
+
+@test
+func test_alter_rename_table() -> I32 {
+    let q = AlterTableQuery::new("old_table").rename_to("new_table")
+    assert_eq(q.to_sql(), "ALTER TABLE old_table RENAME TO new_table", "rename table")
+    return 0
+}

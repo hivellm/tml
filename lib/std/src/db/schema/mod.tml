@@ -1,0 +1,3 @@
+//! Database schema definition and introspection.
+pub mod table
+pub mod introspect

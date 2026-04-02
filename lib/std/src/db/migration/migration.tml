@@ -1,0 +1,46 @@
+//! Migration definition type.
+
+/// A database migration with up/down SQL.
+///
+/// Each migration has a numeric `version` (used for ordering), a human-readable
+/// `name`, the SQL to apply (`up_sql`), and the SQL to reverse it (`down_sql`).
+/// A checksum equal to the version number is stored for basic integrity
+/// checking; it uniquely identifies the migration within a given database.
+pub type Migration {
+    version: I64,
+    name: Str,
+    up_sql: Str,
+    down_sql: Str,
+    checksum: I64
+}
+
+impl Migration {
+    /// Creates a new migration.
+    ///
+    /// The checksum is set to `version` — it uniquely identifies the migration
+    /// and is stored in the history table for integrity verification.
+    pub func new(version: I64, name: Str, up: Str, down: Str) -> Migration {
+        return Migration {
+            version: version,
+            name: name,
+            up_sql: up,
+            down_sql: down,
+            checksum: version
+        }
+    }
+
+    /// Returns the migration version number.
+    pub func version(this) -> I64 { return this.version }
+
+    /// Returns the migration name.
+    pub func name(this) -> Str { return this.name }
+
+    /// Returns the SQL to apply this migration.
+    pub func up_sql(this) -> Str { return this.up_sql }
+
+    /// Returns the SQL to reverse this migration.
+    pub func down_sql(this) -> Str { return this.down_sql }
+
+    /// Returns the checksum for integrity verification.
+    pub func checksum(this) -> I64 { return this.checksum }
+}

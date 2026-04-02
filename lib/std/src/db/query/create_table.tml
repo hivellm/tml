@@ -1,0 +1,45 @@
+//! CREATE TABLE query builder.
+use std::collections::List
+use std::db::schema::table::ColumnDef
+
+/// A CREATE TABLE query builder.
+pub type CreateTableQuery {
+    table_name: Str,
+    columns: List[ColumnDef],
+    if_not_exists: Bool
+}
+
+impl CreateTableQuery {
+    /// Creates a new CREATE TABLE builder for the given table name.
+    pub func new(name: Str) -> CreateTableQuery {
+        return CreateTableQuery { table_name: name, columns: List[ColumnDef]::new(0), if_not_exists: false }
+    }
+
+    /// Adds an IF NOT EXISTS guard to the statement.
+    pub func if_not_exists(this) -> CreateTableQuery {
+        return CreateTableQuery { table_name: this.table_name, columns: this.columns, if_not_exists: true }
+    }
+
+    /// Appends a column definition to the table.
+    pub func column(mut this, col: ColumnDef) -> CreateTableQuery {
+        this.columns.push(col)
+        return CreateTableQuery { table_name: this.table_name, columns: this.columns, if_not_exists: this.if_not_exists }
+    }
+
+    /// Renders the CREATE TABLE statement to SQL.
+    pub func to_sql(this) -> Str {
+        var sql: Str = "CREATE TABLE "
+        if this.if_not_exists { sql = sql + "IF NOT EXISTS " }
+        sql = sql + this.table_name + " ("
+        let n = this.columns.len()
+        var i: I64 = 0
+        loop (i < n) {
+            let col = this.columns.get(i)
+            if i > 0 { sql = sql + ", " }
+            sql = sql + col.to_sql()
+            i = i + 1
+        }
+        sql = sql + ")"
+        return sql
+    }
+}

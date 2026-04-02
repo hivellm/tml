@@ -1,0 +1,24 @@
+//! Migration history table management.
+//!
+//! Provides SQL statement generators for managing the `_tml_migrations`
+//! tracking table that records which migrations have been applied.
+
+/// Returns the SQL to create the migrations history table if it does not yet exist.
+pub func create_history_sql() -> Str {
+    return "CREATE TABLE IF NOT EXISTS _tml_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum INTEGER NOT NULL, applied_at INTEGER NOT NULL DEFAULT (strftime('%s','now')))"
+}
+
+/// Returns an INSERT statement that records a migration as applied.
+pub func record_migration_sql(version: I64, name: Str, checksum: I64) -> Str {
+    return "INSERT INTO _tml_migrations (version, name, checksum) VALUES (" + version.to_string() + ", '" + name + "', " + checksum.to_string() + ")"
+}
+
+/// Returns a DELETE statement that removes a migration record (used for rollback).
+pub func remove_migration_sql(version: I64) -> Str {
+    return "DELETE FROM _tml_migrations WHERE version = " + version.to_string()
+}
+
+/// Returns a SELECT statement that retrieves the highest applied version (0 if none).
+pub func latest_version_sql() -> Str {
+    return "SELECT COALESCE(MAX(version), 0) FROM _tml_migrations"
+}

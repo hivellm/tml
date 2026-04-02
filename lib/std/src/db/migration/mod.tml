@@ -1,0 +1,7 @@
+//! Database migration engine.
+//!
+//! Provides types and functions for defining, applying, and rolling back
+//! schema migrations against a SQLite database.
+pub mod migration
+pub mod history
+pub mod runner

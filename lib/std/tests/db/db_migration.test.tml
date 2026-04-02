@@ -1,0 +1,63 @@
+// Tests for std::db::migration — Migration type and history SQL generators
+use test::{assert, assert_eq}
+use std::db::migration::migration::Migration
+use std::db::migration::history
+
+@test
+func test_migration_creation() -> I32 {
+    let m = Migration::new(1, "create_users", "CREATE TABLE users (id INTEGER)", "DROP TABLE users")
+    assert_eq(m.version(), 1, "version")
+    assert_eq(m.name(), "create_users", "name")
+    return 0
+}
+
+@test
+func test_migration_sql_accessors() -> I32 {
+    let m = Migration::new(2, "add_email", "ALTER TABLE users ADD COLUMN email TEXT", "ALTER TABLE users DROP COLUMN email")
+    assert_eq(m.up_sql(), "ALTER TABLE users ADD COLUMN email TEXT", "up sql")
+    assert_eq(m.down_sql(), "ALTER TABLE users DROP COLUMN email", "down sql")
+    return 0
+}
+
+@test
+func test_migration_checksum() -> I32 {
+    let m = Migration::new(5, "init", "CREATE TABLE t (id INTEGER)", "DROP TABLE t")
+    // checksum == version (uniquely identifies the migration)
+    assert_eq(m.checksum(), 5, "checksum equals version")
+    return 0
+}
+
+@test
+func test_history_create_sql() -> I32 {
+    let sql = history::create_history_sql()
+    assert(sql.contains("_tml_migrations"), "has table name")
+    assert(sql.contains("IF NOT EXISTS"), "has if not exists")
+    assert(sql.contains("version INTEGER PRIMARY KEY"), "has version pk")
+    return 0
+}
+
+@test
+func test_history_record_sql() -> I32 {
+    let sql = history::record_migration_sql(1, "init", 12345)
+    assert(sql.contains("INSERT INTO _tml_migrations"), "has insert")
+    assert(sql.contains("1"), "has version")
+    assert(sql.contains("init"), "has name")
+    assert(sql.contains("12345"), "has checksum")
+    return 0
+}
+
+@test
+func test_history_remove_sql() -> I32 {
+    let sql = history::remove_migration_sql(3)
+    assert(sql.contains("DELETE FROM _tml_migrations"), "has delete")
+    assert(sql.contains("3"), "has version")
+    return 0
+}
+
+@test
+func test_history_latest_version_sql() -> I32 {
+    let sql = history::latest_version_sql()
+    assert(sql.contains("MAX(version)"), "has max version")
+    assert(sql.contains("_tml_migrations"), "has table name")
+    return 0
+}

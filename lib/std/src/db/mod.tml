@@ -19,3 +19,5 @@ pub mod types
 pub mod driver
 pub mod sqlite
 pub mod query
+pub mod schema
+pub mod migration

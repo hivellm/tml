@@ -1,0 +1,51 @@
+//! ALTER TABLE query builder.
+
+/// An ALTER TABLE query builder.
+pub type AlterTableQuery {
+    table_name: Str,
+    action: Str
+}
+
+impl AlterTableQuery {
+    /// Creates a new ALTER TABLE builder for the given table.
+    pub func new(table: Str) -> AlterTableQuery {
+        return AlterTableQuery { table_name: table, action: "" }
+    }
+
+    /// Adds a new column to the table.
+    pub func add_column(this, col_name: Str, col_type: Str) -> AlterTableQuery {
+        return AlterTableQuery {
+            table_name: this.table_name,
+            action: "ADD COLUMN " + col_name + " " + col_type
+        }
+    }
+
+    /// Drops an existing column from the table.
+    pub func drop_column(this, col_name: Str) -> AlterTableQuery {
+        return AlterTableQuery {
+            table_name: this.table_name,
+            action: "DROP COLUMN " + col_name
+        }
+    }
+
+    /// Renames a column.
+    pub func rename_column(this, old_name: Str, new_name: Str) -> AlterTableQuery {
+        return AlterTableQuery {
+            table_name: this.table_name,
+            action: "RENAME COLUMN " + old_name + " TO " + new_name
+        }
+    }
+
+    /// Renames the table itself.
+    pub func rename_to(this, new_name: Str) -> AlterTableQuery {
+        return AlterTableQuery {
+            table_name: this.table_name,
+            action: "RENAME TO " + new_name
+        }
+    }
+
+    /// Renders the ALTER TABLE statement to SQL.
+    pub func to_sql(this) -> Str {
+        return "ALTER TABLE " + this.table_name + " " + this.action
+    }
+}

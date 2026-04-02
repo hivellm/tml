@@ -1,0 +1,57 @@
+//! Schema introspection for SQLite databases.
+use std::db::sqlite::connection::SqliteConnection
+use std::db::sqlite::statement::SqliteStatement
+use std::db::error::{DbError, DbErrorKind}
+
+/// Introspects a table and returns its column descriptions as a comma-separated string.
+///
+/// Each column entry has the form `"name type [PK] [NOT NULL]"`.
+/// Uses SQLite's `PRAGMA table_info()` query.
+pub func introspect_table(conn: ref SqliteConnection, table_name: Str) -> Outcome[Str, DbError] {
+    let sql = "PRAGMA table_info(" + table_name + ")"
+    let stmt_result = conn.prepare(sql)
+    when stmt_result {
+        Ok(raw_stmt) => {
+            let mut stmt = SqliteStatement::new(raw_stmt)
+            var result: Str = ""
+            var count: I32 = 0
+            loop (stmt.step()) {
+                if count > 0 { result = result + ", " }
+                let name = stmt.column_str(1)
+                let col_type = stmt.column_str(2)
+                let notnull = stmt.column_i64(3)
+                let pk = stmt.column_i64(5)
+                result = result + name + " " + col_type
+                if pk > 0 { result = result + " PK" }
+                if notnull > 0 { result = result + " NOT NULL" }
+                count = count + 1
+            }
+            stmt.finalize()
+            return Ok(result)
+        },
+        Err(e) => return Err(e)
+    }
+}
+
+/// Lists all user-defined table names in the database as a comma-separated string.
+///
+/// Tables whose names begin with `sqlite_` are excluded.
+pub func list_tables(conn: ref SqliteConnection) -> Outcome[Str, DbError] {
+    let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    let stmt_result = conn.prepare(sql)
+    when stmt_result {
+        Ok(raw_stmt) => {
+            let mut stmt = SqliteStatement::new(raw_stmt)
+            var result: Str = ""
+            var count: I32 = 0
+            loop (stmt.step()) {
+                if count > 0 { result = result + ", " }
+                result = result + stmt.column_str(0)
+                count = count + 1
+            }
+            stmt.finalize()
+            return Ok(result)
+        },
+        Err(e) => return Err(e)
+    }
+}

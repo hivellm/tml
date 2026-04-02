@@ -1,0 +1,61 @@
+// Tests for std::db::schema::table — ColumnDef, IndexDef, ForeignKeyDef
+use test::{assert, assert_eq}
+use std::db::schema::table::{ColumnDef, IndexDef, ForeignKeyDef}
+
+@test
+func test_column_def_basic() -> I32 {
+    let col = ColumnDef::new("id", "INTEGER").primary().not_null()
+    let sql = col.to_sql()
+    assert(sql.contains("id INTEGER"), "has name and type")
+    assert(sql.contains("PRIMARY KEY"), "has PK")
+    assert(sql.contains("NOT NULL"), "has NOT NULL")
+    return 0
+}
+
+@test
+func test_column_def_nullable() -> I32 {
+    let col = ColumnDef::new("bio", "TEXT")
+    let sql = col.to_sql()
+    assert(sql.contains("bio TEXT"), "has name and type")
+    assert(not sql.contains("NOT NULL"), "is nullable by default")
+    return 0
+}
+
+@test
+func test_column_def_with_default() -> I32 {
+    let col = ColumnDef::new("status", "TEXT").with_default("'active'")
+    let sql = col.to_sql()
+    assert(sql.contains("DEFAULT 'active'"), "has default")
+    return 0
+}
+
+@test
+func test_column_def_unique() -> I32 {
+    let col = ColumnDef::new("email", "TEXT").unique()
+    let sql = col.to_sql()
+    assert(sql.contains("UNIQUE"), "has unique constraint")
+    return 0
+}
+
+@test
+func test_index_def_unique() -> I32 {
+    let idx = IndexDef::new("idx_email", "email", true)
+    let sql = idx.to_sql("users")
+    assert_eq(sql, "CREATE UNIQUE INDEX idx_email ON users (email)", "unique index")
+    return 0
+}
+
+@test
+func test_index_def_non_unique() -> I32 {
+    let idx = IndexDef::new("idx_name", "name", false)
+    let sql = idx.to_sql("users")
+    assert_eq(sql, "CREATE INDEX idx_name ON users (name)", "non-unique index")
+    return 0
+}
+
+@test
+func test_foreign_key_def() -> I32 {
+    let fk = ForeignKeyDef::new("user_id", "users", "id")
+    assert_eq(fk.to_sql(), "FOREIGN KEY (user_id) REFERENCES users(id)", "fk sql")
+    return 0
+}

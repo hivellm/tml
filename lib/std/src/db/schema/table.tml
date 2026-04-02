@@ -1,0 +1,113 @@
+//! Database schema types for table definitions.
+
+/// A foreign key constraint definition.
+pub type ForeignKeyDef {
+    /// Columns in this table.
+    columns: Str,
+    /// Referenced table name.
+    ref_table: Str,
+    /// Referenced column names.
+    ref_columns: Str
+}
+
+impl ForeignKeyDef {
+    /// Creates a new foreign key constraint.
+    pub func new(columns: Str, ref_table: Str, ref_columns: Str) -> ForeignKeyDef {
+        return ForeignKeyDef { columns: columns, ref_table: ref_table, ref_columns: ref_columns }
+    }
+
+    /// Renders the constraint to a SQL fragment.
+    pub func to_sql(this) -> Str {
+        return "FOREIGN KEY (" + this.columns + ") REFERENCES " + this.ref_table + "(" + this.ref_columns + ")"
+    }
+}
+
+/// An index definition.
+pub type IndexDef {
+    name: Str,
+    columns: Str,
+    is_unique: Bool
+}
+
+impl IndexDef {
+    /// Creates a new index definition.
+    pub func new(name: Str, columns: Str, is_unique: Bool) -> IndexDef {
+        return IndexDef { name: name, columns: columns, is_unique: is_unique }
+    }
+
+    /// Renders the CREATE INDEX statement for the given table.
+    pub func to_sql(this, table_name: Str) -> Str {
+        if this.is_unique {
+            return "CREATE UNIQUE INDEX " + this.name + " ON " + table_name + " (" + this.columns + ")"
+        }
+        return "CREATE INDEX " + this.name + " ON " + table_name + " (" + this.columns + ")"
+    }
+}
+
+/// A column definition for schema building.
+pub type ColumnDef {
+    name: Str,
+    col_type: Str,
+    nullable: Bool,
+    primary_key: Bool,
+    unique: Bool,
+    default_value: Str,
+    has_default: Bool
+}
+
+impl ColumnDef {
+    /// Creates a new column definition with the given name and SQL type string.
+    pub func new(name: Str, col_type: Str) -> ColumnDef {
+        return ColumnDef {
+            name: name, col_type: col_type,
+            nullable: true, primary_key: false, unique: false,
+            default_value: "", has_default: false
+        }
+    }
+
+    /// Marks the column as NOT NULL.
+    pub func not_null(this) -> ColumnDef {
+        return ColumnDef {
+            name: this.name, col_type: this.col_type,
+            nullable: false, primary_key: this.primary_key, unique: this.unique,
+            default_value: this.default_value, has_default: this.has_default
+        }
+    }
+
+    /// Marks the column as a PRIMARY KEY.
+    pub func primary(this) -> ColumnDef {
+        return ColumnDef {
+            name: this.name, col_type: this.col_type,
+            nullable: this.nullable, primary_key: true, unique: this.unique,
+            default_value: this.default_value, has_default: this.has_default
+        }
+    }
+
+    /// Marks the column as UNIQUE.
+    pub func unique(this) -> ColumnDef {
+        return ColumnDef {
+            name: this.name, col_type: this.col_type,
+            nullable: this.nullable, primary_key: this.primary_key, unique: true,
+            default_value: this.default_value, has_default: this.has_default
+        }
+    }
+
+    /// Sets a DEFAULT value for the column.
+    pub func with_default(this, val: Str) -> ColumnDef {
+        return ColumnDef {
+            name: this.name, col_type: this.col_type,
+            nullable: this.nullable, primary_key: this.primary_key, unique: this.unique,
+            default_value: val, has_default: true
+        }
+    }
+
+    /// Renders the column definition to a SQL fragment.
+    pub func to_sql(this) -> Str {
+        var sql: Str = this.name + " " + this.col_type
+        if this.primary_key { sql = sql + " PRIMARY KEY" }
+        if not this.nullable { sql = sql + " NOT NULL" }
+        if this.unique { sql = sql + " UNIQUE" }
+        if this.has_default { sql = sql + " DEFAULT " + this.default_value }
+        return sql
+    }
+}
