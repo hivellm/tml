@@ -747,6 +747,8 @@ add_library(tml_codegen STATIC
     src/codegen/codegen_backend.cpp
     src/codegen/c_header_gen.cpp
     src/codegen/codegen_partitioner.cpp
+    # Centralized ABI classification (Win64 calling convention)
+    src/codegen/abi.cpp
     # MIR codegen (MIR → LLVM IR text, backend-agnostic interface)
     src/codegen/mir_codegen.cpp
     src/codegen/mir/codegen_helpers.cpp
