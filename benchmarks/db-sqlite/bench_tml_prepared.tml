@@ -1,0 +1,101 @@
+/// TML SQLite Benchmark — PREPARED STATEMENTS (bind/step/reset)
+/// This is the optimized version that matches how Rust/Node/Go/Python work.
+use std::sqlite::{Database, Statement}
+use std::time::Instant
+
+func main() {
+    let db = Database::open_in_memory().unwrap()
+    db.exec("CREATE TABLE World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)")
+    db.exec("PRAGMA journal_mode=WAL")
+    db.exec("PRAGMA synchronous=OFF")
+
+    // Seed 100 rows using prepared statement
+    let mut seed_stmt = db.prepare("INSERT INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    var i: I64 = 1
+    loop (i <= 100) {
+        seed_stmt.bind_i64(1, i as I32)
+        seed_stmt.bind_i64(2, (i * 7 + 13) as I32)
+        seed_stmt.step()
+        seed_stmt.reset()
+        i = i + 1
+    }
+    seed_stmt.finalize()
+
+    let iters: I64 = 10000
+
+    // === INSERT with prepared statement ===
+    let mut ins = db.prepare("INSERT INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    db.exec("BEGIN")
+    let t1 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let id: I64 = 1000 + i
+        let val: I64 = i * 3
+        ins.bind_i64(1, id as I32)
+        ins.bind_i64(2, val as I32)
+        ins.step()
+        ins.reset()
+        i = i + 1
+    }
+    let insert_ns: I64 = t1.elapsed().as_nanos()
+    db.exec("COMMIT")
+    ins.finalize()
+
+    // === SELECT with prepared statement ===
+    let mut sel = db.prepare("SELECT id, randomNumber FROM World WHERE id = ?").unwrap()
+    let t2 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let pk: I64 = (i + 1)
+        sel.bind_i64(1, pk as I32)
+        sel.step()
+        let _id = sel.column_i64(0)
+        let _rn = sel.column_i64(1)
+        sel.reset()
+        i = i + 1
+    }
+    let select_ns: I64 = t2.elapsed().as_nanos()
+    sel.finalize()
+
+    // === UPDATE with prepared statement ===
+    let mut upd = db.prepare("UPDATE World SET randomNumber = ? WHERE id = ?").unwrap()
+    db.exec("BEGIN")
+    let t3 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let val: I64 = i * 11
+        let pk: I64 = i + 1
+        upd.bind_i64(1, val as I32)
+        upd.bind_i64(2, pk as I32)
+        upd.step()
+        upd.reset()
+        i = i + 1
+    }
+    let update_ns: I64 = t3.elapsed().as_nanos()
+    db.exec("COMMIT")
+    upd.finalize()
+
+    // === DELETE with prepared statement ===
+    let mut del = db.prepare("DELETE FROM World WHERE id = ?").unwrap()
+    db.exec("BEGIN")
+    let t4 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let pk: I64 = 1000 + i
+        del.bind_i64(1, pk as I32)
+        del.step()
+        del.reset()
+        i = i + 1
+    }
+    let delete_ns: I64 = t4.elapsed().as_nanos()
+    db.exec("COMMIT")
+    del.finalize()
+
+    db.close()
+
+    // Output CSV: lang,op,iters,total_ns
+    println("tml_prepared,insert," + iters.to_string() + "," + insert_ns.to_string())
+    println("tml_prepared,select," + iters.to_string() + "," + select_ns.to_string())
+    println("tml_prepared,update," + iters.to_string() + "," + update_ns.to_string())
+    println("tml_prepared,delete," + iters.to_string() + "," + delete_ns.to_string())
+}
