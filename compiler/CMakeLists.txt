@@ -751,6 +751,8 @@ add_library(tml_codegen STATIC
     src/codegen/abi.cpp
     # Typed codegen value wrapper (CGValue — replaces loose reg/type string pairs)
     src/codegen/cg_value.cpp
+    # Typed IR emission helper (IREmitter — validated LLVM IR instruction emission)
+    src/codegen/ir_emitter.cpp
     # MIR codegen (MIR → LLVM IR text, backend-agnostic interface)
     src/codegen/mir_codegen.cpp
     src/codegen/mir/codegen_helpers.cpp

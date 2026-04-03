@@ -1059,8 +1059,7 @@ void MirCodegen::emit_intrinsic_copy_nonoverlapping(const mir::CallInst& i) {
     src = ensure_ptr_reg(i.args[0], src, "cn");
     dst = ensure_ptr_reg(i.args[1], dst, "cn");
 
-    emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + count +
-           ", i1 false)");
+    emitter_.emit_memcpy(dst, src, count);
 }
 
 void MirCodegen::emit_intrinsic_memcpy(const mir::CallInst& i) {
@@ -1072,8 +1071,7 @@ void MirCodegen::emit_intrinsic_memcpy(const mir::CallInst& i) {
     src = ensure_ptr_reg(i.args[1], src, "mc");
     size = promote_to_i64(i.args[2], size, "mc");
 
-    emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + size +
-           ", i1 false)");
+    emitter_.emit_memcpy(dst, src, size);
 }
 
 void MirCodegen::emit_intrinsic_memmove(const mir::CallInst& i, const std::string& base_name) {
@@ -1091,8 +1089,7 @@ void MirCodegen::emit_intrinsic_memmove(const mir::CallInst& i, const std::strin
     src = ensure_ptr_reg(src_v, src, "mm");
     size = promote_to_i64(i.args[2], size, "mm");
 
-    emitln("    call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + size +
-           ", i1 false)");
+    emitter_.emit_memmove(dst, src, size);
 }
 
 void MirCodegen::emit_intrinsic_memset(const mir::CallInst& i, const std::string& base_name) {
@@ -1103,8 +1100,7 @@ void MirCodegen::emit_intrinsic_memset(const mir::CallInst& i, const std::string
     if (base_name == "mem_zero" && i.args.size() >= 2) {
         std::string size = get_value_reg(i.args[1]);
         size = promote_to_i64(i.args[1], size, "mz");
-        emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 0, i64 " + size +
-               ", i1 false)");
+        emitter_.emit_memset(dst, "0", size);
         return;
     }
 
@@ -1127,8 +1123,7 @@ void MirCodegen::emit_intrinsic_memset(const mir::CallInst& i, const std::string
 
         size = promote_to_i64(i.args[2], size, "ms");
 
-        emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val + ", i64 " + size +
-               ", i1 false)");
+        emitter_.emit_memset(dst, val, size);
     }
 }
 

@@ -38,6 +38,7 @@
 
 #include "codegen/abi.hpp"
 #include "codegen/cg_value.hpp"
+#include "codegen/ir_emitter.hpp"
 #include "common.hpp"
 #include "mir/mir.hpp"
 
@@ -87,8 +88,9 @@ private:
     MirCodegenOptions options_;
     std::stringstream output_;
     int temp_counter_ = 0;
-    int spill_counter_ = 0;        // Counter for struct-to-ptr spill allocas
-    int bounds_check_counter_ = 0; // Dedicated counter for bc.panic.N / bc.ok.N labels
+    IREmitter emitter_{output_, temp_counter_}; // Typed IR emission helper
+    int spill_counter_ = 0;                     // Counter for struct-to-ptr spill allocas
+    int bounds_check_counter_ = 0;              // Dedicated counter for bc.panic.N / bc.ok.N labels
 
     // Current function context
     std::string current_func_;
