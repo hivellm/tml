@@ -47,19 +47,22 @@ impl Response {
 
     // ── Builder methods (chainable) ──
 
-    /// Set the response body as JSON.
-    pub func json(this, data: Str) -> Response {
-        return Response { code: this.code, content_type: "application/json; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    /// Set JSON body and send. Returns the complete HTTP response string.
+    pub func json(this, data: Str) -> Str {
+        let r = Response { code: this.code, content_type: "application/json; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+        return r.send()
     }
 
-    /// Set the response body as HTML.
-    pub func html(this, data: Str) -> Response {
-        return Response { code: this.code, content_type: "text/html; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: 1 }
+    /// Set HTML body and send. Returns the complete HTTP response string.
+    pub func html(this, data: Str) -> Str {
+        let r = Response { code: this.code, content_type: "text/html; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: 1 }
+        return r.send()
     }
 
-    /// Set the response body as plain text.
-    pub func text(this, data: Str) -> Response {
-        return Response { code: this.code, content_type: "text/plain; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    /// Set plain text body and send. Returns the complete HTTP response string.
+    pub func text(this, data: Str) -> Str {
+        let r = Response { code: this.code, content_type: "text/plain; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+        return r.send()
     }
 
     /// Set a custom content type.
