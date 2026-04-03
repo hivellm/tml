@@ -32,8 +32,9 @@ enum class PassMode {
 /// ABI info for a single argument or return value.
 struct ArgABI {
     PassMode mode = PassMode::Direct;
-    std::string llvm_type; ///< The LLVM IR type string (e.g., "i64", "ptr", "%struct.Foo")
-    bool sret = false;     ///< True if this is a hidden sret return parameter
+    std::string llvm_type;    ///< The LLVM IR type string (e.g., "i64", "ptr", "%struct.Foo")
+    bool sret = false;        ///< True if this is a hidden sret return parameter
+    mir::MirTypePtr mir_type; ///< Original MIR type (for coercion checks at call sites)
 };
 
 /// ABI info for an entire function signature.

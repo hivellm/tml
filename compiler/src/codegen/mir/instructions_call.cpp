@@ -900,11 +900,11 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         pos += 2;
     }
 
-    // Look up declared parameter types from function signature
-    std::vector<mir::MirTypePtr> const* declared_param_types = nullptr;
-    auto fpt_it = func_param_types_.find(func_name);
-    if (fpt_it != func_param_types_.end()) {
-        declared_param_types = &fpt_it->second;
+    // Look up callee FnABI from cache (for array-to-slice coercion and spill decisions)
+    const codegen::FnABI* callee_abi = nullptr;
+    auto abi_it = fn_abi_cache_.find(func_name);
+    if (abi_it != fn_abi_cache_.end()) {
+        callee_abi = &abi_it->second;
     }
 
     // Pre-process arguments
@@ -939,9 +939,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         // 3. Spill the fat pointer to the stack
         // 4. Pass the fat pointer's address as ptr
         bool did_array_to_slice = false;
-        if (declared_param_types && j < declared_param_types->size()) {
-            auto& param_type = (*declared_param_types)[j];
-            if (param_type) {
+        if (callee_abi && j < callee_abi->args.size() && callee_abi->args[j].mir_type) {
+            const auto& param_type = callee_abi->args[j].mir_type;
+            {
                 auto* ptr_type = std::get_if<mir::MirPointerType>(&param_type->kind);
                 if (ptr_type && ptr_type->pointee) {
                     auto* slice_type = std::get_if<mir::MirSliceType>(&ptr_type->pointee->kind);
@@ -992,6 +992,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             // Win64 ABI: ALL aggregate-typed arguments (structs, enums, classes, unions)
             // must be spilled to memory and passed by pointer. Function definitions
             // declare these params as `ptr`, so the call site must match.
+            // NOTE: This checks the *actual argument value's* LLVM type, not the
+            // declared parameter type. An Indirect parameter might receive a scalar
+            // (e.g., i32) that was already loaded — only aggregate SSA values need spilling.
             bool is_aggregate_value = codegen::is_aggregate_llvm_type(actual_type);
 
             if (is_aggregate_value) {

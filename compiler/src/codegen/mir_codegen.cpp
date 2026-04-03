@@ -315,24 +315,11 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
         }
     }
 
-    // Collect declared parameter types for all functions (for array-to-slice coercion)
-    // Also convert this/self struct params to pointer types to match the actual
-    // LLVM IR signature (where struct this/self is always passed as ptr).
-    func_param_types_.clear();
+    // Build FnABI cache for all functions (for call-site ABI decisions).
+    // compute_fn_abi() handles this/self → ptr conversion for aggregate receivers.
+    fn_abi_cache_.clear();
     for (const auto& func : module.functions) {
-        std::vector<mir::MirTypePtr> param_types;
-        for (const auto& p : func.params) {
-            if ((p.name == "this" || p.name == "self") && p.type) {
-                std::string llvm_ty = mir_type_to_llvm(p.type);
-                if (llvm_ty.starts_with("%struct.") || llvm_ty.starts_with("%enum.") ||
-                    llvm_ty.starts_with("%class.") || llvm_ty.starts_with("%union.")) {
-                    param_types.push_back(mir::make_ptr_type());
-                    continue;
-                }
-            }
-            param_types.push_back(p.type);
-        }
-        func_param_types_[func.name] = std::move(param_types);
+        fn_abi_cache_[func.name] = codegen::compute_fn_abi(func);
     }
 
     // Emit functions: define for functions with bodies, declare for extern/imported
@@ -533,24 +520,11 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
         }
     }
 
-    // Collect declared parameter types for all functions (for array-to-slice coercion)
-    // Also convert this/self struct params to pointer types to match the actual
-    // LLVM IR signature (where struct this/self is always passed as ptr).
-    func_param_types_.clear();
+    // Build FnABI cache for all functions (for call-site ABI decisions).
+    // compute_fn_abi() handles this/self → ptr conversion for aggregate receivers.
+    fn_abi_cache_.clear();
     for (const auto& func : module.functions) {
-        std::vector<mir::MirTypePtr> param_types;
-        for (const auto& p : func.params) {
-            if ((p.name == "this" || p.name == "self") && p.type) {
-                std::string llvm_ty = mir_type_to_llvm(p.type);
-                if (llvm_ty.starts_with("%struct.") || llvm_ty.starts_with("%enum.") ||
-                    llvm_ty.starts_with("%class.") || llvm_ty.starts_with("%union.")) {
-                    param_types.push_back(mir::make_ptr_type());
-                    continue;
-                }
-            }
-            param_types.push_back(p.type);
-        }
-        func_param_types_[func.name] = std::move(param_types);
+        fn_abi_cache_[func.name] = codegen::compute_fn_abi(func);
     }
 
     // Emit functions: define for included (with body), declare for others/extern

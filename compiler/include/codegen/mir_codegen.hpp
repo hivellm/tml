@@ -174,11 +174,10 @@ private:
     // Parameter name to (value_id, type) mapping for indirect calls
     std::unordered_map<std::string, std::pair<mir::ValueId, mir::MirTypePtr>> param_info_;
 
-    // Function name to declared parameter types (for array-to-slice coercion etc.)
-    std::unordered_map<std::string, std::vector<mir::MirTypePtr>> func_param_types_;
-
     // Cached FnABI classifications keyed by mangled function name.
-    // Populated lazily by compute_fn_abi() calls during codegen.
+    // Populated at the start of generate()/generate_cgu() via compute_fn_abi().
+    // Replaces the former func_param_types_ map — provides richer per-argument
+    // ABI info (PassMode, llvm_type, mir_type) for call-site decisions.
     std::unordered_map<std::string, FnABI> fn_abi_cache_;
 
     // Generate helpers

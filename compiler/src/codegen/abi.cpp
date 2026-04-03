@@ -323,6 +323,17 @@ FnABI compute_fn_abi(const mir::Function& func) {
         }
 
         ArgABI arg_abi = classify_type(param.type);
+
+        // Store the original MIR type for call-site coercion checks.
+        // For this/self params that are aggregate types, the ABI passes them as ptr,
+        // so store a pointer MIR type to match the actual LLVM IR signature.
+        if ((param.name == "this" || param.name == "self") && arg_abi.mode == PassMode::Indirect &&
+            !arg_abi.sret) {
+            arg_abi.mir_type = mir::make_ptr_type();
+        } else {
+            arg_abi.mir_type = param.type;
+        }
+
         abi.args.push_back(arg_abi);
     }
 
