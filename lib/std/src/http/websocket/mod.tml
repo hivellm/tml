@@ -1,0 +1,3 @@
+//! WebSocket protocol (RFC 6455): framing, masking, handshake, and message assembly.
+
+pub mod websocket

@@ -1,0 +1,17 @@
+//! Built-in middleware: CORS, security headers, ETag, cache control, rate limiting,
+//! compression, byte-range, SSE streaming, static file serving, and sendfile.
+//!
+//! NOTE: `encoding` and `compression` are NOT re-exported at the std::http level
+//! to avoid pulling in zstd/brotli/zlib DLLs for all http users.
+//! Import directly: use std::http::middleware::compression::{CompressionOptions, compress_response}
+
+pub mod cors
+pub mod security
+pub mod etag
+pub mod cache_control
+pub mod rate_limit
+// compression intentionally excluded from default pub mod — see note above
+pub mod range
+pub mod stream
+pub mod static_server
+pub mod sendfile

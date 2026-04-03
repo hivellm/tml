@@ -1,109 +1,84 @@
-//! HTTP client, server, middleware, and framework — complete HTTP stack.
+//! HTTP — complete HTTP/1.1 stack with NestJS-style framework.
 //!
-//! Full HTTP/1.1 implementation with Express.js-like middleware ecosystem.
-//! Includes body parsing, compression, CORS, security headers, rate limiting,
-//! static file serving, ETag, SSE/streaming, range requests, and more.
+//! ## Module Structure
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | `protocol` | method, status, version, headers, error, cookie, chunked, functions |
+//! | `server` | HTTP server, workers, IOCP, dispatch, parsing, connections |
+//! | `client` | HTTP client, agent, connection pool |
+//! | `request` | request/response types, body parser, content type, multipart, encoding |
+//! | `middleware` | CORS, security, ETag, cache, rate limit, compression, SSE, static files |
+//! | `router` | radix-tree URL router |
+//! | `app` | application framework, controller, arena |
+//! | `websocket` | WebSocket protocol (RFC 6455) |
+//! | `h2` | HTTP/2 protocol (RFC 7540 + RFC 7541) |
+//! | `framework` | NestJS-style: JsonResponse, guards, pipes, interceptors |
 
-// ── Shared protocol types ───────────────────────────────────
-pub mod method
-pub mod status
-pub mod version
-pub mod headers
-pub mod error
-// encoding and compression are NOT declared as pub mod to avoid pulling in
-// std::zlib (zstd/brotli/zlib DLLs) for all std::http users.
-// Import directly: use std::http::encoding::{compress, decompress}
-// or: use std::http::compression::{CompressionOptions, compress_response}
-pub mod cookie
-pub mod chunked
-pub mod functions
-pub mod content_type
-pub mod body_parser
-
-// ── Connection, Request, Response, Client ─────────────────────
-pub mod connection
-pub mod request
-pub mod response
-pub mod client
-
-// ── Server ───────────────────────────────────────────────────
-pub mod incoming
-pub mod server_response
+// ── Subdirectory modules ─────────────────────────────────────
+pub mod protocol
 pub mod server
-
-// ── Connection Pooling ──────────────────────────────────────
-pub mod agent
-
-// ── Routing ─────────────────────────────────────────────────
+pub mod client
+pub mod request
+pub mod middleware
 pub mod router
-
-// ── Multipart ───────────────────────────────────────────────
-pub mod multipart
-
-// ── Application Framework ───────────────────────────────────
-pub mod parse
-pub mod dispatch
-pub mod worker
-pub mod iocp_worker
-pub mod work_stealing
-pub mod conn_pool
-pub mod bytes
-pub mod arena
 pub mod app
-pub mod controller
-
-// ── WebSocket Protocol (RFC 6455) ─────────────────────────────
 pub mod websocket
 
-// ── HTTP/2 Protocol (RFC 7540 + RFC 7541) ─────────────────────
+// ── Pre-existing subdirectory modules ────────────────────────
 pub mod h2
-
-// ── Middleware & Framework ───────────────────────────────────
-pub mod cors
-// compression removed from pub mod — see encoding note above
-pub mod security
-pub mod etag
-pub mod stream
-pub mod range
-pub mod cache_control
-pub mod rate_limit
-pub mod static_server
-
-// ── Re-exports ──────────────────────────────────────────────
-pub use std::http::method::Method
-pub use std::http::status::Status
-pub use std::http::version::HttpVersion
-pub use std::http::headers::Headers
-pub use std::http::error::{HttpError, HttpErrorKind}
-pub use std::http::cookie::Cookie
-pub use std::http::router::{Router, RouteMatch}
-// NOTE: encoding re-exports removed to avoid pulling in std::zlib (zstd/brotli/zlib DLLs)
-// when only core HTTP types are needed. Import directly: use std::http::encoding::{compress, decompress}
-pub use std::http::connection::{Connection, ConnectionInfo}
-pub use std::http::request::Request
-pub use std::http::response::Response
-pub use std::http::client::HttpClient
-pub use std::http::incoming::{IncomingMessage, parse_request}
-pub use std::http::server_response::ServerResponse
-pub use std::http::chunked::{encode_chunk, encode_final_chunk, encode_body_chunked, decode_chunked, recv_chunked_body, ChunkedResult}
-pub use std::http::multipart::{MultipartBuilder, MultipartPart}
-pub use std::http::functions::{methods, status_codes, validate_header_name, validate_header_value, MAX_HEADER_SIZE}
-pub use std::http::server::HttpServer
-pub use std::http::agent::{Agent, AgentOptions}
-pub use std::http::content_type::{parse_content_type, matches_type, negotiate}
-pub use std::http::body_parser::{ParsedBody, parse_body, form_get, url_decode}
-pub use std::http::cors::{CorsOptions, cors_headers, preflight_headers, is_preflight}
-// NOTE: compression re-exports removed to avoid pulling in std::zlib (zstd/brotli/zlib DLLs).
-// Import directly: use std::http::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
-pub use std::http::security::{SecurityOptions, security_headers}
-pub use std::http::etag::{generate, generate_weak, is_not_modified}
-pub use std::http::stream::{SseEvent, sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_headers, ndjson_line}
-pub use std::http::range::{ByteRange, parse_range, content_range, content_range_unsatisfied, is_range_satisfiable}
-pub use std::http::cache_control::{CacheOptions, cache_control_header}
-pub use std::http::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
-pub use std::http::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}
-pub use std::http::controller::{Controller, ControllerInfo, register_controller, register_controllers, register_all}
-pub use std::http::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage, ws_accept_key, ws_upgrade_response, ws_validate_upgrade, ws_encode_frame, ws_decode_frame, ws_assemble_message, ws_close_frame, ws_apply_mask, ws_mask, ws_unmask}
-
-// ── NestJS-style Framework (organized in sub-directory) ─────
 pub mod framework
+
+// ── Re-exports for backward compatibility ────────────────────
+// These keep all existing `use std::http::X` import paths working.
+// New code should prefer the organized paths, e.g. `std::http::protocol::method::Method`.
+
+// protocol/
+pub use std::http::protocol::method::Method
+pub use std::http::protocol::status::Status
+pub use std::http::protocol::version::HttpVersion
+pub use std::http::protocol::headers::Headers
+pub use std::http::protocol::error::{HttpError, HttpErrorKind}
+pub use std::http::protocol::cookie::Cookie
+pub use std::http::protocol::chunked::{encode_chunk, encode_final_chunk, encode_body_chunked, decode_chunked, recv_chunked_body, ChunkedResult}
+pub use std::http::protocol::functions::{methods, status_codes, validate_header_name, validate_header_value, MAX_HEADER_SIZE}
+
+// server/
+pub use std::http::server::server::HttpServer
+pub use std::http::server::incoming::{IncomingMessage, parse_request}
+pub use std::http::server::server_response::ServerResponse
+pub use std::http::server::connection::{Connection, ConnectionInfo}
+
+// client/
+pub use std::http::client::client::HttpClient
+pub use std::http::client::agent::{Agent, AgentOptions}
+
+// request/
+pub use std::http::request::request::Request
+pub use std::http::request::response::Response
+pub use std::http::request::multipart::{MultipartBuilder, MultipartPart}
+pub use std::http::request::content_type::{parse_content_type, matches_type, negotiate}
+pub use std::http::request::body_parser::{ParsedBody, parse_body, form_get, url_decode}
+// NOTE: encoding re-exports omitted to avoid pulling in std::zlib (zstd/brotli/zlib DLLs).
+// Import directly: use std::http::request::encoding::{compress, decompress}
+
+// router/
+pub use std::http::router::router::{Router, RouteMatch}
+
+// app/
+pub use std::http::app::controller::{Controller, ControllerInfo, register_controller, register_controllers, register_all}
+
+// middleware/
+pub use std::http::middleware::cors::{CorsOptions, cors_headers, preflight_headers, is_preflight}
+pub use std::http::middleware::security::{SecurityOptions, security_headers}
+pub use std::http::middleware::etag::{generate, generate_weak, is_not_modified}
+pub use std::http::middleware::stream::{SseEvent, sse_headers, sse_ping, sse_comment, streaming_headers, ndjson_headers, ndjson_line}
+pub use std::http::middleware::range::{ByteRange, parse_range, content_range, content_range_unsatisfied, is_range_satisfiable}
+pub use std::http::middleware::cache_control::{CacheOptions, cache_control_header}
+pub use std::http::middleware::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
+pub use std::http::middleware::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}
+// NOTE: compression re-exports omitted to avoid pulling in std::zlib (zstd/brotli/zlib DLLs).
+// Import directly: use std::http::middleware::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
+
+// websocket/
+pub use std::http::websocket::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage, ws_accept_key, ws_upgrade_response, ws_validate_upgrade, ws_encode_frame, ws_decode_frame, ws_assemble_message, ws_close_frame, ws_apply_mask, ws_mask, ws_unmask}

@@ -1,0 +1,10 @@
+//! Core HTTP protocol types: methods, status codes, versions, headers, errors, cookies.
+
+pub mod method
+pub mod status
+pub mod version
+pub mod headers
+pub mod error
+pub mod cookie
+pub mod chunked
+pub mod functions
