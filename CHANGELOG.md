@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.2.9](docs/patches/v0.2.9.md) | 2026-04-03 | `std::db` module (ORM, query builders, migrations, SQLite adapter), SIMD strings (10x), SQLite 3-4x faster than Rust, `@column` field decorators, 4 codegen fixes |
 | [0.2.8](docs/patches/v0.2.8.md) | 2026-04-01 | Chrome DevTools inspector, `tml inspect` debugger, `std::console`, flame graphs, LSP references/rename, DWARF structs/pointers/scopes |
 | [0.2.7](docs/patches/v0.2.7.md) | 2026-03-29 | SIMD (SSE2/SSE4.2/AVX2/FMA/NEON), 53+ intrinsics, 9 vector types; parallel test compilation, 1 EXE/file, fail-fast, timestamped logs |
 | [0.2.6](docs/patches/v0.2.6.md) | 2026-03-28 | Rust Parity Sprint (16/16) — List/HashMap/Str/File/Thread/Channels/env/Maybe extras |
