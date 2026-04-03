@@ -50,6 +50,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
                 if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "i64";
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                 }
                 return;
             }
@@ -95,6 +96,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 emitln("    " + result_reg + " = add i64 0, " + hash_reg);
                 if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "i64";
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                 }
                 return;
             }
@@ -136,6 +138,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
                 if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "i1";
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
                 }
                 return;
             }
@@ -235,6 +238,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = maybe_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, maybe_type, nullptr);
         }
         return;
     }
@@ -284,6 +288,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "%struct.Ordering";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "%struct.Ordering", nullptr);
         }
         return;
     }
@@ -320,6 +325,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
     }
@@ -344,6 +350,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
     }
@@ -445,6 +452,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
         if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
             value_types_[inst.result] = ret_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
         return;
     }
@@ -561,6 +569,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
 
     if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
         value_types_[inst.result] = ret_type;
+        cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, i.return_type);
     }
 }
 

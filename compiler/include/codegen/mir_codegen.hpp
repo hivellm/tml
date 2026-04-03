@@ -37,6 +37,7 @@
 #pragma once
 
 #include "codegen/abi.hpp"
+#include "codegen/cg_value.hpp"
 #include "common.hpp"
 #include "mir/mir.hpp"
 
@@ -106,6 +107,10 @@ private:
 
     // Value ID to LLVM type string mapping (for type coercion)
     std::unordered_map<mir::ValueId, std::string> value_types_;
+
+    // Value ID to typed CGValue mapping (dual-tracked alongside value_regs_/value_types_).
+    // Phase 2: populated in parallel with the old maps; Phase 3+: read sites migrated here.
+    std::unordered_map<mir::ValueId, CGValue> cg_values_;
 
     // Struct name to field types mapping (for type coercion in struct init)
     std::unordered_map<std::string, std::vector<std::string>> struct_field_types_;

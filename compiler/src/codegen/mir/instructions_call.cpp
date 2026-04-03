@@ -65,8 +65,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
                 if (method_name == "len" && !result_reg.empty()) {
                     emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
-                    if (inst.result != mir::INVALID_VALUE)
+                    if (inst.result != mir::INVALID_VALUE) {
                         value_types_[inst.result] = "i64";
+                        cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
+                    }
                     return;
                 }
 
@@ -105,8 +107,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                         hash_reg = mr;
                     }
                     emitln("    " + result_reg + " = add i64 0, " + hash_reg);
-                    if (inst.result != mir::INVALID_VALUE)
+                    if (inst.result != mir::INVALID_VALUE) {
                         value_types_[inst.result] = "i64";
+                        cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
+                    }
                     return;
                 }
 
@@ -141,8 +145,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                         acc = new_acc;
                     }
                     emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
-                    if (inst.result != mir::INVALID_VALUE)
+                    if (inst.result != mir::INVALID_VALUE) {
                         value_types_[inst.result] = "i1";
+                        cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
+                    }
                     return;
                 }
             }
@@ -343,8 +349,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
-        if (inst.result != mir::INVALID_VALUE)
+        if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = elem_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+        }
         return;
     }
 
@@ -395,8 +403,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         emitln("    " + result_reg + " = load volatile " + elem_type + ", ptr " + ptr_reg);
-        if (inst.result != mir::INVALID_VALUE)
+        if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = elem_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+        }
         return;
     }
 
@@ -489,8 +499,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg + ", align 1");
-        if (inst.result != mir::INVALID_VALUE)
+        if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = elem_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+        }
         return;
     }
 
@@ -566,8 +578,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         emitln("    " + result_reg + " = getelementptr " + elem_type + ", ptr " + ptr_reg +
                ", i64 " + offset_arg);
-        if (inst.result != mir::INVALID_VALUE)
+        if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+        }
         return;
     }
 
@@ -814,6 +828,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
     }
@@ -831,6 +846,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
+            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
     }
@@ -865,8 +881,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             if (arg_vt == m.llvm_type) {
                 emitln("    " + result_reg + " = call ptr @" + std::string(m.mangled_name) + "(" +
                        arg_vt + " " + arg_reg + ")");
-                if (inst.result != mir::INVALID_VALUE)
+                if (inst.result != mir::INVALID_VALUE) {
                     value_types_[inst.result] = "ptr";
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+                }
                 return;
             }
         }
@@ -913,11 +931,18 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string arg = get_value_reg(i.args[j]);
 
         std::string actual_type;
-        auto vt_it = value_types_.find(i.args[j].id);
-        if (vt_it != value_types_.end()) {
-            actual_type = vt_it->second;
-        } else if (i.args[j].type) {
-            actual_type = mir_type_to_llvm(i.args[j].type);
+        bool cg_is_aggregate = false;
+        auto cg_it = cg_values_.find(i.args[j].id);
+        if (cg_it != cg_values_.end()) {
+            actual_type = cg_it->second.llvm_type;
+            cg_is_aggregate = cg_it->second.is_aggregate();
+        } else {
+            auto vt_it = value_types_.find(i.args[j].id);
+            if (vt_it != value_types_.end()) {
+                actual_type = vt_it->second;
+            } else if (i.args[j].type) {
+                actual_type = mir_type_to_llvm(i.args[j].type);
+            }
         }
 
         mir::MirTypePtr arg_ptr =
@@ -995,7 +1020,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             // NOTE: This checks the *actual argument value's* LLVM type, not the
             // declared parameter type. An Indirect parameter might receive a scalar
             // (e.g., i32) that was already loaded — only aggregate SSA values need spilling.
-            bool is_aggregate_value = codegen::is_aggregate_llvm_type(actual_type);
+            // Prefer CGValue::is_aggregate() when available (more reliable than string parsing).
+            bool is_aggregate_value =
+                cg_is_aggregate || codegen::is_aggregate_llvm_type(actual_type);
 
             if (is_aggregate_value) {
                 // Spill aggregate value to memory so we can pass a pointer
@@ -1249,12 +1276,14 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
         emitln("    " + result_reg + " = load " + ret_type + ", ptr " + sret_slot + ", align 8");
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = ret_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
     } else if (ret_type != "void") {
         emitln("    " + result_reg + " = phi " + ret_type + " [ " + thin_result + ", %" +
                label_thin + " ], [ " + fat_result + ", %" + label_fat + " ]");
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = ret_type;
+            cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
     }
 }
@@ -1300,6 +1329,7 @@ void MirCodegen::emit_llvm_intrinsic_call(const mir::CallInst& i, const std::str
 
     if (inst.result != mir::INVALID_VALUE) {
         value_types_[inst.result] = arg_type;
+        cg_values_[inst.result] = CGValue::immediate(result_reg, arg_type, nullptr);
     }
 }
 
@@ -1320,6 +1350,7 @@ void MirCodegen::emit_sret_call(const std::string& func_name, const std::string&
         emitln("    " + result_reg + " = load " + orig_ret_type + ", ptr " + sret_slot +
                ", align 8");
         value_types_[inst.result] = orig_ret_type;
+        cg_values_[inst.result] = CGValue::immediate(result_reg, orig_ret_type, nullptr);
     }
 }
 
@@ -1355,6 +1386,7 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
 
     if (inst.result != mir::INVALID_VALUE && call_ret_type != "void") {
         value_types_[inst.result] = call_ret_type;
+        cg_values_[inst.result] = CGValue::immediate(result_reg, call_ret_type, i.return_type);
     }
 }
 
