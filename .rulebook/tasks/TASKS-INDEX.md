@@ -1,7 +1,20 @@
 # TML Project — Task Index
 
-**Last updated**: 2026-03-30
-**Total tasks**: 49 active (5 archived)
+**Last updated**: 2026-04-03
+**Total tasks**: 55 active (5 archived)
+
+## Phase 0 — Codegen Architecture Fixes
+
+Structural fixes to MIR codegen based on Rust/Go/Clang comparison. See `docs/analyses/codegen/`.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 0a-cg | [Eliminate i32 Fallbacks](phase0a_codegen-eliminate-i32-fallbacks/) | **NEW** | **CRITICAL** | 0% (0/18) |
+| 0b-cg | [ABI Module](phase0b_codegen-abi-module/) | **NEW** | HIGH | 0% (0/20) |
+| 0c-cg | [CGValue Wrapper](phase0c_codegen-cgvalue-wrapper/) | **NEW** | HIGH | 0% (0/20) |
+| 0d-cg | [Table-Driven Intrinsics](phase0d_codegen-table-driven-intrinsics/) | **NEW** | MEDIUM | 0% (0/18) |
+| 0e-cg | [Unit Type Cleanup](phase0e_codegen-unit-type-cleanup/) | **NEW** | MEDIUM | 0% (0/12) |
+| 0f-cg | [Typed Emit Helpers](phase0f_codegen-typed-emit-helpers/) | **NEW** | MEDIUM | 0% (0/15) |
 
 ## Phase 0 — JIT Execution Engine
 
