@@ -1,7 +1,7 @@
 // Tests for interceptor — TransformInterceptor and LoggingInterceptor
 use test::{assert, assert_eq}
 use core::str
-use std::http::interceptor::{TransformInterceptor, LoggingInterceptor}
+use std::http::framework::interceptor::{TransformInterceptor, LoggingInterceptor}
 
 @test
 func test_transform_wraps_in_envelope() -> I32 {

@@ -1,6 +1,6 @@
 // Tests for guard — auth and roles guards
 use test::{assert, assert_eq}
-use std::http::guard::{AuthGuard, RolesGuard}
+use std::http::framework::guard::{AuthGuard, RolesGuard}
 
 @test
 func test_auth_guard_allows() -> I32 {

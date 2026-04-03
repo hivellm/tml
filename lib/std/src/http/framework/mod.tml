@@ -1,0 +1,21 @@
+//! HTTP Framework — NestJS-style building blocks.
+//!
+//! Organized into a sub-module to keep the HTTP root clean.
+//! The HTTP root (std::http) contains the server, router, client, and protocol.
+//! This sub-module (std::http::framework) contains the API framework layer.
+//!
+//! | Module | NestJS Equivalent |
+//! |--------|-------------------|
+//! | `json_response` | Structured JSON responses |
+//! | `middleware` | Middleware pipeline (app.use) |
+//! | `guard` | Guards (@UseGuards) |
+//! | `pipe` | Pipes (@UsePipes) |
+//! | `exception` | Exception filters (@Catch) |
+//! | `interceptor` | Interceptors (@UseInterceptors) |
+
+pub mod json_response
+pub mod middleware
+pub mod guard
+pub mod pipe
+pub mod exception
+pub mod interceptor

@@ -1,7 +1,7 @@
 // Tests for json_response — structured JSON HTTP response type
 use test::{assert, assert_eq}
 use core::str
-use std::http::json_response::JsonResponse
+use std::http::framework::json_response::JsonResponse
 
 @test
 func test_ok() -> I32 {

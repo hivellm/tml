@@ -1,7 +1,7 @@
 // Tests for exception — HttpException and DefaultExceptionFilter
 use test::{assert, assert_eq}
 use core::str
-use std::http::exception::{HttpException, DefaultExceptionFilter}
+use std::http::framework::exception::{HttpException, DefaultExceptionFilter}
 
 @test
 func test_exception_status() -> I32 {

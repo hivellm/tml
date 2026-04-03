@@ -1,7 +1,7 @@
 // Tests for middleware — CORS middleware and cors_headers function
 use test::{assert, assert_eq}
 use core::str
-use std::http::middleware::{CorsMiddleware, cors_headers}
+use std::http::framework::middleware::{CorsMiddleware, cors_headers}
 
 @test
 func test_cors_middleware_origin() -> I32 {

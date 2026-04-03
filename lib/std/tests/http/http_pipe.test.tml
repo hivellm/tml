@@ -1,6 +1,6 @@
 // Tests for pipe — ParseBoolPipe and ParseIntPipe
 use test::{assert, assert_eq}
-use std::http::pipe::{ParseBoolPipe, ParseIntPipe, TrimPipe}
+use std::http::framework::pipe::{ParseBoolPipe, ParseIntPipe, TrimPipe}
 
 @test
 func test_parse_bool_valid() -> I32 {
