@@ -24,6 +24,9 @@ pub use core::str::parse::{parse_i32, parse_i64, parse_f64, parse_bool}
 pub use core::str::convert
 pub use core::str::convert::{repeat, pad_left, pad_right, join, concat, concat_all, chars, strip_prefix, strip_suffix, bytes}
 
+pub use core::str::simd
+pub use core::str::simd::{find_byte, find_byte_scalar, contains_fast, contains_scalar, find_substr, find_substr_scalar, count_byte, count_byte_scalar, is_ascii_fast, is_ascii_scalar}
+
 // ============================================================================
 // Str Methods
 // ============================================================================

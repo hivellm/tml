@@ -1,0 +1,270 @@
+// String SIMD Benchmark — Compares SIMD vs scalar string operations
+//
+// Measures: find_byte, contains, find_substr, count_byte, is_ascii
+// Uses volatile sink (accumulator printed at end) to prevent DCE in release.
+
+use core::str::simd
+
+@extern("c") func time_ns() -> I64
+
+// ============================================================================
+// String builders
+// ============================================================================
+
+func make_string(n: I64) -> Str {
+    var s: Str = ""
+    var i: I64 = 0
+    loop (i < n / 16) {
+        s = s + "abcdefghijklmnop"
+        i = i + 1
+    }
+    return s
+}
+
+func make_repeated(n: I64) -> Str {
+    var s: Str = ""
+    var i: I64 = 0
+    loop (i < n / 16) {
+        s = s + "aaaaaaaaaaaaaaaa"
+        i = i + 1
+    }
+    return s
+}
+
+// ============================================================================
+// Benchmark helpers — return (elapsed_ns, checksum) packed as two values
+// We use a struct-like approach: return elapsed, store checksum via print
+// ============================================================================
+
+func bench_find_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::find_byte(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    // Use acc to prevent DCE — print is an observable side effect
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_find_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::find_byte_scalar(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_contains_simd(s: Str, pat: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        if simd::contains_fast(s, pat) { acc = acc + 1 }
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_contains_scalar(s: Str, pat: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        if simd::contains_scalar(s, pat) { acc = acc + 1 }
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_find_substr_simd(s: Str, pat: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::find_substr(s, pat)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_find_substr_scalar(s: Str, pat: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::find_substr_scalar(s, pat)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_count_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::count_byte(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_count_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::count_byte_scalar(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_is_ascii_simd(s: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        if simd::is_ascii_fast(s) { acc = acc + 1 }
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_is_ascii_scalar(s: Str, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        if simd::is_ascii_scalar(s) { acc = acc + 1 }
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+// ============================================================================
+// Report
+// ============================================================================
+
+func report(name: Str, simd_ns: I64, scalar_ns: I64, iters: I64) {
+    let simd_per: I64 = simd_ns / iters
+    let scalar_per: I64 = scalar_ns / iters
+    println("  " + name)
+    println("    SIMD:   " + simd_per.to_string() + " ns/op")
+    println("    Scalar: " + scalar_per.to_string() + " ns/op")
+    if simd_per > 0 {
+        let speedup: I64 = scalar_per / simd_per
+        let remainder: I64 = ((scalar_per * 10) / simd_per) % 10
+        println("    Speedup: " + speedup.to_string() + "." + remainder.to_string() + "x")
+    } else {
+        println("    Speedup: (SIMD too fast to measure)")
+    }
+    println("")
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+pub func main() -> I32 {
+    println("")
+    println("=== TML String SIMD Benchmark ===")
+    println("")
+
+    let s256: Str = make_string(256)
+    let s1k: Str = make_string(1024)
+    let s4k: Str = make_string(4096)
+    let s16k: Str = make_string(16384)
+
+    let iters: I64 = 100000
+    let iters_short: I64 = 50000
+
+    // ── find_byte: byte NOT in string (worst case full scan) ──
+    println("--- find_byte (byte not found, worst case scan) ---")
+    println("")
+
+    report("256 bytes",
+        bench_find_byte_simd(s256, 90 as U8, iters),
+        bench_find_byte_scalar(s256, 90 as U8, iters), iters)
+
+    report("1 KB",
+        bench_find_byte_simd(s1k, 90 as U8, iters),
+        bench_find_byte_scalar(s1k, 90 as U8, iters), iters)
+
+    report("4 KB",
+        bench_find_byte_simd(s4k, 90 as U8, iters_short),
+        bench_find_byte_scalar(s4k, 90 as U8, iters_short), iters_short)
+
+    // ── contains: pattern not found (worst case) ──
+    println("--- contains (pattern not found, worst case) ---")
+    println("")
+
+    report("256 bytes",
+        bench_contains_simd(s256, "ZZZZZ", iters),
+        bench_contains_scalar(s256, "ZZZZZ", iters), iters)
+
+    report("1 KB",
+        bench_contains_simd(s1k, "ZZZZZ", iters),
+        bench_contains_scalar(s1k, "ZZZZZ", iters), iters)
+
+    report("4 KB",
+        bench_contains_simd(s4k, "ZZZZZ", iters_short),
+        bench_contains_scalar(s4k, "ZZZZZ", iters_short), iters_short)
+
+    // ── find_substr: pattern at end of string ──
+    println("--- find_substr (pattern at end) ---")
+    println("")
+
+    report("1 KB",
+        bench_find_substr_simd(s1k, "nopabcde", iters),
+        bench_find_substr_scalar(s1k, "nopabcde", iters), iters)
+
+    // ── count_byte: count 'a' in all-a string ──
+    println("--- count_byte (all matching) ---")
+    println("")
+
+    let all_a_1k: Str = make_repeated(1024)
+    report("1 KB (all match)",
+        bench_count_byte_simd(all_a_1k, 97 as U8, iters),
+        bench_count_byte_scalar(all_a_1k, 97 as U8, iters), iters)
+
+    // ── is_ascii: all ASCII ──
+    println("--- is_ascii (all ASCII) ---")
+    println("")
+
+    report("1 KB",
+        bench_is_ascii_simd(s1k, iters),
+        bench_is_ascii_scalar(s1k, iters), iters)
+
+    report("16 KB",
+        bench_is_ascii_simd(s16k, iters_short),
+        bench_is_ascii_scalar(s16k, iters_short), iters_short)
+
+    println("=== Benchmark Complete ===")
+    return 0
+}

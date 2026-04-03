@@ -1,0 +1,156 @@
+// Tests for core::str::simd — SIMD-accelerated string search operations // v3
+use test::{assert, assert_eq}
+use core::str::simd
+
+// ============================================================================
+// find_byte — scalar path (short strings)
+// ============================================================================
+
+@test
+func test_find_byte_scalar_found() -> I32 {
+    // 'w' = 119
+    let result: I64 = simd::find_byte_scalar("hello world", 119 as U8)
+    assert_eq(result, 6, "find_byte_scalar should find 'w' at index 6")
+    return 0
+}
+
+@test
+func test_find_byte_scalar_not_found() -> I32 {
+    // 'z' = 122
+    let result: I64 = simd::find_byte_scalar("hello", 122 as U8)
+    assert_eq(result, -1, "find_byte_scalar should return -1 for missing byte")
+    return 0
+}
+
+@test
+func test_find_byte_scalar_first_char() -> I32 {
+    // 'h' = 104
+    let result: I64 = simd::find_byte_scalar("hello", 104 as U8)
+    assert_eq(result, 0, "find_byte_scalar should find 'h' at index 0")
+    return 0
+}
+
+// ============================================================================
+// find_byte — SIMD path (long strings, >= 32 bytes)
+// ============================================================================
+
+@test
+func test_find_byte_simd_long_string() -> I32 {
+    // 48 bytes: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    // Exceeds 32-byte threshold, triggers SIMD path
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    // 'Z' is not in the string
+    let not_found: I64 = simd::find_byte(long, 90 as U8)
+    assert_eq(not_found, -1, "find_byte should return -1 for missing byte in long string")
+    // 'A' = 65, at index 26
+    let found_a: I64 = simd::find_byte(long, 65 as U8)
+    assert_eq(found_a, 26, "find_byte should find 'A' at index 26")
+    // 'a' = 97, at index 0
+    let found_first: I64 = simd::find_byte(long, 97 as U8)
+    assert_eq(found_first, 0, "find_byte should find 'a' at index 0")
+    return 0
+}
+
+// ============================================================================
+// contains_scalar — short strings
+// ============================================================================
+
+@test
+func test_contains_scalar_found() -> I32 {
+    assert(simd::contains_scalar("hello world", "world"), "should contain 'world'")
+    return 0
+}
+
+@test
+func test_contains_scalar_not_found() -> I32 {
+    assert(not simd::contains_scalar("hello", "xyz"), "should not contain 'xyz'")
+    return 0
+}
+
+@test
+func test_contains_scalar_empty_pattern() -> I32 {
+    assert(simd::contains_scalar("hello", ""), "empty pattern should always be found")
+    return 0
+}
+
+// ============================================================================
+// contains_fast — SIMD path (long strings)
+// ============================================================================
+
+@test
+func test_contains_fast_long_string() -> I32 {
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    assert(simd::contains_fast(long, "QRSTUV"), "should contain 'QRSTUV' at end")
+    assert(simd::contains_fast(long, "abcdef"), "should contain 'abcdef' at start")
+    assert(simd::contains_fast(long, "mnopqr"), "should contain 'mnopqr' in middle")
+    assert(not simd::contains_fast(long, "ZZZZZ"), "should not contain 'ZZZZZ'")
+    return 0
+}
+
+// ============================================================================
+// find_substr — scalar and SIMD
+// ============================================================================
+
+@test
+func test_find_substr_scalar() -> I32 {
+    let result: I64 = simd::find_substr_scalar("hello world", "world")
+    assert_eq(result, 6, "find_substr_scalar should find 'world' at index 6")
+    let not_found: I64 = simd::find_substr_scalar("hello", "xyz")
+    assert_eq(not_found, -1, "find_substr_scalar should return -1 for missing pattern")
+    return 0
+}
+
+@test
+func test_find_substr_simd_long() -> I32 {
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    let result: I64 = simd::find_substr(long, "GHIJ")
+    assert_eq(result, 32, "find_substr should find 'GHIJ' at index 32")
+    let first: I64 = simd::find_substr(long, "abcd")
+    assert_eq(first, 0, "find_substr should find 'abcd' at index 0")
+    return 0
+}
+
+// ============================================================================
+// count_byte — scalar and SIMD
+// ============================================================================
+
+@test
+func test_count_byte_scalar() -> I32 {
+    // 'l' = 108
+    let result: I64 = simd::count_byte_scalar("hello world", 108 as U8)
+    assert_eq(result, 3, "count_byte_scalar should find 3 'l' chars")
+    let zero: I64 = simd::count_byte_scalar("hello", 122 as U8)
+    assert_eq(zero, 0, "count_byte_scalar should find 0 'z' chars")
+    return 0
+}
+
+@test
+func test_count_byte_simd_long() -> I32 {
+    // 48 a's repeated
+    let long: Str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    // 'a' = 97
+    let result: I64 = simd::count_byte(long, 97 as U8)
+    assert_eq(result, 48, "count_byte should find 48 'a' chars")
+    // 'b' = 98
+    let zero: I64 = simd::count_byte(long, 98 as U8)
+    assert_eq(zero, 0, "count_byte should find 0 'b' chars in all-a string")
+    return 0
+}
+
+// ============================================================================
+// is_ascii — scalar and SIMD
+// ============================================================================
+
+@test
+func test_is_ascii_scalar() -> I32 {
+    assert(simd::is_ascii_scalar("hello world"), "ASCII string should be ASCII")
+    assert(simd::is_ascii_scalar(""), "empty string should be ASCII")
+    return 0
+}
+
+@test
+func test_is_ascii_fast_long() -> I32 {
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    assert(simd::is_ascii_fast(long), "ASCII long string should be ASCII")
+    return 0
+}

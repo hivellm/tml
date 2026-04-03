@@ -1,0 +1,425 @@
+//! SIMD-accelerated string search operations.
+//!
+//! Uses SSE2 to process 16 bytes per cycle on x86-64.
+//! Short strings (<32 bytes) use scalar path to avoid SIMD setup overhead.
+
+use core::str::basic::len
+use core::simd::i8x16::I8x16
+use core::runtime::intrinsics::{sse2_cmpeq_epi8, sse2_movemask_epi8}
+
+@extern("memcmp")
+func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
+
+// ============================================================================
+// Helper: load 16 bytes from a raw pointer into an I8x16 vector
+// ============================================================================
+
+/// Load 16 bytes from memory at `addr + off` into an I8x16 vector.
+func load_16_bytes(addr: I64, off: I64) -> I8x16 {
+    let p: I64 = addr + off
+    let b0: I8 = lowlevel { ptr_read[I8](p as *I8) }
+    let b1: I8 = lowlevel { ptr_read[I8]((p + 1) as *I8) }
+    let b2: I8 = lowlevel { ptr_read[I8]((p + 2) as *I8) }
+    let b3: I8 = lowlevel { ptr_read[I8]((p + 3) as *I8) }
+    let b4: I8 = lowlevel { ptr_read[I8]((p + 4) as *I8) }
+    let b5: I8 = lowlevel { ptr_read[I8]((p + 5) as *I8) }
+    let b6: I8 = lowlevel { ptr_read[I8]((p + 6) as *I8) }
+    let b7: I8 = lowlevel { ptr_read[I8]((p + 7) as *I8) }
+    let b8: I8 = lowlevel { ptr_read[I8]((p + 8) as *I8) }
+    let b9: I8 = lowlevel { ptr_read[I8]((p + 9) as *I8) }
+    let b10: I8 = lowlevel { ptr_read[I8]((p + 10) as *I8) }
+    let b11: I8 = lowlevel { ptr_read[I8]((p + 11) as *I8) }
+    let b12: I8 = lowlevel { ptr_read[I8]((p + 12) as *I8) }
+    let b13: I8 = lowlevel { ptr_read[I8]((p + 13) as *I8) }
+    let b14: I8 = lowlevel { ptr_read[I8]((p + 14) as *I8) }
+    let b15: I8 = lowlevel { ptr_read[I8]((p + 15) as *I8) }
+    return I8x16::new(b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15)
+}
+
+/// Count trailing zeros in a 32-bit mask (find position of lowest set bit).
+func ctz(mask: I32) -> I32 {
+    var bit: I32 = 0
+    var m: I32 = mask
+    loop (m & 1 == 0 and bit < 32) {
+        m = m >> 1
+        bit = bit + 1
+    }
+    return bit
+}
+
+// ============================================================================
+// find_byte — Find first occurrence of a single byte in a string
+// ============================================================================
+
+/// Find first occurrence of a single byte in a string using SIMD.
+///
+/// Returns the byte index of the first match, or -1 if not found.
+/// Uses SSE2 PCMPEQB + PMOVMSKB to scan 16 bytes at a time.
+/// Falls back to scalar for strings shorter than 32 bytes.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::find_byte("hello world", 'w' as U8) == 6)
+/// assert(simd::find_byte("hello", 'z' as U8) == -1)
+/// ```
+pub func find_byte(s: Str, byte: U8) -> I64 {
+    let s_len: I64 = len(s)
+    if s_len < 32 {
+        return find_byte_scalar(s, byte)
+    }
+
+    let s_base: I64 = s as I64
+    var pos: I64 = 0
+
+    let needle: I8x16 = I8x16::splat(byte as I8)
+
+    // SSE2: scan 16 bytes at a time
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = load_16_bytes(s_base, pos)
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        let mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+        if mask != 0 {
+            let bit: I32 = ctz(mask)
+            return pos + bit as I64
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail for remaining bytes
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if b == byte {
+            return pos
+        }
+        pos = pos + 1
+    }
+
+    return -1
+}
+
+/// Scalar fallback for find_byte. Works on any platform.
+///
+/// Scans byte-by-byte from the start of the string.
+pub func find_byte_scalar(s: Str, byte: U8) -> I64 {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (s_base + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if b == byte {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ============================================================================
+// contains_fast — SIMD-accelerated substring search
+// ============================================================================
+
+/// SIMD-accelerated string contains check.
+///
+/// Uses SSE2 to scan for the first byte of the pattern, then verifies
+/// full matches with memcmp. This is significantly faster than byte-by-byte
+/// scanning for strings longer than 32 bytes.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::contains_fast("hello world", "world") == true)
+/// assert(simd::contains_fast("hello", "xyz") == false)
+/// ```
+pub func contains_fast(s: Str, pattern: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 { return true }
+    if p_len > s_len { return false }
+    if s_len < 32 { return contains_scalar(s, pattern) }
+
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+
+    // Get first byte of pattern for SIMD scanning
+    let first: U8 = lowlevel { ptr_read[U8](p_ptr) }
+    let needle: I8x16 = I8x16::splat(first as I8)
+    var pos: I64 = 0
+
+    // SIMD scan: find first-byte candidates 16 at a time
+    loop (pos + 16 <= s_len and pos <= limit) {
+        let chunk: I8x16 = load_16_bytes(s_base, pos)
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        var mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+
+        // Check each candidate position in this 16-byte window
+        loop (mask != 0) {
+            let bit: I32 = ctz(mask)
+            let candidate: I64 = pos + bit as I64
+            if candidate <= limit {
+                if c_memcmp((s_base + candidate) as *U8, p_ptr, p_len) == 0 {
+                    return true
+                }
+            }
+            // Clear the lowest set bit: mask &= mask - 1
+            mask = mask & (mask - 1)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail for remaining positions
+    loop (pos <= limit) {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
+            return true
+        }
+        pos = pos + 1
+    }
+
+    return false
+}
+
+/// Scalar substring contains check. Works on any platform.
+///
+/// Checks every position using memcmp. This is the baseline
+/// that SIMD aims to beat.
+pub func contains_scalar(s: Str, pattern: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 { return true }
+    if p_len > s_len { return false }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// ============================================================================
+// find_substr — SIMD-accelerated substring find (returns index)
+// ============================================================================
+
+/// Find the first occurrence of a substring using SIMD.
+///
+/// Returns the byte index of the first match, or -1 if not found.
+/// Uses SSE2 first-byte scan + memcmp verification.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::find_substr("hello world", "world") == 6)
+/// assert(simd::find_substr("hello", "xyz") == -1)
+/// ```
+pub func find_substr(s: Str, pattern: Str) -> I64 {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 { return 0 }
+    if p_len > s_len { return -1 }
+    if s_len < 32 { return find_substr_scalar(s, pattern) }
+
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+
+    let first: U8 = lowlevel { ptr_read[U8](p_ptr) }
+    let needle: I8x16 = I8x16::splat(first as I8)
+    var pos: I64 = 0
+
+    loop (pos + 16 <= s_len and pos <= limit) {
+        let chunk: I8x16 = load_16_bytes(s_base, pos)
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        var mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+
+        loop (mask != 0) {
+            let bit: I32 = ctz(mask)
+            let candidate: I64 = pos + bit as I64
+            if candidate <= limit {
+                if c_memcmp((s_base + candidate) as *U8, p_ptr, p_len) == 0 {
+                    return candidate
+                }
+            }
+            mask = mask & (mask - 1)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail
+    loop (pos <= limit) {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
+            return pos
+        }
+        pos = pos + 1
+    }
+
+    return -1
+}
+
+/// Scalar substring find. Works on any platform.
+pub func find_substr_scalar(s: Str, pattern: Str) -> I64 {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 { return 0 }
+    if p_len > s_len { return -1 }
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+    var i: I64 = 0
+    loop (i <= limit) {
+        if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ============================================================================
+// count_byte — Count occurrences of a byte using SIMD
+// ============================================================================
+
+/// Count all occurrences of a byte in a string using SIMD.
+///
+/// Returns the number of times the byte appears in the string.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::count_byte("hello", 'l' as U8) == 2)
+/// assert(simd::count_byte("hello", 'z' as U8) == 0)
+/// ```
+pub func count_byte(s: Str, byte: U8) -> I64 {
+    let s_len: I64 = len(s)
+    if s_len < 32 {
+        return count_byte_scalar(s, byte)
+    }
+
+    let s_base: I64 = s as I64
+    var count: I64 = 0
+    var pos: I64 = 0
+
+    let needle: I8x16 = I8x16::splat(byte as I8)
+
+    // SSE2: scan 16 bytes at a time
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = load_16_bytes(s_base, pos)
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        var mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+
+        // Count set bits in mask (popcount via bit-clearing loop)
+        loop (mask != 0) {
+            count = count + 1
+            mask = mask & (mask - 1)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if b == byte {
+            count = count + 1
+        }
+        pos = pos + 1
+    }
+
+    return count
+}
+
+/// Scalar byte counting fallback. Works on any platform.
+pub func count_byte_scalar(s: Str, byte: U8) -> I64 {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var count: I64 = 0
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (s_base + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if b == byte {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+// ============================================================================
+// is_ascii_fast — SIMD-accelerated ASCII validation
+// ============================================================================
+
+/// Check if all bytes in a string are valid ASCII (< 128) using SIMD.
+///
+/// Uses SSE2 to check 16 bytes at a time by testing the high bit of each byte.
+/// Returns true for empty strings.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::is_ascii_fast("hello world") == true)
+/// assert(simd::is_ascii_fast("") == true)
+/// ```
+pub func is_ascii_fast(s: Str) -> Bool {
+    let s_len: I64 = len(s)
+    if s_len == 0 { return true }
+    if s_len < 32 { return is_ascii_scalar(s) }
+
+    let s_base: I64 = s as I64
+    var pos: I64 = 0
+
+    // High-bit mask: 0x80 in each byte position (as signed I8, this is -128)
+    let high_bit: I8x16 = I8x16::splat(-128 as I8)
+
+    // SSE2: check 16 bytes at a time
+    // AND chunk with 0x80 mask — any byte >= 128 will have its high bit set,
+    // producing a non-zero movemask.
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = load_16_bytes(s_base, pos)
+        let masked: I8x16 = chunk.band(high_bit)
+        let mask: I32 = lowlevel { sse2_movemask_epi8(masked) }
+        if mask != 0 {
+            return false
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if (b as I32) >= 128 {
+            return false
+        }
+        pos = pos + 1
+    }
+
+    return true
+}
+
+/// Scalar ASCII validation fallback. Works on any platform.
+pub func is_ascii_scalar(s: Str) -> Bool {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var i: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (s_base + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if (b as I32) >= 128 {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
