@@ -4,12 +4,6 @@
 
 **Total**: 25 tasks | **Completed**: 0 | **In Progress**: 0 | **Pending**: 25
 
-## phase8e
-
-| Status | Task | Progress | Description |
-|--------|------|----------|-------------|
-| ⬚ | phase8e_db-conditional-compilation | 0/14 | db conditional compilation |
-
 ## phase8f
 
 | Status | Task | Progress | Description |
@@ -33,6 +27,12 @@
 | Status | Task | Progress | Description |
 |--------|------|----------|-------------|
 | ⬚ | phase8x_db-perf-optimization | 0/22 | db perf optimization |
+
+## phase8y
+
+| Status | Task | Progress | Description |
+|--------|------|----------|-------------|
+| ⬚ | phase8y_db-typeorm-parity | 0/40 | db typeorm parity |
 
 ## phase9
 
