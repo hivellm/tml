@@ -14,7 +14,7 @@
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
 use std::collections::Buffer
-use std::http::headers::Headers
+use std::http::protocol::headers::Headers
 use std::text::Text
 
 // ============================================================================

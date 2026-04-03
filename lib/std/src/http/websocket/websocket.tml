@@ -28,7 +28,7 @@
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use std::collections::Buffer
-use std::http::headers::Headers
+use std::http::protocol::headers::Headers
 use std::text::Text
 use std::crypto::hash::sha1
 use std::crypto::constants::bytes_to_base64

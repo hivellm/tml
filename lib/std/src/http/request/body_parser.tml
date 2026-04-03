@@ -5,7 +5,7 @@
 
 use core::str
 use std::collections::Buffer
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 
 /// Maximum body size (1 MB default).
 pub const MAX_BODY_SIZE: I64 = 1048576

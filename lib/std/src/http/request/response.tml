@@ -5,11 +5,11 @@
 
 use core::str
 use core::runtime::intrinsics::mem_free
-use std::http::status::Status
-use std::http::headers::Headers
-use std::http::version::HttpVersion
-use std::http::error::{HttpError, HttpErrorKind}
-use std::http::chunked::decode_chunked
+use std::http::protocol::status::Status
+use std::http::protocol::headers::Headers
+use std::http::protocol::version::HttpVersion
+use std::http::protocol::error::{HttpError, HttpErrorKind}
+use std::http::protocol::chunked::decode_chunked
 
 /// An HTTP response.
 pub type Response {

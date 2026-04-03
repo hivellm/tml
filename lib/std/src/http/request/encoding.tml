@@ -15,7 +15,7 @@ use std::zlib::{
     zstd_compress, zstd_decompress,
     zstd_compress_buffer, zstd_decompress_to_buffer,
 }
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 
 /// Decompresses data based on Content-Encoding header value.
 /// Supported: "gzip", "deflate", "br", "zstd".

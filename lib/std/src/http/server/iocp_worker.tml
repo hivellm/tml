@@ -11,14 +11,14 @@
 
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
-use std::http::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
-use std::http::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
+use std::http::server::dispatch::{app_dispatch, RESPONSE_413, RESPONSE_400}
+use std::http::server::parse::{app_zerocopy_method, app_zerocopy_path, app_extract_body,
                        app_has_header_end, app_has_connection_close, app_is_http11,
                        app_is_bodyless_method, app_find_header_end_in_str,
                        app_count_requests, app_request_offset,
                        app_parse_headers, app_get_content_length,
                        MAX_HEADERS, HEADER_ENTRY_SIZE}
-use std::http::worker::app_bind_listener
+use std::http::server::worker::app_bind_listener
 
 // ════════════════════════════════════════════════════════════════════
 // IOCP FFI declarations

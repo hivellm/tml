@@ -7,10 +7,10 @@
 use core::str
 use core::fmt::helpers::i64_to_str
 use std::net::url::Url
-use std::http::method::Method
-use std::http::headers::Headers
-use std::http::version::HttpVersion
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::protocol::method::Method
+use std::http::protocol::headers::Headers
+use std::http::protocol::version::HttpVersion
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 use std::text::Text
 
 /// An HTTP request with method, URL, headers, and body.

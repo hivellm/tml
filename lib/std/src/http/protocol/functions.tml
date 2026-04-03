@@ -11,7 +11,7 @@
 use core::str
 use std::collections::List
 use std::collections::hashmap::HashMap
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 
 /// Maximum size of HTTP headers in bytes (16 KB).
 /// Corresponds to Node.js `http.maxHeaderSize`.

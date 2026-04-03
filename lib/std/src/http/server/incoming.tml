@@ -8,11 +8,11 @@
 
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
-use std::http::method::Method
-use std::http::headers::Headers
-use std::http::version::HttpVersion
-use std::http::error::{HttpError, HttpErrorKind}
-use std::http::cookie::parse_cookie
+use std::http::protocol::method::Method
+use std::http::protocol::headers::Headers
+use std::http::protocol::version::HttpVersion
+use std::http::protocol::error::{HttpError, HttpErrorKind}
+use std::http::protocol::cookie::parse_cookie
 
 /// An HTTP request received by the server (incoming message).
 ///

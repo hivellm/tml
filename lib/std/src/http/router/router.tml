@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```tml
-//! use std::http::router::{Router, RouteMatch}
+//! use std::http::router::router::{Router, RouteMatch}
 //!
 //! let router = Router::new()
 //! router.on("GET", "/users/:id", 1)

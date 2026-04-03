@@ -20,11 +20,11 @@ use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, copy_nonoverlapping, mem_alloc, mem_free}
 use core::fmt::helpers::i64_to_str
 use std::collections::Buffer
-use std::http::method::Method
+use std::http::protocol::method::Method
 use std::http::request::Request
-use std::http::response::Response
-use std::http::connection::Connection
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::request::response::Response
+use std::http::server::connection::Connection
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 
 // Direct FFI for reading — avoids stack-allocated [U8] arrays
 @extern("c")

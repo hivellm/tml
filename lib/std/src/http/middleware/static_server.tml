@@ -7,8 +7,8 @@
 use core::str
 use std::net::mime::Mime
 use std::text::Text
-use std::http::etag
-use std::http::cache_control::{CacheOptions, cache_control_header}
+use std::http::middleware::etag
+use std::http::middleware::cache_control::{CacheOptions, cache_control_header}
 use core::fmt::helpers::i64_to_str
 
 /// Configuration for static file serving.

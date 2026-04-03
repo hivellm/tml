@@ -14,8 +14,8 @@
 //! ```tml
 //! use std::http::controller::Controller
 //! use std::http::app::App
-//! use std::http::incoming::IncomingMessage
-//! use std::http::dispatch::app_build_response
+//! use std::http::server::incoming::IncomingMessage
+//! use std::http::server::dispatch::app_build_response
 //!
 //! type UserController {}
 //!

@@ -10,10 +10,10 @@ use std::collections::Buffer
 use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
 use std::net::tcp::TcpListener
 use std::net::sys::RawSocket
-use std::http::incoming::{IncomingMessage, parse_request}
-use std::http::server_response::ServerResponse
-use std::http::error::{HttpError, HttpErrorKind}
-use std::http::parse::app_has_header_end
+use std::http::server::incoming::{IncomingMessage, parse_request}
+use std::http::server::server_response::ServerResponse
+use std::http::protocol::error::{HttpError, HttpErrorKind}
+use std::http::server::parse::app_has_header_end
 
 /// FFI declarations — all return I64 to avoid i32 codegen issues
 @extern("c")

@@ -4,8 +4,8 @@
 //! client's Accept-Encoding header. Inspired by Express.js `compression`.
 
 use core::str
-use std::http::encoding::{compress, decompress, accepted_encodings}
-use std::http::error::{HttpError, HttpErrorKind}
+use std::http::request::encoding::{compress, decompress, accepted_encodings}
+use std::http::protocol::error::{HttpError, HttpErrorKind}
 
 /// Minimum body size for compression (1 KB).
 pub const MIN_COMPRESS_SIZE: I64 = 1024

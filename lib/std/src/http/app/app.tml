@@ -17,7 +17,7 @@
 //!
 //! ```tml
 //! use std::http::app::App
-//! use std::http::incoming::IncomingMessage
+//! use std::http::server::incoming::IncomingMessage
 //! use std::http::framework::response_builder::Response
 //!
 //! func handle_root(req: IncomingMessage, res: Response) -> Str {
@@ -41,14 +41,18 @@
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write}
 use std::collections::List
-use std::http::router::{NODE_STATIC, insert, node_new}
-use std::http::incoming::IncomingMessage
-use std::http::server_response::ServerResponse
-use std::http::dispatch::{app_get_param, app_error_response, app_build_response,
+use std::http::router::router::{insert, node_new}
+
+// Re-declared locally because cross-module const resolution fails in codegen
+// Original: std::http::router::router::NODE_STATIC
+const NODE_STATIC: I64 = 0
+use std::http::server::incoming::IncomingMessage
+use std::http::server::server_response::ServerResponse
+use std::http::server::dispatch::{app_get_param, app_error_response, app_build_response,
                           app_status_text, app_find_route}
-use std::http::worker::{app_listen, app_listen_evloop, app_bind_listener, app_shutdown}
-use std::http::iocp_worker::{app_listen_iocp}
-use std::http::parse::MAX_PARAMS
+use std::http::server::worker::{app_listen, app_listen_evloop, app_bind_listener, app_shutdown}
+use std::http::server::iocp_worker::{app_listen_iocp}
+use std::http::server::parse::MAX_PARAMS
 
 // Re-exports removed — import directly from std::http::worker or std::http::parse
 
@@ -484,8 +488,8 @@ pub func app_register(table: I64, count: mut ref I64, trees: I64, method: Str, p
 // Usage in user code:
 //
 //     use std::http::app::{App, app_register}
-//     use std::http::incoming::IncomingMessage
-//     use std::http::dispatch::app_build_response
+//     use std::http::server::incoming::IncomingMessage
+//     use std::http::server::dispatch::app_build_response
 //
 //     // Declare the compiler-generated function
 //     @extern("c")

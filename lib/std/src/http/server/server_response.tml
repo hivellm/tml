@@ -6,9 +6,9 @@
 
 use core::str
 use core::runtime::intrinsics::{ptr_write, copy_nonoverlapping, mem_alloc}
-use std::http::headers::Headers
-use std::http::error::{HttpError, HttpErrorKind}
-use std::http::cookie::Cookie
+use std::http::protocol::headers::Headers
+use std::http::protocol::error::{HttpError, HttpErrorKind}
+use std::http::protocol::cookie::Cookie
 use core::fmt::helpers::i64_to_str
 use std::collections::list::List
 

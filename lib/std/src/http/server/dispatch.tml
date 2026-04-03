@@ -12,9 +12,9 @@
 use core::str
 use core::runtime::intrinsics::{ptr_read, ptr_write, mem_alloc, mem_free, copy_nonoverlapping}
 use core::fmt::helpers::i64_to_str
-use std::http::incoming::IncomingMessage
-use std::http::server_response::ServerResponse
-use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
+use std::http::server::incoming::IncomingMessage
+use std::http::server::server_response::ServerResponse
+use std::http::server::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
 use std::http::framework::response_builder::Response
 
 // System time for Date header (RFC 7231)
@@ -663,8 +663,8 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     }
 
     // ── Route handler ────────────────────────────────────────────
-    // Pre-configure a Response builder with status 200 + middleware headers
-    let res: Response = Response::status(200)
+    // Create Response with socket fd so handlers can chain .status().json() etc.
+    let res: Response = Response::for_request(fd)
     let handler: func(IncomingMessage, Response) -> Str = fn_ptr as func(IncomingMessage, Response) -> Str
     let response: Str = handler(req, res)
 
