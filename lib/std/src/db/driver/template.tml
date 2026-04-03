@@ -1,0 +1,43 @@
+//! Template for creating a new TML database driver.
+//!
+//! ## Steps to create a new driver (e.g., PostgreSQL):
+//!
+//! ### Step 1: Create module directory
+//! ```
+//! lib/std/src/db/postgres/
+//!   mod.tml         — module exports
+//!   connection.tml  — PgConnection, impl Connection
+//!   statement.tml   — PgStatement, impl PreparedStatement
+//!   dialect.tml     — PgDialect, impl Dialect
+//!   types.tml       — PostgreSQL ↔ ColumnType mapping
+//! ```
+//!
+//! ### Step 2: Implement Connection behavior
+//! ```tml
+//! use std::db::driver::connection::Connection
+//! use std::db::error::{DbError, DbErrorKind}
+//!
+//! pub type PgConnection { handle: I64 }
+//!
+//! impl Connection for PgConnection {
+//!     pub func execute(this, sql: Str) -> Outcome[I64, DbError] { ... }
+//!     pub func is_alive(this) -> Bool { ... }
+//!     pub func close(mut this) { ... }
+//! }
+//! ```
+//!
+//! ### Step 3: Guard with feature flag
+//! In `db/mod.tml`:
+//! ```tml
+//! #ifdef DB_POSTGRES
+//! pub mod postgres
+//! #endif
+//! ```
+//!
+//! ### Step 4: Update features.tml
+//! Add `has_postgres()` function.
+
+/// Returns the driver template version.
+pub func version() -> Str {
+    return "1.0"
+}

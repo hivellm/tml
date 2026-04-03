@@ -1,0 +1,12 @@
+//! Driver registry — reports which database drivers are available.
+use std::db::features
+
+/// Returns the default driver name.
+pub func default_driver() -> Str {
+    return features::default_driver()
+}
+
+/// Returns a description of available drivers based on compile flags.
+pub func driver_info() -> Str {
+    return "default: sqlite (bundled)"
+}

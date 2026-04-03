@@ -1,0 +1,63 @@
+//! Database feature flags for conditional compilation.
+//!
+//! Enable drivers with `-D` flags when compiling:
+//!
+//! | Flag | Driver |
+//! |------|--------|
+//! | `DB_SQLITE` | SQLite (bundled) |
+//! | `DB_POSTGRES` | PostgreSQL |
+//! | `DB_MYSQL` | MySQL |
+//! | `DB_MONGODB` | MongoDB |
+//! | `DB_REDIS` | Redis |
+//!
+//! Example: `tml run app.tml -DDB_SQLITE -DDB_POSTGRES`
+
+/// Returns true if SQLite support is compiled in.
+pub func has_sqlite() -> Bool {
+    #ifdef DB_SQLITE
+    return true
+    #else
+    return false
+    #endif
+}
+
+/// Returns true if PostgreSQL support is compiled in.
+pub func has_postgres() -> Bool {
+    #ifdef DB_POSTGRES
+    return true
+    #else
+    return false
+    #endif
+}
+
+/// Returns true if MySQL support is compiled in.
+pub func has_mysql() -> Bool {
+    #ifdef DB_MYSQL
+    return true
+    #else
+    return false
+    #endif
+}
+
+/// Returns true if MongoDB support is compiled in.
+pub func has_mongodb() -> Bool {
+    #ifdef DB_MONGODB
+    return true
+    #else
+    return false
+    #endif
+}
+
+/// Returns true if Redis support is compiled in.
+pub func has_redis() -> Bool {
+    #ifdef DB_REDIS
+    return true
+    #else
+    return false
+    #endif
+}
+
+/// Returns the default driver name (always "sqlite").
+pub func default_driver() -> Str {
+    return "sqlite"
+}

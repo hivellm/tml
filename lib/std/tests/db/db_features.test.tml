@@ -1,0 +1,29 @@
+use test::{assert, assert_eq}
+use std::db::features
+use std::db::driver::registry
+use std::db::driver::template
+
+@test
+func test_default_driver_is_sqlite() -> I32 {
+    assert_eq(features::default_driver(), "sqlite", "default driver")
+    return 0
+}
+
+@test
+func test_registry_default() -> I32 {
+    assert_eq(registry::default_driver(), "sqlite", "registry default")
+    return 0
+}
+
+@test
+func test_driver_info() -> I32 {
+    let info = registry::driver_info()
+    assert(info.contains("sqlite"), "mentions sqlite")
+    return 0
+}
+
+@test
+func test_template_version() -> I32 {
+    assert_eq(template::version(), "1.0", "template version")
+    return 0
+}

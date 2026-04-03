@@ -87,11 +87,12 @@ struct RunOptions {
     bool verbose = false;
     bool coverage = false;
     bool no_cache = false;
-    bool jit = false;              // Execute via ORC LLJIT (no object files or linking)
-    bool profile = false;          // Enable runtime profiling
-    std::string profile_output;    // Custom output path (default: profile.cpuprofile)
-    std::vector<std::string> args; // Program arguments
-    std::string backend = "llvm";  // Codegen backend ("llvm" or "cranelift")
+    bool jit = false;                 // Execute via ORC LLJIT (no object files or linking)
+    bool profile = false;             // Enable runtime profiling
+    std::string profile_output;       // Custom output path (default: profile.cpuprofile)
+    std::vector<std::string> args;    // Program arguments
+    std::vector<std::string> defines; // Preprocessor defines (-D flags)
+    std::string backend = "llvm";     // Codegen backend ("llvm" or "cranelift")
 
     // Emit all pipeline stages to a directory (same as --emit-pipeline for build)
     bool emit_pipeline = false;
@@ -116,7 +117,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false, const std::string& backend = "llvm",
-            const std::string& pipeline_dir = "");
+            const std::string& pipeline_dir = "", const std::vector<std::string>& defines = {});
 
 // Run with extended options
 int run_run_ex(const std::string& path, const RunOptions& options);

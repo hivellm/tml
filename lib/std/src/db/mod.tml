@@ -23,3 +23,4 @@ pub mod schema
 pub mod migration
 pub mod orm
 pub mod bench
+pub mod features

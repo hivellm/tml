@@ -578,6 +578,14 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--inspect-port=")) {
                 opts.inspect_port = std::stoi(arg.substr(15));
                 opts.inspect = true;
+            } else if (arg.starts_with("-D")) {
+                // Preprocessor define: -DSYMBOL or -DSYMBOL=VALUE
+                if (arg.length() > 2) {
+                    opts.defines.push_back(arg.substr(2));
+                }
+            } else if (arg.starts_with("--define=")) {
+                // Preprocessor define: --define=SYMBOL or --define=SYMBOL=VALUE
+                opts.defines.push_back(arg.substr(9));
             } else {
                 opts.args.push_back(arg);
             }
