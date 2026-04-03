@@ -749,6 +749,8 @@ add_library(tml_codegen STATIC
     src/codegen/codegen_partitioner.cpp
     # Centralized ABI classification (Win64 calling convention)
     src/codegen/abi.cpp
+    # Typed codegen value wrapper (CGValue — replaces loose reg/type string pairs)
+    src/codegen/cg_value.cpp
     # MIR codegen (MIR → LLVM IR text, backend-agnostic interface)
     src/codegen/mir_codegen.cpp
     src/codegen/mir/codegen_helpers.cpp
