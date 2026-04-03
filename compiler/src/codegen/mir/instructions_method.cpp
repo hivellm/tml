@@ -421,6 +421,9 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             mir::MirTypePtr arg_ptr =
                 (j < i.arg_types.size() && i.arg_types[j]) ? i.arg_types[j] : i.args[j].type;
             if (!arg_ptr) {
+                TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in MethodCallInst (self-dispatch) — "
+                                        "arg_type is null for arg "
+                                            << j);
                 arg_ptr = mir::make_i32_type();
             }
             std::string arg_type = mir_type_to_llvm(arg_ptr);
@@ -540,6 +543,9 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         mir::MirTypePtr arg_ptr =
             (j < i.arg_types.size() && i.arg_types[j]) ? i.arg_types[j] : i.args[j].type;
         if (!arg_ptr) {
+            TML_LOG_WARN(
+                "codegen",
+                "[CG-I32] i32 fallback in MethodCallInst (emit) — arg_type is null for arg " << j);
             arg_ptr = mir::make_i32_type();
         }
         std::string arg_type = mir_type_to_llvm(arg_ptr);

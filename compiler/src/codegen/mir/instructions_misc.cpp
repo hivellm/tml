@@ -24,7 +24,12 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
     std::string operand = get_value_reg(i.operand);
     mir::MirTypePtr src_ptr = i.source_type ? i.source_type : i.operand.type;
     if (!src_ptr) {
+        TML_LOG_WARN("codegen",
+                     "[CG-I32] i32 fallback in CastInst — source_type and operand.type are null");
         src_ptr = mir::make_i32_type();
+    }
+    if (!i.target_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in CastInst — target_type is null");
     }
     mir::MirTypePtr tgt_ptr = i.target_type ? i.target_type : mir::make_i32_type();
     std::string src_type = mir_type_to_llvm(src_ptr);
@@ -149,6 +154,9 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
 
 void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_reg,
                                const mir::InstructionData& inst) {
+    if (!i.result_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in PhiInst — result_type is null");
+    }
     mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
     // Unit type maps to "void" but LLVM doesn't allow `phi void`.
@@ -362,6 +370,9 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
                                                 ? i.field_types[j]
                                                 : i.fields[j].type;
                 if (!field_ptr) {
+                    TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in StructInitInst (class) — "
+                                            "field_ptr is null for field "
+                                                << j);
                     field_ptr = mir::make_i32_type();
                 }
                 field_type = mir_type_to_llvm(field_ptr);
@@ -390,6 +401,9 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
                                                 ? i.field_types[j]
                                                 : i.fields[j].type;
                 if (!field_ptr) {
+                    TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in StructInitInst (value) — "
+                                            "field_ptr is null for field "
+                                                << j);
                     field_ptr = mir::make_i32_type();
                 }
                 field_type = mir_type_to_llvm(field_ptr);
@@ -420,6 +434,9 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
 // ============================================================================
 
 void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::string& result_reg) {
+    if (!i.result_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in TupleInitInst — result_type is null");
+    }
     mir::MirTypePtr tuple_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string tuple_type = mir_type_to_llvm(tuple_ptr);
 
@@ -448,6 +465,9 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
                                        ? i.element_types[j]
                                        : i.elements[j].type;
         if (!elem_ptr) {
+            TML_LOG_WARN("codegen",
+                         "[CG-I32] i32 fallback in TupleInitInst — elem_ptr is null for element "
+                             << j);
             elem_ptr = mir::make_i32_type();
         }
         std::string elem_type = mir_type_to_llvm(elem_ptr);
@@ -478,8 +498,14 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
 // ============================================================================
 
 void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::string& result_reg) {
+    if (!i.result_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in ArrayInitInst — result_type is null");
+    }
     mir::MirTypePtr array_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string array_type = mir_type_to_llvm(array_ptr);
+    if (!i.element_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in ArrayInitInst — element_type is null");
+    }
     mir::MirTypePtr elem_ptr = i.element_type ? i.element_type : mir::make_i32_type();
     std::string elem_type = mir_type_to_llvm(elem_ptr);
 
@@ -595,6 +621,9 @@ void MirCodegen::emit_array_init_inst(const mir::ArrayInitInst& i, const std::st
 void MirCodegen::emit_atomic_load_inst(const mir::AtomicLoadInst& i, const std::string& result_reg,
                                        const mir::InstructionData& inst) {
     std::string ptr = get_value_reg(i.ptr);
+    if (!i.result_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in AtomicLoadInst — result_type is null");
+    }
     mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
     std::string ordering = atomic_ordering_to_llvm(i.ordering);
@@ -610,6 +639,9 @@ void MirCodegen::emit_atomic_store_inst(const mir::AtomicStoreInst& i) {
     std::string ptr = get_value_reg(i.ptr);
     mir::MirTypePtr type_ptr = i.value_type ? i.value_type : i.value.type;
     if (!type_ptr) {
+        TML_LOG_WARN(
+            "codegen",
+            "[CG-I32] i32 fallback in AtomicStoreInst — value_type and value.type are null");
         type_ptr = mir::make_i32_type();
     }
     std::string type_str = mir_type_to_llvm(type_ptr);
@@ -622,6 +654,9 @@ void MirCodegen::emit_atomic_rmw_inst(const mir::AtomicRMWInst& i, const std::st
                                       const mir::InstructionData& inst) {
     std::string ptr = get_value_reg(i.ptr);
     std::string value = get_value_reg(i.value);
+    if (!i.value_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in AtomicRMWInst — value_type is null");
+    }
     mir::MirTypePtr type_ptr = i.value_type ? i.value_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
     std::string ordering = atomic_ordering_to_llvm(i.ordering);
@@ -639,6 +674,9 @@ void MirCodegen::emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i,
     std::string ptr = get_value_reg(i.ptr);
     std::string expected = get_value_reg(i.expected);
     std::string desired = get_value_reg(i.desired);
+    if (!i.value_type) {
+        TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in AtomicCmpXchgInst — value_type is null");
+    }
     mir::MirTypePtr type_ptr = i.value_type ? i.value_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
     std::string success_ord = atomic_ordering_to_llvm(i.success_ordering);

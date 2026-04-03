@@ -49,6 +49,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::LoadInst>) {
                 std::string ptr = get_value_reg(i.ptr);
+                if (!i.result_type) {
+                    TML_LOG_WARN("codegen",
+                                 "[CG-I32] i32 fallback in LoadInst — result_type is null");
+                }
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 // Unit type maps to "void" but LLVM doesn't allow `load void`.
@@ -74,6 +78,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string ptr = get_value_reg(i.ptr);
                 mir::MirTypePtr type_ptr = i.value_type ? i.value_type : i.value.type;
                 if (!type_ptr) {
+                    TML_LOG_WARN("codegen",
+                                 "[CG-I32] i32 fallback in StoreInst — value_type is null");
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
@@ -97,6 +103,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
 
             } else if constexpr (std::is_same_v<T, mir::AllocaInst>) {
+                if (!i.alloc_type) {
+                    TML_LOG_WARN("codegen",
+                                 "[CG-I32] i32 fallback in AllocaInst — alloc_type is null");
+                }
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
                 // Unit type maps to "void" but LLVM doesn't allow `alloca void`.
@@ -129,6 +139,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::GetElementPtrInst>) {
                 std::string base = get_value_reg(i.base);
+                if (!i.base_type) {
+                    TML_LOG_WARN("codegen",
+                                 "[CG-I32] i32 fallback in GetElementPtrInst — base_type is null");
+                }
                 mir::MirTypePtr type_ptr = i.base_type ? i.base_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
 
@@ -298,6 +312,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string false_val = get_value_reg(i.false_val);
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.true_val.type;
                 if (!type_ptr) {
+                    TML_LOG_WARN("codegen", "[CG-I32] i32 fallback in SelectInst — result_type and "
+                                            "true_val.type are null");
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
@@ -450,6 +466,8 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         }
         if (!type_ptr) {
             // Fallback to i32 if no type info
+            TML_LOG_WARN("codegen",
+                         "[CG-I32] i32 fallback in BinaryInst — all type sources are null");
             type_ptr = mir::make_i32_type();
         }
         type_str = mir_type_to_llvm(type_ptr);
@@ -625,6 +643,8 @@ void MirCodegen::emit_unary_inst(const mir::UnaryInst& i, const std::string& res
     // Use result_type if available, otherwise use operand's type
     mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.operand.type;
     if (!type_ptr) {
+        TML_LOG_WARN("codegen",
+                     "[CG-I32] i32 fallback in UnaryInst — result_type and operand.type are null");
         type_ptr = mir::make_i32_type();
     }
     std::string type_str = mir_type_to_llvm(type_ptr);
