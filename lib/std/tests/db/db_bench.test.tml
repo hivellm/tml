@@ -1,0 +1,117 @@
+use test::{assert, assert_eq}
+use std::db::bench::runner::{BenchConfig, BenchmarkResult}
+use std::db::bench::stats
+use std::db::bench::suite
+use std::db::bench::report
+use std::time::Instant
+
+@test
+func test_bench_config() -> I32 {
+    let c = BenchConfig::new("test_op", 100)
+    assert_eq(c.name(), "test_op", "name")
+    assert_eq(c.measure_iterations, 100, "iterations")
+    assert_eq(c.warmup_iterations, 5, "default warmup")
+    return 0
+}
+
+@test
+func test_bench_config_warmup() -> I32 {
+    let c = BenchConfig::new("x", 50).with_warmup(10)
+    assert_eq(c.warmup_iterations, 10, "custom warmup")
+    return 0
+}
+
+@test
+func test_bench_result() -> I32 {
+    let r = BenchmarkResult::new("insert", 1000, 5000000, 4000, 8000)
+    assert_eq(r.name(), "insert", "name")
+    assert_eq(r.iterations(), 1000, "iterations")
+    assert_eq(r.mean_ns(), 5000, "mean ns")
+    assert(r.ops_per_sec() > 0, "has ops/sec")
+    return 0
+}
+
+@test
+func test_bench_result_summary() -> I32 {
+    let r = BenchmarkResult::new("test", 100, 1000000, 9000, 12000)
+    let s = r.summary()
+    assert(s.contains("test"), "has name")
+    assert(s.contains("ns/op"), "has unit")
+    assert(s.contains("ops/sec"), "has ops")
+    return 0
+}
+
+@test
+func test_stats_format_duration() -> I32 {
+    assert_eq(stats::format_duration(500), "500 ns", "nanoseconds")
+    assert_eq(stats::format_duration(5000), "5 us", "microseconds")
+    assert_eq(stats::format_duration(5000000), "5 ms", "milliseconds")
+    assert_eq(stats::format_duration(2000000000), "2 s", "seconds")
+    return 0
+}
+
+@test
+func test_stats_ops_per_sec() -> I32 {
+    assert_eq(stats::ops_per_sec(1000), 1000000, "1us = 1M ops/s")
+    assert_eq(stats::ops_per_sec(0), 0, "zero guard")
+    return 0
+}
+
+@test
+func test_suite_techempower_schema() -> I32 {
+    let world = suite::techempower_world_sql()
+    assert(world.contains("CREATE TABLE"), "has create")
+    assert(world.contains("World"), "has table name")
+    assert(world.contains("randomNumber"), "has column")
+    return 0
+}
+
+@test
+func test_suite_seed_sql() -> I32 {
+    let sql = suite::seed_world_sql(1, 42)
+    assert(sql.contains("INSERT INTO World"), "has insert")
+    assert(sql.contains("1"), "has id")
+    assert(sql.contains("42"), "has random")
+    return 0
+}
+
+@test
+func test_report_csv() -> I32 {
+    let r = BenchmarkResult::new("op", 100, 500000, 4000, 6000)
+    let csv = report::format_csv(ref r)
+    assert(csv.contains("op,"), "has name")
+    assert(csv.contains(",100"), "has iterations")
+    return 0
+}
+
+@test
+func test_report_json() -> I32 {
+    let r = BenchmarkResult::new("op", 100, 500000, 4000, 6000)
+    let j = report::format_json(ref r)
+    assert(j.contains("\"name\":\"op\""), "has name")
+    assert(j.contains("\"ops_per_sec\""), "has ops")
+    return 0
+}
+
+@test
+func test_report_markdown() -> I32 {
+    let header = report::markdown_header()
+    assert(header.contains("Benchmark"), "has header")
+    assert(header.contains("Ops/sec"), "has ops column")
+    return 0
+}
+
+@test
+func test_measure_timing() -> I32 {
+    let start = Instant::now()
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop (i < 1000) {
+        sum = sum + i
+        i = i + 1
+    }
+    let elapsed = start.elapsed()
+    let ns = elapsed.as_nanos()
+    assert(ns > 0, "elapsed should be > 0")
+    return 0
+}

@@ -22,3 +22,4 @@ pub mod query
 pub mod schema
 pub mod migration
 pub mod orm
+pub mod bench

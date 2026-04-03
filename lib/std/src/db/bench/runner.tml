@@ -1,0 +1,87 @@
+//! Database benchmark runner with statistical analysis.
+
+use std::time::Instant
+
+/// Benchmark configuration.
+pub type BenchConfig {
+    warmup_iterations: I64,
+    measure_iterations: I64,
+    config_name: Str
+}
+
+impl BenchConfig {
+    pub func new(name: Str, iterations: I64) -> BenchConfig {
+        return BenchConfig { warmup_iterations: 5, measure_iterations: iterations, config_name: name }
+    }
+
+    pub func with_warmup(this, warmup: I64) -> BenchConfig {
+        return BenchConfig { warmup_iterations: warmup, measure_iterations: this.measure_iterations, config_name: this.config_name }
+    }
+
+    pub func name(this) -> Str { return this.config_name }
+}
+
+/// Timing statistics for a benchmark run.
+pub type BenchmarkStats {
+    st_iterations: I64,
+    st_total_ns: I64,
+    st_min_ns: I64,
+    st_max_ns: I64,
+    st_mean_ns: I64,
+    st_ops_sec: I64
+}
+
+/// Benchmark result with statistical metrics.
+pub type BenchmarkResult {
+    br_name: Str,
+    br_stats: BenchmarkStats
+}
+
+func make_bstats(iterations: I64, total_ns: I64, min_ns: I64, max_ns: I64, mean: I64, ops: I64) -> BenchmarkStats {
+    return BenchmarkStats {
+        st_iterations: iterations,
+        st_total_ns: total_ns,
+        st_min_ns: min_ns,
+        st_max_ns: max_ns,
+        st_mean_ns: mean,
+        st_ops_sec: ops
+    }
+}
+
+impl BenchmarkResult {
+    pub func new(name: Str, iterations: I64, total_ns: I64, min_ns: I64, max_ns: I64) -> BenchmarkResult {
+        var mean: I64 = 0
+        if iterations > 0 { mean = total_ns / iterations }
+        var ops: I64 = 0
+        if mean > 0 { ops = 1000000000 / mean }
+        let s = make_bstats(iterations, total_ns, min_ns, max_ns, mean, ops)
+        return BenchmarkResult { br_name: name, br_stats: s }
+    }
+
+    /// Human-readable summary line.
+    pub func summary(this) -> Str {
+        let n = this.br_name
+        let m = this.br_stats.st_mean_ns
+        let o = this.br_stats.st_ops_sec
+        let i = this.br_stats.st_iterations
+        return n + ": " + m.to_string() + " ns/op (" + o.to_string() + " ops/sec, " + i.to_string() + " iters)"
+    }
+
+    pub func name(this) -> Str { return this.br_name }
+    pub func mean_ns(this) -> I64 { return this.br_stats.st_mean_ns }
+    pub func ops_per_sec(this) -> I64 { return this.br_stats.st_ops_sec }
+    pub func min_ns(this) -> I64 { return this.br_stats.st_min_ns }
+    pub func max_ns(this) -> I64 { return this.br_stats.st_max_ns }
+    pub func total_ns(this) -> I64 { return this.br_stats.st_total_ns }
+    pub func iterations(this) -> I64 { return this.br_stats.st_iterations }
+}
+
+// BenchResult and BenchStats are type aliases for backward compatibility.
+pub type BenchResult = BenchmarkResult
+pub type BenchStats = BenchmarkStats
+
+/// Measures execution time of a single iteration in nanoseconds.
+pub func measure_ns(start: Instant) -> I64 {
+    let elapsed = start.elapsed()
+    return elapsed.as_nanos()
+}

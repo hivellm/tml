@@ -1,0 +1,47 @@
+//! Standard database benchmark operations.
+
+/// Standard benchmark operation types.
+pub enum BenchOp {
+    InsertSingle,
+    InsertBulk,
+    SelectByPK,
+    SelectAll,
+    SelectFiltered,
+    UpdateByPK,
+    DeleteByPK,
+    Transaction
+}
+
+impl BenchOp {
+    pub func name(this) -> Str {
+        when this {
+            BenchOp::InsertSingle   => "insert_single",
+            BenchOp::InsertBulk     => "insert_bulk",
+            BenchOp::SelectByPK     => "select_by_pk",
+            BenchOp::SelectAll      => "select_all",
+            BenchOp::SelectFiltered => "select_filtered",
+            BenchOp::UpdateByPK     => "update_by_pk",
+            BenchOp::DeleteByPK     => "delete_by_pk",
+            BenchOp::Transaction    => "transaction"
+        }
+    }
+}
+
+/// TechEmpower benchmark schema SQL.
+pub func techempower_world_sql() -> Str {
+    return "CREATE TABLE IF NOT EXISTS World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)"
+}
+
+pub func techempower_fortune_sql() -> Str {
+    return "CREATE TABLE IF NOT EXISTS Fortune (id INTEGER PRIMARY KEY, message TEXT NOT NULL)"
+}
+
+/// Generates seed INSERT SQL for World table.
+pub func seed_world_sql(id: I64, random_number: I64) -> Str {
+    return "INSERT INTO World (id, randomNumber) VALUES (" + id.to_string() + ", " + random_number.to_string() + ")"
+}
+
+/// Generates seed INSERT SQL for Fortune table.
+pub func seed_fortune_sql(id: I64, message: Str) -> Str {
+    return "INSERT INTO Fortune (id, message) VALUES (" + id.to_string() + ", '" + message + "')"
+}

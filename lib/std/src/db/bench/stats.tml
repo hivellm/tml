@@ -1,0 +1,37 @@
+//! Statistical functions for benchmark analysis.
+
+/// Calculates the mean of an array of I64 values given sum and count.
+pub func mean(total: I64, count: I64) -> I64 {
+    if count == 0 { return 0 }
+    return total / count
+}
+
+/// Calculates operations per second from mean nanoseconds per operation.
+pub func ops_per_sec(mean_ns: I64) -> I64 {
+    if mean_ns == 0 { return 0 }
+    return 1000000000 / mean_ns
+}
+
+/// Converts nanoseconds to microseconds.
+pub func ns_to_us(ns: I64) -> I64 {
+    return ns / 1000
+}
+
+/// Converts nanoseconds to milliseconds.
+pub func ns_to_ms(ns: I64) -> I64 {
+    return ns / 1000000
+}
+
+/// Formats nanoseconds to a human-readable string with appropriate unit.
+pub func format_duration(ns: I64) -> Str {
+    if ns < 1000 {
+        return ns.to_string() + " ns"
+    }
+    if ns < 1000000 {
+        return (ns / 1000).to_string() + " us"
+    }
+    if ns < 1000000000 {
+        return (ns / 1000000).to_string() + " ms"
+    }
+    return (ns / 1000000000).to_string() + " s"
+}

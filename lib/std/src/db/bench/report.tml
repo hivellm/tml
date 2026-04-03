@@ -1,0 +1,39 @@
+//! Benchmark report formatters — console, CSV, JSON, Markdown.
+
+use std::db::bench::runner::BenchmarkResult
+use std::db::bench::stats
+
+/// Formats a BenchmarkResult as a console table row.
+pub func format_console(result: ref BenchmarkResult) -> Str {
+    let name = result.name()
+    let mean = stats::format_duration(result.mean_ns())
+    let ops = result.ops_per_sec().to_string()
+    let min = stats::format_duration(result.min_ns())
+    let max = stats::format_duration(result.max_ns())
+    return "| " + name + " | " + mean + " | " + ops + " ops/s | " + min + " - " + max + " |"
+}
+
+/// Formats a BenchmarkResult as a CSV row (no header).
+pub func format_csv(result: ref BenchmarkResult) -> Str {
+    return result.name() + "," + result.mean_ns().to_string() + "," + result.ops_per_sec().to_string() + "," + result.min_ns().to_string() + "," + result.max_ns().to_string() + "," + result.iterations().to_string()
+}
+
+/// CSV header row.
+pub func csv_header() -> Str {
+    return "name,mean_ns,ops_per_sec,min_ns,max_ns,iterations"
+}
+
+/// Formats a BenchmarkResult as a JSON object.
+pub func format_json(result: ref BenchmarkResult) -> Str {
+    return "{\"name\":\"" + result.name() + "\",\"mean_ns\":" + result.mean_ns().to_string() + ",\"ops_per_sec\":" + result.ops_per_sec().to_string() + ",\"min_ns\":" + result.min_ns().to_string() + ",\"max_ns\":" + result.max_ns().to_string() + "}"
+}
+
+/// Formats a BenchmarkResult as a Markdown table row.
+pub func format_markdown(result: ref BenchmarkResult) -> Str {
+    return "| " + result.name() + " | " + stats::format_duration(result.mean_ns()) + " | " + result.ops_per_sec().to_string() + " |"
+}
+
+/// Markdown table header.
+pub func markdown_header() -> Str {
+    return "| Benchmark | Mean | Ops/sec |\n|-----------|------|---------|"
+}
