@@ -8,50 +8,51 @@
 //         curl http://localhost:3000/old-page
 // Bench:  npx autocannon -c 100 -d 10 http://localhost:3000/
 //
-// Handler signature: func(req: IncomingMessage) -> Str
-//   Use app_build_response(status, content_type, body) to build responses.
-//   Middleware and hooks are disabled pending a codegen fix for ServerResponse fn ptrs.
+// Handler signature: func(req: IncomingMessage, res: Response) -> Str
+//   Use res.json(data).send() for JSON, res.html(data).send() for HTML.
+//   Headers (CORS, Security, ETag, Cache-Control) are auto-resolved by the Response builder.
 
 mod http_server
 
 use core::str
 use std::http::app::App
-use std::http::dispatch::{app_get_param, app_build_response}
+use std::http::dispatch::app_get_param
 use std::http::incoming::IncomingMessage
+use std::http::framework::response_builder::Response
 
 // ── Handlers ───────────────────────────────────────────────────
 
-func handle_root(req: IncomingMessage) -> Str {
-    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}")
+func handle_root(req: IncomingMessage, res: Response) -> Str {
+    return res.json("{\"status\":\"ok\",\"message\":\"TML HTTP Server\"}").send()
 }
 
-func handle_health(req: IncomingMessage) -> Str {
-    app_build_response(200, "application/json; charset=utf-8", "{\"status\":\"ok\"}")
+func handle_health(req: IncomingMessage, res: Response) -> Str {
+    return res.json("{\"status\":\"ok\"}").send()
 }
 
-func handle_user(req: IncomingMessage) -> Str {
+func handle_user(req: IncomingMessage, res: Response) -> Str {
     let id: Str = app_get_param(req, "id")
-    app_build_response(200, "application/json; charset=utf-8", "{\"user_id\":\"" + id + "\"}")
+    return res.json("{\"user_id\":\"" + id + "\"}").send()
 }
 
-func handle_echo(req: IncomingMessage) -> Str {
+func handle_echo(req: IncomingMessage, res: Response) -> Str {
     let body: Str = req.body()
     if str::len(body) == 0 {
-        return app_build_response(200, "application/json; charset=utf-8", "{}")
+        return res.json("{}").send()
     }
-    app_build_response(200, "application/json; charset=utf-8", body)
+    return res.json(body).send()
 }
 
-func handle_redirect(req: IncomingMessage) -> Str {
-    "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
+func handle_redirect(req: IncomingMessage, res: Response) -> Str {
+    return "HTTP/1.1 302 Found\r\nLocation: /\r\nContent-Length: 0\r\nServer: TML\r\nConnection: keep-alive\r\n\r\n"
 }
 
-func handle_html(req: IncomingMessage) -> Str {
-    app_build_response(200, "text/html; charset=utf-8", "<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>")
+func handle_html(req: IncomingMessage, res: Response) -> Str {
+    return res.html("<html><body><h1>Hello from TML</h1><p>This is an HTML page.</p></body></html>").send()
 }
 
-func handle_text(req: IncomingMessage) -> Str {
-    app_build_response(200, "text/plain; charset=utf-8", "Hello, plain text world!")
+func handle_text(req: IncomingMessage, res: Response) -> Str {
+    return res.text("Hello, plain text world!").send()
 }
 
 // ── Main ───────────────────────────────────────────────────────

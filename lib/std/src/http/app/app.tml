@@ -5,8 +5,10 @@
 //!   - Thread pool (N workers = CPU cores) — no thread-per-connection
 //!   - Hook lifecycle: onRequest, preHandler, onSend, onResponse, onError
 //!     (hooks are defined but not wired in dispatch until a codegen bug is fixed)
-//!   - Handler signature: func(req: IncomingMessage) -> Str
-//!     Use app_build_response(status, content_type, body) to build responses.
+//!   - Handler signature: func(req: IncomingMessage, res: Response) -> Str
+//!     The `res` parameter is a pre-configured Response builder with status 200,
+//!     CORS, Security, ETag, and Cache-Control headers auto-resolved.
+//!     Use res.json(data).send() for JSON, res.html(data).send() for HTML.
 //!   - Read/write/idle timeouts
 //!   - Graceful shutdown via app.shutdown()
 //!   - Keep-alive connections
@@ -14,16 +16,17 @@
 //! # Example
 //!
 //! ```tml
-//! use std::http::app::{App, app_get_param, app_build_response}
+//! use std::http::app::App
 //! use std::http::incoming::IncomingMessage
+//! use std::http::framework::response_builder::Response
 //!
-//! func handle_root(req: IncomingMessage) -> Str {
-//!     app_build_response(200, "application/json", "{\"status\":\"ok\"}")
+//! func handle_root(req: IncomingMessage, res: Response) -> Str {
+//!     return res.json("{\"status\":\"ok\"}").send()
 //! }
 //!
-//! func handle_user(req: IncomingMessage) -> Str {
+//! func handle_user(req: IncomingMessage, res: Response) -> Str {
 //!     let id: Str = app_get_param(req, "id")
-//!     app_build_response(200, "application/json", "{\"user_id\":\"" + id + "\"}")
+//!     return res.json("{\"user_id\":\"" + id + "\"}").send()
 //! }
 //!
 //! pub func main() -> I32 {

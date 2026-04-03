@@ -1,60 +1,59 @@
-/// HTTP Server — Express/CMMV-style with auto header resolution
+/// HTTP Server — Express/CMMV-style with (req, res) handlers
 ///
 /// Run:   tml run samples/11-http-server/server.tml
 /// Test:  curl http://localhost:3000/
 ///        curl http://localhost:3000/api/users
 ///        curl http://localhost:3000/api/users/42
 ///        curl -X POST http://localhost:3000/api/users -d '{"name":"alice"}'
-///        curl -I http://localhost:3000/api/health
 
 use core::str
 use std::http::app::App
 use std::http::dispatch::app_get_param
 use std::http::incoming::IncomingMessage
-use std::http::framework::response_builder::Res
+use std::http::framework::response_builder::{Response, Res}
 
 // ════════════════════════════════════════════════════════════════
-// Handlers — Express-style, one-liners
-// Headers are auto-resolved: CORS, Security, ETag, Cache-Control
+// Handlers — Express-style: func(req, res) -> Str
+// res comes pre-configured with CORS, Security, ETag, Cache
 // ════════════════════════════════════════════════════════════════
 
-func handle_root(req: IncomingMessage) -> Str {
-    return Res::ok("{\"service\":\"TML HTTP Server\",\"version\":\"0.2.9\"}")
+func handle_root(req: IncomingMessage, res: Response) -> Str {
+    return res.json(`{"service":"TML HTTP Server","version":"0.2.9"}`).send()
 }
 
-func handle_health(req: IncomingMessage) -> Str {
-    return Res::ok("{\"status\":\"healthy\"}")
+func handle_health(req: IncomingMessage, res: Response) -> Str {
+    return res.json(`{"status":"healthy"}`).send()
 }
 
-func handle_users_list(req: IncomingMessage) -> Str {
-    return Res::ok("[{\"id\":1,\"name\":\"alice\"},{\"id\":2,\"name\":\"bob\"}]")
+func handle_users_list(req: IncomingMessage, res: Response) -> Str {
+    return res.json(`[{"id":1,"name":"alice"},{"id":2,"name":"bob"}]`).send()
 }
 
-func handle_user_by_id(req: IncomingMessage) -> Str {
-    let id: Str = app_get_param(req, "id")
-    return Res::ok("{\"id\":" + id + ",\"name\":\"user_" + id + "\"}")
+func handle_user_by_id(req: IncomingMessage, res: Response) -> Str {
+    let id = app_get_param(req, "id")
+    return res.json(`{"id":{id},"name":"user_{id}"}`).send()
 }
 
-func handle_user_create(req: IncomingMessage) -> Str {
-    let body: Str = req.body()
+func handle_user_create(req: IncomingMessage, res: Response) -> Str {
+    let body = req.body()
     if str::len(body) == 0 {
-        return Res::bad_request("body required")
+        return res.status(400).json(`{"error":"body required"}`).send()
     }
-    return Res::created("{\"created\":true}")
+    return res.status(201).json(`{"created":true}`).send()
 }
 
-func handle_user_update(req: IncomingMessage) -> Str {
-    let id: Str = app_get_param(req, "id")
-    return Res::ok("{\"id\":" + id + ",\"updated\":true}")
+func handle_user_update(req: IncomingMessage, res: Response) -> Str {
+    let id = app_get_param(req, "id")
+    return res.json(`{"id":{id},"updated":true}`).send()
 }
 
-func handle_user_delete(req: IncomingMessage) -> Str {
-    let id: Str = app_get_param(req, "id")
-    return Res::ok("{\"id\":" + id + ",\"deleted\":true}")
+func handle_user_delete(req: IncomingMessage, res: Response) -> Str {
+    let id = app_get_param(req, "id")
+    return res.json(`{"id":{id},"deleted":true}`).send()
 }
 
-func handle_not_found(req: IncomingMessage) -> Str {
-    return Res::not_found("route not found")
+func handle_not_found(req: IncomingMessage, res: Response) -> Str {
+    return res.status(404).json(`{"error":"route not found"}`).send()
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -74,7 +73,6 @@ pub func main() -> I32 {
     app.get("/*", handle_not_found as I64)
 
     println("TML HTTP Server on http://localhost:3000")
-    println("  CORS + ETag + Cache-Control + Security — auto-resolved")
     app.listen(3000)
     return 0
 }

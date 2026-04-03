@@ -1,7 +1,7 @@
 //! HTTP request dispatch — route matching + handler invocation.
 //!
 //! Implements the route dispatch pipeline:
-//!   route match → handler(req) -> Str → return HTTP response string
+//!   route match → handler(req, res) -> Str → return HTTP response string
 //!
 //! Hooks are wired into app_dispatch: onRequest (before routing), preHandler
 //! (after routing, before handler), onResponse (after handler, for logging).
@@ -15,6 +15,7 @@ use core::fmt::helpers::i64_to_str
 use std::http::incoming::IncomingMessage
 use std::http::server_response::ServerResponse
 use std::http::parse::{app_store_param, app_find_header_end_in_str, MAX_PARAMS}
+use std::http::framework::response_builder::Response
 
 // System time for Date header (RFC 7231)
 @extern("tml_os_system_time_secs") func system_time_secs() -> I64
@@ -662,8 +663,10 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
     }
 
     // ── Route handler ────────────────────────────────────────────
-    let handler: func(IncomingMessage) -> Str = fn_ptr as func(IncomingMessage) -> Str
-    let response: Str = handler(req)
+    // Pre-configure a Response builder with status 200 + middleware headers
+    let res: Response = Response::status(200)
+    let handler: func(IncomingMessage, Response) -> Str = fn_ptr as func(IncomingMessage, Response) -> Str
+    let response: Str = handler(req, res)
 
     // ── onResponse hooks (after handler, for logging/metrics) ────
     if on_response_count > 0 {
@@ -892,6 +895,7 @@ pub func app_http_date() -> Str {
     return dow_name + ", " + dd + " " + mon_name + " " + yy + " " + hh + ":" + mm + ":" + ss + " GMT"
 }
 
+/// DEPRECATED — use res.json(data).send() instead.
 /// Build HTTP response — optimized hot path with Date header.
 pub func app_build_response(status: I64, content_type: Str, body: Str) -> Str {
     let body_len: I64 = str::len(body)
