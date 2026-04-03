@@ -1,0 +1,11 @@
+# Node.js
+node_modules/
+package-lock.json
+package.json
+
+# Go
+go_bench/
+
+# Rust
+rust_bench/target/
+rust_bench/Cargo.lock
