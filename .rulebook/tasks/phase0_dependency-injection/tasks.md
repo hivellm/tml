@@ -1,39 +1,68 @@
-# Tasks: Dependency Injection — CMMV-Inspired Singleton Registry + NestJS Decorators
+# Tasks: Dependency Injection — CMMV-Style Application Bootstrap
 
-**Status**: Planning. 0% (0/48).
-**Approach**: CMMV-style (singleton registry, no heavy IoC) + NestJS decorators
+**Status**: Planning. 0% (0/43).
+**Approach**: CMMV Application.create() pattern — one declarative call, zero boilerplate
 **Target API**:
+
+### User-Facing Code (what developers write)
+
 ```tml
-@Service("user")
-type UserService {
-    db: SqliteConnection
-}
+// === Contracts — define once, generate everything ===
 
-impl UserService {
-    pub func new(db: SqliteConnection) -> UserService {
-        return UserService { db: db }
+let TaskContract = Contract::entity("tasks")
+    .field("id", "INTEGER", primary: true)
+    .field("title", "TEXT")
+    .field("done", "INTEGER")
+    .crud()
+
+// === Services — @Service decorator, singleton ===
+
+@Service("auth")
+type AuthService {}
+
+impl AuthService {
+    pub func validate_token(this, token: Str) -> Bool {
+        return token == "secret-token"
     }
-    pub func find_all(this) -> Str { return "[]" }
 }
 
-@Controller("/users")
-type UserController {
-    service: ref UserService
-}
+// === Modules — CMMV-style flat composition ===
 
-// Module — explicit flat wiring, no IoC magic
+let TaskModule = Module::new("tasks")
+    .contract(TaskContract)         // auto-generates TaskController + TaskService
+
+let AuthModule = Module::new("auth")
+    .service(AuthService {})
+
+let AppModule = Module::new("app")
+    .import(TaskModule)
+    .import(AuthModule)
+
+// === Bootstrap — one call, like CMMV Application.create() ===
+
 func main() -> I32 {
-    let db = SqliteConnection::open_in_memory().unwrap()
-    let user_svc = UserService::new(db)
-
-    var app = App::new()
-    let module = Module::new()
-        .service("user", ref user_svc)
-        .controller(UserController { service: ref user_svc })
-    app.bootstrap(module)
-    app.listen(3000)
+    Application::create({
+        http_adapter: "default",
+        modules: [AppModule],
+        contracts: [TaskContract],
+        config: {
+            port: 3000,
+            db: ":memory:",
+            cors: "*"
+        }
+    })
     return 0
 }
+```
+
+### What `Application::create()` Does Internally
+```
+1. Create SqliteConnection from config.db
+2. For each contract: generate controller + service + entity
+3. For each module: register services in ServiceRegistry (singleton)
+4. For each controller: register routes in radix-tree router
+5. Start HTTP server on config.port
+6. Block on accept loop
 ```
 
 ## CMMV vs NestJS Approach
@@ -67,37 +96,35 @@ NestJS (what we DON'T do):
 - [ ] 1.7 `di/global.tml` — module-level `ServiceRegistry` instance (singleton pattern)
 - [ ] 1.8 `register_service(name, ptr)`, `get_service(name) -> I64` — convenience functions
 
-## Phase 2: @Service Decorator + Module Builder (8 items)
+## Phase 2: Module — CMMV-style Declarative Composition (8 items)
 
-### @Service decorator (CMMV-style — just metadata, no magic)
-- [ ] 2.1 Parser: `@Service("token")` on type declarations → stores token as decorator arg
-- [ ] 2.2 `di/service.tml` — `ServiceDef` type: token, type_name, instance_ptr
-- [ ] 2.3 `di/service.tml` — `ServiceDef::new(token, ptr)` — wraps a pre-built instance
+### Module type (mirrors CMMV's `new Module({...})`)
+- [ ] 2.1 `di/module.tml` — `Module` type: name, controllers (Str list), providers (Str list), submodules (Str list), contracts (Str list)
+- [ ] 2.2 `Module::new(name)` → returns empty module with name
+- [ ] 2.3 `.controller(ctrl_ptr)` → adds controller to module
+- [ ] 2.4 `.service(svc_instance)` → adds service as singleton provider
+- [ ] 2.5 `.contract(contract)` → adds contract (auto-generates controller + service)
+- [ ] 2.6 `.import(sub_module)` → imports another module's providers (CMMV submodules)
 
-### Module builder (CMMV-style — flat, explicit wiring)
-- [ ] 2.4 `di/module.tml` — `Module` type with fluent builder
-- [ ] 2.5 `Module::new()` → `Module::service(token, ptr)` → `Module::controller(ctrl)` → `Module::build()`
-- [ ] 2.6 `Module::build()` — registers all services in ServiceRegistry, returns controller list
-- [ ] 2.7 `Module::import(other_module)` — merges another module's services into this one (submodules)
-
-### Tests
-- [ ] 2.8 Test: Module::new().service("db", ptr).service("user", ptr).build() registers both
-
-## Phase 3: HTTP Integration — App.bootstrap(Module) (8 items)
-
-### Wiring to HTTP
-- [ ] 3.1 `App::bootstrap(module)` — calls module.build(), then registers controllers with router
-- [ ] 3.2 Controller methods receive services via `this.field` (direct ref, no proxy)
-- [ ] 3.3 `http/context.tml` — `RequestContext` for per-request data (not per-request DI — CMMV-style)
-- [ ] 3.4 Auto-register routes from @Controller + @Get/@Post methods during bootstrap
-
-### ServiceRegistry access in handlers
-- [ ] 3.5 `get_service("user")` available globally — any handler can look up a service by token
-- [ ] 3.6 Type-safe wrapper: `get_user_service() -> ref UserService` (generated or manual)
+### @Service decorator
+- [ ] 2.7 `@Service("token")` on types → compile-time metadata, registers in ServiceRegistry at bootstrap
 
 ### Tests
-- [ ] 3.7 Test: App.bootstrap(module) → GET /users calls UserController which uses UserService
-- [ ] 3.8 Test: get_service("db") returns the same ptr registered at startup
+- [ ] 2.8 Test: Module::new("app").service(svc).import(sub_mod) composes correctly
+
+## Phase 3: Application::create() — CMMV Bootstrap (8 items)
+
+### Application entry point (mirrors CMMV `Application.create({...})`)
+- [ ] 3.1 `di/application.tml` — `AppConfig` type: http_adapter (Str), port (I32), db_path (Str), cors (Str)
+- [ ] 3.2 `Application::create(config, modules, contracts)` — single declarative bootstrap call
+- [ ] 3.3 Internally: create DB connection from config.db_path
+- [ ] 3.4 Internally: resolve all contracts → generate controllers + services
+- [ ] 3.5 Internally: resolve all module providers → register in ServiceRegistry
+- [ ] 3.6 Internally: collect all controllers → register routes in App router
+- [ ] 3.7 Internally: start HTTP server on config.port
+
+### Tests
+- [ ] 3.8 Test: Application::create() with one module + one contract → server starts, routes work
 
 ## Phase 4: Contract-Driven Generation (CMMV's killer feature) (8 items)
 
