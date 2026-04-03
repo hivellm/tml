@@ -1,0 +1,153 @@
+/// Complete HTTP Server — uses std::http middleware stack
+///
+/// Run:   tml run samples/11-http-server/server.tml
+/// Test:  curl http://localhost:3000/
+///        curl http://localhost:3000/api/users
+///        curl -X POST http://localhost:3000/api/users -d '{"name":"alice"}'
+///        curl -I http://localhost:3000/api/health
+
+use core::str
+use std::http::app::App
+use std::http::dispatch::{app_get_param, app_build_response}
+use std::http::incoming::IncomingMessage
+use std::http::cors::{CorsOptions, cors_headers}
+use std::http::security::{SecurityOptions, security_headers}
+use std::http::etag
+use std::http::cache_control::{CacheOptions, cache_control_header}
+
+// ════════════════════════════════════════════════════════════════
+// Shared response builder — uses middleware modules, NOT hardcoded headers
+// ════════════════════════════════════════════════════════════════
+
+/// Builds a full HTTP response using the middleware stack.
+func api_response(status: I32, body: Str) -> Str {
+    // CORS headers from std::http::cors
+    let cors = cors_headers("*")
+
+    // Security headers from std::http::security
+    let sec_opts = SecurityOptions::defaults()
+    let sec = security_headers(sec_opts)
+
+    // Cache headers from std::http::cache_control
+    let cache_opts = CacheOptions::no_cache()
+    let cache = cache_control_header(cache_opts)
+
+    // ETag from std::http::etag
+    let tag = etag::generate(body)
+
+    let body_len: I64 = str::len(body)
+    var resp: Str = "HTTP/1.1 " + status_line(status) + "\r\n"
+    resp = resp + "Content-Type: application/json; charset=utf-8\r\n"
+    resp = resp + "Content-Length: " + body_len.to_string() + "\r\n"
+    resp = resp + cors
+    resp = resp + sec
+    resp = resp + "Cache-Control: " + cache + "\r\n"
+    resp = resp + "ETag: " + tag + "\r\n"
+    resp = resp + "Connection: keep-alive\r\n"
+    resp = resp + "\r\n" + body
+    return resp
+}
+
+/// Static file response with long cache.
+func static_response(status: I32, content_type: Str, body: Str) -> Str {
+    let cache_opts = CacheOptions::public_immutable(86400)
+    let cache = cache_control_header(cache_opts)
+    let tag = etag::generate(body)
+    let body_len: I64 = str::len(body)
+
+    var resp: Str = "HTTP/1.1 " + status_line(status) + "\r\n"
+    resp = resp + "Content-Type: " + content_type + "\r\n"
+    resp = resp + "Content-Length: " + body_len.to_string() + "\r\n"
+    resp = resp + "Cache-Control: " + cache + "\r\n"
+    resp = resp + "ETag: " + tag + "\r\n"
+    resp = resp + "Connection: keep-alive\r\n"
+    resp = resp + "\r\n" + body
+    return resp
+}
+
+func status_line(code: I32) -> Str {
+    if code == 200 { return "200 OK" }
+    if code == 201 { return "201 Created" }
+    if code == 204 { return "204 No Content" }
+    if code == 400 { return "400 Bad Request" }
+    if code == 404 { return "404 Not Found" }
+    return "200 OK"
+}
+
+// ════════════════════════════════════════════════════════════════
+// Handlers — clean, focused on business logic only
+// ════════════════════════════════════════════════════════════════
+
+func handle_root(req: IncomingMessage) -> Str {
+    return api_response(200, "{\"service\":\"TML HTTP Server\",\"version\":\"0.2.9\"}")
+}
+
+func handle_health(req: IncomingMessage) -> Str {
+    return api_response(200, "{\"status\":\"healthy\"}")
+}
+
+func handle_users_list(req: IncomingMessage) -> Str {
+    return api_response(200, "[{\"id\":1,\"name\":\"alice\"},{\"id\":2,\"name\":\"bob\"}]")
+}
+
+func handle_user_by_id(req: IncomingMessage) -> Str {
+    let id: Str = app_get_param(req, "id")
+    return api_response(200, "{\"id\":" + id + ",\"name\":\"user_" + id + "\"}")
+}
+
+func handle_user_create(req: IncomingMessage) -> Str {
+    let body: Str = req.body()
+    if str::len(body) == 0 {
+        return api_response(400, "{\"error\":\"body required\"}")
+    }
+    return api_response(201, "{\"created\":true,\"body\":" + body + "}")
+}
+
+func handle_user_update(req: IncomingMessage) -> Str {
+    let id: Str = app_get_param(req, "id")
+    return api_response(200, "{\"id\":" + id + ",\"updated\":true}")
+}
+
+func handle_user_delete(req: IncomingMessage) -> Str {
+    let id: Str = app_get_param(req, "id")
+    return api_response(200, "{\"id\":" + id + ",\"deleted\":true}")
+}
+
+func handle_static_html(req: IncomingMessage) -> Str {
+    var page: Str = "<html><head><title>TML Server</title></head><body>"
+    page = page + "<h1>TML HTTP Server</h1>"
+    page = page + "<p>CORS + ETag + Cache-Control + Security headers</p>"
+    page = page + "<p>GET /api/users | POST /api/users | GET /api/users/:id</p>"
+    page = page + "</body></html>"
+    return static_response(200, "text/html; charset=utf-8", page)
+}
+
+func handle_not_found(req: IncomingMessage) -> Str {
+    return api_response(404, "{\"error\":\"not found\"}")
+}
+
+// ════════════════════════════════════════════════════════════════
+// Bootstrap
+// ════════════════════════════════════════════════════════════════
+
+pub func main() -> I32 {
+    var app: App = App::new()
+
+    app.get("/", handle_root as I64)
+    app.get("/api/health", handle_health as I64)
+    app.get("/api/users", handle_users_list as I64)
+    app.get("/api/users/:id", handle_user_by_id as I64)
+    app.post("/api/users", handle_user_create as I64)
+    app.put("/api/users/:id", handle_user_update as I64)
+    app.delete("/api/users/:id", handle_user_delete as I64)
+    app.get("/static/index.html", handle_static_html as I64)
+    app.get("/*", handle_not_found as I64)
+
+    println("TML HTTP Server v0.2.9 on http://localhost:3000")
+    println("  GET  /api/health, /api/users, /api/users/:id")
+    println("  POST /api/users | PUT/DEL /api/users/:id")
+    println("  Headers: CORS, ETag, Cache-Control, Security")
+
+    app.listen(3000)
+    return 0
+}
