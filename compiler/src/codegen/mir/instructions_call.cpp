@@ -17,6 +17,7 @@ TML_MODULE("codegen_x86")
 //! | emit_normal_call          | Plain direct call emission                           |
 
 #include "codegen/abi.hpp"
+#include "codegen/intrinsic_table.hpp"
 #include "codegen/mir_codegen.hpp"
 
 #include <iomanip>
@@ -152,733 +153,151 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
     }
 
-    // Handle LLVM intrinsics (sqrt, sin, cos, etc.)
+    // ========================================================================
+    // Qualified to_string / debug_string (Char::to_string, Str::to_string, etc.)
+    // These MUST be checked before the intrinsic table because base_name
+    // stripping would reduce "Char::to_string" to "to_string", which matches
+    // IntrinsicKind::ToString — but the qualified forms need special inline
+    // codegen (char→string, str identity) rather than the bare type-dispatch.
+    // ========================================================================
+    if (i.func_name == "Char::to_string" || i.func_name == "Char::debug_string" ||
+        i.func_name == "Char__to_string" || i.func_name == "Char__debug_string") {
+        emit_intrinsic_char_to_string(i, result_reg, inst);
+        return;
+    }
+    if (i.func_name == "Str::to_string" || i.func_name == "Str::debug_string" ||
+        i.func_name == "Str__to_string" || i.func_name == "Str__debug_string") {
+        emit_intrinsic_str_to_string(i, result_reg, inst);
+        return;
+    }
+
+    // ========================================================================
+    // Table-driven intrinsic dispatch
+    // Strip module path to get base function name, then look up in the
+    // intrinsic table. This replaces ~700 lines of if/else chains.
+    // ========================================================================
     std::string base_name = i.func_name;
     size_t last_colon = base_name.rfind("::");
     if (last_colon != std::string::npos) {
         base_name = base_name.substr(last_colon + 2);
     }
 
-    // Check for math intrinsics that map to @llvm.* calls
-    static const std::unordered_set<std::string> llvm_intrinsics = {
-        "sqrt",  "sin",   "cos", "log",  "exp",    "pow",    "floor",   "ceil",
-        "round", "trunc", "fma", "fabs", "minnum", "maxnum", "copysign"};
-
-    if (llvm_intrinsics.count(base_name) > 0 && !i.args.empty()) {
-        // Only treat as LLVM math intrinsic if the first argument is a float/double type.
-        // Functions like std::console::log(Str) have base_name "log" but take ptr args —
-        // those must NOT be routed to @llvm.log.
-        std::string first_arg_type;
-        if (i.args[0].type) {
-            first_arg_type = mir_type_to_llvm(i.args[0].type);
-        }
-        if (first_arg_type.empty()) {
-            auto it = cg_values_.find(i.args[0].id);
-            if (it != cg_values_.end()) {
-                first_arg_type = it->second.llvm_type;
+    auto intrinsic = lookup_intrinsic(base_name);
+    if (intrinsic && static_cast<int>(i.args.size()) >= intrinsic->min_args) {
+        switch (intrinsic->kind) {
+        // ---- Math intrinsics (LLVM) ----
+        // These need a numeric-type guard: "log" with a ptr arg is std::console::log, not @llvm.log
+        case IntrinsicKind::Sqrt:
+        case IntrinsicKind::Sin:
+        case IntrinsicKind::Cos:
+        case IntrinsicKind::Log:
+        case IntrinsicKind::Exp:
+        case IntrinsicKind::Floor:
+        case IntrinsicKind::Ceil:
+        case IntrinsicKind::Round:
+        case IntrinsicKind::Trunc:
+        case IntrinsicKind::Fabs:
+        case IntrinsicKind::Pow:
+        case IntrinsicKind::Minnum:
+        case IntrinsicKind::Maxnum:
+        case IntrinsicKind::Copysign:
+        case IntrinsicKind::Fma: {
+            // Only treat as LLVM math intrinsic if the first argument is a numeric type.
+            std::string first_arg_type;
+            if (i.args[0].type) {
+                first_arg_type = mir_type_to_llvm(i.args[0].type);
             }
-        }
-        bool is_numeric = first_arg_type == "float" || first_arg_type == "double" ||
-                          first_arg_type == "half" || first_arg_type == "fp128" ||
-                          first_arg_type == "i32" || first_arg_type == "i64";
-        if (is_numeric || first_arg_type.empty()) {
-            emit_llvm_intrinsic_call(i, base_name, result_reg, inst);
-            return;
-        }
-        // Fall through to normal function call for non-numeric types (e.g., ptr)
-    }
-
-    // Handle black_box intrinsics - prevent optimization
-    if (base_name == "black_box" && i.args.size() == 1) {
-        std::string arg = get_value_reg(i.args[0]);
-        emitln("    " + result_reg + " = call i32 @black_box_i32(i32 " + arg + ")");
-        value_regs_[inst.result] = result_reg;
-        return;
-    }
-    if (base_name == "black_box_i64" && i.args.size() == 1) {
-        std::string arg = get_value_reg(i.args[0]);
-        emitln("    " + result_reg + " = call i64 @black_box_i64(i64 " + arg + ")");
-        value_regs_[inst.result] = result_reg;
-        return;
-    }
-    if (base_name == "black_box_f64" && i.args.size() == 1) {
-        std::string arg = get_value_reg(i.args[0]);
-        emitln("    " + result_reg + " = call double @black_box_f64(double " + arg + ")");
-        value_regs_[inst.result] = result_reg;
-        return;
-    }
-
-    // Handle store_byte intrinsic: store_byte(ptr, offset, byte_val)
-    // Optimized for tight loops - combines GEP and store in one intrinsic
-    if (base_name == "store_byte" && i.args.size() >= 3) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr = get_value_reg(i.args[0]);
-        std::string offset = get_value_reg(i.args[1]);
-        std::string byte_val = get_value_reg(i.args[2]);
-
-        // GEP to compute ptr + offset
-        emitln("    %gep.sb." + id + " = getelementptr i8, ptr " + ptr + ", i64 " + offset);
-        // Truncate i32 to i8
-        emitln("    %trunc.sb." + id + " = trunc i32 " + byte_val + " to i8");
-        // Store the byte
-        emitln("    store i8 %trunc.sb." + id + ", ptr %gep.sb." + id);
-        return;
-    }
-
-    // ========================================================================
-    // Memory intrinsics: ptr_write, ptr_read, ptr_offset, mem_free,
-    // copy_nonoverlapping — lowered to LLVM store/load/GEP/call.
-    // These are TML's core::intrinsics functions that the legacy codegen
-    // handles in builtins/intrinsics.cpp but MIR codegen was missing.
-    // ========================================================================
-
-    // ptr_write[T](ptr, val) -> Unit  — store val to ptr
-    if (base_name == "ptr_write" && i.args.size() >= 2) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-        std::string val_arg = get_value_reg(i.args[1]);
-
-        // Determine the element type. Priority:
-        // 1) Generic type argument [T] from call (most reliable)
-        // 2) cg_values_ of the value argument
-        // 3) MIR type of the value argument
-        // 4) Declared arg_types
-        // 5) Fallback i32
-        std::string elem_type = "i32"; // default
-
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-
-        if (elem_type == "i32") {
-            auto val_cg = cg_values_.find(i.args[1].id);
-            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
-                elem_type = val_cg->second.llvm_type;
-            } else if (i.args[1].type) {
-                elem_type = mir_type_to_llvm(i.args[1].type);
-            }
-        }
-        if (elem_type == "i32" && i.arg_types.size() >= 2 && i.arg_types[1]) {
-            std::string declared = mir_type_to_llvm(i.arg_types[1]);
-            if (declared != "void" && declared != "i32") {
-                elem_type = declared;
-            }
-        }
-
-        // If ptr_arg is an integer (e.g., I64 address), convert to ptr
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.pw." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
-        return;
-    }
-
-    // ptr_read[T](ptr) -> T  — load T from ptr
-    if (base_name == "ptr_read" && i.args.size() >= 1) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-
-        // Determine the element type. Priority:
-        // 1) Generic type argument [T] from call (most reliable for struct types)
-        // 2) Pointee type from pointer argument's MIR type
-        // 3) Return type from MIR CallInst (may be I32 default from type checker)
-        // 4) Fallback i32
-        std::string elem_type = "i32";
-
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-
-        // Check pointer argument's pointee type
-        if (elem_type == "i32") {
-            mir::MirTypePtr arg_type =
-                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-            if (arg_type) {
-                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                    if (pt->pointee) {
-                        std::string pointee = mir_type_to_llvm(pt->pointee);
-                        if (pointee != "void" && pointee != "{}")
-                            elem_type = pointee;
-                    }
+            if (first_arg_type.empty()) {
+                auto it = cg_values_.find(i.args[0].id);
+                if (it != cg_values_.end()) {
+                    first_arg_type = it->second.llvm_type;
                 }
             }
-        }
-
-        // Fall back to return type if pointee didn't resolve
-        if (elem_type == "i32" && i.return_type) {
-            std::string rt = mir_type_to_llvm(i.return_type);
-            if (rt != "void" && rt != "i32")
-                elem_type = rt;
-        }
-
-        // If ptr_arg is an integer, convert to ptr
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.pr." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
-        }
-        return;
-    }
-
-    // ptr_read_volatile[T](ptr) -> T / volatile_read
-    if ((base_name == "ptr_read_volatile" || base_name == "volatile_read") && i.args.size() >= 1) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-
-        std::string elem_type = "i32";
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-        if (elem_type == "i32") {
-            mir::MirTypePtr arg_type =
-                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-            if (arg_type) {
-                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                    if (pt->pointee) {
-                        std::string pointee = mir_type_to_llvm(pt->pointee);
-                        if (pointee != "void" && pointee != "{}")
-                            elem_type = pointee;
-                    }
-                }
-            }
-        }
-        if (elem_type == "i32" && i.return_type) {
-            std::string rt = mir_type_to_llvm(i.return_type);
-            if (rt != "void" && rt != "i32")
-                elem_type = rt;
-        }
-
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.prv." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    " + result_reg + " = load volatile " + elem_type + ", ptr " + ptr_reg);
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
-        }
-        return;
-    }
-
-    // ptr_write_volatile[T](ptr, val) / volatile_write
-    if ((base_name == "ptr_write_volatile" || base_name == "volatile_write") &&
-        i.args.size() >= 2) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-        std::string val_arg = get_value_reg(i.args[1]);
-
-        std::string elem_type = "i32";
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-        if (elem_type == "i32") {
-            auto val_cg = cg_values_.find(i.args[1].id);
-            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
-                elem_type = val_cg->second.llvm_type;
-            } else if (i.args[1].type) {
-                elem_type = mir_type_to_llvm(i.args[1].type);
-            }
-        }
-
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.pwv." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    store volatile " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
-        return;
-    }
-
-    // ptr_read_unaligned[T](ptr) -> T
-    if (base_name == "ptr_read_unaligned" && i.args.size() >= 1) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-
-        std::string elem_type = "i32";
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-        if (elem_type == "i32") {
-            mir::MirTypePtr arg_type =
-                (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
-            if (arg_type) {
-                if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
-                    if (pt->pointee) {
-                        std::string pointee = mir_type_to_llvm(pt->pointee);
-                        if (pointee != "void" && pointee != "{}")
-                            elem_type = pointee;
-                    }
-                }
-            }
-        }
-        if (elem_type == "i32" && i.return_type) {
-            std::string rt = mir_type_to_llvm(i.return_type);
-            if (rt != "void" && rt != "i32")
-                elem_type = rt;
-        }
-
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.pru." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg + ", align 1");
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
-        }
-        return;
-    }
-
-    // ptr_write_unaligned[T](ptr, val)
-    if (base_name == "ptr_write_unaligned" && i.args.size() >= 2) {
-        std::string id = std::to_string(temp_counter_++);
-        std::string ptr_arg = get_value_reg(i.args[0]);
-        std::string val_arg = get_value_reg(i.args[1]);
-
-        std::string elem_type = "i32";
-        // Highest priority: explicit generic type argument [T]
-        if (!i.type_args.empty() && i.type_args[0]) {
-            std::string ta = mir_type_to_llvm(i.type_args[0]);
-            if (ta != "void" && ta != "i32") {
-                elem_type = ta;
-            }
-        }
-        if (elem_type == "i32") {
-            auto val_cg = cg_values_.find(i.args[1].id);
-            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
-                elem_type = val_cg->second.llvm_type;
-            } else if (i.args[1].type) {
-                elem_type = mir_type_to_llvm(i.args[1].type);
-            }
-        }
-
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string conv = "%itp.pwu." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg + ", align 1");
-        return;
-    }
-
-    // ptr_offset[T](ptr, offset) -> *T  — GEP-based pointer arithmetic
-    if (base_name == "ptr_offset" && i.args.size() >= 2) {
-        std::string ptr_arg = get_value_reg(i.args[0]);
-        std::string offset_arg = get_value_reg(i.args[1]);
-
-        // Determine element type for GEP stride
-        std::string elem_type = "i8"; // default byte-stride
-        if (i.return_type) {
-            if (auto* pt = std::get_if<mir::MirPointerType>(&i.return_type->kind)) {
-                if (pt->pointee)
-                    elem_type = mir_type_to_llvm(pt->pointee);
-            }
-        }
-
-        std::string ptr_reg = ptr_arg;
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
-            std::string id = std::to_string(temp_counter_++);
-            std::string conv = "%itp.po." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            ptr_reg = conv;
-        }
-
-        emitln("    " + result_reg + " = getelementptr " + elem_type + ", ptr " + ptr_reg +
-               ", i64 " + offset_arg);
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
-        }
-        return;
-    }
-
-    // mem_free(ptr) -> Unit
-    if (base_name == "mem_free" && i.args.size() >= 1) {
-        std::string ptr_arg = get_value_reg(i.args[0]);
-
-        // If the argument is an integer, convert to ptr
-        auto ptr_cg = cg_values_.find(i.args[0].id);
-        std::string ptr_type_str;
-        if (ptr_cg != cg_values_.end())
-            ptr_type_str = ptr_cg->second.llvm_type;
-        else if (i.args[0].type)
-            ptr_type_str = mir_type_to_llvm(i.args[0].type);
-
-        if (ptr_type_str == "ptr") {
-            emitln("    call void @mem_free(ptr " + ptr_arg + ")");
-        } else if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i') {
-            std::string id = std::to_string(temp_counter_++);
-            std::string conv = "%itp.mf." + id;
-            emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
-            emitln("    call void @mem_free(ptr " + conv + ")");
-        } else {
-            emitln("    call void @mem_free(ptr " + ptr_arg + ")");
-        }
-        return;
-    }
-
-    // copy_nonoverlapping(src, dst, count) -> Unit
-    if (base_name == "copy_nonoverlapping" && i.args.size() >= 3) {
-        std::string src = get_value_reg(i.args[0]);
-        std::string dst = get_value_reg(i.args[1]);
-        std::string count = get_value_reg(i.args[2]);
-
-        // Ensure both pointers are ptr type
-        auto ensure_ptr = [&](const mir::Value& v, std::string& reg) {
-            auto vt_cg = cg_values_.find(v.id);
-            std::string vtype;
-            if (vt_cg != cg_values_.end())
-                vtype = vt_cg->second.llvm_type;
-            else if (v.type)
-                vtype = mir_type_to_llvm(v.type);
-            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
-                std::string id = std::to_string(temp_counter_++);
-                std::string conv = "%itp.cn." + id;
-                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
-                reg = conv;
-            }
-        };
-        ensure_ptr(i.args[0], src);
-        ensure_ptr(i.args[1], dst);
-
-        emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
-               count + ", i1 false)");
-        return;
-    }
-
-    // memcpy(dst, src, size) / mem_copy(dst, src, size) — non-overlapping copy (byte count)
-    if ((base_name == "memcpy" || base_name == "mem_copy") && i.args.size() >= 3) {
-        std::string dst = get_value_reg(i.args[0]);
-        std::string src = get_value_reg(i.args[1]);
-        std::string size = get_value_reg(i.args[2]);
-
-        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt_cg = cg_values_.find(v.id);
-            std::string vtype;
-            if (vt_cg != cg_values_.end())
-                vtype = vt_cg->second.llvm_type;
-            else if (v.type)
-                vtype = mir_type_to_llvm(v.type);
-            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
-                std::string id = std::to_string(temp_counter_++);
-                std::string conv = "%itp.mc." + id;
-                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
-                reg = conv;
-            }
-        };
-        ensure_ptr_local(i.args[0], dst);
-        ensure_ptr_local(i.args[1], src);
-
-        // Promote i32 size to i64
-        auto sz_cg = cg_values_.find(i.args[2].id);
-        std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
-                              : i.args[2].type          ? mir_type_to_llvm(i.args[2].type)
-                                                        : "i64";
-        if (sz_type == "i32") {
-            std::string ext = "%ext.mc." + std::to_string(temp_counter_++);
-            emitln("    " + ext + " = sext i32 " + size + " to i64");
-            size = ext;
-        }
-
-        emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
-               size + ", i1 false)");
-        return;
-    }
-
-    // memmove(dst, src, size) / mem_move(dst, src, size) / copy(src, dst, count)
-    // Overlapping-safe memory copy; lowered to @llvm.memmove.p0.p0.i64.
-    if ((base_name == "memmove" || base_name == "mem_move" || base_name == "copy") &&
-        i.args.size() >= 3) {
-        // copy(src, dst, count) uses (src, dst, count); the others use (dst, src, size)
-        bool src_first = (base_name == "copy");
-        std::string first = get_value_reg(i.args[0]);
-        std::string second = get_value_reg(i.args[1]);
-        std::string size = get_value_reg(i.args[2]);
-        std::string dst = src_first ? second : first;
-        std::string src = src_first ? first : second;
-        const mir::Value& dst_v = src_first ? i.args[1] : i.args[0];
-        const mir::Value& src_v = src_first ? i.args[0] : i.args[1];
-
-        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt_cg = cg_values_.find(v.id);
-            std::string vtype;
-            if (vt_cg != cg_values_.end())
-                vtype = vt_cg->second.llvm_type;
-            else if (v.type)
-                vtype = mir_type_to_llvm(v.type);
-            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
-                std::string id = std::to_string(temp_counter_++);
-                std::string conv = "%itp.mm." + id;
-                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
-                reg = conv;
-            }
-        };
-        ensure_ptr_local(dst_v, dst);
-        ensure_ptr_local(src_v, src);
-
-        // Promote i32 size/count to i64
-        auto sz_cg = cg_values_.find(i.args[2].id);
-        std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
-                              : i.args[2].type          ? mir_type_to_llvm(i.args[2].type)
-                                                        : "i64";
-        if (sz_type == "i32") {
-            std::string ext = "%ext.mm." + std::to_string(temp_counter_++);
-            emitln("    " + ext + " = sext i32 " + size + " to i64");
-            size = ext;
-        }
-
-        emitln("    call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " +
-               size + ", i1 false)");
-        return;
-    }
-
-    // memset(dst, value, size) / mem_set(dst, value, size) / mem_zero(dst, size)
-    // write_bytes(dst, val, count) — fills count*sizeof(T) bytes
-    // Lowered to @llvm.memset.p0.i64.
-    if ((base_name == "memset" || base_name == "mem_set" || base_name == "mem_zero" ||
-         base_name == "write_bytes") &&
-        i.args.size() >= 2) {
-        std::string dst = get_value_reg(i.args[0]);
-
-        auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt_cg = cg_values_.find(v.id);
-            std::string vtype;
-            if (vt_cg != cg_values_.end())
-                vtype = vt_cg->second.llvm_type;
-            else if (v.type)
-                vtype = mir_type_to_llvm(v.type);
-            if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
-                std::string id = std::to_string(temp_counter_++);
-                std::string conv = "%itp.ms." + id;
-                emitln("    " + conv + " = inttoptr " + vtype + " " + reg + " to ptr");
-                reg = conv;
-            }
-        };
-        ensure_ptr_local(i.args[0], dst);
-
-        // mem_zero(dst, size): two-arg form, fill byte is 0
-        if (base_name == "mem_zero" && i.args.size() >= 2) {
-            std::string size = get_value_reg(i.args[1]);
-            auto sz_cg = cg_values_.find(i.args[1].id);
-            std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
-                                  : i.args[1].type          ? mir_type_to_llvm(i.args[1].type)
-                                                            : "i64";
-            if (sz_type == "i32") {
-                std::string ext = "%ext.mz." + std::to_string(temp_counter_++);
-                emitln("    " + ext + " = sext i32 " + size + " to i64");
-                size = ext;
-            }
-            emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 0, i64 " + size +
-                   ", i1 false)");
-            return;
-        }
-
-        // Three-arg form: memset(dst, val, size) / mem_set(dst, val, size) / write_bytes(dst, val,
-        // count)
-        if (i.args.size() >= 3) {
-            std::string val = get_value_reg(i.args[1]);
-            std::string size = get_value_reg(i.args[2]);
-
-            // Truncate fill byte to i8 if needed
-            auto val_cg = cg_values_.find(i.args[1].id);
-            std::string val_type = val_cg != cg_values_.end() ? val_cg->second.llvm_type
-                                   : i.args[1].type           ? mir_type_to_llvm(i.args[1].type)
-                                                              : "i32";
-            if (val_type != "i8") {
-                std::string trunc = "%trunc.ms." + std::to_string(temp_counter_++);
-                emitln("    " + trunc + " = trunc " + val_type + " " + val + " to i8");
-                val = trunc;
-            }
-
-            // Promote size/count to i64
-            auto sz_cg2 = cg_values_.find(i.args[2].id);
-            std::string sz_type = sz_cg2 != cg_values_.end() ? sz_cg2->second.llvm_type
-                                  : i.args[2].type           ? mir_type_to_llvm(i.args[2].type)
-                                                             : "i64";
-            if (sz_type == "i32") {
-                std::string ext = "%ext.ms." + std::to_string(temp_counter_++);
-                emitln("    " + ext + " = sext i32 " + size + " to i64");
-                size = ext;
-            }
-
-            emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val + ", i64 " +
-                   size + ", i1 false)");
-            return;
-        }
-
-        return; // malformed call — skip
-    }
-
-    // ========================================================================
-    // Inline primitive to_string / debug_string (Char, Str, Bool)
-    // These may arrive as CallInst with func_name "Type::method" when the
-    // MIR builder resolves behavior methods to qualified function names.
-    // ========================================================================
-    if (i.func_name == "Char::to_string" || i.func_name == "Char::debug_string" ||
-        i.func_name == "Char__to_string" || i.func_name == "Char__debug_string") {
-        std::string id = std::to_string(temp_counter_++);
-        std::string receiver = i.args.empty() ? "0" : get_value_reg(i.args[0]);
-        // Truncate i32 to i8 (ASCII)
-        emitln("    %char_byte." + id + " = trunc i32 " + receiver + " to i8");
-        // Allocate 2 bytes for single-char string + null
-        emitln("    %char_buf." + id + " = call ptr @mem_alloc(i64 2)");
-        emitln("    store i8 %char_byte." + id + ", ptr %char_buf." + id);
-        emitln("    %char_p1." + id + " = getelementptr i8, ptr %char_buf." + id + ", i64 1");
-        emitln("    store i8 0, ptr %char_p1." + id);
-        if (i.func_name == "Char::debug_string" || i.func_name == "Char__debug_string") {
-            emitln("    %sq_tmp." + id +
-                   " = call ptr @str_concat_opt(ptr @.str.sq, ptr %char_buf." + id + ")");
-            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %sq_tmp." + id +
-                   ", ptr @.str.sq)");
-        } else {
-            emitln("    " + result_reg + " = bitcast ptr %char_buf." + id + " to ptr");
-        }
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
-        }
-        return;
-    }
-    if (i.func_name == "Str::to_string" || i.func_name == "Str::debug_string" ||
-        i.func_name == "Str__to_string" || i.func_name == "Str__debug_string") {
-        std::string receiver = i.args.empty() ? "null" : get_value_reg(i.args[0]);
-        if (i.func_name == "Str::to_string" || i.func_name == "Str__to_string") {
-            emitln("    " + result_reg + " = bitcast ptr " + receiver + " to ptr");
-        } else {
-            std::string id = std::to_string(temp_counter_++);
-            emitln("    %dq_tmp." + id + " = call ptr @str_concat_opt(ptr @.str.dq, ptr " +
-                   receiver + ")");
-            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %dq_tmp." + id +
-                   ", ptr @.str.dq)");
-        }
-        if (inst.result != mir::INVALID_VALUE) {
-            cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
-        }
-        return;
-    }
-
-    // ========================================================================
-    // Handle bare "to_string" / "debug_string" calls on primitive types
-    // These come from devirtualized/resolved method calls where func_name
-    // lost the type prefix. Detect receiver type from cg_values_.
-    // ========================================================================
-    if ((i.func_name == "to_string" || i.func_name == "debug_string") && !i.args.empty() &&
-        !result_reg.empty()) {
-        std::string arg_vt;
-        auto avt = cg_values_.find(i.args[0].id);
-        if (avt != cg_values_.end())
-            arg_vt = avt->second.llvm_type;
-        std::string arg_reg = get_value_reg(i.args[0]);
-
-        // Map LLVM type to mangled TML to_string function name
-        // e.g., i64 -> tml_N4core3I649to_stringE
-        struct TypeMapping {
-            const char* llvm_type;
-            const char* mangled_name;
-        };
-        static const TypeMapping mappings[] = {
-            {"i8", "tml_N4core2I89to_stringE"},      {"i16", "tml_N4core3I169to_stringE"},
-            {"i32", "tml_N4core3I329to_stringE"},    {"i64", "tml_N4core3I649to_stringE"},
-            {"i128", "tml_N4core4I1289to_stringE"},  {"float", "tml_N4core3F329to_stringE"},
-            {"double", "tml_N4core3F649to_stringE"},
-        };
-
-        for (const auto& m : mappings) {
-            if (arg_vt == m.llvm_type) {
-                emitln("    " + result_reg + " = call ptr @" + std::string(m.mangled_name) + "(" +
-                       arg_vt + " " + arg_reg + ")");
-                if (inst.result != mir::INVALID_VALUE) {
-                    cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
-                }
+            bool is_numeric = first_arg_type == "float" || first_arg_type == "double" ||
+                              first_arg_type == "half" || first_arg_type == "fp128" ||
+                              first_arg_type == "i32" || first_arg_type == "i64";
+            if (is_numeric || first_arg_type.empty()) {
+                emit_llvm_intrinsic_call(i, base_name, result_reg, inst);
                 return;
             }
+            break; // Fall through to normal function call for non-numeric types (e.g., ptr)
+        }
+
+        // ---- Black box / store_byte ----
+        case IntrinsicKind::BlackBox:
+        case IntrinsicKind::BlackBoxI64:
+        case IntrinsicKind::BlackBoxF64:
+            emit_intrinsic_black_box(i, base_name, result_reg, inst);
+            return;
+        case IntrinsicKind::StoreByte:
+            emit_intrinsic_store_byte(i);
+            return;
+
+        // ---- Pointer operations ----
+        case IntrinsicKind::PtrWrite:
+            emit_intrinsic_ptr_write(i);
+            return;
+        case IntrinsicKind::PtrRead:
+            emit_intrinsic_ptr_read(i, result_reg, inst);
+            return;
+        case IntrinsicKind::PtrReadVolatile:
+            emit_intrinsic_ptr_read_volatile(i, result_reg, inst);
+            return;
+        case IntrinsicKind::PtrWriteVolatile:
+            emit_intrinsic_ptr_write_volatile(i);
+            return;
+        case IntrinsicKind::PtrReadUnaligned:
+            emit_intrinsic_ptr_read_unaligned(i, result_reg, inst);
+            return;
+        case IntrinsicKind::PtrWriteUnaligned:
+            emit_intrinsic_ptr_write_unaligned(i);
+            return;
+        case IntrinsicKind::PtrOffset:
+            emit_intrinsic_ptr_offset(i, result_reg, inst);
+            return;
+
+        // ---- Memory management ----
+        case IntrinsicKind::MemFree:
+            emit_intrinsic_mem_free(i);
+            return;
+
+        // ---- Bulk memory operations ----
+        case IntrinsicKind::CopyNonOverlapping:
+            emit_intrinsic_copy_nonoverlapping(i);
+            return;
+        case IntrinsicKind::Memcpy:
+            emit_intrinsic_memcpy(i);
+            return;
+        case IntrinsicKind::Memmove:
+            emit_intrinsic_memmove(i, base_name);
+            return;
+        case IntrinsicKind::Memset:
+            emit_intrinsic_memset(i, base_name);
+            return;
+        case IntrinsicKind::MemZero:
+            emit_intrinsic_memset(i, "mem_zero");
+            return;
+
+        // ---- Conversion (bare to_string/debug_string) ----
+        // Note: qualified names like "Char::to_string" are handled below
+        case IntrinsicKind::ToString:
+        case IntrinsicKind::DebugString:
+            if (!result_reg.empty()) {
+                emit_intrinsic_bare_to_string(i, result_reg, inst);
+                // bare_to_string returns without emitting if no type matched;
+                // check if it actually emitted something by seeing if result was set
+                if (inst.result != mir::INVALID_VALUE) {
+                    auto cg_it = cg_values_.find(inst.result);
+                    if (cg_it != cg_values_.end()) {
+                        return; // Successfully handled
+                    }
+                }
+            }
+            break; // Fall through to normal function call
         }
     }
+
+    // (Qualified to_string/debug_string already handled above, before table lookup)
 
     // Check if the THIR builder marked this as an indirect call through a local variable
     // or parameter holding a function pointer. The callee field carries the MIR Value
@@ -1372,6 +791,451 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
     if (inst.result != mir::INVALID_VALUE && call_ret_type != "void") {
         cg_values_[inst.result] = CGValue::immediate(result_reg, call_ret_type, i.return_type);
     }
+}
+
+// ============================================================================
+// Intrinsic Helpers — shared logic extracted from pointer/memory intrinsics
+// ============================================================================
+
+std::string MirCodegen::resolve_read_element_type(const mir::CallInst& i) {
+    std::string elem_type = "i32";
+
+    // Highest priority: explicit generic type argument [T]
+    if (!i.type_args.empty() && i.type_args[0]) {
+        std::string ta = mir_type_to_llvm(i.type_args[0]);
+        if (ta != "void" && ta != "i32") {
+            elem_type = ta;
+        }
+    }
+
+    // Check pointer argument's pointee type
+    if (elem_type == "i32") {
+        mir::MirTypePtr arg_type =
+            (i.arg_types.size() >= 1 && i.arg_types[0]) ? i.arg_types[0] : i.args[0].type;
+        if (arg_type) {
+            if (auto* pt = std::get_if<mir::MirPointerType>(&arg_type->kind)) {
+                if (pt->pointee) {
+                    std::string pointee = mir_type_to_llvm(pt->pointee);
+                    if (pointee != "void" && pointee != "{}")
+                        elem_type = pointee;
+                }
+            }
+        }
+    }
+
+    // Fall back to return type if pointee didn't resolve
+    if (elem_type == "i32" && i.return_type) {
+        std::string rt = mir_type_to_llvm(i.return_type);
+        if (rt != "void" && rt != "i32")
+            elem_type = rt;
+    }
+
+    return elem_type;
+}
+
+std::string MirCodegen::resolve_write_element_type(const mir::CallInst& i) {
+    std::string elem_type = "i32";
+
+    // Highest priority: explicit generic type argument [T]
+    if (!i.type_args.empty() && i.type_args[0]) {
+        std::string ta = mir_type_to_llvm(i.type_args[0]);
+        if (ta != "void" && ta != "i32") {
+            elem_type = ta;
+        }
+    }
+
+    if (elem_type == "i32") {
+        auto val_cg = cg_values_.find(i.args[1].id);
+        if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+            elem_type = val_cg->second.llvm_type;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+    }
+    if (elem_type == "i32" && i.arg_types.size() >= 2 && i.arg_types[1]) {
+        std::string declared = mir_type_to_llvm(i.arg_types[1]);
+        if (declared != "void" && declared != "i32") {
+            elem_type = declared;
+        }
+    }
+
+    return elem_type;
+}
+
+std::string MirCodegen::ensure_ptr_reg(const mir::Value& v, const std::string& reg,
+                                       const std::string& prefix) {
+    auto ptr_cg = cg_values_.find(v.id);
+    std::string ptr_type_str;
+    if (ptr_cg != cg_values_.end())
+        ptr_type_str = ptr_cg->second.llvm_type;
+    else if (v.type)
+        ptr_type_str = mir_type_to_llvm(v.type);
+
+    if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i' && ptr_type_str != "i1") {
+        std::string id = std::to_string(temp_counter_++);
+        std::string conv = "%itp." + prefix + "." + id;
+        emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + reg + " to ptr");
+        return conv;
+    }
+    return reg;
+}
+
+std::string MirCodegen::promote_to_i64(const mir::Value& v, const std::string& reg,
+                                       const std::string& prefix) {
+    auto sz_cg = cg_values_.find(v.id);
+    std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
+                          : v.type                  ? mir_type_to_llvm(v.type)
+                                                    : "i64";
+    if (sz_type == "i32") {
+        std::string ext = "%ext." + prefix + "." + std::to_string(temp_counter_++);
+        emitln("    " + ext + " = sext i32 " + reg + " to i64");
+        return ext;
+    }
+    return reg;
+}
+
+// ============================================================================
+// Intrinsic Emission Methods
+// ============================================================================
+
+void MirCodegen::emit_intrinsic_ptr_write(const mir::CallInst& i) {
+    std::string id = std::to_string(temp_counter_++);
+    std::string ptr_arg = get_value_reg(i.args[0]);
+    std::string val_arg = get_value_reg(i.args[1]);
+
+    std::string elem_type = resolve_write_element_type(i);
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "pw");
+
+    emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
+}
+
+void MirCodegen::emit_intrinsic_ptr_read(const mir::CallInst& i, const std::string& result_reg,
+                                         const mir::InstructionData& inst) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+
+    std::string elem_type = resolve_read_element_type(i);
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "pr");
+
+    emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_ptr_read_volatile(const mir::CallInst& i,
+                                                  const std::string& result_reg,
+                                                  const mir::InstructionData& inst) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+
+    std::string elem_type = resolve_read_element_type(i);
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "prv");
+
+    emitln("    " + result_reg + " = load volatile " + elem_type + ", ptr " + ptr_reg);
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_ptr_write_volatile(const mir::CallInst& i) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+    std::string val_arg = get_value_reg(i.args[1]);
+
+    std::string elem_type = "i32";
+    // Highest priority: explicit generic type argument [T]
+    if (!i.type_args.empty() && i.type_args[0]) {
+        std::string ta = mir_type_to_llvm(i.type_args[0]);
+        if (ta != "void" && ta != "i32") {
+            elem_type = ta;
+        }
+    }
+    if (elem_type == "i32") {
+        auto val_cg = cg_values_.find(i.args[1].id);
+        if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+            elem_type = val_cg->second.llvm_type;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+    }
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "pwv");
+
+    emitln("    store volatile " + elem_type + " " + val_arg + ", ptr " + ptr_reg);
+}
+
+void MirCodegen::emit_intrinsic_ptr_read_unaligned(const mir::CallInst& i,
+                                                   const std::string& result_reg,
+                                                   const mir::InstructionData& inst) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+
+    std::string elem_type = resolve_read_element_type(i);
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "pru");
+
+    emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg + ", align 1");
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_ptr_write_unaligned(const mir::CallInst& i) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+    std::string val_arg = get_value_reg(i.args[1]);
+
+    std::string elem_type = "i32";
+    if (!i.type_args.empty() && i.type_args[0]) {
+        std::string ta = mir_type_to_llvm(i.type_args[0]);
+        if (ta != "void" && ta != "i32") {
+            elem_type = ta;
+        }
+    }
+    if (elem_type == "i32") {
+        auto val_cg = cg_values_.find(i.args[1].id);
+        if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+            elem_type = val_cg->second.llvm_type;
+        } else if (i.args[1].type) {
+            elem_type = mir_type_to_llvm(i.args[1].type);
+        }
+    }
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "pwu");
+
+    emitln("    store " + elem_type + " " + val_arg + ", ptr " + ptr_reg + ", align 1");
+}
+
+void MirCodegen::emit_intrinsic_ptr_offset(const mir::CallInst& i, const std::string& result_reg,
+                                           const mir::InstructionData& inst) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+    std::string offset_arg = get_value_reg(i.args[1]);
+
+    // Determine element type for GEP stride
+    std::string elem_type = "i8"; // default byte-stride
+    if (i.return_type) {
+        if (auto* pt = std::get_if<mir::MirPointerType>(&i.return_type->kind)) {
+            if (pt->pointee)
+                elem_type = mir_type_to_llvm(pt->pointee);
+        }
+    }
+
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "po");
+
+    emitln("    " + result_reg + " = getelementptr " + elem_type + ", ptr " + ptr_reg + ", i64 " +
+           offset_arg);
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_mem_free(const mir::CallInst& i) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+
+    // If the argument is an integer, convert to ptr
+    auto ptr_cg = cg_values_.find(i.args[0].id);
+    std::string ptr_type_str;
+    if (ptr_cg != cg_values_.end())
+        ptr_type_str = ptr_cg->second.llvm_type;
+    else if (i.args[0].type)
+        ptr_type_str = mir_type_to_llvm(i.args[0].type);
+
+    if (ptr_type_str == "ptr") {
+        emitln("    call void @mem_free(ptr " + ptr_arg + ")");
+    } else if (ptr_type_str.size() > 0 && ptr_type_str[0] == 'i') {
+        std::string id = std::to_string(temp_counter_++);
+        std::string conv = "%itp.mf." + id;
+        emitln("    " + conv + " = inttoptr " + ptr_type_str + " " + ptr_arg + " to ptr");
+        emitln("    call void @mem_free(ptr " + conv + ")");
+    } else {
+        emitln("    call void @mem_free(ptr " + ptr_arg + ")");
+    }
+}
+
+void MirCodegen::emit_intrinsic_copy_nonoverlapping(const mir::CallInst& i) {
+    std::string src = get_value_reg(i.args[0]);
+    std::string dst = get_value_reg(i.args[1]);
+    std::string count = get_value_reg(i.args[2]);
+
+    src = ensure_ptr_reg(i.args[0], src, "cn");
+    dst = ensure_ptr_reg(i.args[1], dst, "cn");
+
+    emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + count +
+           ", i1 false)");
+}
+
+void MirCodegen::emit_intrinsic_memcpy(const mir::CallInst& i) {
+    std::string dst = get_value_reg(i.args[0]);
+    std::string src = get_value_reg(i.args[1]);
+    std::string size = get_value_reg(i.args[2]);
+
+    dst = ensure_ptr_reg(i.args[0], dst, "mc");
+    src = ensure_ptr_reg(i.args[1], src, "mc");
+    size = promote_to_i64(i.args[2], size, "mc");
+
+    emitln("    call void @llvm.memcpy.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + size +
+           ", i1 false)");
+}
+
+void MirCodegen::emit_intrinsic_memmove(const mir::CallInst& i, const std::string& base_name) {
+    // copy(src, dst, count) uses (src, dst, count); the others use (dst, src, size)
+    bool src_first = (base_name == "copy");
+    std::string first = get_value_reg(i.args[0]);
+    std::string second = get_value_reg(i.args[1]);
+    std::string size = get_value_reg(i.args[2]);
+    std::string dst = src_first ? second : first;
+    std::string src = src_first ? first : second;
+    const mir::Value& dst_v = src_first ? i.args[1] : i.args[0];
+    const mir::Value& src_v = src_first ? i.args[0] : i.args[1];
+
+    dst = ensure_ptr_reg(dst_v, dst, "mm");
+    src = ensure_ptr_reg(src_v, src, "mm");
+    size = promote_to_i64(i.args[2], size, "mm");
+
+    emitln("    call void @llvm.memmove.p0.p0.i64(ptr " + dst + ", ptr " + src + ", i64 " + size +
+           ", i1 false)");
+}
+
+void MirCodegen::emit_intrinsic_memset(const mir::CallInst& i, const std::string& base_name) {
+    std::string dst = get_value_reg(i.args[0]);
+    dst = ensure_ptr_reg(i.args[0], dst, "ms");
+
+    // mem_zero(dst, size): two-arg form, fill byte is 0
+    if (base_name == "mem_zero" && i.args.size() >= 2) {
+        std::string size = get_value_reg(i.args[1]);
+        size = promote_to_i64(i.args[1], size, "mz");
+        emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 0, i64 " + size +
+               ", i1 false)");
+        return;
+    }
+
+    // Three-arg form: memset(dst, val, size) / mem_set(dst, val, size) / write_bytes(dst, val,
+    // count)
+    if (i.args.size() >= 3) {
+        std::string val = get_value_reg(i.args[1]);
+        std::string size = get_value_reg(i.args[2]);
+
+        // Truncate fill byte to i8 if needed
+        auto val_cg = cg_values_.find(i.args[1].id);
+        std::string val_type = val_cg != cg_values_.end() ? val_cg->second.llvm_type
+                               : i.args[1].type           ? mir_type_to_llvm(i.args[1].type)
+                                                          : "i32";
+        if (val_type != "i8") {
+            std::string trunc = "%trunc.ms." + std::to_string(temp_counter_++);
+            emitln("    " + trunc + " = trunc " + val_type + " " + val + " to i8");
+            val = trunc;
+        }
+
+        size = promote_to_i64(i.args[2], size, "ms");
+
+        emitln("    call void @llvm.memset.p0.i64(ptr " + dst + ", i8 " + val + ", i64 " + size +
+               ", i1 false)");
+    }
+}
+
+void MirCodegen::emit_intrinsic_black_box(const mir::CallInst& i, const std::string& base_name,
+                                          const std::string& result_reg,
+                                          const mir::InstructionData& inst) {
+    std::string arg = get_value_reg(i.args[0]);
+    if (base_name == "black_box_i64") {
+        emitln("    " + result_reg + " = call i64 @black_box_i64(i64 " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+    } else if (base_name == "black_box_f64") {
+        emitln("    " + result_reg + " = call double @black_box_f64(double " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+    } else {
+        emitln("    " + result_reg + " = call i32 @black_box_i32(i32 " + arg + ")");
+        value_regs_[inst.result] = result_reg;
+    }
+}
+
+void MirCodegen::emit_intrinsic_store_byte(const mir::CallInst& i) {
+    std::string id = std::to_string(temp_counter_++);
+    std::string ptr = get_value_reg(i.args[0]);
+    std::string offset = get_value_reg(i.args[1]);
+    std::string byte_val = get_value_reg(i.args[2]);
+
+    // GEP to compute ptr + offset
+    emitln("    %gep.sb." + id + " = getelementptr i8, ptr " + ptr + ", i64 " + offset);
+    // Truncate i32 to i8
+    emitln("    %trunc.sb." + id + " = trunc i32 " + byte_val + " to i8");
+    // Store the byte
+    emitln("    store i8 %trunc.sb." + id + ", ptr %gep.sb." + id);
+}
+
+void MirCodegen::emit_intrinsic_char_to_string(const mir::CallInst& i,
+                                               const std::string& result_reg,
+                                               const mir::InstructionData& inst) {
+    std::string id = std::to_string(temp_counter_++);
+    std::string receiver = i.args.empty() ? "0" : get_value_reg(i.args[0]);
+    // Truncate i32 to i8 (ASCII)
+    emitln("    %char_byte." + id + " = trunc i32 " + receiver + " to i8");
+    // Allocate 2 bytes for single-char string + null
+    emitln("    %char_buf." + id + " = call ptr @mem_alloc(i64 2)");
+    emitln("    store i8 %char_byte." + id + ", ptr %char_buf." + id);
+    emitln("    %char_p1." + id + " = getelementptr i8, ptr %char_buf." + id + ", i64 1");
+    emitln("    store i8 0, ptr %char_p1." + id);
+    if (i.func_name == "Char::debug_string" || i.func_name == "Char__debug_string") {
+        emitln("    %sq_tmp." + id + " = call ptr @str_concat_opt(ptr @.str.sq, ptr %char_buf." +
+               id + ")");
+        emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %sq_tmp." + id +
+               ", ptr @.str.sq)");
+    } else {
+        emitln("    " + result_reg + " = bitcast ptr %char_buf." + id + " to ptr");
+    }
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_str_to_string(const mir::CallInst& i, const std::string& result_reg,
+                                              const mir::InstructionData& inst) {
+    std::string receiver = i.args.empty() ? "null" : get_value_reg(i.args[0]);
+    if (i.func_name == "Str::to_string" || i.func_name == "Str__to_string") {
+        emitln("    " + result_reg + " = bitcast ptr " + receiver + " to ptr");
+    } else {
+        std::string id = std::to_string(temp_counter_++);
+        emitln("    %dq_tmp." + id + " = call ptr @str_concat_opt(ptr @.str.dq, ptr " + receiver +
+               ")");
+        emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr %dq_tmp." + id +
+               ", ptr @.str.dq)");
+    }
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+    }
+}
+
+void MirCodegen::emit_intrinsic_bare_to_string(const mir::CallInst& i,
+                                               const std::string& result_reg,
+                                               const mir::InstructionData& inst) {
+    std::string arg_vt;
+    auto avt = cg_values_.find(i.args[0].id);
+    if (avt != cg_values_.end())
+        arg_vt = avt->second.llvm_type;
+    std::string arg_reg = get_value_reg(i.args[0]);
+
+    // Map LLVM type to mangled TML to_string function name
+    struct TypeMapping {
+        const char* llvm_type;
+        const char* mangled_name;
+    };
+    static const TypeMapping mappings[] = {
+        {"i8", "tml_N4core2I89to_stringE"},      {"i16", "tml_N4core3I169to_stringE"},
+        {"i32", "tml_N4core3I329to_stringE"},    {"i64", "tml_N4core3I649to_stringE"},
+        {"i128", "tml_N4core4I1289to_stringE"},  {"float", "tml_N4core3F329to_stringE"},
+        {"double", "tml_N4core3F649to_stringE"},
+    };
+
+    for (const auto& m : mappings) {
+        if (arg_vt == m.llvm_type) {
+            emitln("    " + result_reg + " = call ptr @" + std::string(m.mangled_name) + "(" +
+                   arg_vt + " " + arg_reg + ")");
+            if (inst.result != mir::INVALID_VALUE) {
+                cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+            }
+            return;
+        }
+    }
+    // If no type matched, fall through — caller will handle as normal function call
 }
 
 } // namespace tml::codegen

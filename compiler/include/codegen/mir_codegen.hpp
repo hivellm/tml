@@ -266,7 +266,7 @@ private:
     void emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i, const std::string& result_reg,
                                   const mir::InstructionData& inst);
 
-    // Call emission helpers (implemented in mir/instructions.cpp)
+    // Call emission helpers (implemented in mir/instructions_call.cpp)
     void emit_llvm_intrinsic_call(const mir::CallInst& i, const std::string& base_name,
                                   const std::string& result_reg, const mir::InstructionData& inst);
     void emit_sret_call(const std::string& func_name, const std::string& orig_ret_type,
@@ -275,6 +275,43 @@ private:
     void emit_normal_call(const mir::CallInst& i, const std::string& func_name,
                           const std::vector<std::string>& processed_args,
                           const std::string& result_reg, const mir::InstructionData& inst);
+
+    // Intrinsic emission methods (implemented in mir/instructions_call.cpp)
+    // Each method corresponds to one or more IntrinsicKind values and produces
+    // exactly the same LLVM IR as the original if/else chain it was extracted from.
+    void emit_intrinsic_ptr_read(const mir::CallInst& i, const std::string& result_reg,
+                                 const mir::InstructionData& inst);
+    void emit_intrinsic_ptr_write(const mir::CallInst& i);
+    void emit_intrinsic_ptr_read_volatile(const mir::CallInst& i, const std::string& result_reg,
+                                          const mir::InstructionData& inst);
+    void emit_intrinsic_ptr_write_volatile(const mir::CallInst& i);
+    void emit_intrinsic_ptr_read_unaligned(const mir::CallInst& i, const std::string& result_reg,
+                                           const mir::InstructionData& inst);
+    void emit_intrinsic_ptr_write_unaligned(const mir::CallInst& i);
+    void emit_intrinsic_ptr_offset(const mir::CallInst& i, const std::string& result_reg,
+                                   const mir::InstructionData& inst);
+    void emit_intrinsic_mem_free(const mir::CallInst& i);
+    void emit_intrinsic_copy_nonoverlapping(const mir::CallInst& i);
+    void emit_intrinsic_memcpy(const mir::CallInst& i);
+    void emit_intrinsic_memmove(const mir::CallInst& i, const std::string& base_name);
+    void emit_intrinsic_memset(const mir::CallInst& i, const std::string& base_name);
+    void emit_intrinsic_black_box(const mir::CallInst& i, const std::string& base_name,
+                                  const std::string& result_reg, const mir::InstructionData& inst);
+    void emit_intrinsic_store_byte(const mir::CallInst& i);
+    void emit_intrinsic_char_to_string(const mir::CallInst& i, const std::string& result_reg,
+                                       const mir::InstructionData& inst);
+    void emit_intrinsic_str_to_string(const mir::CallInst& i, const std::string& result_reg,
+                                      const mir::InstructionData& inst);
+    void emit_intrinsic_bare_to_string(const mir::CallInst& i, const std::string& result_reg,
+                                       const mir::InstructionData& inst);
+
+    // Intrinsic helpers — shared logic extracted from pointer intrinsics
+    std::string resolve_read_element_type(const mir::CallInst& i);
+    std::string resolve_write_element_type(const mir::CallInst& i);
+    std::string ensure_ptr_reg(const mir::Value& v, const std::string& reg,
+                               const std::string& prefix);
+    std::string promote_to_i64(const mir::Value& v, const std::string& reg,
+                               const std::string& prefix);
 };
 
 } // namespace tml::codegen

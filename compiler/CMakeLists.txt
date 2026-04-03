@@ -757,6 +757,7 @@ add_library(tml_codegen STATIC
     src/codegen/mir/mir_types.cpp
     src/codegen/mir/terminators.cpp
     src/codegen/mir/instructions.cpp
+    src/codegen/intrinsic_table.cpp
     src/codegen/mir/instructions_call.cpp
     src/codegen/mir/instructions_method.cpp
     src/codegen/mir/instructions_misc.cpp
