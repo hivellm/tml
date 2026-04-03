@@ -29,12 +29,12 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     // ==========================================================================
     // Inline array methods (len, hash, eq)
     // ==========================================================================
-    // Check if receiver is an array type from value_types_ (e.g., "[3 x i32]")
+    // Check if receiver is an array type from cg_values_ (e.g., "[3 x i32]")
     std::string receiver_vt;
     {
-        auto vt_it = value_types_.find(i.receiver.id);
-        if (vt_it != value_types_.end())
-            receiver_vt = vt_it->second;
+        auto cg_it = cg_values_.find(i.receiver.id);
+        if (cg_it != cg_values_.end())
+            receiver_vt = cg_it->second.llvm_type;
     }
     if (receiver_vt.size() > 2 && receiver_vt[0] == '[') {
         // Parse "[N x T]" to extract N and T
@@ -49,7 +49,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             if (i.method_name == "len" && !result_reg.empty()) {
                 emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "i64";
                     cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                 }
                 return;
@@ -95,7 +94,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 }
                 emitln("    " + result_reg + " = add i64 0, " + hash_reg);
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "i64";
                     cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                 }
                 return;
@@ -137,7 +135,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 }
                 emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "i1";
                     cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
                 }
                 return;
@@ -237,7 +234,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         emitln("    " + result_reg + " = load " + maybe_type + ", ptr %maybe_alloca." + id);
 
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = maybe_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, maybe_type, nullptr);
         }
         return;
@@ -287,7 +283,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                ", 0");
 
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "%struct.Ordering";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "%struct.Ordering", nullptr);
         }
         return;
@@ -324,7 +319,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         }
 
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
@@ -349,7 +343,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         }
 
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
@@ -451,7 +444,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         }
 
         if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
-            value_types_[inst.result] = ret_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
         return;
@@ -470,12 +462,13 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     std::string ret_type = mir_type_to_llvm(ret_ptr);
 
     // Determine the actual LLVM type of the receiver value
-    // Priority: value_types_ (what the register actually holds) > i.receiver.type (MIR type)
+    // Priority: cg_values_ (what the register actually holds) > i.receiver.type (MIR type)
     std::string receiver_actual_type;
-    auto vt_it = value_types_.find(i.receiver.id);
-    if (vt_it != value_types_.end() && !vt_it->second.empty() && vt_it->second != "ptr") {
-        // Use the actual type from value_types_ (what the register holds)
-        receiver_actual_type = vt_it->second;
+    auto cg_recv_it = cg_values_.find(i.receiver.id);
+    if (cg_recv_it != cg_values_.end() && !cg_recv_it->second.llvm_type.empty() &&
+        cg_recv_it->second.llvm_type != "ptr") {
+        // Use the actual type from cg_values_ (what the register holds)
+        receiver_actual_type = cg_recv_it->second.llvm_type;
     } else if (i.receiver.type) {
         receiver_actual_type = mir_type_to_llvm(i.receiver.type);
     }
@@ -519,9 +512,9 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     // DEBUG: emit diagnostic comment for method call analysis
     {
         std::string vt_str = "none";
-        auto dbg_it = value_types_.find(i.receiver.id);
-        if (dbg_it != value_types_.end())
-            vt_str = dbg_it->second;
+        auto dbg_it = cg_values_.find(i.receiver.id);
+        if (dbg_it != cg_values_.end())
+            vt_str = dbg_it->second.llvm_type;
         emitln("    ; MCALL: " + recv_type + "." + i.method_name + " recv_id=" +
                std::to_string(i.receiver.id) + " recv_reg=" + receiver + " vt=" + vt_str +
                " actual=" + receiver_actual_type + " for_call=" + receiver_type_for_call);
@@ -568,7 +561,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
     emitln(")");
 
     if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
-        value_types_[inst.result] = ret_type;
         cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, i.return_type);
     }
 }

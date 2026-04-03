@@ -152,9 +152,8 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     temp_counter_ = 0;
     spill_counter_ = 0;
     value_regs_.clear();
-    value_types_.clear();
+    cg_values_.clear();
     struct_field_types_.clear();
-    value_spill_allocas_.clear();
     block_labels_.clear();
     emitted_types_.clear();
     string_constants_.clear();
@@ -362,9 +361,8 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     temp_counter_ = 0;
     spill_counter_ = 0;
     value_regs_.clear();
-    value_types_.clear();
+    cg_values_.clear();
     struct_field_types_.clear();
-    value_spill_allocas_.clear();
     block_labels_.clear();
     emitted_types_.clear();
     string_constants_.clear();
@@ -1263,9 +1261,9 @@ void MirCodegen::emit_function(const mir::Function& func) {
     current_func_ = func.name;
     current_func_ret_type_ = func.return_type ? mir_type_to_llvm(func.return_type) : "void";
     value_regs_.clear();
+    cg_values_.clear();
     block_labels_.clear();
     block_exit_labels_.clear();
-    value_types_.clear();      // Clear type tracking for new function
     bounds_check_counter_ = 0; // Reset per-function (see pre-scan below)
 
     // Setup block labels - use block ID, not index
@@ -1326,7 +1324,8 @@ void MirCodegen::emit_function(const mir::Function& func) {
         value_regs_[param.value_id] = "%" + param.name;
         // Also store parameter types for correct type tracking
         if (param.type) {
-            value_types_[param.value_id] = mir_type_to_llvm(param.type);
+            cg_values_[param.value_id] =
+                CGValue::immediate("%" + param.name, mir_type_to_llvm(param.type), param.type);
             // Track parameter info for function pointer indirect calls
             param_info_[param.name] = {param.value_id, param.type};
         }
@@ -1401,13 +1400,15 @@ void MirCodegen::emit_function(const mir::Function& func) {
         // already spills struct values to alloca and passes ptr (see instructions_call.cpp
         // lines ~1011-1017). The function definition must match by declaring ptr params.
         // This applies to ALL struct params, not just 'this'/'self'.
-        // emit_extract_value_inst already handles value_types_[id]=="ptr" by using
+        // emit_extract_value_inst already handles cg_values_[id].llvm_type=="ptr" by using
         // GEP+load instead of extractvalue, so field access works correctly.
         if (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
             param_type.starts_with("%class.") || param_type.starts_with("%union.")) {
+            std::string orig_param_type = param_type;
             param_type = "ptr";
-            // Update value_types_ so instructions correctly see this as ptr
-            value_types_[func.params[i].value_id] = "ptr";
+            // Update cg_values_ so instructions correctly see this as ptr (Address kind)
+            cg_values_[func.params[i].value_id] =
+                CGValue::address("%" + func.params[i].name, orig_param_type, func.params[i].type);
         }
         // If this function uses sret, the first parameter gets the sret attribute
         if (func.uses_sret && i == 0 && func.original_return_type) {

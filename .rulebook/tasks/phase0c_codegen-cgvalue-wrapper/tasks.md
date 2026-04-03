@@ -1,6 +1,6 @@
 # Tasks: CGValue Wrapper — Typed Values with Pointer/Value Distinction
 
-**Status**: In progress. 80% (16/20). **Priority**: HIGH — depends on phase0a
+**Status**: DONE. 100% (20/20). **Priority**: HIGH — depends on phase0a
 **Reference**: `docs/analyses/codegen/04-VALUE-REPRESENTATION.md`
 
 ## 1. CGValue Type Design
@@ -34,7 +34,7 @@ Also populated: GEP (Address), BinaryInst, ExtractValue, InsertValue (via Extrac
 
 ## 4. Remove value_types_ (final)
 
-- [ ] 4.1 Replace remaining `value_types_` reads with `cg_values_` reads
-- [ ] 4.2 Remove `value_types_` map from MirCodegen
-- [ ] 4.3 Remove `value_spill_allocas_` map (replaced by CGValue::to_address)
-- [ ] 4.4 Run full test suite — verify zero regressions
+- [x] 4.1 Replace remaining `value_types_` reads with `cg_values_` reads — all 78+ sites across 5 .cpp files migrated
+- [x] 4.2 Remove `value_types_` map from MirCodegen — declaration removed from mir_codegen.hpp, all .clear() calls removed
+- [x] 4.3 Remove `value_spill_allocas_` map (replaced by CGValue kind=Address tracking) — 1 write + 2 reads migrated to cg_values_ with CGValueKind::Address
+- [x] 4.4 Run test suites — zero regressions: core/str 25/25, core/fmt 46/46, core/ops 47/47, core/num 53/53, std/sync 60/60

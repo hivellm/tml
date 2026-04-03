@@ -37,9 +37,9 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
     std::string tgt_type = mir_type_to_llvm(tgt_ptr);
 
     std::string operand_actual_type;
-    auto vt_it = value_types_.find(i.operand.id);
-    if (vt_it != value_types_.end()) {
-        operand_actual_type = vt_it->second;
+    auto cg_op_it = cg_values_.find(i.operand.id);
+    if (cg_op_it != cg_values_.end()) {
+        operand_actual_type = cg_op_it->second.llvm_type;
     } else if (i.operand.type) {
         operand_actual_type = mir_type_to_llvm(i.operand.type);
     }
@@ -55,7 +55,6 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         emitln("    store " + operand_actual_type + " " + operand + ", ptr " + spill_ptr);
         emitln("    " + result_reg + " = bitcast ptr " + spill_ptr + " to ptr");
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", tgt_ptr);
         }
     } else if (i.kind == mir::CastKind::Bitcast && codegen::is_aggregate_llvm_type(src_type) &&
@@ -66,7 +65,6 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         emitln("    store " + src_type + " " + operand + ", ptr " + spill_ptr);
         emitln("    " + result_reg + " = load " + tgt_type + ", ptr " + spill_ptr);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = tgt_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
         }
     } else if ((src_type == "{ ptr, ptr }" || operand_actual_type == "{ ptr, ptr }") &&
@@ -77,7 +75,6 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         emitln("    " + extract_reg + " = extractvalue { ptr, ptr } " + operand + ", 0");
         emitln("    " + result_reg + " = ptrtoint ptr " + extract_reg + " to " + tgt_type);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = tgt_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
         }
     } else if ((tgt_type == "{ ptr, ptr }" || tgt_type == "ptr") &&
@@ -92,20 +89,17 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         } else {
             // ptr to ptr — just alias, no bitcast needed
             value_regs_[inst.result] = ptr_reg;
-            value_types_[inst.result] = tgt_type;
             cg_values_[inst.result] = CGValue::immediate(ptr_reg, tgt_type, tgt_ptr);
             return;
         }
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = tgt_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
         }
     } else if (src_type == tgt_type) {
         // Same type — no cast needed, just alias the register.
-        // This happens when value_types_ overrides src_type to match tgt_type
+        // This happens when cg_values_ overrides src_type to match tgt_type
         // (e.g., constant 8 already coerced from i32 to i64 by a prior operation).
         value_regs_[inst.result] = operand;
-        value_types_[inst.result] = tgt_type;
         cg_values_[inst.result] = CGValue::immediate(operand, tgt_type, tgt_ptr);
     } else {
         static const char* cast_names[] = {"bitcast", "trunc",  "zext",     "sext",
@@ -150,7 +144,6 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " + operand + " to " +
                tgt_type);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = tgt_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
         }
     }
@@ -215,7 +208,6 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
     }
 
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = type_str;
         // For empty phi with zeroinitializer, the reg was overwritten in value_regs_
         std::string phi_reg =
             (i.incoming.empty() && type_str == "{}") ? std::string("zeroinitializer") : result_reg;
@@ -240,7 +232,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 if (inst.result != mir::INVALID_VALUE) {
                     std::string lit = std::to_string(c.value);
                     value_regs_[inst.result] = lit;
-                    value_types_[inst.result] = type_str;
                     cg_values_[inst.result] = CGValue::immediate(lit, type_str, nullptr);
                     // Track integer constants for zero-initialization detection
                     value_int_constants_[inst.result] = c.value;
@@ -254,7 +245,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 if (inst.result != mir::INVALID_VALUE) {
                     std::string lit = ss.str();
                     value_regs_[inst.result] = lit;
-                    value_types_[inst.result] = type_str;
                     cg_values_[inst.result] = CGValue::immediate(lit, type_str, nullptr);
                 }
                 // No instruction emitted - the literal will be used directly
@@ -263,7 +253,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 if (inst.result != mir::INVALID_VALUE) {
                     std::string lit = c.value ? "1" : "0";
                     value_regs_[inst.result] = lit;
-                    value_types_[inst.result] = "i1";
                     cg_values_[inst.result] = CGValue::immediate(lit, "i1", nullptr);
                 }
                 // No instruction emitted - the literal will be used directly
@@ -275,7 +264,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                     emitln("    " + result_reg + " = bitcast ptr null to ptr");
                 }
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "ptr";
                     cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
                     // Store string content for compile-time length optimization
                     value_string_contents_[inst.result] = c.value;
@@ -285,7 +273,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                 // downstream use (insertvalue, store, phi) gets a valid operand.
                 if (inst.result != mir::INVALID_VALUE) {
                     value_regs_[inst.result] = "zeroinitializer";
-                    value_types_[inst.result] = "{}";
                     cg_values_[inst.result] = CGValue::zero_sized();
                 }
             } else if constexpr (std::is_same_v<C, mir::ConstFuncRef>) {
@@ -300,7 +287,6 @@ void MirCodegen::emit_constant_inst(const mir::ConstantInst& i, const std::strin
                            ", 0");
                     emitln("    " + result_reg + " = insertvalue { ptr, ptr } " + tmp +
                            ", ptr null, 1");
-                    value_types_[inst.result] = "{ ptr, ptr }";
                     cg_values_[inst.result] =
                         CGValue::immediate(result_reg, "{ ptr, ptr }", nullptr);
                 }
@@ -342,9 +328,9 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
     auto coerce_int_type = [this](std::string& field_val, const std::string& expected_type,
                                   mir::ValueId val_id, mir::MirTypePtr /* actual_type_ptr */) {
         std::string actual_type;
-        auto it = value_types_.find(val_id);
-        if (it != value_types_.end()) {
-            actual_type = it->second;
+        auto it = cg_values_.find(val_id);
+        if (it != cg_values_.end()) {
+            actual_type = it->second.llvm_type;
         }
 
         if (!actual_type.empty() && actual_type != expected_type) {
@@ -447,7 +433,6 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
     }
 
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = struct_type;
         cg_values_[inst.result] = CGValue::immediate(result_reg, struct_type, result_type);
     }
 }
@@ -474,7 +459,6 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
         if (result_reg.size() > 2 && result_reg[0] == '%' && result_reg[1] == 'v') {
             unsigned id = std::stoul(result_reg.substr(2));
             value_regs_[id] = "zeroinitializer";
-            value_types_[id] = "{}";
             cg_values_[id] = CGValue::zero_sized();
         }
         return;
@@ -500,10 +484,12 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
         // mutation (e.g., var arr: [U8; 4] with subsequent arr[i] = x), reload
         // from the spill alloca so the mutations are included in the tuple.
         if (!elem_type.empty() && elem_type[0] == '[') {
-            auto spill_it = value_spill_allocas_.find(i.elements[j].id);
-            if (spill_it != value_spill_allocas_.end()) {
+            auto cg_spill_it = cg_values_.find(i.elements[j].id);
+            if (cg_spill_it != cg_values_.end() &&
+                cg_spill_it->second.kind == CGValueKind::Address) {
                 std::string reloaded = "%reload" + std::to_string(temp_counter_++);
-                emitln("    " + reloaded + " = load " + elem_type + ", ptr " + spill_it->second);
+                emitln("    " + reloaded + " = load " + elem_type + ", ptr " +
+                       cg_spill_it->second.reg);
                 elem_val = reloaded;
             }
         }
@@ -654,7 +640,6 @@ void MirCodegen::emit_atomic_load_inst(const mir::AtomicLoadInst& i, const std::
     emitln("    " + result_reg + " = load atomic " + type_str + ", ptr " + ptr + " " + ordering +
            ", align " + std::to_string(get_type_alignment(type_ptr)));
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = type_str;
         cg_values_[inst.result] = CGValue::immediate(result_reg, type_str, type_ptr);
     }
 }
@@ -689,7 +674,6 @@ void MirCodegen::emit_atomic_rmw_inst(const mir::AtomicRMWInst& i, const std::st
     emitln("    " + result_reg + " = atomicrmw " + op + " ptr " + ptr + ", " + type_str + " " +
            value + " " + ordering);
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = type_str;
         cg_values_[inst.result] = CGValue::immediate(result_reg, type_str, type_ptr);
     }
 }
@@ -716,7 +700,6 @@ void MirCodegen::emit_atomic_cmpxchg_inst(const mir::AtomicCmpXchgInst& i,
     emitln("    " + result_reg + " = extractvalue { " + type_str + ", i1 } " + cmpxchg_result +
            ", 0");
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = type_str;
         cg_values_[inst.result] = CGValue::immediate(result_reg, type_str, type_ptr);
     }
 }
@@ -747,9 +730,8 @@ void MirCodegen::emit_closure_init_inst(const mir::ClosureInitInst& i,
 
     // Mark the result type as function type (fat pointer)
     // CRITICAL: This must be done so that when CallInst looks up the argument type,
-    // it finds the { ptr, ptr } type in the value_types_ map
+    // it finds the { ptr, ptr } type in the cg_values_ map
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = "{ ptr, ptr }";
         cg_values_[inst.result] = CGValue::immediate(result_reg, "{ ptr, ptr }", nullptr);
     }
 }
@@ -866,7 +848,6 @@ void MirCodegen::emit_make_dyn_object_inst(const mir::MakeDynObjectInst& i,
 
     // Track the type for dyn dispatch resolution
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = "{ ptr, ptr }";
         cg_values_[inst.result] = CGValue::immediate(result_reg, "{ ptr, ptr }", nullptr);
         value_dyn_behavior_[inst.result] = i.behavior_name;
     }

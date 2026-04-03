@@ -39,13 +39,13 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
     // ========================================================================
     // Inline array methods (devirtualized from MethodCallInst)
     // When devirtualization converts array.len() to call "len"(array),
-    // the first arg is the array value. Detect array type from value_types_.
+    // the first arg is the array value. Detect array type from cg_values_.
     // ========================================================================
     if (!i.args.empty()) {
         std::string recv_vt;
-        auto vt_it = value_types_.find(i.args[0].id);
-        if (vt_it != value_types_.end())
-            recv_vt = vt_it->second;
+        auto recv_cg = cg_values_.find(i.args[0].id);
+        if (recv_cg != cg_values_.end())
+            recv_vt = recv_cg->second.llvm_type;
         if (recv_vt.size() > 2 && recv_vt[0] == '[') {
             size_t x_pos = recv_vt.find(" x ");
             if (x_pos != std::string::npos) {
@@ -66,7 +66,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                 if (method_name == "len" && !result_reg.empty()) {
                     emitln("    " + result_reg + " = add i64 0, " + std::to_string(arr_size));
                     if (inst.result != mir::INVALID_VALUE) {
-                        value_types_[inst.result] = "i64";
                         cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                     }
                     return;
@@ -108,7 +107,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                     }
                     emitln("    " + result_reg + " = add i64 0, " + hash_reg);
                     if (inst.result != mir::INVALID_VALUE) {
-                        value_types_[inst.result] = "i64";
                         cg_values_[inst.result] = CGValue::immediate(result_reg, "i64", nullptr);
                     }
                     return;
@@ -146,7 +144,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                     }
                     emitln("    " + result_reg + " = zext i1 " + acc + " to i1");
                     if (inst.result != mir::INVALID_VALUE) {
-                        value_types_[inst.result] = "i1";
                         cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
                     }
                     return;
@@ -176,9 +173,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             first_arg_type = mir_type_to_llvm(i.args[0].type);
         }
         if (first_arg_type.empty()) {
-            auto it = value_types_.find(i.args[0].id);
-            if (it != value_types_.end()) {
-                first_arg_type = it->second;
+            auto it = cg_values_.find(i.args[0].id);
+            if (it != cg_values_.end()) {
+                first_arg_type = it->second.llvm_type;
             }
         }
         bool is_numeric = first_arg_type == "float" || first_arg_type == "double" ||
@@ -243,7 +240,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         // Determine the element type. Priority:
         // 1) Generic type argument [T] from call (most reliable)
-        // 2) value_types_ of the value argument
+        // 2) cg_values_ of the value argument
         // 3) MIR type of the value argument
         // 4) Declared arg_types
         // 5) Fallback i32
@@ -258,9 +255,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         if (elem_type == "i32") {
-            auto val_vt = value_types_.find(i.args[1].id);
-            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-                elem_type = val_vt->second;
+            auto val_cg = cg_values_.find(i.args[1].id);
+            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+                elem_type = val_cg->second.llvm_type;
             } else if (i.args[1].type) {
                 elem_type = mir_type_to_llvm(i.args[1].type);
             }
@@ -274,10 +271,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         // If ptr_arg is an integer (e.g., I64 address), convert to ptr
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -335,10 +332,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         // If ptr_arg is an integer, convert to ptr
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -350,7 +347,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = elem_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
         }
         return;
@@ -389,10 +385,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -404,7 +400,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         emitln("    " + result_reg + " = load volatile " + elem_type + ", ptr " + ptr_reg);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = elem_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
         }
         return;
@@ -426,19 +421,19 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             }
         }
         if (elem_type == "i32") {
-            auto val_vt = value_types_.find(i.args[1].id);
-            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-                elem_type = val_vt->second;
+            auto val_cg = cg_values_.find(i.args[1].id);
+            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+                elem_type = val_cg->second.llvm_type;
             } else if (i.args[1].type) {
                 elem_type = mir_type_to_llvm(i.args[1].type);
             }
         }
 
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -485,10 +480,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -500,7 +495,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg + ", align 1");
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = elem_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
         }
         return;
@@ -521,19 +515,19 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             }
         }
         if (elem_type == "i32") {
-            auto val_vt = value_types_.find(i.args[1].id);
-            if (val_vt != value_types_.end() && !val_vt->second.empty()) {
-                elem_type = val_vt->second;
+            auto val_cg = cg_values_.find(i.args[1].id);
+            if (val_cg != cg_values_.end() && !val_cg->second.llvm_type.empty()) {
+                elem_type = val_cg->second.llvm_type;
             } else if (i.args[1].type) {
                 elem_type = mir_type_to_llvm(i.args[1].type);
             }
         }
 
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -562,10 +556,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         std::string ptr_reg = ptr_arg;
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -579,7 +573,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         emitln("    " + result_reg + " = getelementptr " + elem_type + ", ptr " + ptr_reg +
                ", i64 " + offset_arg);
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
@@ -590,10 +583,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string ptr_arg = get_value_reg(i.args[0]);
 
         // If the argument is an integer, convert to ptr
-        auto ptr_vt = value_types_.find(i.args[0].id);
+        auto ptr_cg = cg_values_.find(i.args[0].id);
         std::string ptr_type_str;
-        if (ptr_vt != value_types_.end())
-            ptr_type_str = ptr_vt->second;
+        if (ptr_cg != cg_values_.end())
+            ptr_type_str = ptr_cg->second.llvm_type;
         else if (i.args[0].type)
             ptr_type_str = mir_type_to_llvm(i.args[0].type);
 
@@ -618,10 +611,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
 
         // Ensure both pointers are ptr type
         auto ensure_ptr = [&](const mir::Value& v, std::string& reg) {
-            auto vt = value_types_.find(v.id);
+            auto vt_cg = cg_values_.find(v.id);
             std::string vtype;
-            if (vt != value_types_.end())
-                vtype = vt->second;
+            if (vt_cg != cg_values_.end())
+                vtype = vt_cg->second.llvm_type;
             else if (v.type)
                 vtype = mir_type_to_llvm(v.type);
             if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
@@ -646,10 +639,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string size = get_value_reg(i.args[2]);
 
         auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt = value_types_.find(v.id);
+            auto vt_cg = cg_values_.find(v.id);
             std::string vtype;
-            if (vt != value_types_.end())
-                vtype = vt->second;
+            if (vt_cg != cg_values_.end())
+                vtype = vt_cg->second.llvm_type;
             else if (v.type)
                 vtype = mir_type_to_llvm(v.type);
             if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
@@ -663,10 +656,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         ensure_ptr_local(i.args[1], src);
 
         // Promote i32 size to i64
-        auto sz_vt = value_types_.find(i.args[2].id);
-        std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
-                              : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
-                                                          : "i64";
+        auto sz_cg = cg_values_.find(i.args[2].id);
+        std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
+                              : i.args[2].type          ? mir_type_to_llvm(i.args[2].type)
+                                                        : "i64";
         if (sz_type == "i32") {
             std::string ext = "%ext.mc." + std::to_string(temp_counter_++);
             emitln("    " + ext + " = sext i32 " + size + " to i64");
@@ -693,10 +686,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         const mir::Value& src_v = src_first ? i.args[0] : i.args[1];
 
         auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt = value_types_.find(v.id);
+            auto vt_cg = cg_values_.find(v.id);
             std::string vtype;
-            if (vt != value_types_.end())
-                vtype = vt->second;
+            if (vt_cg != cg_values_.end())
+                vtype = vt_cg->second.llvm_type;
             else if (v.type)
                 vtype = mir_type_to_llvm(v.type);
             if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
@@ -710,10 +703,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         ensure_ptr_local(src_v, src);
 
         // Promote i32 size/count to i64
-        auto sz_vt = value_types_.find(i.args[2].id);
-        std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
-                              : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
-                                                          : "i64";
+        auto sz_cg = cg_values_.find(i.args[2].id);
+        std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
+                              : i.args[2].type          ? mir_type_to_llvm(i.args[2].type)
+                                                        : "i64";
         if (sz_type == "i32") {
             std::string ext = "%ext.mm." + std::to_string(temp_counter_++);
             emitln("    " + ext + " = sext i32 " + size + " to i64");
@@ -734,10 +727,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         std::string dst = get_value_reg(i.args[0]);
 
         auto ensure_ptr_local = [&](const mir::Value& v, std::string& reg) {
-            auto vt = value_types_.find(v.id);
+            auto vt_cg = cg_values_.find(v.id);
             std::string vtype;
-            if (vt != value_types_.end())
-                vtype = vt->second;
+            if (vt_cg != cg_values_.end())
+                vtype = vt_cg->second.llvm_type;
             else if (v.type)
                 vtype = mir_type_to_llvm(v.type);
             if (vtype.size() > 0 && vtype[0] == 'i' && vtype != "i1") {
@@ -752,10 +745,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         // mem_zero(dst, size): two-arg form, fill byte is 0
         if (base_name == "mem_zero" && i.args.size() >= 2) {
             std::string size = get_value_reg(i.args[1]);
-            auto sz_vt = value_types_.find(i.args[1].id);
-            std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
-                                  : i.args[1].type            ? mir_type_to_llvm(i.args[1].type)
-                                                              : "i64";
+            auto sz_cg = cg_values_.find(i.args[1].id);
+            std::string sz_type = sz_cg != cg_values_.end() ? sz_cg->second.llvm_type
+                                  : i.args[1].type          ? mir_type_to_llvm(i.args[1].type)
+                                                            : "i64";
             if (sz_type == "i32") {
                 std::string ext = "%ext.mz." + std::to_string(temp_counter_++);
                 emitln("    " + ext + " = sext i32 " + size + " to i64");
@@ -773,10 +766,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             std::string size = get_value_reg(i.args[2]);
 
             // Truncate fill byte to i8 if needed
-            auto val_vt = value_types_.find(i.args[1].id);
-            std::string val_type = val_vt != value_types_.end() ? val_vt->second
-                                   : i.args[1].type             ? mir_type_to_llvm(i.args[1].type)
-                                                                : "i32";
+            auto val_cg = cg_values_.find(i.args[1].id);
+            std::string val_type = val_cg != cg_values_.end() ? val_cg->second.llvm_type
+                                   : i.args[1].type           ? mir_type_to_llvm(i.args[1].type)
+                                                              : "i32";
             if (val_type != "i8") {
                 std::string trunc = "%trunc.ms." + std::to_string(temp_counter_++);
                 emitln("    " + trunc + " = trunc " + val_type + " " + val + " to i8");
@@ -784,10 +777,10 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             }
 
             // Promote size/count to i64
-            auto sz_vt = value_types_.find(i.args[2].id);
-            std::string sz_type = sz_vt != value_types_.end() ? sz_vt->second
-                                  : i.args[2].type            ? mir_type_to_llvm(i.args[2].type)
-                                                              : "i64";
+            auto sz_cg2 = cg_values_.find(i.args[2].id);
+            std::string sz_type = sz_cg2 != cg_values_.end() ? sz_cg2->second.llvm_type
+                                  : i.args[2].type           ? mir_type_to_llvm(i.args[2].type)
+                                                             : "i64";
             if (sz_type == "i32") {
                 std::string ext = "%ext.ms." + std::to_string(temp_counter_++);
                 emitln("    " + ext + " = sext i32 " + size + " to i64");
@@ -827,7 +820,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             emitln("    " + result_reg + " = bitcast ptr %char_buf." + id + " to ptr");
         }
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
@@ -845,7 +837,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                    ", ptr @.str.dq)");
         }
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "ptr";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
         }
         return;
@@ -854,14 +845,14 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
     // ========================================================================
     // Handle bare "to_string" / "debug_string" calls on primitive types
     // These come from devirtualized/resolved method calls where func_name
-    // lost the type prefix. Detect receiver type from value_types_.
+    // lost the type prefix. Detect receiver type from cg_values_.
     // ========================================================================
     if ((i.func_name == "to_string" || i.func_name == "debug_string") && !i.args.empty() &&
         !result_reg.empty()) {
         std::string arg_vt;
-        auto avt = value_types_.find(i.args[0].id);
-        if (avt != value_types_.end())
-            arg_vt = avt->second;
+        auto avt = cg_values_.find(i.args[0].id);
+        if (avt != cg_values_.end())
+            arg_vt = avt->second.llvm_type;
         std::string arg_reg = get_value_reg(i.args[0]);
 
         // Map LLVM type to mangled TML to_string function name
@@ -882,7 +873,6 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
                 emitln("    " + result_reg + " = call ptr @" + std::string(m.mangled_name) + "(" +
                        arg_vt + " " + arg_reg + ")");
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "ptr";
                     cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
                 }
                 return;
@@ -937,9 +927,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             actual_type = cg_it->second.llvm_type;
             cg_is_aggregate = cg_it->second.is_aggregate();
         } else {
-            auto vt_it = value_types_.find(i.args[j].id);
-            if (vt_it != value_types_.end()) {
-                actual_type = vt_it->second;
+            auto vt_cg_it = cg_values_.find(i.args[j].id);
+            if (vt_cg_it != cg_values_.end()) {
+                actual_type = vt_cg_it->second.llvm_type;
             } else if (i.args[j].type) {
                 actual_type = mir_type_to_llvm(i.args[j].type);
             }
@@ -1275,14 +1265,12 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
         // Load the result from the shared sret slot
         emitln("    " + result_reg + " = load " + ret_type + ", ptr " + sret_slot + ", align 8");
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = ret_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
     } else if (ret_type != "void") {
         emitln("    " + result_reg + " = phi " + ret_type + " [ " + thin_result + ", %" +
                label_thin + " ], [ " + fat_result + ", %" + label_fat + " ]");
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = ret_type;
             cg_values_[inst.result] = CGValue::immediate(result_reg, ret_type, nullptr);
         }
     }
@@ -1297,9 +1285,9 @@ void MirCodegen::emit_llvm_intrinsic_call(const mir::CallInst& i, const std::str
         arg_type = mir_type_to_llvm(i.args[0].type);
     }
     if (arg_type.empty()) {
-        auto it = value_types_.find(i.args[0].id);
-        if (it != value_types_.end()) {
-            arg_type = it->second;
+        auto it = cg_values_.find(i.args[0].id);
+        if (it != cg_values_.end()) {
+            arg_type = it->second.llvm_type;
         }
     }
     if (arg_type.empty()) {
@@ -1328,7 +1316,6 @@ void MirCodegen::emit_llvm_intrinsic_call(const mir::CallInst& i, const std::str
     }
 
     if (inst.result != mir::INVALID_VALUE) {
-        value_types_[inst.result] = arg_type;
         cg_values_[inst.result] = CGValue::immediate(result_reg, arg_type, nullptr);
     }
 }
@@ -1349,7 +1336,6 @@ void MirCodegen::emit_sret_call(const std::string& func_name, const std::string&
     if (!result_reg.empty()) {
         emitln("    " + result_reg + " = load " + orig_ret_type + ", ptr " + sret_slot +
                ", align 8");
-        value_types_[inst.result] = orig_ret_type;
         cg_values_[inst.result] = CGValue::immediate(result_reg, orig_ret_type, nullptr);
     }
 }
@@ -1385,7 +1371,6 @@ void MirCodegen::emit_normal_call(const mir::CallInst& i, const std::string& fun
     emitln(")");
 
     if (inst.result != mir::INVALID_VALUE && call_ret_type != "void") {
-        value_types_[inst.result] = call_ret_type;
         cg_values_[inst.result] = CGValue::immediate(result_reg, call_ret_type, i.return_type);
     }
 }

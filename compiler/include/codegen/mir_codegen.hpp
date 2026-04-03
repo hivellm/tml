@@ -105,21 +105,12 @@ private:
     // Value ID to LLVM register mapping
     std::unordered_map<mir::ValueId, std::string> value_regs_;
 
-    // Value ID to LLVM type string mapping (for type coercion)
-    std::unordered_map<mir::ValueId, std::string> value_types_;
-
-    // Value ID to typed CGValue mapping (dual-tracked alongside value_regs_/value_types_).
-    // Phase 2: populated in parallel with the old maps; Phase 3+: read sites migrated here.
+    // Value ID to typed CGValue mapping — primary type/value tracking for codegen.
+    // Replaces the former value_types_ and value_spill_allocas_ maps.
     std::unordered_map<mir::ValueId, CGValue> cg_values_;
 
     // Struct name to field types mapping (for type coercion in struct init)
     std::unordered_map<std::string, std::vector<std::string>> struct_field_types_;
-
-    // Value ID to spill alloca register mapping.
-    // When a GEP spills an aggregate (array/struct) SSA value to an alloca for
-    // mutation, the spill alloca is recorded here. Subsequent reads of that value
-    // (e.g., in TupleInit) should reload from the alloca to pick up mutations.
-    std::unordered_map<mir::ValueId, std::string> value_spill_allocas_;
 
     // Block index to LLVM label mapping (entry label for each MIR block)
     std::unordered_map<uint32_t, std::string> block_labels_;

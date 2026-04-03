@@ -42,16 +42,16 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
 
                 if (t.value.has_value()) {
                     std::string val = get_value_reg(*t.value);
-                    // Get type from the value itself, with fallback to value_types_ map
+                    // Get type from the value itself, with fallback to cg_values_ map
                     std::string type_str;
                     if (t.value->type) {
                         type_str = mir_type_to_llvm(t.value->type);
                     }
-                    // Check value_types_ for actual type (important for intrinsic calls)
+                    // Check cg_values_ for actual type (important for intrinsic calls)
                     if (type_str.empty() || type_str == "i32") {
-                        auto it = value_types_.find(t.value->id);
-                        if (it != value_types_.end() && !it->second.empty()) {
-                            type_str = it->second;
+                        auto it = cg_values_.find(t.value->id);
+                        if (it != cg_values_.end() && !it->second.llvm_type.empty()) {
+                            type_str = it->second.llvm_type;
                         }
                     }
                     if (type_str == "void" && !current_func_ret_type_.empty() &&

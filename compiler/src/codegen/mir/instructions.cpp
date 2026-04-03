@@ -72,7 +72,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                            ptr);
                 }
                 // Track the loaded value's type for method call receiver handling
-                value_types_[inst.result] = type_str;
                 if (inst.result != mir::INVALID_VALUE) {
                     cg_values_[inst.result] = CGValue::immediate(result_reg, type_str, type_ptr);
                 }
@@ -138,7 +137,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 // Track alloca as pointer type for method call receiver handling
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "ptr";
                     cg_values_[inst.result] = CGValue::address(result_reg, type_str, type_ptr);
                 }
 
@@ -155,18 +153,19 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 // value (e.g., an array from insertvalue chain or a load of an
                 // aggregate), spill it to a temp alloca and use the alloca pointer.
                 //
-                // Strategy: check value_types_ first (most precise), then the MIR
+                // Strategy: check cg_values_ first (most precise), then the MIR
                 // Value's type annotation, then infer from the GEP's own base_type.
                 // If the base is NOT positively known to be a pointer, and the GEP
                 // pointee type is an aggregate (array/struct), assume spill is needed.
                 bool needs_spill = false;
                 std::string spill_type;
-                auto base_type_it = value_types_.find(i.base.id);
-                if (base_type_it != value_types_.end()) {
+                auto base_cg_it = cg_values_.find(i.base.id);
+                if (base_cg_it != cg_values_.end()) {
                     // Tracked: spill if not a pointer
-                    if (base_type_it->second != "ptr") {
+                    if (base_cg_it->second.llvm_type != "ptr" &&
+                        base_cg_it->second.kind != CGValueKind::Address) {
                         needs_spill = true;
-                        spill_type = base_type_it->second;
+                        spill_type = base_cg_it->second.llvm_type;
                     }
                 } else {
                     // Not tracked. Check MIR Value type annotation first.
@@ -200,7 +199,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emitln("    store " + spill_type + " " + base + ", ptr " + spill_reg);
                     // Track the spill so later reads of this value ID (e.g., in
                     // TupleInit) reload from the alloca and pick up any mutations.
-                    value_spill_allocas_[i.base.id] = spill_reg;
+                    cg_values_[i.base.id] = CGValue::address(spill_reg, spill_type);
                     base = spill_reg;
                 }
 
@@ -287,7 +286,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emitln();
                 // GEP result is always a pointer
                 if (inst.result != mir::INVALID_VALUE) {
-                    value_types_[inst.result] = "ptr";
                     cg_values_[inst.result] = CGValue::address(result_reg, type_str, type_ptr);
                 }
 
@@ -353,7 +351,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     // Unit/empty tuple: use "{}" instead of "void" for data tracking
                     if (tup_type == "void")
                         tup_type = "{}";
-                    value_types_[inst.result] = tup_type;
                     cg_values_[inst.result] =
                         CGValue::immediate(result_reg, tup_type, i.result_type);
                 }
@@ -365,12 +362,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     std::string arr_type_str;
                     if (i.result_type) {
                         arr_type_str = mir_type_to_llvm(i.result_type);
-                        value_types_[inst.result] = arr_type_str;
                     } else if (i.element_type && !i.elements.empty()) {
                         // Fallback: compute array type from element type + count
                         std::string elem = mir_type_to_llvm(i.element_type);
                         arr_type_str = "[" + std::to_string(i.elements.size()) + " x " + elem + "]";
-                        value_types_[inst.result] = arr_type_str;
                     }
                     if (!arr_type_str.empty()) {
                         cg_values_[inst.result] =
@@ -416,9 +411,9 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 // Determine the Poll struct type from the poll_value's type
                 std::string poll_type;
-                auto poll_type_it = value_types_.find(i.poll_value.id);
-                if (poll_type_it != value_types_.end()) {
-                    poll_type = poll_type_it->second;
+                auto poll_cg_it = cg_values_.find(i.poll_value.id);
+                if (poll_cg_it != cg_values_.end()) {
+                    poll_type = poll_cg_it->second.llvm_type;
                 } else if (i.poll_value.type) {
                     poll_type = mir_type_to_llvm(i.poll_value.type);
                 }
@@ -433,7 +428,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emitln("    " + field_ptr + " = getelementptr inbounds " + poll_type + ", ptr " +
                        spill + ", i32 0, i32 1");
                 emitln("    " + result_reg + " = load " + inner_type + ", ptr " + field_ptr);
-                value_types_[inst.result] = inner_type;
                 if (inst.result != mir::INVALID_VALUE) {
                     cg_values_[inst.result] =
                         CGValue::immediate(result_reg, inner_type, i.result_type);
@@ -461,13 +455,13 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
     mir::MirTypePtr type_ptr;
     std::string type_str;
 
-    // First check value_types_ for actual runtime type (important for intrinsic results)
-    auto left_it = value_types_.find(i.left.id);
-    auto right_it = value_types_.find(i.right.id);
-    if (left_it != value_types_.end() && !left_it->second.empty()) {
-        type_str = left_it->second;
-    } else if (right_it != value_types_.end() && !right_it->second.empty()) {
-        type_str = right_it->second;
+    // First check cg_values_ for actual runtime type (important for intrinsic results)
+    auto left_cg = cg_values_.find(i.left.id);
+    auto right_cg = cg_values_.find(i.right.id);
+    if (left_cg != cg_values_.end() && !left_cg->second.llvm_type.empty()) {
+        type_str = left_cg->second.llvm_type;
+    } else if (right_cg != cg_values_.end() && !right_cg->second.llvm_type.empty()) {
+        type_str = right_cg->second.llvm_type;
     }
 
     if (type_str.empty()) {
@@ -494,11 +488,11 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
     bool is_float = (type_str == "double" || type_str == "float");
     bool is_signed = type_ptr ? type_ptr->is_signed() : true;
 
-    // Get operand types from value_types_ first, then MIR types
+    // Get operand types from cg_values_ first, then MIR types
     auto get_operand_type = [this](const mir::Value& v) -> std::string {
-        auto it = value_types_.find(v.id);
-        if (it != value_types_.end() && !it->second.empty()) {
-            return it->second;
+        auto it = cg_values_.find(v.id);
+        if (it != cg_values_.end() && !it->second.llvm_type.empty()) {
+            return it->second.llvm_type;
         }
         if (v.type) {
             return mir_type_to_llvm(v.type);
@@ -615,7 +609,6 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         }
 
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "i1";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
         }
     } else if (is_comparison) {
@@ -629,7 +622,6 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         }
         // Comparison results are always i1 (bool)
         if (inst.result != mir::INVALID_VALUE) {
-            value_types_[inst.result] = "i1";
             cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
         }
     } else {
@@ -639,7 +631,6 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
             emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " +
                    right + ")");
             if (inst.result != mir::INVALID_VALUE) {
-                value_types_[inst.result] = "ptr";
                 cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
             }
         } else {
@@ -648,7 +639,6 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
                    right);
             // Store result type for subsequent operations
             if (inst.result != mir::INVALID_VALUE) {
-                value_types_[inst.result] = type_str;
                 cg_values_[inst.result] = CGValue::immediate(result_reg, type_str, result_type);
             }
         }
@@ -704,8 +694,10 @@ void MirCodegen::emit_extract_value_inst(const mir::ExtractValueInst& i,
     // Check if the aggregate is actually a pointer (e.g., 'this'/'self' parameter
     // whose type was changed from struct to ptr in emit_function).
     // In that case, use GEP+load instead of extractvalue.
-    auto vt_it = value_types_.find(i.aggregate.id);
-    bool agg_is_ptr = (vt_it != value_types_.end() && vt_it->second == "ptr");
+    auto agg_cg_it = cg_values_.find(i.aggregate.id);
+    bool agg_is_ptr =
+        (agg_cg_it != cg_values_.end() &&
+         (agg_cg_it->second.llvm_type == "ptr" || agg_cg_it->second.kind == CGValueKind::Address));
     if (agg_is_ptr && codegen::is_aggregate_llvm_type(agg_type)) {
         // Aggregate is a pointer to a struct — emit GEP + load instead of extractvalue
         std::string gep_reg = new_temp();
@@ -771,7 +763,6 @@ void MirCodegen::emit_extract_value_inst(const mir::ExtractValueInst& i,
             }
         }
         if (!ev_type_str.empty()) {
-            value_types_[inst.result] = ev_type_str;
             cg_values_[inst.result] = CGValue::immediate(result_reg, ev_type_str, ev_mir_type);
         }
     }
@@ -792,15 +783,15 @@ void MirCodegen::emit_insert_value_inst(const mir::InsertValueInst& i,
     // Get expected type string
     std::string expected_type = expected_ptr ? mir_type_to_llvm(expected_ptr) : "";
 
-    // Get actual type - first try MIR type, then stored type from value_types_
+    // Get actual type - first try MIR type, then stored type from cg_values_
     std::string actual_type;
     if (i.value.type) {
         actual_type = mir_type_to_llvm(i.value.type);
     } else {
-        // Look up from value_types_ (for constants and other values)
-        auto it = value_types_.find(i.value.id);
-        if (it != value_types_.end()) {
-            actual_type = it->second;
+        // Look up from cg_values_ (for constants and other values)
+        auto it = cg_values_.find(i.value.id);
+        if (it != cg_values_.end()) {
+            actual_type = it->second.llvm_type;
         }
     }
 
