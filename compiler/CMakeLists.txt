@@ -660,6 +660,7 @@ add_library(tml_mir STATIC
     src/mir/mir_builder.cpp
     src/mir/mir_serialize.cpp
     src/mir/mir_pass.cpp
+    src/mir/mir_validate.cpp
     # Builder modules (split from mir_builder.cpp for maintainability)
     src/mir/builder/builder_types.cpp
     src/mir/builder/expr.cpp

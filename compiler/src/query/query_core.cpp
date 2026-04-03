@@ -20,6 +20,7 @@ TML_MODULE("compiler")
 #include "mir/hir_mir_builder.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_pass.hpp"
+#include "mir/mir_validate.hpp"
 #include "mir/passes/infinite_loop_check.hpp"
 #include "mir/passes/memory_leak_check.hpp"
 #include "mir/passes/pgo.hpp"
@@ -523,6 +524,17 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
                 mir::PgoPass pgo_pass(*profile_opt);
                 pgo_pass.run(mir_module);
             }
+        }
+    }
+
+    // Run MIR validation pass (debug diagnostics — warns on null types, missing terminators)
+    {
+        auto vr = mir::validate_module(mir_module);
+        if (!vr.is_clean()) {
+            TML_DEBUG_LN("[MIR] Validation: " << vr.null_type_count << " null type(s), "
+                                              << vr.missing_terminator_count
+                                              << " missing terminator(s), " << vr.empty_block_count
+                                              << " empty block(s)");
         }
     }
 
