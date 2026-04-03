@@ -1,0 +1,80 @@
+/// TML SQLite Benchmark — insert, select, update, delete (in-memory)
+use std::db::sqlite::connection::SqliteConnection
+use std::db::sqlite::statement::SqliteStatement
+use std::time::Instant
+
+func main() {
+    let mut conn = SqliteConnection::open_in_memory().unwrap()
+    conn.execute("CREATE TABLE World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=OFF")
+
+    // Seed 100 rows
+    var i: I64 = 1
+    loop (i <= 100) {
+        let id: I64 = i
+        let val: I64 = i * 7 + 13
+        conn.execute("INSERT INTO World (id, randomNumber) VALUES (" + id.to_string() + ", " + val.to_string() + ")")
+        i = i + 1
+    }
+
+    let iters: I64 = 10000
+
+    // INSERT
+    let t1 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let id: I64 = 1000 + i
+        let val: I64 = i * 3
+        conn.execute("INSERT INTO World (id, randomNumber) VALUES (" + id.to_string() + ", " + val.to_string() + ")")
+        i = i + 1
+    }
+    let insert_ns: I64 = t1.elapsed().as_nanos()
+
+    // SELECT
+    let t2 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let pk: I64 = i + 1
+        let stmt_r = conn.prepare("SELECT id, randomNumber FROM World WHERE id = " + pk.to_string())
+        when stmt_r {
+            Ok(raw) => {
+                let mut stmt = SqliteStatement::new(raw)
+                stmt.step()
+                stmt.finalize()
+            },
+            Err(_) => {}
+        }
+        i = i + 1
+    }
+    let select_ns: I64 = t2.elapsed().as_nanos()
+
+    // UPDATE
+    let t3 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let val: I64 = i * 11
+        let pk: I64 = i + 1
+        conn.execute("UPDATE World SET randomNumber = " + val.to_string() + " WHERE id = " + pk.to_string())
+        i = i + 1
+    }
+    let update_ns: I64 = t3.elapsed().as_nanos()
+
+    // DELETE
+    let t4 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let pk: I64 = 1000 + i
+        conn.execute("DELETE FROM World WHERE id = " + pk.to_string())
+        i = i + 1
+    }
+    let delete_ns: I64 = t4.elapsed().as_nanos()
+
+    conn.close()
+
+    // Output CSV: lang,op,iters,total_ns
+    println("tml,insert," + iters.to_string() + "," + insert_ns.to_string())
+    println("tml,select," + iters.to_string() + "," + select_ns.to_string())
+    println("tml,update," + iters.to_string() + "," + update_ns.to_string())
+    println("tml,delete," + iters.to_string() + "," + delete_ns.to_string())
+}
