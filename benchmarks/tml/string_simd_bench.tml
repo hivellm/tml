@@ -1,8 +1,13 @@
-// String SIMD Benchmark — Compares SIMD vs scalar string operations
+// String SIMD Benchmark — Tests transparent SIMD dispatch in public API
 //
-// Measures: find_byte, contains, find_substr, count_byte, is_ascii
-// Uses volatile sink (accumulator printed at end) to prevent DCE in release.
+// The public contains(), find() functions in core::str::search now
+// auto-dispatch to SSE2 SIMD for strings >= 32 bytes.
+// This benchmark measures the public API directly (no simd:: prefix needed).
+//
+// Also compares simd::contains_fast vs simd::contains_scalar directly
+// and the new simd_load_ptr-based SIMD vs the scalar fallback.
 
+use core::str::search::{contains, find}
 use core::str::simd
 
 @extern("c") func time_ns() -> I64
@@ -32,30 +37,29 @@ func make_repeated(n: I64) -> Str {
 }
 
 // ============================================================================
-// Benchmark helpers — return (elapsed_ns, checksum) packed as two values
-// We use a struct-like approach: return elapsed, store checksum via print
+// Benchmark helpers
 // ============================================================================
 
-func bench_find_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
+func bench_contains_public(s: Str, pat: Str, iters: I64) -> I64 {
     var acc: I64 = 0
     let start: I64 = time_ns()
     var i: I64 = 0
     loop (i < iters) {
-        acc = acc + simd::find_byte(s, byte)
+        if contains(s, pat) { acc = acc + 1 }
         i = i + 1
     }
     let elapsed: I64 = time_ns() - start
-    // Use acc to prevent DCE — print is an observable side effect
     if acc == -9999999 { println("x") }
     return elapsed
 }
 
-func bench_find_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
+func bench_find_public(s: Str, pat: Str, iters: I64) -> I64 {
     var acc: I64 = 0
     let start: I64 = time_ns()
     var i: I64 = 0
     loop (i < iters) {
-        acc = acc + simd::find_byte_scalar(s, byte)
+        let r: Maybe[I64] = find(s, pat)
+        if r.is_just() { acc = acc + 1 }
         i = i + 1
     }
     let elapsed: I64 = time_ns() - start
@@ -89,12 +93,12 @@ func bench_contains_scalar(s: Str, pat: Str, iters: I64) -> I64 {
     return elapsed
 }
 
-func bench_find_substr_simd(s: Str, pat: Str, iters: I64) -> I64 {
+func bench_find_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
     var acc: I64 = 0
     let start: I64 = time_ns()
     var i: I64 = 0
     loop (i < iters) {
-        acc = acc + simd::find_substr(s, pat)
+        acc = acc + simd::find_byte(s, byte)
         i = i + 1
     }
     let elapsed: I64 = time_ns() - start
@@ -102,38 +106,12 @@ func bench_find_substr_simd(s: Str, pat: Str, iters: I64) -> I64 {
     return elapsed
 }
 
-func bench_find_substr_scalar(s: Str, pat: Str, iters: I64) -> I64 {
+func bench_find_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
     var acc: I64 = 0
     let start: I64 = time_ns()
     var i: I64 = 0
     loop (i < iters) {
-        acc = acc + simd::find_substr_scalar(s, pat)
-        i = i + 1
-    }
-    let elapsed: I64 = time_ns() - start
-    if acc == -9999999 { println("x") }
-    return elapsed
-}
-
-func bench_count_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
-    var acc: I64 = 0
-    let start: I64 = time_ns()
-    var i: I64 = 0
-    loop (i < iters) {
-        acc = acc + simd::count_byte(s, byte)
-        i = i + 1
-    }
-    let elapsed: I64 = time_ns() - start
-    if acc == -9999999 { println("x") }
-    return elapsed
-}
-
-func bench_count_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
-    var acc: I64 = 0
-    let start: I64 = time_ns()
-    var i: I64 = 0
-    loop (i < iters) {
-        acc = acc + simd::count_byte_scalar(s, byte)
+        acc = acc + simd::find_byte_scalar(s, byte)
         i = i + 1
     }
     let elapsed: I64 = time_ns() - start
@@ -167,6 +145,32 @@ func bench_is_ascii_scalar(s: Str, iters: I64) -> I64 {
     return elapsed
 }
 
+func bench_count_byte_simd(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::count_byte(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
+func bench_count_byte_scalar(s: Str, byte: U8, iters: I64) -> I64 {
+    var acc: I64 = 0
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop (i < iters) {
+        acc = acc + simd::count_byte_scalar(s, byte)
+        i = i + 1
+    }
+    let elapsed: I64 = time_ns() - start
+    if acc == -9999999 { println("x") }
+    return elapsed
+}
+
 // ============================================================================
 // Report
 // ============================================================================
@@ -187,13 +191,22 @@ func report(name: Str, simd_ns: I64, scalar_ns: I64, iters: I64) {
     println("")
 }
 
+func report_single(name: Str, ns: I64, iters: I64, size: I64) {
+    let per: I64 = ns / iters
+    println("  " + name + ": " + per.to_string() + " ns/op")
+    if per > 0 {
+        let throughput: I64 = (size * 1000) / per
+        println("    Throughput: " + throughput.to_string() + " MB/s")
+    }
+}
+
 // ============================================================================
 // Main
 // ============================================================================
 
 pub func main() -> I32 {
     println("")
-    println("=== TML String SIMD Benchmark ===")
+    println("=== TML String SIMD Benchmark (simd_load_ptr, transparent dispatch) ===")
     println("")
 
     let s256: Str = make_string(256)
@@ -204,64 +217,64 @@ pub func main() -> I32 {
     let iters: I64 = 100000
     let iters_short: I64 = 50000
 
-    // ── find_byte: byte NOT in string (worst case full scan) ──
-    println("--- find_byte (byte not found, worst case scan) ---")
+    // ── Section 1: Public API (transparent SIMD dispatch) ──
+    println("--- Public API: contains() (transparent SIMD for >= 32 bytes) ---")
     println("")
 
-    report("256 bytes",
+    report_single("contains 256B (not found)", bench_contains_public(s256, "ZZZZZ", iters), iters, 256)
+    report_single("contains  1KB (not found)", bench_contains_public(s1k, "ZZZZZ", iters), iters, 1024)
+    report_single("contains  4KB (not found)", bench_contains_public(s4k, "ZZZZZ", iters_short), iters_short, 4096)
+    println("")
+
+    println("--- Public API: find() (transparent SIMD for >= 32 bytes) ---")
+    println("")
+
+    report_single("find 256B (not found)", bench_find_public(s256, "ZZZZZ", iters), iters, 256)
+    report_single("find  1KB (not found)", bench_find_public(s1k, "ZZZZZ", iters), iters, 1024)
+    report_single("find  4KB (not found)", bench_find_public(s4k, "ZZZZZ", iters_short), iters_short, 4096)
+    println("")
+
+    // ── Section 2: SIMD vs Scalar direct comparison ──
+    println("--- Direct: SIMD (simd_load_ptr) vs Scalar ---")
+    println("")
+
+    println("  find_byte (byte not found, worst case scan):")
+    println("")
+    report("  256 bytes",
         bench_find_byte_simd(s256, 90 as U8, iters),
         bench_find_byte_scalar(s256, 90 as U8, iters), iters)
-
-    report("1 KB",
+    report("  1 KB",
         bench_find_byte_simd(s1k, 90 as U8, iters),
         bench_find_byte_scalar(s1k, 90 as U8, iters), iters)
-
-    report("4 KB",
+    report("  4 KB",
         bench_find_byte_simd(s4k, 90 as U8, iters_short),
         bench_find_byte_scalar(s4k, 90 as U8, iters_short), iters_short)
 
-    // ── contains: pattern not found (worst case) ──
-    println("--- contains (pattern not found, worst case) ---")
+    println("  contains (pattern not found, worst case):")
     println("")
-
-    report("256 bytes",
+    report("  256 bytes",
         bench_contains_simd(s256, "ZZZZZ", iters),
         bench_contains_scalar(s256, "ZZZZZ", iters), iters)
-
-    report("1 KB",
+    report("  1 KB",
         bench_contains_simd(s1k, "ZZZZZ", iters),
         bench_contains_scalar(s1k, "ZZZZZ", iters), iters)
-
-    report("4 KB",
+    report("  4 KB",
         bench_contains_simd(s4k, "ZZZZZ", iters_short),
         bench_contains_scalar(s4k, "ZZZZZ", iters_short), iters_short)
 
-    // ── find_substr: pattern at end of string ──
-    println("--- find_substr (pattern at end) ---")
+    println("  count_byte (all matching, 1KB):")
     println("")
-
-    report("1 KB",
-        bench_find_substr_simd(s1k, "nopabcde", iters),
-        bench_find_substr_scalar(s1k, "nopabcde", iters), iters)
-
-    // ── count_byte: count 'a' in all-a string ──
-    println("--- count_byte (all matching) ---")
-    println("")
-
     let all_a_1k: Str = make_repeated(1024)
-    report("1 KB (all match)",
+    report("  1 KB (all match)",
         bench_count_byte_simd(all_a_1k, 97 as U8, iters),
         bench_count_byte_scalar(all_a_1k, 97 as U8, iters), iters)
 
-    // ── is_ascii: all ASCII ──
-    println("--- is_ascii (all ASCII) ---")
+    println("  is_ascii (all ASCII):")
     println("")
-
-    report("1 KB",
+    report("  1 KB",
         bench_is_ascii_simd(s1k, iters),
         bench_is_ascii_scalar(s1k, iters), iters)
-
-    report("16 KB",
+    report("  16 KB",
         bench_is_ascii_simd(s16k, iters_short),
         bench_is_ascii_scalar(s16k, iters_short), iters_short)
 

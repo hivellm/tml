@@ -1,6 +1,10 @@
 //! String search operations: contains, starts_with, ends_with, find, rfind, is_ascii, matches.
+//!
+//! Functions automatically use SIMD (SSE2) for strings >= 32 bytes on x86-64.
+//! No special API needed — just call contains(), find(), etc.
 
 use core::str::basic::{len, substring}
+use core::str::simd
 
 // ============================================================================
 // FFI declarations for optimized C library string functions
@@ -14,6 +18,8 @@ func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
 // ============================================================================
 
 /// Returns `true` if the string contains the given substring.
+///
+/// Automatically uses SIMD for strings >= 32 bytes on x86-64.
 ///
 /// # Examples
 ///
@@ -30,6 +36,11 @@ pub func contains(s: Str, pattern: Str) -> Bool {
     if p_len > s_len {
         return false
     }
+    // SIMD path for long strings
+    if s_len >= 32 {
+        return simd::contains_simd(s, pattern)
+    }
+    // Scalar path for short strings
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
@@ -87,6 +98,7 @@ pub func ends_with(s: Str, suffix: Str) -> Bool {
 /// Returns the byte index of the first occurrence of the pattern.
 ///
 /// Returns `Nothing` if the pattern is not found.
+/// Automatically uses SIMD for strings >= 32 bytes on x86-64.
 ///
 /// # Examples
 ///
@@ -103,6 +115,11 @@ pub func find(s: Str, pattern: Str) -> Maybe[I64] {
     if p_len > s_len {
         return Nothing
     }
+    // SIMD path for long strings
+    if s_len >= 32 {
+        return simd::find_simd(s, pattern)
+    }
+    // Scalar path for short strings
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
@@ -150,16 +167,22 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
 /// Returns `true` if all bytes in the string are valid ASCII (< 128).
 ///
 /// An empty string returns `true`.
+/// Automatically uses SIMD for strings >= 32 bytes on x86-64.
 ///
 /// # Examples
 ///
 /// ```tml
 /// assert(is_ascii("hello") == true)
 /// assert(is_ascii("") == true)
-/// assert(is_ascii("caf\xc3\xa9") == false)  // UTF-8 é
 /// ```
 pub func is_ascii(s: Str) -> Bool {
     let s_len: I64 = len(s)
+    if s_len == 0 { return true }
+    // SIMD path for long strings
+    if s_len >= 32 {
+        return simd::is_ascii_simd(s)
+    }
+    // Scalar path for short strings
     let src: I64 = s as I64
     var i: I64 = 0
     loop (i < s_len) {
