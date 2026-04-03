@@ -82,14 +82,57 @@ void ModuleRegistry::register_file_mapping(const std::string& file_path,
 auto ModuleRegistry::lookup_function(const std::string& module_path,
                                      const std::string& symbol_name) const
     -> std::optional<FuncSig> {
+    // Track visited modules to prevent infinite recursion through re-exports
+    std::unordered_set<std::string> visited;
+    return lookup_function_impl(module_path, symbol_name, visited);
+}
+
+auto ModuleRegistry::lookup_function_impl(const std::string& module_path,
+                                          const std::string& symbol_name,
+                                          std::unordered_set<std::string>& visited) const
+    -> std::optional<FuncSig> {
+    // Prevent infinite recursion
+    if (visited.count(module_path) > 0) {
+        return std::nullopt;
+    }
+    visited.insert(module_path);
+
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
 
+    // First, try to find the function directly in this module
     auto it = module->functions.find(symbol_name);
     if (it != module->functions.end()) {
         return it->second;
     }
+
+    // Not found directly - check re-exports
+    for (const auto& re_export : module->re_exports) {
+        bool should_follow = false;
+
+        if (re_export.is_glob) {
+            // Glob import - try to find the symbol in the source module
+            should_follow = true;
+        } else {
+            // Check if this specific symbol is in the re-export list
+            for (const auto& sym : re_export.symbols) {
+                if (sym == symbol_name) {
+                    should_follow = true;
+                    break;
+                }
+            }
+        }
+
+        if (should_follow) {
+            // Recursively look up in the source module
+            auto result = lookup_function_impl(re_export.source_path, symbol_name, visited);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -209,14 +252,57 @@ auto ModuleRegistry::lookup_enum_impl(const std::string& module_path,
 auto ModuleRegistry::lookup_behavior(const std::string& module_path,
                                      const std::string& symbol_name) const
     -> std::optional<BehaviorDef> {
+    // Track visited modules to prevent infinite recursion through re-exports
+    std::unordered_set<std::string> visited;
+    return lookup_behavior_impl(module_path, symbol_name, visited);
+}
+
+auto ModuleRegistry::lookup_behavior_impl(const std::string& module_path,
+                                          const std::string& symbol_name,
+                                          std::unordered_set<std::string>& visited) const
+    -> std::optional<BehaviorDef> {
+    // Prevent infinite recursion
+    if (visited.count(module_path) > 0) {
+        return std::nullopt;
+    }
+    visited.insert(module_path);
+
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
 
+    // First, try to find the behavior directly in this module
     auto it = module->behaviors.find(symbol_name);
     if (it != module->behaviors.end()) {
         return it->second;
     }
+
+    // Not found directly - check re-exports
+    for (const auto& re_export : module->re_exports) {
+        bool should_follow = false;
+
+        if (re_export.is_glob) {
+            // Glob import - try to find the symbol in the source module
+            should_follow = true;
+        } else {
+            // Check if this specific symbol is in the re-export list
+            for (const auto& sym : re_export.symbols) {
+                if (sym == symbol_name) {
+                    should_follow = true;
+                    break;
+                }
+            }
+        }
+
+        if (should_follow) {
+            // Recursively look up in the source module
+            auto result = lookup_behavior_impl(re_export.source_path, symbol_name, visited);
+            if (result) {
+                return result;
+            }
+        }
+    }
+
     return std::nullopt;
 }
 

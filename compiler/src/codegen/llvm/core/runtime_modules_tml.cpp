@@ -245,6 +245,9 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // When module A imports module B, and B imports module C, we must also
     // process C. Without this, cross-library imports (e.g., std::uuid importing
     // core::encoding::hex) would leave C's functions unresolved at link time.
+    // This also follows `pub use` re-exports: when module A imports from B which
+    // re-exports symbols from C, C must be in the imported set for its function
+    // bodies and their dependencies to be emitted.
     {
         std::vector<std::string> worklist(imported_module_paths.begin(),
                                           imported_module_paths.end());
@@ -254,6 +257,8 @@ void LLVMIRGen::emit_module_pure_tml_functions(
             auto it = all_modules.find(path);
             if (it == all_modules.end())
                 continue;
+
+            // Follow private_imports (transitive dependencies)
             for (const auto& dep : it->second.private_imports) {
                 // private_imports may contain symbol-level paths like
                 // "std::net::sys::RawSocket" where the actual module is
@@ -280,6 +285,26 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                 // Also insert the original dep path (it may match an exact module)
                 if (resolved != dep) {
                     imported_module_paths.insert(dep);
+                }
+            }
+
+            // Follow pub use re-exports — their source modules contain the actual
+            // function definitions and may have their own transitive dependencies.
+            for (const auto& re_export : it->second.re_exports) {
+                std::string source = re_export.source_path;
+                // Re-export source_path may be a symbol-level path (e.g.,
+                // "std::http::middleware::cors") — resolve to actual module.
+                if (all_modules.find(source) == all_modules.end()) {
+                    auto sep = source.rfind("::");
+                    if (sep != std::string::npos) {
+                        std::string parent = source.substr(0, sep);
+                        if (all_modules.find(parent) != all_modules.end()) {
+                            source = parent;
+                        }
+                    }
+                }
+                if (imported_module_paths.insert(source).second) {
+                    worklist.push_back(source);
                 }
             }
         }

@@ -463,12 +463,14 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     extract_module_declarations(module_path, file_path, all_parsed, mod);
 
-    // Capture re-export source paths before moving the module
+    // Capture re-export source paths and private imports before moving the module.
+    // After std::move(mod), these vectors are no longer accessible.
     std::vector<std::string> re_export_sources;
     re_export_sources.reserve(mod.re_exports.size());
     for (const auto& re_export : mod.re_exports) {
         re_export_sources.push_back(re_export.source_path);
     }
+    std::vector<std::string> private_import_sources = mod.private_imports;
 
     module_registry_->register_module(module_path, std::move(mod));
 
@@ -479,6 +481,25 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // Load re-export source modules to ensure they're in the current registry
     for (const auto& source_path : re_export_sources) {
         load_native_module(source_path, /*silent=*/true);
+    }
+
+    // Load private import modules to ensure transitive dependencies are available.
+    // Without this, functions from deep module paths (e.g., std::http::router::router)
+    // that are imported by library modules (e.g., app.tml's "use std::http::router::router::{...}")
+    // would not be registered in the module registry, causing the codegen to miss their
+    // declare/define statements and produce incorrect LLVM IR (wrong return types).
+    // The cache paths (GlobalModuleCache, binary meta) already do this — this brings
+    // the file-loading path to parity.
+    for (const auto& import_path : private_import_sources) {
+        bool loaded = load_native_module(import_path, /*silent=*/true);
+        if (!loaded) {
+            // Strip last segment — it may be a symbol name, not a module
+            // (e.g., "core::option::Maybe" where the module is "core::option")
+            auto last_sep = import_path.rfind("::");
+            if (last_sep != std::string::npos) {
+                load_native_module(import_path.substr(0, last_sep), /*silent=*/true);
+            }
+        }
     }
 
     return true;

@@ -265,6 +265,16 @@ private:
     auto lookup_constant_impl(const std::string& module_path, const std::string& symbol_name,
                               std::unordered_set<std::string>& visited) const
         -> std::optional<std::string>;
+
+    /// Internal helper for lookup_function that follows re-exports.
+    auto lookup_function_impl(const std::string& module_path, const std::string& symbol_name,
+                              std::unordered_set<std::string>& visited) const
+        -> std::optional<FuncSig>;
+
+    /// Internal helper for lookup_behavior that follows re-exports.
+    auto lookup_behavior_impl(const std::string& module_path, const std::string& symbol_name,
+                              std::unordered_set<std::string>& visited) const
+        -> std::optional<BehaviorDef>;
 };
 
 } // namespace tml::types

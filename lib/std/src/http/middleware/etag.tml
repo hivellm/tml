@@ -12,27 +12,25 @@ use std::text::Text
 /// Fast, deterministic, and good distribution for ETag use.
 func fnv1a_hex(content: Str) -> Str {
     let content_len: I64 = str::len(content)
-    // FNV-1a 64-bit: offset basis and prime
-    var hash: I64 = -3750763034362895579 as I64  // 0xCBF29CE484222325
-    let prime: I64 = 1099511628211 as I64         // 0x100000001B3
+    // FNV-1a 64-bit: offset basis and prime (unsigned per spec)
+    var hash: U64 = 14695981039346656037 as U64  // 0xCBF29CE484222325
+    let prime: U64 = 1099511628211 as U64         // 0x100000001B3
     var i: I64 = 0
     loop (i < content_len) {
-        let byte: I64 = str::char_at(content, i) as I64
-        // XOR with byte, then multiply by prime
+        let byte: U64 = str::char_at(content, i) as U64
+        // XOR with byte, then multiply by prime (wrapping — FNV-1a requires modular arithmetic)
         hash = hash ^ byte
-        hash = hash * prime
+        hash = hash.wrapping_mul(prime)
         i = i + 1
     }
-    // Convert to hex string (positive)
+    // Convert to hex string
     let hex_chars: Str = "0123456789abcdef"
     var text = Text::new()
-    // Output 16 hex chars (full 64-bit hash)
+    // Output 16 hex chars (full 64-bit hash), extracting each nibble via right-shift
     var shift: I64 = 60
     loop (shift >= 0) {
-        let nibble: I64 = (hash / (1 << shift)) % 16
-        // Handle negative values
-        var idx: I64 = nibble
-        if idx < 0 { idx = idx + 16 }
+        let nibble: U64 = (hash >> (shift as U64)) % (16 as U64)
+        let idx: I64 = nibble as I64
         text.push_str(str::substring(hex_chars, idx, idx + 1))
         shift = shift - 4
     }
