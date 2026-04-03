@@ -160,11 +160,6 @@ void MirCodegen::emit_phi_inst(const mir::PhiInst& i, const std::string& result_
     }
     mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string type_str = mir_type_to_llvm(type_ptr);
-    // Unit type maps to "void" but LLVM doesn't allow `phi void`.
-    // Use "{}" (empty struct, zero-sized) as the data representation.
-    if (type_str == "void") {
-        type_str = "{}";
-    }
 
     if (i.incoming.empty()) {
         if (type_str == "{}") {
@@ -448,9 +443,8 @@ void MirCodegen::emit_tuple_init_inst(const mir::TupleInitInst& i, const std::st
     mir::MirTypePtr tuple_ptr = i.result_type ? i.result_type : mir::make_i32_type();
     std::string tuple_type = mir_type_to_llvm(tuple_ptr);
 
-    // Unit type (empty tuple) maps to "void" but LLVM doesn't allow alloca/load void.
-    // Use "{}" (empty struct, zero-sized) for the data representation.
-    if (tuple_type == "void" && i.elements.empty()) {
+    // Unit type (empty tuple) is "{}" (zero-sized). No alloca needed.
+    if (tuple_type == "{}" && i.elements.empty()) {
         // Map the result register to zeroinitializer so downstream uses get a
         // valid operand. The result_reg was derived from the instruction's result
         // ID, so we overwrite it in value_regs_ by looking up the register name.

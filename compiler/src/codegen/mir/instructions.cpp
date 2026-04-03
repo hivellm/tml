@@ -56,11 +56,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                // Unit type maps to "void" but LLVM doesn't allow `load void`.
-                // Use "{}" (empty struct, zero-sized) as the data representation.
-                if (type_str == "void") {
-                    type_str = "{}";
-                }
                 std::string volatile_kw = i.is_volatile ? "volatile " : "";
                 // Array loads need align 16 to match the alignment of array allocas.
                 bool is_array_load = type_ptr && type_ptr->is_array();
@@ -86,11 +81,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                // Unit type maps to "void" but LLVM doesn't allow `store void`.
-                // Skip the store entirely for void/unit — it's a zero-sized type
-                // with no data to write.
-                if (type_str == "void") {
-                    emitln("    ; skip store of void (unit type)");
+                // Unit type maps to "{}" (zero-sized). Skip the store entirely —
+                // there's no data to write for a zero-sized type.
+                if (type_str == "{}") {
+                    emitln("    ; skip store of {} (unit type)");
                 } else {
                     std::string volatile_kw = i.is_volatile ? "volatile " : "";
                     // Array stores need align 16 to match the alignment of array allocas
@@ -112,11 +106,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                // Unit type maps to "void" but LLVM doesn't allow `alloca void`.
-                // Use "{}" (empty struct, zero-sized) as the data representation.
-                if (type_str == "void") {
-                    type_str = "{}";
-                }
                 emitln("    ; ALLOCA: result_id=" + std::to_string(inst.result) +
                        " reg=" + result_reg + " type=" + type_str);
                 // Array allocas need explicit alignment to prevent LLVM backend crashes
@@ -348,9 +337,6 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 // Track tuple type so GEP can detect non-pointer bases
                 if (inst.result != mir::INVALID_VALUE && i.result_type) {
                     std::string tup_type = mir_type_to_llvm(i.result_type);
-                    // Unit/empty tuple: use "{}" instead of "void" for data tracking
-                    if (tup_type == "void")
-                        tup_type = "{}";
                     cg_values_[inst.result] =
                         CGValue::immediate(result_reg, tup_type, i.result_type);
                 }

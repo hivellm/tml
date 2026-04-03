@@ -364,6 +364,10 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             ret_ptr = mir::make_unit_type();
         }
         std::string ret_type = mir_type_to_llvm(ret_ptr);
+        // Unit maps to "{}" but LLVM call instructions must use "void"
+        if (ret_type == "{}") {
+            ret_type = "void";
+        }
 
         // Spill the fat pointer to memory so we can GEP into it
         std::string fat_ptr_alloca = "%dyn_fat." + id;
@@ -428,9 +432,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
                 arg_ptr = mir::make_i32_type();
             }
             std::string arg_type = mir_type_to_llvm(arg_ptr);
-            if (arg_type == "void") {
-                arg_type = "{}";
-            }
             std::string arg = get_value_reg(i.args[j]);
             args_str += ", " + arg_type + " " + arg;
         }
@@ -460,6 +461,10 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         ret_ptr = mir::make_ptr_type();
     }
     std::string ret_type = mir_type_to_llvm(ret_ptr);
+    // Unit maps to "{}" but LLVM call instructions must use "void"
+    if (ret_type == "{}") {
+        ret_type = "void";
+    }
 
     // Determine the actual LLVM type of the receiver value
     // Priority: cg_values_ (what the register actually holds) > i.receiver.type (MIR type)
@@ -496,7 +501,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         receiver_type_for_call = "ptr";
     } else if (receiver_actual_type == "ptr" || receiver_actual_type.empty()) {
         receiver_type_for_call = "ptr";
-    } else if (receiver_actual_type == "void") {
+    } else if (receiver_actual_type == "{}") {
         // Unit receiver — zero-sized type, no spill needed. Use a null pointer
         // as a dummy receiver since the function won't dereference it.
         receiver_type_for_call = "ptr";
@@ -551,10 +556,6 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
             arg_ptr = mir::make_i32_type();
         }
         std::string arg_type = mir_type_to_llvm(arg_ptr);
-        // Unit type maps to "void" but LLVM doesn't allow void as a call argument.
-        if (arg_type == "void") {
-            arg_type = "{}";
-        }
         std::string arg = get_value_reg(i.args[j]);
         emit(arg_type + " " + arg);
     }

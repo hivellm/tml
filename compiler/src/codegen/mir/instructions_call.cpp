@@ -1038,11 +1038,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             arg_type = "{ ptr, ptr }";
         }
 
-        // Unit type maps to "void" but LLVM doesn't allow void as a call argument.
-        // Use "{}" (empty struct, zero-sized) as the data representation.
-        if (arg_type == "void") {
-            arg_type = "{}";
-        }
+        // Unit type is "{}" (zero-sized) — valid as a call argument in LLVM IR.
         processed_args.push_back(arg_type + " " + arg);
     }
 
@@ -1157,9 +1153,12 @@ void MirCodegen::emit_indirect_call(const mir::CallInst& i, const std::string& p
         param_types.push_back(mir_type_to_llvm(pt));
     }
 
-    // Get return type
+    // Get return type — Unit maps to "{}" in type system but LLVM calls use "void"
     std::string ret_type =
         mir_func_type.return_type ? mir_type_to_llvm(mir_func_type.return_type) : "void";
+    if (ret_type == "{}") {
+        ret_type = "void";
+    }
 
     // Determine if the return type requires sret convention.
     // The SretConversionPass converts functions returning named struct types

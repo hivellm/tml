@@ -215,4 +215,13 @@ auto MirCodegen::get_cmp_predicate(mir::BinOp op, bool is_float, bool is_signed)
     }
 }
 
+auto MirCodegen::is_unit_type(const mir::MirTypePtr& type) -> bool {
+    if (!type)
+        return false;
+    if (auto* prim = std::get_if<mir::MirPrimitiveType>(&type->kind)) {
+        return prim->kind == mir::PrimitiveType::Unit;
+    }
+    return false;
+}
+
 } // namespace tml::codegen

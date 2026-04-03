@@ -210,6 +210,12 @@ private:
     auto atomic_rmw_op_to_llvm(mir::AtomicRMWOp op) -> std::string;
     auto get_type_alignment(const mir::MirTypePtr& type) -> size_t;
 
+    // Unit type helpers
+    /// Returns true if the given MIR type is Unit (empty struct "{}").
+    /// Used to emit "void" as the LLVM function return type for Unit-returning
+    /// functions, since LLVM requires `ret void` (not `ret {}`).
+    auto is_unit_type(const mir::MirTypePtr& type) -> bool;
+
     // Name helpers
     /// Quote a function name for use in LLVM IR to avoid keyword collisions.
     /// LLVM IR keywords like `double`, `float`, `void`, `call`, etc. cannot be used

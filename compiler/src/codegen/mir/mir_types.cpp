@@ -95,7 +95,7 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
 auto MirCodegen::mir_primitive_to_llvm(mir::PrimitiveType kind) -> std::string {
     switch (kind) {
     case mir::PrimitiveType::Unit:
-        return "void";
+        return "{}";
     case mir::PrimitiveType::Bool:
         return "i1";
     case mir::PrimitiveType::I8:

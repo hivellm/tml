@@ -54,23 +54,20 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                             type_str = it->second.llvm_type;
                         }
                     }
-                    if (type_str == "void" && !current_func_ret_type_.empty() &&
-                        current_func_ret_type_ != "void" && current_func_ret_type_ != "{}") {
-                        // Value was typed as void (e.g., block's last ExprStmt in a closure)
+                    if (type_str == "{}" || current_func_ret_type_ == "void") {
+                        // Unit return (type is "{}" or function declared as void) —
+                        // emit `ret void` since LLVM function signatures use void for Unit.
+                        emitln("    ret void");
+                    } else if (type_str == "void" && !current_func_ret_type_.empty() &&
+                               current_func_ret_type_ != "void") {
+                        // Value was typed as void (null type → mir_type_to_llvm returns "void")
                         // but the function return type is non-void. Use the function's
                         // return type instead — the value register holds the correct data.
                         emitln("    ret " + current_func_ret_type_ + " " + val);
-                    } else if (type_str == "void") {
-                        // Unit type return — emit `ret void` without a value operand
-                        emitln("    ret void");
                     } else if (type_str.empty()) {
                         // Type info was lost; fall back to i32
                         type_str = "i32";
                         emitln("    ret " + type_str + " " + val);
-                    } else if (type_str == "{}") {
-                        // Unit stored as empty struct — emit `ret void` since the
-                        // function signature uses void for Unit return type
-                        emitln("    ret void");
                     } else {
                         emitln("    ret " + type_str + " " + val);
                     }

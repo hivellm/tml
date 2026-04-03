@@ -579,6 +579,10 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
     }
 
     std::string ret_type = mir_type_to_llvm(func.return_type);
+    // Unit maps to "{}" but LLVM function return types must use "void"
+    if (ret_type == "{}") {
+        ret_type = "void";
+    }
     // Rename `main` based on entry mode:
     // - generate_exe_main: rename to tml_main (C entry wrapper calls it)
     // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
@@ -598,10 +602,6 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
         const auto& param_name = func.params[i].name;
-        // Unit type maps to "void" but LLVM doesn't allow void as a parameter type.
-        if (param_type == "void") {
-            param_type = "{}";
-        }
         // Win64 ABI: aggregate types must be passed by pointer, not by value.
         // This matches the call site which spills structs to alloca and passes ptr.
         if (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
@@ -636,7 +636,7 @@ void MirCodegen::emit_main_wrapper(const mir::Module& module) {
 
     // Determine if user's main returns void or i32.
     std::string main_ret = mir_type_to_llvm(main_func->return_type);
-    bool returns_void = (main_ret == "void");
+    bool returns_void = (main_ret == "void" || main_ret == "{}");
 
     emitln("; C entry point — calls tml_main() generated from user's `main` function");
     emitln("define dso_local i32 @main(i32 %argc, ptr %argv) noinline {");
@@ -702,7 +702,7 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
         // Call each @test function sequentially
         for (const auto* tf : test_funcs) {
             std::string ret_type = mir_type_to_llvm(tf->return_type);
-            if (ret_type == "void") {
+            if (ret_type == "void" || ret_type == "{}") {
                 emitln("  call void @" + quote_func_name(tf->name) + "()");
             } else {
                 emitln("  call " + ret_type + " @" + quote_func_name(tf->name) + "()");
@@ -711,7 +711,7 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
     } else if (main_func) {
         // Fallback: call main renamed to tml_main
         std::string main_ret = mir_type_to_llvm(main_func->return_type);
-        if (main_ret == "void") {
+        if (main_ret == "void" || main_ret == "{}") {
             emitln("  call void @tml_main()");
         } else {
             emitln("  call i32 @tml_main()");
@@ -1260,6 +1260,11 @@ void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
 void MirCodegen::emit_function(const mir::Function& func) {
     current_func_ = func.name;
     current_func_ret_type_ = func.return_type ? mir_type_to_llvm(func.return_type) : "void";
+    // Unit type now maps to "{}" in mir_type_to_llvm, but LLVM function signatures
+    // must use "void" for Unit-returning functions (LLVM doesn't allow `define {} @f()`).
+    if (current_func_ret_type_ == "{}") {
+        current_func_ret_type_ = "void";
+    }
     value_regs_.clear();
     cg_values_.clear();
     block_labels_.clear();
@@ -1373,6 +1378,10 @@ void MirCodegen::emit_function(const mir::Function& func) {
     }
 
     std::string ret_type = mir_type_to_llvm(func.return_type);
+    // Unit maps to "{}" but LLVM function return types must use "void"
+    if (ret_type == "{}") {
+        ret_type = "void";
+    }
     // Rename `main` based on entry mode:
     // - generate_exe_main: rename to tml_main (C entry wrapper calls it)
     // - test_entry_name: rename to e.g. tml_test_0 (dispatcher calls it)
@@ -1390,11 +1399,6 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
         std::string param_type = mir_type_to_llvm(func.params[i].type);
         const auto& param_name = func.params[i].name;
-        // Unit type maps to "void" but LLVM doesn't allow void as a parameter type.
-        // Use "{}" (empty struct, zero-sized) as the data representation.
-        if (param_type == "void") {
-            param_type = "{}";
-        }
         // On Win64 ABI, aggregate types (structs, enums, classes, unions) that are
         // larger than 8 bytes MUST be passed by pointer, not by value. The call site
         // already spills struct values to alloca and passes ptr (see instructions_call.cpp
