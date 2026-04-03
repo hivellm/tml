@@ -630,12 +630,13 @@ void MirCodegen::emit_function_declaration(const mir::Function& func) {
         if (param_type == "void") {
             param_type = "{}";
         }
-        // Method 'this'/'self' parameters for struct/enum types → ptr
-        if ((param_name == "this" || param_name == "self") &&
-            (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
-             param_type.starts_with("%class.") || param_type.starts_with("%union."))) {
+        // Win64 ABI: aggregate types must be passed by pointer, not by value.
+        // This matches the call site which spills structs to alloca and passes ptr.
+        if (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
+            param_type.starts_with("%class.") || param_type.starts_with("%union.")) {
             param_type = "ptr";
         }
+        (void)param_name; // Used only in define path, silence warning for declare path
         if (func.uses_sret && i == 0 && func.original_return_type) {
             std::string orig_ret_type = mir_type_to_llvm(func.original_return_type);
             emit(param_type + " sret(" + orig_ret_type + ")");
@@ -1421,12 +1422,15 @@ void MirCodegen::emit_function(const mir::Function& func) {
         if (param_type == "void") {
             param_type = "{}";
         }
-        // Method 'this'/'self' parameters for struct/enum types must be passed
-        // as ptr (pointer), not by value. The function body uses GEP instructions
-        // that expect a pointer base, so the parameter type must match.
-        if ((param_name == "this" || param_name == "self") &&
-            (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
-             param_type.starts_with("%class.") || param_type.starts_with("%union."))) {
+        // On Win64 ABI, aggregate types (structs, enums, classes, unions) that are
+        // larger than 8 bytes MUST be passed by pointer, not by value. The call site
+        // already spills struct values to alloca and passes ptr (see instructions_call.cpp
+        // lines ~1011-1017). The function definition must match by declaring ptr params.
+        // This applies to ALL struct params, not just 'this'/'self'.
+        // emit_extract_value_inst already handles value_types_[id]=="ptr" by using
+        // GEP+load instead of extractvalue, so field access works correctly.
+        if (param_type.starts_with("%struct.") || param_type.starts_with("%enum.") ||
+            param_type.starts_with("%class.") || param_type.starts_with("%union.")) {
             param_type = "ptr";
             // Update value_types_ so instructions correctly see this as ptr
             value_types_[func.params[i].value_id] = "ptr";

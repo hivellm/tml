@@ -986,37 +986,20 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         }
 
         if (!did_array_to_slice) {
-            // If the actual argument is a struct value but the function expects ptr,
-            // spill to memory. This happens for method calls where the receiver is
-            // passed by value but the method signature has `this: ref This`.
-            bool is_struct_value = actual_type.find("%struct.") == 0;
-            bool expects_ptr = false;
-            if (declared_param_types && j < declared_param_types->size()) {
-                auto& param_type = (*declared_param_types)[j];
-                if (param_type) {
-                    // MirPointerType: typed pointer (make_pointer_type)
-                    // MirPrimitiveType{Ptr}: raw opaque pointer (make_ptr_type)
-                    expects_ptr = std::holds_alternative<mir::MirPointerType>(param_type->kind);
-                    if (!expects_ptr) {
-                        if (auto* prim = std::get_if<mir::MirPrimitiveType>(&param_type->kind)) {
-                            expects_ptr = (prim->kind == mir::PrimitiveType::Ptr);
-                        }
-                    }
-                }
-            }
-            if (!expects_ptr) {
-                expects_ptr = declared_type == "ptr";
-            }
+            // Win64 ABI: ALL aggregate-typed arguments (structs, enums, classes, unions)
+            // must be spilled to memory and passed by pointer. Function definitions
+            // declare these params as `ptr`, so the call site must match.
+            bool is_aggregate_value =
+                actual_type.find("%struct.") == 0 || actual_type.find("%enum.") == 0 ||
+                actual_type.find("%class.") == 0 || actual_type.find("%union.") == 0;
 
-            if (is_struct_value && expects_ptr) {
-                // Spill struct value to memory so we can pass a pointer
+            if (is_aggregate_value) {
+                // Spill aggregate value to memory so we can pass a pointer
                 std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
                 emitln("    " + spill_ptr + " = alloca " + actual_type);
                 emitln("    store " + actual_type + " " + arg + ", ptr " + spill_ptr);
                 arg = spill_ptr;
                 arg_type = "ptr";
-            } else if (is_struct_value) {
-                arg_type = actual_type;
             } else if ((declared_type == "void" || declared_type == "i32") &&
                        !actual_type.empty() && actual_type != declared_type) {
                 arg_type = actual_type;
