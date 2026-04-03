@@ -1,0 +1,52 @@
+//! Middleware — request/response pipeline.
+//!
+//! Middleware processes requests before they reach the handler,
+//! and can modify the response after the handler returns.
+
+use core::str
+
+/// Middleware behavior — process request and optionally call next.
+pub behavior Middleware {
+    /// Process the request. Return a response string or empty to continue.
+    func handle(this, method: Str, path: Str, headers: Str, body: Str) -> Str
+}
+
+/// Logger middleware — logs method + path.
+pub type LoggerMiddleware {}
+
+impl LoggerMiddleware {
+    pub func new() -> LoggerMiddleware { return LoggerMiddleware {} }
+}
+
+impl Middleware for LoggerMiddleware {
+    pub func handle(this, method: Str, path: Str, headers: Str, body: Str) -> Str {
+        // In a real impl this would log to console/file
+        // Return "" to continue to next middleware/handler
+        return ""
+    }
+}
+
+/// CORS middleware — adds Access-Control-Allow-Origin header.
+pub type CorsMiddleware {
+    origin: Str
+}
+
+impl CorsMiddleware {
+    /// Create CORS middleware with a specific allowed origin.
+    pub func new(origin: Str) -> CorsMiddleware {
+        return CorsMiddleware { origin: origin }
+    }
+
+    /// Create CORS middleware allowing all origins.
+    pub func allow_all() -> CorsMiddleware {
+        return CorsMiddleware { origin: "*" }
+    }
+
+    /// Returns the configured allowed origin.
+    pub func allowed_origin(this) -> Str { return this.origin }
+}
+
+/// Returns CORS headers string for the given origin.
+pub func cors_headers(origin: Str) -> Str {
+    return "Access-Control-Allow-Origin: " + origin + "\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n"
+}

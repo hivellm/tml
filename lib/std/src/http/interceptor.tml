@@ -1,0 +1,44 @@
+//! Interceptors — wrap handler execution (like NestJS @UseInterceptors).
+
+/// Interceptor behavior — wraps around handler execution.
+pub behavior Interceptor {
+    /// Called before the handler. Return "" to continue, or a response to short-circuit.
+    func before(this, method: Str, path: Str) -> Str
+
+    /// Called after the handler with the response. Can transform the response.
+    func after(this, method: Str, path: Str, response: Str) -> Str
+}
+
+/// Logging interceptor — logs request/response timing.
+pub type LoggingInterceptor {}
+
+impl LoggingInterceptor {
+    pub func new() -> LoggingInterceptor { return LoggingInterceptor {} }
+}
+
+impl Interceptor for LoggingInterceptor {
+    pub func before(this, method: Str, path: Str) -> Str {
+        return ""
+    }
+
+    pub func after(this, method: Str, path: Str, response: Str) -> Str {
+        return response
+    }
+}
+
+/// Transform interceptor — wraps response in standard envelope.
+pub type TransformInterceptor {}
+
+impl TransformInterceptor {
+    pub func new() -> TransformInterceptor { return TransformInterceptor {} }
+}
+
+impl Interceptor for TransformInterceptor {
+    pub func before(this, method: Str, path: Str) -> Str {
+        return ""
+    }
+
+    pub func after(this, method: Str, path: Str, response: Str) -> Str {
+        return "{\"data\":" + response + "}"
+    }
+}

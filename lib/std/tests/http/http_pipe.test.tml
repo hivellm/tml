@@ -1,0 +1,42 @@
+// Tests for pipe — ParseBoolPipe and ParseIntPipe
+use test::{assert, assert_eq}
+use std::http::pipe::{ParseBoolPipe, ParseIntPipe, TrimPipe}
+
+@test
+func test_parse_bool_valid() -> I32 {
+    let p: ParseBoolPipe = ParseBoolPipe::new()
+    assert(p.transform("true").is_ok(), "true is ok")
+    assert(p.transform("false").is_ok(), "false is ok")
+    assert(p.transform("1").is_ok(), "1 is ok")
+    assert(p.transform("0").is_ok(), "0 is ok")
+    return 0
+}
+
+@test
+func test_parse_bool_invalid() -> I32 {
+    let p: ParseBoolPipe = ParseBoolPipe::new()
+    assert(p.transform("yes").is_err(), "yes is invalid")
+    assert(p.transform("maybe").is_err(), "maybe is invalid")
+    return 0
+}
+
+@test
+func test_parse_int_empty() -> I32 {
+    let p: ParseIntPipe = ParseIntPipe::new()
+    assert(p.transform("").is_err(), "empty string is invalid")
+    return 0
+}
+
+@test
+func test_parse_int_valid() -> I32 {
+    let p: ParseIntPipe = ParseIntPipe::new()
+    assert(p.transform("42").is_ok(), "numeric string is ok")
+    return 0
+}
+
+@test
+func test_trim_pipe() -> I32 {
+    let p: TrimPipe = TrimPipe::new()
+    assert(p.transform("hello").is_ok(), "trim pipe passes value through")
+    return 0
+}

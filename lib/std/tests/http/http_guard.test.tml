@@ -1,0 +1,38 @@
+// Tests for guard — auth and roles guards
+use test::{assert, assert_eq}
+use std::http::guard::{AuthGuard, RolesGuard}
+
+@test
+func test_auth_guard_allows() -> I32 {
+    let g: AuthGuard = AuthGuard::new()
+    assert(g.can_activate("GET", "/api", "Authorization: Bearer token123"), "allows with auth header")
+    return 0
+}
+
+@test
+func test_auth_guard_blocks() -> I32 {
+    let g: AuthGuard = AuthGuard::new()
+    assert(not g.can_activate("GET", "/api", "Content-Type: text/plain"), "blocks without auth header")
+    return 0
+}
+
+@test
+func test_roles_guard_allows() -> I32 {
+    let g: RolesGuard = RolesGuard::new("admin")
+    assert(g.can_activate("GET", "/admin", "X-Role: admin"), "allows admin role")
+    return 0
+}
+
+@test
+func test_roles_guard_blocks() -> I32 {
+    let g: RolesGuard = RolesGuard::new("admin")
+    assert(not g.can_activate("GET", "/admin", "X-Role: user"), "blocks wrong role")
+    return 0
+}
+
+@test
+func test_roles_guard_required() -> I32 {
+    let g: RolesGuard = RolesGuard::new("moderator")
+    assert_eq(g.required(), "moderator", "required role")
+    return 0
+}

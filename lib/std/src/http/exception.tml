@@ -1,0 +1,48 @@
+//! HTTP exceptions and exception filters (like NestJS @Catch).
+
+use core::fmt::helpers::i64_to_str
+
+/// An HTTP exception with status code and message.
+pub type HttpException {
+    status_code: I32,
+    message: Str
+}
+
+impl HttpException {
+    pub func new(status: I32, msg: Str) -> HttpException {
+        return HttpException { status_code: status, message: msg }
+    }
+
+    pub func bad_request(msg: Str) -> HttpException { return HttpException::new(400, msg) }
+    pub func unauthorized(msg: Str) -> HttpException { return HttpException::new(401, msg) }
+    pub func forbidden(msg: Str) -> HttpException { return HttpException::new(403, msg) }
+    pub func not_found(msg: Str) -> HttpException { return HttpException::new(404, msg) }
+    pub func internal(msg: Str) -> HttpException { return HttpException::new(500, msg) }
+
+    pub func status(this) -> I32 { return this.status_code }
+    pub func message(this) -> Str { return this.message }
+
+    /// Converts to JSON error response string.
+    pub func to_json(this) -> Str {
+        let code_str: Str = i64_to_str(this.status_code as I64)
+        return "{\"statusCode\":" + code_str + ",\"message\":\"" + this.message + "\"}"
+    }
+}
+
+/// Exception filter behavior — catches and formats exceptions.
+pub behavior ExceptionFilter {
+    func catch_exception(this, ex: HttpException) -> Str
+}
+
+/// Default exception filter — returns JSON error response.
+pub type DefaultExceptionFilter {}
+
+impl DefaultExceptionFilter {
+    pub func new() -> DefaultExceptionFilter { return DefaultExceptionFilter {} }
+}
+
+impl ExceptionFilter for DefaultExceptionFilter {
+    pub func catch_exception(this, ex: HttpException) -> Str {
+        return ex.to_json()
+    }
+}

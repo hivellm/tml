@@ -1,0 +1,37 @@
+// Tests for interceptor — TransformInterceptor and LoggingInterceptor
+use test::{assert, assert_eq}
+use core::str
+use std::http::interceptor::{TransformInterceptor, LoggingInterceptor}
+
+@test
+func test_transform_wraps_in_envelope() -> I32 {
+    let i: TransformInterceptor = TransformInterceptor::new()
+    let result: Str = i.after("GET", "/api", "{\"id\":1}")
+    assert(str::contains(result, "data"), "wraps in data envelope")
+    return 0
+}
+
+@test
+func test_transform_preserves_original() -> I32 {
+    let i: TransformInterceptor = TransformInterceptor::new()
+    let result: Str = i.after("GET", "/api", "{\"id\":1}")
+    assert(str::contains(result, "{\"id\":1}"), "preserves original response")
+    return 0
+}
+
+@test
+func test_logging_before_passthrough() -> I32 {
+    let i: LoggingInterceptor = LoggingInterceptor::new()
+    let result: Str = i.before("GET", "/api")
+    assert_eq(result, "", "before returns empty to continue")
+    return 0
+}
+
+@test
+func test_logging_after_passthrough() -> I32 {
+    let i: LoggingInterceptor = LoggingInterceptor::new()
+    let response: Str = "{\"ok\":true}"
+    let result: Str = i.after("GET", "/api", response)
+    assert_eq(result, "{\"ok\":true}", "after passes response unchanged")
+    return 0
+}

@@ -1,0 +1,41 @@
+// Tests for middleware — CORS middleware and cors_headers function
+use test::{assert, assert_eq}
+use core::str
+use std::http::middleware::{CorsMiddleware, cors_headers}
+
+@test
+func test_cors_middleware_origin() -> I32 {
+    let cors: CorsMiddleware = CorsMiddleware::new("https://example.com")
+    assert_eq(cors.allowed_origin(), "https://example.com", "origin matches")
+    return 0
+}
+
+@test
+func test_cors_allow_all() -> I32 {
+    let cors: CorsMiddleware = CorsMiddleware::allow_all()
+    assert_eq(cors.allowed_origin(), "*", "wildcard origin")
+    return 0
+}
+
+@test
+func test_cors_headers_origin() -> I32 {
+    let h: Str = cors_headers("*")
+    assert(str::contains(h, "Access-Control-Allow-Origin: *"), "has origin header")
+    return 0
+}
+
+@test
+func test_cors_headers_methods() -> I32 {
+    let h: Str = cors_headers("https://example.com")
+    assert(str::contains(h, "GET"), "has GET method")
+    assert(str::contains(h, "POST"), "has POST method")
+    return 0
+}
+
+@test
+func test_cors_headers_allow_headers() -> I32 {
+    let h: Str = cors_headers("*")
+    assert(str::contains(h, "Authorization"), "has Authorization in allowed headers")
+    assert(str::contains(h, "Content-Type"), "has Content-Type in allowed headers")
+    return 0
+}

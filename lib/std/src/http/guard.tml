@@ -1,0 +1,43 @@
+//! Guards — route access control (like NestJS @UseGuards).
+
+use core::str
+
+/// Guard behavior — decides if a request can proceed.
+pub behavior Guard {
+    /// Returns true if the request is allowed, false to block (403).
+    func can_activate(this, method: Str, path: Str, headers: Str) -> Bool
+}
+
+/// Auth guard — checks for Authorization header with Bearer token.
+pub type AuthGuard {}
+
+impl AuthGuard {
+    pub func new() -> AuthGuard { return AuthGuard {} }
+}
+
+impl Guard for AuthGuard {
+    pub func can_activate(this, method: Str, path: Str, headers: Str) -> Bool {
+        return str::contains(headers, "Authorization")
+    }
+}
+
+/// Roles guard — checks if user has required role.
+pub type RolesGuard {
+    required_role: Str
+}
+
+impl RolesGuard {
+    pub func new(role: Str) -> RolesGuard {
+        return RolesGuard { required_role: role }
+    }
+
+    /// Returns the required role string.
+    pub func required(this) -> Str { return this.required_role }
+}
+
+impl Guard for RolesGuard {
+    pub func can_activate(this, method: Str, path: Str, headers: Str) -> Bool {
+        let role_header: Str = "X-Role: " + this.required_role
+        return str::contains(headers, role_header)
+    }
+}

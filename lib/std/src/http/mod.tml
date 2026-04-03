@@ -104,3 +104,11 @@ pub use std::http::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
 pub use std::http::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}
 pub use std::http::controller::{Controller, ControllerInfo, register_controller, register_controllers, register_all}
 pub use std::http::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage, ws_accept_key, ws_upgrade_response, ws_validate_upgrade, ws_encode_frame, ws_decode_frame, ws_assemble_message, ws_close_frame, ws_apply_mask, ws_mask, ws_unmask}
+
+// ── NestJS-style Framework Primitives ────────────────────────
+pub mod json_response
+pub mod middleware
+pub mod guard
+pub mod pipe
+pub mod exception
+pub mod interceptor

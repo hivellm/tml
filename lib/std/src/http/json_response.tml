@@ -1,0 +1,117 @@
+//! Structured JSON HTTP response type.
+//!
+//! ```tml
+//! use std::http::json_response::JsonResponse
+//!
+//! let ok = JsonResponse::ok("{\"status\":\"ok\"}")
+//! let created = JsonResponse::created("{\"id\":1}")
+//! let not_found = JsonResponse::not_found("User not found")
+//! let err = JsonResponse::bad_request("Invalid input")
+//! ```
+
+use core::str
+use core::fmt::helpers::i64_to_str
+
+/// A structured HTTP response with status, content type, and body.
+pub type JsonResponse {
+    status_code: I32,
+    content_type: Str,
+    body: Str,
+    extra_headers: Str
+}
+
+impl JsonResponse {
+    /// 200 OK with JSON body.
+    pub func ok(body: Str) -> JsonResponse {
+        return JsonResponse { status_code: 200, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 201 Created with JSON body.
+    pub func created(body: Str) -> JsonResponse {
+        return JsonResponse { status_code: 201, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 204 No Content.
+    pub func no_content() -> JsonResponse {
+        return JsonResponse { status_code: 204, content_type: "", body: "", extra_headers: "" }
+    }
+
+    /// 400 Bad Request.
+    pub func bad_request(msg: Str) -> JsonResponse {
+        let body: Str = "{\"error\":\"" + msg + "\"}"
+        return JsonResponse { status_code: 400, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 401 Unauthorized.
+    pub func unauthorized(msg: Str) -> JsonResponse {
+        let body: Str = "{\"error\":\"" + msg + "\"}"
+        return JsonResponse { status_code: 401, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 403 Forbidden.
+    pub func forbidden(msg: Str) -> JsonResponse {
+        let body: Str = "{\"error\":\"" + msg + "\"}"
+        return JsonResponse { status_code: 403, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 404 Not Found.
+    pub func not_found(msg: Str) -> JsonResponse {
+        let body: Str = "{\"error\":\"" + msg + "\"}"
+        return JsonResponse { status_code: 404, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// 500 Internal Server Error.
+    pub func internal_error(msg: Str) -> JsonResponse {
+        let body: Str = "{\"error\":\"" + msg + "\"}"
+        return JsonResponse { status_code: 500, content_type: "application/json", body: body, extra_headers: "" }
+    }
+
+    /// Add a custom header.
+    pub func with_header(this, name: Str, value: Str) -> JsonResponse {
+        let header: Str = name + ": " + value + "\r\n"
+        return JsonResponse {
+            status_code: this.status_code,
+            content_type: this.content_type,
+            body: this.body,
+            extra_headers: this.extra_headers + header
+        }
+    }
+
+    /// Build the full HTTP response string.
+    pub func to_http(this) -> Str {
+        let code: I32 = this.status_code
+        let status_text: Str = json_response_status_to_text(code)
+        let code_str: Str = i64_to_str(code as I64)
+        var response: Str = "HTTP/1.1 " + code_str + " " + status_text + "\r\n"
+        if str::len(this.content_type) > 0 {
+            response = response + "Content-Type: " + this.content_type + "\r\n"
+        }
+        let body_len: I64 = str::len(this.body)
+        let len_str: Str = i64_to_str(body_len)
+        response = response + "Content-Length: " + len_str + "\r\n"
+        if str::len(this.extra_headers) > 0 {
+            response = response + this.extra_headers
+        }
+        response = response + "\r\n" + this.body
+        return response
+    }
+
+    /// Returns the status code.
+    pub func status(this) -> I32 { return this.status_code }
+
+    /// Returns the body content.
+    pub func content(this) -> Str { return this.body }
+}
+
+/// Maps status code to reason phrase.
+func json_response_status_to_text(code: I32) -> Str {
+    if code == 200 { return "OK" }
+    if code == 201 { return "Created" }
+    if code == 204 { return "No Content" }
+    if code == 400 { return "Bad Request" }
+    if code == 401 { return "Unauthorized" }
+    if code == 403 { return "Forbidden" }
+    if code == 404 { return "Not Found" }
+    if code == 500 { return "Internal Server Error" }
+    return "Unknown"
+}

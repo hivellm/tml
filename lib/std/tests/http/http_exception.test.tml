@@ -1,0 +1,43 @@
+// Tests for exception — HttpException and DefaultExceptionFilter
+use test::{assert, assert_eq}
+use core::str
+use std::http::exception::{HttpException, DefaultExceptionFilter}
+
+@test
+func test_exception_status() -> I32 {
+    let ex: HttpException = HttpException::bad_request("Invalid email")
+    assert_eq(ex.status(), 400, "status 400")
+    return 0
+}
+
+@test
+func test_exception_message() -> I32 {
+    let ex: HttpException = HttpException::bad_request("Invalid email")
+    assert_eq(ex.message(), "Invalid email", "message matches")
+    return 0
+}
+
+@test
+func test_exception_json_status() -> I32 {
+    let ex: HttpException = HttpException::not_found("User not found")
+    let json: Str = ex.to_json()
+    assert(str::contains(json, "404"), "json has status code")
+    return 0
+}
+
+@test
+func test_exception_json_message() -> I32 {
+    let ex: HttpException = HttpException::not_found("User not found")
+    let json: Str = ex.to_json()
+    assert(str::contains(json, "User not found"), "json has message")
+    return 0
+}
+
+@test
+func test_default_filter() -> I32 {
+    let f: DefaultExceptionFilter = DefaultExceptionFilter::new()
+    let ex: HttpException = HttpException::internal("Server error")
+    let result: Str = f.catch_exception(ex)
+    assert(str::contains(result, "500"), "filter result has status 500")
+    return 0
+}

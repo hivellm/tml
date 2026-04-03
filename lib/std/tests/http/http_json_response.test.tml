@@ -1,0 +1,60 @@
+// Tests for json_response — structured JSON HTTP response type
+use test::{assert, assert_eq}
+use core::str
+use std::http::json_response::JsonResponse
+
+@test
+func test_ok() -> I32 {
+    let r: JsonResponse = JsonResponse::ok("{\"status\":\"ok\"}")
+    assert_eq(r.status(), 200, "status 200")
+    assert(str::contains(r.content(), "status"), "has body")
+    return 0
+}
+
+@test
+func test_created() -> I32 {
+    let r: JsonResponse = JsonResponse::created("{\"id\":1}")
+    assert_eq(r.status(), 201, "status 201")
+    return 0
+}
+
+@test
+func test_not_found() -> I32 {
+    let r: JsonResponse = JsonResponse::not_found("User not found")
+    assert_eq(r.status(), 404, "status 404")
+    assert(str::contains(r.content(), "error"), "has error key")
+    return 0
+}
+
+@test
+func test_to_http() -> I32 {
+    let r: JsonResponse = JsonResponse::ok("{}")
+    let http: Str = r.to_http()
+    assert(str::contains(http, "HTTP/1.1 200 OK"), "has status line")
+    assert(str::contains(http, "application/json"), "has content type")
+    assert(str::contains(http, "Content-Length:"), "has content length")
+    return 0
+}
+
+@test
+func test_with_header() -> I32 {
+    let r: JsonResponse = JsonResponse::ok("{}").with_header("X-Custom", "value")
+    let http: Str = r.to_http()
+    assert(str::contains(http, "X-Custom: value"), "has custom header")
+    return 0
+}
+
+@test
+func test_bad_request() -> I32 {
+    let r: JsonResponse = JsonResponse::bad_request("Invalid input")
+    assert_eq(r.status(), 400, "status 400")
+    assert(str::contains(r.content(), "Invalid input"), "has message")
+    return 0
+}
+
+@test
+func test_no_content() -> I32 {
+    let r: JsonResponse = JsonResponse::no_content()
+    assert_eq(r.status(), 204, "status 204")
+    return 0
+}

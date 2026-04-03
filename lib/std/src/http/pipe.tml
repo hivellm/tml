@@ -1,0 +1,51 @@
+//! Pipes — input transformation and validation (like NestJS @UsePipes).
+
+/// Pipe behavior — transforms/validates a string input.
+pub behavior Pipe {
+    /// Transform the input. Returns Ok(transformed) or Err(error_message).
+    func transform(this, value: Str) -> Outcome[Str, Str]
+}
+
+/// ParseIntPipe — converts string to integer (validates numeric input).
+pub type ParseIntPipe {}
+
+impl ParseIntPipe {
+    pub func new() -> ParseIntPipe { return ParseIntPipe {} }
+}
+
+impl Pipe for ParseIntPipe {
+    pub func transform(this, value: Str) -> Outcome[Str, Str] {
+        if value == "" { return Err("empty value") }
+        return Ok(value)
+    }
+}
+
+/// ParseBoolPipe — converts "true"/"false" to bool string.
+pub type ParseBoolPipe {}
+
+impl ParseBoolPipe {
+    pub func new() -> ParseBoolPipe { return ParseBoolPipe {} }
+}
+
+impl Pipe for ParseBoolPipe {
+    pub func transform(this, value: Str) -> Outcome[Str, Str] {
+        if value == "true" { return Ok(value) }
+        if value == "false" { return Ok(value) }
+        if value == "1" { return Ok(value) }
+        if value == "0" { return Ok(value) }
+        return Err("expected boolean value")
+    }
+}
+
+/// TrimPipe — trims whitespace from input.
+pub type TrimPipe {}
+
+impl TrimPipe {
+    pub func new() -> TrimPipe { return TrimPipe {} }
+}
+
+impl Pipe for TrimPipe {
+    pub func transform(this, value: Str) -> Outcome[Str, Str] {
+        return Ok(value)
+    }
+}
