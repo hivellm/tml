@@ -527,14 +527,23 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
         }
     }
 
-    // Run MIR validation pass (debug diagnostics — warns on null types, missing terminators)
+    // Run MIR validation pass — abort on null types (like Rust ICE).
+    // A null type in MIR means the MIR builder has a bug. Silently falling back
+    // to i32 masks the bug and produces wrong code. Abort immediately.
     {
         auto vr = mir::validate_module(mir_module);
         if (!vr.is_clean()) {
-            TML_DEBUG_LN("[MIR] Validation: " << vr.null_type_count << " null type(s), "
-                                              << vr.missing_terminator_count
-                                              << " missing terminator(s), " << vr.empty_block_count
-                                              << " empty block(s)");
+            for (const auto& w : vr.warnings) {
+                TML_LOG_ERROR("mir", w);
+            }
+            TML_LOG_ERROR("mir", "[ICE] MIR validation failed for '"
+                                     << mk.module_name << "': " << vr.null_type_count
+                                     << " null type(s), " << vr.missing_terminator_count
+                                     << " missing terminator(s), " << vr.empty_block_count
+                                     << " empty block(s). "
+                                     << "This is a compiler bug — please report it.");
+            result.success = false;
+            return result;
         }
     }
 
