@@ -1,0 +1,93 @@
+//! Module — CMMV-style flat composition with pointer-based service wiring.
+//!
+//! A Module groups providers (services) and controllers (route handlers).
+//! Uses string-based storage to avoid List[T] codegen overhead.
+//!
+//! ```tml
+//! use std::di::module::Module
+//!
+//! var m = Module::new("app")
+//!     .provide("db", 999)
+//!     .controller("/users", 42)
+//! ```
+
+use std::di::registry::ServiceRegistry
+
+/// A module that groups providers and controllers.
+pub type Module {
+    name: Str,
+    registry: ServiceRegistry,
+    ctrl_prefixes: Str,
+    ctrl_ptrs: Str,
+    ctrl_count: I32
+}
+
+impl Module {
+    /// Creates a new empty module with the given name.
+    pub func new(name: Str) -> Module {
+        return Module {
+            name: name,
+            registry: ServiceRegistry::new(),
+            ctrl_prefixes: "",
+            ctrl_ptrs: "",
+            ctrl_count: 0
+        }
+    }
+
+    /// Registers a service pointer in the module's registry.
+    pub func provide(this, token: Str, ptr: I64) -> Module {
+        this.registry.provide(token, ptr)
+        return Module {
+            name: this.name,
+            registry: this.registry,
+            ctrl_prefixes: this.ctrl_prefixes,
+            ctrl_ptrs: this.ctrl_ptrs,
+            ctrl_count: this.ctrl_count
+        }
+    }
+
+    /// Registers a controller with its route prefix.
+    pub func controller(this, prefix: Str, ptr: I64) -> Module {
+        if this.ctrl_count == 0 {
+            return Module {
+                name: this.name,
+                registry: this.registry,
+                ctrl_prefixes: prefix,
+                ctrl_ptrs: ptr.to_string(),
+                ctrl_count: 1
+            }
+        }
+        return Module {
+            name: this.name,
+            registry: this.registry,
+            ctrl_prefixes: this.ctrl_prefixes + ";" + prefix,
+            ctrl_ptrs: this.ctrl_ptrs + ";" + ptr.to_string(),
+            ctrl_count: this.ctrl_count + 1
+        }
+    }
+
+    /// Imports another module (placeholder — full merge requires HashMap iteration).
+    pub func import_module(this, other_name: Str) -> Module {
+        return Module {
+            name: this.name,
+            registry: this.registry,
+            ctrl_prefixes: this.ctrl_prefixes,
+            ctrl_ptrs: this.ctrl_ptrs,
+            ctrl_count: this.ctrl_count
+        }
+    }
+
+    /// Resolves a service from this module's registry.
+    pub func resolve(this, token: Str) -> Maybe[I64] {
+        return this.registry.resolve(token)
+    }
+
+    /// Returns the module name.
+    pub func module_name(this) -> Str { return this.name }
+
+    /// Returns the number of registered services.
+    pub func service_count(this) -> I64 { return this.registry.len() }
+
+    /// Returns the number of registered controllers.
+    pub func controller_count(this) -> I32 { return this.ctrl_count }
+}

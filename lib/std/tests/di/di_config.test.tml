@@ -1,0 +1,93 @@
+// Tests for std::di::config::InjectedConfig
+use test::{assert, assert_eq}
+use std::di::config::InjectedConfig as InjectedConfig
+
+@test
+func test_config_empty() -> I32 {
+    let c = InjectedConfig::new()
+    assert_eq(c.len(), 0, "empty config len")
+    assert(c.is_empty(), "empty config is_empty")
+    assert(not c.has("port"), "empty config has nothing")
+    return 0
+}
+
+@test
+func test_config_set_get() -> I32 {
+    var c = InjectedConfig::new()
+    c.set("host", "localhost")
+    c.set("port", "3000")
+    assert_eq(c.len(), 2, "two entries")
+    assert_eq(c.get("host"), "localhost", "get host")
+    assert_eq(c.get("port"), "3000", "get port")
+    return 0
+}
+
+@test
+func test_config_get_missing() -> I32 {
+    let c = InjectedConfig::new()
+    assert_eq(c.get("missing"), "", "missing returns empty string")
+    return 0
+}
+
+@test
+func test_config_get_or() -> I32 {
+    var c = InjectedConfig::new()
+    c.set("host", "localhost")
+    assert_eq(c.get_or("host", "default"), "localhost", "get_or returns value")
+    assert_eq(c.get_or("missing", "fallback"), "fallback", "get_or returns default")
+    return 0
+}
+
+@test
+func test_config_get_i64_or_present() -> I32 {
+    var c = InjectedConfig::new()
+    c.set("port", "8080")
+    // Use get_i64_or to avoid Maybe[I64] codegen bug
+    let val = c.get_i64_or("port", 0)
+    assert_eq(val, 8080, "get_i64_or parses correctly")
+    return 0
+}
+
+@test
+func test_config_get_i64_or_missing() -> I32 {
+    let c = InjectedConfig::new()
+    let val = c.get_i64_or("port", 9999)
+    assert_eq(val, 9999, "get_i64_or returns default for missing key")
+    return 0
+}
+
+@test
+func test_config_get_bool_true() -> I32 {
+    var c = InjectedConfig::new()
+    c.set("debug", "true")
+    var found: Bool = false
+    var val: Bool = false
+    when c.get_bool("debug") {
+        Just(b) => {
+            found = true
+            val = b
+        },
+        Nothing => {},
+    }
+    assert(found, "get_bool returns Just for 'true'")
+    assert(val, "get_bool parses 'true' correctly")
+    return 0
+}
+
+@test
+func test_config_get_bool_false() -> I32 {
+    var c = InjectedConfig::new()
+    c.set("verbose", "false")
+    var found: Bool = false
+    var val: Bool = true
+    when c.get_bool("verbose") {
+        Just(b) => {
+            found = true
+            val = b
+        },
+        Nothing => {},
+    }
+    assert(found, "get_bool returns Just for 'false'")
+    assert(not val, "get_bool parses 'false' correctly")
+    return 0
+}

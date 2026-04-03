@@ -1,0 +1,49 @@
+// Tests for std::di::application — AppConfig and bootstrap
+use test::{assert, assert_eq}
+use std::di::application::{AppConfig, ApplicationInfo, bootstrap, bootstrap_modules}
+use std::di::module::Module
+
+@test
+func test_app_config_defaults() -> I32 {
+    let c = AppConfig::new(3000)
+    assert_eq(c.port, 3000, "port is set")
+    assert_eq(c.cors, "*", "default cors is *")
+    return 0
+}
+
+@test
+func test_app_config_with_cors() -> I32 {
+    let c = AppConfig::new(8080).with_cors("https://example.com")
+    assert_eq(c.port, 8080, "port preserved")
+    assert_eq(c.cors, "https://example.com", "cors updated")
+    return 0
+}
+
+@test
+func test_bootstrap_basic() -> I32 {
+    let info = bootstrap(AppConfig::new(3000), 2)
+    assert_eq(info.module_count, 2, "two modules")
+    assert_eq(info.config.port, 3000, "port from config")
+    return 0
+}
+
+@test
+func test_application_info_summary() -> I32 {
+    let info = bootstrap(AppConfig::new(3000), 1)
+    let s = info.summary()
+    assert(s.contains("3000"), "summary contains port")
+    assert(s.contains("services"), "summary mentions services")
+    assert(s.contains("controllers"), "summary mentions controllers")
+    return 0
+}
+
+@test
+func test_bootstrap_modules() -> I32 {
+    var m = Module::new("app")
+    m = m.provide("svc1", 1).provide("svc2", 2).controller("/api", 10)
+    let info = bootstrap_modules(AppConfig::new(4000), m)
+    assert_eq(info.total_services, 2, "two services counted")
+    assert_eq(info.total_controllers, 1, "one controller counted")
+    assert_eq(info.module_count, 1, "one root module")
+    return 0
+}

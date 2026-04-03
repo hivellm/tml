@@ -1,0 +1,136 @@
+//! InjectedConfig provider — typed key-value configuration store for DI.
+//!
+//! Stores string configuration values keyed by string names.
+//! Supports typed accessors for common types (I64, Bool).
+//!
+//! ```tml
+//! use std::di::config::InjectedConfig
+//!
+//! var cfg = InjectedConfig::new()
+//! cfg.set("host", "localhost")
+//! cfg.set("port", "3000")
+//! let host = cfg.get("host")              // "localhost"
+//! let port = cfg.get_i64_or("port", 0)   // 8080
+//! ```
+
+// v3 — local strlen, inline parse_i64
+use std::collections::hashmap::HashMap
+
+@extern("strlen")
+func di_c_strlen(s: Str) -> I64
+
+/// A key-value configuration store.
+pub type InjectedConfig {
+    map: HashMap[Str, Str]
+}
+
+/// Private helper: parse a decimal string as I64.
+/// Returns (value, ok) — ok=true if parsing succeeded.
+/// Implemented inline to avoid cross-module Maybe[I64] ABI issues.
+func config_parse_i64(s: Str) -> I64 {
+    let s_len: I64 = di_c_strlen(s)
+    if s_len == 0 {
+        return 0
+    }
+    let src: I64 = s as I64
+    var i: I64 = 0
+    var negative: Bool = false
+    let first_p: *U8 = src as *U8
+    let first_b: U8 = lowlevel { ptr_read[U8](first_p) }
+    let first_ch: I32 = first_b as I32
+    if first_ch == 45 {   // '-'
+        negative = true
+        i = 1
+    } else if first_ch == 43 {  // '+'
+        i = 1
+    }
+    if i >= s_len {
+        return 0
+    }
+    var result: I64 = 0
+    loop (i < s_len) {
+        let p: *U8 = (src + i) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        let ch: I32 = b as I32
+        if ch < 48 or ch > 57 {
+            return 0
+        }
+        result = result * 10 + (ch - 48) as I64
+        i = i + 1
+    }
+    if negative {
+        result = 0 - result
+    }
+    return result
+}
+
+impl InjectedConfig {
+    /// Creates a new empty configuration store.
+    pub func new() -> InjectedConfig {
+        return InjectedConfig { map: HashMap::default() }
+    }
+
+    /// Sets a configuration value by key.
+    pub func set(this, key: Str, value: Str) {
+        this.map.set(key, value)
+    }
+
+    /// Returns the raw string value for the given key, or "" if not found.
+    pub func get(this, key: Str) -> Str {
+        if this.map.has(key) {
+            return this.map.get(key)
+        }
+        return ""
+    }
+
+    /// Returns the value for `key` or `default_val` if not found.
+    pub func get_or(this, key: Str, default_val: Str) -> Str {
+        if this.map.has(key) {
+            return this.map.get(key)
+        }
+        return default_val
+    }
+
+    /// Returns true if the configuration contains the given key.
+    pub func has(this, key: Str) -> Bool {
+        return this.map.has(key)
+    }
+
+    /// Returns the number of configuration entries.
+    pub func len(this) -> I64 {
+        return this.map.len()
+    }
+
+    /// Returns true if the configuration is empty.
+    pub func is_empty(this) -> Bool {
+        return this.map.is_empty()
+    }
+
+    /// Parses and returns the value as an I64, or `default_val` if missing or unparseable.
+    pub func get_i64_or(this, key: Str, default_val: I64) -> I64 {
+        if not this.map.has(key) {
+            return default_val
+        }
+        let s = this.map.get(key)
+        if s == "" {
+            return default_val
+        }
+        return config_parse_i64(s)
+    }
+
+    /// Parses and returns the value as a Bool, or Nothing if missing or unparseable.
+    /// Accepts "true"/"false" (case-sensitive).
+    pub func get_bool(this, key: Str) -> Maybe[Bool] {
+        if not this.map.has(key) {
+            return Nothing
+        }
+        let s = this.map.get(key)
+        if s == "true" {
+            return Just(true)
+        }
+        if s == "false" {
+            return Just(false)
+        }
+        return Nothing
+    }
+}

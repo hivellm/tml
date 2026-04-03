@@ -1,0 +1,58 @@
+// Tests for std::di::registry::ServiceRegistry
+use test::{assert, assert_eq}
+use std::di::registry::ServiceRegistry
+
+@test
+func test_empty_registry() -> I32 {
+    let reg = ServiceRegistry::new()
+    assert_eq(reg.len(), 0, "empty registry has len 0")
+    assert(reg.is_empty(), "empty registry is_empty")
+    assert(not reg.has("anything"), "empty registry has nothing")
+    return 0
+}
+
+@test
+func test_provide_and_resolve() -> I32 {
+    var reg = ServiceRegistry::new()
+    reg.provide("db", 12345)
+    assert(reg.has("db"), "has db after provide")
+    assert_eq(reg.len(), 1, "one service after provide")
+    let ptr = reg.resolve("db")
+    assert(ptr.is_just(), "resolve returns Just")
+    assert_eq(ptr.unwrap(), 12345, "resolved ptr matches")
+    return 0
+}
+
+@test
+func test_resolve_not_found() -> I32 {
+    var reg = ServiceRegistry::new()
+    reg.provide("a", 1)
+    let result = reg.resolve("b")
+    assert(result.is_nothing(), "resolve unknown token returns Nothing")
+    return 0
+}
+
+@test
+func test_multiple_services() -> I32 {
+    var reg = ServiceRegistry::new()
+    reg.provide("svc1", 100)
+    reg.provide("svc2", 200)
+    reg.provide("svc3", 300)
+    assert_eq(reg.len(), 3, "three services registered")
+    assert(reg.has("svc1"), "has svc1")
+    assert(reg.has("svc2"), "has svc2")
+    assert(reg.has("svc3"), "has svc3")
+    assert(not reg.has("svc4"), "does not have svc4")
+    return 0
+}
+
+@test
+func test_overwrite_service() -> I32 {
+    var reg = ServiceRegistry::new()
+    reg.provide("db", 111)
+    reg.provide("db", 222)
+    // HashMap set overwrites existing key
+    assert_eq(reg.len(), 1, "overwrite keeps count at 1")
+    assert_eq(reg.resolve("db").unwrap(), 222, "overwrite updates value")
+    return 0
+}

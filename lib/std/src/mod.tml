@@ -39,6 +39,7 @@
 //! | [`mime`] | MIME type parsing and extension lookup |
 //! | [`cli`] | CLI argument parsing framework |
 //! | [`http`] | HTTP router (radix tree), client, server |
+//! | [`di`] | Dependency Injection (service registry, modules, config) |
 
 pub mod traits
 pub mod oop
@@ -81,3 +82,4 @@ pub mod sqlite     // SQLite3 embedded database
 pub mod http       // HTTP router (radix tree), client, server
 pub mod ffi        // FFI types: CString (owned C string)
 pub mod debug      // Debug utilities for Reflect types (debug_print, debug_string)
+pub mod di         // Dependency Injection (pointer-based service registry, modules, config)

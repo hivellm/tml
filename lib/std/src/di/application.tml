@@ -1,0 +1,75 @@
+//! Application — CMMV-style bootstrap entry point.
+//!
+//! Collects modules, counts services and controllers, and returns
+//! an ApplicationInfo summary. Does NOT start a server — that
+//! requires the HTTP module.
+//!
+//! ```tml
+//! use std::di::application::{AppConfig, bootstrap}
+//! use std::di::module::Module
+//!
+//! let cfg = AppConfig::new(3000).with_cors("*")
+//! var m = Module::new("app").provide("db", 0)
+//! let info = bootstrap(cfg, 1)
+//! ```
+
+use std::di::module::Module
+
+/// Application configuration.
+pub type AppConfig {
+    port: I32,
+    cors: Str
+}
+
+impl AppConfig {
+    /// Creates a new AppConfig with the given port and default CORS ("*").
+    pub func new(port: I32) -> AppConfig {
+        return AppConfig { port: port, cors: "*" }
+    }
+
+    /// Returns a new AppConfig with the given CORS policy.
+    pub func with_cors(this, cors: Str) -> AppConfig {
+        return AppConfig { port: this.port, cors: cors }
+    }
+}
+
+/// Result of bootstrapping the application.
+pub type ApplicationInfo {
+    config: AppConfig,
+    total_services: I64,
+    total_controllers: I64,
+    module_count: I32
+}
+
+impl ApplicationInfo {
+    /// Returns a human-readable summary of the application.
+    pub func summary(this) -> Str {
+        return "Application: " + this.total_services.to_string() + " services, " + this.total_controllers.to_string() + " controllers, port " + this.config.port.to_string()
+    }
+}
+
+/// Bootstraps an application from a config and the number of root modules.
+///
+/// This records overall topology for inspection. Pass the total count of
+/// top-level modules you have wired. To compute service/controller totals
+/// from actual Module values, use `bootstrap_modules` instead.
+pub func bootstrap(config: AppConfig, modules_count: I32) -> ApplicationInfo {
+    return ApplicationInfo {
+        config: config,
+        total_services: 0,
+        total_controllers: 0,
+        module_count: modules_count
+    }
+}
+
+/// Bootstraps an application from a config and a list of root modules.
+///
+/// Sums up all services and controllers across all provided modules.
+pub func bootstrap_modules(config: AppConfig, modules: Module) -> ApplicationInfo {
+    return ApplicationInfo {
+        config: config,
+        total_services: modules.service_count(),
+        total_controllers: modules.controller_count(),
+        module_count: 1
+    }
+}

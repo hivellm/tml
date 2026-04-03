@@ -1,0 +1,36 @@
+// Tests for std::di::module::Module
+use test::{assert, assert_eq}
+use std::di::module::Module
+
+@test
+func test_module_creation() -> I32 {
+    let m = Module::new("test")
+    assert_eq(m.module_name(), "test", "module name")
+    return 0
+}
+
+@test
+func test_module_provide_and_resolve() -> I32 {
+    var m = Module::new("app").provide("db", 999)
+    assert(m.resolve("db").is_just(), "resolves")
+    assert_eq(m.resolve("db").unwrap(), 999, "correct ptr")
+    return 0
+}
+
+@test
+func test_module_controller() -> I32 {
+    var m = Module::new("app").controller("/users", 42)
+    assert_eq(m.controller_count(), 1, "one controller")
+    return 0
+}
+
+@test
+func test_module_chain() -> I32 {
+    var m = Module::new("app")
+        .provide("svc1", 1)
+        .provide("svc2", 2)
+        .controller("/api", 100)
+    assert_eq(m.controller_count(), 1, "one ctrl")
+    assert_eq(m.module_name(), "app", "name preserved")
+    return 0
+}

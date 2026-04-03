@@ -1,0 +1,54 @@
+//! Service Registry — singleton pointer store for DI.
+//!
+//! Stores service instances as raw pointers (I64) keyed by token string.
+//! Zero-copy, zero-overhead — just a HashMap[Str, I64].
+//!
+//! ```tml
+//! use std::di::registry::ServiceRegistry
+//!
+//! var reg = ServiceRegistry::new()
+//! reg.provide("my_service", 12345)
+//! let ptr = reg.resolve("my_service")
+//! ```
+
+use std::collections::hashmap::HashMap
+
+/// A flat registry mapping service tokens to raw pointers.
+pub type ServiceRegistry {
+    map: HashMap[Str, I64]
+}
+
+impl ServiceRegistry {
+    /// Creates an empty registry.
+    pub func new() -> ServiceRegistry {
+        return ServiceRegistry { map: HashMap::default() }
+    }
+
+    /// Registers a service pointer by token name.
+    pub func provide(this, token: Str, ptr: I64) {
+        this.map.set(token, ptr)
+    }
+
+    /// Resolves a service pointer by token. Returns Nothing if not found.
+    pub func resolve(this, token: Str) -> Maybe[I64] {
+        if this.map.has(token) {
+            return Just(this.map.get(token))
+        }
+        return Nothing
+    }
+
+    /// Returns true if a service with this token is registered.
+    pub func has(this, token: Str) -> Bool {
+        return this.map.has(token)
+    }
+
+    /// Returns the number of registered services.
+    pub func len(this) -> I64 {
+        return this.map.len()
+    }
+
+    /// Returns true if the registry has no registered services.
+    pub func is_empty(this) -> Bool {
+        return this.map.is_empty()
+    }
+}

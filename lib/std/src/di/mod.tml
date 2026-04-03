@@ -1,0 +1,19 @@
+//! Dependency Injection — pointer-based, zero-copy service wiring.
+//!
+//! Inspired by CMMV's DI system. Services are stored as raw pointers
+//! (I64) in a flat HashMap registry. Modules compose registries.
+//! Configuration is a typed key-value store.
+//!
+//! # Usage
+//!
+//! ```tml
+//! use std::di::registry::ServiceRegistry
+//! use std::di::module::Module
+//! use std::di::application::{AppConfig, bootstrap, bootstrap_modules}
+//! use std::di::config::InjectedConfig
+//! ```
+
+pub mod registry
+pub mod module
+pub mod application
+pub mod config
