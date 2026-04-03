@@ -98,6 +98,18 @@ static auto primitive_size(mir::PrimitiveType kind) -> size_t {
 }
 
 // ============================================================================
+// LLVM Type String Classification (transitional)
+// ============================================================================
+
+bool is_aggregate_llvm_type(const std::string& llvm_type) {
+    // Check all aggregate type prefixes used in TML's LLVM IR generation.
+    // These correspond to named struct types emitted by emit_struct_def / emit_enum_def.
+    return llvm_type.starts_with("%struct.") || llvm_type.starts_with("%enum.") ||
+           llvm_type.starts_with("%class.") || llvm_type.starts_with("%union.") ||
+           llvm_type.starts_with("%tuple.");
+}
+
+// ============================================================================
 // Type Size Computation
 // ============================================================================
 

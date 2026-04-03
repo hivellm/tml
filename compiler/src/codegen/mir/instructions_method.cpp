@@ -8,6 +8,7 @@ TML_MODULE("codegen_x86")
 //!
 //! Extracted from instructions.cpp to reduce file size.
 
+#include "codegen/abi.hpp"
 #include "codegen/mir_codegen.hpp"
 
 #include <iomanip>
@@ -479,7 +480,7 @@ void MirCodegen::emit_method_call_inst(const mir::MethodCallInst& i, const std::
         "I8",  "I16", "I32",  "I64", "I128", "U8",   "U16",
         "U32", "U64", "U128", "F32", "F64",  "Bool", "Char"};
     bool is_primitive_tml = primitive_tml_types.count(recv_type) > 0;
-    bool is_struct_type = receiver_actual_type.find("%struct.") == 0;
+    bool is_struct_type = codegen::is_aggregate_llvm_type(receiver_actual_type);
 
     std::string receiver_type_for_call = receiver_actual_type;
 

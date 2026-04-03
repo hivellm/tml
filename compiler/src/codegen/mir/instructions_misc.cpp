@@ -7,6 +7,7 @@ TML_MODULE("codegen_x86")
 //!
 //! Extracted from instructions.cpp to reduce file size.
 
+#include "codegen/abi.hpp"
 #include "codegen/mir_codegen.hpp"
 
 #include <iomanip>
@@ -47,8 +48,8 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         src_type = operand_actual_type;
     }
 
-    // If casting a struct value to ptr, spill it first
-    if (tgt_type == "ptr" && operand_actual_type.find("%struct.") == 0) {
+    // If casting an aggregate value to ptr, spill it first
+    if (tgt_type == "ptr" && codegen::is_aggregate_llvm_type(operand_actual_type)) {
         std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
         emitln("    " + spill_ptr + " = alloca " + operand_actual_type);
         emitln("    store " + operand_actual_type + " " + operand + ", ptr " + spill_ptr);
@@ -56,8 +57,8 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
         if (inst.result != mir::INVALID_VALUE) {
             value_types_[inst.result] = "ptr";
         }
-    } else if (i.kind == mir::CastKind::Bitcast && src_type.find("%struct.") == 0 &&
-               tgt_type.find("%struct.") == 0 && src_type != tgt_type) {
+    } else if (i.kind == mir::CastKind::Bitcast && codegen::is_aggregate_llvm_type(src_type) &&
+               codegen::is_aggregate_llvm_type(tgt_type) && src_type != tgt_type) {
         // Class upcast: derived struct to base struct
         std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
         emitln("    " + spill_ptr + " = alloca " + src_type);

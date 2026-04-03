@@ -16,6 +16,7 @@ TML_MODULE("codegen_x86")
 //! | emit_sret_call            | sret-convention struct-return calls                  |
 //! | emit_normal_call          | Plain direct call emission                           |
 
+#include "codegen/abi.hpp"
 #include "codegen/mir_codegen.hpp"
 
 #include <iomanip>
@@ -991,9 +992,7 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
             // Win64 ABI: ALL aggregate-typed arguments (structs, enums, classes, unions)
             // must be spilled to memory and passed by pointer. Function definitions
             // declare these params as `ptr`, so the call site must match.
-            bool is_aggregate_value =
-                actual_type.find("%struct.") == 0 || actual_type.find("%enum.") == 0 ||
-                actual_type.find("%class.") == 0 || actual_type.find("%union.") == 0;
+            bool is_aggregate_value = codegen::is_aggregate_llvm_type(actual_type);
 
             if (is_aggregate_value) {
                 // Spill aggregate value to memory so we can pass a pointer

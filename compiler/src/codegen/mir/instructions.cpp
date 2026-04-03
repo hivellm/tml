@@ -19,6 +19,7 @@ TML_MODULE("codegen_x86")
 //! | Collections  | TupleInitInst, ArrayInitInst, EnumInitInst            |
 //! | Atomic       | AtomicLoadInst, AtomicStoreInst, AtomicRMWInst, etc.  |
 
+#include "codegen/abi.hpp"
 #include "codegen/mir_codegen.hpp"
 
 #include <iomanip>
@@ -684,8 +685,7 @@ void MirCodegen::emit_extract_value_inst(const mir::ExtractValueInst& i,
     // In that case, use GEP+load instead of extractvalue.
     auto vt_it = value_types_.find(i.aggregate.id);
     bool agg_is_ptr = (vt_it != value_types_.end() && vt_it->second == "ptr");
-    if (agg_is_ptr && (agg_type.starts_with("%struct.") || agg_type.starts_with("%enum.") ||
-                       agg_type.starts_with("%class.") || agg_type.starts_with("%union."))) {
+    if (agg_is_ptr && codegen::is_aggregate_llvm_type(agg_type)) {
         // Aggregate is a pointer to a struct — emit GEP + load instead of extractvalue
         std::string gep_reg = new_temp();
         emit("    " + gep_reg + " = getelementptr inbounds " + agg_type + ", ptr " + agg);

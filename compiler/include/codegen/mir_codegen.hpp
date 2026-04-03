@@ -36,6 +36,7 @@
 
 #pragma once
 
+#include "codegen/abi.hpp"
 #include "common.hpp"
 #include "mir/mir.hpp"
 
@@ -175,6 +176,10 @@ private:
 
     // Function name to declared parameter types (for array-to-slice coercion etc.)
     std::unordered_map<std::string, std::vector<mir::MirTypePtr>> func_param_types_;
+
+    // Cached FnABI classifications keyed by mangled function name.
+    // Populated lazily by compute_fn_abi() calls during codegen.
+    std::unordered_map<std::string, FnABI> fn_abi_cache_;
 
     // Generate helpers
     void emit_preamble();

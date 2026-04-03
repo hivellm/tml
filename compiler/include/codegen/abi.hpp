@@ -65,6 +65,14 @@ ArgABI classify_return(const mir::MirTypePtr& type);
 /// - Respects existing sret annotations on the function
 FnABI compute_fn_abi(const mir::Function& func);
 
+/// Returns true if an LLVM IR type string represents an aggregate type
+/// (struct, enum, class, union, tuple) that should be passed indirectly on Win64.
+///
+/// This is a transitional helper that replaces scattered `starts_with("%struct.")`
+/// checks throughout MIR codegen. Prefer `classify_type(MirTypePtr)` in new code
+/// where the MIR type is available.
+bool is_aggregate_llvm_type(const std::string& llvm_type);
+
 /// Compute the size in bytes of a MIR type for ABI classification purposes.
 ///
 /// Returns 0 for types that cannot be sized at the MIR level (opaque structs/enums
