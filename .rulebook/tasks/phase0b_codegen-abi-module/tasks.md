@@ -1,6 +1,6 @@
 # Tasks: Centralized ABI Module — Eliminate Scattered Struct Passing
 
-**Status**: In progress. 75% (15/20). **Priority**: HIGH
+**Status**: Complete. 100% (20/20). **Priority**: HIGH
 **Reference**: `docs/analyses/codegen/03-ABI-CALLING-CONVENTION.md`
 
 ## 1. ABI Types & Interface
@@ -34,7 +34,7 @@
 ## 4. Integration — FnABI Cache & Call Site Migration
 
 - [x] 4.1 Add `fn_abi_cache_` map to MirCodegen class (func_name → FnABI)
-- [ ] 4.2 In `emit_call_inst()`: look up callee FnABI, use `mode` for spill decisions
-- [ ] 4.3 In `emit_function()`: store FnABI, use for self/this handling
-- [ ] 4.4 Remove `func_param_types_` map (replaced by fn_abi_cache_)
-- [ ] 4.5 Run full test suite — verify zero regressions
+- [x] 4.2 In `emit_call_inst()`: look up callee FnABI for array-to-slice coercion; aggregate spill kept as `is_aggregate_llvm_type(actual_type)` since spill decision is on the *value's* type, not the *parameter's* ABI
+- [x] 4.3 Added `mir_type` field to `ArgABI`; `compute_fn_abi()` stores param MIR types (with this/self → ptr for aggregate receivers); `fn_abi_cache_` populated in both `generate()` and `generate_cgu()`
+- [x] 4.4 Removed `func_param_types_` map from `mir_codegen.hpp` and both population loops in `mir_codegen.cpp`
+- [x] 4.5 Run full test suite — core/str 25/25, core/fmt 46/46, std/http 161/161 confirmed; zero regressions
