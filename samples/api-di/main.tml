@@ -1,0 +1,138 @@
+/// Sample: Pointer-Based Dependency Injection
+///
+/// Demonstrates TML's zero-copy DI — services wired via raw pointers.
+/// No IoC container, no reflection, no proxy — just pointer assignment.
+///
+/// Run: tml run samples/api-di/main.tml
+
+use std::di::registry::ServiceRegistry
+use std::di::module::Module
+use std::di::application::{AppConfig, bootstrap_modules}
+use std::di::config::InjectedConfig
+use std::db::sqlite::connection::SqliteConnection
+
+// ============================================================================
+// Service layer — @Service types with pointer fields
+// ============================================================================
+
+/// Database service — holds a pointer to the shared DB connection.
+@Service
+type DbService {
+    conn_ptr: I64   // raw pointer to SqliteConnection
+}
+
+impl DbService {
+    pub func new(conn_ptr: I64) -> DbService {
+        return DbService { conn_ptr: conn_ptr }
+    }
+
+    pub func execute(this, sql: Str) -> Str {
+        // In a real app, dereference conn_ptr and call execute()
+        return "executed: " + sql
+    }
+}
+
+/// User service — depends on DbService via pointer.
+@Service
+type UserService {
+    db_ptr: I64   // raw pointer to DbService
+}
+
+impl UserService {
+    pub func new(db_ptr: I64) -> UserService {
+        return UserService { db_ptr: db_ptr }
+    }
+
+    pub func find_all(this) -> Str {
+        return "[{\"id\":1,\"name\":\"alice\"},{\"id\":2,\"name\":\"bob\"}]"
+    }
+
+    pub func find_by_id(this, id: I64) -> Str {
+        return "{\"id\":" + id.to_string() + ",\"name\":\"user_" + id.to_string() + "\"}"
+    }
+}
+
+/// Auth service — stateless, no dependencies.
+@Service
+type AuthService {}
+
+impl AuthService {
+    pub func validate(this, token: Str) -> Bool {
+        return token == "valid-token"
+    }
+}
+
+// ============================================================================
+// Controller layer — fields are pointers to services
+// ============================================================================
+
+@Controller("/users")
+type UserController {
+    user_svc_ptr: I64,   // pointer to UserService
+    auth_svc_ptr: I64    // pointer to AuthService
+}
+
+// ============================================================================
+// Module composition — explicit, flat, zero-magic
+// ============================================================================
+
+func main() -> I32 {
+    // 1. Create services (they live on the stack, pointers are valid for main's lifetime)
+    var db_svc = DbService::new(0)
+    var user_svc = UserService::new(&db_svc as I64)
+    var auth_svc = AuthService {}
+
+    // 2. Create config
+    var config = InjectedConfig::new()
+    config.set("port", "3000")
+    config.set("cors", "*")
+    config.set("db", ":memory:")
+
+    // 3. Wire controller — pointers to services
+    var ctrl = UserController {
+        user_svc_ptr: &user_svc as I64,
+        auth_svc_ptr: &auth_svc as I64
+    }
+
+    // 4. Wire module — pointers, not copies
+    let app_module = Module::new("app")
+        .provide("db", &db_svc as I64)
+        .provide("user", &user_svc as I64)
+        .provide("auth", &auth_svc as I64)
+        .controller("/users", &ctrl as I64)
+
+    // 5. Bootstrap — registers everything, reports topology
+    let app_config = AppConfig::new(config.get_i64_or("port", 3000) as I32)
+    let info = bootstrap_modules(app_config, app_module)
+
+    // 5. Report
+    println("=== TML DI Sample ===")
+    println(info.summary())
+    println("")
+
+    // 6. Verify services resolve correctly
+    let user_ptr = app_module.resolve("user")
+    if user_ptr.is_just() {
+        println("UserService registered at ptr: " + user_ptr.unwrap().to_string())
+    }
+
+    let auth_ptr = app_module.resolve("auth")
+    if auth_ptr.is_just() {
+        println("AuthService registered at ptr: " + auth_ptr.unwrap().to_string())
+    }
+
+    // 7. Use services directly (what a handler would do)
+    println("")
+    println("UserService.find_all(): " + user_svc.find_all())
+    println("UserService.find_by_id(1): " + user_svc.find_by_id(1))
+    println("AuthService.validate('valid-token'): " + auth_svc.validate("valid-token").to_string())
+    println("AuthService.validate('bad'): " + auth_svc.validate("bad").to_string())
+
+    println("")
+    println("Config port: " + config.get_or("port", "8080"))
+    println("Config cors: " + config.get_or("cors", "none"))
+
+    println("")
+    println("Done. Zero-copy DI — all services wired via pointers.")
+    return 0
+}
