@@ -1,0 +1,188 @@
+//! Response Builder — Express/CMMV-style fluent HTTP response.
+//!
+//! ```tml
+//! use std::http::framework::response_builder::{Response, Res}
+//!
+//! // Express-style:
+//! Res::status(200).json("{\"ok\":true}")
+//! Res::created("{\"id\":1}")
+//! Res::not_found("User not found")
+//! Res::ok().header("X-Custom", "value").json("{\"data\":[]}")
+//! ```
+
+use core::str
+use std::http::cors::{CorsOptions, cors_headers}
+use std::http::security::{SecurityOptions, security_headers}
+use std::http::etag
+use std::http::cache_control::{CacheOptions, cache_control_header}
+
+/// HTTP Response builder — auto-resolves headers from middleware stack.
+pub type Response {
+    code: I32,
+    content_type: Str,
+    body: Str,
+    custom_headers: Str,
+    use_cors: Bool,
+    use_security: Bool,
+    use_etag: Bool,
+    cache_mode: I32   // 0=no-cache, 1=public, 2=private
+}
+
+impl Response {
+    // ── Factory methods (like Express res.status()) ──
+
+    /// Creates a response with the given status code.
+    pub func status(code: I32) -> Response {
+        return Response { code: code, content_type: "application/json; charset=utf-8", body: "", custom_headers: "", use_cors: true, use_security: true, use_etag: true, cache_mode: 0 }
+    }
+
+    /// 200 OK.
+    pub func ok() -> Response { return Response::status(200) }
+
+    /// 201 Created.
+    pub func created_status() -> Response { return Response::status(201) }
+
+    /// 204 No Content.
+    pub func no_content() -> Response { return Response::status(204).content_type_raw("") }
+
+    // ── Builder methods (chainable) ──
+
+    /// Set the response body as JSON.
+    pub func json(this, data: Str) -> Response {
+        return Response { code: this.code, content_type: "application/json; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    }
+
+    /// Set the response body as HTML.
+    pub func html(this, data: Str) -> Response {
+        return Response { code: this.code, content_type: "text/html; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: 1 }
+    }
+
+    /// Set the response body as plain text.
+    pub func text(this, data: Str) -> Response {
+        return Response { code: this.code, content_type: "text/plain; charset=utf-8", body: data, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    }
+
+    /// Set a custom content type.
+    pub func content_type_raw(this, ct: Str) -> Response {
+        return Response { code: this.code, content_type: ct, body: this.body, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    }
+
+    /// Add a custom header.
+    pub func header(this, name: Str, value: Str) -> Response {
+        return Response { code: this.code, content_type: this.content_type, body: this.body, custom_headers: this.custom_headers + name + ": " + value + "\r\n", use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    }
+
+    /// Enable long cache (public, max-age).
+    pub func cache_public(this, max_age: I32) -> Response {
+        return Response { code: this.code, content_type: this.content_type, body: this.body, custom_headers: this.custom_headers, use_cors: this.use_cors, use_security: this.use_security, use_etag: this.use_etag, cache_mode: 1 }
+    }
+
+    /// Disable CORS headers.
+    pub func no_cors(this) -> Response {
+        return Response { code: this.code, content_type: this.content_type, body: this.body, custom_headers: this.custom_headers, use_cors: false, use_security: this.use_security, use_etag: this.use_etag, cache_mode: this.cache_mode }
+    }
+
+    // ── Render to HTTP string (auto-resolves all headers) ──
+
+    /// Builds the complete HTTP/1.1 response string.
+    /// Automatically applies: CORS, Security, ETag, Cache-Control, Content-Length.
+    pub func send(this) -> Str {
+        let body_len: I64 = str::len(this.body)
+
+        // Status line
+        var resp: Str = "HTTP/1.1 " + response_status_line(this.code) + "\r\n"
+
+        // Content headers
+        if this.content_type != "" {
+            resp = resp + "Content-Type: " + this.content_type + "\r\n"
+        }
+        resp = resp + "Content-Length: " + body_len.to_string() + "\r\n"
+
+        // CORS (auto from middleware)
+        if this.use_cors {
+            resp = resp + cors_headers("*")
+        }
+
+        // Security (auto from middleware)
+        if this.use_security {
+            let sec_opts = SecurityOptions::defaults()
+            resp = resp + security_headers(sec_opts)
+        }
+
+        // Cache-Control (auto based on mode)
+        if this.cache_mode == 0 {
+            let opts = CacheOptions::no_cache()
+            resp = resp + "Cache-Control: " + cache_control_header(opts) + "\r\n"
+        }
+        if this.cache_mode == 1 {
+            let opts = CacheOptions::public_immutable(3600)
+            resp = resp + "Cache-Control: " + cache_control_header(opts) + "\r\n"
+        }
+
+        // ETag (auto from body)
+        if this.use_etag and body_len > 0 {
+            resp = resp + "ETag: " + etag::generate(this.body) + "\r\n"
+        }
+
+        // Custom headers
+        if this.custom_headers != "" {
+            resp = resp + this.custom_headers
+        }
+
+        // Connection
+        resp = resp + "Connection: keep-alive\r\n"
+        resp = resp + "\r\n" + this.body
+        return resp
+    }
+}
+
+// ── Shortcut type alias ──
+
+/// Shortcut for Response (like Express `res`).
+pub type Res {}
+
+impl Res {
+    /// res.status(200).json(data).send()
+    pub func status(code: I32) -> Response { return Response::status(code) }
+
+    /// 200 + JSON body → send
+    pub func ok(data: Str) -> Str { return Response::ok().json(data).send() }
+
+    /// 201 + JSON body → send
+    pub func created(data: Str) -> Str { return Response::created_status().json(data).send() }
+
+    /// 400 + error JSON → send
+    pub func bad_request(msg: Str) -> Str {
+        return Response::status(400).json("{\"error\":\"" + msg + "\"}").send()
+    }
+
+    /// 401 → send
+    pub func unauthorized(msg: Str) -> Str {
+        return Response::status(401).json("{\"error\":\"" + msg + "\"}").send()
+    }
+
+    /// 404 → send
+    pub func not_found(msg: Str) -> Str {
+        return Response::status(404).json("{\"error\":\"" + msg + "\"}").send()
+    }
+
+    /// 500 → send
+    pub func internal_error(msg: Str) -> Str {
+        return Response::status(500).json("{\"error\":\"" + msg + "\"}").send()
+    }
+}
+
+/// Maps status code to reason phrase.
+func response_status_line(code: I32) -> Str {
+    if code == 200 { return "200 OK" }
+    if code == 201 { return "201 Created" }
+    if code == 204 { return "204 No Content" }
+    if code == 301 { return "301 Moved Permanently" }
+    if code == 304 { return "304 Not Modified" }
+    if code == 400 { return "400 Bad Request" }
+    if code == 401 { return "401 Unauthorized" }
+    if code == 403 { return "403 Forbidden" }
+    if code == 404 { return "404 Not Found" }
+    if code == 500 { return "500 Internal Server Error" }
+    return "200 OK"
+}
