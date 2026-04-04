@@ -49,6 +49,11 @@ use std::net::eventloop::{NetEventLoop, Interest, Event}
 @extern("c") func tml_condvar_notify_all(cvar: *Unit) -> I32
 @extern("c") func tml_condvar_wait(cvar: *Unit, mutex: *Unit) -> I32
 
+// Compiler-generated decorator route registration.
+// Always emitted by the codegen (empty if no @Get/@Post/etc. routes).
+// Writes route entries to the flat handler table and updates count_ptr.
+@extern("c") func __tml_register_routes(table: I64, count_ptr: mut ref I64, trees: I64)
+
 const AF_INET: I32 = 2
 const SOCK_STREAM: I32 = 1
 const SOL_SOCKET: I32 = 65535
@@ -566,6 +571,12 @@ pub func app_listen(
     read_timeout: I64, write_timeout: I64, idle_timeout: I64,
     body_limit: I64, port: I64
 ) {
+    // Auto-register decorator routes (@Get, @Post, etc.) into the handler table.
+    // The compiler always emits __tml_register_routes (empty if no decorators).
+    // This merges decorator routes with any manually-registered routes.
+    var total_count: I64 = count
+    __tml_register_routes(table, mut ref total_count, trees)
+
     let num_workers: I64 = cpu_count() as I64
     if num_workers < 1 { return }
 
@@ -575,7 +586,7 @@ pub func app_listen(
     println("  Keep-Alive: yes")
     println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
     println("  Middleware: " + mw_count.to_string())
-    println("  Routes:     " + count.to_string())
+    println("  Routes:     " + total_count.to_string())
     println("  Hooks:      onRequest=" + on_request_count.to_string() +
             " preHandler=" + pre_handler_count.to_string() +
             " onSend=" + on_send_count.to_string() +
@@ -584,7 +595,7 @@ pub func app_listen(
     println("")
 
     var i: I64 = 0
-    loop (i < count) {
+    loop (i < total_count) {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
@@ -610,7 +621,7 @@ pub func app_listen(
 
     // Write shared state fields
     shared_set(shared, OFF_TABLE, table)
-    shared_set(shared, OFF_COUNT, count)
+    shared_set(shared, OFF_COUNT, total_count)
     shared_set(shared, OFF_ROUTER, trees)
     shared_set(shared, OFF_MW_TABLE, mw_table)
     shared_set(shared, OFF_MW_COUNT, mw_count)
@@ -879,6 +890,10 @@ pub func app_listen_evloop(
     read_timeout: I64, write_timeout: I64, idle_timeout: I64,
     body_limit: I64, port: I64
 ) {
+    // Auto-register decorator routes
+    var total_count: I64 = count
+    __tml_register_routes(table, mut ref total_count, trees)
+
     let num_workers: I64 = cpu_count() as I64
     if num_workers < 1 { return }
 
@@ -888,7 +903,7 @@ pub func app_listen_evloop(
     println("  Keep-Alive: yes")
     println("  Timeouts:   read=" + read_timeout.to_string() + "ms write=" + write_timeout.to_string() + "ms idle=" + idle_timeout.to_string() + "ms")
     println("  Middleware: " + mw_count.to_string())
-    println("  Routes:     " + count.to_string())
+    println("  Routes:     " + total_count.to_string())
     println("  Hooks:      onRequest=" + on_request_count.to_string() +
             " preHandler=" + pre_handler_count.to_string() +
             " onSend=" + on_send_count.to_string() +
@@ -897,7 +912,7 @@ pub func app_listen_evloop(
     println("")
 
     var i: I64 = 0
-    loop (i < count) {
+    loop (i < total_count) {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
@@ -919,7 +934,7 @@ pub func app_listen_evloop(
     loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
 
     shared_set(shared, OFF_TABLE, table)
-    shared_set(shared, OFF_COUNT, count)
+    shared_set(shared, OFF_COUNT, total_count)
     shared_set(shared, OFF_ROUTER, trees)
     shared_set(shared, OFF_MW_TABLE, mw_table)
     shared_set(shared, OFF_MW_COUNT, mw_count)

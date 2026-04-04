@@ -45,6 +45,96 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         std::string func_name;
     };
     std::vector<LegacyRouteEntry> route_functions;
+
+    // Helper: extract route decorator info from a decorator list.
+    // Returns true if a route was found, and populates method_str and path.
+    auto extract_route_decorator = [](const std::vector<parser::Decorator>& decorators,
+                                      std::string& method_str, std::string& path) -> bool {
+        for (const auto& decorator : decorators) {
+            if (decorator.name == "Get" || decorator.name == "Post" || decorator.name == "Put" ||
+                decorator.name == "Delete" || decorator.name == "Patch" ||
+                decorator.name == "Head" || decorator.name == "Options") {
+                if (decorator.name == "Get")
+                    method_str = "GET";
+                else if (decorator.name == "Post")
+                    method_str = "POST";
+                else if (decorator.name == "Put")
+                    method_str = "PUT";
+                else if (decorator.name == "Delete")
+                    method_str = "DELETE";
+                else if (decorator.name == "Patch")
+                    method_str = "PATCH";
+                else if (decorator.name == "Head")
+                    method_str = "HEAD";
+                else
+                    method_str = "OPTIONS";
+                if (!decorator.args.empty() && decorator.args[0]->is<parser::LiteralExpr>()) {
+                    const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                        path = lit.token.string_value().value;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
+    // Helper: extract @Controller prefix from a decorator list (on struct/class types).
+    auto extract_controller_prefix =
+        [](const std::vector<parser::Decorator>& decorators) -> std::string {
+        for (const auto& decorator : decorators) {
+            if (decorator.name == "Controller" && !decorator.args.empty()) {
+                if (decorator.args[0]->is<parser::LiteralExpr>()) {
+                    const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                        std::string prefix = lit.token.string_value().value;
+                        // Remove trailing slash to avoid double slashes
+                        while (prefix.size() > 1 && prefix.back() == '/') {
+                            prefix.pop_back();
+                        }
+                        return prefix;
+                    }
+                }
+            }
+        }
+        return "";
+    };
+
+    // Helper: prepend controller prefix to a route path.
+    auto apply_controller_prefix = [](const std::string& controller_prefix,
+                                      const std::string& method_path) -> std::string {
+        if (controller_prefix.empty()) {
+            return method_path;
+        }
+        std::string normalized_path = method_path;
+        if (normalized_path.empty() || normalized_path[0] != '/') {
+            normalized_path = "/" + normalized_path;
+        }
+        if (normalized_path == "/") {
+            return controller_prefix;
+        }
+        return controller_prefix + normalized_path;
+    };
+
+    // Build a map of struct/class name -> @Controller prefix for looking up impl targets.
+    std::unordered_map<std::string, std::string> controller_prefixes;
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::StructDecl>()) {
+            const auto& s = decl->as<parser::StructDecl>();
+            std::string prefix = extract_controller_prefix(s.decorators);
+            if (!prefix.empty()) {
+                controller_prefixes[s.name] = prefix;
+            }
+        } else if (decl->is<parser::ClassDecl>()) {
+            const auto& c = decl->as<parser::ClassDecl>();
+            std::string prefix = extract_controller_prefix(c.decorators);
+            if (!prefix.empty()) {
+                controller_prefixes[c.name] = prefix;
+            }
+        }
+    }
+
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
@@ -99,33 +189,13 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                     bench_functions.push_back(info);
                 } else if (decorator.name == "fuzz") {
                     fuzz_functions.push_back(func.name);
-                } else if (decorator.name == "Get" || decorator.name == "Post" ||
-                           decorator.name == "Put" || decorator.name == "Delete" ||
-                           decorator.name == "Patch" || decorator.name == "Head" ||
-                           decorator.name == "Options") {
-                    std::string method_str;
-                    if (decorator.name == "Get")
-                        method_str = "GET";
-                    else if (decorator.name == "Post")
-                        method_str = "POST";
-                    else if (decorator.name == "Put")
-                        method_str = "PUT";
-                    else if (decorator.name == "Delete")
-                        method_str = "DELETE";
-                    else if (decorator.name == "Patch")
-                        method_str = "PATCH";
-                    else if (decorator.name == "Head")
-                        method_str = "HEAD";
-                    else
-                        method_str = "OPTIONS";
-                    if (!decorator.args.empty() && decorator.args[0]->is<parser::LiteralExpr>()) {
-                        const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
-                        if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                            route_functions.push_back(
-                                {method_str, lit.token.string_value().value, func.name});
-                        }
-                    }
                 }
+            }
+
+            // Check for route decorators on top-level functions
+            std::string method_str, path;
+            if (extract_route_decorator(func.decorators, method_str, path)) {
+                route_functions.push_back({method_str, path, func.name});
             }
 
             if (is_test) {
@@ -139,6 +209,69 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                     info.expected_panic_message_str = add_string_literal(expected_panic_message);
                 }
                 test_functions.push_back(info);
+            }
+        } else if (decl->is<parser::ImplDecl>()) {
+            // Scan impl blocks for methods with @Get/@Post/etc. route decorators.
+            // For @Controller types, prepend the controller prefix to route paths.
+            const auto& impl_decl = decl->as<parser::ImplDecl>();
+
+            // Extract the type name from self_type (e.g., "UserController")
+            std::string type_name;
+            if (impl_decl.self_type && impl_decl.self_type->is<parser::NamedType>()) {
+                const auto& named = impl_decl.self_type->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    type_name = named.path.segments.back();
+                }
+            }
+            if (type_name.empty())
+                continue;
+
+            // Look up @Controller prefix for this type
+            std::string ctrl_prefix;
+            auto cp_it = controller_prefixes.find(type_name);
+            if (cp_it != controller_prefixes.end()) {
+                ctrl_prefix = cp_it->second;
+            }
+
+            for (const auto& method : impl_decl.methods) {
+                std::string method_str, path;
+                if (extract_route_decorator(method.decorators, method_str, path)) {
+                    // Apply controller prefix to the route path
+                    std::string full_path = apply_controller_prefix(ctrl_prefix, path);
+                    // Compute the mangled function name for the impl method.
+                    // mangle_impl_method returns "tml_<prefix>TypeName_method" — strip "tml_"
+                    // because the route registration emitter adds "@tml_" itself.
+                    std::string mangled = mangle_impl_method(type_name, method.name);
+                    std::string func_name = mangled;
+                    if (func_name.substr(0, 4) == "tml_") {
+                        func_name = func_name.substr(4);
+                    }
+                    route_functions.push_back({method_str, full_path, func_name});
+                }
+            }
+        } else if (decl->is<parser::ClassDecl>()) {
+            // Scan class declarations for methods with @Get/@Post/etc. route decorators.
+            const auto& class_decl = decl->as<parser::ClassDecl>();
+            std::string type_name = class_decl.name;
+
+            // Look up @Controller prefix for this class
+            std::string ctrl_prefix;
+            auto cp_it = controller_prefixes.find(type_name);
+            if (cp_it != controller_prefixes.end()) {
+                ctrl_prefix = cp_it->second;
+            }
+
+            for (const auto& method : class_decl.methods) {
+                std::string method_str, path;
+                if (extract_route_decorator(method.decorators, method_str, path)) {
+                    std::string full_path = apply_controller_prefix(ctrl_prefix, path);
+                    std::string mangled = mangle_impl_method(type_name, method.name);
+                    std::string func_name = mangled;
+                    if (func_name.substr(0, 4) == "tml_") {
+                        func_name = func_name.substr(4);
+                    }
+                    route_functions.push_back({method_str, full_path, func_name});
+                }
             }
         }
     }
@@ -516,42 +649,27 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         }
     }
 
-    // Emit HTTP route registration function for @Get/@Post/etc. decorators
-    if (!route_functions.empty()) {
+    // Always emit __tml_register_routes — even if no routes exist (empty function).
+    // This allows library code (app_listen) to unconditionally call it without
+    // worrying about whether the symbol exists.
+    {
         emit_line("");
         emit_line(
             "; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
-        for (size_t i = 0; i < route_functions.size(); ++i) {
-            const auto& route = route_functions[i];
-            std::string idx = std::to_string(i);
-            size_t method_len = route.method_str.size() + 1;
-            size_t path_len = route.path.size() + 1;
-            emit_line("@.route.method." + idx + " = private constant [" +
-                      std::to_string(method_len) + " x i8] c\"" + route.method_str + "\\00\"");
-            emit_line("@.route.path." + idx + " = private constant [" + std::to_string(path_len) +
-                      " x i8] c\"" + route.path + "\\00\"");
-        }
-        // Look up the actual mangled LLVM name for app_register
-        // Try multiple keys since imported functions use qualified names
-        std::string app_register_llvm_name;
-        for (const auto& key :
-             {"app_register", "app::app_register", "std::http::app::app_register"}) {
-            auto it = functions_.find(key);
-            if (it != functions_.end()) {
-                app_register_llvm_name = it->second.llvm_name;
-                break;
+
+        if (!route_functions.empty()) {
+            // Emit string constants for route methods and paths
+            for (size_t i = 0; i < route_functions.size(); ++i) {
+                const auto& route = route_functions[i];
+                std::string idx = std::to_string(i);
+                size_t method_len = route.method_str.size() + 1;
+                size_t path_len = route.path.size() + 1;
+                emit_line("@.route.method." + idx + " = private constant [" +
+                          std::to_string(method_len) + " x i8] c\"" + route.method_str + "\\00\"");
+                emit_line("@.route.path." + idx + " = private constant [" +
+                          std::to_string(path_len) + " x i8] c\"" + route.path + "\\00\"");
             }
         }
-        if (app_register_llvm_name.empty()) {
-            // Fallback: scan all functions for one containing "app_register"
-            for (const auto& [name, info] : functions_) {
-                if (name.find("app_register") != std::string::npos) {
-                    app_register_llvm_name = info.llvm_name;
-                    break;
-                }
-            }
-        }
-        (void)app_register_llvm_name; // Not used — inline registration below
 
         emit_line("");
         // Generate inline route registration (no dependency on app_register function)
@@ -559,50 +677,58 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         // [method_ptr: i64, path_ptr: i64, handler_ptr: i64]
         emit_line("define void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
         emit_line("entry:");
-        emit_line("  %count_init = load i64, ptr %count_ptr");
 
-        for (size_t i = 0; i < route_functions.size(); ++i) {
-            const auto& route = route_functions[i];
-            std::string idx = std::to_string(i);
-            size_t method_len = route.method_str.size() + 1;
-            size_t path_len = route.path.size() + 1;
+        if (route_functions.empty()) {
+            // No routes — just return
+            emit_line("  ret void");
+        } else {
+            emit_line("  %count_init = load i64, ptr %count_ptr");
 
-            // Compute offset = (count + i) * 24
-            emit_line("  %slot_" + idx + " = add i64 %count_init, " + std::to_string(i));
-            emit_line("  %offset_" + idx + " = mul i64 %slot_" + idx + ", 24");
-            // Base address for this entry
-            emit_line("  %base_" + idx + " = add i64 %table, %offset_" + idx);
+            for (size_t i = 0; i < route_functions.size(); ++i) {
+                const auto& route = route_functions[i];
+                std::string idx = std::to_string(i);
+                size_t method_len = route.method_str.size() + 1;
+                size_t path_len = route.path.size() + 1;
 
-            // Get method and path string pointers
-            emit_line("  %method_" + idx + " = getelementptr [" + std::to_string(method_len) +
-                      " x i8], ptr @.route.method." + idx + ", i32 0, i32 0");
-            emit_line("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) +
-                      " x i8], ptr @.route.path." + idx + ", i32 0, i32 0");
-            emit_line("  %handler_" + idx + " = ptrtoint ptr @tml_" + route.func_name + " to i64");
+                // Compute offset = (count + i) * 24
+                emit_line("  %slot_" + idx + " = add i64 %count_init, " + std::to_string(i));
+                emit_line("  %offset_" + idx + " = mul i64 %slot_" + idx + ", 24");
+                // Base address for this entry
+                emit_line("  %base_" + idx + " = add i64 %table, %offset_" + idx);
 
-            // Write method ptr at offset + 0
-            emit_line("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
-            emit_line("  %mptr_" + idx + " = inttoptr i64 %base_" + idx + " to ptr");
-            emit_line("  store i64 %method_i64_" + idx + ", ptr %mptr_" + idx);
+                // Get method and path string pointers
+                emit_line("  %method_" + idx + " = getelementptr [" + std::to_string(method_len) +
+                          " x i8], ptr @.route.method." + idx + ", i32 0, i32 0");
+                emit_line("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) +
+                          " x i8], ptr @.route.path." + idx + ", i32 0, i32 0");
+                emit_line("  %handler_" + idx + " = ptrtoint ptr @tml_" + route.func_name +
+                          " to i64");
 
-            // Write path ptr at offset + 8
-            emit_line("  %path_off_" + idx + " = add i64 %base_" + idx + ", 8");
-            emit_line("  %path_i64_" + idx + " = ptrtoint ptr %path_" + idx + " to i64");
-            emit_line("  %pptr_" + idx + " = inttoptr i64 %path_off_" + idx + " to ptr");
-            emit_line("  store i64 %path_i64_" + idx + ", ptr %pptr_" + idx);
+                // Write method ptr at offset + 0
+                emit_line("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
+                emit_line("  %mptr_" + idx + " = inttoptr i64 %base_" + idx + " to ptr");
+                emit_line("  store i64 %method_i64_" + idx + ", ptr %mptr_" + idx);
 
-            // Write handler ptr at offset + 16
-            emit_line("  %hndl_off_" + idx + " = add i64 %base_" + idx + ", 16");
-            emit_line("  %hptr_" + idx + " = inttoptr i64 %hndl_off_" + idx + " to ptr");
-            emit_line("  store i64 %handler_" + idx + ", ptr %hptr_" + idx);
+                // Write path ptr at offset + 8
+                emit_line("  %path_off_" + idx + " = add i64 %base_" + idx + ", 8");
+                emit_line("  %path_i64_" + idx + " = ptrtoint ptr %path_" + idx + " to i64");
+                emit_line("  %pptr_" + idx + " = inttoptr i64 %path_off_" + idx + " to ptr");
+                emit_line("  store i64 %path_i64_" + idx + ", ptr %pptr_" + idx);
+
+                // Write handler ptr at offset + 16
+                emit_line("  %hndl_off_" + idx + " = add i64 %base_" + idx + ", 16");
+                emit_line("  %hptr_" + idx + " = inttoptr i64 %hndl_off_" + idx + " to ptr");
+                emit_line("  store i64 %handler_" + idx + ", ptr %hptr_" + idx);
+            }
+
+            // Update count = count + N
+            std::string new_count = std::to_string(route_functions.size());
+            emit_line("  %new_count = add i64 %count_init, " + new_count);
+            emit_line("  store i64 %new_count, ptr %count_ptr");
+
+            emit_line("  ret void");
         }
 
-        // Update count = count + N
-        std::string new_count = std::to_string(route_functions.size());
-        emit_line("  %new_count = add i64 %count_init, " + new_count);
-        emit_line("  store i64 %new_count, ptr %count_ptr");
-
-        emit_line("  ret void");
         emit_line("}");
     }
 }

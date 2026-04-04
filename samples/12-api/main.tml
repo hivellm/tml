@@ -1,133 +1,56 @@
-/// Complete REST API Example — NestJS-style @Controller + DI
+/// NestJS-style REST API — @Controller auto-registration
 ///
-/// Demonstrates all NestJS-style features in TML:
-///   - @Controller decorator for URL prefix documentation
-///   - @Get/@Post/@Put/@Delete decorators on handler functions
-///   - (req: IncomingMessage, res: Response) -> Str handler signature
-///   - Route parameter extraction with app_get_param(req, "id")
-///   - Response builder: res.json(), res.html(), res.text(), res.status()
-///   - DI integration: pointer-based service wiring from std::di
-///   - Controller behavior for explicit route registration
+/// Routes auto-register from @Controller + @Get/@Post/@Put/@Delete decorators.
+/// No manual app.get()/app.post() calls needed.
 ///
-/// Run:   tml run samples/api/main.tml
+/// Run:   tml run samples/12-api/main.tml
 /// Test:
-///   curl http://localhost:3000/api/health
-///   curl http://localhost:3000/api/users
-///   curl http://localhost:3000/api/users/42
-///   curl -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d '{"name":"carol"}'
-///   curl -X PUT http://localhost:3000/api/users/1 -d '{"name":"alice2"}'
-///   curl -X DELETE http://localhost:3000/api/users/1
+///   curl http://localhost:15200/api/health
+///   curl http://localhost:15200/api/users
+///   curl http://localhost:15200/api/users/42
+///   curl -X POST http://localhost:15200/api/users
+///   curl -X PUT http://localhost:15200/api/users/1
+///   curl -X DELETE http://localhost:15200/api/users/1
 
-use core::str
 use std::http::app::App
-use std::http::app::controller::Controller
 use std::http::server::dispatch::app_get_param
 use std::http::server::incoming::IncomingMessage
 use std::http::framework::response_builder::Response
-use std::di::registry::ServiceRegistry
-use std::di::config::InjectedConfig
-
-// ============================================================================
-// Service Layer — DI-injectable services
-// ============================================================================
-
-/// In-memory user store (production would use std::db::sqlite).
-@Service
-type UserService {
-    next_id: I64
-}
-
-impl UserService {
-    pub func new() -> UserService {
-        return UserService { next_id: 3 }
-    }
-
-    pub func find_all(this) -> Str {
-        return `[{"id":1,"name":"alice"},{"id":2,"name":"bob"}]` as Str
-    }
-
-    pub func find_by_id(this, id: Str) -> Str {
-        return `{"id":{id},"name":"user_{id}"}` as Str
-    }
-
-    pub func create(this, body: Str) -> Str {
-        return `{"id":{this.next_id},"created":true,"body":{body}}` as Str
-    }
-
-    pub func update(this, id: Str) -> Str {
-        return `{"id":{id},"updated":true}` as Str
-    }
-
-    pub func delete_by_id(this, id: Str) -> Str {
-        return `{"id":{id},"deleted":true}` as Str
-    }
-}
 
 // ============================================================================
 // User Controller — CRUD endpoints under /api/users
 // ============================================================================
-//
-// The @Controller decorator marks this type as a route group with the given
-// URL prefix. Handler functions below are registered manually in UserController's
-// `register()` implementation (the standard TML Controller pattern).
-//
-// In a future compiler version, @Get/@Post etc. on methods will auto-register
-// routes. Until then, explicit registration in register() is required.
 
-/// Handler functions — free functions with (req, res) signature.
-/// These are the actual HTTP handlers; the @Get/@Post decorators serve as
-/// documentation of their intended HTTP verb and path.
-
-@Get("/api/users")
-func users_list(req: IncomingMessage, res: Response) -> Str {
-    let data = `[{"id":1,"name":"alice"},{"id":2,"name":"bob"}]` as Str
-    return res.json(data)
-}
-
-@Get("/api/users/:id")
-func users_get_by_id(req: IncomingMessage, res: Response) -> Str {
-    let id = app_get_param(req, "id")
-    let data = `{"id":{id},"name":"user_{id}"}` as Str
-    return res.json(data)
-}
-
-@Post("/api/users")
-func users_create(req: IncomingMessage, res: Response) -> Str {
-    let body = req.body()
-    if str::len(body) == 0 {
-        return res.status(400).json(`{"error":"request body required"}` as Str)
-    }
-    return res.status(201).json(`{"created":true}` as Str)
-}
-
-@Put("/api/users/:id")
-func users_update(req: IncomingMessage, res: Response) -> Str {
-    let id = app_get_param(req, "id")
-    return res.json(`{"id":{id},"updated":true}` as Str)
-}
-
-@Delete("/api/users/:id")
-func users_delete(req: IncomingMessage, res: Response) -> Str {
-    let id = app_get_param(req, "id")
-    return res.json(`{"id":{id},"deleted":true}` as Str)
-}
-
-/// UserController groups user CRUD routes under /api/users prefix.
 @Controller("/api/users")
-type UserController {
-    /// Pointer to the injected UserService (DI pattern).
-    user_svc_ptr: I64
-}
+type UserController {}
 
-impl Controller for UserController {
-    func prefix(this) -> Str { return "/api/users" }
+impl UserController {
+    @Get("/")
+    pub func list(req: IncomingMessage, res: Response) -> Str {
+        return res.json("[{\"id\":1,\"name\":\"alice\"},{\"id\":2,\"name\":\"bob\"}]")
+    }
 
-    func register(this, app: mut ref App) {
-        app.get("/api/users", users_list as I64)
-        app.get("/api/users/:id", users_get_by_id as I64)
-        app.post("/api/users", users_create as I64)
-        app.put("/api/users/:id", users_update as I64)
-        app.delete("/api/users/:id", users_delete as I64)
+    @Get("/:id")
+    pub func get_by_id(req: IncomingMessage, res: Response) -> Str {
+        let id = app_get_param(req, "id")
+        return res.json("{\"id\":\"" + id + "\",\"name\":\"user_" + id + "\"}")
+    }
+
+    @Post("/")
+    pub func create(req: IncomingMessage, res: Response) -> Str {
+        return res.set_status(201).json("{\"created\":true}")
+    }
+
+    @Put("/:id")
+    pub func update(req: IncomingMessage, res: Response) -> Str {
+        let id = app_get_param(req, "id")
+        return res.json("{\"id\":\"" + id + "\",\"updated\":true}")
+    }
+
+    @Delete("/:id")
+    pub func delete(req: IncomingMessage, res: Response) -> Str {
+        let id = app_get_param(req, "id")
+        return res.json("{\"id\":\"" + id + "\",\"deleted\":true}")
     }
 }
 
@@ -135,100 +58,28 @@ impl Controller for UserController {
 // Health Controller — status endpoints under /api
 // ============================================================================
 
-@Get("/api/health")
-func health_check(req: IncomingMessage, res: Response) -> Str {
-    return res.json(`{"status":"healthy","version":"0.2.9"}` as Str)
-}
-
-@Get("/api/info")
-func app_info(req: IncomingMessage, res: Response) -> Str {
-    return res.json(`{"name":"TML REST API","runtime":"TML v0.2.9","language":"TML"}` as Str)
-}
-
-/// HealthController groups health/info routes under /api prefix.
 @Controller("/api")
 type HealthController {}
 
-impl Controller for HealthController {
-    func prefix(this) -> Str { return "/api" }
+impl HealthController {
+    @Get("/health")
+    pub func health(req: IncomingMessage, res: Response) -> Str {
+        return res.json("{\"status\":\"healthy\",\"version\":\"0.2.9\"}")
+    }
 
-    func register(this, app: mut ref App) {
-        app.get("/api/health", health_check as I64)
-        app.get("/api/info", app_info as I64)
+    @Get("/info")
+    pub func info(req: IncomingMessage, res: Response) -> Str {
+        return res.json("{\"name\":\"TML REST API\",\"runtime\":\"TML v0.2.9\",\"language\":\"TML\"}")
     }
 }
 
 // ============================================================================
-// Root Handler — landing page
-// ============================================================================
-
-func handle_root(req: IncomingMessage, res: Response) -> Str {
-    return res.html(`<!DOCTYPE html>
-<html>
-<head><title>TML REST API</title></head>
-<body>
-<h1>TML REST API</h1>
-<h2>Available Routes</h2>
-<ul>
-  <li>GET  /api/health</li>
-  <li>GET  /api/info</li>
-  <li>GET  /api/users</li>
-  <li>GET  /api/users/:id</li>
-  <li>POST /api/users</li>
-  <li>PUT  /api/users/:id</li>
-  <li>DELETE /api/users/:id</li>
-</ul>
-</body>
-</html>` as Str)
-}
-
-// ============================================================================
-// Application Bootstrap — DI wiring + route registration
+// Application Bootstrap
 // ============================================================================
 
 pub func main() -> I32 {
-    // 1. Create services (stack-allocated, pointers valid for main's lifetime)
-    var user_svc = UserService::new()
-
-    // 2. Create config via DI
-    var config = InjectedConfig::new()
-    config.set("port", "3000")
-    config.set("env", "development")
-
-    // 3. Wire controllers — inject service pointers
-    let user_ctrl = UserController { user_svc_ptr: &user_svc as I64 }
-    let health_ctrl = HealthController {}
-
-    // 4. Build App
     var app: App = App::new()
-
-    // 5. Register root route
-    app.get("/", handle_root as I64)
-
-    // 6. Register controllers via Controller behavior
-    // Register controllers individually (explicit registration, no closures needed)
-    user_ctrl.register(ref app)
-    health_ctrl.register(ref app)
-
-    // 7. Print startup info
-    let port_str = config.get_or("port", "3000")
-    let env_str = config.get_or("env", "development")
-    println("TML REST API — http://localhost:" + port_str)
-    println("Environment: " + env_str)
-    println("")
-    println("Routes:")
-    println("  GET    /")
-    println("  GET    /api/health")
-    println("  GET    /api/info")
-    println("  GET    /api/users")
-    println("  GET    /api/users/:id")
-    println("  POST   /api/users")
-    println("  PUT    /api/users/:id")
-    println("  DELETE /api/users/:id")
-    println("")
-    println("UserService ptr: " + (&user_svc as I64).to_string())
-
-    // 8. Start server
+    println("NestJS-style REST API on http://localhost:15200")
     app.listen(15200)
     return 0
 }

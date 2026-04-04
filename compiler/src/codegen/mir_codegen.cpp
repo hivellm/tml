@@ -776,58 +776,63 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
         routes.push_back({method_str, func.route_info->path, func.name});
     }
 
-    if (routes.empty())
-        return;
-
+    // Always emit __tml_register_routes — even if no routes exist (empty function).
+    // This allows library code (app_listen) to unconditionally call it.
     emitln("; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
     emitln("; Inline registration: writes directly to the flat handler table (24 bytes/entry)");
     emitln("define void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
     emitln("entry:");
-    emitln("  %count_init = load i64, ptr %count_ptr");
 
-    for (size_t i = 0; i < routes.size(); ++i) {
-        const auto& route = routes[i];
-        std::string idx = std::to_string(i);
-        std::string method_global = string_constants_[route.method_str];
-        std::string path_global = string_constants_[route.path];
-        size_t method_len = route.method_str.size() + 1;
-        size_t path_len = route.path.size() + 1;
+    if (routes.empty()) {
+        emitln("  ret void");
+    } else {
+        emitln("  %count_init = load i64, ptr %count_ptr");
 
-        // Compute offset = (count + i) * 24
-        emitln("  %slot_" + idx + " = add i64 %count_init, " + std::to_string(i));
-        emitln("  %offset_" + idx + " = mul i64 %slot_" + idx + ", 24");
-        emitln("  %base_" + idx + " = add i64 %table, %offset_" + idx);
+        for (size_t i = 0; i < routes.size(); ++i) {
+            const auto& route = routes[i];
+            std::string idx = std::to_string(i);
+            std::string method_global = string_constants_[route.method_str];
+            std::string path_global = string_constants_[route.path];
+            size_t method_len = route.method_str.size() + 1;
+            size_t path_len = route.path.size() + 1;
 
-        // Get method and path string pointers
-        emitln("  %method_" + idx + " = getelementptr [" + std::to_string(method_len) +
-               " x i8], ptr " + method_global + ", i32 0, i32 0");
-        emitln("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) + " x i8], ptr " +
-               path_global + ", i32 0, i32 0");
-        emitln("  %handler_" + idx + " = ptrtoint ptr @" + quote_func_name(route.func_name) +
-               " to i64");
+            // Compute offset = (count + i) * 24
+            emitln("  %slot_" + idx + " = add i64 %count_init, " + std::to_string(i));
+            emitln("  %offset_" + idx + " = mul i64 %slot_" + idx + ", 24");
+            emitln("  %base_" + idx + " = add i64 %table, %offset_" + idx);
 
-        // Write method ptr at offset + 0
-        emitln("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
-        emitln("  %mptr_" + idx + " = inttoptr i64 %base_" + idx + " to ptr");
-        emitln("  store i64 %method_i64_" + idx + ", ptr %mptr_" + idx);
+            // Get method and path string pointers
+            emitln("  %method_" + idx + " = getelementptr [" + std::to_string(method_len) +
+                   " x i8], ptr " + method_global + ", i32 0, i32 0");
+            emitln("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) +
+                   " x i8], ptr " + path_global + ", i32 0, i32 0");
+            emitln("  %handler_" + idx + " = ptrtoint ptr @" + quote_func_name(route.func_name) +
+                   " to i64");
 
-        // Write path ptr at offset + 8
-        emitln("  %path_off_" + idx + " = add i64 %base_" + idx + ", 8");
-        emitln("  %path_i64_" + idx + " = ptrtoint ptr %path_" + idx + " to i64");
-        emitln("  %pptr_" + idx + " = inttoptr i64 %path_off_" + idx + " to ptr");
-        emitln("  store i64 %path_i64_" + idx + ", ptr %pptr_" + idx);
+            // Write method ptr at offset + 0
+            emitln("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
+            emitln("  %mptr_" + idx + " = inttoptr i64 %base_" + idx + " to ptr");
+            emitln("  store i64 %method_i64_" + idx + ", ptr %mptr_" + idx);
 
-        // Write handler ptr at offset + 16
-        emitln("  %hndl_off_" + idx + " = add i64 %base_" + idx + ", 16");
-        emitln("  %hptr_" + idx + " = inttoptr i64 %hndl_off_" + idx + " to ptr");
-        emitln("  store i64 %handler_" + idx + ", ptr %hptr_" + idx);
+            // Write path ptr at offset + 8
+            emitln("  %path_off_" + idx + " = add i64 %base_" + idx + ", 8");
+            emitln("  %path_i64_" + idx + " = ptrtoint ptr %path_" + idx + " to i64");
+            emitln("  %pptr_" + idx + " = inttoptr i64 %path_off_" + idx + " to ptr");
+            emitln("  store i64 %path_i64_" + idx + ", ptr %pptr_" + idx);
+
+            // Write handler ptr at offset + 16
+            emitln("  %hndl_off_" + idx + " = add i64 %base_" + idx + ", 16");
+            emitln("  %hptr_" + idx + " = inttoptr i64 %hndl_off_" + idx + " to ptr");
+            emitln("  store i64 %handler_" + idx + ", ptr %hptr_" + idx);
+        }
+
+        // Update count = count + N
+        emitln("  %new_count = add i64 %count_init, " + std::to_string(routes.size()));
+        emitln("  store i64 %new_count, ptr %count_ptr");
+
+        emitln("  ret void");
     }
 
-    // Update count = count + N
-    emitln("  %new_count = add i64 %count_init, " + std::to_string(routes.size()));
-    emitln("  store i64 %new_count, ptr %count_ptr");
-
-    emitln("  ret void");
     emitln("}");
     emitln();
 }
