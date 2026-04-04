@@ -52,16 +52,19 @@ public:
             return false;
         if (!CreatePipe(&stdin_rd_, &stdin_wr_, &sa, 0))
             return false;
+        if (!CreatePipe(&stderr_rd_, &stderr_wr_, &sa, 0))
+            return false;
 
         SetHandleInformation(stdout_rd_, HANDLE_FLAG_INHERIT, 0);
         SetHandleInformation(stdin_wr_, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(stderr_rd_, HANDLE_FLAG_INHERIT, 0);
 
         STARTUPINFOA si{};
         si.cb = sizeof(si);
         si.dwFlags = STARTF_USESTDHANDLES;
         si.hStdInput = stdin_rd_;
         si.hStdOutput = stdout_wr_;
-        si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+        si.hStdError = stderr_wr_;
 
         PROCESS_INFORMATION pi{};
         std::string cmd = exe;
@@ -79,6 +82,8 @@ public:
         stdout_wr_ = INVALID_HANDLE_VALUE;
         CloseHandle(stdin_rd_);
         stdin_rd_ = INVALID_HANDLE_VALUE;
+        CloseHandle(stderr_wr_);
+        stderr_wr_ = INVALID_HANDLE_VALUE;
 #else
         int in_pipe[2], out_pipe[2];
         if (pipe(in_pipe) < 0 || pipe(out_pipe) < 0)
@@ -118,6 +123,10 @@ public:
         if (stdout_rd_ != INVALID_HANDLE_VALUE) {
             CloseHandle(stdout_rd_);
             stdout_rd_ = INVALID_HANDLE_VALUE;
+        }
+        if (stderr_rd_ != INVALID_HANDLE_VALUE) {
+            CloseHandle(stderr_rd_);
+            stderr_rd_ = INVALID_HANDLE_VALUE;
         }
         if (proc_ != INVALID_HANDLE_VALUE) {
             TerminateProcess(proc_, 0);
@@ -217,6 +226,42 @@ public:
 #endif
     }
 
+    // Drain any stderr output from subprocess (non-blocking)
+    std::string drain_stderr() {
+        std::string result;
+#ifdef _WIN32
+        if (stderr_rd_ == INVALID_HANDLE_VALUE)
+            return result;
+        char buf[4096];
+        DWORD avail = 0;
+        while (PeekNamedPipe(stderr_rd_, nullptr, 0, nullptr, &avail, nullptr) && avail > 0) {
+            DWORD to_read = (avail < sizeof(buf) - 1) ? avail : (DWORD)(sizeof(buf) - 1);
+            DWORD rd;
+            if (ReadFile(stderr_rd_, buf, to_read, &rd, nullptr) && rd > 0) {
+                buf[rd] = '\0';
+                result.append(buf, rd);
+            } else {
+                break;
+            }
+            avail = 0;
+        }
+#else
+        if (stderr_rd_fd_ < 0)
+            return result;
+        char buf[4096];
+        // Non-blocking read
+        int flags = fcntl(stderr_rd_fd_, F_GETFL);
+        fcntl(stderr_rd_fd_, F_SETFL, flags | O_NONBLOCK);
+        ssize_t r;
+        while ((r = read(stderr_rd_fd_, buf, sizeof(buf) - 1)) > 0) {
+            buf[r] = '\0';
+            result.append(buf, r);
+        }
+        fcntl(stderr_rd_fd_, F_SETFL, flags);
+#endif
+        return result;
+    }
+
     bool is_alive() const {
         return alive_;
     }
@@ -239,10 +284,13 @@ private:
     HANDLE stdin_wr_ = INVALID_HANDLE_VALUE;
     HANDLE stdout_rd_ = INVALID_HANDLE_VALUE;
     HANDLE stdout_wr_ = INVALID_HANDLE_VALUE;
+    HANDLE stderr_rd_ = INVALID_HANDLE_VALUE;
+    HANDLE stderr_wr_ = INVALID_HANDLE_VALUE;
 #else
     pid_t pid_ = 0;
     int stdin_wr_fd_ = -1;
     int stdout_rd_fd_ = -1;
+    int stderr_rd_fd_ = -1;
 #endif
 };
 
@@ -320,10 +368,14 @@ int main(int /*argc*/, char* /*argv*/[]) {
         std::string response = mcp.send(line);
 
         if (response.empty()) {
-            // Subprocess died during this request
-            std::fprintf(stderr, "[daemon] MCP died during request, sending error\n");
+            // Subprocess died — drain stderr for error details
+            std::string stderr_output = mcp.drain_stderr();
+            std::fprintf(stderr, "[daemon] MCP died during request\n");
+            if (!stderr_output.empty()) {
+                std::fprintf(stderr, "[daemon] stderr: %s\n", stderr_output.c_str());
+            }
 
-            // Try to extract request ID for proper error response
+            // Extract request ID
             std::string id_str = "null";
             auto id_pos = line.find("\"id\":");
             if (id_pos != std::string::npos) {
@@ -333,15 +385,35 @@ int main(int /*argc*/, char* /*argv*/[]) {
                     id_str = line.substr(val_start, val_end - val_start);
             }
 
-            // Check if this is a notification (no id) — don't send error for notifications
             if (line.find("\"id\"") == std::string::npos) {
-                // Notification — no response needed
                 continue;
             }
 
-            std::cout << "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"MCP "
-                         "subprocess crashed — restarting\"},\"id\":"
-                      << id_str << "}\n"
+            // Escape stderr for JSON (replace " and \ and newlines)
+            std::string escaped_stderr;
+            for (char c : stderr_output) {
+                if (c == '"')
+                    escaped_stderr += "\\\"";
+                else if (c == '\\')
+                    escaped_stderr += "\\\\";
+                else if (c == '\n')
+                    escaped_stderr += "\\n";
+                else if (c == '\r')
+                    continue;
+                else if (c >= 32)
+                    escaped_stderr += c;
+            }
+            if (escaped_stderr.size() > 500) {
+                escaped_stderr = escaped_stderr.substr(escaped_stderr.size() - 500);
+            }
+
+            std::string error_msg = "MCP subprocess crashed";
+            if (!escaped_stderr.empty()) {
+                error_msg += ": " + escaped_stderr;
+            }
+
+            std::cout << "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\""
+                      << error_msg << "\"},\"id\":" << id_str << "}\n"
                       << std::flush;
             continue;
         }
