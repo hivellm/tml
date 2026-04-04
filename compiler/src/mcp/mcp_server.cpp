@@ -70,7 +70,7 @@ void McpServer::init_call_logger() {
 }
 
 void McpServer::log_tool_call(const std::string& tool_name, const std::string& params_json,
-                              bool is_error, int64_t duration_ms) {
+                              bool is_error, int64_t duration_ms, const std::string& result_text) {
     std::lock_guard<std::mutex> lock(call_log_mutex_);
     if (call_log_fp_ == nullptr) {
         init_call_logger();
@@ -83,13 +83,111 @@ void McpServer::log_tool_call(const std::string& tool_name, const std::string& p
                         std::chrono::system_clock::now().time_since_epoch())
                         .count();
 
+    // --- 1.1: Extract test results from structured output ---
+    std::string test_results;
+    if (tool_name == "test" && !result_text.empty()) {
+        auto total_pos = result_text.find("\"total\":");
+        if (total_pos != std::string::npos) {
+            auto brace_start = result_text.rfind('{', total_pos);
+            auto brace_end = result_text.find('}', total_pos);
+            if (brace_start != std::string::npos && brace_end != std::string::npos) {
+                test_results = result_text.substr(brace_start, brace_end - brace_start + 1);
+            }
+        }
+    }
+
+    // --- 1.2: Extract normalized test target (suite or path) ---
+    std::string test_target;
+    if (tool_name == "test") {
+        auto suite_pos = params_json.find("\"suite\":");
+        if (suite_pos != std::string::npos) {
+            auto quote_start = params_json.find('"', suite_pos + 8);
+            auto quote_end = params_json.find('"', quote_start + 1);
+            if (quote_start != std::string::npos && quote_end != std::string::npos) {
+                test_target = params_json.substr(quote_start + 1, quote_end - quote_start - 1);
+            }
+        } else {
+            auto path_pos = params_json.find("\"path\":");
+            if (path_pos != std::string::npos) {
+                auto quote_start = params_json.find('"', path_pos + 7);
+                auto quote_end = params_json.find('"', quote_start + 1);
+                if (quote_start != std::string::npos && quote_end != std::string::npos) {
+                    test_target = params_json.substr(quote_start + 1, quote_end - quote_start - 1);
+                }
+            }
+        }
+    }
+
+    // --- 1.3: Check if debug_layers was explicitly requested ---
+    // -1 = not applicable (non-test), 0 = false, 1 = true
+    int debug_layers_state = -1;
+    if (tool_name == "test") {
+        debug_layers_state =
+            (params_json.find("\"debug_layers\":true") != std::string::npos) ? 1 : 0;
+    }
+
+    // --- 1.4: Estimate output token count (rough: chars/4) ---
+    int64_t output_tokens = static_cast<int64_t>(result_text.size()) / 4;
+
+    // --- 1.5: Classify error type ---
+    std::string error_type = "none";
+    if (is_error) {
+        if (result_text.find("CRASH") != std::string::npos ||
+            result_text.find("HEAP_CORRUPTION") != std::string::npos) {
+            error_type = "crash";
+        } else if (result_text.find("TIMEOUT") != std::string::npos) {
+            error_type = "timeout";
+        } else if (result_text.find("compile_errors") != std::string::npos ||
+                   result_text.find("Compile error") != std::string::npos ||
+                   result_text.find("Type check failed") != std::string::npos) {
+            error_type = "compile";
+        } else if (result_text.find("assertion") != std::string::npos ||
+                   result_text.find("FAIL") != std::string::npos ||
+                   result_text.find("failed") != std::string::npos) {
+            error_type = "assertion";
+        } else {
+            error_type = "unknown";
+        }
+    } else if (tool_name == "test" && !result_text.empty()) {
+        // Check for test failures even when is_error is false
+        auto pos = result_text.find("\"failed\":");
+        if (pos != std::string::npos) {
+            auto num_start = pos + 9;
+            while (num_start < result_text.size() && result_text[num_start] == ' ') {
+                num_start++;
+            }
+            if (num_start < result_text.size() && result_text[num_start] != '0') {
+                error_type = "assertion";
+            }
+        }
+    }
+
+    // --- 1.6: Track preceding tool ---
+    std::string preceded_by = last_tool_name_;
+    last_tool_name_ = tool_name;
+
+    // --- Build debug_layers JSON value ---
+    const char* debug_layers_json =
+        (debug_layers_state < 0) ? "null" : (debug_layers_state ? "true" : "false");
+
+    // --- Build optional test_results suffix (avoids allocation when empty) ---
+    std::string test_results_suffix;
+    if (!test_results.empty()) {
+        test_results_suffix = ",\"test_results\":" + test_results;
+    }
+
     std::fprintf(call_log_fp_,
                  "{\"event\":\"tool_call\",\"session\":\"%s\",\"seq\":%llu,"
                  "\"ts\":%lld,\"tool\":\"%s\",\"params\":%s,"
-                 "\"duration_ms\":%lld,\"is_error\":%s}\n",
+                 "\"duration_ms\":%lld,\"is_error\":%s,"
+                 "\"error_type\":\"%s\",\"preceded_by\":\"%s\","
+                 "\"test_target\":\"%s\",\"debug_layers\":%s,"
+                 "\"output_tokens\":%lld%s}\n",
                  session_id_.c_str(), static_cast<unsigned long long>(call_sequence_.fetch_add(1)),
                  static_cast<long long>(epoch_ms), tool_name.c_str(), params_json.c_str(),
-                 static_cast<long long>(duration_ms), is_error ? "true" : "false");
+                 static_cast<long long>(duration_ms), is_error ? "true" : "false",
+                 error_type.c_str(), preceded_by.c_str(), test_target.c_str(), debug_layers_json,
+                 static_cast<long long>(output_tokens), test_results_suffix.c_str());
     std::fflush(call_log_fp_);
 }
 
@@ -371,7 +469,17 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
     auto elapsed_ms = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                                std::chrono::steady_clock::now() - start)
                                                .count());
-    log_tool_call(tool_name, params_json, result.is_error, elapsed_ms);
+
+    // Extract result text for logging
+    std::string result_text;
+    for (const auto& c : result.content) {
+        if (c.type == "text" && !c.text.empty()) {
+            result_text = c.text;
+            break;
+        }
+    }
+
+    log_tool_call(tool_name, params_json, result.is_error, elapsed_ms, result_text);
     return json::JsonRpcResponse::success(result.to_json(), std::move(id));
 }
 

@@ -125,9 +125,10 @@ private:
     std::FILE* call_log_fp_ = nullptr;
     std::string session_id_;
     std::atomic<uint64_t> call_sequence_{0};
+    std::string last_tool_name_; // tracks preceding tool for research logging
     void init_call_logger();
     void log_tool_call(const std::string& tool_name, const std::string& params_json, bool is_error,
-                       int64_t duration_ms);
+                       int64_t duration_ms, const std::string& result_text);
 
     // Request processing
     void process_request(const json::JsonRpcRequest& request);
