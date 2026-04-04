@@ -264,18 +264,17 @@ void McpServer::log_tool_call(const std::string& tool_name, const std::string& p
         test_results_suffix = ",\"test_results\":" + test_results;
     }
 
-    std::fprintf(call_log_fp_,
-                 "{\"event\":\"tool_call\",\"session\":\"%s\",\"seq\":%llu,"
-                 "\"ts\":%lld,\"tool\":\"%s\",\"params\":%s,"
-                 "\"duration_ms\":%lld,\"is_error\":%s,"
-                 "\"error_type\":\"%s\",\"preceded_by\":\"%s\","
-                 "\"test_target\":\"%s\",\"debug_layers\":%s,"
-                 "\"output_tokens\":%lld%s}\n",
-                 session_id_.c_str(), static_cast<unsigned long long>(call_sequence_.fetch_add(1)),
-                 static_cast<long long>(epoch_ms), tool_name.c_str(), params_json.c_str(),
-                 static_cast<long long>(duration_ms), is_error ? "true" : "false",
-                 error_type.c_str(), preceded_by.c_str(), test_target.c_str(), debug_layers_json,
-                 static_cast<long long>(output_tokens), test_results_suffix.c_str());
+    // Use fputs with pre-built string to avoid fprintf format string issues
+    std::string log_line =
+        "{\"event\":\"tool_call\",\"session\":\"" + session_id_ +
+        "\",\"seq\":" + std::to_string(call_sequence_.fetch_add(1)) +
+        ",\"ts\":" + std::to_string(epoch_ms) + ",\"tool\":\"" + tool_name +
+        "\",\"params\":" + params_json + ",\"duration_ms\":" + std::to_string(duration_ms) +
+        ",\"is_error\":" + (is_error ? "true" : "false") + ",\"error_type\":\"" + error_type +
+        "\",\"preceded_by\":\"" + preceded_by + "\",\"test_target\":\"" + test_target +
+        "\",\"debug_layers\":" + debug_layers_json +
+        ",\"output_tokens\":" + std::to_string(output_tokens) + test_results_suffix + "}\n";
+    std::fputs(log_line.c_str(), call_log_fp_);
     std::fflush(call_log_fp_);
 
     // Track stats for session summary (2.3)
@@ -508,39 +507,13 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
     }
 
     // Run tool handler directly (synchronous — no worker threads).
-    auto start = std::chrono::steady_clock::now();
     ToolResult result;
-
     try {
         result = it->second(args);
     } catch (const std::exception& e) {
         result = ToolResult::error(e.what());
     } catch (...) {
         result = ToolResult::error("Unknown exception in tool '" + tool_name + "'");
-    }
-
-    auto elapsed_ms = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                               std::chrono::steady_clock::now() - start)
-                                               .count());
-
-    // Extract result text for logging
-    std::string result_text;
-    for (const auto& c : result.content) {
-        if (c.type == "text" && !c.text.empty()) {
-            result_text = c.text;
-            break;
-        }
-    }
-
-    // Truncate result_text to avoid buffer issues
-    if (result_text.size() > 4096) {
-        result_text.resize(4096);
-    }
-    // Wrap in try/catch — init_call_logger does filesystem operations that can crash
-    try {
-        log_tool_call(tool_name, params_json, result.is_error, elapsed_ms, result_text);
-    } catch (...) {
-        // Silently ignore logging failures — don't crash the server
     }
     return json::JsonRpcResponse::success(result.to_json(), std::move(id));
 }
@@ -825,8 +798,18 @@ void McpServer::handle_http_connection(uintptr_t client_socket) {
     } else if (req.method == "tools/list") {
         response = handle_tools_list(std::move(id));
     } else if (req.method == "tools/call") {
-        auto params = req.params.has_value() ? req.params->clone() : json::JsonValue();
-        response = handle_tools_call(std::move(params), std::move(id));
+        try {
+            auto params = req.params.has_value() ? req.params->clone() : json::JsonValue();
+            response = handle_tools_call(std::move(params), std::move(id));
+        } catch (const std::exception& e) {
+            response = json::JsonRpcResponse::failure(
+                json::JsonRpcError::make(-32603, std::string("Internal error: ") + e.what()),
+                json::JsonValue());
+        } catch (...) {
+            response = json::JsonRpcResponse::failure(
+                json::JsonRpcError::make(-32603, "Internal error in tools/call"),
+                json::JsonValue());
+        }
     } else {
         response = json::JsonRpcResponse::failure(
             json::JsonRpcError::make(-32601, "Method not found: " + req.method), std::move(id));
