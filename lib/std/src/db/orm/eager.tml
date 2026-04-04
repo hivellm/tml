@@ -7,14 +7,8 @@
 use std::db::orm::relation::Relation
 use std::db::query::select::SelectQuery
 use std::db::query::expression::Expr
-use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
 use std::db::error::DbError
-
-// NOTE: load_with() takes ref SqliteConnection for now because TML's codegen
-// doesn't support behavior dispatch through ref (ref dyn Connection).
-// When that's fixed, change to `conn: ref Connection` for database-agnostic usage.
-// The Connection behavior already defines execute() which is all load_with needs.
 
 /// Generates a SELECT query with LEFT JOINs for all given relations.
 ///
@@ -41,8 +35,7 @@ pub func eager_load_sql(table: Str, relations: ref List[Relation]) -> Str {
 /// Executes the eager-loading query for a specific parent row identified by its PK.
 ///
 /// Binds `pk` as a WHERE condition (`<table>.id = <pk>`) on top of the JOIN query,
-/// executes it, and returns the SQL string that was run (so callers can inspect it
-/// or route results through their own row-reader).
+/// executes it, and returns the SQL string that was run.
 ///
 /// Returns `Ok(sql)` on success, `Err(e)` if execution fails.
 pub func load_with(conn: ref SqliteConnection, table: Str, pk: I64, relations: ref List[Relation]) -> Outcome[Str, DbError] {

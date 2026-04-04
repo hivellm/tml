@@ -1,29 +1,19 @@
 //! Cascade operations — generates INSERT/DELETE SQL for child rows when
 //! a parent is mutated, mirroring TypeORM's `cascade: ["insert", "remove"]`.
 //!
-//! All functions build the SQL string and execute via prepared-statement
-//! helpers; they do NOT perform recursive cascading (only one level deep).
+//! All functions build complete SQL strings with values inlined and execute
+//! via `conn.execute(sql)`.  Only one level of cascading (not recursive).
 
 use std::db::orm::relation::Relation
-use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
 use std::db::error::DbError
-
-// NOTE: cascade functions take ref SqliteConnection for now because TML's codegen
-// doesn't support behavior dispatch through ref (ref dyn Connection).
-// When that's fixed, change to `conn: ref Connection` for database-agnostic usage.
-// Connection behavior already defines execute_i64_params/execute_i64_str.
 
 /// Inserts a child row for a given parent PK using the relation's foreign key.
 ///
 /// Generates:
 /// ```sql
-/// INSERT INTO <child_table> (<fk_col>, <value_col>) VALUES (?, ?)
+/// INSERT INTO <child_table> (<fk_col>, <value_col>) VALUES (<parent_pk>, '<child_val>')
 /// ```
-/// where `<fk_col>` is `relation.foreign_key`, `parent_pk` is bound as I64,
-/// and `child_val` (a Str) is the single value column.
-///
-/// Returns `Ok(rows_affected)` or `Err(DbError)`.
 pub func cascade_insert(
     conn: ref SqliteConnection,
     child_relation: ref Relation,
@@ -33,19 +23,16 @@ pub func cascade_insert(
 ) -> Outcome[I64, DbError] {
     let child_table = child_relation.foreign_table
     let fk_col = child_relation.foreign_key
-    let sql = "INSERT INTO " + child_table + " (" + fk_col + ", " + value_col + ") VALUES (?, ?)"
-    return conn.execute_i64_str(sql, parent_pk, child_val)
+    let sql = "INSERT INTO " + child_table + " (" + fk_col + ", " + value_col + ") VALUES (" + parent_pk.to_string() + ", '" + child_val + "')"
+    return conn.execute(sql)
 }
 
 /// Deletes all child rows for a given parent PK using the relation's foreign key.
 ///
 /// Generates:
 /// ```sql
-/// DELETE FROM <child_table> WHERE <fk_col> = ?
+/// DELETE FROM <child_table> WHERE <fk_col> = <parent_pk>
 /// ```
-/// and binds `parent_pk` as the parameter.
-///
-/// Returns `Ok(rows_deleted)` or `Err(DbError)`.
 pub func cascade_delete(
     conn: ref SqliteConnection,
     child_relation: ref Relation,
@@ -53,8 +40,8 @@ pub func cascade_delete(
 ) -> Outcome[I64, DbError] {
     let child_table = child_relation.foreign_table
     let fk_col = child_relation.foreign_key
-    let sql = "DELETE FROM " + child_table + " WHERE " + fk_col + " = ?"
-    return conn.execute_i64_params(sql, parent_pk)
+    let sql = "DELETE FROM " + child_table + " WHERE " + fk_col + " = " + parent_pk.to_string()
+    return conn.execute(sql)
 }
 
 /// Returns the SQL string that `cascade_insert` would execute (for inspection/testing).

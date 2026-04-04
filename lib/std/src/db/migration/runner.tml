@@ -1,7 +1,5 @@
 //! Migration runner — applies and rolls back migrations.
-use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
-use std::db::sqlite::statement::SqliteStatement
 use std::db::error::{DbError, DbErrorKind}
 use std::db::migration::migration::Migration
 use std::db::migration::history
@@ -93,18 +91,6 @@ pub func rollback_migration(conn: ref SqliteConnection, m: ref Migration) -> Out
 
 /// Returns the current migration version (0 if no migrations have been applied).
 pub func current_version(conn: ref SqliteConnection) -> Outcome[I64, DbError] {
-    let stmt_result = conn.prepare(history::latest_version_sql())
-    when stmt_result {
-        Ok(raw_stmt) => {
-            let mut stmt = SqliteStatement::new(raw_stmt)
-            if stmt.step() {
-                let v = stmt.column_i64(0)
-                stmt.finalize()
-                return Ok(v)
-            }
-            stmt.finalize()
-            return Ok(0)
-        },
-        Err(e) => return Err(e)
-    }
+    let sql = history::latest_version_sql()
+    return conn.query_scalar_i64(sql)
 }
