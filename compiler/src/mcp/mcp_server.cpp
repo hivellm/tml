@@ -95,9 +95,11 @@ void McpServer::init_call_logger() {
     const char* condition =
         (dl_env != nullptr && std::string(dl_env) == "0") ? "baseline" : "debug-layers";
 
-    // 2.1: Detect active Rulebook task
+    // 2.1: Detect active Rulebook task (wrapped in try/catch — filesystem can fail)
     std::string task_id;
-    {
+    std::string model;
+    std::string claude_md_hash;
+    try {
         std::error_code ec;
         fs::path tasks_dir = fs::current_path() / ".rulebook" / "tasks";
         if (fs::exists(tasks_dir, ec)) {
@@ -107,7 +109,6 @@ void McpServer::init_call_logger() {
                 fs::path meta = entry.path() / ".metadata.json";
                 if (!fs::exists(meta))
                     continue;
-                // Read metadata to check status
                 std::ifstream mf(meta);
                 std::string content((std::istreambuf_iterator<char>(mf)),
                                     std::istreambuf_iterator<char>());
@@ -117,18 +118,18 @@ void McpServer::init_call_logger() {
                 }
             }
         }
-    }
+    } catch (...) {}
 
     // 2.2: Model from env var
-    std::string model;
-    const char* model_env = std::getenv("TML_MODEL");
-    if (model_env != nullptr && model_env[0] != '\0') {
-        model = model_env;
-    }
+    try {
+        const char* model_env = std::getenv("TML_MODEL");
+        if (model_env != nullptr && model_env[0] != '\0') {
+            model = model_env;
+        }
+    } catch (...) {}
 
     // 2.4: CLAUDE.md hash (CRC32 of first 4KB for speed)
-    std::string claude_md_hash;
-    {
+    try {
         std::ifstream cf("CLAUDE.md", std::ios::binary);
         if (cf.is_open()) {
             char buf[4096];
@@ -145,7 +146,7 @@ void McpServer::init_call_logger() {
             std::snprintf(hex, sizeof(hex), "%08x", crc);
             claude_md_hash = hex;
         }
-    }
+    } catch (...) {}
 
     std::fprintf(call_log_fp_,
                  "{\"event\":\"session_start\",\"session\":\"%s\","
