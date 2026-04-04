@@ -80,6 +80,10 @@ struct BuildOptions {
     // Emit all pipeline stages (HIR, THIR, MIR pre/per-pass/post, LLVM IR) to a directory.
     bool emit_pipeline = false;
     std::string pipeline_output_dir; // Default: .sandbox/pipeline/ relative to source
+
+    // Bundle: copy all needed runtime DLLs alongside the output executable
+    bool bundle = false;
+    std::string bundle_dir; // Custom bundle dir (default: build/<config>/bundle/)
 };
 
 // Run options (for run command)

@@ -1073,6 +1073,31 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         }
     }
 
+    // Bundle: create self-contained directory with EXE + all runtime DLLs
+    if (options.bundle) {
+        fs::path bdir =
+            options.bundle_dir.empty() ? build_dir / "bundle" : fs::path(options.bundle_dir);
+        std::error_code bec;
+        fs::create_directories(bdir, bec);
+
+        // Copy the executable
+        fs::path bundled_exe = bdir / final_output.filename();
+        fs::copy_file(final_output, bundled_exe, fs::copy_options::overwrite_existing, bec);
+
+        // Copy all runtime DLLs from build dir
+        for (const auto& entry : fs::directory_iterator(build_dir, bec)) {
+            if (!entry.is_regular_file())
+                continue;
+            auto ext = entry.path().extension().string();
+            if (ext == ".dll" || ext == ".so" || ext == ".dylib") {
+                fs::path dest = bdir / entry.path().filename();
+                fs::copy_file(entry.path(), dest, fs::copy_options::overwrite_existing, bec);
+            }
+        }
+
+        TML_LOG_INFO("build", "bundle: " << to_forward_slashes(bdir.string()));
+    }
+
     TML_LOG_INFO("build", "build: " << to_forward_slashes(final_output.string()));
 
     // Generate C header if requested (after successful build)

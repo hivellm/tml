@@ -262,6 +262,10 @@ int tml_main(int argc, char* argv[]) {
         bool emit_pipeline = false;
         std::string pipeline_output_dir;
 
+        // Bundle: copy all runtime DLLs alongside output
+        bool bundle = false;
+        std::string bundle_dir;
+
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
@@ -391,6 +395,11 @@ int tml_main(int argc, char* argv[]) {
                 tml::CompilerOptions::checked_math = true;
             } else if (arg == "--no-checked-math") {
                 tml::CompilerOptions::checked_math = false;
+            } else if (arg == "--bundle") {
+                bundle = true;
+            } else if (arg.starts_with("--bundle=")) {
+                bundle = true;
+                bundle_dir = arg.substr(9);
             }
         }
 
@@ -449,6 +458,8 @@ int tml_main(int argc, char* argv[]) {
         tml::CompilerOptions::polonius = polonius;
         opts.emit_pipeline = emit_pipeline;
         opts.pipeline_output_dir = std::move(pipeline_output_dir);
+        opts.bundle = bundle;
+        opts.bundle_dir = std::move(bundle_dir);
 
         // Default: query-based build (demand-driven with incremental compilation)
         // Use --legacy to fall back to the traditional pipeline
