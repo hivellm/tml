@@ -745,6 +745,88 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         return false;
     }
 
+    // ── Generic external package resolution ─────────────────────────
+    // For any module path like "postgresql::connection::PgConnection",
+    // extract "postgresql" as the package name and look for
+    // lib/postgresql/src/connection/PgConnection.tml (or .../mod.tml).
+    // This allows ANY package in lib/ to be imported without hardcoding.
+    {
+        std::string package_name;
+        std::string rest;
+        auto sep = module_path.find("::");
+        if (sep != std::string::npos) {
+            package_name = module_path.substr(0, sep);
+            rest = module_path.substr(sep + 2);
+        } else {
+            package_name = module_path;
+            // No submodule — try loading mod.tml from the package root
+        }
+
+        // Skip known prefixes (already handled above) and special names
+        if (!package_name.empty() && package_name != "self" && package_name != "super" &&
+            package_name != "core" && package_name != "std" && package_name != "test" &&
+            package_name != "backtrace") {
+
+            const std::string& lib_root = find_lib_root();
+            if (!lib_root.empty()) {
+                namespace fs = std::filesystem;
+                fs::path package_src = fs::path(lib_root) / package_name / "src";
+
+                if (fs::exists(package_src) && fs::is_directory(package_src)) {
+                    // This is a valid external package — check caches first
+                    std::string cached_path = get_cached_path(module_path);
+                    if (!cached_path.empty()) {
+                        TML_DEBUG_LN("[MODULE] Path cache hit: " << module_path);
+                        return load_module_from_file(module_path, cached_path);
+                    }
+                    if (is_known_not_found(module_path)) {
+                        if (!silent) {
+                            TML_LOG_ERROR("types", "Module not found: " << module_path);
+                        }
+                        return false;
+                    }
+
+                    if (rest.empty()) {
+                        // Root module: try lib/<package>/src/mod.tml
+                        std::string resolved = resolve_lib_module_path(package_name, "src", "mod");
+                        if (!resolved.empty()) {
+                            cache_resolved_path(module_path, resolved);
+                            TML_DEBUG_LN("[MODULE] Resolved external package: "
+                                         << module_path << " -> " << resolved);
+                            return load_module_from_file(module_path, resolved);
+                        }
+                    } else {
+                        // Submodule: convert :: to / and resolve
+                        std::string fs_rest = rest;
+                        size_t p = 0;
+                        while ((p = fs_rest.find("::", p)) != std::string::npos) {
+                            fs_rest.replace(p, 2, "/");
+                            p += 1;
+                        }
+
+                        std::string resolved =
+                            resolve_lib_module_path(package_name, "src", fs_rest);
+                        if (!resolved.empty()) {
+                            cache_resolved_path(module_path, resolved);
+                            TML_DEBUG_LN("[MODULE] Resolved external module: "
+                                         << module_path << " -> " << resolved);
+                            return load_module_from_file(module_path, resolved);
+                        }
+                    }
+
+                    // Not found in the package
+                    if (!silent) {
+                        TML_LOG_ERROR("types", "Module '" << module_path
+                                                          << "' not found in package lib/"
+                                                          << package_name << "/src/");
+                    }
+                    cache_not_found(module_path);
+                    return false;
+                }
+            }
+        }
+    }
+
     // Local module - try to load from source directory
     // This supports "use algorithms" to load "algorithms.tml" from the same directory
     // Also supports nested modules like "utils::helpers" -> "utils/helpers.tml"

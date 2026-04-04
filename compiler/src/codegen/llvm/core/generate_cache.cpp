@@ -77,9 +77,10 @@ GlobalASTCache::Stats GlobalASTCache::get_stats() const {
 }
 
 bool GlobalASTCache::should_cache(const std::string& module_path) {
-    // Cache library modules: core::*, std::*, test
+    // Cache library modules: core::*, std::*, test, backtrace::*
     if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
-        module_path == "test" || module_path.starts_with("test::")) {
+        module_path == "test" || module_path.starts_with("test::") || module_path == "backtrace" ||
+        module_path.starts_with("backtrace::")) {
         return true;
     }
     return false;

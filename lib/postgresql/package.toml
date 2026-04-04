@@ -14,9 +14,6 @@ categories = ["database"]
 name = "postgresql"
 path = "src/mod.tml"
 
-[dependencies]
-std = { path = "../std" }
-
 [native-deps]
 libpq = { lib = "libpq", headers = ["libpq-fe.h"] }
 

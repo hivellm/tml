@@ -152,8 +152,21 @@ auto run_build_script(const fs::path& build_script_path, const fs::path& package
         return result;
     }
 
-    // Determine temp directory for build script compilation
-    fs::path temp_dir = package_dir / ".build-script-cache";
+    // Determine temp directory for build script compilation — always under build/
+    fs::path project_root = package_dir;
+    // Walk up to find the project root (contains build/ directory)
+    for (int i = 0; i < 10; ++i) {
+        if (fs::exists(project_root / "build")) {
+            break;
+        }
+        auto parent = project_root.parent_path();
+        if (parent == project_root) {
+            break;
+        }
+        project_root = parent;
+    }
+    fs::path temp_dir =
+        project_root / "build" / "debug" / "build-scripts" / package_dir.filename().string();
     std::error_code ec;
     fs::create_directories(temp_dir, ec);
     if (ec) {
