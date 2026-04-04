@@ -63,6 +63,13 @@ build/
 *.lib
 compile_commands.json
 
+# Allow pre-built native libraries in packages (like Rust's bundled -sys crates)
+!lib/*/native/**/*.dll
+!lib/*/native/**/*.so
+!lib/*/native/**/*.dylib
+!lib/*/native/**/*.a
+!lib/*/native/**/*.lib
+
 # Compiler build artifacts
 packages/compiler/build/
 vcpkg_installed/
