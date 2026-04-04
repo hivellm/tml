@@ -243,6 +243,40 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             // Hard cap: no test executable may run longer than 60 seconds
             opts.timeout = std::min(opts.timeout, std::chrono::milliseconds(60'000));
 
+            // Add native library directories to subprocess PATH so DLLs are found at runtime.
+            // build_environment_block() prepends PATH entries, so setting opts.env["PATH"]
+            // is safe — it prepends to the existing PATH rather than replacing it.
+            {
+                std::string native_path;
+                // 1. Test exe cache dir (DLLs already copied there by ensure_runtime_dlls)
+                auto cache_dir = fs::absolute(fs::path(work.exe_path).parent_path());
+                native_path = cache_dir.string();
+                // 2. Project-local native dirs: lib/<pkg>/native/<platform>/
+#ifdef _WIN32
+                static const std::string platform_dir = "win-x64";
+                static const std::string path_sep = ";";
+#elif defined(__APPLE__)
+                static const std::string platform_dir = "macos-arm64";
+                static const std::string path_sep = ":";
+#else
+                static const std::string platform_dir = "linux-x64";
+                static const std::string path_sep = ":";
+#endif
+                fs::path lib_dir = fs::current_path() / "lib";
+                if (fs::exists(lib_dir)) {
+                    std::error_code ec2;
+                    for (const auto& pkg : fs::directory_iterator(lib_dir, ec2)) {
+                        if (!pkg.is_directory())
+                            continue;
+                        fs::path native = pkg.path() / "native" / platform_dir;
+                        if (fs::exists(native)) {
+                            native_path += path_sep + fs::absolute(native).string();
+                        }
+                    }
+                }
+                opts.env["PATH"] = native_path;
+            }
+
             // Coverage: tell subprocess to write covered functions to a file
             if (config.coverage && out_covered != nullptr) {
                 auto cov_dir = fs::current_path() / "build" / "coverage";
@@ -779,6 +813,36 @@ TestRunResult run_tests(const TestConfig& config) {
             run_opts.timeout = std::chrono::seconds(static_cast<int>(total_s));
         } else {
             run_opts.timeout = std::chrono::seconds(config.timeout_seconds * 10);
+        }
+
+        // Add native library directories to subprocess PATH (same logic as per-suite path above)
+        {
+            std::string native_path;
+            auto cache_dir = fs::absolute(fs::path(run_opts.exe_path).parent_path());
+            native_path = cache_dir.string();
+#ifdef _WIN32
+            static const std::string unified_platform_dir = "win-x64";
+            static const std::string unified_path_sep = ";";
+#elif defined(__APPLE__)
+            static const std::string unified_platform_dir = "macos-arm64";
+            static const std::string unified_path_sep = ":";
+#else
+            static const std::string unified_platform_dir = "linux-x64";
+            static const std::string unified_path_sep = ":";
+#endif
+            fs::path lib_dir = fs::current_path() / "lib";
+            if (fs::exists(lib_dir)) {
+                std::error_code ec2;
+                for (const auto& pkg : fs::directory_iterator(lib_dir, ec2)) {
+                    if (!pkg.is_directory())
+                        continue;
+                    fs::path native = pkg.path() / "native" / unified_platform_dir;
+                    if (fs::exists(native)) {
+                        native_path += unified_path_sep + fs::absolute(native).string();
+                    }
+                }
+            }
+            run_opts.env["PATH"] = native_path;
         }
 
         auto run_start = Clock::now();

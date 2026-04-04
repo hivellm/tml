@@ -25,6 +25,7 @@ TML_MODULE("compiler")
 
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"
+#include "cli/builder/native_lib_resolver.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
@@ -421,6 +422,19 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
+        // Use NativeLibResolver to copy runtime DLLs to cache dir
+        {
+            auto nlr_platform = Platform::detect();
+            NativeLibResolver nlr(nlr_platform);
+            nlr.set_project_root(fs::current_path());
+            for (const auto& lib : compile.link_libs) {
+                auto resolved = nlr.resolve(lib);
+                if (resolved.tier != NativeLibTier::NotFound) {
+                    NativeLibResolver::copy_runtime_libs({resolved}, cache_dir);
+                }
+            }
+        }
+
         // Link to temporary location first
         fs::path temp_exe = cache_dir / (exe_hash + "_link_temp.exe");
 
@@ -685,6 +699,19 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
         link_options.link_flags.push_back("/STACK:67108864");
 #endif
+
+        // Use NativeLibResolver to copy runtime DLLs to cache dir (second code path)
+        {
+            auto nlr_platform2 = Platform::detect();
+            NativeLibResolver nlr2(nlr_platform2);
+            nlr2.set_project_root(fs::current_path());
+            for (const auto& lib : compile.link_libs) {
+                auto resolved = nlr2.resolve(lib);
+                if (resolved.tier != NativeLibTier::NotFound) {
+                    NativeLibResolver::copy_runtime_libs({resolved}, cache_dir);
+                }
+            }
+        }
 
         // Link to a unique temporary location (avoid race conditions)
         std::string temp_key = generate_cache_key(path);

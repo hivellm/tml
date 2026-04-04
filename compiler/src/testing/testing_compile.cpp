@@ -17,6 +17,7 @@ TML_MODULE("test")
 #include "cli/builder/build_script.hpp"
 #include "cli/builder/builder_internal.hpp"
 #include "cli/builder/compiler_setup.hpp"
+#include "cli/builder/native_lib_resolver.hpp"
 #include "cli/builder/object_compiler.hpp"
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "common.hpp"
@@ -1241,6 +1242,19 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // Use NativeLibResolver to copy ALL runtime DLLs (including transitive deps) to test cache
+    {
+        auto nlr_platform = cli::Platform::detect();
+        cli::NativeLibResolver nlr(nlr_platform);
+        nlr.set_project_root(fs::current_path());
+        for (const auto& lib : all_link_libs) {
+            auto resolved = nlr.resolve(lib);
+            if (resolved.tier != cli::NativeLibTier::NotFound) {
+                cli::NativeLibResolver::copy_runtime_libs({resolved}, cache_dir);
             }
         }
     }

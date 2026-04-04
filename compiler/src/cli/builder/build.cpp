@@ -29,6 +29,7 @@ TML_MODULE("compiler")
 
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"
+#include "cli/builder/native_lib_resolver.hpp"
 #include "codegen/codegen_backend.hpp"
 #include "codegen/codegen_partitioner.hpp"
 #include "query/query_context.hpp"
@@ -969,6 +970,47 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                                           fs::copy_options::overwrite_existing, ec);
                         }
                     }
+                }
+            }
+        }
+
+        // Use NativeLibResolver to copy runtime DLLs from all resolved native libs
+        // to the output directory so they're found at runtime.
+        {
+            auto platform = Platform::detect();
+            NativeLibResolver resolver(platform);
+            resolver.set_project_root(fs::current_path());
+
+            // Collect all link libs from build script + @link attributes
+            std::set<std::string> all_libs;
+            for (const auto& lib : build_script_result.link_libs) {
+                all_libs.insert(lib);
+            }
+            for (const auto& lib : link_libs) {
+                fs::path lp(lib);
+                if (lp.has_parent_path())
+                    continue; // skip full paths
+                std::string name = lp.stem().string();
+                if (name.size() > 3 && name.substr(0, 3) == "lib")
+                    name = name.substr(3);
+                all_libs.insert(name);
+            }
+
+            // Add search paths from the source file's build script result
+            if (build_script_result.success) {
+                fs::path source_pkg_dir = detect_package_dir(fs::absolute(fs::path(path)));
+                std::vector<fs::path> search_paths;
+                for (const auto& sp : build_script_result.link_search_paths) {
+                    search_paths.push_back(sp.is_absolute() ? sp : source_pkg_dir / sp);
+                }
+                resolver.add_search_paths(search_paths);
+            }
+
+            // Resolve and copy runtime libs for each library name
+            for (const auto& lib_name : all_libs) {
+                auto resolved = resolver.resolve(lib_name);
+                if (resolved.tier != NativeLibTier::NotFound && !resolved.runtime_libs.empty()) {
+                    NativeLibResolver::copy_runtime_libs({resolved}, build_dir);
                 }
             }
         }
