@@ -1,0 +1,169 @@
+//! PostgreSQL OID-to-ColumnType mapping.
+//!
+//! Maps between PostgreSQL object identifiers (OIDs) for built-in types
+//! and the abstract [`ColumnType`] enum used by the database abstraction layer.
+
+use std::db::types::ColumnType
+
+// ============================================================================
+// PostgreSQL Built-in Type OIDs
+// ============================================================================
+
+/// OID for the `bool` type.
+pub const PG_BOOL_OID: I32 = 16
+
+/// OID for the `bytea` type.
+pub const PG_BYTEA_OID: I32 = 17
+
+/// OID for the `int8` (bigint) type.
+pub const PG_INT8_OID: I32 = 20
+
+/// OID for the `int2` (smallint) type.
+pub const PG_INT2_OID: I32 = 21
+
+/// OID for the `int4` (integer) type.
+pub const PG_INT4_OID: I32 = 23
+
+/// OID for the `text` type.
+pub const PG_TEXT_OID: I32 = 25
+
+/// OID for the `oid` type itself.
+pub const PG_OID_OID: I32 = 26
+
+/// OID for the `float4` (real) type.
+pub const PG_FLOAT4_OID: I32 = 700
+
+/// OID for the `float8` (double precision) type.
+pub const PG_FLOAT8_OID: I32 = 701
+
+/// OID for the `numeric` type.
+pub const PG_NUMERIC_OID: I32 = 1700
+
+/// OID for the `bpchar` (char(n)) type.
+pub const PG_BPCHAR_OID: I32 = 1042
+
+/// OID for the `varchar` type.
+pub const PG_VARCHAR_OID: I32 = 1043
+
+/// OID for the `date` type.
+pub const PG_DATE_OID: I32 = 1082
+
+/// OID for the `time` type.
+pub const PG_TIME_OID: I32 = 1083
+
+/// OID for the `timestamp` type (without time zone).
+pub const PG_TIMESTAMP_OID: I32 = 1114
+
+/// OID for the `timestamptz` type (with time zone).
+pub const PG_TIMESTAMPTZ_OID: I32 = 1184
+
+/// OID for the `interval` type.
+pub const PG_INTERVAL_OID: I32 = 1186
+
+/// OID for the `uuid` type.
+pub const PG_UUID_OID: I32 = 2950
+
+/// OID for the `json` type.
+pub const PG_JSON_OID: I32 = 114
+
+/// OID for the `jsonb` type.
+pub const PG_JSONB_OID: I32 = 3802
+
+// ============================================================================
+// OID → ColumnType Mapping
+// ============================================================================
+
+/// Maps a PostgreSQL type OID to a [`ColumnType`].
+///
+/// Integer types (int2, int4, int8, oid) map to `Integer`.
+/// Floating-point types (float4, float8, numeric) map to `Float`.
+/// String types (text, varchar, bpchar, json, jsonb) map to `Text`.
+/// Binary type (bytea) maps to `Blob`.
+/// Boolean type (bool) maps to `Boolean`.
+/// Date/time types (date, time, timestamp, timestamptz, interval) map to `Timestamp`.
+/// UUID type maps to `Uuid`.
+/// Unknown OIDs default to `Text`.
+pub func from_pg_oid(oid: I32) -> ColumnType {
+    // Integer types
+    if oid == PG_INT2_OID or oid == PG_INT4_OID or oid == PG_INT8_OID or oid == PG_OID_OID {
+        return ColumnType::Integer
+    }
+    // Floating-point types
+    if oid == PG_FLOAT4_OID or oid == PG_FLOAT8_OID or oid == PG_NUMERIC_OID {
+        return ColumnType::Float
+    }
+    // Boolean
+    if oid == PG_BOOL_OID {
+        return ColumnType::Boolean
+    }
+    // Binary
+    if oid == PG_BYTEA_OID {
+        return ColumnType::Blob
+    }
+    // Date/time types
+    if oid == PG_DATE_OID or oid == PG_TIME_OID or oid == PG_TIMESTAMP_OID or oid == PG_TIMESTAMPTZ_OID or oid == PG_INTERVAL_OID {
+        return ColumnType::Timestamp
+    }
+    // UUID
+    if oid == PG_UUID_OID {
+        return ColumnType::Uuid
+    }
+    // Text types (text, varchar, bpchar, json, jsonb) and unknown
+    return ColumnType::Text
+}
+
+/// Maps a [`ColumnType`] back to a PostgreSQL type name string.
+///
+/// Returns the canonical PostgreSQL type name for use in DDL statements.
+pub func to_pg_type(col_type: ColumnType) -> Str {
+    when col_type {
+        ColumnType::Integer   => "BIGINT",
+        ColumnType::Float     => "DOUBLE PRECISION",
+        ColumnType::Text      => "TEXT",
+        ColumnType::Blob      => "BYTEA",
+        ColumnType::Boolean   => "BOOLEAN",
+        ColumnType::Timestamp => "TIMESTAMPTZ",
+        ColumnType::Uuid      => "UUID"
+    }
+}
+
+/// Maps a PostgreSQL type name string (e.g. from `pg_catalog`) to a [`ColumnType`].
+///
+/// Handles common PostgreSQL type names with case-insensitive prefix matching.
+/// Unknown type names default to `Text`.
+pub func from_pg_type_name(type_name: Str) -> ColumnType {
+    if type_name == "" {
+        return ColumnType::Text
+    }
+    // Integer types
+    if type_name == "int2" or type_name == "int4" or type_name == "int8" or
+       type_name == "smallint" or type_name == "integer" or type_name == "bigint" or
+       type_name == "serial" or type_name == "bigserial" or type_name == "oid" {
+        return ColumnType::Integer
+    }
+    // Floating-point types
+    if type_name == "float4" or type_name == "float8" or
+       type_name == "real" or type_name == "numeric" or type_name == "decimal" or
+       type_name.starts_with("double") {
+        return ColumnType::Float
+    }
+    // Boolean
+    if type_name == "bool" or type_name == "boolean" {
+        return ColumnType::Boolean
+    }
+    // Binary
+    if type_name == "bytea" {
+        return ColumnType::Blob
+    }
+    // Date/time types
+    if type_name == "date" or type_name == "time" or
+       type_name.starts_with("timestamp") or type_name == "interval" {
+        return ColumnType::Timestamp
+    }
+    // UUID
+    if type_name == "uuid" {
+        return ColumnType::Uuid
+    }
+    // Text, varchar, char, json, jsonb, and everything else
+    return ColumnType::Text
+}

@@ -1,0 +1,577 @@
+//! PostgreSQL connection adapter.
+//!
+//! [`PgConnection`] wraps a raw libpq connection handle and implements
+//! the [`Connection`] behavior for database-agnostic usage.
+//!
+//! # Quick start
+//!
+//! ```tml
+//! use postgresql::connection::PgConnection
+//!
+//! let conn = PgConnection::connect("host=localhost dbname=mydb")!
+//! conn.execute("CREATE TABLE t (id SERIAL PRIMARY KEY, val TEXT)")!
+//! conn.execute("INSERT INTO t (val) VALUES ('hello')")!
+//! ```
+
+use std::db::error::{DbError, DbErrorKind}
+use std::db::driver::connection::Connection
+
+// ── libpq FFI declarations (local to this file) ─────────────────────────
+
+@extern("c") func PQconnectdb(conninfo: Str) -> *Unit
+@extern("c") func PQstatus(conn: *Unit) -> I32
+@extern("c") func PQfinish(conn: *Unit)
+@extern("c") func PQerrorMessage(conn: *Unit) -> Str
+@extern("c") func PQexec(conn: *Unit, query: Str) -> *Unit
+@extern("c") func PQexecParams(conn: *Unit, command: Str, nParams: I32, paramTypes: *Unit, paramValues: *Unit, paramLengths: *Unit, paramFormats: *Unit, resultFormat: I32) -> *Unit
+@extern("c") func PQresultStatus(result: *Unit) -> I32
+@extern("c") func PQntuples(result: *Unit) -> I32
+@extern("c") func PQgetvalue(result: *Unit, row: I32, col: I32) -> Str
+@extern("c") func PQgetisnull(result: *Unit, row: I32, col: I32) -> I32
+@extern("c") func PQcmdTuples(result: *Unit) -> Str
+@extern("c") func PQclear(result: *Unit)
+@extern("c") func PQresultErrorMessage(result: *Unit) -> Str
+@extern("c") func PQtransactionStatus(conn: *Unit) -> I32
+@extern("c") func PQserverVersion(conn: *Unit) -> I32
+
+// ── String length via C strlen (avoids Str::len() codegen issues) ───────
+
+@extern("c") func strlen(s: Str) -> I64
+
+// ── Constants ───────────────────────────────────────────────────────────
+
+/// Connection succeeded.
+const PG_CONNECTION_OK: I32 = 0
+
+/// Non-query command completed successfully.
+const PG_COMMAND_OK: I32 = 1
+
+/// Query returned rows successfully.
+const PG_TUPLES_OK: I32 = 2
+
+/// Fatal error occurred.
+const PG_FATAL_ERROR: I32 = 7
+
+/// Connection idle (not in a transaction).
+const PG_TRANS_IDLE: I32 = 0
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+/// Parses a decimal string to I64.  Returns 0 if the string is empty
+/// or contains non-digit characters.
+///
+/// This is a local helper to avoid cross-module `Maybe[I64]` codegen
+/// issues with `Str::parse_i64()`.
+func pg_parse_i64(s: Str) -> I64 {
+    let slen = strlen(s)
+    if slen == 0 {
+        return 0
+    }
+    var result: I64 = 0
+    var i: I64 = 0
+    loop (i < slen) {
+        var c: I64 = 0
+        lowlevel {
+            let base = s as RawPtr
+            let addr = ptr_offset(base, i)
+            c = ptr_read[U8](addr) as I64
+        }
+        if c >= 48 and c <= 57 {
+            result = result * 10 + (c - 48)
+        } else {
+            return 0
+        }
+        i = i + 1
+    }
+    return result
+}
+
+/// Null pointer constant for `*Unit`.
+func pg_null() -> *Unit {
+    return 0 as *Unit
+}
+
+/// Checks a PGresult for errors.  Returns Ok(()) on success,
+/// Err(DbError) on failure.  Clears the result on error.
+func pg_check_result(result: *Unit, conn: *Unit) -> Outcome[Unit, DbError] {
+    if result == pg_null() {
+        let msg = PQerrorMessage(conn)
+        return Err(DbError::new(DbErrorKind::Query, msg))
+    }
+    let status = PQresultStatus(result)
+    if status == PG_FATAL_ERROR {
+        let msg = PQresultErrorMessage(result)
+        PQclear(result)
+        return Err(DbError::new(DbErrorKind::Query, msg))
+    }
+    return Ok(())
+}
+
+/// Builds a param values array with one I64 value (as text).
+/// Returns a heap-allocated array of 1 pointer; caller must free.
+func pg_bind_1_i64(p1: I64) -> *Unit {
+    let s1 = p1.to_string()
+    var params: *Unit = pg_null()
+    lowlevel {
+        let arr = mem_alloc(8)
+        let s1_ptr = s1 as RawPtr
+        ptr_write[I64](arr, s1_ptr as I64)
+        params = arr as *Unit
+    }
+    return params
+}
+
+/// Builds a param values array with two I64 values (as text).
+func pg_bind_2_i64(p1: I64, p2: I64) -> *Unit {
+    let s1 = p1.to_string()
+    let s2 = p2.to_string()
+    var params: *Unit = pg_null()
+    lowlevel {
+        let arr = mem_alloc(16)
+        let s1_ptr = s1 as RawPtr
+        let s2_ptr = s2 as RawPtr
+        ptr_write[I64](arr, s1_ptr as I64)
+        ptr_write[I64](ptr_offset(arr, 8), s2_ptr as I64)
+        params = arr as *Unit
+    }
+    return params
+}
+
+/// Builds a param values array with one Str value.
+func pg_bind_1_str(p1: Str) -> *Unit {
+    var params: *Unit = pg_null()
+    lowlevel {
+        let arr = mem_alloc(8)
+        let p1_ptr = p1 as RawPtr
+        ptr_write[I64](arr, p1_ptr as I64)
+        params = arr as *Unit
+    }
+    return params
+}
+
+/// Builds a param values array with one Str then one I64 value.
+func pg_bind_str_i64(p1: Str, p2: I64) -> *Unit {
+    let s2 = p2.to_string()
+    var params: *Unit = pg_null()
+    lowlevel {
+        let arr = mem_alloc(16)
+        let p1_ptr = p1 as RawPtr
+        let s2_ptr = s2 as RawPtr
+        ptr_write[I64](arr, p1_ptr as I64)
+        ptr_write[I64](ptr_offset(arr, 8), s2_ptr as I64)
+        params = arr as *Unit
+    }
+    return params
+}
+
+/// Builds a param values array with one I64 then one Str value.
+func pg_bind_i64_str(p1: I64, p2: Str) -> *Unit {
+    let s1 = p1.to_string()
+    var params: *Unit = pg_null()
+    lowlevel {
+        let arr = mem_alloc(16)
+        let s1_ptr = s1 as RawPtr
+        let p2_ptr = p2 as RawPtr
+        ptr_write[I64](arr, s1_ptr as I64)
+        ptr_write[I64](ptr_offset(arr, 8), p2_ptr as I64)
+        params = arr as *Unit
+    }
+    return params
+}
+
+/// Frees a param values array allocated by pg_bind_* functions.
+func pg_free_params(params: *Unit) {
+    lowlevel {
+        mem_free(params as RawPtr)
+    }
+}
+
+/// Extracts affected rows from a PGresult and clears it.
+func pg_affected_rows(result: *Unit) -> I64 {
+    let count_str = PQcmdTuples(result)
+    let count = pg_parse_i64(count_str)
+    PQclear(result)
+    return count
+}
+
+// ============================================================================
+// PgConnection
+// ============================================================================
+
+/// A database connection backed by PostgreSQL via libpq.
+///
+/// Obtain one via [`PgConnection::connect`].  The underlying libpq
+/// connection is closed when `close()` is called.
+pub type PgConnection {
+    pg_handle: *Unit,
+    pg_is_open: Bool,
+}
+
+impl PgConnection {
+    /// Connects to a PostgreSQL server using the given connection string.
+    ///
+    /// The connection string can be a keyword=value format:
+    /// `"host=localhost port=5432 dbname=mydb user=myuser password=secret"`
+    ///
+    /// Or a URI:
+    /// `"postgresql://user:pass@host:5432/dbname"`
+    ///
+    /// Returns a `DbError` with kind `Connection` if the connection fails.
+    pub func connect(conninfo: Str) -> Outcome[PgConnection, DbError] {
+        let conn = PQconnectdb(conninfo)
+        let status = PQstatus(conn)
+        if status != PG_CONNECTION_OK {
+            let msg = PQerrorMessage(conn)
+            PQfinish(conn)
+            return Err(DbError::new(DbErrorKind::Connection, msg))
+        }
+        return Ok(PgConnection { pg_handle: conn, pg_is_open: true })
+    }
+
+    /// Returns the raw libpq connection handle for advanced usage.
+    ///
+    /// The handle is valid as long as this `PgConnection` is open.
+    /// Callers must not call `PQfinish()` on this handle.
+    pub func raw_handle(this) -> *Unit {
+        return this.pg_handle
+    }
+
+    /// Returns the server version as an integer (e.g. 150000 for 15.0).
+    pub func server_version(this) -> I32 {
+        return PQserverVersion(this.pg_handle)
+    }
+
+    /// Returns the current transaction status.
+    ///
+    /// 0 = idle, 1 = active, 2 = in transaction, 3 = error, 4 = unknown.
+    pub func transaction_status(this) -> I32 {
+        return PQtransactionStatus(this.pg_handle)
+    }
+
+    // ── PostgreSQL-specific helpers (not part of Connection behavior) ────
+
+    /// Executes a parameterized statement with three I64 parameters.
+    pub func execute_3_i64(this, sql: Str, p1: I64, p2: I64, p3: I64) -> Outcome[I64, DbError] {
+        let s1 = p1.to_string()
+        let s2 = p2.to_string()
+        let s3 = p3.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(24)
+            let s1p = s1 as RawPtr
+            let s2p = s2 as RawPtr
+            let s3p = s3 as RawPtr
+            ptr_write[I64](arr, s1p as I64)
+            ptr_write[I64](ptr_offset(arr, 8), s2p as I64)
+            ptr_write[I64](ptr_offset(arr, 16), s3p as I64)
+            params = arr as *Unit
+        }
+        let result = PQexecParams(this.pg_handle, sql, 3, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with two Str parameters.
+    pub func execute_2str(this, sql: Str, p1: Str, p2: Str) -> Outcome[I64, DbError] {
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(16)
+            let p1p = p1 as RawPtr
+            let p2p = p2 as RawPtr
+            ptr_write[I64](arr, p1p as I64)
+            ptr_write[I64](ptr_offset(arr, 8), p2p as I64)
+            params = arr as *Unit
+        }
+        let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with two Str parameters then one I64.
+    pub func execute_2str_i64(this, sql: Str, p1: Str, p2: Str, p3: I64) -> Outcome[I64, DbError] {
+        let s3 = p3.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(24)
+            let p1p = p1 as RawPtr
+            let p2p = p2 as RawPtr
+            let s3p = s3 as RawPtr
+            ptr_write[I64](arr, p1p as I64)
+            ptr_write[I64](ptr_offset(arr, 8), p2p as I64)
+            ptr_write[I64](ptr_offset(arr, 16), s3p as I64)
+            params = arr as *Unit
+        }
+        let result = PQexecParams(this.pg_handle, sql, 3, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Queries a single Str scalar value.
+    pub func query_scalar_str(this, sql: Str) -> Outcome[Str, DbError] {
+        let result = PQexec(this.pg_handle, sql)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        let nrows = PQntuples(result)
+        if nrows > 0 {
+            let val = PQgetvalue(result, 0, 0)
+            PQclear(result)
+            return Ok(val)
+        }
+        PQclear(result)
+        return Ok("")
+    }
+
+    /// Queries a single I64 value with one I64 parameter.
+    pub func query_one_i64(this, sql: Str, p1: I64) -> I64 {
+        let params = pg_bind_1_i64(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        if result == pg_null() {
+            return 0
+        }
+        let status = PQresultStatus(result)
+        if status != PG_TUPLES_OK {
+            PQclear(result)
+            return 0
+        }
+        let nrows = PQntuples(result)
+        if nrows > 0 {
+            let val_str = PQgetvalue(result, 0, 0)
+            let val = pg_parse_i64(val_str)
+            PQclear(result)
+            return val
+        }
+        PQclear(result)
+        return 0
+    }
+
+    /// Queries a single Str value with one I64 parameter.
+    pub func query_one_str(this, sql: Str, p1: I64) -> Str {
+        let params = pg_bind_1_i64(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        if result == pg_null() {
+            return ""
+        }
+        let status = PQresultStatus(result)
+        if status != PG_TUPLES_OK {
+            PQclear(result)
+            return ""
+        }
+        let nrows = PQntuples(result)
+        if nrows > 0 {
+            let val = PQgetvalue(result, 0, 0)
+            PQclear(result)
+            return val
+        }
+        PQclear(result)
+        return ""
+    }
+}
+
+// ============================================================================
+// Connection behavior implementation
+// ============================================================================
+
+impl Connection for PgConnection {
+    /// Executes a SQL statement that does not return rows.
+    ///
+    /// Returns the number of rows affected.
+    pub func execute(this, sql: Str) -> Outcome[I64, DbError] {
+        let result = PQexec(this.pg_handle, sql)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Returns `true` if the connection is open and the server is reachable.
+    pub func is_alive(this) -> Bool {
+        if not this.pg_is_open {
+            return false
+        }
+        let status = PQstatus(this.pg_handle)
+        return status == PG_CONNECTION_OK
+    }
+
+    /// Closes the connection and releases all libpq resources.
+    pub func close(mut this) {
+        if this.pg_is_open {
+            PQfinish(this.pg_handle)
+            this.pg_is_open = false
+        }
+    }
+
+    /// Begins a new transaction.
+    pub func begin(this) -> Outcome[Unit, DbError] {
+        let result = PQexec(this.pg_handle, "BEGIN")
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(DbError::new(DbErrorKind::Transaction, e.message())),
+            Ok(_) => {}
+        }
+        PQclear(result)
+        return Ok(())
+    }
+
+    /// Commits the current transaction.
+    pub func commit(this) -> Outcome[Unit, DbError] {
+        let result = PQexec(this.pg_handle, "COMMIT")
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(DbError::new(DbErrorKind::Transaction, e.message())),
+            Ok(_) => {}
+        }
+        PQclear(result)
+        return Ok(())
+    }
+
+    /// Rolls back the current transaction.
+    pub func rollback(this) -> Outcome[Unit, DbError] {
+        let result = PQexec(this.pg_handle, "ROLLBACK")
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(DbError::new(DbErrorKind::Transaction, e.message())),
+            Ok(_) => {}
+        }
+        PQclear(result)
+        return Ok(())
+    }
+
+    /// Executes a parameterized statement with one I64 parameter.
+    pub func execute_i64_params(this, sql: Str, p1: I64) -> Outcome[I64, DbError] {
+        let params = pg_bind_1_i64(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with two I64 parameters.
+    pub func execute_i64_2(this, sql: Str, p1: I64, p2: I64) -> Outcome[I64, DbError] {
+        let params = pg_bind_2_i64(p1, p2)
+        let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with one Str parameter.
+    pub func execute_str(this, sql: Str, p1: Str) -> Outcome[I64, DbError] {
+        let params = pg_bind_1_str(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with one Str then one I64 parameter.
+    pub func execute_str_i64(this, sql: Str, p1: Str, p2: I64) -> Outcome[I64, DbError] {
+        let params = pg_bind_str_i64(p1, p2)
+        let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Executes a parameterized statement with one I64 then one Str parameter.
+    pub func execute_i64_str(this, sql: Str, p1: I64, p2: Str) -> Outcome[I64, DbError] {
+        let params = pg_bind_i64_str(p1, p2)
+        let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        return Ok(pg_affected_rows(result))
+    }
+
+    /// Queries a single I64 scalar value (e.g. `COUNT(*)`).
+    pub func query_scalar_i64(this, sql: Str) -> Outcome[I64, DbError] {
+        let result = PQexec(this.pg_handle, sql)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        let status = PQresultStatus(result)
+        if status == PG_TUPLES_OK {
+            let nrows = PQntuples(result)
+            if nrows > 0 {
+                let val_str = PQgetvalue(result, 0, 0)
+                let val = pg_parse_i64(val_str)
+                PQclear(result)
+                return Ok(val)
+            }
+        }
+        PQclear(result)
+        return Ok(0)
+    }
+
+    /// Queries whether at least one row exists, with an I64 parameter.
+    pub func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError] {
+        let params = pg_bind_1_i64(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        let nrows = PQntuples(result)
+        PQclear(result)
+        return Ok(nrows > 0)
+    }
+
+    /// Queries whether at least one row exists, with a Str parameter.
+    pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
+        let params = pg_bind_1_str(p1)
+        let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
+        pg_free_params(params)
+        let chk = pg_check_result(result, this.pg_handle)
+        when chk {
+            Err(e) => return Err(e),
+            Ok(_) => {}
+        }
+        let nrows = PQntuples(result)
+        PQclear(result)
+        return Ok(nrows > 0)
+    }
+}

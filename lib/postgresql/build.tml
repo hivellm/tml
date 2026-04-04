@@ -1,0 +1,35 @@
+/// Build script for PostgreSQL driver — resolves libpq native library.
+///
+/// Emits `tml:` directives to configure the linker for the correct
+/// platform-specific native library path.
+///
+/// NOTE: This file uses `#if` preprocessor directives which are only
+/// processed during a full build, not during `tml check`.
+
+func main() {
+    println("tml:warning=PostgreSQL driver: configuring libpq")
+    println("tml:rerun-if-changed=native/")
+    emit_link()
+}
+
+/// Emits the platform-specific linker search path and library name.
+///
+/// Each platform block is conditionally compiled — only one definition
+/// of `emit_link()` will be present in the final binary.
+#if WINDOWS
+func emit_link() {
+    println("tml:link-search=native/win-x64")
+    println("tml:link-lib=libpq")
+    println("tml:copy-artifact=native/win-x64/libpq.dll")
+}
+#elif LINUX
+func emit_link() {
+    println("tml:link-search=native/linux-x64")
+    println("tml:link-lib=pq")
+}
+#elif MACOS
+func emit_link() {
+    println("tml:link-search=native/macos-arm64")
+    println("tml:link-lib=pq")
+}
+#endif

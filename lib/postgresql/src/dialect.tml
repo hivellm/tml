@@ -1,0 +1,58 @@
+//! PostgreSQL-specific SQL dialect.
+//!
+//! [`PostgresDialect`] implements the [`Dialect`] behavior with PostgreSQL
+//! conventions: double-quote identifier quoting, `$N` numbered placeholders,
+//! and full `RETURNING` clause support.
+
+use std::db::query::dialect::Dialect
+
+/// PostgreSQL SQL dialect implementation.
+///
+/// Uses `$1`, `$2`, ... for parameter placeholders and double-quoted
+/// identifiers, following the PostgreSQL SQL standard.
+pub type PostgresDialect {}
+
+impl PostgresDialect {
+    /// Creates a new PostgreSQL dialect instance.
+    pub func new() -> PostgresDialect {
+        return PostgresDialect {}
+    }
+
+    /// Quotes an identifier with double quotes (PostgreSQL standard).
+    ///
+    /// PostgreSQL folds unquoted identifiers to lowercase, so quoting
+    /// preserves the original case.
+    pub func quote_identifier(this, name: Str) -> Str {
+        return "\"" + name + "\""
+    }
+
+    /// Returns the `$N` placeholder for the given 1-based index.
+    ///
+    /// PostgreSQL uses numbered placeholders: `$1`, `$2`, `$3`, etc.
+    pub func placeholder(this, index: I32) -> Str {
+        return "$" + index.to_string()
+    }
+
+    /// Returns `true` because PostgreSQL supports the `RETURNING` clause
+    /// (since version 8.2).
+    pub func supports_returning(this) -> Bool {
+        return true
+    }
+}
+
+impl Dialect for PostgresDialect {
+    /// Quotes an identifier with double quotes.
+    pub func quote_identifier(this, name: Str) -> Str {
+        return "\"" + name + "\""
+    }
+
+    /// Returns the `$N` placeholder for the given 1-based index.
+    pub func placeholder(this, index: I32) -> Str {
+        return "$" + index.to_string()
+    }
+
+    /// PostgreSQL supports the `RETURNING` clause.
+    pub func supports_returning(this) -> Bool {
+        return true
+    }
+}

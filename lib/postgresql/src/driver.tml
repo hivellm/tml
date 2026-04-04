@@ -1,0 +1,28 @@
+//! PostgreSQL driver marker type.
+//!
+//! `PgDriver` is a zero-size token type that identifies the PostgreSQL backend.
+//! Construct it with `PgDriver::new()` and pass it to connection-factory
+//! functions that accept a driver value.
+
+/// The PostgreSQL database driver.
+///
+/// This is a zero-size value type used as a marker for the PostgreSQL backend.
+/// It carries no state — all state lives in [`PgConnection`].
+pub type PgDriver {}
+
+impl PgDriver {
+    /// Creates a new `PgDriver` instance.
+    pub func new() -> PgDriver {
+        PgDriver {}
+    }
+
+    /// Returns the driver name.
+    pub func name(this) -> Str {
+        return "postgresql"
+    }
+
+    /// Returns a human-readable description of this driver.
+    pub func description(this) -> Str {
+        return "PostgreSQL driver via libpq"
+    }
+}

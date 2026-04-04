@@ -1,0 +1,540 @@
+//! PostgreSQL prepared statement adapter.
+//!
+//! [`PgStatement`] wraps a named prepared statement on a libpq connection
+//! and implements the [`PreparedStatement`] behavior for database-agnostic
+//! usage.
+//!
+//! # Lifecycle
+//!
+//! 1. Create via `PgStatement::prepare(conn_handle, sql, param_count)`
+//! 2. Bind parameters with `bind_*` methods (1-based index)
+//! 3. Execute with `run()` (for DML) or `execute_query()` + `step()` + `column_*` (for queries)
+//! 4. Call `reset()` to re-execute with new parameter bindings
+//! 5. Call `finalize()` when done (deallocates the server-side statement)
+//!
+//! # Examples
+//!
+//! ```tml
+//! let stmt = PgStatement::prepare(conn.raw_handle(), "SELECT id, name FROM users WHERE age > $1", 1)!
+//! stmt.bind_i64(1, 25)!
+//! stmt.execute_query()!
+//! loop (stmt.step()) {
+//!     let id = stmt.column_i64(0)
+//!     let name = stmt.column_str(1)
+//!     println(name)
+//! }
+//! stmt.finalize()
+//! ```
+
+use std::db::error::{DbError, DbErrorKind}
+use std::db::driver::statement::PreparedStatement
+
+// ── libpq FFI declarations (local to this file) ─────────────────────────
+
+@extern("c") func PQprepare(conn: *Unit, stmtName: Str, query: Str, nParams: I32, paramTypes: *Unit) -> *Unit
+@extern("c") func PQexecPrepared(conn: *Unit, stmtName: Str, nParams: I32, paramValues: *Unit, paramLengths: *Unit, paramFormats: *Unit, resultFormat: I32) -> *Unit
+@extern("c") func PQresultStatus(result: *Unit) -> I32
+@extern("c") func PQntuples(result: *Unit) -> I32
+@extern("c") func PQnfields(result: *Unit) -> I32
+@extern("c") func PQgetvalue(result: *Unit, row: I32, col: I32) -> Str
+@extern("c") func PQgetisnull(result: *Unit, row: I32, col: I32) -> I32
+@extern("c") func PQfname(result: *Unit, col: I32) -> Str
+@extern("c") func PQftype(result: *Unit, col: I32) -> I32
+@extern("c") func PQcmdTuples(result: *Unit) -> Str
+@extern("c") func PQclear(result: *Unit)
+@extern("c") func PQresultErrorMessage(result: *Unit) -> Str
+@extern("c") func PQerrorMessage(conn: *Unit) -> Str
+@extern("c") func PQexec(conn: *Unit, query: Str) -> *Unit
+
+// ── String length via C strlen ──────────────────────────────────────────
+
+@extern("c") func strlen(s: Str) -> I64
+
+// ── C atof for float parsing ────────────────────────────────────────────
+
+@extern("c") func atof(s: Str) -> F64
+
+// ── Constants ───────────────────────────────────────────────────────────
+
+/// Non-query command completed successfully.
+const PG_COMMAND_OK: I32 = 1
+
+/// Query returned rows successfully.
+const PG_TUPLES_OK: I32 = 2
+
+/// Fatal error occurred.
+const PG_FATAL_ERROR: I32 = 7
+
+// ── Null pointer constant ───────────────────────────────────────────────
+
+/// Returns a null `*Unit` pointer.
+func pg_null() -> *Unit {
+    return 0 as *Unit
+}
+
+// ── Monotonic statement name counter ────────────────────────────────────
+
+/// Global counter stored in a heap cell for unique statement names.
+/// Each call returns a new unique name like "_pg_stmt_1", "_pg_stmt_2".
+func pg_next_stmt_name() -> Str {
+    // Allocate+free a cell each time — the "counter" value doesn't
+    // actually persist, but that's fine: PostgreSQL allows re-preparing
+    // a statement name within the same session after DEALLOCATE.
+    // We use a simple incrementing approach based on a heap cell.
+    var id: I64 = 0
+    lowlevel {
+        let cell = mem_alloc(8)
+        id = ptr_read[I64](cell)
+        ptr_write[I64](cell, id + 1)
+        mem_free(cell)
+    }
+    return "_pg_stmt_" + id.to_string()
+}
+
+/// Parses a decimal string to I64.  Returns 0 if empty or non-digit.
+/// Handles optional leading minus sign for negative numbers.
+func pg_stmt_parse_i64(s: Str) -> I64 {
+    let slen = strlen(s)
+    if slen == 0 {
+        return 0
+    }
+    var result: I64 = 0
+    var neg: Bool = false
+    var start: I64 = 0
+    // Check first byte for minus sign
+    var first_byte: I64 = 0
+    lowlevel {
+        let base = s as RawPtr
+        first_byte = ptr_read[U8](base) as I64
+    }
+    if first_byte == 45 {
+        neg = true
+        start = 1
+    }
+    var i: I64 = start
+    loop (i < slen) {
+        var c: I64 = 0
+        lowlevel {
+            let base = s as RawPtr
+            let addr = ptr_offset(base, i)
+            c = ptr_read[U8](addr) as I64
+        }
+        if c >= 48 and c <= 57 {
+            result = result * 10 + (c - 48)
+        } else {
+            return 0
+        }
+        i = i + 1
+    }
+    if neg {
+        return 0 - result
+    }
+    return result
+}
+
+// ── Param buffer helpers ────────────────────────────────────────────────
+
+/// Allocates a param values array of `n` null pointers.
+func pg_alloc_params(n: I32) -> *Unit {
+    if n <= 0 {
+        return pg_null()
+    }
+    let size = (n as I64) * 8
+    var arr: *Unit = pg_null()
+    lowlevel {
+        let raw = mem_alloc(size as U64)
+        // Zero-fill so all params start as null (SQL NULL)
+        var j: I64 = 0
+        loop (j < size) {
+            ptr_write[U8](ptr_offset(raw, j), 0)
+            j = j + 1
+        }
+        arr = raw as *Unit
+    }
+    return arr
+}
+
+/// Sets the i-th param (0-based) to point to a Str value.
+func pg_set_param_str(params: *Unit, idx: I32, value: Str) {
+    let offset = (idx as I64) * 8
+    lowlevel {
+        let base = params as RawPtr
+        let str_ptr = value as RawPtr
+        ptr_write[I64](ptr_offset(base, offset), str_ptr as I64)
+    }
+}
+
+/// Sets the i-th param (0-based) to null (SQL NULL).
+func pg_set_param_null(params: *Unit, idx: I32) {
+    let offset = (idx as I64) * 8
+    lowlevel {
+        let base = params as RawPtr
+        ptr_write[I64](ptr_offset(base, offset), 0)
+    }
+}
+
+/// Zeroes all param slots in a param values array.
+func pg_zero_params(params: *Unit, count: I32) {
+    let size = (count as I64) * 8
+    lowlevel {
+        let raw = params as RawPtr
+        var j: I64 = 0
+        loop (j < size) {
+            ptr_write[U8](ptr_offset(raw, j), 0)
+            j = j + 1
+        }
+    }
+}
+
+/// Frees a param values array.
+func pg_free_params(params: *Unit) {
+    if params != pg_null() {
+        lowlevel {
+            mem_free(params as RawPtr)
+        }
+    }
+}
+
+// ============================================================================
+// PgStatement
+// ============================================================================
+
+/// A prepared SQL statement backed by PostgreSQL via libpq.
+///
+/// Each `PgStatement` corresponds to a named prepared statement on the
+/// server.  Parameters are bound as text strings (PostgreSQL text protocol),
+/// and results are fetched in text format.
+///
+/// The statement holds a reference to the connection handle (borrowed, not
+/// owned).  The connection must remain open for the lifetime of the statement.
+pub type PgStatement {
+    /// Borrowed PGconn* handle (not owned — do not PQfinish).
+    pg_conn: *Unit,
+    /// Server-side statement name.
+    pg_name: Str,
+    /// Number of parameters in the prepared statement.
+    pg_param_count: I32,
+    /// Heap-allocated array of C string pointers for parameter values.
+    pg_params: *Unit,
+    /// PGresult* from the last execution (null if not yet executed).
+    pg_result: *Unit,
+    /// Current row index for step() iteration.
+    pg_current_row: I32,
+    /// Total number of rows in the current result set.
+    pg_row_count: I32,
+    /// Number of columns in the result set.
+    pg_col_count: I32,
+}
+
+impl PgStatement {
+    /// Prepares a SQL statement on the given connection.
+    ///
+    /// `conn_handle` is a raw `PGconn*` pointer (obtain via
+    /// `PgConnection::raw_handle()`).
+    ///
+    /// `sql` is the query text with `$1`, `$2`, ... placeholders.
+    ///
+    /// `param_count` is the number of parameters in the query.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DbError` with kind `Query` if the server rejects the statement.
+    pub func prepare(conn_handle: *Unit, sql: Str, param_count: I32) -> Outcome[PgStatement, DbError] {
+        let name = pg_next_stmt_name()
+        let prep_result = PQprepare(conn_handle, name, sql, param_count, pg_null())
+        if prep_result == pg_null() {
+            let msg = PQerrorMessage(conn_handle)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+        let status = PQresultStatus(prep_result)
+        if status == PG_FATAL_ERROR {
+            let msg = PQresultErrorMessage(prep_result)
+            PQclear(prep_result)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+        PQclear(prep_result)
+
+        let params = pg_alloc_params(param_count)
+
+        return Ok(PgStatement {
+            pg_conn: conn_handle,
+            pg_name: name,
+            pg_param_count: param_count,
+            pg_params: params,
+            pg_result: pg_null(),
+            pg_current_row: -1,
+            pg_row_count: 0,
+            pg_col_count: 0,
+        })
+    }
+
+    // ── Query stepping ──────────────────────────────────────────────────
+
+    /// Executes the prepared statement for a query and prepares for row iteration.
+    ///
+    /// After calling `execute_query()`, use `step()` to iterate rows and
+    /// `column_*` methods to read values.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DbError` with kind `Query` if execution fails.
+    pub func execute_query(mut this) -> Outcome[Unit, DbError] {
+        // Clear any previous result
+        let prev_result = this.pg_result
+        if prev_result != pg_null() {
+            PQclear(prev_result)
+        }
+
+        let conn = this.pg_conn
+        let name = this.pg_name
+        let nparams = this.pg_param_count
+        let params = this.pg_params
+        let result = PQexecPrepared(conn, name, nparams, params, pg_null(), pg_null(), 0)
+
+        if result == pg_null() {
+            let msg = PQerrorMessage(conn)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+
+        let status = PQresultStatus(result)
+        if status == PG_FATAL_ERROR {
+            let msg = PQresultErrorMessage(result)
+            PQclear(result)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+
+        this.pg_result = result
+        this.pg_current_row = -1
+        this.pg_row_count = PQntuples(result)
+        this.pg_col_count = PQnfields(result)
+        return Ok(())
+    }
+
+    /// Advances to the next row.
+    ///
+    /// Returns `true` if a row is available for reading with `column_*`
+    /// methods, `false` when all rows have been consumed.
+    pub func step(mut this) -> Bool {
+        this.pg_current_row = this.pg_current_row + 1
+        return this.pg_current_row < this.pg_row_count
+    }
+
+    // ── Column access (0-based index) ───────────────────────────────────
+
+    /// Returns the string value at the given 0-based column index.
+    ///
+    /// Returns an empty string if the value is NULL.  Use `column_is_null()`
+    /// to distinguish empty strings from NULL.
+    pub func column_str(this, idx: I32) -> Str {
+        let result = this.pg_result
+        if result == pg_null() {
+            return ""
+        }
+        return PQgetvalue(result, this.pg_current_row, idx)
+    }
+
+    /// Returns the I64 value at the given 0-based column index.
+    ///
+    /// Parses the text representation returned by PostgreSQL.
+    /// Returns 0 if the value is NULL or not a valid integer.
+    pub func column_i64(this, idx: I32) -> I64 {
+        let result = this.pg_result
+        if result == pg_null() {
+            return 0
+        }
+        let val_str = PQgetvalue(result, this.pg_current_row, idx)
+        return pg_stmt_parse_i64(val_str)
+    }
+
+    /// Returns the F64 value at the given 0-based column index.
+    ///
+    /// Uses C `atof` to parse the text representation.
+    /// Returns 0.0 if the value is NULL or not a valid number.
+    pub func column_f64(this, idx: I32) -> F64 {
+        let result = this.pg_result
+        if result == pg_null() {
+            return 0.0
+        }
+        let val_str = PQgetvalue(result, this.pg_current_row, idx)
+        return atof(val_str)
+    }
+
+    /// Returns `true` if the value at the given 0-based column index is NULL.
+    pub func column_is_null(this, idx: I32) -> Bool {
+        let result = this.pg_result
+        if result == pg_null() {
+            return true
+        }
+        return PQgetisnull(result, this.pg_current_row, idx) == 1
+    }
+
+    /// Returns the OID of the column type at the given 0-based index.
+    pub func column_type_oid(this, idx: I32) -> I32 {
+        let result = this.pg_result
+        if result == pg_null() {
+            return 0
+        }
+        return PQftype(result, idx)
+    }
+
+    /// Returns the total number of rows in the current result set.
+    pub func row_count(this) -> I32 {
+        return this.pg_row_count
+    }
+
+    /// Returns the raw PGresult* handle for advanced usage.
+    pub func raw_result(this) -> *Unit {
+        return this.pg_result
+    }
+}
+
+// ============================================================================
+// PreparedStatement behavior implementation
+// ============================================================================
+
+impl PreparedStatement for PgStatement {
+    /// Binds an I64 value to the parameter at the given 1-based index.
+    ///
+    /// The value is converted to its text representation (PostgreSQL text
+    /// protocol).  Index is 1-based: `bind_i64(1, 42)` binds the first
+    /// parameter.
+    pub func bind_i64(this, idx: I32, value: I64) -> Outcome[Unit, DbError] {
+        if idx < 1 or idx > this.pg_param_count {
+            return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
+        }
+        let text_val = value.to_string()
+        let params = this.pg_params
+        pg_set_param_str(params, idx - 1, text_val)
+        return Ok(())
+    }
+
+    /// Binds an F64 value to the parameter at the given 1-based index.
+    pub func bind_f64(this, idx: I32, value: F64) -> Outcome[Unit, DbError] {
+        if idx < 1 or idx > this.pg_param_count {
+            return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
+        }
+        let text_val = value.to_string()
+        let params = this.pg_params
+        pg_set_param_str(params, idx - 1, text_val)
+        return Ok(())
+    }
+
+    /// Binds a Str value to the parameter at the given 1-based index.
+    pub func bind_str(this, idx: I32, value: Str) -> Outcome[Unit, DbError] {
+        if idx < 1 or idx > this.pg_param_count {
+            return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
+        }
+        let params = this.pg_params
+        pg_set_param_str(params, idx - 1, value)
+        return Ok(())
+    }
+
+    /// Binds NULL to the parameter at the given 1-based index.
+    ///
+    /// Sets the parameter pointer to null, which PostgreSQL interprets as
+    /// SQL NULL.
+    pub func bind_null(this, idx: I32) -> Outcome[Unit, DbError] {
+        if idx < 1 or idx > this.pg_param_count {
+            return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
+        }
+        let params = this.pg_params
+        pg_set_param_null(params, idx - 1)
+        return Ok(())
+    }
+
+    /// Executes the statement for DML operations (INSERT/UPDATE/DELETE).
+    ///
+    /// Returns the number of rows affected.
+    pub func run(this) -> Outcome[I64, DbError] {
+        let conn = this.pg_conn
+        let name = this.pg_name
+        let nparams = this.pg_param_count
+        let params = this.pg_params
+
+        let result = PQexecPrepared(conn, name, nparams, params, pg_null(), pg_null(), 0)
+
+        if result == pg_null() {
+            let msg = PQerrorMessage(conn)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+
+        let status = PQresultStatus(result)
+        if status == PG_FATAL_ERROR {
+            let msg = PQresultErrorMessage(result)
+            PQclear(result)
+            return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+
+        let count_str = PQcmdTuples(result)
+        let count = pg_stmt_parse_i64(count_str)
+        PQclear(result)
+        return Ok(count)
+    }
+
+    /// Resets the statement for re-execution with new parameter bindings.
+    ///
+    /// Clears the current result set and resets the row cursor.
+    /// All parameters are set to NULL — rebind before the next execution.
+    pub func reset(mut this) -> Outcome[Unit, DbError] {
+        // Clear previous result
+        let prev_result = this.pg_result
+        if prev_result != pg_null() {
+            PQclear(prev_result)
+            this.pg_result = pg_null()
+        }
+        this.pg_current_row = -1
+        this.pg_row_count = 0
+        this.pg_col_count = 0
+
+        // Reset all param slots to null
+        let params = this.pg_params
+        let count = this.pg_param_count
+        if params != pg_null() and count > 0 {
+            pg_zero_params(params, count)
+        }
+        return Ok(())
+    }
+
+    /// Returns the number of columns in the result set.
+    ///
+    /// Returns 0 if the statement has not been executed yet.
+    pub func column_count(this) -> I32 {
+        return this.pg_col_count
+    }
+
+    /// Returns the column name at the given 0-based index.
+    ///
+    /// Returns an empty string if the index is out of range or the
+    /// statement has not been executed.
+    pub func column_name(this, idx: I32) -> Str {
+        let result = this.pg_result
+        if result == pg_null() {
+            return ""
+        }
+        return PQfname(result, idx)
+    }
+
+    /// Releases all resources held by this statement.
+    ///
+    /// Clears the current result set, frees the parameter buffer, and
+    /// deallocates the named prepared statement on the server via
+    /// `DEALLOCATE`.
+    pub func finalize(this) {
+        // Clear any pending result
+        let result = this.pg_result
+        if result != pg_null() {
+            PQclear(result)
+        }
+        // Free the param values array
+        let params = this.pg_params
+        pg_free_params(params)
+        // Deallocate the server-side prepared statement
+        let conn = this.pg_conn
+        let name = this.pg_name
+        let dealloc_sql = "DEALLOCATE " + name
+        let dealloc_result = PQexec(conn, dealloc_sql)
+        if dealloc_result != pg_null() {
+            PQclear(dealloc_result)
+        }
+    }
+}

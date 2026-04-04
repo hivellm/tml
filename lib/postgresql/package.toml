@@ -1,0 +1,33 @@
+[package]
+name = "postgresql"
+version = "0.1.0"
+edition = "2025"
+authors = ["TML Team"]
+description = "PostgreSQL driver for TML database abstraction layer"
+license = "MIT"
+repository = "https://github.com/hivellm/tml"
+homepage = "https://tml-lang.org"
+keywords = ["database", "postgresql", "postgres", "driver"]
+categories = ["database"]
+
+[lib]
+name = "postgresql"
+path = "src/mod.tml"
+
+[dependencies]
+std = { path = "../std" }
+
+[native-deps]
+libpq = { lib = "libpq", headers = ["libpq-fe.h"] }
+
+[features]
+default = []
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true

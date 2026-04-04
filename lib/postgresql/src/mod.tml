@@ -1,0 +1,30 @@
+//! PostgreSQL driver for the TML database abstraction layer.
+//!
+//! Self-contained package with libpq FFI bindings, connection adapter,
+//! prepared statement support, and PostgreSQL-specific dialect.
+//!
+//! # Quick start
+//!
+//! ```tml
+//! use postgresql::connection::PgConnection
+//!
+//! let conn = PgConnection::connect("host=localhost dbname=mydb")!
+//! conn.execute("CREATE TABLE t (id SERIAL PRIMARY KEY, val TEXT)")!
+//! conn.execute("INSERT INTO t (val) VALUES ('hello')")!
+//! ```
+//!
+//! # Module structure
+//!
+//! - [`ffi`] — Raw libpq C function bindings (low-level)
+//! - [`connection`] — `PgConnection` implementing `Connection` behavior
+//! - [`statement`] — `PgStatement` implementing `PreparedStatement` behavior
+//! - [`dialect`] — `PostgresDialect` implementing `Dialect` behavior
+//! - [`driver`] — `PgDriver` marker type
+//! - [`types`] — PostgreSQL OID-to-ColumnType mapping
+
+pub mod ffi
+pub mod connection
+pub mod statement
+pub mod driver
+pub mod dialect
+pub mod types
