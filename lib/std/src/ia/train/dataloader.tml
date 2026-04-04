@@ -1,0 +1,125 @@
+//! DataLoader — batching and shuffling for datasets.
+//!
+//! Iterates over a [`Dataset`] in batches, optionally shuffling
+//! the sample order at the beginning of each epoch.
+
+use std::collections::List
+use std::random::Rng
+use std::ia::tensor::tensor::Tensor
+use std::ia::train::dataset::Dataset
+
+/// Iterates over a dataset in batches, optionally shuffling.
+///
+/// Call [`reset`] at the start of each epoch to re-shuffle indices
+/// (if `shuffle` is enabled) and reset the cursor to the beginning.
+/// Then iterate with [`has_next`], [`next_inputs`], and [`next_targets`].
+pub type DataLoader {
+    dataset: Dataset,
+    batch_size: I64,
+    shuffle: Bool,
+    indices: List[I64],
+    current: I64,
+    rng: Rng,
+}
+
+impl DataLoader {
+    /// Creates a new DataLoader.
+    ///
+    /// - `dataset`: the dataset to iterate over
+    /// - `batch_size`: number of samples per batch
+    /// - `shuffle`: whether to shuffle indices at each reset
+    pub func new(dataset: Dataset, batch_size: I64, shuffle: Bool) -> DataLoader {
+        let n: I64 = dataset.len()
+        let indices: List[I64] = List[I64]::new()
+        let mut i: I64 = 0
+        loop (i < n) {
+            indices.push(i)
+            i = i + 1
+        }
+
+        let mut loader: DataLoader = DataLoader {
+            dataset: dataset,
+            batch_size: batch_size,
+            shuffle: shuffle,
+            indices: indices,
+            current: 0,
+            rng: Rng::new(),
+        }
+
+        // Shuffle on creation if requested
+        if shuffle {
+            loader.rng.shuffle_i64(loader.indices)
+        }
+
+        return loader
+    }
+
+    /// Resets the cursor to the beginning of the dataset.
+    ///
+    /// If `shuffle` is enabled, the sample order is re-shuffled.
+    pub func reset(this) {
+        this.current = 0
+        if this.shuffle {
+            this.rng.shuffle_i64(this.indices)
+        }
+    }
+
+    /// Returns `true` if there are more batches remaining.
+    pub func has_next(this) -> Bool {
+        return this.current < this.indices.len()
+    }
+
+    /// Returns the next batch of input tensors and advances the cursor.
+    ///
+    /// The returned list has at most `batch_size` elements.
+    /// For the last batch, it may contain fewer elements.
+    pub func next_inputs(this) -> List[Tensor] {
+        let result: List[Tensor] = List[Tensor]::new()
+        let total: I64 = this.indices.len()
+        let end: I64 = this.current + this.batch_size
+        let mut i: I64 = this.current
+        let mut limit: I64 = end
+        if total < end {
+            limit = total
+        }
+        loop (i < limit) {
+            let idx: I64 = this.indices.get(i)
+            result.push(this.dataset.get_input(idx))
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns the next batch of target tensors and advances the cursor.
+    ///
+    /// Must be called after [`next_inputs`] for the same batch.
+    /// After calling this, the cursor advances past the current batch.
+    pub func next_targets(this) -> List[Tensor] {
+        let result: List[Tensor] = List[Tensor]::new()
+        let total: I64 = this.indices.len()
+        let end: I64 = this.current + this.batch_size
+        let mut i: I64 = this.current
+        let mut limit: I64 = end
+        if total < end {
+            limit = total
+        }
+        loop (i < limit) {
+            let idx: I64 = this.indices.get(i)
+            result.push(this.dataset.get_target(idx))
+            i = i + 1
+        }
+        // Advance cursor past this batch
+        this.current = limit
+        return result
+    }
+
+    /// Returns the total number of batches in one full epoch.
+    pub func num_batches(this) -> I64 {
+        let n: I64 = this.indices.len()
+        if this.batch_size <= 0 {
+            return 0
+        }
+        // Ceiling division
+        return (n + this.batch_size - 1) / this.batch_size
+    }
+}

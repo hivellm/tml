@@ -1,0 +1,285 @@
+//! Attention mechanisms for transformer architectures.
+//!
+//! Provides scaled dot-product attention and multi-head attention.
+//! All operations work on 2-D tensors `[seq_len, embed_dim]` (single batch).
+
+use std::collections::List
+use std::math::{sqrt, exp}
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, from_list_f64}
+use std::ia::tensor::matmul
+use std::ia::tensor::reshape
+use std::ia::tensor::ops
+use std::ia::nn::linear::Linear
+use std::ia::nn::module::xavier_uniform
+
+/// Collect all dims of a tensor into a List[I64].
+func tensor_dims(t: ref Tensor) -> List[I64] {
+    let rank: I64 = t.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i: I64 = 0
+    loop (i < rank) {
+        dims.push(t.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+/// Softmax along the last dimension of a 2-D tensor (each row).
+///
+/// Reused from activation.tml but kept local to avoid circular deps.
+func row_softmax(input: ref Tensor) -> Tensor {
+    let rows: I64 = input.dim(0)
+    let cols: I64 = input.dim(1)
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+
+    let mut r: I64 = 0
+    loop (r < rows) {
+        let row_off: I64 = r * cols
+        // Find max for numerical stability.
+        let mut max_val: F64 = input.get_f64(row_off)
+        let mut c: I64 = 1
+        loop (c < cols) {
+            let v: F64 = input.get_f64(row_off + c)
+            if v > max_val {
+                max_val = v
+            }
+            c = c + 1
+        }
+        // exp(x - max) and sum.
+        let mut sum_exp: F64 = 0.0
+        c = 0
+        loop (c < cols) {
+            let e: F64 = exp(input.get_f64(row_off + c) - max_val)
+            result.set_f64(row_off + c, e)
+            sum_exp = sum_exp + e
+            c = c + 1
+        }
+        // Normalise.
+        c = 0
+        loop (c < cols) {
+            result.set_f64(row_off + c, result.get_f64(row_off + c) / sum_exp)
+            c = c + 1
+        }
+        r = r + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Scaled Dot-Product Attention
+// ---------------------------------------------------------------------------
+
+/// Scaled dot-product attention (Vaswani et al., 2017).
+///
+/// `Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V`
+///
+/// * `query`:  `[seq_q, d_k]`
+/// * `key`:    `[seq_k, d_k]`
+/// * `value`:  `[seq_k, d_v]`
+/// * Returns:  `[seq_q, d_v]`
+pub func scaled_dot_product_attention(
+    query: ref Tensor,
+    key: ref Tensor,
+    value: ref Tensor,
+) -> IaResult[Tensor] {
+    let d_k: I64 = query.dim(1)
+    let scale: F64 = 1.0 / sqrt(d_k as F64)
+
+    // K^T: [seq_k, d_k] -> [d_k, seq_k]
+    let kt_result = reshape::transpose(key)
+    when kt_result {
+        Err(e) => Err(e),
+        Ok(kt) => {
+            // Q @ K^T: [seq_q, d_k] @ [d_k, seq_k] -> [seq_q, seq_k]
+            let scores_result = matmul::matmul(query, ref kt)
+            when scores_result {
+                Err(e) => Err(e),
+                Ok(raw_scores) => {
+                    // Scale by 1/sqrt(d_k).
+                    let n_scores: I64 = raw_scores.numel()
+                    let score_dims = tensor_dims(ref raw_scores)
+                    let mut scores = zeros(score_dims, raw_scores.dtype())
+                    let mut i: I64 = 0
+                    loop (i < n_scores) {
+                        scores.set_f64(i, raw_scores.get_f64(i) * scale)
+                        i = i + 1
+                    }
+                    // Softmax along last dim (each row).
+                    let attn_weights = row_softmax(ref scores)
+                    // attn_weights @ V: [seq_q, seq_k] @ [seq_k, d_v] -> [seq_q, d_v]
+                    matmul::matmul(ref attn_weights, value)
+                },
+            }
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-Head Attention
+// ---------------------------------------------------------------------------
+
+/// Multi-head attention layer.
+///
+/// Splits the embedding into `num_heads` heads, applies scaled dot-product
+/// attention to each head independently, then concatenates and projects.
+///
+/// * `embed_dim` — total embedding dimension (must be divisible by `num_heads`).
+/// * `num_heads` — number of attention heads.
+/// * `head_dim` — per-head dimension (`embed_dim / num_heads`).
+pub type MultiHeadAttention {
+    num_heads: I64,
+    head_dim: I64,
+    embed_dim: I64,
+    q_proj: Linear,
+    k_proj: Linear,
+    v_proj: Linear,
+    out_proj: Linear,
+}
+
+impl MultiHeadAttention {
+    /// Create a new multi-head attention layer.
+    ///
+    /// `embed_dim` must be divisible by `num_heads`.
+    pub func new(embed_dim: I64, num_heads: I64) -> MultiHeadAttention {
+        let head_dim: I64 = embed_dim / num_heads
+        MultiHeadAttention {
+            num_heads: num_heads,
+            head_dim: head_dim,
+            embed_dim: embed_dim,
+            q_proj: Linear::new(embed_dim, embed_dim),
+            k_proj: Linear::new(embed_dim, embed_dim),
+            v_proj: Linear::new(embed_dim, embed_dim),
+            out_proj: Linear::new(embed_dim, embed_dim),
+        }
+    }
+
+    /// Extract head `h` from a projected tensor.
+    ///
+    /// `projected`: `[seq_len, embed_dim]`
+    /// Returns: `[seq_len, head_dim]` (columns `[h*head_dim .. (h+1)*head_dim]`)
+    func extract_head(this, projected: ref Tensor, h: I64) -> Tensor {
+        let seq_len: I64 = projected.dim(0)
+        let hd: I64 = this.head_dim
+        let start_col: I64 = h * hd
+        let mut out_dims = List[I64]::new(2)
+        out_dims.push(seq_len)
+        out_dims.push(hd)
+        let mut out = zeros(out_dims, projected.dtype())
+        let full_cols: I64 = projected.dim(1)
+        let mut r: I64 = 0
+        loop (r < seq_len) {
+            let mut c: I64 = 0
+            loop (c < hd) {
+                out.set_f64(r * hd + c, projected.get_f64(r * full_cols + start_col + c))
+                c = c + 1
+            }
+            r = r + 1
+        }
+        out
+    }
+
+    /// Forward pass: multi-head self-attention.
+    ///
+    /// For self-attention, pass the same tensor for query, key, and value.
+    /// For cross-attention, query comes from the decoder, key/value from the encoder.
+    ///
+    /// * `query`:  `[seq_q, embed_dim]`
+    /// * `key`:    `[seq_k, embed_dim]`
+    /// * `value`:  `[seq_k, embed_dim]`
+    /// * Returns:  `[seq_q, embed_dim]`
+    pub func forward(
+        this,
+        query: ref Tensor,
+        key: ref Tensor,
+        value: ref Tensor,
+    ) -> IaResult[Tensor] {
+        // Project Q, K, V through linear layers.
+        let q_proj_result = this.q_proj.forward(query)
+        when q_proj_result {
+            Err(e) => return Err(e),
+            Ok(q_full) => {
+                let k_proj_result = this.k_proj.forward(key)
+                when k_proj_result {
+                    Err(e) => return Err(e),
+                    Ok(k_full) => {
+                        let v_proj_result = this.v_proj.forward(value)
+                        when v_proj_result {
+                            Err(e) => return Err(e),
+                            Ok(v_full) => {
+                                let seq_q: I64 = query.dim(0)
+                                let hd: I64 = this.head_dim
+                                let nh: I64 = this.num_heads
+                                let ed: I64 = this.embed_dim
+
+                                // Allocate concatenated output [seq_q, embed_dim].
+                                let mut concat_dims = List[I64]::new(2)
+                                concat_dims.push(seq_q)
+                                concat_dims.push(ed)
+                                let mut concat = zeros(concat_dims, query.dtype())
+
+                                // Process each head.
+                                let mut h: I64 = 0
+                                loop (h < nh) {
+                                    let q_h = this.extract_head(ref q_full, h)
+                                    let k_h = this.extract_head(ref k_full, h)
+                                    let v_h = this.extract_head(ref v_full, h)
+
+                                    let head_result = scaled_dot_product_attention(ref q_h, ref k_h, ref v_h)
+                                    when head_result {
+                                        Err(e) => return Err(e),
+                                        Ok(head_out) => {
+                                            // Copy head output into concat at correct column offset.
+                                            let col_off: I64 = h * hd
+                                            let mut r: I64 = 0
+                                            loop (r < seq_q) {
+                                                let mut c: I64 = 0
+                                                loop (c < hd) {
+                                                    concat.set_f64(
+                                                        r * ed + col_off + c,
+                                                        head_out.get_f64(r * hd + c),
+                                                    )
+                                                    c = c + 1
+                                                }
+                                                r = r + 1
+                                            }
+                                        },
+                                    }
+                                    h = h + 1
+                                }
+
+                                // Final output projection.
+                                this.out_proj.forward(ref concat)
+                            },
+                        }
+                    },
+                }
+            },
+        }
+    }
+
+    /// Returns the number of heads.
+    pub func get_num_heads(this) -> I64 {
+        this.num_heads
+    }
+
+    /// Returns the per-head dimension.
+    pub func get_head_dim(this) -> I64 {
+        this.head_dim
+    }
+
+    /// Returns the total embedding dimension.
+    pub func get_embed_dim(this) -> I64 {
+        this.embed_dim
+    }
+
+    /// Returns the total number of learnable parameters.
+    pub func num_parameters(this) -> I64 {
+        // 4 linear layers, each embed_dim * embed_dim + embed_dim bias
+        let per_proj: I64 = this.embed_dim * this.embed_dim + this.embed_dim
+        per_proj * 4
+    }
+}

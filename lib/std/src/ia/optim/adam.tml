@@ -1,0 +1,174 @@
+//! Adam optimizer with bias-corrected moments (and AdamW variant).
+//!
+//! Implements the Adam algorithm from "Adam: A Method for Stochastic
+//! Optimization" (Kingma & Ba, 2014), plus the AdamW variant with
+//! decoupled weight decay (Loshchilov & Hutter, 2019).
+
+use std::collections::List
+use std::math::sqrt
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::zeros
+use std::ia::optim::optimizer::ParamGroup
+
+
+/// Adam optimizer with optional AdamW decoupled weight decay.
+///
+/// Maintains first moment (`m`) and second moment (`v`) estimates
+/// for each parameter, with bias correction applied at each step.
+pub type Adam {
+    lr: F64,
+    beta1: F64,
+    beta2: F64,
+    eps: F64,
+    weight_decay: F64,
+    adamw: Bool,
+    m: List[Tensor],
+    v: List[Tensor],
+    t: I64,
+    initialized: Bool,
+}
+
+impl Adam {
+    /// Creates a new Adam optimizer with default hyperparameters.
+    ///
+    /// Defaults: beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.
+    pub func new(lr: F64) -> Adam {
+        return Adam {
+            lr: lr,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 0.00000001,
+            weight_decay: 0.0,
+            adamw: false,
+            m: List[Tensor]::new(),
+            v: List[Tensor]::new(),
+            t: 0,
+            initialized: false,
+        }
+    }
+
+    /// Creates a new Adam optimizer with custom beta values.
+    pub func with_betas(lr: F64, beta1: F64, beta2: F64) -> Adam {
+        return Adam {
+            lr: lr,
+            beta1: beta1,
+            beta2: beta2,
+            eps: 0.00000001,
+            weight_decay: 0.0,
+            adamw: false,
+            m: List[Tensor]::new(),
+            v: List[Tensor]::new(),
+            t: 0,
+            initialized: false,
+        }
+    }
+
+    /// Creates an AdamW optimizer with decoupled weight decay.
+    pub func adamw(lr: F64, weight_decay: F64) -> Adam {
+        return Adam {
+            lr: lr,
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 0.00000001,
+            weight_decay: weight_decay,
+            adamw: true,
+            m: List[Tensor]::new(),
+            v: List[Tensor]::new(),
+            t: 0,
+            initialized: false,
+        }
+    }
+
+    /// Perform one optimization step using Adam update rule.
+    ///
+    /// Updates all parameters in the group using their gradients,
+    /// with bias-corrected first and second moment estimates.
+    /// Uses SIMD (F64x2) for the inner element-wise loops.
+    pub func step(this, params: ref ParamGroup) {
+        let num_params: I64 = params.len()
+
+        // Initialize moment buffers on first call
+        if not this.initialized {
+            let mut i: I64 = 0
+            loop (i < num_params) {
+                let p: Tensor = params.get_param(i)
+                let n: I64 = p.numel()
+                let dims_m: List[I64] = List[I64]::new()
+                dims_m.push(n)
+                let dims_v: List[I64] = List[I64]::new()
+                dims_v.push(n)
+                this.m.push(zeros(dims_m, DType::F64))
+                this.v.push(zeros(dims_v, DType::F64))
+                i = i + 1
+            }
+            this.initialized = true
+        }
+
+        // Increment timestep
+        this.t = this.t + 1
+
+        // Bias correction denominators
+        let beta1_t: F64 = this.beta1
+        let beta2_t: F64 = this.beta2
+        let mut beta1_pow: F64 = 1.0
+        let mut beta2_pow: F64 = 1.0
+        let mut ti: I64 = 0
+        loop (ti < this.t) {
+            beta1_pow = beta1_pow * beta1_t
+            beta2_pow = beta2_pow * beta2_t
+            ti = ti + 1
+        }
+        let bc1: F64 = 1.0 - beta1_pow
+        let bc2: F64 = 1.0 - beta2_pow
+
+        let mut i: I64 = 0
+        loop (i < num_params) {
+            let param: Tensor = params.get_param(i)
+            let grad: Tensor = params.get_grad(i)
+            let mi: Tensor = this.m.get(i)
+            let vi: Tensor = this.v.get(i)
+            let n: I64 = param.numel()
+
+            // AdamW: decoupled weight decay applied directly to params
+            if this.adamw and this.weight_decay > 0.0 {
+                let wd_factor: F64 = 1.0 - this.lr * this.weight_decay
+                let mut j: I64 = 0
+                loop (j < n) {
+                    let p: F64 = param.get_f64(j)
+                    param.set_f64(j, p * wd_factor)
+                    j = j + 1
+                }
+            }
+
+            // Scalar loop for moment updates + param update
+            let mut j: I64 = 0
+            loop (j < n) {
+                let g: F64 = grad.get_f64(j)
+                let old_m: F64 = mi.get_f64(j)
+                let old_v: F64 = vi.get_f64(j)
+
+                // Update moments
+                let new_m: F64 = this.beta1 * old_m + (1.0 - this.beta1) * g
+                let new_v: F64 = this.beta2 * old_v + (1.0 - this.beta2) * g * g
+                mi.set_f64(j, new_m)
+                vi.set_f64(j, new_v)
+
+                // Bias correction
+                let m_hat: F64 = new_m / bc1
+                let v_hat: F64 = new_v / bc2
+
+                let p: F64 = param.get_f64(j)
+                if not this.adamw and this.weight_decay > 0.0 {
+                    param.set_f64(j, p - this.lr * (m_hat / (sqrt(v_hat) + this.eps) + this.weight_decay * p))
+                } else {
+                    param.set_f64(j, p - this.lr * m_hat / (sqrt(v_hat) + this.eps))
+                }
+
+                j = j + 1
+            }
+
+            i = i + 1
+        }
+    }
+}

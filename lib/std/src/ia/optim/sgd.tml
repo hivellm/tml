@@ -1,0 +1,112 @@
+//! Stochastic Gradient Descent with momentum and weight decay.
+//!
+//! Implements classical SGD with optional Nesterov-style momentum
+//! and L2 weight decay regularization.
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::zeros
+use std::ia::optim::optimizer::ParamGroup
+
+/// Stochastic Gradient Descent optimizer.
+///
+/// Supports momentum and weight decay. The update rule is:
+///
+/// ```
+/// if weight_decay > 0: grad = grad + weight_decay * param
+/// if momentum > 0:
+///     velocity = momentum * velocity + grad
+///     update = velocity
+/// else:
+///     update = grad
+/// param = param - lr * update
+/// ```
+pub type SGD {
+    lr: F64,
+    momentum: F64,
+    weight_decay: F64,
+    velocities: List[Tensor],
+    initialized: Bool,
+}
+
+impl SGD {
+    /// Creates a new SGD optimizer.
+    ///
+    /// - `lr`: learning rate
+    /// - `momentum`: momentum factor (0.0 = no momentum)
+    /// - `weight_decay`: L2 regularization coefficient (0.0 = none)
+    pub func new(lr: F64, momentum: F64, weight_decay: F64) -> SGD {
+        return SGD {
+            lr: lr,
+            momentum: momentum,
+            weight_decay: weight_decay,
+            velocities: List[Tensor]::new(),
+            initialized: false,
+        }
+    }
+
+    /// Perform one optimization step: update params using gradients.
+    ///
+    /// On the first call, momentum buffers are initialized to zeros
+    /// matching each parameter's shape.
+    pub func step(this, params: ref ParamGroup) {
+        let num_params: I64 = params.len()
+
+        // Initialize velocity buffers on first call
+        if not this.initialized {
+            if this.momentum > 0.0 {
+                let mut i: I64 = 0
+                loop (i < num_params) {
+                    let p: Tensor = params.get_param(i)
+                    let n: I64 = p.numel()
+                    let dims: List[I64] = List[I64]::new()
+                    dims.push(n)
+                    let vel: Tensor = zeros(dims, DType::F64)
+                    this.velocities.push(vel)
+                    i = i + 1
+                }
+            }
+            this.initialized = true
+        }
+
+        let mut i: I64 = 0
+        loop (i < num_params) {
+            let param: Tensor = params.get_param(i)
+            let grad: Tensor = params.get_grad(i)
+            let n: I64 = param.numel()
+
+            // Build effective gradient (with weight decay applied)
+            // Then compute update and apply to parameter
+            let mut j: I64 = 0
+            loop (j < n) {
+                let g: F64 = grad.get_f64(j)
+                let p: F64 = param.get_f64(j)
+
+                // Apply weight decay: effective_grad = grad + wd * param
+                let eff_g: F64 = if this.weight_decay > 0.0 {
+                    g + this.weight_decay * p
+                } else {
+                    g
+                }
+
+                // Compute update using momentum or plain gradient
+                let update: F64 = if this.momentum > 0.0 {
+                    let vel: Tensor = this.velocities.get(i)
+                    let old_v: F64 = vel.get_f64(j)
+                    let new_v: F64 = this.momentum * old_v + eff_g
+                    vel.set_f64(j, new_v)
+                    new_v
+                } else {
+                    eff_g
+                }
+
+                // param = param - lr * update
+                param.set_f64(j, p - this.lr * update)
+                j = j + 1
+            }
+
+            i = i + 1
+        }
+    }
+}

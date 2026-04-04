@@ -1,0 +1,94 @@
+//! Lookup embedding layer.
+//!
+//! Maps integer token indices to dense vectors by table lookup.
+//! The weight matrix has shape `[vocab_size, embed_dim]`.
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, from_list_f64, randn}
+
+/// Lookup embedding: maps integer indices to dense vectors.
+///
+/// Weight shape: `[vocab_size, embed_dim]`.
+/// Forward input: 1-D I64 tensor of token indices, length `seq_len`.
+/// Forward output: `[seq_len, embed_dim]` F64 tensor.
+pub type Embedding {
+    weight: Tensor,
+    vocab_size: I64,
+    embed_dim: I64,
+}
+
+impl Embedding {
+    /// Create a new Embedding with random N(0,1) weights.
+    pub func new(vocab_size: I64, embed_dim: I64) -> Embedding {
+        let mut dims = List[I64]::new(2)
+        dims.push(vocab_size)
+        dims.push(embed_dim)
+        let weight = randn(dims)
+        Embedding {
+            weight: weight,
+            vocab_size: vocab_size,
+            embed_dim: embed_dim,
+        }
+    }
+
+    /// Create an Embedding from a pre-trained weight tensor.
+    ///
+    /// The weight must have shape `[vocab_size, embed_dim]`.
+    pub func from_weight(weight: Tensor, vocab_size: I64, embed_dim: I64) -> Embedding {
+        Embedding {
+            weight: weight,
+            vocab_size: vocab_size,
+            embed_dim: embed_dim,
+        }
+    }
+
+    /// Forward pass: look up embeddings for each index in `indices`.
+    ///
+    /// `indices` is a 1-D tensor of I64 values (token IDs).
+    /// Returns a `[seq_len, embed_dim]` tensor.
+    pub func forward(this, indices: ref Tensor) -> Tensor {
+        let seq_len: I64 = indices.numel()
+        let d: I64 = this.embed_dim
+        let mut out_dims = List[I64]::new(2)
+        out_dims.push(seq_len)
+        out_dims.push(d)
+        let mut result = zeros(out_dims, DType::F64)
+
+        let mut s: I64 = 0
+        loop (s < seq_len) {
+            let idx: I64 = indices.get_i64(s)
+            // Copy the idx-th row of the weight matrix into the output.
+            let src_off: I64 = idx * d
+            let dst_off: I64 = s * d
+            let mut j: I64 = 0
+            loop (j < d) {
+                result.set_f64(dst_off + j, this.weight.get_f64(src_off + j))
+                j = j + 1
+            }
+            s = s + 1
+        }
+        result
+    }
+
+    /// Returns the vocabulary size.
+    pub func get_vocab_size(this) -> I64 {
+        this.vocab_size
+    }
+
+    /// Returns the embedding dimension.
+    pub func get_embed_dim(this) -> I64 {
+        this.embed_dim
+    }
+
+    /// Returns a copy of the weight tensor.
+    pub func get_weight(this) -> Tensor {
+        this.weight
+    }
+
+    /// Returns the total number of parameters (vocab_size * embed_dim).
+    pub func num_parameters(this) -> I64 {
+        this.vocab_size * this.embed_dim
+    }
+}

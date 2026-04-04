@@ -1,4 +1,4 @@
-//! Element-wise tensor operations. // v2
+//! Element-wise tensor operations. // v4
 //!
 //! Provides unary and binary element-wise operations with NumPy-compatible
 //! broadcasting for binary operations.
@@ -50,22 +50,22 @@ func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
     let rank = shape.rank()
     let mut indices = List[I64]::new(rank)
     // Pre-fill with zeros so we can use set() below.
-    let mut k = 0
+    let mut k: I64 = 0
     loop (k < rank) {
-        indices.push(0)
+        indices.push(0 as I64)
         k = k + 1
     }
-    let mut remaining = flat
-    let mut j = 0
+    let mut remaining: I64 = flat
+    let mut j: I64 = 0
     loop (j < rank) {
         // Compute stride for dimension j (product of all dims to the right).
-        let mut stride = 1
-        let mut s = j + 1
+        let mut stride: I64 = 1
+        let mut s: I64 = j + 1
         loop (s < rank) {
             stride = stride * shape.dim(s)
             s = s + 1
         }
-        let idx = remaining / stride
+        let idx: I64 = remaining / stride
         indices.set(j, idx)
         remaining = remaining - idx * stride
         j = j + 1
@@ -77,19 +77,19 @@ func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
 /// shape (possibly lower-rank, left-padded with 1s for broadcasting), compute
 /// the flat index into the source tensor.
 func broadcast_flat_index(out_indices: ref List[I64], src_shape: ref Shape) -> I64 {
-    let out_rank = out_indices.len()
-    let src_rank = src_shape.rank()
+    let out_rank: I64 = out_indices.len()
+    let src_rank: I64 = src_shape.rank()
     // How many leading output dims to skip (the source is left-padded with 1s).
-    let offset = out_rank - src_rank
-    let mut flat = 0
-    let mut stride = 1
+    let offset: I64 = out_rank - src_rank
+    let mut flat: I64 = 0
+    let mut stride: I64 = 1
     // Traverse from the last dimension to the first.
-    let mut i = src_rank - 1
+    let mut i: I64 = src_rank - 1
     loop (i >= 0) {
-        let dim_val = src_shape.dim(i)
-        let out_idx = out_indices.get(i + offset)
+        let dim_val: I64 = src_shape.dim(i)
+        let out_idx: I64 = out_indices.get(i + offset)
         // If this source dim is 1, it is broadcast — always use index 0.
-        let src_idx = dim_val == 1 ? 0 : out_idx
+        let src_idx: I64 = dim_val == 1 ? 0 as I64 : out_idx
         flat = flat + src_idx * stride
         stride = stride * dim_val
         i = i - 1
@@ -103,6 +103,20 @@ func broadcast_flat_index(out_indices: ref List[I64], src_shape: ref Shape) -> I
 
 /// Element-wise addition.  Supports broadcasting.
 pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // Fast path: same shape — no broadcasting overhead.
+    if a.shape().eq(b.shape()) {
+        let dims = shape_dims(a)
+        let mut result = zeros(dims, a.dtype())
+        let n: I64 = a.numel()
+        let mut i: I64 = 0
+        loop (i < n) {
+            result.set_f64(i, a.get_f64(i) + b.get_f64(i))
+            i = i + 1
+        }
+        return Ok(result)
+    }
+
+    // Slow path: broadcasting.
     let bc = broadcast_shape(a.shape(), b.shape())
     when bc {
         Err(e) => Err(e),
@@ -110,7 +124,7 @@ pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i = 0
+            let mut i: I64 = 0
             loop (i < n) {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
@@ -125,6 +139,20 @@ pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
 
 /// Element-wise subtraction.  Supports broadcasting.
 pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // Fast path: same shape — no broadcasting overhead.
+    if a.shape().eq(b.shape()) {
+        let dims = shape_dims(a)
+        let mut result = zeros(dims, a.dtype())
+        let n: I64 = a.numel()
+        let mut i: I64 = 0
+        loop (i < n) {
+            result.set_f64(i, a.get_f64(i) - b.get_f64(i))
+            i = i + 1
+        }
+        return Ok(result)
+    }
+
+    // Slow path: broadcasting.
     let bc = broadcast_shape(a.shape(), b.shape())
     when bc {
         Err(e) => Err(e),
@@ -132,7 +160,7 @@ pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i = 0
+            let mut i: I64 = 0
             loop (i < n) {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
@@ -147,6 +175,20 @@ pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
 
 /// Element-wise multiplication.  Supports broadcasting.
 pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // Fast path: same shape — no broadcasting overhead.
+    if a.shape().eq(b.shape()) {
+        let dims = shape_dims(a)
+        let mut result = zeros(dims, a.dtype())
+        let n: I64 = a.numel()
+        let mut i: I64 = 0
+        loop (i < n) {
+            result.set_f64(i, a.get_f64(i) * b.get_f64(i))
+            i = i + 1
+        }
+        return Ok(result)
+    }
+
+    // Slow path: broadcasting.
     let bc = broadcast_shape(a.shape(), b.shape())
     when bc {
         Err(e) => Err(e),
@@ -154,7 +196,7 @@ pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i = 0
+            let mut i: I64 = 0
             loop (i < n) {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
@@ -169,6 +211,20 @@ pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
 
 /// Element-wise division.  Supports broadcasting.
 pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // Fast path: same shape — no broadcasting overhead.
+    if a.shape().eq(b.shape()) {
+        let dims = shape_dims(a)
+        let mut result = zeros(dims, a.dtype())
+        let n: I64 = a.numel()
+        let mut i: I64 = 0
+        loop (i < n) {
+            result.set_f64(i, a.get_f64(i) / b.get_f64(i))
+            i = i + 1
+        }
+        return Ok(result)
+    }
+
+    // Slow path: broadcasting.
     let bc = broadcast_shape(a.shape(), b.shape())
     when bc {
         Err(e) => Err(e),
@@ -176,7 +232,7 @@ pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i = 0
+            let mut i: I64 = 0
             loop (i < n) {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
@@ -197,8 +253,8 @@ pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
 pub func neg(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
-    let n = a.numel()
-    let mut i = 0
+    let n: I64 = a.numel()
+    let mut i: I64 = 0
     loop (i < n) {
         result.set_f64(i, 0.0 - a.get_f64(i))
         i = i + 1

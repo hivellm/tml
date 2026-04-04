@@ -1,4 +1,4 @@
-//! Shape, strides, and layout for tensor dimensions.
+//! Shape, strides, and layout for tensor dimensions. // v2
 
 use std::collections::List
 use std::ia::error::IaError
@@ -145,16 +145,16 @@ impl Layout {
 ///    - If one is 1, use the other.
 ///    - Otherwise, return IaError::ShapeMismatch.
 pub func broadcast_shape(a: ref Shape, b: ref Shape) -> Outcome[Shape, IaError] {
-    let ra = a.rank()
-    let rb = b.rank()
-    let out_rank = ra > rb ? ra : rb
+    let ra: I64 = a.rank()
+    let rb: I64 = b.rank()
+    let out_rank: I64 = ra > rb ? ra : rb
     let mut out_dims = List[I64]::new(out_rank)
-    let mut i = 0
+    let mut i: I64 = 0
     loop (i < out_rank) {
-        let ai = ra - out_rank + i
-        let bi = rb - out_rank + i
-        let da = ai >= 0 ? a.dim(ai) : 1
-        let db = bi >= 0 ? b.dim(bi) : 1
+        let ai: I64 = ra - out_rank + i
+        let bi: I64 = rb - out_rank + i
+        let da: I64 = ai >= 0 ? a.dim(ai) : 1 as I64
+        let db: I64 = bi >= 0 ? b.dim(bi) : 1 as I64
         if da == db {
             out_dims.push(da)
         } else if da == 1 {

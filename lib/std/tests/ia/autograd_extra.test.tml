@@ -1,0 +1,147 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{from_list_f64, zeros, ones, full}
+use std::ia::autograd::graph::Tape
+use std::ia::autograd::graph::{OP_ADD, OP_MUL, OP_SUM}
+use std::ia::autograd::backward::{GradStore, backward}
+
+/// Helper: create a 1-D dims list.
+func dims1(n: I64) -> List[I64] {
+    let mut d: List[I64] = List[I64]::new(1)
+    d.push(n)
+    return d
+}
+
+/// Helper: approximate equality check.
+func approx(a: F64, b: F64) -> Bool {
+    let diff: F64 = a - b
+    let abs_diff: F64 = diff > 0.0 ? diff : 0.0 - diff
+    return abs_diff < 0.01
+}
+
+@test
+func test_no_grad_disables_recording() -> I32 {
+    let mut tape = Tape::new()
+    assert(tape.is_recording(), "tape should be recording by default")
+
+    // Record a leaf
+    let t: Tensor = full(dims1(1 as I64), 1.0, DType::F64)
+    let idx1: I64 = tape.record_leaf(t)
+    assert_eq(tape.len(), 1 as I64, "should have 1 entry")
+
+    // Disable recording
+    tape.disable()
+    assert(not tape.is_recording(), "tape should not record after disable")
+
+    // Try to record a leaf — should return -1
+    let t2: Tensor = full(dims1(1 as I64), 2.0, DType::F64)
+    let idx2: I64 = tape.record_leaf(t2)
+    assert_eq(idx2, -1 as I64, "record_leaf during no_grad should return -1")
+    assert_eq(tape.len(), 1 as I64, "tape length should still be 1")
+
+    // Re-enable
+    tape.enable()
+    assert(tape.is_recording(), "tape should be recording again")
+
+    return 0
+}
+
+@test
+func test_no_grad_reenable_records() -> I32 {
+    let mut tape = Tape::new()
+
+    tape.disable()
+    tape.enable()
+
+    // After re-enabling, recording should work
+    let t: Tensor = full(dims1(1 as I64), 5.0, DType::F64)
+    let idx: I64 = tape.record_leaf(t)
+    assert_eq(idx, 0 as I64, "first record after re-enable should be index 0")
+    assert_eq(tape.len(), 1 as I64, "tape should have 1 entry")
+
+    return 0
+}
+
+@test
+func test_chain_add_mul() -> I32 {
+    // z = (x + y) * y, x=3, y=2
+    // z = 5 * 2 = 10
+    // dz/dx = y = 2
+    // dz/dy = (x + y) * 1 + 1 * y = 5 + 2 = 7
+    let mut tape = Tape::new()
+
+    // Leaf x = 3
+    let mut xd: List[F64] = List[F64]::new(1)
+    xd.push(3.0)
+    let x_tensor = from_list_f64(xd, dims1(1 as I64))
+    let x_idx: I64 = tape.record_leaf(x_tensor)
+
+    // Leaf y = 2
+    let mut yd: List[F64] = List[F64]::new(1)
+    yd.push(2.0)
+    let y_tensor = from_list_f64(yd, dims1(1 as I64))
+    let y_idx: I64 = tape.record_leaf(y_tensor)
+
+    // w = x + y = 5
+    let mut wd: List[F64] = List[F64]::new(1)
+    wd.push(5.0)
+    let w_tensor = from_list_f64(wd, dims1(1 as I64))
+    let w_idx: I64 = tape.record_binary(OP_ADD, x_idx, y_idx, w_tensor)
+
+    // z = w * y = 10
+    let mut zd: List[F64] = List[F64]::new(1)
+    zd.push(10.0)
+    let z_tensor = from_list_f64(zd, dims1(1 as I64))
+    let z_idx: I64 = tape.record_binary(OP_MUL, w_idx, y_idx, z_tensor)
+
+    // Backward from z (z is already scalar, so no need for sum reduction)
+    let grads = backward(ref tape, z_idx)
+
+    // dz/dx = y = 2
+    let gx: F64 = grads.get(x_idx).get_f64(0 as I64)
+    assert(approx(gx, 2.0), "dz/dx should be 2.0")
+
+    // dz/dy = 7
+    let gy: F64 = grads.get(y_idx).get_f64(0 as I64)
+    assert(approx(gy, 7.0), "dz/dy should be 7.0")
+
+    return 0
+}
+
+@test
+func test_add_three_leaves() -> I32 {
+    // z = (a + b) + c, a=1, b=2, c=3
+    // z = 6
+    // dz/da = 1, dz/db = 1, dz/dc = 1
+    let mut tape = Tape::new()
+
+    let a: Tensor = full(dims1(1 as I64), 1.0, DType::F64)
+    let b: Tensor = full(dims1(1 as I64), 2.0, DType::F64)
+    let c: Tensor = full(dims1(1 as I64), 3.0, DType::F64)
+
+    let a_idx: I64 = tape.record_leaf(a)
+    let b_idx: I64 = tape.record_leaf(b)
+    let c_idx: I64 = tape.record_leaf(c)
+
+    // ab = a + b = 3
+    let ab: Tensor = full(dims1(1 as I64), 3.0, DType::F64)
+    let ab_idx: I64 = tape.record_binary(OP_ADD, a_idx, b_idx, ab)
+
+    // z = ab + c = 6
+    let z: Tensor = full(dims1(1 as I64), 6.0, DType::F64)
+    let z_idx: I64 = tape.record_binary(OP_ADD, ab_idx, c_idx, z)
+
+    let grads = backward(ref tape, z_idx)
+
+    let ga: F64 = grads.get(a_idx).get_f64(0 as I64)
+    let gb: F64 = grads.get(b_idx).get_f64(0 as I64)
+    let gc: F64 = grads.get(c_idx).get_f64(0 as I64)
+
+    assert(approx(ga, 1.0), "dz/da should be 1.0")
+    assert(approx(gb, 1.0), "dz/db should be 1.0")
+    assert(approx(gc, 1.0), "dz/dc should be 1.0")
+
+    return 0
+}

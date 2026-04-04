@@ -1,0 +1,159 @@
+//! Learning rate schedulers.
+//!
+//! Provides [`CosineAnnealing`], [`LinearWarmup`], and [`StepLR`] schedulers
+//! for adjusting the learning rate during training.
+
+use std::math::{cos, pow}
+
+/// Returns Pi (avoids cross-module const resolution issues).
+func pi_val() -> F64 { 3.14159265358979323846 }
+
+/// Cosine annealing scheduler.
+///
+/// Learning rate follows a cosine curve from `lr_max` down to `lr_min`
+/// over `total_steps` steps:
+///
+/// ```
+/// lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + cos(pi * step / total_steps))
+/// ```
+pub type CosineAnnealing {
+    lr_max: F64,
+    lr_min: F64,
+    total_steps: I64,
+    current_step: I64,
+}
+
+impl CosineAnnealing {
+    /// Creates a new cosine annealing scheduler.
+    ///
+    /// - `lr_max`: maximum (initial) learning rate
+    /// - `lr_min`: minimum learning rate at the end of annealing
+    /// - `total_steps`: total number of steps for one cosine cycle
+    pub func new(lr_max: F64, lr_min: F64, total_steps: I64) -> CosineAnnealing {
+        return CosineAnnealing {
+            lr_max: lr_max,
+            lr_min: lr_min,
+            total_steps: total_steps,
+            current_step: 0,
+        }
+    }
+
+    /// Returns the current learning rate without advancing the step counter.
+    pub func get_lr(this) -> F64 {
+        if this.total_steps <= 0 {
+            return this.lr_max
+        }
+        let step_f: F64 = this.current_step as F64
+        let total_f: F64 = this.total_steps as F64
+        let ratio: F64 = step_f / total_f
+        return this.lr_min + 0.5 * (this.lr_max - this.lr_min) * (1.0 + cos(pi_val() * ratio))
+    }
+
+    /// Advances one step and returns the new learning rate.
+    pub func step(this) -> F64 {
+        if this.current_step < this.total_steps {
+            this.current_step = this.current_step + 1
+        }
+        return this.get_lr()
+    }
+}
+
+/// Linear warmup scheduler.
+///
+/// Learning rate increases linearly from 0 to `base_lr` over
+/// `warmup_steps` steps. After warmup, returns `base_lr`.
+///
+/// ```
+/// lr = base_lr * min(1.0, current_step / warmup_steps)
+/// ```
+pub type LinearWarmup {
+    base_lr: F64,
+    warmup_steps: I64,
+    current_step: I64,
+}
+
+impl LinearWarmup {
+    /// Creates a new linear warmup scheduler.
+    ///
+    /// - `base_lr`: target learning rate after warmup
+    /// - `warmup_steps`: number of warmup steps
+    pub func new(base_lr: F64, warmup_steps: I64) -> LinearWarmup {
+        return LinearWarmup {
+            base_lr: base_lr,
+            warmup_steps: warmup_steps,
+            current_step: 0,
+        }
+    }
+
+    /// Returns the current learning rate without advancing the step counter.
+    pub func get_lr(this) -> F64 {
+        if this.warmup_steps <= 0 {
+            return this.base_lr
+        }
+        let step_f: F64 = this.current_step as F64
+        let warmup_f: F64 = this.warmup_steps as F64
+        let ratio: F64 = step_f / warmup_f
+        if ratio > 1.0 {
+            return this.base_lr
+        }
+        return this.base_lr * ratio
+    }
+
+    /// Advances one step and returns the new learning rate.
+    pub func step(this) -> F64 {
+        this.current_step = this.current_step + 1
+        return this.get_lr()
+    }
+}
+
+/// Step LR scheduler.
+///
+/// Reduces the learning rate by a multiplicative factor (`gamma`)
+/// every `step_size` steps:
+///
+/// ```
+/// lr = base_lr * gamma ^ (current_step / step_size)
+/// ```
+pub type StepLR {
+    base_lr: F64,
+    step_size: I64,
+    gamma: F64,
+    current_step: I64,
+}
+
+impl StepLR {
+    /// Creates a new step LR scheduler.
+    ///
+    /// - `base_lr`: initial learning rate
+    /// - `step_size`: period of learning rate decay (in steps)
+    /// - `gamma`: multiplicative decay factor (e.g., 0.1)
+    pub func new(base_lr: F64, step_size: I64, gamma: F64) -> StepLR {
+        return StepLR {
+            base_lr: base_lr,
+            step_size: step_size,
+            gamma: gamma,
+            current_step: 0,
+        }
+    }
+
+    /// Returns the current learning rate without advancing the step counter.
+    pub func get_lr(this) -> F64 {
+        if this.step_size <= 0 {
+            return this.base_lr
+        }
+        let num_decays: I64 = this.current_step / this.step_size
+        let mut lr: F64 = this.base_lr
+        let mut d: I64 = 0
+        loop (d < num_decays) {
+            lr = lr * this.gamma
+            d = d + 1
+        }
+        return lr
+    }
+
+    /// Advances one step and returns the new learning rate.
+    pub func step(this) -> F64 {
+        this.current_step = this.current_step + 1
+        return this.get_lr()
+    }
+}

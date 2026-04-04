@@ -4,12 +4,21 @@
 //!
 //! # Modules
 //!
-//! | Module    | Description                          |
-//! |-----------|--------------------------------------|
-//! | `error`   | [`IaError`], [`IaResult`] — error types for IA operations |
-//! | `tensor`  | Tensor types and operations          |
+//! | Module     | Description                                            |
+//! |------------|--------------------------------------------------------|
+//! | `error`    | [`IaError`], [`IaResult`] — error types                |
+//! | `tensor`   | Tensor types and operations                            |
+//! | `autograd` | Automatic differentiation (Variable, Tape)             |
+//! | `nn`       | Neural network layers, activations, loss functions     |
+//! | `optim`    | Optimizers (SGD, Adam) and learning rate schedulers    |
+//! | `train`    | Dataset, DataLoader, EpochResult, Checkpoint utilities |
 
 pub mod tensor
 pub mod error
+pub mod autograd
+pub mod nn
+pub mod optim
+pub mod train
 
-pub use error::{IaError, IaResult}
+pub use std::ia::error::IaError
+pub use std::ia::error::IaResult

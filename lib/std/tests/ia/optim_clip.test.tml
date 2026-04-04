@@ -1,0 +1,53 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::optim::optimizer::{clip_grad_value, clip_grad_norm}
+
+@test
+func test_clip_grad_value() -> I32 {
+    let mut data = List[F64]::new(4)
+    data.push(-5.0)
+    data.push(2.0)
+    data.push(10.0)
+    data.push(-1.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(4)
+    let grad = from_list_f64(data, dims)
+    let mut grads = List[Tensor]::new()
+    grads.push(grad)
+    clip_grad_value(ref grads, 3.0)
+    let g = grads.get(0)
+    let v0: F64 = g.get_f64(0)
+    assert(v0 > -3.01 and v0 < -2.99, "clip_value: -5 clipped to -3")
+    let v2: F64 = g.get_f64(2)
+    assert(v2 > 2.99 and v2 < 3.01, "clip_value: 10 clipped to 3")
+    let v1: F64 = g.get_f64(1)
+    let d1: F64 = v1 - 2.0
+    assert(d1 > -0.01 and d1 < 0.01, "clip_value: 2 unchanged")
+    return 0
+}
+
+@test
+func test_clip_grad_norm() -> I32 {
+    // grad = [3, 4], norm = 5. max_norm = 2.5 => scale = 0.5
+    // clipped = [1.5, 2.0]
+    let mut data = List[F64]::new(2)
+    data.push(3.0)
+    data.push(4.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(2)
+    let grad = from_list_f64(data, dims)
+    let mut grads = List[Tensor]::new()
+    grads.push(grad)
+    let norm: F64 = clip_grad_norm(ref grads, 2.5)
+    let dn: F64 = norm - 5.0
+    assert(dn > -0.01 and dn < 0.01, "original norm should be 5.0")
+    let g = grads.get(0)
+    let v0: F64 = g.get_f64(0)
+    let d0: F64 = v0 - 1.5
+    assert(d0 > -0.01 and d0 < 0.01, "clip_norm: 3.0 * 0.5 = 1.5")
+    let v1: F64 = g.get_f64(1)
+    let d1: F64 = v1 - 2.0
+    assert(d1 > -0.01 and d1 < 0.01, "clip_norm: 4.0 * 0.5 = 2.0")
+    return 0
+}

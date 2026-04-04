@@ -1,0 +1,69 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, ones}
+use std::ia::nn::dropout::Dropout
+
+@test
+func test_dropout_eval_identity() -> I32 {
+    // In eval mode, dropout should return input unchanged
+    let mut data = List[F64]::new(4)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(4)
+    let input = from_list_f64(data, dims)
+    let dropout = Dropout::new(0.5).set_eval()
+    let out = dropout.forward(ref input)
+    assert_eq(out.numel(), 4, "dropout eval output should have 4 elements")
+    let v0: F64 = out.get_f64(0)
+    let d0: F64 = v0 - 1.0
+    assert(d0 > -0.01 and d0 < 0.01, "dropout eval should preserve values")
+    let v3: F64 = out.get_f64(3)
+    let d3: F64 = v3 - 4.0
+    assert(d3 > -0.01 and d3 < 0.01, "dropout eval should preserve values")
+    return 0
+}
+
+@test
+func test_dropout_train_some_zeroed() -> I32 {
+    // In training mode with p=0.99, almost all elements should be zeroed
+    let mut dims = List[I64]::new(1)
+    dims.push(100)
+    let input = ones(dims, DType::F64)
+    // Dropout::new starts in training mode by default
+    let dropout = Dropout::new(0.99)
+    let out = dropout.forward(ref input)
+    // Count non-zero elements
+    let mut nonzero: I64 = 0
+    let mut i: I64 = 0
+    loop (i < 100) {
+        let v: F64 = out.get_f64(i)
+        if v > 0.001 or v < -0.001 {
+            nonzero = nonzero + 1
+        }
+        i = i + 1
+    }
+    // With p=0.99, expect ~1 non-zero out of 100
+    assert(nonzero < 20, "dropout p=0.99 should zero most elements")
+    return 0
+}
+
+@test
+func test_dropout_zero_prob() -> I32 {
+    // p=0 should keep all elements (none dropped)
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let input = from_list_f64(data, dims)
+    let dropout = Dropout::new(0.0)
+    let out = dropout.forward(ref input)
+    let v0: F64 = out.get_f64(0)
+    let d0: F64 = v0 - 1.0
+    assert(d0 > -0.01 and d0 < 0.01, "dropout p=0 should preserve all values")
+    return 0
+}

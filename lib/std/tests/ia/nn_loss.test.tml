@@ -1,0 +1,47 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::nn::loss::{mse_loss, l1_loss}
+
+@test
+func test_mse_zero() -> I32 {
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let preds = from_list_f64(data, dims)
+    let mut data2 = List[F64]::new(3)
+    data2.push(1.0)
+    data2.push(2.0)
+    data2.push(3.0)
+    let mut dims2 = List[I64]::new(1)
+    dims2.push(3)
+    let targets = from_list_f64(data2, dims2)
+    let loss = mse_loss(ref preds, ref targets)
+    let v: F64 = loss.get_f64(0)
+    assert(v > -0.01 and v < 0.01, "mse_loss of identical tensors should be ~0")
+    return 0
+}
+
+@test
+func test_mse_known() -> I32 {
+    let mut pd = List[F64]::new(2)
+    pd.push(1.0)
+    pd.push(0.0)
+    let mut d1 = List[I64]::new(1)
+    d1.push(2)
+    let preds = from_list_f64(pd, d1)
+    let mut td = List[F64]::new(2)
+    td.push(0.0)
+    td.push(1.0)
+    let mut d2 = List[I64]::new(1)
+    d2.push(2)
+    let targets = from_list_f64(td, d2)
+    let loss = mse_loss(ref preds, ref targets)
+    let v: F64 = loss.get_f64(0)
+    let diff: F64 = v - 1.0
+    assert(diff > -0.01 and diff < 0.01, "mse_loss([1,0],[0,1]) should be 1.0")
+    return 0
+}

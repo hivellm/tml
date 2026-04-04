@@ -88,3 +88,155 @@ func test_abs() -> I32 {
     assert(diff2 > -0.001 and diff2 < 0.001, "abs element 2 should be 3.0")
     return 0
 }
+
+@test
+func test_sqrt() -> I32 {
+    // sqrt([4,9,16]) → [2,3,4]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(4.0)
+    data_a.push(9.0)
+    data_a.push(16.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::sqrt_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 2.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "sqrt element 0 should be 2.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 3.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "sqrt element 1 should be 3.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 4.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "sqrt element 2 should be 4.0")
+    return 0
+}
+
+@test
+func test_clamp() -> I32 {
+    // clamp([1,5,10], 2.0, 8.0) → [2,5,8]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.0)
+    data_a.push(5.0)
+    data_a.push(10.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::clamp(ref a, 2.0, 8.0)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 2.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "clamp element 0 should be 2.0 (clamped up)")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 5.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "clamp element 1 should be 5.0 (in range)")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 8.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "clamp element 2 should be 8.0 (clamped down)")
+    return 0
+}
+
+@test
+func test_pow() -> I32 {
+    // pow([2,3,4], 2.0) → [4,9,16]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    data_a.push(4.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::pow_tensor(ref a, 2.0)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 4.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "pow element 0 should be 4.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 9.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "pow element 1 should be 9.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 16.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "pow element 2 should be 16.0")
+    return 0
+}
+
+@test
+func test_floor() -> I32 {
+    // floor([1.7, 2.3, -0.5]) → [1.0, 2.0, -1.0]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.7)
+    data_a.push(2.3)
+    data_a.push(-0.5)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::floor_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 1.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "floor element 0 should be 1.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 2.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "floor element 1 should be 2.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - (-1.0)
+    assert(diff2 > -0.001 and diff2 < 0.001, "floor element 2 should be -1.0")
+    return 0
+}
+
+@test
+func test_ceil() -> I32 {
+    // ceil([1.2, 2.8, -0.3]) → [2.0, 3.0, 0.0]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.2)
+    data_a.push(2.8)
+    data_a.push(-0.3)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::ceil_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 2.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "ceil element 0 should be 2.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 3.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "ceil element 1 should be 3.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 0.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "ceil element 2 should be 0.0")
+    return 0
+}
+
+@test
+func test_exp() -> I32 {
+    // exp([0.0]) → [1.0]  (e^0 = 1)
+    let mut data_a = List[F64]::new(1)
+    data_a.push(0.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(1)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::exp_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 1.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "exp(0.0) should be 1.0")
+    return 0
+}
+
+@test
+func test_log() -> I32 {
+    // log([1.0]) → [0.0]  (ln(1) = 0)
+    let mut data_a = List[F64]::new(1)
+    data_a.push(1.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(1)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::log_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 0.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "log(1.0) should be 0.0")
+    return 0
+}

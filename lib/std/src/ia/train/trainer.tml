@@ -1,0 +1,131 @@
+//! Training utilities.
+//!
+//! Provides helper functions for training loops: index shuffling,
+//! range generation, and epoch result tracking.
+//!
+//! Since TML does not support closures or trait objects for generic
+//! forward/loss callbacks, users write their own training loops
+//! using these utilities together with optimizers and data loaders.
+
+use std::collections::List
+use std::random::Rng
+use std::ia::tensor::tensor::Tensor
+
+/// Configuration for a training loop.
+pub type TrainConfig {
+    epochs: I64,
+    print_every: I64,
+}
+
+impl TrainConfig {
+    /// Creates a new training configuration.
+    ///
+    /// - `epochs`: number of training epochs
+    /// - `print_every`: print loss every N steps (0 = never)
+    pub func new(epochs: I64, print_every: I64) -> TrainConfig {
+        return TrainConfig {
+            epochs: epochs,
+            print_every: print_every,
+        }
+    }
+}
+
+/// Result of one training epoch.
+pub type EpochResult {
+    epoch: I64,
+    avg_loss: F64,
+    num_steps: I64,
+}
+
+impl EpochResult {
+    /// Creates a new epoch result.
+    pub func new(epoch: I64, avg_loss: F64, num_steps: I64) -> EpochResult {
+        return EpochResult {
+            epoch: epoch,
+            avg_loss: avg_loss,
+            num_steps: num_steps,
+        }
+    }
+
+    /// Returns the epoch number.
+    pub func get_epoch(this) -> I64 {
+        return this.epoch
+    }
+
+    /// Returns the average loss for this epoch.
+    pub func get_avg_loss(this) -> F64 {
+        return this.avg_loss
+    }
+
+    /// Returns the number of steps in this epoch.
+    pub func get_num_steps(this) -> I64 {
+        return this.num_steps
+    }
+}
+
+/// Creates a list of indices [0, 1, 2, ..., n-1].
+pub func range_indices(n: I64) -> List[I64] {
+    let result: List[I64] = List[I64]::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        result.push(i)
+        i = i + 1
+    }
+    return result
+}
+
+/// Shuffles a list of I64 indices in place using Fisher-Yates algorithm.
+pub func shuffle_indices(indices: List[I64]) {
+    let mut rng: Rng = Rng::new()
+    rng.shuffle_i64(indices)
+}
+
+/// Accumulates loss values and computes the running average.
+///
+/// Use this in a training loop to track the average loss across steps.
+pub type LossAccumulator {
+    total_loss: F64,
+    num_steps: I64,
+}
+
+impl LossAccumulator {
+    /// Creates a new loss accumulator starting at zero.
+    pub func new() -> LossAccumulator {
+        return LossAccumulator {
+            total_loss: 0.0,
+            num_steps: 0,
+        }
+    }
+
+    /// Adds a loss value from one training step.
+    pub func add(this, loss: F64) {
+        this.total_loss = this.total_loss + loss
+        this.num_steps = this.num_steps + 1
+    }
+
+    /// Returns the average loss so far.
+    ///
+    /// Returns 0.0 if no steps have been recorded.
+    pub func avg(this) -> F64 {
+        if this.num_steps <= 0 {
+            return 0.0
+        }
+        return this.total_loss / (this.num_steps as F64)
+    }
+
+    /// Returns the total accumulated loss.
+    pub func total(this) -> F64 {
+        return this.total_loss
+    }
+
+    /// Returns the number of steps recorded.
+    pub func count(this) -> I64 {
+        return this.num_steps
+    }
+
+    /// Resets the accumulator to zero.
+    pub func reset(this) {
+        this.total_loss = 0.0
+        this.num_steps = 0
+    }
+}

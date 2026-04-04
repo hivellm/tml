@@ -1,0 +1,95 @@
+//! Dropout regularisation layer.
+//!
+//! During training, randomly zeroes elements with probability `p` and scales
+//! surviving elements by `1/(1-p)` (inverted dropout).  During evaluation,
+//! the input passes through unchanged.
+
+use std::collections::List
+use std::random::Rng
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::zeros
+
+/// Collect all dims of a tensor into a List[I64].
+func tensor_dims(t: ref Tensor) -> List[I64] {
+    let rank: I64 = t.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i: I64 = 0
+    loop (i < rank) {
+        dims.push(t.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+/// Dropout layer — randomly zeroes elements during training.
+///
+/// * `p` — probability of zeroing each element (typically 0.1–0.5).
+/// * `training` — whether the layer is in training mode.
+///
+/// Uses inverted dropout: surviving elements are scaled by `1/(1-p)`
+/// so that no scaling is needed at inference time.
+pub type Dropout {
+    prob: F64,
+    training: Bool,
+}
+
+impl Dropout {
+    /// Create a new Dropout layer with the given drop probability.
+    pub func new(prob: F64) -> Dropout {
+        Dropout { prob: prob, training: true }
+    }
+
+    /// Forward pass.
+    ///
+    /// In training mode: randomly zeroes elements with probability `p`,
+    /// scales remaining by `1/(1-p)`.
+    /// In eval mode: returns a copy of the input unchanged.
+    pub func forward(this, input: ref Tensor) -> Tensor {
+        let n: I64 = input.numel()
+        let dims = tensor_dims(input)
+        let mut result = zeros(dims, input.dtype())
+
+        if this.training {
+            let scale: F64 = 1.0 / (1.0 - this.prob)
+            let mut rng = Rng::new()
+            let mut i: I64 = 0
+            loop (i < n) {
+                let r: F64 = rng.next_f64()
+                if r >= this.prob {
+                    result.set_f64(i, input.get_f64(i) * scale)
+                }
+                // else: result already has 0.0 from zeros()
+                i = i + 1
+            }
+        } else {
+            // Eval mode: identity copy.
+            let mut i: I64 = 0
+            loop (i < n) {
+                result.set_f64(i, input.get_f64(i))
+                i = i + 1
+            }
+        }
+        result
+    }
+
+    /// Switch to training mode.
+    pub func set_training(this) -> Dropout {
+        Dropout { prob: this.prob, training: true }
+    }
+
+    /// Switch to evaluation mode.
+    pub func set_eval(this) -> Dropout {
+        Dropout { prob: this.prob, training: false }
+    }
+
+    /// Returns whether the layer is in training mode.
+    pub func is_training(this) -> Bool {
+        this.training
+    }
+
+    /// Returns the drop probability.
+    pub func get_prob(this) -> F64 {
+        this.prob
+    }
+}

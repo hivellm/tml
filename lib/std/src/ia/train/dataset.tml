@@ -1,0 +1,47 @@
+//! Dataset abstraction for training data.
+//!
+//! Provides a simple in-memory [`Dataset`] of (input, target) tensor pairs
+//! for use with [`DataLoader`](super::dataloader::DataLoader).
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+
+/// A simple in-memory dataset of (input, target) tensor pairs.
+///
+/// Each sample consists of an input tensor and a corresponding target tensor.
+/// Samples are stored in parallel lists and accessed by index.
+pub type Dataset {
+    inputs: List[Tensor],
+    targets: List[Tensor],
+}
+
+impl Dataset {
+    /// Creates an empty dataset.
+    pub func new() -> Dataset {
+        return Dataset {
+            inputs: List[Tensor]::new(),
+            targets: List[Tensor]::new(),
+        }
+    }
+
+    /// Adds an (input, target) pair to the dataset.
+    pub func add(this, input: Tensor, target: Tensor) {
+        this.inputs.push(input)
+        this.targets.push(target)
+    }
+
+    /// Returns the number of samples in the dataset.
+    pub func len(this) -> I64 {
+        return this.inputs.len()
+    }
+
+    /// Returns the input tensor at index `i`.
+    pub func get_input(this, i: I64) -> Tensor {
+        return this.inputs.get(i)
+    }
+
+    /// Returns the target tensor at index `i`.
+    pub func get_target(this, i: I64) -> Tensor {
+        return this.targets.get(i)
+    }
+}

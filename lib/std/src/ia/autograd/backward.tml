@@ -1,0 +1,544 @@
+//! Backward pass -- gradient computation via reverse-mode automatic differentiation.
+//!
+//! This module implements the core backward pass that traverses the computation
+//! tape in reverse order, propagating gradients from the loss back to all leaf
+//! variables.  It also provides the `GradStore` type for accumulating and
+//! retrieving per-variable gradients.
+
+use std::collections::List
+use std::math::{ln, pow}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, ones, full}
+use std::ia::tensor::ops
+use std::ia::tensor::matmul
+use std::ia::tensor::reshape
+use std::ia::autograd::graph::Tape
+use std::ia::autograd::graph::{OP_ADD, OP_SUB, OP_MUL, OP_DIV}
+use std::ia::autograd::graph::{OP_NEG, OP_EXP, OP_LOG, OP_SQRT, OP_RELU, OP_SIGMOID, OP_TANH}
+use std::ia::autograd::graph::{OP_SUM, OP_MEAN}
+
+// =========================================================================
+// Tensor helpers (element-wise, no Outcome unwrapping needed)
+// =========================================================================
+
+/// Extract the dimension list from a tensor as a new List[I64].
+func tensor_dims(a: ref Tensor) -> List[I64] {
+    let r: I64 = a.rank()
+    let mut dims: List[I64] = List[I64]::new(r)
+    let mut i: I64 = 0
+    loop (i < r) {
+        dims.push(a.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+/// Create an element-wise copy of a tensor.
+func copy_tensor(a: ref Tensor) -> Tensor {
+    let n: I64 = a.numel()
+    let dims: List[I64] = tensor_dims(a)
+    let mut result: Tensor = zeros(dims, a.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        result.set_f64(i, a.get_f64(i))
+        i = i + 1
+    }
+    result
+}
+
+/// Element-wise negation.
+func neg_tensor(a: ref Tensor) -> Tensor {
+    let n: I64 = a.numel()
+    let dims: List[I64] = tensor_dims(a)
+    let mut result: Tensor = zeros(dims, a.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        result.set_f64(i, 0.0 - a.get_f64(i))
+        i = i + 1
+    }
+    result
+}
+
+/// Element-wise multiplication of two same-shape tensors.
+func mul_tensors(a: ref Tensor, b: ref Tensor) -> Tensor {
+    let n: I64 = a.numel()
+    let dims: List[I64] = tensor_dims(a)
+    let mut result: Tensor = zeros(dims, a.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        result.set_f64(i, a.get_f64(i) * b.get_f64(i))
+        i = i + 1
+    }
+    result
+}
+
+/// Element-wise division of two same-shape tensors.
+func div_tensors(a: ref Tensor, b: ref Tensor) -> Tensor {
+    let n: I64 = a.numel()
+    let dims: List[I64] = tensor_dims(a)
+    let mut result: Tensor = zeros(dims, a.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        result.set_f64(i, a.get_f64(i) / b.get_f64(i))
+        i = i + 1
+    }
+    result
+}
+
+// =========================================================================
+// GradStore
+// =========================================================================
+
+/// Storage for accumulated gradients, indexed by tape position.
+///
+/// Each tape entry gets a slot.  Gradients are accumulated (summed) when
+/// multiple paths in the computation graph contribute to the same variable.
+pub type GradStore {
+    /// Gradient tensor for each tape position (placeholder zeros if unset).
+    grads: List[Tensor],
+    /// Whether a gradient has actually been written for each position.
+    has_grad: List[Bool],
+}
+
+impl GradStore {
+    /// Create a new GradStore with `size` slots, all initially empty.
+    pub func new(size: I64) -> GradStore {
+        let mut grads: List[Tensor] = List[Tensor]::new(size)
+        let mut has_grad: List[Bool] = List[Bool]::new(size)
+        let mut i: I64 = 0
+        loop (i < size) {
+            // Each slot gets a 1-element placeholder; overwritten on first accumulate.
+            let mut d: List[I64] = List[I64]::new(1)
+            d.push(1)
+            grads.push(zeros(d, DType::F64))
+            has_grad.push(false)
+            i = i + 1
+        }
+        GradStore { grads: grads, has_grad: has_grad }
+    }
+
+    /// Accumulate a gradient for tape position `idx`.
+    ///
+    /// On first call for a given `idx`, the gradient is stored directly.
+    /// On subsequent calls the incoming gradient is added element-wise to
+    /// the existing one (handles fan-out in the computation graph).
+    pub func accumulate(mut this, idx: I64, grad: Tensor) {
+        if this.has_grad.get(idx) {
+            let existing: Tensor = this.grads.get(idx)
+            let add_result = ops::add(ref existing, ref grad)
+            when add_result {
+                Ok(sum_grad) => { this.grads.set(idx, sum_grad) },
+                Err(_e) => {},
+            }
+            return
+        }
+        this.grads.set(idx, grad)
+        this.has_grad.set(idx, true)
+    }
+
+    /// Get the gradient tensor at tape position `idx` (by value).
+    pub func get(this, idx: I64) -> Tensor {
+        this.grads.get(idx)
+    }
+
+    /// Returns true if a gradient has been accumulated for position `idx`.
+    pub func has(this, idx: I64) -> Bool {
+        this.has_grad.get(idx)
+    }
+
+    /// Returns the number of slots in this store.
+    pub func len(this) -> I64 {
+        this.grads.len()
+    }
+}
+
+// =========================================================================
+// Gradient computation helpers (one per operation tag)
+// =========================================================================
+
+/// Propagate gradients for binary arithmetic ops (tag 1).
+func compute_binary_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    op_kind: I64,
+    left_idx: I64,
+    right_idx: I64,
+    left: ref Tensor,
+    right: ref Tensor,
+) {
+    if op_kind == OP_ADD {
+        // d(a+b)/da = 1, d(a+b)/db = 1
+        grads.accumulate(left_idx, copy_tensor(grad_output))
+        grads.accumulate(right_idx, copy_tensor(grad_output))
+    } else if op_kind == OP_SUB {
+        // d(a-b)/da = 1, d(a-b)/db = -1
+        grads.accumulate(left_idx, copy_tensor(grad_output))
+        grads.accumulate(right_idx, neg_tensor(grad_output))
+    } else if op_kind == OP_MUL {
+        // d(a*b)/da = b, d(a*b)/db = a
+        let grad_left: Tensor = mul_tensors(grad_output, right)
+        let grad_right: Tensor = mul_tensors(grad_output, left)
+        grads.accumulate(left_idx, grad_left)
+        grads.accumulate(right_idx, grad_right)
+    } else if op_kind == OP_DIV {
+        // d(a/b)/da = 1/b
+        let grad_left: Tensor = div_tensors(grad_output, right)
+        // d(a/b)/db = -a / b^2
+        let neg_a: Tensor = neg_tensor(left)
+        let b_sq: Tensor = mul_tensors(right, right)
+        let ratio: Tensor = div_tensors(ref neg_a, ref b_sq)
+        let grad_right: Tensor = mul_tensors(grad_output, ref ratio)
+        grads.accumulate(left_idx, grad_left)
+        grads.accumulate(right_idx, grad_right)
+    }
+}
+
+/// Propagate gradients for unary ops (tag 2).
+func compute_unary_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    op_kind: I64,
+    input_idx: I64,
+    input: ref Tensor,
+    output: ref Tensor,
+) {
+    if op_kind == OP_NEG {
+        // d(-x)/dx = -1
+        grads.accumulate(input_idx, neg_tensor(grad_output))
+    } else if op_kind == OP_EXP {
+        // d(exp(x))/dx = exp(x) = output
+        let grad_input: Tensor = mul_tensors(grad_output, output)
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_LOG {
+        // d(ln(x))/dx = 1/x
+        let grad_input: Tensor = div_tensors(grad_output, input)
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_SQRT {
+        // d(sqrt(x))/dx = 1 / (2 * sqrt(x)) = 1 / (2 * output)
+        let n: I64 = output.numel()
+        let dims: List[I64] = tensor_dims(output)
+        let mut grad_input: Tensor = zeros(dims, output.dtype())
+        let mut i: I64 = 0
+        loop (i < n) {
+            let out_val: F64 = output.get_f64(i)
+            let g: F64 = grad_output.get_f64(i) / (2.0 * out_val)
+            grad_input.set_f64(i, g)
+            i = i + 1
+        }
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_RELU {
+        // d(relu(x))/dx = 1 if x > 0, else 0
+        let n: I64 = input.numel()
+        let dims: List[I64] = tensor_dims(input)
+        let mut grad_input: Tensor = zeros(dims, input.dtype())
+        let mut i: I64 = 0
+        loop (i < n) {
+            let v: F64 = input.get_f64(i)
+            let g: F64 = v > 0.0 ? grad_output.get_f64(i) : 0.0
+            grad_input.set_f64(i, g)
+            i = i + 1
+        }
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_SIGMOID {
+        // d(sigmoid(x))/dx = sigmoid(x) * (1 - sigmoid(x)) = output * (1 - output)
+        let n: I64 = output.numel()
+        let dims: List[I64] = tensor_dims(output)
+        let mut grad_input: Tensor = zeros(dims, output.dtype())
+        let mut i: I64 = 0
+        loop (i < n) {
+            let s: F64 = output.get_f64(i)
+            grad_input.set_f64(i, grad_output.get_f64(i) * s * (1.0 - s))
+            i = i + 1
+        }
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_TANH {
+        // d(tanh(x))/dx = 1 - tanh^2(x) = 1 - output^2
+        let n: I64 = output.numel()
+        let dims: List[I64] = tensor_dims(output)
+        let mut grad_input: Tensor = zeros(dims, output.dtype())
+        let mut i: I64 = 0
+        loop (i < n) {
+            let t: F64 = output.get_f64(i)
+            grad_input.set_f64(i, grad_output.get_f64(i) * (1.0 - t * t))
+            i = i + 1
+        }
+        grads.accumulate(input_idx, grad_input)
+    }
+}
+
+/// Propagate gradients for matmul (tag 3).
+///
+/// Given C = A @ B where A is [M,K], B is [K,N], C is [M,N]:
+///   dL/dA = dL/dC @ B^T
+///   dL/dB = A^T @ dL/dC
+func compute_matmul_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    left_idx: I64,
+    right_idx: I64,
+    left: ref Tensor,
+    right: ref Tensor,
+) {
+    // dL/dA = grad_output @ B^T
+    let b_t_result = reshape::transpose(right)
+    when b_t_result {
+        Ok(b_t) => {
+            let ga_result = matmul::matmul(grad_output, ref b_t)
+            when ga_result {
+                Ok(grad_a) => { grads.accumulate(left_idx, grad_a) },
+                Err(_e) => {},
+            }
+        },
+        Err(_e) => {},
+    }
+
+    // dL/dB = A^T @ grad_output
+    let a_t_result = reshape::transpose(left)
+    when a_t_result {
+        Ok(a_t) => {
+            let gb_result = matmul::matmul(ref a_t, grad_output)
+            when gb_result {
+                Ok(grad_b) => { grads.accumulate(right_idx, grad_b) },
+                Err(_e) => {},
+            }
+        },
+        Err(_e) => {},
+    }
+}
+
+/// Propagate gradients for reduce ops (tag 4).
+func compute_reduce_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    op_kind: I64,
+    input_idx: I64,
+    input: ref Tensor,
+) {
+    if op_kind == OP_SUM {
+        // d(sum(x))/dx_i = 1  =>  broadcast scalar grad to input shape
+        let dims: List[I64] = tensor_dims(input)
+        let grad_val: F64 = grad_output.get_f64(0)
+        let grad_input: Tensor = full(dims, grad_val, input.dtype())
+        grads.accumulate(input_idx, grad_input)
+    } else if op_kind == OP_MEAN {
+        // d(mean(x))/dx_i = 1/n
+        let dims: List[I64] = tensor_dims(input)
+        let n: I64 = input.numel()
+        let grad_val: F64 = grad_output.get_f64(0) / (n as F64)
+        let grad_input: Tensor = full(dims, grad_val, input.dtype())
+        grads.accumulate(input_idx, grad_input)
+    }
+}
+
+/// Propagate gradients for pow (tag 5).
+///
+/// d(x^n)/dx = n * x^(n-1)
+func compute_pow_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    input_idx: I64,
+    input: ref Tensor,
+    exponent: F64,
+) {
+    let n_elem: I64 = input.numel()
+    let dims: List[I64] = tensor_dims(input)
+    let mut grad_input: Tensor = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n_elem) {
+        let x: F64 = input.get_f64(i)
+        let g: F64 = grad_output.get_f64(i) * exponent * pow(x, exponent - 1.0)
+        grad_input.set_f64(i, g)
+        i = i + 1
+    }
+    grads.accumulate(input_idx, grad_input)
+}
+
+/// Propagate gradients for softmax (tag 6).
+///
+/// Given y = softmax(x):
+///   dL/dx_i = y_i * (dL/dy_i - sum_j(dL/dy_j * y_j))
+func compute_softmax_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    input_idx: I64,
+    output: ref Tensor,
+) {
+    let n: I64 = output.numel()
+    let dims: List[I64] = tensor_dims(output)
+
+    // dot = sum_j(grad_output_j * output_j)
+    let mut dot_sum: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        dot_sum = dot_sum + grad_output.get_f64(i) * output.get_f64(i)
+        i = i + 1
+    }
+
+    // grad_input[i] = output[i] * (grad_output[i] - dot_sum)
+    let mut grad_input: Tensor = zeros(dims, output.dtype())
+    i = 0
+    loop (i < n) {
+        let y: F64 = output.get_f64(i)
+        let g: F64 = y * (grad_output.get_f64(i) - dot_sum)
+        grad_input.set_f64(i, g)
+        i = i + 1
+    }
+    grads.accumulate(input_idx, grad_input)
+}
+
+/// Propagate gradients for cross-entropy loss (tag 7).
+///
+/// Loss = -sum(targets * log(preds))
+///   dL/d_preds  = -targets / preds
+///   dL/d_targets = -log(preds)   (usually unused, but computed for completeness)
+func compute_cross_entropy_grad(
+    mut grads: ref GradStore,
+    grad_output: ref Tensor,
+    preds_idx: I64,
+    targets_idx: I64,
+    preds: ref Tensor,
+    targets: ref Tensor,
+) {
+    let n: I64 = preds.numel()
+    let scalar_grad: F64 = grad_output.get_f64(0)
+
+    // dL/d_preds = scalar_grad * (-targets / preds)
+    let dims_p: List[I64] = tensor_dims(preds)
+    let mut grad_preds: Tensor = zeros(dims_p, preds.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let p: F64 = preds.get_f64(i)
+        let t: F64 = targets.get_f64(i)
+        // Clamp p away from zero to avoid division by zero.
+        let p_safe: F64 = p < 0.0000001 ? 0.0000001 : p
+        grad_preds.set_f64(i, scalar_grad * (0.0 - t / p_safe))
+        i = i + 1
+    }
+    grads.accumulate(preds_idx, grad_preds)
+
+    // dL/d_targets = scalar_grad * (-log(preds))
+    let dims_t: List[I64] = tensor_dims(targets)
+    let mut grad_targets: Tensor = zeros(dims_t, targets.dtype())
+    i = 0
+    loop (i < n) {
+        let p: F64 = preds.get_f64(i)
+        let p_safe: F64 = p < 0.0000001 ? 0.0000001 : p
+        grad_targets.set_f64(i, scalar_grad * (0.0 - ln(p_safe)))
+        i = i + 1
+    }
+    grads.accumulate(targets_idx, grad_targets)
+}
+
+// =========================================================================
+// backward — the main reverse-mode pass
+// =========================================================================
+
+/// Compute gradients for all tape entries via reverse-mode autodiff.
+///
+/// Starting from `loss_idx` (which should point to a scalar loss tensor),
+/// the function traverses the tape in reverse order and propagates
+/// gradients back to all contributing entries.
+///
+/// Returns a `GradStore` containing per-entry gradients.  Use
+/// `grads.get(variable.tape_index())` to retrieve a specific gradient.
+pub func backward(tape: ref Tape, loss_idx: I64) -> GradStore {
+    let n: I64 = tape.len()
+    let mut grads: GradStore = GradStore::new(n)
+
+    // Seed: gradient of loss w.r.t. itself is 1.0 (same shape as loss output).
+    let loss_output: Tensor = tape.get_output(loss_idx)
+    let seed_dims: List[I64] = tensor_dims(ref loss_output)
+    let seed: Tensor = ones(seed_dims, DType::F64)
+    grads.accumulate(loss_idx, seed)
+
+    // Traverse the tape in reverse order.
+    let mut i: I64 = loss_idx
+    loop (i >= 0) {
+        if grads.has(i) {
+            let grad_output: Tensor = grads.get(i)
+            let tag: I64 = tape.get_tag(i)
+
+            if tag == 0 {
+                // Leaf -- no parents to propagate to.
+            } else if tag == 1 {
+                // BinaryArith
+                let op_kind: I64 = tape.get_operand0(i)
+                let left_idx: I64 = tape.get_operand1(i)
+                let right_idx: I64 = tape.get_operand2(i)
+                let left_tensor: Tensor = tape.get_output(left_idx)
+                let right_tensor: Tensor = tape.get_output(right_idx)
+                compute_binary_grad(mut ref grads, ref grad_output, op_kind, left_idx, right_idx, ref left_tensor, ref right_tensor)
+            } else if tag == 2 {
+                // Unary
+                let op_kind: I64 = tape.get_operand0(i)
+                let input_idx: I64 = tape.get_operand1(i)
+                let input_tensor: Tensor = tape.get_output(input_idx)
+                let output_tensor: Tensor = tape.get_output(i)
+                compute_unary_grad(mut ref grads, ref grad_output, op_kind, input_idx, ref input_tensor, ref output_tensor)
+            } else if tag == 3 {
+                // Matmul
+                let left_idx: I64 = tape.get_operand0(i)
+                let right_idx: I64 = tape.get_operand1(i)
+                let left_tensor: Tensor = tape.get_output(left_idx)
+                let right_tensor: Tensor = tape.get_output(right_idx)
+                compute_matmul_grad(mut ref grads, ref grad_output, left_idx, right_idx, ref left_tensor, ref right_tensor)
+            } else if tag == 4 {
+                // Reduce
+                let op_kind: I64 = tape.get_operand0(i)
+                let input_idx: I64 = tape.get_operand1(i)
+                let input_tensor: Tensor = tape.get_output(input_idx)
+                compute_reduce_grad(mut ref grads, ref grad_output, op_kind, input_idx, ref input_tensor)
+            } else if tag == 5 {
+                // Pow
+                let input_idx: I64 = tape.get_operand0(i)
+                let exponent: F64 = tape.get_pow_exponent(i)
+                let input_tensor: Tensor = tape.get_output(input_idx)
+                compute_pow_grad(mut ref grads, ref grad_output, input_idx, ref input_tensor, exponent)
+            } else if tag == 6 {
+                // Softmax
+                let input_idx: I64 = tape.get_operand0(i)
+                let output_tensor: Tensor = tape.get_output(i)
+                compute_softmax_grad(mut ref grads, ref grad_output, input_idx, ref output_tensor)
+            } else if tag == 7 {
+                // CrossEntropy
+                let preds_idx: I64 = tape.get_operand0(i)
+                let targets_idx: I64 = tape.get_operand1(i)
+                let preds_tensor: Tensor = tape.get_output(preds_idx)
+                let targets_tensor: Tensor = tape.get_output(targets_idx)
+                compute_cross_entropy_grad(mut ref grads, ref grad_output, preds_idx, targets_idx, ref preds_tensor, ref targets_tensor)
+            }
+        }
+        i = i - 1
+    }
+
+    grads
+}
+
+// =========================================================================
+// Utility functions
+// =========================================================================
+
+/// Reset all gradient flags in the store so it can be reused.
+///
+/// This does NOT deallocate the placeholder tensors -- it simply marks
+/// every slot as "no gradient written yet".  The next `backward()` call
+/// will overwrite them.
+pub func zero_grad(mut store: ref GradStore) {
+    let n: I64 = store.len()
+    let mut i: I64 = 0
+    loop (i < n) {
+        store.has_grad.set(i, false)
+        i = i + 1
+    }
+}
+
+/// Disable gradient recording on a tape (enter no-grad context).
+pub func no_grad_begin(mut tape: ref Tape) {
+    tape.disable()
+}
+
+/// Re-enable gradient recording on a tape (exit no-grad context).
+pub func no_grad_end(mut tape: ref Tape) {
+    tape.enable()
+}

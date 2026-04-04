@@ -1,0 +1,146 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, zeros}
+use std::ia::optim::optimizer::ParamGroup
+use std::ia::optim::adam::Adam
+
+@test
+func test_adam_step() -> I32 {
+    // Create a simple 1-D parameter [1.0, 2.0, 3.0]
+    let mut p_data = List[F64]::new(3)
+    p_data.push(1.0)
+    p_data.push(2.0)
+    p_data.push(3.0)
+    let mut p_dims = List[I64]::new(1)
+    p_dims.push(3)
+    let param = from_list_f64(p_data, p_dims)
+
+    // Gradient: all ones
+    let mut g_data = List[F64]::new(3)
+    g_data.push(1.0)
+    g_data.push(1.0)
+    g_data.push(1.0)
+    let mut g_dims = List[I64]::new(1)
+    g_dims.push(3)
+    let grad = from_list_f64(g_data, g_dims)
+
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+
+    let mut adam = Adam::new(0.01)
+    adam.step(ref group)
+
+    // After one Adam step with positive gradient, params should decrease
+    let updated = group.get_param(0)
+    let v0: F64 = updated.get_f64(0)
+    assert(v0 < 1.0, "param[0] should decrease after Adam step with positive gradient")
+    let v1: F64 = updated.get_f64(1)
+    assert(v1 < 2.0, "param[1] should decrease after Adam step")
+    let v2: F64 = updated.get_f64(2)
+    assert(v2 < 3.0, "param[2] should decrease after Adam step")
+    return 0
+}
+
+@test
+func test_adam_adamw_variant() -> I32 {
+    // AdamW should also decrease params with positive gradient
+    let mut p_data = List[F64]::new(2)
+    p_data.push(2.0)
+    p_data.push(4.0)
+    let mut p_dims = List[I64]::new(1)
+    p_dims.push(2)
+    let param = from_list_f64(p_data, p_dims)
+
+    let mut g_data = List[F64]::new(2)
+    g_data.push(1.0)
+    g_data.push(1.0)
+    let mut g_dims = List[I64]::new(1)
+    g_dims.push(2)
+    let grad = from_list_f64(g_data, g_dims)
+
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+
+    let mut adamw = Adam::adamw(0.01, 0.01)
+    adamw.step(ref group)
+
+    let updated = group.get_param(0)
+    let u0: F64 = updated.get_f64(0)
+    assert(u0 < 2.0, "AdamW param[0] should decrease with positive gradient and weight decay")
+    let u1: F64 = updated.get_f64(1)
+    assert(u1 < 4.0, "AdamW param[1] should decrease with positive gradient and weight decay")
+    return 0
+}
+
+@test
+func test_adam_multiple_steps() -> I32 {
+    // Verify Adam converges: minimize f(x) = x^2 starting at x=5.0
+    // Gradient = 2x at each step. The same ParamGroup is reused so
+    // Adam accumulates moment estimates across steps.
+    let mut p_data = List[F64]::new(1)
+    p_data.push(5.0)
+    let mut p_dims = List[I64]::new(1)
+    p_dims.push(1)
+    let param = from_list_f64(p_data, p_dims)
+
+    let mut g_data = List[F64]::new(1)
+    g_data.push(10.0)
+    let mut g_dims = List[I64]::new(1)
+    g_dims.push(1)
+    let grad = from_list_f64(g_data, g_dims)
+
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+
+    let mut adam = Adam::new(0.1)
+
+    let mut step: I64 = 0
+    loop (step < 50) {
+        // Refresh gradient to 2 * current param value before each step
+        let cur: Tensor = group.get_param(0)
+        let x: F64 = cur.get_f64(0)
+        let grad_val: F64 = 2.0 * x
+        group.get_grad(0).set_f64(0, grad_val)
+        adam.step(ref group)
+        step = step + 1
+    }
+
+    let final_x: F64 = group.get_param(0).get_f64(0)
+    // After 50 Adam steps on x^2 starting at 5.0, x should be close to 0
+    assert(final_x > -1.0 and final_x < 1.0, "Adam should converge x^2 near 0 after 50 steps")
+    return 0
+}
+
+@test
+func test_adam_with_betas() -> I32 {
+    // Adam with custom betas should still update params
+    let mut p_data = List[F64]::new(2)
+    p_data.push(1.0)
+    p_data.push(-1.0)
+    let mut p_dims = List[I64]::new(1)
+    p_dims.push(2)
+    let param = from_list_f64(p_data, p_dims)
+
+    let mut g_data = List[F64]::new(2)
+    g_data.push(1.0)
+    g_data.push(-1.0)
+    let mut g_dims = List[I64]::new(1)
+    g_dims.push(2)
+    let grad = from_list_f64(g_data, g_dims)
+
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+
+    // Custom betas: faster momentum decay
+    let mut adam = Adam::with_betas(0.01, 0.5, 0.9)
+    adam.step(ref group)
+
+    let updated = group.get_param(0)
+    let u0: F64 = updated.get_f64(0)
+    // positive gradient -> param[0] should decrease from 1.0
+    assert(u0 < 1.0, "with_betas: param[0] should decrease with positive gradient")
+    let u1: F64 = updated.get_f64(1)
+    // negative gradient -> param[1] should increase from -1.0
+    assert(u1 > -1.0, "with_betas: param[1] should increase with negative gradient")
+    return 0
+}

@@ -1,0 +1,114 @@
+//! Fully-connected (dense) linear layer: `y = x @ W + b`.
+//!
+//! The weight matrix is stored as `[in_features, out_features]` so the
+//! forward pass is simply `input @ weight + bias` — no transpose needed.
+
+use std::collections::List
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, from_list_f64}
+use std::ia::tensor::matmul
+use std::ia::tensor::ops
+use std::ia::nn::module::{Parameter, xavier_uniform}
+
+/// A fully connected (dense) linear layer.
+///
+/// Computes `output = input @ weight + bias`.
+///
+/// * Weight shape: `[in_features, out_features]`
+/// * Bias shape: `[out_features]`
+/// * Input shape: `[batch, in_features]` or `[in_features]` (single sample)
+/// * Output shape: `[batch, out_features]` or `[out_features]`
+pub type Linear {
+    weight: Parameter,
+    bias: Parameter,
+    in_features: I64,
+    out_features: I64,
+    has_bias: Bool,
+}
+
+impl Linear {
+    /// Create a new Linear layer with Xavier-initialised weights and zero bias.
+    pub func new(in_features: I64, out_features: I64) -> Linear {
+        let w = xavier_uniform(in_features, out_features)
+        let mut bias_dims = List[I64]::new(1)
+        bias_dims.push(out_features)
+        let b = zeros(bias_dims, DType::F64)
+        Linear {
+            weight: Parameter::new(w, "weight"),
+            bias: Parameter::new(b, "bias"),
+            in_features: in_features,
+            out_features: out_features,
+            has_bias: true,
+        }
+    }
+
+    /// Create a new Linear layer without bias.
+    pub func new_no_bias(in_features: I64, out_features: I64) -> Linear {
+        let w = xavier_uniform(in_features, out_features)
+        let mut bias_dims = List[I64]::new(1)
+        bias_dims.push(out_features)
+        let b = zeros(bias_dims, DType::F64)
+        Linear {
+            weight: Parameter::new(w, "weight"),
+            bias: Parameter::new(b, "bias"),
+            in_features: in_features,
+            out_features: out_features,
+            has_bias: false,
+        }
+    }
+
+    /// Forward pass: `y = x @ W + b`.
+    ///
+    /// For a 1-D input `[in_features]` the input is treated as a single row
+    /// and the output is `[out_features]`.
+    ///
+    /// For a 2-D input `[batch, in_features]` the output is `[batch, out_features]`.
+    pub func forward(this, input: ref Tensor) -> IaResult[Tensor] {
+        let w = this.weight.get_data()
+        let result = matmul::matmul(input, ref w)
+        when result {
+            Err(e) => Err(e),
+            Ok(out) => {
+                if this.has_bias {
+                    let b = this.bias.get_data()
+                    // Broadcasting add: [batch, out_features] + [out_features]
+                    ops::add(ref out, ref b)
+                } else {
+                    Ok(out)
+                }
+            },
+        }
+    }
+
+    /// Returns a copy of the weight tensor.
+    pub func get_weight(this) -> Tensor {
+        this.weight.get_data()
+    }
+
+    /// Returns a copy of the bias tensor.
+    pub func get_bias(this) -> Tensor {
+        this.bias.get_data()
+    }
+
+    /// Returns the input feature count.
+    pub func get_in_features(this) -> I64 {
+        this.in_features
+    }
+
+    /// Returns the output feature count.
+    pub func get_out_features(this) -> I64 {
+        this.out_features
+    }
+
+    /// Returns the total number of learnable parameters.
+    pub func num_parameters(this) -> I64 {
+        let w_count: I64 = this.in_features * this.out_features
+        if this.has_bias {
+            w_count + this.out_features
+        } else {
+            w_count
+        }
+    }
+}

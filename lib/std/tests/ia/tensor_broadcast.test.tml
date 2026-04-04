@@ -1,0 +1,120 @@
+// Tests for broadcasting in tensor element-wise operations // v2
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::tensor::ops
+
+@test
+func test_add_broadcast_scalar() -> I32 {
+    // add([1,2,3] shape [3], [10] shape [1]) → [11,12,13]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.0)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(1)
+    data_b.push(10.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(1)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = ops::add(ref a, ref b)
+    when result {
+        Ok(t) => {
+            assert_eq(t.numel(), 3, "broadcast scalar add should produce 3 elements")
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 11.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "broadcast add element 0 should be 11.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 12.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "broadcast add element 1 should be 12.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 13.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "broadcast add element 2 should be 13.0")
+        },
+        Err(e) => assert(false, "broadcast scalar add should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_add_broadcast_2d() -> I32 {
+    // add([[1,2],[3,4]] shape [2,2], [10,20] shape [2]) → [[11,22],[13,24]]
+    // flat a=[1,2,3,4], b=[10,20], result=[11,22,13,24]
+    let mut data_a = List[F64]::new(4)
+    data_a.push(1.0)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    data_a.push(4.0)
+    let mut dims_a = List[I64]::new(2)
+    dims_a.push(2)
+    dims_a.push(2)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(2)
+    data_b.push(10.0)
+    data_b.push(20.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(2)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = ops::add(ref a, ref b)
+    when result {
+        Ok(t) => {
+            assert_eq(t.numel(), 4, "broadcast 2d add should produce 4 elements")
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 11.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "broadcast 2d add element 0 should be 11.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 22.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "broadcast 2d add element 1 should be 22.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 13.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "broadcast 2d add element 2 should be 13.0")
+            let v3 = t.get_f64(3)
+            let diff3 = v3 - 24.0
+            assert(diff3 > -0.001 and diff3 < 0.001, "broadcast 2d add element 3 should be 24.0")
+        },
+        Err(e) => assert(false, "broadcast 2d add should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_mul_broadcast() -> I32 {
+    // mul([1,2,3] shape [3], [2] shape [1]) → [2,4,6]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.0)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(1)
+    data_b.push(2.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(1)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = ops::mul(ref a, ref b)
+    when result {
+        Ok(t) => {
+            assert_eq(t.numel(), 3, "broadcast mul should produce 3 elements")
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 2.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "broadcast mul element 0 should be 2.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 4.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "broadcast mul element 1 should be 4.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 6.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "broadcast mul element 2 should be 6.0")
+        },
+        Err(e) => assert(false, "broadcast mul should not fail"),
+    }
+    return 0
+}

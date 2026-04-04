@@ -1,0 +1,75 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::optim::optimizer::ParamGroup
+use std::ia::optim::sgd::SGD
+
+@test
+func test_sgd_basic() -> I32 {
+    // param=[5.0], grad=[1.0], lr=0.1 => new_param = 5.0 - 0.1*1.0 = 4.9
+    let mut pd = List[F64]::new(1)
+    pd.push(5.0)
+    let mut d1 = List[I64]::new(1)
+    d1.push(1)
+    let param = from_list_f64(pd, d1)
+    let mut gd = List[F64]::new(1)
+    gd.push(1.0)
+    let mut d2 = List[I64]::new(1)
+    d2.push(1)
+    let grad = from_list_f64(gd, d2)
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+    let mut sgd = SGD::new(0.1, 0.0, 0.0)
+    sgd.step(ref group)
+    let v: F64 = group.get_param(0).get_f64(0)
+    let diff: F64 = v - 4.9
+    assert(diff > -0.01 and diff < 0.01, "SGD basic: 5.0 - 0.1*1.0 = 4.9")
+    return 0
+}
+
+@test
+func test_sgd_multiple_steps() -> I32 {
+    // Two steps: param starts at 10.0, grad=2.0, lr=0.5
+    // step1: 10 - 0.5*2 = 9.0, step2: 9 - 0.5*2 = 8.0
+    let mut pd = List[F64]::new(1)
+    pd.push(10.0)
+    let mut d1 = List[I64]::new(1)
+    d1.push(1)
+    let param = from_list_f64(pd, d1)
+    let mut gd = List[F64]::new(1)
+    gd.push(2.0)
+    let mut d2 = List[I64]::new(1)
+    d2.push(1)
+    let grad = from_list_f64(gd, d2)
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+    let mut sgd = SGD::new(0.5, 0.0, 0.0)
+    sgd.step(ref group)
+    sgd.step(ref group)
+    let v: F64 = group.get_param(0).get_f64(0)
+    let diff: F64 = v - 8.0
+    assert(diff > -0.01 and diff < 0.01, "SGD 2 steps: 10-1-1=8")
+    return 0
+}
+
+@test
+func test_sgd_with_weight_decay() -> I32 {
+    // param=1.0, grad=0.0, lr=0.1, wd=0.1 => grad_eff = 0 + 0.1*1 = 0.1 => param = 1 - 0.1*0.1 = 0.99
+    let mut pd = List[F64]::new(1)
+    pd.push(1.0)
+    let mut d1 = List[I64]::new(1)
+    d1.push(1)
+    let param = from_list_f64(pd, d1)
+    let mut gd = List[F64]::new(1)
+    gd.push(0.0)
+    let mut d2 = List[I64]::new(1)
+    d2.push(1)
+    let grad = from_list_f64(gd, d2)
+    let mut group = ParamGroup::new()
+    group.add(param, grad)
+    let mut sgd = SGD::new(0.1, 0.0, 0.1)
+    sgd.step(ref group)
+    let v: F64 = group.get_param(0).get_f64(0)
+    assert(v < 1.0, "SGD with weight decay should shrink params toward 0")
+    return 0
+}

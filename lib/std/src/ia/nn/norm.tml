@@ -1,0 +1,257 @@
+//! Normalisation layers: LayerNorm and RMSNorm.
+//!
+//! Both operate on 2-D tensors `[batch, dim]` and normalise along the
+//! last dimension (each row independently).
+
+use std::collections::List
+use std::math::sqrt
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, ones, from_list_f64}
+
+/// Collect all dims of a tensor into a List[I64].
+func tensor_dims(t: ref Tensor) -> List[I64] {
+    let rank: I64 = t.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i: I64 = 0
+    loop (i < rank) {
+        dims.push(t.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+/// Layer Normalisation (Ba et al., 2016).
+///
+/// For each row (sample) in a `[batch, dim]` tensor, normalises to zero
+/// mean and unit variance, then applies a learnable affine transform:
+///
+/// `output = gamma * (x - mean) / sqrt(var + eps) + beta`
+///
+/// Fields:
+/// * `normalized_shape` — size of the last dimension.
+/// * `eps` — small constant for numerical stability (default 1e-5).
+/// * `gamma` — learnable scale, shape `[dim]`, initialised to 1.
+/// * `beta` — learnable shift, shape `[dim]`, initialised to 0.
+pub type LayerNorm {
+    normalized_shape: I64,
+    eps: F64,
+    gamma: Tensor,
+    beta: Tensor,
+}
+
+impl LayerNorm {
+    /// Create a new LayerNorm for the given feature dimension.
+    pub func new(normalized_shape: I64) -> LayerNorm {
+        let mut dims = List[I64]::new(1)
+        dims.push(normalized_shape)
+        let gamma = ones(dims, DType::F64)
+        let mut dims2 = List[I64]::new(1)
+        dims2.push(normalized_shape)
+        let beta = zeros(dims2, DType::F64)
+        LayerNorm {
+            normalized_shape: normalized_shape,
+            eps: 1e-5,
+            gamma: gamma,
+            beta: beta,
+        }
+    }
+
+    /// Create a LayerNorm with a custom epsilon.
+    pub func with_eps(normalized_shape: I64, eps: F64) -> LayerNorm {
+        let mut dims = List[I64]::new(1)
+        dims.push(normalized_shape)
+        let gamma = ones(dims, DType::F64)
+        let mut dims2 = List[I64]::new(1)
+        dims2.push(normalized_shape)
+        let beta = zeros(dims2, DType::F64)
+        LayerNorm {
+            normalized_shape: normalized_shape,
+            eps: eps,
+            gamma: gamma,
+            beta: beta,
+        }
+    }
+
+    /// Forward pass.
+    ///
+    /// Input shape: `[batch, dim]` or `[dim]`.
+    /// Output shape: same as input.
+    pub func forward(this, input: ref Tensor) -> Tensor {
+        let rank: I64 = input.rank()
+        let dims = tensor_dims(input)
+        let d: I64 = this.normalized_shape
+        let mut result = zeros(dims, input.dtype())
+
+        if rank <= 1 {
+            // Single vector: normalise the whole thing.
+            let n: I64 = input.numel()
+            // Compute mean.
+            let mut mean_val: F64 = 0.0
+            let mut i: I64 = 0
+            loop (i < n) {
+                mean_val = mean_val + input.get_f64(i)
+                i = i + 1
+            }
+            mean_val = mean_val / (n as F64)
+            // Compute variance.
+            let mut var_val: F64 = 0.0
+            i = 0
+            loop (i < n) {
+                let diff: F64 = input.get_f64(i) - mean_val
+                var_val = var_val + diff * diff
+                i = i + 1
+            }
+            var_val = var_val / (n as F64)
+            let inv_std: F64 = 1.0 / sqrt(var_val + this.eps)
+            // Apply gamma * normalised + beta.
+            i = 0
+            loop (i < n) {
+                let norm_val: F64 = (input.get_f64(i) - mean_val) * inv_std
+                let out_val: F64 = this.gamma.get_f64(i) * norm_val + this.beta.get_f64(i)
+                result.set_f64(i, out_val)
+                i = i + 1
+            }
+        } else {
+            // 2-D: normalise each row.
+            let rows: I64 = input.dim(0)
+            let cols: I64 = input.dim(1)
+            let mut r: I64 = 0
+            loop (r < rows) {
+                let row_off: I64 = r * cols
+                // Mean of this row.
+                let mut mean_val: F64 = 0.0
+                let mut c: I64 = 0
+                loop (c < cols) {
+                    mean_val = mean_val + input.get_f64(row_off + c)
+                    c = c + 1
+                }
+                mean_val = mean_val / (cols as F64)
+                // Variance of this row.
+                let mut var_val: F64 = 0.0
+                c = 0
+                loop (c < cols) {
+                    let diff: F64 = input.get_f64(row_off + c) - mean_val
+                    var_val = var_val + diff * diff
+                    c = c + 1
+                }
+                var_val = var_val / (cols as F64)
+                let inv_std: F64 = 1.0 / sqrt(var_val + this.eps)
+                // Apply affine transform.
+                c = 0
+                loop (c < cols) {
+                    let norm_val: F64 = (input.get_f64(row_off + c) - mean_val) * inv_std
+                    let out_val: F64 = this.gamma.get_f64(c) * norm_val + this.beta.get_f64(c)
+                    result.set_f64(row_off + c, out_val)
+                    c = c + 1
+                }
+                r = r + 1
+            }
+        }
+        result
+    }
+
+    /// Returns the feature dimension.
+    pub func get_normalized_shape(this) -> I64 {
+        this.normalized_shape
+    }
+
+    /// Returns the epsilon value.
+    pub func get_eps(this) -> F64 {
+        this.eps
+    }
+}
+
+/// RMS Normalisation (Zhang & Sennrich, 2019).
+///
+/// Used by LLaMA, Mistral, and other modern architectures.  Simpler
+/// than LayerNorm — no mean subtraction, no bias:
+///
+/// `output = weight * x / sqrt(mean(x^2) + eps)`
+pub type RMSNorm {
+    dim: I64,
+    eps: F64,
+    weight: Tensor,
+}
+
+impl RMSNorm {
+    /// Create a new RMSNorm for the given feature dimension.
+    pub func new(dim: I64) -> RMSNorm {
+        let mut dims = List[I64]::new(1)
+        dims.push(dim)
+        let weight = ones(dims, DType::F64)
+        RMSNorm { dim: dim, eps: 1e-5, weight: weight }
+    }
+
+    /// Create an RMSNorm with a custom epsilon.
+    pub func with_eps(dim: I64, eps: F64) -> RMSNorm {
+        let mut dims = List[I64]::new(1)
+        dims.push(dim)
+        let weight = ones(dims, DType::F64)
+        RMSNorm { dim: dim, eps: eps, weight: weight }
+    }
+
+    /// Forward pass.
+    ///
+    /// Input: `[batch, dim]` or `[dim]`.
+    /// Output: same shape.
+    pub func forward(this, input: ref Tensor) -> Tensor {
+        let rank: I64 = input.rank()
+        let dims = tensor_dims(input)
+        let mut result = zeros(dims, input.dtype())
+
+        if rank <= 1 {
+            let n: I64 = input.numel()
+            // Compute mean of squares.
+            let mut sum_sq: F64 = 0.0
+            let mut i: I64 = 0
+            loop (i < n) {
+                let v: F64 = input.get_f64(i)
+                sum_sq = sum_sq + v * v
+                i = i + 1
+            }
+            let rms: F64 = sqrt(sum_sq / (n as F64) + this.eps)
+            let inv_rms: F64 = 1.0 / rms
+            i = 0
+            loop (i < n) {
+                let out_val: F64 = this.weight.get_f64(i) * input.get_f64(i) * inv_rms
+                result.set_f64(i, out_val)
+                i = i + 1
+            }
+        } else {
+            let rows: I64 = input.dim(0)
+            let cols: I64 = input.dim(1)
+            let mut r: I64 = 0
+            loop (r < rows) {
+                let row_off: I64 = r * cols
+                let mut sum_sq: F64 = 0.0
+                let mut c: I64 = 0
+                loop (c < cols) {
+                    let v: F64 = input.get_f64(row_off + c)
+                    sum_sq = sum_sq + v * v
+                    c = c + 1
+                }
+                let rms: F64 = sqrt(sum_sq / (cols as F64) + this.eps)
+                let inv_rms: F64 = 1.0 / rms
+                c = 0
+                loop (c < cols) {
+                    let out_val: F64 = this.weight.get_f64(c) * input.get_f64(row_off + c) * inv_rms
+                    result.set_f64(row_off + c, out_val)
+                    c = c + 1
+                }
+                r = r + 1
+            }
+        }
+        result
+    }
+
+    /// Returns the feature dimension.
+    pub func get_dim(this) -> I64 {
+        this.dim
+    }
+
+    /// Returns the epsilon value.
+    pub func get_eps(this) -> F64 {
+        this.eps
+    }
+}

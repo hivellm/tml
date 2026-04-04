@@ -1,0 +1,125 @@
+//! Optimizer primitives and gradient clipping utilities.
+//!
+//! Provides [`ParamGroup`] for grouping parameters with their gradients,
+//! and gradient clipping functions ([`clip_grad_value`], [`clip_grad_norm`]).
+
+use std::collections::List
+use std::math::{sqrt, abs}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::zeros
+
+
+/// A group of parameters to optimize, with their current gradients.
+///
+/// Each parameter tensor at index `i` corresponds to the gradient tensor
+/// at the same index in `grads`.
+pub type ParamGroup {
+    params: List[Tensor],
+    grads: List[Tensor],
+}
+
+impl ParamGroup {
+    /// Creates an empty parameter group.
+    pub func new() -> ParamGroup {
+        return ParamGroup {
+            params: List[Tensor]::new(),
+            grads: List[Tensor]::new(),
+        }
+    }
+
+    /// Adds a parameter tensor and its corresponding gradient.
+    pub func add(this, param: Tensor, grad: Tensor) {
+        this.params.push(param)
+        this.grads.push(grad)
+    }
+
+    /// Returns the number of parameter-gradient pairs.
+    pub func len(this) -> I64 {
+        return this.params.len()
+    }
+
+    /// Returns the parameter tensor at index `i`.
+    pub func get_param(this, i: I64) -> Tensor {
+        return this.params.get(i)
+    }
+
+    /// Returns the gradient tensor at index `i`.
+    pub func get_grad(this, i: I64) -> Tensor {
+        return this.grads.get(i)
+    }
+
+    /// Replaces the parameter tensor at index `i`.
+    pub func set_param(this, i: I64, param: Tensor) {
+        this.params.set(i, param)
+    }
+}
+
+/// Clip gradients by value: clamp each element to [-max_val, max_val].
+///
+/// Iterates over every gradient tensor in the list and clamps each
+/// element to the range `[-max_val, max_val]`.
+pub func clip_grad_value(grads: ref List[Tensor], max_val: F64) {
+    let neg_max: F64 = 0.0 - max_val
+    let num_grads: I64 = grads.len()
+    let mut gi: I64 = 0
+    loop (gi < num_grads) {
+        let grad: Tensor = grads.get(gi)
+        let n: I64 = grad.numel()
+        let mut j: I64 = 0
+        loop (j < n) {
+            let v: F64 = grad.get_f64(j)
+            if v > max_val {
+                grad.set_f64(j, max_val)
+            } else if v < neg_max {
+                grad.set_f64(j, neg_max)
+            }
+            j = j + 1
+        }
+        gi = gi + 1
+    }
+}
+
+/// Clip gradients by global L2 norm.
+///
+/// If the total L2 norm of all gradient elements exceeds `max_norm`,
+/// all gradients are scaled down proportionally. Returns the total
+/// norm (before clipping).
+pub func clip_grad_norm(grads: ref List[Tensor], max_norm: F64) -> F64 {
+    // Compute total squared norm across all gradient tensors
+    let mut total_sq: F64 = 0.0
+    let num_grads: I64 = grads.len()
+    let mut gi: I64 = 0
+    loop (gi < num_grads) {
+        let grad: Tensor = grads.get(gi)
+        let n: I64 = grad.numel()
+        let mut j: I64 = 0
+        loop (j < n) {
+            let v: F64 = grad.get_f64(j)
+            total_sq = total_sq + v * v
+            j = j + 1
+        }
+        gi = gi + 1
+    }
+
+    let total_norm: F64 = sqrt(total_sq)
+
+    // Scale gradients if norm exceeds max_norm
+    if total_norm > max_norm {
+        let scale: F64 = max_norm / total_norm
+        let mut gi2: I64 = 0
+        loop (gi2 < num_grads) {
+            let grad: Tensor = grads.get(gi2)
+            let n: I64 = grad.numel()
+            let mut j: I64 = 0
+            loop (j < n) {
+                let v: F64 = grad.get_f64(j)
+                grad.set_f64(j, v * scale)
+                j = j + 1
+            }
+            gi2 = gi2 + 1
+        }
+    }
+
+    return total_norm
+}

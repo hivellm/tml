@@ -77,6 +77,7 @@ pub func from_list_f64(data: List[F64], dims: List[I64]) -> Tensor {
     let n = shape.numel()
     let byte_size = n * 8
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut i = 0
     loop (i < n) {
         let offset = i * 8
@@ -95,6 +96,7 @@ pub func from_list_f32(data: List[F32], dims: List[I64]) -> Tensor {
     let n = shape.numel()
     let byte_size = n * 4
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut i = 0
     loop (i < n) {
         let offset = i * 4
@@ -113,6 +115,7 @@ pub func from_list_i64(data: List[I64], dims: List[I64]) -> Tensor {
     let n = shape.numel()
     let byte_size = n * 8
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut i = 0
     loop (i < n) {
         let offset = i * 8
@@ -161,6 +164,7 @@ pub func arange(start: F64, end: F64, step: F64, dtype: DType) -> Tensor {
 pub func linspace(start: F64, end: F64, steps: I64) -> Tensor {
     let byte_size = steps * 8
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut i = 0
     loop (i < steps) {
         let t: F64 = steps > 1 ? (i as F64) / ((steps - 1) as F64) : 0.0
@@ -182,6 +186,7 @@ pub func rand(dims: List[I64]) -> Tensor {
     let n = shape.numel()
     let byte_size = n * 8
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut rng = Rng::new()
     let mut i = 0
     loop (i < n) {
@@ -201,6 +206,7 @@ pub func randn(dims: List[I64]) -> Tensor {
     let n = shape.numel()
     let byte_size = n * 8
     let mut buf = Buffer::new(byte_size)
+    write_zero_bytes(ref buf, byte_size)
     let mut rng = Rng::new()
     // Box-Muller / Marsaglia polar method.
     // Each iteration produces two normal samples.  We generate them in pairs and

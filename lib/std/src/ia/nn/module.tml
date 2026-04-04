@@ -1,0 +1,155 @@
+//! Neural network module primitives.
+//!
+//! Provides the [`Parameter`] type for learnable weights, and weight
+//! initialization functions (Xavier/Glorot, Kaiming/He).
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, from_list_f64}
+use std::random::Rng
+use std::math::{sqrt, ln}
+
+/// A learnable parameter — a named tensor that participates in training.
+///
+/// Parameters wrap a tensor and a human-readable name so that layers
+/// can expose their weights for optimiser updates and serialisation.
+pub type Parameter {
+    data: Tensor,
+    name: Str,
+}
+
+impl Parameter {
+    /// Create a new parameter from a tensor and a name.
+    pub func new(data: Tensor, name: Str) -> Parameter {
+        Parameter { data: data, name: name }
+    }
+
+    /// Returns a copy of the underlying tensor.
+    pub func get_data(this) -> Tensor {
+        this.data
+    }
+
+    /// Returns the parameter name.
+    pub func get_name(this) -> Str {
+        this.name
+    }
+
+    /// Returns the total number of scalar elements.
+    pub func numel(this) -> I64 {
+        this.data.numel()
+    }
+}
+
+/// Collect all dims of a tensor into a List[I64].
+func tensor_dims(t: ref Tensor) -> List[I64] {
+    let rank: I64 = t.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i: I64 = 0
+    loop (i < rank) {
+        dims.push(t.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+/// Xavier (Glorot) uniform initialisation.
+///
+/// Creates an F64 tensor of shape `[fan_in, fan_out]` with values drawn
+/// uniformly from `[-limit, limit]` where `limit = sqrt(6 / (fan_in + fan_out))`.
+pub func xavier_uniform(fan_in: I64, fan_out: I64) -> Tensor {
+    let limit: F64 = sqrt(6.0 / ((fan_in + fan_out) as F64))
+    let n: I64 = fan_in * fan_out
+    let mut data = List[F64]::new(n)
+    let mut rng = Rng::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        data.push(rng.range_f64(0.0 - limit, limit))
+        i = i + 1
+    }
+    let mut dims = List[I64]::new(2)
+    dims.push(fan_in)
+    dims.push(fan_out)
+    from_list_f64(data, dims)
+}
+
+/// Kaiming (He) uniform initialisation — designed for ReLU networks.
+///
+/// Creates an F64 tensor of shape `[fan_in, fan_out]` with values drawn
+/// uniformly from `[-limit, limit]` where `limit = sqrt(6 / fan_in)`.
+pub func kaiming_uniform(fan_in: I64, fan_out: I64) -> Tensor {
+    let limit: F64 = sqrt(6.0 / (fan_in as F64))
+    let n: I64 = fan_in * fan_out
+    let mut data = List[F64]::new(n)
+    let mut rng = Rng::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        data.push(rng.range_f64(0.0 - limit, limit))
+        i = i + 1
+    }
+    let mut dims = List[I64]::new(2)
+    dims.push(fan_in)
+    dims.push(fan_out)
+    from_list_f64(data, dims)
+}
+
+/// Xavier (Glorot) normal initialisation.
+///
+/// Creates an F64 tensor of shape `[fan_in, fan_out]` with values drawn
+/// from N(0, std) where `std = sqrt(2 / (fan_in + fan_out))`.
+pub func xavier_normal(fan_in: I64, fan_out: I64) -> Tensor {
+    let std_dev: F64 = sqrt(2.0 / ((fan_in + fan_out) as F64))
+    let n: I64 = fan_in * fan_out
+    let mut data = List[F64]::new(n)
+    let mut rng = Rng::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        // Box-Muller for normal samples
+        let mut u: F64 = 0.0
+        let mut v: F64 = 0.0
+        let mut s: F64 = 0.0
+        loop (s <= 0.0 or s >= 1.0) {
+            u = rng.range_f64(-1.0, 1.0)
+            v = rng.range_f64(-1.0, 1.0)
+            s = u * u + v * v
+        }
+        let factor: F64 = sqrt(-2.0 * ln(s) / s)
+        let z: F64 = u * factor * std_dev
+        data.push(z)
+        i = i + 1
+    }
+    let mut dims = List[I64]::new(2)
+    dims.push(fan_in)
+    dims.push(fan_out)
+    from_list_f64(data, dims)
+}
+
+/// Kaiming (He) normal initialisation.
+///
+/// Creates an F64 tensor of shape `[fan_in, fan_out]` with values drawn
+/// from N(0, std) where `std = sqrt(2 / fan_in)`.
+pub func kaiming_normal(fan_in: I64, fan_out: I64) -> Tensor {
+    let std_dev: F64 = sqrt(2.0 / (fan_in as F64))
+    let n: I64 = fan_in * fan_out
+    let mut data = List[F64]::new(n)
+    let mut rng = Rng::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        let mut u: F64 = 0.0
+        let mut v: F64 = 0.0
+        let mut s: F64 = 0.0
+        loop (s <= 0.0 or s >= 1.0) {
+            u = rng.range_f64(-1.0, 1.0)
+            v = rng.range_f64(-1.0, 1.0)
+            s = u * u + v * v
+        }
+        let factor: F64 = sqrt(-2.0 * ln(s) / s)
+        let z: F64 = u * factor * std_dev
+        data.push(z)
+        i = i + 1
+    }
+    let mut dims = List[I64]::new(2)
+    dims.push(fan_in)
+    dims.push(fan_out)
+    from_list_f64(data, dims)
+}

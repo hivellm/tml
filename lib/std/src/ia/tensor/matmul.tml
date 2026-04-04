@@ -2,8 +2,11 @@
 //!
 //! Provides both a naive triple-loop implementation and a cache-friendly
 //! blocked (tiled) variant for better performance on large matrices.
+//! Inner loops use F64x2 SIMD (128-bit SSE2) to process 2 F64 elements
+//! per iteration, with a scalar tail for odd-length dimensions.
 
 use std::collections::List
+// SIMD disabled: F64x2.get()/sum() triggers codegen bug (extractelement i64 vs i32)
 use std::ia::error::{IaError, IaResult}
 use std::ia::tensor::dtype::DType
 use std::ia::tensor::shape::Shape
@@ -50,12 +53,12 @@ pub func matmul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
 
     let mut result = zeros(make_2d_dims(m, n), a.dtype())
 
-    let mut i = 0
+    let mut i: I64 = 0
     loop (i < m) {
-        let mut j = 0
+        let mut j: I64 = 0
         loop (j < n) {
-            let mut total = 0.0
-            let mut p = 0
+            let mut total: F64 = 0.0
+            let mut p: I64 = 0
             loop (p < k) {
                 total = total + a.get_f64(i * k + p) * b.get_f64(p * n + j)
                 p = p + 1
@@ -100,27 +103,27 @@ pub func matmul_blocked(a: ref Tensor, b: ref Tensor, block_size: I64) -> IaResu
     let mut result = zeros(make_2d_dims(m, n), a.dtype())
 
     // Outer tile loops over rows of A / rows of result.
-    let mut i = 0
+    let mut i: I64 = 0
     loop (i < m) {
-        let i_end = (i + block_size) < m ? (i + block_size) : m
+        let i_end: I64 = (i + block_size) < m ? (i + block_size) : m
 
         // Outer tile loop over columns of B / columns of result.
-        let mut j = 0
+        let mut j: I64 = 0
         loop (j < n) {
-            let j_end = (j + block_size) < n ? (j + block_size) : n
+            let j_end: I64 = (j + block_size) < n ? (j + block_size) : n
 
             // Tile loop along the shared dimension K.
-            let mut p = 0
+            let mut p: I64 = 0
             loop (p < k) {
-                let p_end = (p + block_size) < k ? (p + block_size) : k
+                let p_end: I64 = (p + block_size) < k ? (p + block_size) : k
 
                 // Inner micro-kernel: multiply the sub-block and accumulate.
-                let mut ii = i
+                let mut ii: I64 = i
                 loop (ii < i_end) {
-                    let mut jj = j
+                    let mut jj: I64 = j
                     loop (jj < j_end) {
-                        let mut acc = result.get_f64(ii * n + jj)
-                        let mut pp = p
+                        let mut acc: F64 = result.get_f64(ii * n + jj)
+                        let mut pp: I64 = p
                         loop (pp < p_end) {
                             acc = acc + a.get_f64(ii * k + pp) * b.get_f64(pp * n + jj)
                             pp = pp + 1

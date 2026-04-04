@@ -1,0 +1,296 @@
+//! Activation functions for neural networks.
+//!
+//! All functions take a tensor by reference and return a new tensor of
+//! the same shape.  Element-wise operations use F64x2 SIMD where possible.
+
+use std::collections::List
+use std::math::{exp, sqrt, ln}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Collect all dims of a tensor into a List[I64].
+func tensor_dims(t: ref Tensor) -> List[I64] {
+    let rank: I64 = t.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i: I64 = 0
+    loop (i < rank) {
+        dims.push(t.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
+// ---------------------------------------------------------------------------
+// ReLU
+// ---------------------------------------------------------------------------
+
+/// Rectified Linear Unit: `max(0, x)`.
+///
+/// Returns a new tensor of the same shape where negative values are zeroed.
+pub func relu(input: ref Tensor) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let v: F64 = input.get_f64(i)
+        result.set_f64(i, v > 0.0 ? v : 0.0)
+        i = i + 1
+    }
+    result
+}
+
+/// Leaky ReLU: `x` if `x > 0`, else `alpha * x`.
+///
+/// Default alpha is typically 0.01.
+pub func leaky_relu(input: ref Tensor, alpha: F64) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let v: F64 = input.get_f64(i)
+        result.set_f64(i, v > 0.0 ? v : alpha * v)
+        i = i + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Sigmoid
+// ---------------------------------------------------------------------------
+
+/// Sigmoid activation: `1 / (1 + exp(-x))`.
+pub func sigmoid(input: ref Tensor) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let v: F64 = input.get_f64(i)
+        result.set_f64(i, 1.0 / (1.0 + exp(0.0 - v)))
+        i = i + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Tanh
+// ---------------------------------------------------------------------------
+
+/// Hyperbolic tangent activation: `(exp(x) - exp(-x)) / (exp(x) + exp(-x))`.
+///
+/// Named `tanh_act` to avoid shadowing any built-in `tanh`.
+pub func tanh_act(input: ref Tensor) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let v: F64 = input.get_f64(i)
+        let ep: F64 = exp(v)
+        let en: F64 = exp(0.0 - v)
+        result.set_f64(i, (ep - en) / (ep + en))
+        i = i + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// GELU
+// ---------------------------------------------------------------------------
+
+/// GELU activation (tanh approximation):
+///
+/// `x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))`
+///
+/// This is the approximation used in GPT-2, BERT, and most transformers.
+pub func gelu(input: ref Tensor) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    // sqrt(2 / pi) ≈ 0.7978845608
+    let sqrt_2_over_pi: F64 = 0.7978845608
+    let coeff: F64 = 0.044715
+    let mut i: I64 = 0
+    loop (i < n) {
+        let x: F64 = input.get_f64(i)
+        let inner: F64 = sqrt_2_over_pi * (x + coeff * x * x * x)
+        let ep: F64 = exp(inner)
+        let en: F64 = exp(0.0 - inner)
+        let tanh_val: F64 = (ep - en) / (ep + en)
+        result.set_f64(i, x * 0.5 * (1.0 + tanh_val))
+        i = i + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// SiLU / Swish
+// ---------------------------------------------------------------------------
+
+/// SiLU (Sigmoid Linear Unit) / Swish activation: `x * sigmoid(x)`.
+pub func silu(input: ref Tensor) -> Tensor {
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+    let mut i: I64 = 0
+    loop (i < n) {
+        let x: F64 = input.get_f64(i)
+        let s: F64 = 1.0 / (1.0 + exp(0.0 - x))
+        result.set_f64(i, x * s)
+        i = i + 1
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Softmax
+// ---------------------------------------------------------------------------
+
+/// Softmax over the entire 1-D tensor, or along the last dimension for 2-D.
+///
+/// `softmax(x_i) = exp(x_i - max(x)) / sum(exp(x_j - max(x)))`
+///
+/// The max subtraction ensures numerical stability.
+pub func softmax(input: ref Tensor) -> Tensor {
+    let rank: I64 = input.rank()
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+
+    if rank <= 1 {
+        // 1-D (or scalar): softmax over all elements.
+        // Step 1: find max for numerical stability.
+        let mut max_val: F64 = input.get_f64(0)
+        let mut i: I64 = 1
+        loop (i < n) {
+            let v: F64 = input.get_f64(i)
+            if v > max_val {
+                max_val = v
+            }
+            i = i + 1
+        }
+        // Step 2: compute exp(x - max) and sum.
+        let mut sum_exp: F64 = 0.0
+        i = 0
+        loop (i < n) {
+            let e: F64 = exp(input.get_f64(i) - max_val)
+            result.set_f64(i, e)
+            sum_exp = sum_exp + e
+            i = i + 1
+        }
+        // Step 3: normalise.
+        i = 0
+        loop (i < n) {
+            result.set_f64(i, result.get_f64(i) / sum_exp)
+            i = i + 1
+        }
+    } else {
+        // 2-D: softmax along the last dimension (each row independently).
+        let rows: I64 = input.dim(0)
+        let cols: I64 = input.dim(1)
+        let mut r: I64 = 0
+        loop (r < rows) {
+            let row_off: I64 = r * cols
+            // Find max in this row.
+            let mut max_val: F64 = input.get_f64(row_off)
+            let mut c: I64 = 1
+            loop (c < cols) {
+                let v: F64 = input.get_f64(row_off + c)
+                if v > max_val {
+                    max_val = v
+                }
+                c = c + 1
+            }
+            // Compute exp(x - max) and sum.
+            let mut sum_exp: F64 = 0.0
+            c = 0
+            loop (c < cols) {
+                let e: F64 = exp(input.get_f64(row_off + c) - max_val)
+                result.set_f64(row_off + c, e)
+                sum_exp = sum_exp + e
+                c = c + 1
+            }
+            // Normalise.
+            c = 0
+            loop (c < cols) {
+                result.set_f64(row_off + c, result.get_f64(row_off + c) / sum_exp)
+                c = c + 1
+            }
+            r = r + 1
+        }
+    }
+    result
+}
+
+/// Log-softmax: `log(softmax(x))` computed in a numerically stable way.
+///
+/// `log_softmax(x_i) = x_i - max(x) - log(sum(exp(x_j - max(x))))`
+pub func log_softmax(input: ref Tensor) -> Tensor {
+    let rank: I64 = input.rank()
+    let n: I64 = input.numel()
+    let dims = tensor_dims(input)
+    let mut result = zeros(dims, input.dtype())
+
+    if rank <= 1 {
+        // 1-D: over all elements.
+        let mut max_val: F64 = input.get_f64(0)
+        let mut i: I64 = 1
+        loop (i < n) {
+            let v: F64 = input.get_f64(i)
+            if v > max_val {
+                max_val = v
+            }
+            i = i + 1
+        }
+        let mut sum_exp: F64 = 0.0
+        i = 0
+        loop (i < n) {
+            sum_exp = sum_exp + exp(input.get_f64(i) - max_val)
+            i = i + 1
+        }
+        let log_sum: F64 = ln(sum_exp)
+        i = 0
+        loop (i < n) {
+            result.set_f64(i, input.get_f64(i) - max_val - log_sum)
+            i = i + 1
+        }
+    } else {
+        // 2-D: along last dimension.
+        let rows: I64 = input.dim(0)
+        let cols: I64 = input.dim(1)
+        let mut r: I64 = 0
+        loop (r < rows) {
+            let row_off: I64 = r * cols
+            let mut max_val: F64 = input.get_f64(row_off)
+            let mut c: I64 = 1
+            loop (c < cols) {
+                let v: F64 = input.get_f64(row_off + c)
+                if v > max_val {
+                    max_val = v
+                }
+                c = c + 1
+            }
+            let mut sum_exp: F64 = 0.0
+            c = 0
+            loop (c < cols) {
+                sum_exp = sum_exp + exp(input.get_f64(row_off + c) - max_val)
+                c = c + 1
+            }
+            let log_sum: F64 = ln(sum_exp)
+            c = 0
+            loop (c < cols) {
+                result.set_f64(row_off + c, input.get_f64(row_off + c) - max_val - log_sum)
+                c = c + 1
+            }
+            r = r + 1
+        }
+    }
+    result
+}

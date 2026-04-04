@@ -1,0 +1,176 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, from_list_i64, slice, gather, scatter}
+
+@test
+func test_slice_dim0() -> I32 {
+    // slice([[1,2,3],[4,5,6]] shape [2,3], dim=0, start=1, end=2) -> [[4,5,6]] shape [1,3]
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+    let result = slice(ref t, 0, 1, 2)
+    when result {
+        Ok(s) => {
+            assert_eq(s.dim(0), 1, "sliced dim 0 should be 1")
+            assert_eq(s.dim(1), 3, "sliced dim 1 should be 3")
+            let v0: F64 = s.get_f64(0)
+            let d0: F64 = v0 - 4.0
+            assert(d0 > -0.01 and d0 < 0.01, "sliced[0] should be 4.0")
+            let v1: F64 = s.get_f64(1)
+            let d1: F64 = v1 - 5.0
+            assert(d1 > -0.01 and d1 < 0.01, "sliced[1] should be 5.0")
+            let v2: F64 = s.get_f64(2)
+            let d2: F64 = v2 - 6.0
+            assert(d2 > -0.01 and d2 < 0.01, "sliced[2] should be 6.0")
+        },
+        Err(e) => assert(false, "slice dim0 should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_slice_dim1() -> I32 {
+    // slice([[1,2,3],[4,5,6]] shape [2,3], dim=1, start=0, end=2) -> [[1,2],[4,5]] shape [2,2]
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+    let result = slice(ref t, 1, 0, 2)
+    when result {
+        Ok(s) => {
+            assert_eq(s.dim(0), 2, "sliced dim 0 should be 2")
+            assert_eq(s.dim(1), 2, "sliced dim 1 should be 2")
+            // row 0: elements [1,2]
+            let v00: F64 = s.get_f64(0)
+            let d00: F64 = v00 - 1.0
+            assert(d00 > -0.01 and d00 < 0.01, "sliced[0,0] should be 1.0")
+            let v01: F64 = s.get_f64(1)
+            let d01: F64 = v01 - 2.0
+            assert(d01 > -0.01 and d01 < 0.01, "sliced[0,1] should be 2.0")
+            // row 1: elements [4,5]
+            let v10: F64 = s.get_f64(2)
+            let d10: F64 = v10 - 4.0
+            assert(d10 > -0.01 and d10 < 0.01, "sliced[1,0] should be 4.0")
+            let v11: F64 = s.get_f64(3)
+            let d11: F64 = v11 - 5.0
+            assert(d11 > -0.01 and d11 < 0.01, "sliced[1,1] should be 5.0")
+        },
+        Err(e) => assert(false, "slice dim1 should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_slice_out_of_range_returns_err() -> I32 {
+    // slice with start >= end should return Err
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+    let result = slice(ref t, 0, 2, 1)
+    when result {
+        Ok(s) => assert(false, "slice with start >= end should return Err"),
+        Err(e) => assert(true, "slice with start >= end correctly returned Err"),
+    }
+    return 0
+}
+
+@test
+func test_gather_1d() -> I32 {
+    // gather([10,20,30,40], dim=0, indices=[2,0,1]) -> [30,10,20]
+    let mut data = List[F64]::new(4)
+    data.push(10.0)
+    data.push(20.0)
+    data.push(30.0)
+    data.push(40.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(4)
+    let t = from_list_f64(data, dims)
+    let mut idata = List[F64]::new(3)
+    idata.push(2.0)
+    idata.push(0.0)
+    idata.push(1.0)
+    let mut idims = List[I64]::new(1)
+    idims.push(3)
+    let idx = from_list_f64(idata, idims)
+    let result = gather(ref t, 0, ref idx)
+    when result {
+        Ok(g) => {
+            assert_eq(g.numel(), 3, "gathered numel should be 3")
+            let v0: F64 = g.get_f64(0)
+            let d0: F64 = v0 - 30.0
+            assert(d0 > -0.01 and d0 < 0.01, "gather[0] should be 30.0 (index 2)")
+            let v1: F64 = g.get_f64(1)
+            let d1: F64 = v1 - 10.0
+            assert(d1 > -0.01 and d1 < 0.01, "gather[1] should be 10.0 (index 0)")
+            let v2: F64 = g.get_f64(2)
+            let d2: F64 = v2 - 20.0
+            assert(d2 > -0.01 and d2 < 0.01, "gather[2] should be 20.0 (index 1)")
+        },
+        Err(e) => assert(false, "gather should not fail for valid indices"),
+    }
+    return 0
+}
+
+@test
+func test_scatter_1d() -> I32 {
+    // scatter([0,0,0,0], dim=0, indices=[1,3], src=[9,7])
+    // -> [0,9,0,7]
+    let mut base_data = List[F64]::new(4)
+    base_data.push(0.0)
+    base_data.push(0.0)
+    base_data.push(0.0)
+    base_data.push(0.0)
+    let mut base_dims = List[I64]::new(1)
+    base_dims.push(4)
+    let dest = from_list_f64(base_data, base_dims)
+    let mut idata = List[F64]::new(2)
+    idata.push(1.0)
+    idata.push(3.0)
+    let mut idims = List[I64]::new(1)
+    idims.push(2)
+    let idx = from_list_f64(idata, idims)
+    let mut sdata = List[F64]::new(2)
+    sdata.push(9.0)
+    sdata.push(7.0)
+    let mut sdims = List[I64]::new(1)
+    sdims.push(2)
+    let src = from_list_f64(sdata, sdims)
+    let result = scatter(ref dest, 0, ref idx, ref src)
+    when result {
+        Ok(s) => {
+            assert_eq(s.numel(), 4, "scattered numel should be 4")
+            let v1: F64 = s.get_f64(1)
+            let d1: F64 = v1 - 9.0
+            assert(d1 > -0.01 and d1 < 0.01, "scatter[1] should be 9.0")
+            let v3: F64 = s.get_f64(3)
+            let d3: F64 = v3 - 7.0
+            assert(d3 > -0.01 and d3 < 0.01, "scatter[3] should be 7.0")
+            // Unset positions should remain 0
+            let v0: F64 = s.get_f64(0)
+            assert(v0 > -0.01 and v0 < 0.01, "scatter[0] should remain 0.0")
+            let v2: F64 = s.get_f64(2)
+            assert(v2 > -0.01 and v2 < 0.01, "scatter[2] should remain 0.0")
+        },
+        Err(e) => assert(false, "scatter should not fail for valid indices"),
+    }
+    return 0
+}

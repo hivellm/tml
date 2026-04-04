@@ -94,9 +94,9 @@ func output_shape_dims(a: ref Tensor, dim: I64) -> List[I64] {
 
 /// Sum all elements in the tensor.
 pub func sum(a: ref Tensor) -> F64 {
-    let n = a.numel()
-    let mut total = 0.0
-    let mut i = 0
+    let n: I64 = a.numel()
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
     loop (i < n) {
         total = total + a.get_f64(i)
         i = i + 1
@@ -115,16 +115,16 @@ pub func mean(a: ref Tensor) -> F64 {
 
 /// Maximum element value in the tensor.
 ///
-/// Returns the value of the first element if the tensor is empty.
+/// Returns 0.0 if the tensor is empty.
 pub func max_val(a: ref Tensor) -> F64 {
-    let n = a.numel()
+    let n: I64 = a.numel()
     if n == 0 {
         return 0.0
     }
-    let mut best = a.get_f64(0)
-    let mut i = 1
+    let mut best: F64 = a.get_f64(0)
+    let mut i: I64 = 1
     loop (i < n) {
-        let v = a.get_f64(i)
+        let v: F64 = a.get_f64(i)
         if v > best {
             best = v
         }
@@ -135,16 +135,16 @@ pub func max_val(a: ref Tensor) -> F64 {
 
 /// Minimum element value in the tensor.
 ///
-/// Returns the value of the first element if the tensor is empty.
+/// Returns 0.0 if the tensor is empty.
 pub func min_val(a: ref Tensor) -> F64 {
-    let n = a.numel()
+    let n: I64 = a.numel()
     if n == 0 {
         return 0.0
     }
-    let mut best = a.get_f64(0)
-    let mut i = 1
+    let mut best: F64 = a.get_f64(0)
+    let mut i: I64 = 1
     loop (i < n) {
-        let v = a.get_f64(i)
+        let v: F64 = a.get_f64(i)
         if v < best {
             best = v
         }

@@ -1,0 +1,118 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{from_list_f64, zeros}
+use std::ia::train::checkpoint::{Checkpoint, CheckpointStore}
+
+@test
+func test_checkpoint_basic() -> I32 {
+    let mut params: List[Tensor] = List[Tensor]::new()
+    let mut d: List[F64] = List[F64]::new(2)
+    d.push(1.0)
+    d.push(2.0)
+    let mut dims: List[I64] = List[I64]::new(1)
+    dims.push(2 as I64)
+    params.push(from_list_f64(d, dims))
+
+    let cp = Checkpoint::new(params, 100 as I64, 0.05)
+    assert_eq(cp.get_step(), 100 as I64, "step should be 100")
+
+    let loss: F64 = cp.get_loss()
+    let dl: F64 = loss - 0.05
+    let abs_dl: F64 = dl > 0.0 ? dl : 0.0 - dl
+    assert(abs_dl < 0.001, "loss should be 0.05")
+
+    assert_eq(cp.num_params(), 1 as I64, "should have 1 param tensor")
+    return 0
+}
+
+@test
+func test_checkpoint_get_param() -> I32 {
+    let mut params: List[Tensor] = List[Tensor]::new()
+    let mut d: List[F64] = List[F64]::new(3)
+    d.push(3.0)
+    d.push(6.0)
+    d.push(9.0)
+    let mut dims: List[I64] = List[I64]::new(1)
+    dims.push(3 as I64)
+    params.push(from_list_f64(d, dims))
+
+    let cp = Checkpoint::new(params, 50 as I64, 0.1)
+    let p = cp.get_param(0 as I64)
+    let v0: F64 = p.get_f64(0 as I64)
+    let dv0: F64 = v0 - 3.0
+    let abs_dv0: F64 = dv0 > 0.0 ? dv0 : 0.0 - dv0
+    assert(abs_dv0 < 0.001, "param[0] should be 3.0")
+
+    let v1: F64 = p.get_f64(1 as I64)
+    let dv1: F64 = v1 - 6.0
+    let abs_dv1: F64 = dv1 > 0.0 ? dv1 : 0.0 - dv1
+    assert(abs_dv1 < 0.001, "param[1] should be 6.0")
+
+    return 0
+}
+
+@test
+func test_checkpoint_store_best() -> I32 {
+    let mut store = CheckpointStore::new()
+    assert(store.is_empty(), "store should start empty")
+
+    // Add checkpoint with loss 0.5
+    let mut p1: List[Tensor] = List[Tensor]::new()
+    let mut dims1: List[I64] = List[I64]::new(1)
+    dims1.push(1 as I64)
+    p1.push(zeros(dims1, DType::F64))
+    store.add(Checkpoint::new(p1, 10 as I64, 0.5))
+
+    assert_eq(store.len(), 1 as I64, "store should have 1 checkpoint")
+
+    // Add checkpoint with loss 0.3 (better)
+    let mut p2: List[Tensor] = List[Tensor]::new()
+    let mut dims2: List[I64] = List[I64]::new(1)
+    dims2.push(1 as I64)
+    p2.push(zeros(dims2, DType::F64))
+    store.add(Checkpoint::new(p2, 20 as I64, 0.3))
+
+    // Add checkpoint with loss 0.8 (worse)
+    let mut p3: List[Tensor] = List[Tensor]::new()
+    let mut dims3: List[I64] = List[I64]::new(1)
+    dims3.push(1 as I64)
+    p3.push(zeros(dims3, DType::F64))
+    store.add(Checkpoint::new(p3, 30 as I64, 0.8))
+
+    assert_eq(store.len(), 3 as I64, "store should have 3 checkpoints")
+
+    // Best should be the one with loss 0.3 at step 20
+    let best = store.get_best()
+    assert_eq(best.get_step(), 20 as I64, "best checkpoint should be at step 20")
+
+    let best_loss: F64 = best.get_loss()
+    let dl: F64 = best_loss - 0.3
+    let abs_dl: F64 = dl > 0.0 ? dl : 0.0 - dl
+    assert(abs_dl < 0.001, "best loss should be 0.3")
+
+    return 0
+}
+
+@test
+func test_checkpoint_store_latest() -> I32 {
+    let mut store = CheckpointStore::new()
+
+    let mut p1: List[Tensor] = List[Tensor]::new()
+    let mut dims1: List[I64] = List[I64]::new(1)
+    dims1.push(1 as I64)
+    p1.push(zeros(dims1, DType::F64))
+    store.add(Checkpoint::new(p1, 1 as I64, 0.9))
+
+    let mut p2: List[Tensor] = List[Tensor]::new()
+    let mut dims2: List[I64] = List[I64]::new(1)
+    dims2.push(1 as I64)
+    p2.push(zeros(dims2, DType::F64))
+    store.add(Checkpoint::new(p2, 2 as I64, 0.7))
+
+    let latest = store.get_latest()
+    assert_eq(latest.get_step(), 2 as I64, "latest should be at step 2")
+
+    return 0
+}

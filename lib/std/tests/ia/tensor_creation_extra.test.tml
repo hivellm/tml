@@ -1,0 +1,131 @@
+// Additional creation tests for std::ia tensor module.
+// Tests from_list_f32, from_list_i64, rand, randn, zeros (I64), ones (3D).
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f32, from_list_i64, rand, randn, zeros, ones}
+
+@test
+func test_from_list_f32() -> I32 {
+    // Create F32 tensor from [1.0, 2.0, 3.0]
+    let mut data = List[F32]::new(3)
+    data.push(1.0 as F32)
+    data.push(2.0 as F32)
+    data.push(3.0 as F32)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let t = from_list_f32(data, dims)
+    assert_eq(t.numel(), 3 as I64, "from_list_f32 should have 3 elements")
+    assert_eq(t.rank(), 1 as I64, "from_list_f32 should have rank 1")
+    let v0 = t.get_f64(0)
+    let d0 = v0 - 1.0
+    assert(d0 > -0.001 and d0 < 0.001, "f32[0] should be 1.0")
+    let v1 = t.get_f64(1)
+    let d1 = v1 - 2.0
+    assert(d1 > -0.001 and d1 < 0.001, "f32[1] should be 2.0")
+    let v2 = t.get_f64(2)
+    let d2 = v2 - 3.0
+    assert(d2 > -0.001 and d2 < 0.001, "f32[2] should be 3.0")
+    return 0
+}
+
+@test
+func test_from_list_i64() -> I32 {
+    // Create I64 tensor from [10, 20, 30]
+    let mut data = List[I64]::new(3)
+    data.push(10)
+    data.push(20)
+    data.push(30)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let t = from_list_i64(data, dims)
+    assert_eq(t.numel(), 3 as I64, "from_list_i64 should have 3 elements")
+    assert_eq(t.rank(), 1 as I64, "from_list_i64 should have rank 1")
+    let v0 = t.get_f64(0)
+    let d0 = v0 - 10.0
+    assert(d0 > -0.001 and d0 < 0.001, "i64[0] should be 10.0")
+    let v1 = t.get_f64(1)
+    let d1 = v1 - 20.0
+    assert(d1 > -0.001 and d1 < 0.001, "i64[1] should be 20.0")
+    let v2 = t.get_f64(2)
+    let d2 = v2 - 30.0
+    assert(d2 > -0.001 and d2 < 0.001, "i64[2] should be 30.0")
+    return 0
+}
+
+@test
+func test_rand_shape() -> I32 {
+    // rand([2,3]) should have numel=6, rank=2, all values in [0,1)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = rand(dims)
+    assert_eq(t.numel(), 6 as I64, "rand [2,3] should have 6 elements")
+    assert_eq(t.rank(), 2 as I64, "rand [2,3] should have rank 2")
+    assert_eq(t.dim(0), 2 as I64, "rand dim 0 should be 2")
+    assert_eq(t.dim(1), 3 as I64, "rand dim 1 should be 3")
+    // Verify all values in [0, 1)
+    let mut i = 0
+    loop (i < 6) {
+        let v = t.get_f64(i)
+        assert(v >= 0.0 and v < 1.0, "rand element should be in [0,1)")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_randn_shape() -> I32 {
+    // randn([100]) should have numel=100, rank=1
+    let mut dims = List[I64]::new(1)
+    dims.push(100)
+    let t = randn(dims)
+    assert_eq(t.numel(), 100 as I64, "randn [100] should have 100 elements")
+    assert_eq(t.rank(), 1 as I64, "randn [100] should have rank 1")
+    // Verify mean is approximately 0 for large N (within ±0.5 with very high probability)
+    let mut total = 0.0
+    let mut i = 0
+    loop (i < 100) {
+        total = total + t.get_f64(i)
+        i = i + 1
+    }
+    let m = total / 100.0
+    assert(m > -0.5 and m < 0.5, "randn mean should be near 0 for N=100")
+    return 0
+}
+
+@test
+func test_zeros_i64() -> I32 {
+    // zeros([5], I64) should have all zeros
+    let mut dims = List[I64]::new(1)
+    dims.push(5)
+    let t = zeros(dims, DType::I64)
+    assert_eq(t.numel(), 5 as I64, "zeros I64 should have 5 elements")
+    let mut i = 0
+    loop (i < 5) {
+        let v = t.get_f64(i)
+        let d = v - 0.0
+        assert(d > -0.001 and d < 0.001, "zeros I64 element should be 0")
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_ones_3d() -> I32 {
+    // ones([2,3,4], F64) should have numel=24, all ones
+    let mut dims = List[I64]::new(3)
+    dims.push(2)
+    dims.push(3)
+    dims.push(4)
+    let t = ones(dims, DType::F64)
+    assert_eq(t.numel(), 24 as I64, "ones [2,3,4] should have 24 elements")
+    assert_eq(t.rank(), 3 as I64, "ones [2,3,4] should have rank 3")
+    let mut i = 0
+    loop (i < 24) {
+        let v = t.get_f64(i)
+        let d = v - 1.0
+        assert(d > -0.001 and d < 0.001, "ones element should be 1.0")
+        i = i + 1
+    }
+    return 0
+}

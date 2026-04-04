@@ -1,0 +1,271 @@
+use test
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, ones, full, from_list_f64}
+use std::ia::tensor::ops
+use std::ia::autograd::graph::Tape
+use std::ia::autograd::graph::{OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_SUM, OP_MEAN}
+use std::ia::autograd::graph::{OP_NEG, OP_EXP, OP_LOG, OP_RELU, OP_SIGMOID, OP_TANH}
+use std::ia::autograd::backward::{GradStore, backward, zero_grad}
+
+/// Helper: create a 1-D dims list.
+func dims1(n: I64) -> List[I64] {
+    let mut d: List[I64] = List[I64]::new(1)
+    d.push(n)
+    d
+}
+
+/// Helper: create a 2-D dims list.
+func dims2(r: I64, c: I64) -> List[I64] {
+    let mut d: List[I64] = List[I64]::new(2)
+    d.push(r)
+    d.push(c)
+    d
+}
+
+/// Helper: check that two F64 values are approximately equal.
+func approx_eq(a: F64, b: F64, tol: F64) -> Bool {
+    let diff: F64 = a - b
+    let abs_diff: F64 = diff > 0.0 ? diff : 0.0 - diff
+    abs_diff < tol
+}
+
+// =========================================================================
+// GradStore tests
+// =========================================================================
+
+@test
+func test_grad_store_new() -> Outcome[Unit, Str] {
+    let store: GradStore = GradStore::new(5)
+    assert_eq(store.len(), 5)
+    assert_eq(store.has(0), false)
+    assert_eq(store.has(4), false)
+    Ok(())
+}
+
+@test
+func test_grad_store_accumulate() -> Outcome[Unit, Str] {
+    let mut store: GradStore = GradStore::new(3)
+    let t: Tensor = full(dims1(2), 3.0, DType::F64)
+    store.accumulate(1, t)
+    assert_eq(store.has(1), true)
+    let g: Tensor = store.get(1)
+    assert_true(approx_eq(g.get_f64(0), 3.0, 0.001))
+    assert_true(approx_eq(g.get_f64(1), 3.0, 0.001))
+    // Accumulate again -- should add
+    let t2: Tensor = full(dims1(2), 2.0, DType::F64)
+    store.accumulate(1, t2)
+    let g2: Tensor = store.get(1)
+    assert_true(approx_eq(g2.get_f64(0), 5.0, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: addition
+// =========================================================================
+
+@test
+func test_backward_add() -> Outcome[Unit, Str] {
+    // f(a, b) = sum(a + b)
+    // df/da = 1, df/db = 1 (broadcast from sum gradient)
+    let mut tape: Tape = Tape::new()
+
+    let a: Tensor = full(dims1(3), 2.0, DType::F64)
+    let b: Tensor = full(dims1(3), 3.0, DType::F64)
+    let a_idx: I64 = tape.record_leaf(a)
+    let b_idx: I64 = tape.record_leaf(b)
+
+    // a + b -> [5, 5, 5]
+    let ab: Tensor = full(dims1(3), 5.0, DType::F64)
+    let add_idx: I64 = tape.record_binary(OP_ADD, a_idx, b_idx, ab)
+
+    // sum([5,5,5]) -> 15
+    let s: Tensor = full(dims1(1), 15.0, DType::F64)
+    let sum_idx: I64 = tape.record_reduce(OP_SUM, add_idx, s)
+
+    let grads: GradStore = backward(ref tape, sum_idx)
+
+    // Gradient of sum output is 1.0 (scalar seed)
+    // Grad of add w.r.t. a = 1, broadcast by sum -> all 1.0
+    let ga: Tensor = grads.get(a_idx)
+    assert_true(approx_eq(ga.get_f64(0), 1.0, 0.001))
+    assert_true(approx_eq(ga.get_f64(1), 1.0, 0.001))
+    assert_true(approx_eq(ga.get_f64(2), 1.0, 0.001))
+
+    let gb: Tensor = grads.get(b_idx)
+    assert_true(approx_eq(gb.get_f64(0), 1.0, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: multiplication
+// =========================================================================
+
+@test
+func test_backward_mul() -> Outcome[Unit, Str] {
+    // f(a, b) = sum(a * b)
+    // df/da = b, df/db = a (element-wise, then broadcast by sum)
+    let mut tape: Tape = Tape::new()
+
+    // a = [2, 3], b = [4, 5]
+    let mut a_data: List[F64] = List[F64]::new(2)
+    a_data.push(2.0)
+    a_data.push(3.0)
+    let a: Tensor = from_list_f64(a_data, dims1(2))
+
+    let mut b_data: List[F64] = List[F64]::new(2)
+    b_data.push(4.0)
+    b_data.push(5.0)
+    let b: Tensor = from_list_f64(b_data, dims1(2))
+
+    let a_idx: I64 = tape.record_leaf(a)
+    let b_idx: I64 = tape.record_leaf(b)
+
+    // a * b = [8, 15]
+    let mut ab_data: List[F64] = List[F64]::new(2)
+    ab_data.push(8.0)
+    ab_data.push(15.0)
+    let ab: Tensor = from_list_f64(ab_data, dims1(2))
+    let mul_idx: I64 = tape.record_binary(OP_MUL, a_idx, b_idx, ab)
+
+    // sum = 23
+    let s: Tensor = full(dims1(1), 23.0, DType::F64)
+    let sum_idx: I64 = tape.record_reduce(OP_SUM, mul_idx, s)
+
+    let grads: GradStore = backward(ref tape, sum_idx)
+
+    // df/da = b = [4, 5]
+    let ga: Tensor = grads.get(a_idx)
+    assert_true(approx_eq(ga.get_f64(0), 4.0, 0.001))
+    assert_true(approx_eq(ga.get_f64(1), 5.0, 0.001))
+
+    // df/db = a = [2, 3]
+    let gb: Tensor = grads.get(b_idx)
+    assert_true(approx_eq(gb.get_f64(0), 2.0, 0.001))
+    assert_true(approx_eq(gb.get_f64(1), 3.0, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: subtraction
+// =========================================================================
+
+@test
+func test_backward_sub() -> Outcome[Unit, Str] {
+    // f(a, b) = sum(a - b)
+    // df/da = 1, df/db = -1
+    let mut tape: Tape = Tape::new()
+
+    let a: Tensor = full(dims1(2), 5.0, DType::F64)
+    let b: Tensor = full(dims1(2), 3.0, DType::F64)
+    let a_idx: I64 = tape.record_leaf(a)
+    let b_idx: I64 = tape.record_leaf(b)
+
+    let ab: Tensor = full(dims1(2), 2.0, DType::F64)
+    let sub_idx: I64 = tape.record_binary(OP_SUB, a_idx, b_idx, ab)
+
+    let s: Tensor = full(dims1(1), 4.0, DType::F64)
+    let sum_idx: I64 = tape.record_reduce(OP_SUM, sub_idx, s)
+
+    let grads: GradStore = backward(ref tape, sum_idx)
+
+    let ga: Tensor = grads.get(a_idx)
+    assert_true(approx_eq(ga.get_f64(0), 1.0, 0.001))
+
+    let gb: Tensor = grads.get(b_idx)
+    assert_true(approx_eq(gb.get_f64(0), -1.0, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: mean reduction
+// =========================================================================
+
+@test
+func test_backward_mean() -> Outcome[Unit, Str] {
+    // f(x) = mean(x)
+    // df/dx_i = 1/n
+    let mut tape: Tape = Tape::new()
+
+    let x: Tensor = full(dims1(4), 3.0, DType::F64)
+    let x_idx: I64 = tape.record_leaf(x)
+
+    let m: Tensor = full(dims1(1), 3.0, DType::F64)
+    let mean_idx: I64 = tape.record_reduce(OP_MEAN, x_idx, m)
+
+    let grads: GradStore = backward(ref tape, mean_idx)
+
+    let gx: Tensor = grads.get(x_idx)
+    // 1/4 = 0.25
+    assert_true(approx_eq(gx.get_f64(0), 0.25, 0.001))
+    assert_true(approx_eq(gx.get_f64(3), 0.25, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: negation
+// =========================================================================
+
+@test
+func test_backward_neg() -> Outcome[Unit, Str] {
+    // f(x) = sum(-x)
+    // df/dx = -1
+    let mut tape: Tape = Tape::new()
+
+    let x: Tensor = full(dims1(3), 2.0, DType::F64)
+    let x_idx: I64 = tape.record_leaf(x)
+
+    let neg_x: Tensor = full(dims1(3), -2.0, DType::F64)
+    let neg_idx: I64 = tape.record_unary(OP_NEG, x_idx, neg_x)
+
+    let s: Tensor = full(dims1(1), -6.0, DType::F64)
+    let sum_idx: I64 = tape.record_reduce(OP_SUM, neg_idx, s)
+
+    let grads: GradStore = backward(ref tape, sum_idx)
+
+    let gx: Tensor = grads.get(x_idx)
+    assert_true(approx_eq(gx.get_f64(0), -1.0, 0.001))
+    Ok(())
+}
+
+// =========================================================================
+// Backward tests: ReLU
+// =========================================================================
+
+@test
+func test_backward_relu() -> Outcome[Unit, Str] {
+    // f(x) = sum(relu(x))
+    // df/dx_i = 1 if x_i > 0, else 0
+    let mut tape: Tape = Tape::new()
+
+    // x = [-1, 2, -3, 4]
+    let mut x_data: List[F64] = List[F64]::new(4)
+    x_data.push(-1.0)
+    x_data.push(2.0)
+    x_data.push(-3.0)
+    x_data.push(4.0)
+    let x: Tensor = from_list_f64(x_data, dims1(4))
+    let x_idx: I64 = tape.record_leaf(x)
+
+    // relu(x) = [0, 2, 0, 4]
+    let mut r_data: List[F64] = List[F64]::new(4)
+    r_data.push(0.0)
+    r_data.push(2.0)
+    r_data.push(0.0)
+    r_data.push(4.0)
+    let rx: Tensor = from_list_f64(r_data, dims1(4))
+    let relu_idx: I64 = tape.record_unary(OP_RELU, x_idx, rx)
+
+    let s: Tensor = full(dims1(1), 6.0, DType::F64)
+    let sum_idx: I64 = tape.record_reduce(OP_SUM, relu_idx, s)
+
+    let grads: GradStore = backward(ref tape, sum_idx)
+
+    let gx: Tensor = grads.get(x_idx)
+    assert_true(approx_eq(gx.get_f64(0), 0.0, 0.001))  // -1 < 0
+    assert_true(approx_eq(gx.get_f64(1), 1.0, 0.001))  //  2 > 0
+    assert_true(approx_eq(gx.get_f64(2), 0.0, 0.001))  // -3 < 0
+    assert_true(approx_eq(gx.get_f64(3), 1.0, 0.001))  //  4 > 0
+    Ok(())
+}

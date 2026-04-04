@@ -1,0 +1,153 @@
+// Axis reduction tests for std::ia tensor module.
+// A = [[1,2,3],[4,5,6]]  shape [2,3]  flat [1,2,3,4,5,6]
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::tensor::reduce
+
+/// Build the 2x3 test tensor [[1,2,3],[4,5,6]].
+func make_2x3() -> Tensor {
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    from_list_f64(data, dims)
+}
+
+@test
+func test_sum_dim0() -> I32 {
+    // sum_dim(A, 0) collapses rows: [1+4, 2+5, 3+6] = [5,7,9], shape [3]
+    let t = make_2x3()
+    let result = reduce::sum_dim(ref t, 0)
+    when result {
+        Err(e) => assert(false, "sum_dim(0) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "sum_dim0 rank should be 1")
+            assert_eq(r.dim(0), 3 as I64, "sum_dim0 dim 0 should be 3")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 5.0
+            assert(d0 > -0.001 and d0 < 0.001, "sum_dim0[0] should be 5.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 7.0
+            assert(d1 > -0.001 and d1 < 0.001, "sum_dim0[1] should be 7.0")
+            let v2 = r.get_f64(2)
+            let d2 = v2 - 9.0
+            assert(d2 > -0.001 and d2 < 0.001, "sum_dim0[2] should be 9.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_sum_dim1() -> I32 {
+    // sum_dim(A, 1) collapses cols: [1+2+3, 4+5+6] = [6,15], shape [2]
+    let t = make_2x3()
+    let result = reduce::sum_dim(ref t, 1)
+    when result {
+        Err(e) => assert(false, "sum_dim(1) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "sum_dim1 rank should be 1")
+            assert_eq(r.dim(0), 2 as I64, "sum_dim1 dim 0 should be 2")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 6.0
+            assert(d0 > -0.001 and d0 < 0.001, "sum_dim1[0] should be 6.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 15.0
+            assert(d1 > -0.001 and d1 < 0.001, "sum_dim1[1] should be 15.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_mean_dim1() -> I32 {
+    // mean_dim(A, 1): [6/3, 15/3] = [2.0, 5.0], shape [2]
+    let t = make_2x3()
+    let result = reduce::mean_dim(ref t, 1)
+    when result {
+        Err(e) => assert(false, "mean_dim(1) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "mean_dim1 rank should be 1")
+            assert_eq(r.dim(0), 2 as I64, "mean_dim1 dim 0 should be 2")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 2.0
+            assert(d0 > -0.001 and d0 < 0.001, "mean_dim1[0] should be 2.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 5.0
+            assert(d1 > -0.001 and d1 < 0.001, "mean_dim1[1] should be 5.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_max_dim0() -> I32 {
+    // max_dim(A, 0): max of each column = [max(1,4), max(2,5), max(3,6)] = [4,5,6], shape [3]
+    let t = make_2x3()
+    let result = reduce::max_dim(ref t, 0)
+    when result {
+        Err(e) => assert(false, "max_dim(0) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "max_dim0 rank should be 1")
+            assert_eq(r.dim(0), 3 as I64, "max_dim0 dim 0 should be 3")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 4.0
+            assert(d0 > -0.001 and d0 < 0.001, "max_dim0[0] should be 4.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 5.0
+            assert(d1 > -0.001 and d1 < 0.001, "max_dim0[1] should be 5.0")
+            let v2 = r.get_f64(2)
+            let d2 = v2 - 6.0
+            assert(d2 > -0.001 and d2 < 0.001, "max_dim0[2] should be 6.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_min_dim1() -> I32 {
+    // min_dim(A, 1): min of each row = [min(1,2,3), min(4,5,6)] = [1,4], shape [2]
+    let t = make_2x3()
+    let result = reduce::min_dim(ref t, 1)
+    when result {
+        Err(e) => assert(false, "min_dim(1) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "min_dim1 rank should be 1")
+            assert_eq(r.dim(0), 2 as I64, "min_dim1 dim 0 should be 2")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 1.0
+            assert(d0 > -0.001 and d0 < 0.001, "min_dim1[0] should be 1.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 4.0
+            assert(d1 > -0.001 and d1 < 0.001, "min_dim1[1] should be 4.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_argmax_dim1() -> I32 {
+    // argmax_dim(A, 1): index of max in each row = [2,2] (3→idx2, 6→idx2), shape [2]
+    let t = make_2x3()
+    let result = reduce::argmax_dim(ref t, 1)
+    when result {
+        Err(e) => assert(false, "argmax_dim(1) should not fail"),
+        Ok(r) => {
+            assert_eq(r.rank(), 1 as I64, "argmax_dim1 rank should be 1")
+            assert_eq(r.dim(0), 2 as I64, "argmax_dim1 dim 0 should be 2")
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 2.0
+            assert(d0 > -0.001 and d0 < 0.001, "argmax_dim1[0] should be 2 (index of 3.0)")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 2.0
+            assert(d1 > -0.001 and d1 < 0.001, "argmax_dim1[1] should be 2 (index of 6.0)")
+        },
+    }
+    return 0
+}

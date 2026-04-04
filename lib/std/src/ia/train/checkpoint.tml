@@ -1,0 +1,122 @@
+//! In-memory training checkpoints.
+//!
+//! Provides [`Checkpoint`] for capturing a snapshot of model parameters
+//! at a given training step, along with the loss at that step.
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+
+/// A snapshot of model parameters taken at a specific training step.
+///
+/// Use [`CheckpointStore`] to maintain a history of checkpoints and
+/// restore the best one after training.
+pub type Checkpoint {
+    params: List[Tensor],
+    step: I64,
+    loss: F64,
+}
+
+impl Checkpoint {
+    /// Creates a new checkpoint.
+    ///
+    /// - `params`: parameter tensors to snapshot
+    /// - `step`: training step at which the snapshot was taken
+    /// - `loss`: loss value at this step (used for best-checkpoint selection)
+    pub func new(params: List[Tensor], step: I64, loss: F64) -> Checkpoint {
+        return Checkpoint {
+            params: params,
+            step: step,
+            loss: loss,
+        }
+    }
+
+    /// Returns the saved parameter tensors.
+    pub func get_params(this) -> List[Tensor] {
+        return this.params
+    }
+
+    /// Returns the training step at which this checkpoint was taken.
+    pub func get_step(this) -> I64 {
+        return this.step
+    }
+
+    /// Returns the loss recorded at this checkpoint.
+    pub func get_loss(this) -> F64 {
+        return this.loss
+    }
+
+    /// Returns the number of parameter tensors in this checkpoint.
+    pub func num_params(this) -> I64 {
+        return this.params.len()
+    }
+
+    /// Returns the parameter tensor at index `i`.
+    pub func get_param(this, i: I64) -> Tensor {
+        return this.params.get(i)
+    }
+}
+
+/// A store of checkpoints that keeps track of the best (lowest-loss) one.
+///
+/// Use [`add`] to insert checkpoints during training, then [`get_best`]
+/// to retrieve the checkpoint with the lowest recorded loss.
+pub type CheckpointStore {
+    checkpoints: List[Checkpoint],
+    best_idx: I64,
+}
+
+impl CheckpointStore {
+    /// Creates an empty checkpoint store.
+    pub func new() -> CheckpointStore {
+        return CheckpointStore {
+            checkpoints: List[Checkpoint]::new(),
+            best_idx: 0,
+        }
+    }
+
+    /// Adds a checkpoint to the store and updates the best-checkpoint index.
+    pub func add(this, ckpt: Checkpoint) {
+        let new_idx: I64 = this.checkpoints.len()
+        this.checkpoints.push(ckpt)
+        // Update best if this checkpoint has a lower loss
+        if new_idx == 0 {
+            this.best_idx = 0
+        } else {
+            let current_best: Checkpoint = this.checkpoints.get(this.best_idx)
+            let new_ckpt: Checkpoint = this.checkpoints.get(new_idx)
+            if new_ckpt.get_loss() < current_best.get_loss() {
+                this.best_idx = new_idx
+            }
+        }
+    }
+
+    /// Returns the total number of checkpoints stored.
+    pub func len(this) -> I64 {
+        return this.checkpoints.len()
+    }
+
+    /// Returns `true` if no checkpoints have been stored.
+    pub func is_empty(this) -> Bool {
+        return this.checkpoints.len() == 0
+    }
+
+    /// Returns the checkpoint with the lowest loss.
+    ///
+    /// Panics if the store is empty.
+    pub func get_best(this) -> Checkpoint {
+        return this.checkpoints.get(this.best_idx)
+    }
+
+    /// Returns the checkpoint at index `i`.
+    pub func get(this, i: I64) -> Checkpoint {
+        return this.checkpoints.get(i)
+    }
+
+    /// Returns the latest (most recently added) checkpoint.
+    ///
+    /// Panics if the store is empty.
+    pub func get_latest(this) -> Checkpoint {
+        let n: I64 = this.checkpoints.len()
+        return this.checkpoints.get(n - 1)
+    }
+}

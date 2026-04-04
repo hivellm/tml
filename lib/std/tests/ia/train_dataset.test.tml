@@ -1,0 +1,106 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{from_list_f64, zeros}
+use std::ia::train::dataset::Dataset
+
+@test
+func test_dataset_empty() -> I32 {
+    let ds = Dataset::new()
+    assert_eq(ds.len(), 0 as I64, "new dataset should be empty")
+    return 0
+}
+
+@test
+func test_dataset_add_and_get() -> I32 {
+    let mut ds = Dataset::new()
+
+    // Add first sample: input=[1.0, 2.0], target=[0.0]
+    let mut id1: List[F64] = List[F64]::new(2)
+    id1.push(1.0)
+    id1.push(2.0)
+    let mut dd1: List[I64] = List[I64]::new(1)
+    dd1.push(2 as I64)
+    let input1 = from_list_f64(id1, dd1)
+
+    let mut td1: List[F64] = List[F64]::new(1)
+    td1.push(0.0)
+    let mut tdd1: List[I64] = List[I64]::new(1)
+    tdd1.push(1 as I64)
+    let target1 = from_list_f64(td1, tdd1)
+
+    ds.add(input1, target1)
+    assert_eq(ds.len(), 1 as I64, "dataset should have 1 sample")
+
+    // Add second sample: input=[3.0, 4.0], target=[1.0]
+    let mut id2: List[F64] = List[F64]::new(2)
+    id2.push(3.0)
+    id2.push(4.0)
+    let mut dd2: List[I64] = List[I64]::new(1)
+    dd2.push(2 as I64)
+    let input2 = from_list_f64(id2, dd2)
+
+    let mut td2: List[F64] = List[F64]::new(1)
+    td2.push(1.0)
+    let mut tdd2: List[I64] = List[I64]::new(1)
+    tdd2.push(1 as I64)
+    let target2 = from_list_f64(td2, tdd2)
+
+    ds.add(input2, target2)
+    assert_eq(ds.len(), 2 as I64, "dataset should have 2 samples")
+
+    // Verify first sample input[0][0] == 1.0
+    let got_input = ds.get_input(0 as I64)
+    let v0: F64 = got_input.get_f64(0 as I64)
+    let d0: F64 = v0 - 1.0
+    let abs_d0: F64 = d0 > 0.0 ? d0 : 0.0 - d0
+    assert(abs_d0 < 0.01, "input[0][0] should be 1.0")
+
+    // Verify first sample target[0][0] == 0.0
+    let got_target = ds.get_target(0 as I64)
+    let t0: F64 = got_target.get_f64(0 as I64)
+    let dt0: F64 = t0 > 0.0 ? t0 : 0.0 - t0
+    assert(dt0 < 0.01, "target[0][0] should be 0.0")
+
+    return 0
+}
+
+@test
+func test_dataset_multiple_samples() -> I32 {
+    let mut ds = Dataset::new()
+
+    let mut i: I64 = 0
+    loop (i < 5 as I64) {
+        let mut d: List[F64] = List[F64]::new(1)
+        d.push(i as F64)
+        let mut dims: List[I64] = List[I64]::new(1)
+        dims.push(1 as I64)
+        let inp = from_list_f64(d, dims)
+
+        let mut td: List[F64] = List[F64]::new(1)
+        td.push(0.0)
+        let mut tdims: List[I64] = List[I64]::new(1)
+        tdims.push(1 as I64)
+        let tgt = from_list_f64(td, tdims)
+
+        ds.add(inp, tgt)
+        i = i + 1
+    }
+
+    assert_eq(ds.len(), 5 as I64, "dataset should have 5 samples")
+
+    // Check each input value matches its index
+    i = 0
+    loop (i < 5 as I64) {
+        let inp = ds.get_input(i)
+        let val: F64 = inp.get_f64(0 as I64)
+        let expected: F64 = i as F64
+        let diff: F64 = val - expected
+        let abs_diff: F64 = diff > 0.0 ? diff : 0.0 - diff
+        assert(abs_diff < 0.01, "input value should match index")
+        i = i + 1
+    }
+
+    return 0
+}

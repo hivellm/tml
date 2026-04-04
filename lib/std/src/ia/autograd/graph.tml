@@ -1,0 +1,349 @@
+//! Tape-based computation graph for automatic differentiation.
+//!
+//! The autograd engine uses a linear tape that records operations in
+//! forward-execution order.  During the backward pass the tape is
+//! traversed in reverse to propagate gradients from outputs back to
+//! leaf variables.
+//!
+//! # Design
+//!
+//! Operations and their outputs are stored in two parallel lists
+//! (`ops` and `outputs`) indexed by the same tape position.  This
+//! avoids issues with storing compound structs inside generic `List[T]`
+//! containers and keeps the layout simple and cache-friendly.
+
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+
+// -------------------------------------------------------------------------
+// Operation-kind constants for BackpropOp variants that carry an op_kind.
+// -------------------------------------------------------------------------
+
+// BinaryArith op kinds
+/// Addition.
+pub const OP_ADD: I64 = 0
+/// Subtraction.
+pub const OP_SUB: I64 = 1
+/// Element-wise multiplication.
+pub const OP_MUL: I64 = 2
+/// Element-wise division.
+pub const OP_DIV: I64 = 3
+
+// Unary op kinds
+/// Negation.
+pub const OP_NEG: I64 = 10
+/// Exponential (e^x).
+pub const OP_EXP: I64 = 11
+/// Natural logarithm.
+pub const OP_LOG: I64 = 12
+/// Square root.
+pub const OP_SQRT: I64 = 13
+/// Rectified linear unit (max(0, x)).
+pub const OP_RELU: I64 = 14
+/// Sigmoid activation (1 / (1 + e^-x)).
+pub const OP_SIGMOID: I64 = 15
+/// Hyperbolic tangent.
+pub const OP_TANH: I64 = 16
+
+// Reduce op kinds
+/// Sum reduction.
+pub const OP_SUM: I64 = 20
+/// Mean reduction.
+pub const OP_MEAN: I64 = 21
+
+// -------------------------------------------------------------------------
+// BackpropOp — the operation recorded on the tape
+// -------------------------------------------------------------------------
+
+// BackpropOp is encoded as a flat tag + 3 operand I64s per tape entry.
+// See TAG_* constants below for variant tags and the encoding scheme
+// documented above the Tape type.
+
+// -------------------------------------------------------------------------
+// Tape — the global recording structure
+// -------------------------------------------------------------------------
+
+/// The computation tape that records operations for the backward pass.
+///
+/// Operations and their corresponding output tensors are stored in
+/// two parallel lists indexed by the same position.  Call `record()`
+/// to append a new entry and receive back the tape index, which is
+/// then stored on the resulting `Variable`.
+pub type Tape {
+    /// Recorded operations in forward-execution order.
+    ops: List[I64],
+    /// Flat-encoded operand data for each operation.
+    /// Each entry stores up to 3 I64 values at index
+    /// `tape_idx * 3 + 0/1/2`.
+    operands: List[I64],
+    /// Output tensors corresponding to each tape entry.
+    outputs: List[Tensor],
+    /// F64 auxiliary data for operations that need it (e.g. Pow exponent).
+    /// Indexed by tape position; entries that don't need it store 0.0.
+    f64_aux: List[F64],
+    /// Whether recording is currently enabled.
+    recording: Bool,
+}
+
+// -------------------------------------------------------------------------
+// Encoding scheme for ops + operands
+//
+// We store the BackpropOp as a (tag, field0, field1, field2) quad of I64
+// packed into the `ops` and `operands` lists.  The `ops` list stores just
+// the variant tag; `operands` stores 3 I64 values per entry at index
+// `tape_idx * 3 + 0/1/2`.
+//
+// Tag values:
+//   0 = Leaf
+//   1 = BinaryArith  → (op_kind, left_idx, right_idx)
+//   2 = Unary        → (op_kind, input_idx, 0)
+//   3 = Matmul       → (left_idx, right_idx, 0)
+//   4 = Reduce       → (op_kind, input_idx, 0)
+//   5 = Pow          → (input_idx, exponent_bits, 0)
+//   6 = Softmax      → (input_idx, dim, 0)
+//   7 = CrossEntropy → (preds_idx, targets_idx, 0)
+// -------------------------------------------------------------------------
+
+/// Tag constants for tape encoding.
+const TAG_LEAF: I64 = 0
+const TAG_BINARY_ARITH: I64 = 1
+const TAG_UNARY: I64 = 2
+const TAG_MATMUL: I64 = 3
+const TAG_REDUCE: I64 = 4
+const TAG_POW: I64 = 5
+const TAG_SOFTMAX: I64 = 6
+const TAG_CROSS_ENTROPY: I64 = 7
+
+impl Tape {
+    /// Create a new empty tape with recording enabled.
+    pub func new() -> Tape {
+        Tape {
+            ops: List[I64]::new(64),
+            operands: List[I64]::new(192),
+            outputs: List[Tensor]::new(64),
+            f64_aux: List[F64]::new(64),
+            recording: true,
+        }
+    }
+
+    /// Returns the number of entries on the tape.
+    pub func len(this) -> I64 {
+        this.ops.len()
+    }
+
+    /// Returns true if recording is enabled.
+    pub func is_recording(this) -> Bool {
+        this.recording
+    }
+
+    /// Enable recording of operations.
+    pub func enable(mut this) {
+        this.recording = true
+    }
+
+    /// Disable recording (e.g. during a no_grad section).
+    pub func disable(mut this) {
+        this.recording = false
+    }
+
+    /// Clear all entries from the tape for reuse.
+    pub func clear(mut this) {
+        this.ops.clear()
+        this.operands.clear()
+        this.outputs.clear()
+        this.f64_aux.clear()
+    }
+
+    // -----------------------------------------------------------------
+    // Recording helpers — one per BackpropOp variant
+    // -----------------------------------------------------------------
+
+    /// Record a leaf variable.  Returns the tape index.
+    pub func record_leaf(mut this, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_LEAF)
+        this.operands.push(0)
+        this.operands.push(0)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a binary arithmetic operation.  Returns the tape index.
+    pub func record_binary(mut this, op_kind: I64, left_idx: I64, right_idx: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_BINARY_ARITH)
+        this.operands.push(op_kind)
+        this.operands.push(left_idx)
+        this.operands.push(right_idx)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a unary operation.  Returns the tape index.
+    pub func record_unary(mut this, op_kind: I64, input_idx: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_UNARY)
+        this.operands.push(op_kind)
+        this.operands.push(input_idx)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a matrix multiplication.  Returns the tape index.
+    pub func record_matmul(mut this, left_idx: I64, right_idx: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_MATMUL)
+        this.operands.push(left_idx)
+        this.operands.push(right_idx)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a reduction operation.  Returns the tape index.
+    pub func record_reduce(mut this, op_kind: I64, input_idx: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_REDUCE)
+        this.operands.push(op_kind)
+        this.operands.push(input_idx)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a power operation with scalar exponent.  Returns the tape index.
+    /// The exponent is stored in the `f64_aux` list for lossless F64 retrieval.
+    pub func record_pow(mut this, input_idx: I64, exponent: F64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_POW)
+        this.operands.push(input_idx)
+        this.operands.push(0)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(exponent)
+        idx
+    }
+
+    /// Record a softmax operation.  Returns the tape index.
+    pub func record_softmax(mut this, input_idx: I64, dim: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_SOFTMAX)
+        this.operands.push(input_idx)
+        this.operands.push(dim)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    /// Record a cross-entropy loss operation.  Returns the tape index.
+    pub func record_cross_entropy(mut this, preds_idx: I64, targets_idx: I64, output: Tensor) -> I64 {
+        if not this.recording { return -1 as I64 }
+        let idx: I64 = this.ops.len()
+        this.ops.push(TAG_CROSS_ENTROPY)
+        this.operands.push(preds_idx)
+        this.operands.push(targets_idx)
+        this.operands.push(0)
+        this.outputs.push(output)
+        this.f64_aux.push(0.0)
+        idx
+    }
+
+    // -----------------------------------------------------------------
+    // Accessors
+    // -----------------------------------------------------------------
+
+    /// Returns the tag of the operation at the given tape index.
+    pub func get_tag(this, index: I64) -> I64 {
+        this.ops.get(index)
+    }
+
+    /// Returns the first operand field for the entry at `index`.
+    pub func get_operand0(this, index: I64) -> I64 {
+        this.operands.get(index * 3)
+    }
+
+    /// Returns the second operand field for the entry at `index`.
+    pub func get_operand1(this, index: I64) -> I64 {
+        this.operands.get(index * 3 + 1)
+    }
+
+    /// Returns the third operand field for the entry at `index`.
+    pub func get_operand2(this, index: I64) -> I64 {
+        this.operands.get(index * 3 + 2)
+    }
+
+    /// Retrieve the F64 exponent stored for a Pow entry.
+    /// Only valid when `get_tag(index) == TAG_POW`.
+    pub func get_pow_exponent(this, index: I64) -> F64 {
+        this.f64_aux.get(index)
+    }
+
+    /// Retrieve the F64 auxiliary value for any entry.
+    pub func get_f64_aux(this, index: I64) -> F64 {
+        this.f64_aux.get(index)
+    }
+
+    /// Returns the output tensor at the given tape index (by value).
+    pub func get_output(this, index: I64) -> Tensor {
+        this.outputs.get(index)
+    }
+
+    // -----------------------------------------------------------------
+    // Tag query helpers (avoid leaking tag constants to callers)
+    // -----------------------------------------------------------------
+
+    /// Returns true if the entry at `index` is a Leaf.
+    pub func is_leaf(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_LEAF
+    }
+
+    /// Returns true if the entry at `index` is a BinaryArith.
+    pub func is_binary(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_BINARY_ARITH
+    }
+
+    /// Returns true if the entry at `index` is a Unary operation.
+    pub func is_unary(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_UNARY
+    }
+
+    /// Returns true if the entry at `index` is a Matmul.
+    pub func is_matmul(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_MATMUL
+    }
+
+    /// Returns true if the entry at `index` is a Reduce operation.
+    pub func is_reduce(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_REDUCE
+    }
+
+    /// Returns true if the entry at `index` is a Pow operation.
+    pub func is_pow(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_POW
+    }
+
+    /// Returns true if the entry at `index` is a Softmax.
+    pub func is_softmax(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_SOFTMAX
+    }
+
+    /// Returns true if the entry at `index` is a CrossEntropy.
+    pub func is_cross_entropy(this, index: I64) -> Bool {
+        this.ops.get(index) == TAG_CROSS_ENTROPY
+    }
+}

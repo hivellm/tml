@@ -1,0 +1,138 @@
+//! Loss functions for neural network training.
+//!
+//! Each function takes prediction and target tensors of the same shape
+//! and returns a scalar (1-element) tensor representing the loss.
+
+use std::collections::List
+use std::math::{ln, abs, exp}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::init::{zeros, from_list_f64}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Create a scalar (1-element) F64 tensor holding `value`.
+func scalar_tensor(value: F64) -> Tensor {
+    let mut data = List[F64]::new(1)
+    data.push(value)
+    let mut dims = List[I64]::new(1)
+    dims.push(1)
+    from_list_f64(data, dims)
+}
+
+// ---------------------------------------------------------------------------
+// Mean Squared Error
+// ---------------------------------------------------------------------------
+
+/// Mean Squared Error loss: `mean((predictions - targets)^2)`.
+///
+/// Both tensors must have the same number of elements.
+pub func mse_loss(predictions: ref Tensor, targets: ref Tensor) -> Tensor {
+    let n: I64 = predictions.numel()
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        let diff: F64 = predictions.get_f64(i) - targets.get_f64(i)
+        total = total + diff * diff
+        i = i + 1
+    }
+    scalar_tensor(total / (n as F64))
+}
+
+// ---------------------------------------------------------------------------
+// Cross-Entropy
+// ---------------------------------------------------------------------------
+
+/// Cross-entropy loss for probability distributions.
+///
+/// `loss = -mean(sum_classes(targets * log(predictions + eps)))` per sample.
+///
+/// For soft labels (one-hot or probability targets) over `[batch, classes]`
+/// or `[classes]`.  A small epsilon (1e-12) prevents log(0).
+pub func cross_entropy_loss(predictions: ref Tensor, targets: ref Tensor) -> Tensor {
+    let n: I64 = predictions.numel()
+    let eps: F64 = 1e-12
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        let p: F64 = predictions.get_f64(i)
+        let t: F64 = targets.get_f64(i)
+        // Clamp p to avoid log(0).
+        let p_safe: F64 = p > eps ? p : eps
+        total = total - t * ln(p_safe)
+        i = i + 1
+    }
+    // If 2-D [batch, classes], total is sum over all elements.
+    // Divide by batch_size (dim 0) if rank >= 2, else by n.
+    let rank: I64 = predictions.rank()
+    let divisor: F64 = rank >= 2 ? (predictions.dim(0) as F64) : (n as F64)
+    scalar_tensor(total / divisor)
+}
+
+// ---------------------------------------------------------------------------
+// L1 Loss (Mean Absolute Error)
+// ---------------------------------------------------------------------------
+
+/// L1 (Mean Absolute Error) loss: `mean(|predictions - targets|)`.
+pub func l1_loss(predictions: ref Tensor, targets: ref Tensor) -> Tensor {
+    let n: I64 = predictions.numel()
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        let diff: F64 = predictions.get_f64(i) - targets.get_f64(i)
+        let abs_diff: F64 = diff > 0.0 ? diff : (0.0 - diff)
+        total = total + abs_diff
+        i = i + 1
+    }
+    scalar_tensor(total / (n as F64))
+}
+
+// ---------------------------------------------------------------------------
+// Binary Cross-Entropy
+// ---------------------------------------------------------------------------
+
+/// Binary cross-entropy loss: `-mean(y * log(p) + (1-y) * log(1-p))`.
+///
+/// Predictions should be in [0, 1] (e.g. sigmoid output).
+/// Targets should be 0 or 1.
+pub func bce_loss(predictions: ref Tensor, targets: ref Tensor) -> Tensor {
+    let n: I64 = predictions.numel()
+    let eps: F64 = 1e-12
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        let p: F64 = predictions.get_f64(i)
+        let y: F64 = targets.get_f64(i)
+        let p_safe: F64 = p > eps ? (p < (1.0 - eps) ? p : (1.0 - eps)) : eps
+        total = total - (y * ln(p_safe) + (1.0 - y) * ln(1.0 - p_safe))
+        i = i + 1
+    }
+    scalar_tensor(total / (n as F64))
+}
+
+// ---------------------------------------------------------------------------
+// Huber Loss (Smooth L1)
+// ---------------------------------------------------------------------------
+
+/// Huber loss (Smooth L1): quadratic for small errors, linear for large.
+///
+/// `loss = 0.5 * x^2  if |x| <= delta`
+/// `loss = delta * (|x| - 0.5 * delta)  otherwise`
+pub func huber_loss(predictions: ref Tensor, targets: ref Tensor, delta: F64) -> Tensor {
+    let n: I64 = predictions.numel()
+    let mut total: F64 = 0.0
+    let mut i: I64 = 0
+    loop (i < n) {
+        let diff: F64 = predictions.get_f64(i) - targets.get_f64(i)
+        let abs_diff: F64 = diff > 0.0 ? diff : (0.0 - diff)
+        if abs_diff <= delta {
+            total = total + 0.5 * diff * diff
+        } else {
+            total = total + delta * (abs_diff - 0.5 * delta)
+        }
+        i = i + 1
+    }
+    scalar_tensor(total / (n as F64))
+}

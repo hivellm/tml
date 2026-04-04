@@ -1,0 +1,138 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::optim::scheduler::{CosineAnnealing, LinearWarmup, StepLR}
+
+@test
+func test_linear_warmup_first_step() -> I32 {
+    // LinearWarmup: step() increments current_step then returns get_lr()
+    // base_lr=0.01, warmup_steps=10
+    // After 1st call: current_step=1, lr = 0.01 * (1/10) = 0.001
+    let mut warmup = LinearWarmup::new(0.01, 10)
+    let lr1: F64 = warmup.step()
+    let diff1: F64 = lr1 - 0.001
+    assert(diff1 > -0.0001 and diff1 < 0.0001, "warmup lr at step 1 should be ~0.001")
+    return 0
+}
+
+@test
+func test_linear_warmup_midpoint() -> I32 {
+    // After 5 calls: current_step=5, lr = 0.01 * (5/10) = 0.005
+    let mut warmup = LinearWarmup::new(0.01, 10)
+    let mut i: I64 = 0
+    loop (i < 4) {
+        warmup.step()
+        i = i + 1
+    }
+    let lr5: F64 = warmup.step()
+    let diff5: F64 = lr5 - 0.005
+    assert(diff5 > -0.0001 and diff5 < 0.0001, "warmup lr at step 5 should be ~0.005")
+    return 0
+}
+
+@test
+func test_linear_warmup_saturates() -> I32 {
+    // After warmup_steps calls, lr should equal base_lr and stay there
+    let base_lr: F64 = 0.02
+    let warmup_steps: I64 = 5
+    let mut warmup = LinearWarmup::new(base_lr, warmup_steps)
+    let mut i: I64 = 0
+    loop (i < warmup_steps) {
+        warmup.step()
+        i = i + 1
+    }
+    // One extra step beyond warmup — lr should still equal base_lr
+    let lr_extra: F64 = warmup.step()
+    let diff: F64 = lr_extra - base_lr
+    assert(diff > -0.0001 and diff < 0.0001, "warmup lr after saturation should equal base_lr")
+    return 0
+}
+
+@test
+func test_step_lr_initial() -> I32 {
+    // StepLR: first step → current_step=1, num_decays=0, lr=base_lr
+    let mut sched = StepLR::new(0.1, 5, 0.1)
+    let lr0: F64 = sched.step()
+    let d0: F64 = lr0 - 0.1
+    assert(d0 > -0.0001 and d0 < 0.0001, "step_lr at step 1 should be 0.1 (no decay yet)")
+    return 0
+}
+
+@test
+func test_step_lr_decays_at_step_size() -> I32 {
+    // After step_size=5 calls → current_step=5, num_decays=1, lr=0.1*0.1=0.01
+    let mut sched = StepLR::new(0.1, 5, 0.1)
+    let mut i: I64 = 0
+    loop (i < 4) {
+        sched.step()
+        i = i + 1
+    }
+    let lr5: F64 = sched.step()
+    let d5: F64 = lr5 - 0.01
+    assert(d5 > -0.0001 and d5 < 0.0001, "step_lr at step 5 should be 0.01 (one decay applied)")
+    return 0
+}
+
+@test
+func test_step_lr_double_decay() -> I32 {
+    // After step_size*2=10 calls → current_step=10, num_decays=2, lr=0.1*0.1*0.1=0.001
+    let mut sched = StepLR::new(0.1, 5, 0.1)
+    let mut i: I64 = 0
+    loop (i < 9) {
+        sched.step()
+        i = i + 1
+    }
+    let lr10: F64 = sched.step()
+    let d10: F64 = lr10 - 0.001
+    assert(d10 > -0.0001 and d10 < 0.0001, "step_lr at step 10 should be 0.001 (two decays applied)")
+    return 0
+}
+
+@test
+func test_cosine_annealing_starts_at_lr_max() -> I32 {
+    // CosineAnnealing: at step 0 (get_lr before any step()), lr = lr_max
+    // Because step() increments THEN calls get_lr. At step=0: cos(pi*0/T) = cos(0) = 1
+    // lr = lr_min + 0.5*(lr_max-lr_min)*(1+1) = lr_max
+    // Note: we call get_lr() directly without step() to check step=0
+    let sched = CosineAnnealing::new(0.1, 0.0, 100)
+    let lr0: F64 = sched.get_lr()
+    let diff: F64 = lr0 - 0.1
+    assert(diff > -0.001 and diff < 0.001, "cosine annealing get_lr at step 0 should equal lr_max")
+    return 0
+}
+
+@test
+func test_cosine_annealing_decreases_monotonically() -> I32 {
+    // With lr_min=0.0, lr_max=1.0, total_steps=10:
+    // lr should decrease from lr_max toward lr_min as steps increase
+    let mut sched = CosineAnnealing::new(1.0, 0.0, 10)
+    let mut prev_lr: F64 = sched.get_lr()
+    let mut i: I64 = 0
+    loop (i < 10) {
+        let cur_lr: F64 = sched.step()
+        assert(cur_lr <= prev_lr, "cosine annealing lr should not increase during descent phase")
+        prev_lr = cur_lr
+        i = i + 1
+    }
+    return 0
+}
+
+@test
+func test_cosine_annealing_ends_near_lr_min() -> I32 {
+    // After total_steps, lr should be close to lr_min
+    // step() only increments when current_step < total_steps, so after total_steps calls
+    // current_step == total_steps, get_lr returns lr_min + 0.5*(lr_max-lr_min)*(1+cos(pi))
+    //   = lr_min + 0.5*(lr_max-lr_min)*(1-1) = lr_min
+    let lr_min: F64 = 0.001
+    let lr_max: F64 = 0.1
+    let total: I64 = 10
+    let mut sched = CosineAnnealing::new(lr_max, lr_min, total)
+    let mut i: I64 = 0
+    loop (i < total) {
+        sched.step()
+        i = i + 1
+    }
+    let lr_end: F64 = sched.get_lr()
+    let diff: F64 = lr_end - lr_min
+    assert(diff > -0.0001 and diff < 0.0001, "cosine annealing lr at end should equal lr_min")
+    return 0
+}

@@ -1,0 +1,136 @@
+// Additional reshape and dimension manipulation tests for std::ia tensor module.
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::tensor::reshape
+
+/// Build the 2x3 test tensor [[1,2,3],[4,5,6]].
+func make_2x3() -> Tensor {
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    from_list_f64(data, dims)
+}
+
+@test
+func test_permute() -> I32 {
+    // permute([[1,2,3],[4,5,6]] shape [2,3], axes=[1,0])
+    // Same as transpose: shape [3,2], flat [1,4,2,5,3,6]
+    let t = make_2x3()
+    let mut axes = List[I64]::new(2)
+    axes.push(1)
+    axes.push(0)
+    let result = reshape::permute(ref t, axes)
+    when result {
+        Err(e) => assert(false, "permute should not fail for valid axes"),
+        Ok(r) => {
+            assert_eq(r.rank(), 2 as I64, "permuted rank should be 2")
+            assert_eq(r.dim(0), 3 as I64, "permuted dim 0 should be 3")
+            assert_eq(r.dim(1), 2 as I64, "permuted dim 1 should be 2")
+            // Expected flat: [1,4,2,5,3,6]
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 1.0
+            assert(d0 > -0.001 and d0 < 0.001, "permuted[0] should be 1.0")
+            let v1 = r.get_f64(1)
+            let d1 = v1 - 4.0
+            assert(d1 > -0.001 and d1 < 0.001, "permuted[1] should be 4.0")
+            let v2 = r.get_f64(2)
+            let d2 = v2 - 2.0
+            assert(d2 > -0.001 and d2 < 0.001, "permuted[2] should be 2.0")
+            let v3 = r.get_f64(3)
+            let d3 = v3 - 5.0
+            assert(d3 > -0.001 and d3 < 0.001, "permuted[3] should be 5.0")
+            let v4 = r.get_f64(4)
+            let d4 = v4 - 3.0
+            assert(d4 > -0.001 and d4 < 0.001, "permuted[4] should be 3.0")
+            let v5 = r.get_f64(5)
+            let d5 = v5 - 6.0
+            assert(d5 > -0.001 and d5 < 0.001, "permuted[5] should be 6.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_contiguous() -> I32 {
+    // contiguous copies data, verify values preserved
+    let t = make_2x3()
+    let r = reshape::contiguous(ref t)
+    assert_eq(r.numel(), 6 as I64, "contiguous should have 6 elements")
+    assert_eq(r.rank(), 2 as I64, "contiguous should preserve rank")
+    assert_eq(r.dim(0), 2 as I64, "contiguous dim 0 should be 2")
+    assert_eq(r.dim(1), 3 as I64, "contiguous dim 1 should be 3")
+    let v0 = r.get_f64(0)
+    let d0 = v0 - 1.0
+    assert(d0 > -0.001 and d0 < 0.001, "contiguous[0] should be 1.0")
+    let v5 = r.get_f64(5)
+    let d5 = v5 - 6.0
+    assert(d5 > -0.001 and d5 < 0.001, "contiguous[5] should be 6.0")
+    return 0
+}
+
+@test
+func test_expand() -> I32 {
+    // expand([1,3] tensor [[1,2,3]], new_dims=[3,3]) → [[1,2,3],[1,2,3],[1,2,3]]
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(1)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+
+    let mut new_dims = List[I64]::new(2)
+    new_dims.push(3)
+    new_dims.push(3)
+    let result = reshape::expand(ref t, new_dims)
+    when result {
+        Err(e) => assert(false, "expand should not fail for compatible shapes"),
+        Ok(r) => {
+            assert_eq(r.numel(), 9 as I64, "expanded numel should be 9")
+            assert_eq(r.rank(), 2 as I64, "expanded rank should be 2")
+            assert_eq(r.dim(0), 3 as I64, "expanded dim 0 should be 3")
+            assert_eq(r.dim(1), 3 as I64, "expanded dim 1 should be 3")
+            // All three rows should be [1,2,3]
+            let v0 = r.get_f64(0)
+            let d0 = v0 - 1.0
+            assert(d0 > -0.001 and d0 < 0.001, "expanded[0] should be 1.0")
+            let v3 = r.get_f64(3)
+            let d3 = v3 - 1.0
+            assert(d3 > -0.001 and d3 < 0.001, "expanded[3] should be 1.0 (second row)")
+            let v6 = r.get_f64(6)
+            let d6 = v6 - 1.0
+            assert(d6 > -0.001 and d6 < 0.001, "expanded[6] should be 1.0 (third row)")
+            let v4 = r.get_f64(4)
+            let d4 = v4 - 2.0
+            assert(d4 > -0.001 and d4 < 0.001, "expanded[4] should be 2.0 (second row, second col)")
+        },
+    }
+    return 0
+}
+
+@test
+func test_reshape_error() -> I32 {
+    // reshape [2,3] (numel=6) to [2,2] (numel=4) should fail with ShapeMismatch
+    let t = make_2x3()
+    let mut bad_dims = List[I64]::new(2)
+    bad_dims.push(2)
+    bad_dims.push(2)
+    let result = reshape::reshape(ref t, bad_dims)
+    when result {
+        Ok(r) => assert(false, "reshape with mismatched numel should have failed"),
+        Err(e) => {
+            // Error is expected — test passes
+            assert(true, "reshape correctly returned error for numel mismatch")
+        },
+    }
+    return 0
+}

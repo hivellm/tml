@@ -1,0 +1,112 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::nn::activation::{relu, sigmoid, softmax, gelu}
+
+@test
+func test_relu() -> I32 {
+    // relu([-2, -1, 0, 1, 2]) -> [0, 0, 0, 1, 2]
+    let mut data = List[F64]::new(5)
+    data.push(-2.0)
+    data.push(-1.0)
+    data.push(0.0)
+    data.push(1.0)
+    data.push(2.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(5)
+    let input = from_list_f64(data, dims)
+    let out = relu(ref input)
+    assert_eq(out.numel(), 5, "relu should preserve numel")
+    let v0: F64 = out.get_f64(0)
+    assert(v0 > -0.01 and v0 < 0.01, "relu(-2) should be 0")
+    let v1: F64 = out.get_f64(1)
+    assert(v1 > -0.01 and v1 < 0.01, "relu(-1) should be 0")
+    let v3: F64 = out.get_f64(3)
+    let d3: F64 = v3 - 1.0
+    assert(d3 > -0.01 and d3 < 0.01, "relu(1) should be 1")
+    let v4: F64 = out.get_f64(4)
+    let d4: F64 = v4 - 2.0
+    assert(d4 > -0.01 and d4 < 0.01, "relu(2) should be 2")
+    return 0
+}
+
+@test
+func test_sigmoid() -> I32 {
+    // sigmoid(0) = 0.5
+    let mut data = List[F64]::new(1)
+    data.push(0.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(1)
+    let input = from_list_f64(data, dims)
+    let out = sigmoid(ref input)
+    let v: F64 = out.get_f64(0)
+    let diff: F64 = v - 0.5
+    assert(diff > -0.01 and diff < 0.01, "sigmoid(0) should be 0.5")
+
+    // sigmoid(100) ~ 1.0
+    let mut data2 = List[F64]::new(1)
+    data2.push(100.0)
+    let mut dims2 = List[I64]::new(1)
+    dims2.push(1)
+    let input2 = from_list_f64(data2, dims2)
+    let out2 = sigmoid(ref input2)
+    let v2: F64 = out2.get_f64(0)
+    assert(v2 > 0.999, "sigmoid(100) should be close to 1.0")
+    return 0
+}
+
+@test
+func test_softmax() -> I32 {
+    // softmax([1,1,1]) -> [~0.333, ~0.333, ~0.333]
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(1.0)
+    data.push(1.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let input = from_list_f64(data, dims)
+    let out = softmax(ref input)
+    let v0: F64 = out.get_f64(0)
+    let d0: F64 = v0 - 0.3333
+    assert(d0 > -0.01 and d0 < 0.01, "softmax([1,1,1])[0] should be ~0.333")
+    let v1: F64 = out.get_f64(1)
+    let d1: F64 = v1 - 0.3333
+    assert(d1 > -0.01 and d1 < 0.01, "softmax([1,1,1])[1] should be ~0.333")
+
+    // softmax([0,0,100]) -> last element ~1.0
+    let mut data2 = List[F64]::new(3)
+    data2.push(0.0)
+    data2.push(0.0)
+    data2.push(100.0)
+    let mut dims2 = List[I64]::new(1)
+    dims2.push(3)
+    let input2 = from_list_f64(data2, dims2)
+    let out2 = softmax(ref input2)
+    let vlast: F64 = out2.get_f64(2)
+    assert(vlast > 0.99, "softmax([0,0,100])[2] should be ~1.0")
+    return 0
+}
+
+@test
+func test_gelu() -> I32 {
+    // gelu(0) ~ 0.0
+    let mut data = List[F64]::new(1)
+    data.push(0.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(1)
+    let input = from_list_f64(data, dims)
+    let out = gelu(ref input)
+    let v0: F64 = out.get_f64(0)
+    assert(v0 > -0.01 and v0 < 0.01, "gelu(0) should be ~0.0")
+
+    // gelu(1) > 0.0
+    let mut data2 = List[F64]::new(1)
+    data2.push(1.0)
+    let mut dims2 = List[I64]::new(1)
+    dims2.push(1)
+    let input2 = from_list_f64(data2, dims2)
+    let out2 = gelu(ref input2)
+    let v1: F64 = out2.get_f64(0)
+    assert(v1 > 0.0, "gelu(1) should be > 0.0")
+    return 0
+}

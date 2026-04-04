@@ -1,0 +1,27 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::nn::linear::Linear
+
+@test
+func test_linear_shape() -> I32 {
+    let linear = Linear::new(3, 2)
+    let mut data = List[F64]::new(3)
+    data.push(1.0)
+    data.push(1.0)
+    data.push(1.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(1)
+    dims.push(3)
+    let input = from_list_f64(data, dims)
+    let result = linear.forward(ref input)
+    when result {
+        Ok(out) => {
+            assert_eq(out.rank(), 2, "linear output rank should be 2")
+            assert_eq(out.dim(0), 1, "linear output dim 0 should be 1")
+            assert_eq(out.dim(1), 2, "linear output dim 1 should be 2")
+        },
+        Err(e) => assert(false, "linear forward should not fail"),
+    }
+    return 0
+}

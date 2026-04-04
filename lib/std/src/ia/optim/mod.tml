@@ -1,0 +1,24 @@
+//! Optimizers and learning rate schedulers for training.
+//!
+//! # Modules
+//!
+//! | Module      | Description                                      |
+//! |-------------|--------------------------------------------------|
+//! | `optimizer` | [`ParamGroup`], gradient clipping utilities       |
+//! | `sgd`       | [`SGD`] — stochastic gradient descent             |
+//! | `adam`       | [`Adam`] — Adam and AdamW optimizers              |
+//! | `scheduler` | [`CosineAnnealing`], [`LinearWarmup`], [`StepLR`] |
+
+pub mod optimizer
+pub mod sgd
+pub mod adam
+pub mod scheduler
+
+pub use std::ia::optim::optimizer::ParamGroup
+pub use std::ia::optim::optimizer::clip_grad_value
+pub use std::ia::optim::optimizer::clip_grad_norm
+pub use std::ia::optim::sgd::SGD
+pub use std::ia::optim::adam::Adam
+pub use std::ia::optim::scheduler::CosineAnnealing
+pub use std::ia::optim::scheduler::LinearWarmup
+pub use std::ia::optim::scheduler::StepLR

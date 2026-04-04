@@ -1,0 +1,100 @@
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::init::from_list_f64
+use std::ia::train::dataset::Dataset
+use std::ia::train::dataloader::DataLoader
+
+/// Helper to build a dataset with n scalar samples (value = index).
+func make_dataset(n: I64) -> Dataset {
+    let mut ds = Dataset::new()
+    let mut i: I64 = 0
+    loop (i < n) {
+        let mut d: List[F64] = List[F64]::new(1)
+        d.push(i as F64)
+        let mut dims: List[I64] = List[I64]::new(1)
+        dims.push(1 as I64)
+        let inp = from_list_f64(d, dims)
+
+        let mut td: List[F64] = List[F64]::new(1)
+        td.push(0.0)
+        let mut tdims: List[I64] = List[I64]::new(1)
+        tdims.push(1 as I64)
+        let tgt = from_list_f64(td, tdims)
+
+        ds.add(inp, tgt)
+        i = i + 1
+    }
+    return ds
+}
+
+@test
+func test_dataloader_num_batches() -> I32 {
+    // 5 samples, batch_size=2 => 3 batches (ceil(5/2))
+    let ds = make_dataset(5 as I64)
+    let dl = DataLoader::new(ds, 2 as I64, false)
+    assert_eq(dl.num_batches(), 3 as I64, "5 samples / batch 2 => 3 batches")
+    return 0
+}
+
+@test
+func test_dataloader_num_batches_exact() -> I32 {
+    // 6 samples, batch_size=3 => exactly 2 batches
+    let ds = make_dataset(6 as I64)
+    let dl = DataLoader::new(ds, 3 as I64, false)
+    assert_eq(dl.num_batches(), 2 as I64, "6 samples / batch 3 => 2 batches")
+    return 0
+}
+
+@test
+func test_dataloader_has_next_and_iterate() -> I32 {
+    // 3 samples, batch_size=2 => 2 batches
+    let ds = make_dataset(3 as I64)
+    let mut dl = DataLoader::new(ds, 2 as I64, false)
+    assert(dl.has_next(), "should have first batch")
+
+    // First batch: 2 inputs
+    let inputs1 = dl.next_inputs()
+    assert_eq(inputs1.len(), 2 as I64, "first batch should have 2 inputs")
+    let targets1 = dl.next_targets()
+    assert_eq(targets1.len(), 2 as I64, "first batch targets should have 2 items")
+
+    assert(dl.has_next(), "should have second batch")
+
+    // Second batch: 1 input (partial)
+    let inputs2 = dl.next_inputs()
+    assert_eq(inputs2.len(), 1 as I64, "second batch should have 1 input")
+    let targets2 = dl.next_targets()
+    assert_eq(targets2.len(), 1 as I64, "second batch targets should have 1 item")
+
+    assert(not dl.has_next(), "no more batches after second")
+    return 0
+}
+
+@test
+func test_dataloader_reset() -> I32 {
+    let ds = make_dataset(3 as I64)
+    let mut dl = DataLoader::new(ds, 10 as I64, false)
+
+    assert(dl.has_next(), "should have batches initially")
+
+    // Consume all
+    let _inp = dl.next_inputs()
+    let _tgt = dl.next_targets()
+
+    assert(not dl.has_next(), "should have no more after full consume")
+
+    dl.reset()
+    assert(dl.has_next(), "should have batches after reset")
+
+    return 0
+}
+
+@test
+func test_dataloader_single_batch() -> I32 {
+    // batch_size larger than dataset: only 1 batch with all samples
+    let ds = make_dataset(4 as I64)
+    let dl = DataLoader::new(ds, 100 as I64, false)
+    assert_eq(dl.num_batches(), 1 as I64, "all samples fit in 1 batch")
+    return 0
+}

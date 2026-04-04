@@ -1,0 +1,109 @@
+//! Variable — a tensor wrapper that tracks computation for automatic differentiation.
+//!
+//! A Variable wraps a Tensor and records whether it requires gradient
+//! computation.  When operations are performed on Variables while a Tape
+//! is recording, the operation is logged so that `backward()` can later
+//! traverse the computation graph in reverse to compute gradients.
+
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::shape::Shape
+
+/// A tensor that participates in automatic differentiation.
+///
+/// Variables track their creation operation so that gradients can be
+/// computed by traversing the computation graph in reverse.
+pub type Variable {
+    /// The underlying tensor data.
+    data: Tensor,
+    /// Whether this variable requires gradient computation.
+    requires_grad: Bool,
+    /// Index into the global tape (-1 if not recorded, or tape index).
+    tape_index: I64,
+}
+
+impl Variable {
+    /// Create a new variable from a tensor.  Not recorded on the tape.
+    pub func new(data: Tensor, requires_grad: Bool) -> Variable {
+        Variable {
+            data: data,
+            requires_grad: requires_grad,
+            tape_index: -1 as I64,
+        }
+    }
+
+    /// Create a leaf variable that requires gradient computation.
+    /// Leaf variables are inputs to a computation graph (e.g. model parameters).
+    pub func leaf(data: Tensor) -> Variable {
+        Variable {
+            data: data,
+            requires_grad: true,
+            tape_index: -1 as I64,
+        }
+    }
+
+    /// Create a constant variable that does not require gradient computation.
+    /// Constants participate in forward computation but do not accumulate gradients.
+    pub func constant(data: Tensor) -> Variable {
+        Variable {
+            data: data,
+            requires_grad: false,
+            tape_index: -1 as I64,
+        }
+    }
+
+    /// Returns a reference to the underlying tensor data.
+    pub func data(this) -> ref Tensor {
+        ref this.data
+    }
+
+    /// Returns whether this variable requires gradient computation.
+    pub func requires_grad(this) -> Bool {
+        this.requires_grad
+    }
+
+    /// Returns the tape index (-1 if this is a detached leaf).
+    pub func tape_index(this) -> I64 {
+        this.tape_index
+    }
+
+    /// Returns a reference to the shape of the underlying tensor.
+    pub func shape(this) -> ref Shape {
+        this.data.shape()
+    }
+
+    /// Returns the total number of elements in the underlying tensor.
+    pub func numel(this) -> I64 {
+        this.data.numel()
+    }
+
+    /// Returns the number of dimensions (rank) of the underlying tensor.
+    pub func rank(this) -> I64 {
+        this.data.rank()
+    }
+
+    /// Gets the element at flat index `i` as F64.
+    pub func get_f64(this, i: I64) -> F64 {
+        this.data.get_f64(i)
+    }
+
+    /// Creates a detached copy of this variable (no gradient tracking).
+    /// The returned variable shares no tape connection and has
+    /// `requires_grad` set to false.
+    pub func detach(this) -> Variable {
+        Variable {
+            data: this.data,
+            requires_grad: false,
+            tape_index: -1 as I64,
+        }
+    }
+
+    /// Returns true if this variable is a leaf (not produced by a tape operation).
+    pub func is_leaf(this) -> Bool {
+        this.tape_index == -1 as I64
+    }
+
+    /// Returns true if this variable is recorded on a tape.
+    pub func is_tracked(this) -> Bool {
+        this.tape_index >= 0
+    }
+}

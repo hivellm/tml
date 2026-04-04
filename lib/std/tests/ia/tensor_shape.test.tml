@@ -1,0 +1,153 @@
+// Tests for Shape, Layout, and broadcast_shape from std::ia::tensor::shape
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::shape::{Shape, Layout, broadcast_shape}
+
+@test
+func test_shape_basic() -> I32 {
+    // Shape::new([2,3,4]), rank=3, dim(0)=2, dim(1)=3, dim(2)=4, numel=24
+    let mut dims = List[I64]::new(3)
+    dims.push(2)
+    dims.push(3)
+    dims.push(4)
+    let s = Shape::new(dims)
+    assert_eq(s.rank(), 3, "shape [2,3,4] should have rank 3")
+    assert_eq(s.dim(0), 2, "shape dim 0 should be 2")
+    assert_eq(s.dim(1), 3, "shape dim 1 should be 3")
+    assert_eq(s.dim(2), 4, "shape dim 2 should be 4")
+    assert_eq(s.numel(), 24, "shape [2,3,4] numel should be 24")
+    return 0
+}
+
+@test
+func test_shape_scalar() -> I32 {
+    // Shape::new([]) is_scalar=true, numel=1
+    let dims = List[I64]::new(0)
+    let s = Shape::new(dims)
+    assert(s.is_scalar(), "empty shape should be scalar")
+    assert_eq(s.numel(), 1, "scalar shape numel should be 1")
+    assert_eq(s.rank(), 0, "scalar shape rank should be 0")
+    return 0
+}
+
+@test
+func test_contiguous_strides() -> I32 {
+    // Shape [2,3,4] → strides [12,4,1]
+    let mut dims = List[I64]::new(3)
+    dims.push(2)
+    dims.push(3)
+    dims.push(4)
+    let s = Shape::new(dims)
+    let strides = s.contiguous_strides()
+    assert_eq(strides.get(0), 12, "stride[0] should be 12 for shape [2,3,4]")
+    assert_eq(strides.get(1), 4, "stride[1] should be 4 for shape [2,3,4]")
+    assert_eq(strides.get(2), 1, "stride[2] should be 1 for shape [2,3,4]")
+    return 0
+}
+
+@test
+func test_layout_contiguous() -> I32 {
+    // Layout::contiguous(shape), is_contiguous=true
+    let mut dims = List[I64]::new(2)
+    dims.push(3)
+    dims.push(4)
+    let s = Shape::new(dims)
+    let layout = Layout::contiguous(s)
+    assert(layout.is_contiguous(), "contiguous layout should report is_contiguous=true")
+    return 0
+}
+
+@test
+func test_broadcast_same() -> I32 {
+    // broadcast_shape([2,3], [2,3]) → Ok([2,3])
+    let mut dims_a = List[I64]::new(2)
+    dims_a.push(2)
+    dims_a.push(3)
+    let sa = Shape::new(dims_a)
+
+    let mut dims_b = List[I64]::new(2)
+    dims_b.push(2)
+    dims_b.push(3)
+    let sb = Shape::new(dims_b)
+
+    let result = broadcast_shape(ref sa, ref sb)
+    when result {
+        Ok(out) => {
+            assert_eq(out.rank(), 2, "broadcast same-shape should have rank 2")
+            assert_eq(out.dim(0), 2, "broadcast same-shape dim 0 should be 2")
+            assert_eq(out.dim(1), 3, "broadcast same-shape dim 1 should be 3")
+        },
+        Err(e) => assert(false, "broadcast of same shapes should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_broadcast_extend() -> I32 {
+    // broadcast_shape([3], [2,3]) → Ok([2,3])
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let sa = Shape::new(dims_a)
+
+    let mut dims_b = List[I64]::new(2)
+    dims_b.push(2)
+    dims_b.push(3)
+    let sb = Shape::new(dims_b)
+
+    let result = broadcast_shape(ref sa, ref sb)
+    when result {
+        Ok(out) => {
+            assert_eq(out.rank(), 2, "broadcast extend should have rank 2")
+            assert_eq(out.dim(0), 2, "broadcast extend dim 0 should be 2")
+            assert_eq(out.dim(1), 3, "broadcast extend dim 1 should be 3")
+        },
+        Err(e) => assert(false, "broadcast extend should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_broadcast_ones() -> I32 {
+    // broadcast_shape([1,3], [2,1]) → Ok([2,3])
+    let mut dims_a = List[I64]::new(2)
+    dims_a.push(1)
+    dims_a.push(3)
+    let sa = Shape::new(dims_a)
+
+    let mut dims_b = List[I64]::new(2)
+    dims_b.push(2)
+    dims_b.push(1)
+    let sb = Shape::new(dims_b)
+
+    let result = broadcast_shape(ref sa, ref sb)
+    when result {
+        Ok(out) => {
+            assert_eq(out.rank(), 2, "broadcast ones should have rank 2")
+            assert_eq(out.dim(0), 2, "broadcast ones dim 0 should be 2")
+            assert_eq(out.dim(1), 3, "broadcast ones dim 1 should be 3")
+        },
+        Err(e) => assert(false, "broadcast with ones should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_broadcast_error() -> I32 {
+    // broadcast_shape([2,3], [4,3]) → Err (incompatible dims)
+    let mut dims_a = List[I64]::new(2)
+    dims_a.push(2)
+    dims_a.push(3)
+    let sa = Shape::new(dims_a)
+
+    let mut dims_b = List[I64]::new(2)
+    dims_b.push(4)
+    dims_b.push(3)
+    let sb = Shape::new(dims_b)
+
+    let result = broadcast_shape(ref sa, ref sb)
+    when result {
+        Ok(out) => assert(false, "broadcast of [2,3] and [4,3] should fail"),
+        Err(e) => assert(true, "broadcast error expected for incompatible shapes"),
+    }
+    return 0
+}
