@@ -9,8 +9,10 @@
       ]
     },
     "tml": {
-      "type": "http",
-      "url": "http://localhost:25710/mcp"
+      "type": "stdio",
+      "command": "f:\\Node\\hivellm\\tml\\build\\debug\\bin\\tml_daemon.exe",
+      "args": [],
+      "env": {}
     }
   }
 }
