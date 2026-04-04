@@ -384,19 +384,10 @@ void McpServer::process_request(const json::JsonRpcRequest& request) {
     } else if (request.method == "tools/list") {
         send_response(handle_tools_list(std::move(id)));
     } else if (request.method == "tools/call") {
-        // Dispatch to worker thread — main stdin loop stays responsive.
-        // If the tool hangs, it times out inside handle_tools_call and the
-        // worker thread eventually returns; stdin reading is never blocked.
+        // Process synchronously to avoid thread lifecycle issues.
+        // The tool handler itself uses std::async with timeout internally.
         auto params = request.params.has_value() ? request.params->clone() : json::JsonValue();
-        active_workers_.fetch_add(1);
-        std::thread([this, params = std::move(params), id = std::move(id)]() mutable {
-            send_response(handle_tools_call(std::move(params), std::move(id)));
-            {
-                std::lock_guard<std::mutex> lock(workers_mutex_);
-                active_workers_.fetch_sub(1);
-            }
-            workers_cv_.notify_all();
-        }).detach();
+        send_response(handle_tools_call(std::move(params), std::move(id)));
     } else {
         send_response(json::JsonRpcResponse::failure(
             json::JsonRpcError::from_code(json::JsonRpcErrorCode::MethodNotFound), std::move(id)));
@@ -515,41 +506,16 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
         }
     }
 
-    // Run tool handler in an inner thread with a hard timeout.
-    // This prevents any tool from hanging the worker thread indefinitely.
-    // The worker thread was already dispatched by process_request, so the
-    // main stdin loop is never blocked regardless of what happens here.
-    constexpr int TOOL_TIMEOUT_S = 300;
-
-    auto promise = std::make_shared<std::promise<ToolResult>>();
-    auto future = promise->get_future();
-    auto handler_fn = it->second; // copy handler for thread capture
-
-    std::thread([promise, handler_fn, args = std::move(args)]() mutable {
-        try {
-            promise->set_value(handler_fn(args));
-        } catch (const std::exception& e) {
-            promise->set_value(ToolResult::error(e.what()));
-        } catch (...) {
-            promise->set_value(ToolResult::error("Unknown exception in tool handler"));
-        }
-    }).detach();
-
+    // Run tool handler directly (synchronous — no worker threads).
     auto start = std::chrono::steady_clock::now();
     ToolResult result;
 
-    if (future.wait_for(std::chrono::seconds(TOOL_TIMEOUT_S)) == std::future_status::timeout) {
-        result = ToolResult::error("Tool '" + tool_name + "' timed out after " +
-                                   std::to_string(TOOL_TIMEOUT_S) + "s");
-        log("Tool timed out: " + tool_name);
-    } else {
-        try {
-            result = future.get();
-        } catch (const std::exception& e) {
-            result = ToolResult::error(e.what());
-        } catch (...) {
-            result = ToolResult::error("Unknown exception in tool '" + tool_name + "'");
-        }
+    try {
+        result = it->second(args);
+    } catch (const std::exception& e) {
+        result = ToolResult::error(e.what());
+    } catch (...) {
+        result = ToolResult::error("Unknown exception in tool '" + tool_name + "'");
     }
 
     auto elapsed_ms = static_cast<int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -565,7 +531,16 @@ auto McpServer::handle_tools_call(json::JsonValue params, json::JsonValue id)
         }
     }
 
-    log_tool_call(tool_name, params_json, result.is_error, elapsed_ms, result_text);
+    // Truncate result_text to avoid buffer issues
+    if (result_text.size() > 4096) {
+        result_text.resize(4096);
+    }
+    // Wrap in try/catch — init_call_logger does filesystem operations that can crash
+    try {
+        log_tool_call(tool_name, params_json, result.is_error, elapsed_ms, result_text);
+    } catch (...) {
+        // Silently ignore logging failures — don't crash the server
+    }
     return json::JsonRpcResponse::success(result.to_json(), std::move(id));
 }
 
