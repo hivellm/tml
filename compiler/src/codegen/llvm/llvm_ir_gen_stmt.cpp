@@ -509,113 +509,197 @@ void LLVMIRGen::gen_let_else_stmt(const parser::LetElseStmt& let_else) {
         const auto& enum_pat = let_else.pattern->as<parser::EnumPattern>();
         std::string variant_name = enum_pat.path.segments.back();
 
-        // Get pointer to scrutinee
-        std::string scrutinee_ptr;
-        if (last_expr_type_ == "ptr") {
-            scrutinee_ptr = scrutinee;
-        } else {
-            scrutinee_ptr = fresh_reg();
-            emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
-            emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+        // Detect nullable Maybe optimization: Maybe[Str], Maybe[ref T], etc.
+        // are represented as bare pointers (null = Nothing, non-null = Just).
+        // This matches the detection in when.cpp (gen_when_expr).
+        bool is_nullable_maybe = false;
+        if (scrutinee_type == "ptr" && scrutinee_semantic &&
+            scrutinee_semantic->is<types::NamedType>() &&
+            scrutinee_semantic->as<types::NamedType>().name == "Maybe") {
+            is_nullable_maybe = true;
         }
 
-        // Extract tag
-        std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
-                  scrutinee_ptr + ", i32 0, i32 0");
-        std::string tag = fresh_reg();
-        emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+        if (is_nullable_maybe) {
+            // Nullable pointer optimization path.
+            // Discriminant: null = Nothing (tag 1), non-null = Just (tag 0).
+            std::string is_null = fresh_reg();
+            emit_line("  " + is_null + " = icmp eq ptr " + scrutinee + ", null");
+            std::string tag = fresh_reg();
+            emit_line("  " + tag + " = zext i1 " + is_null + " to i32");
 
-        // Find variant index
-        int variant_tag = -1;
-        std::string scrutinee_enum_name;
-        if (scrutinee_type.starts_with("%struct.")) {
-            scrutinee_enum_name = scrutinee_type.substr(8);
-        }
-
-        if (!scrutinee_enum_name.empty()) {
-            std::string key = scrutinee_enum_name + "::" + variant_name;
-            auto it = enum_variants_.find(key);
-            if (it != enum_variants_.end()) {
-                variant_tag = it->second;
-            }
-        }
-
-        // Fallback to env lookup
-        if (variant_tag < 0) {
-            for (const auto& [enum_name, enum_def] : env_.all_enums()) {
-                for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
-                    if (enum_def.variants[v_idx].first == variant_name) {
-                        variant_tag = static_cast<int>(v_idx);
+            // Find variant tag (Just=0, Nothing=1)
+            int variant_tag = -1;
+            if (variant_name == "Just")
+                variant_tag = 0;
+            else if (variant_name == "Nothing")
+                variant_tag = 1;
+            else {
+                // Fallback to env lookup
+                for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+                    for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                        if (enum_def.variants[v_idx].first == variant_name) {
+                            variant_tag = static_cast<int>(v_idx);
+                            break;
+                        }
+                    }
+                    if (variant_tag >= 0)
                         break;
-                    }
-                }
-                if (variant_tag >= 0)
-                    break;
-            }
-        }
-
-        // Compare tag and branch
-        if (variant_tag >= 0) {
-            std::string cmp = fresh_reg();
-            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
-            emit_line("  br i1 " + cmp + ", label %" + label_match + ", label %" + label_else);
-        } else {
-            emit_line("  br label %" + label_else);
-        }
-
-        // Match block - bind pattern variables
-        emit_line(label_match + ":");
-        block_terminated_ = false;
-
-        if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
-            std::string payload_ptr = fresh_reg();
-            emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
-                      ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
-
-            // Get payload type from semantic info
-            types::TypePtr payload_type = nullptr;
-            if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
-                const auto& named = scrutinee_semantic->as<types::NamedType>();
-                if (named.name == "Outcome" && named.type_args.size() >= 2) {
-                    if (variant_name == "Ok")
-                        payload_type = named.type_args[0];
-                    else if (variant_name == "Err")
-                        payload_type = named.type_args[1];
-                } else if (named.name == "Maybe" && !named.type_args.empty()) {
-                    if (variant_name == "Just")
-                        payload_type = named.type_args[0];
                 }
             }
 
-            // Bind first payload element
-            if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
-                const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
-                std::string bound_type =
-                    payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
+            // Compare tag and branch
+            if (variant_tag >= 0) {
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
+                          std::to_string(variant_tag));
+                emit_line("  br i1 " + cmp + ", label %" + label_match + ", label %" + label_else);
+            } else {
+                emit_line("  br label %" + label_else);
+            }
 
-                if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
-                    // Struct/tuple: variable is pointer to payload
-                    locals_[ident.name] =
-                        VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
-                } else {
-                    // Primitive: load and allocate
-                    std::string payload_raw = fresh_reg();
-                    emit_line("  " + payload_raw + " = load i64, ptr " + payload_ptr);
+            // Match block - bind pattern variables
+            emit_line(label_match + ":");
+            block_terminated_ = false;
 
-                    std::string payload_val = payload_raw;
-                    // Truncate if needed (i64 -> i32)
-                    if (bound_type == "i32") {
-                        std::string trunc = fresh_reg();
-                        emit_line("  " + trunc + " = trunc i64 " + payload_raw + " to i32");
-                        payload_val = trunc;
+            if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+                // For nullable Maybe, the payload IS the pointer itself (scrutinee).
+                // Get payload type from semantic info.
+                types::TypePtr payload_type = nullptr;
+                if (scrutinee_semantic->is<types::NamedType>()) {
+                    const auto& named = scrutinee_semantic->as<types::NamedType>();
+                    if (named.name == "Maybe" && !named.type_args.empty() &&
+                        variant_name == "Just") {
+                        payload_type = named.type_args[0];
                     }
+                }
 
+                if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                    const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
+                    std::string bound_type =
+                        payload_type ? llvm_type_from_semantic(payload_type, true) : "ptr";
+
+                    // For nullable Maybe, the scrutinee ptr IS the payload value.
+                    // Store it in an alloca so the variable has an address.
                     std::string var_alloca = fresh_reg();
                     emit_line("  " + var_alloca + " = alloca " + bound_type);
-                    emit_line("  store " + bound_type + " " + payload_val + ", ptr " + var_alloca);
+                    emit_line("  store " + bound_type + " " + scrutinee + ", ptr " + var_alloca);
                     locals_[ident.name] =
                         VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
+                }
+            }
+        } else {
+            // Non-nullable enum path (standard struct-based enum representation).
+
+            // Get pointer to scrutinee
+            std::string scrutinee_ptr;
+            if (last_expr_type_ == "ptr") {
+                scrutinee_ptr = scrutinee;
+            } else {
+                scrutinee_ptr = fresh_reg();
+                emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+                emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+            }
+
+            // Extract tag
+            std::string tag_ptr = fresh_reg();
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+                      scrutinee_ptr + ", i32 0, i32 0");
+            std::string tag = fresh_reg();
+            emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+
+            // Find variant index
+            int variant_tag = -1;
+            std::string scrutinee_enum_name;
+            if (scrutinee_type.starts_with("%struct.")) {
+                scrutinee_enum_name = scrutinee_type.substr(8);
+            }
+
+            if (!scrutinee_enum_name.empty()) {
+                std::string key = scrutinee_enum_name + "::" + variant_name;
+                auto it = enum_variants_.find(key);
+                if (it != enum_variants_.end()) {
+                    variant_tag = it->second;
+                }
+            }
+
+            // Fallback to env lookup
+            if (variant_tag < 0) {
+                for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+                    for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                        if (enum_def.variants[v_idx].first == variant_name) {
+                            variant_tag = static_cast<int>(v_idx);
+                            break;
+                        }
+                    }
+                    if (variant_tag >= 0)
+                        break;
+                }
+            }
+
+            // Compare tag and branch
+            if (variant_tag >= 0) {
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
+                          std::to_string(variant_tag));
+                emit_line("  br i1 " + cmp + ", label %" + label_match + ", label %" + label_else);
+            } else {
+                emit_line("  br label %" + label_else);
+            }
+
+            // Match block - bind pattern variables
+            emit_line(label_match + ":");
+            block_terminated_ = false;
+
+            if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+                std::string payload_ptr = fresh_reg();
+                emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
+                          ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+
+                // Get payload type from semantic info
+                types::TypePtr payload_type = nullptr;
+                if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                    const auto& named = scrutinee_semantic->as<types::NamedType>();
+                    if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                        if (variant_name == "Ok")
+                            payload_type = named.type_args[0];
+                        else if (variant_name == "Err")
+                            payload_type = named.type_args[1];
+                    } else if (named.name == "Maybe" && !named.type_args.empty()) {
+                        if (variant_name == "Just")
+                            payload_type = named.type_args[0];
+                    }
+                }
+
+                // Bind first payload element
+                if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                    const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
+                    std::string bound_type =
+                        payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
+
+                    if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
+                        // Struct/tuple: variable is pointer to payload
+                        locals_[ident.name] =
+                            VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
+                    } else {
+                        // Primitive: load and allocate
+                        std::string payload_raw = fresh_reg();
+                        emit_line("  " + payload_raw + " = load i64, ptr " + payload_ptr);
+
+                        std::string payload_val = payload_raw;
+                        // Truncate if needed (i64 -> i32)
+                        if (bound_type == "i32") {
+                            std::string trunc = fresh_reg();
+                            emit_line("  " + trunc + " = trunc i64 " + payload_raw + " to i32");
+                            payload_val = trunc;
+                        }
+
+                        std::string var_alloca = fresh_reg();
+                        emit_line("  " + var_alloca + " = alloca " + bound_type);
+                        emit_line("  store " + bound_type + " " + payload_val + ", ptr " +
+                                  var_alloca);
+                        locals_[ident.name] =
+                            VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
+                    }
                 }
             }
         }
