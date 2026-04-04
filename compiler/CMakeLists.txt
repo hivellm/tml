@@ -1703,6 +1703,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_build.cpp
     src/cli/commands/cmd_cache.cpp
     src/cli/commands/cmd_debug.cpp
+    src/cli/commands/cmd_install.cpp
     src/cli/commands/cmd_doc.cpp
     # Explain modules
     src/cli/explain/explain_run.cpp

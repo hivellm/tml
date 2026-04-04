@@ -15,7 +15,22 @@ name = "postgresql"
 path = "src/mod.tml"
 
 [native-deps]
-libpq = { lib = "libpq", headers = ["libpq-fe.h"] }
+libpq = { lib = "libpq", version = "16.0", headers = ["libpq-fe.h"] }
+
+[native-deps.libpq.win-x64]
+runtime = ["libpq.dll", "libcrypto-3-x64.dll", "libssl-3-x64.dll", "libiconv-2.dll", "libintl-9.dll"]
+link = ["libpq.lib"]
+source = "native/win-x64"
+
+[native-deps.libpq.linux-x64]
+runtime = ["libpq.so.5"]
+link = ["libpq.so"]
+source = "native/linux-x64"
+
+[native-deps.libpq.macos-arm64]
+runtime = ["libpq.5.dylib"]
+link = ["libpq.dylib"]
+source = "native/macos-arm64"
 
 [features]
 default = []

@@ -117,6 +117,32 @@ struct ProfileConfig {
 };
 
 /**
+ * Native dependency for a specific platform.
+ *
+ * Declares which files to link and copy at runtime for a given
+ * OS+architecture combination (e.g., "win-x64", "linux-x64").
+ */
+struct NativeDepPlatform {
+    std::vector<std::string> runtime; ///< DLL/so/dylib files to copy at runtime
+    std::vector<std::string> link;    ///< .lib/.a files for linking
+    std::string source;               ///< Relative path from package root to native files dir
+};
+
+/**
+ * Native dependency declaration from [native-deps] section.
+ *
+ * Combines a library-level declaration (name, lib, version) with
+ * per-platform overrides for runtime/link files and source paths.
+ */
+struct NativeDep {
+    std::string name;                                   ///< Key name (e.g., "libpq")
+    std::string lib;                                    ///< Library name for -l flag
+    std::string version;                                ///< Version string (e.g., "16.0")
+    std::vector<std::string> headers;                   ///< Header files (informational)
+    std::map<std::string, NativeDepPlatform> platforms; ///< Keyed by platform name
+};
+
+/**
  * Complete manifest structure
  */
 struct Manifest {
@@ -124,6 +150,7 @@ struct Manifest {
     std::optional<LibConfig> lib;
     std::vector<BinConfig> bins;
     std::map<std::string, Dependency> dependencies;
+    std::map<std::string, NativeDep> native_deps; ///< Native dependencies from [native-deps]
     BuildSettings build;
     std::map<std::string, ProfileConfig> profiles;
 
@@ -209,6 +236,8 @@ private:
     std::map<std::string, Dependency> parse_dependencies_section();
     std::optional<BuildSettings> parse_build_section();
     std::optional<ProfileConfig> parse_profile_section(const std::string& profile_name);
+    std::map<std::string, NativeDep> parse_native_deps_section();
+    void parse_native_dep_platform_section(NativeDep& dep, const std::string& platform_name);
 
     void set_error(const std::string& message);
 };

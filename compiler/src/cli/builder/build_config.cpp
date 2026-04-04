@@ -402,6 +402,17 @@ std::optional<PackageInfo> SimpleTomlParser::parse_package_section() {
             info.repository = parse_string();
         } else if (key == "authors") {
             info.authors = parse_string_array();
+        } else {
+            // Skip unknown key value (string, array, bool, number)
+            if (peek() == '"') {
+                parse_string();
+            } else if (peek() == '[') {
+                parse_string_array();
+            } else {
+                while (!is_eof() && peek() != '\n' && peek() != '\r') {
+                    advance();
+                }
+            }
         }
 
         skip_whitespace();
@@ -585,7 +596,7 @@ std::optional<BuildSettings> SimpleTomlParser::parse_build_section() {
         advance();
         skip_whitespace();
 
-        if (key == "optimization-level") {
+        if (key == "optimization-level" || key == "opt-level") {
             settings.optimization_level = parse_number();
         } else if (key == "emit-ir") {
             settings.emit_ir = parse_boolean();
@@ -597,6 +608,17 @@ std::optional<BuildSettings> SimpleTomlParser::parse_build_section() {
             settings.cache = parse_boolean();
         } else if (key == "parallel") {
             settings.parallel = parse_boolean();
+        } else {
+            // Skip unknown key value (debug, lto, etc.)
+            if (peek() == '"') {
+                parse_string();
+            } else if (peek() == '[') {
+                parse_string_array();
+            } else {
+                while (!is_eof() && peek() != '\n' && peek() != '\r') {
+                    advance();
+                }
+            }
         }
 
         skip_whitespace();
@@ -619,6 +641,125 @@ SimpleTomlParser::parse_profile_section(const std::string& profile_name) {
     return profile;
 }
 
+std::map<std::string, NativeDep> SimpleTomlParser::parse_native_deps_section() {
+    std::map<std::string, NativeDep> deps;
+
+    skip_whitespace();
+    skip_comment();
+
+    while (!is_eof() && peek() != '[') {
+        skip_whitespace();
+        skip_comment();
+
+        if (peek() == '[' || is_eof())
+            break;
+
+        std::string name = parse_identifier();
+        skip_whitespace();
+
+        if (peek() != '=') {
+            set_error("Expected '=' after native dep name");
+            return deps;
+        }
+        advance();
+        skip_whitespace();
+
+        NativeDep dep;
+        dep.name = name;
+
+        if (peek() == '{') {
+            // Inline table: { lib = "libpq", version = "16.0", headers = ["libpq-fe.h"] }
+            advance(); // Skip '{'
+            skip_whitespace();
+
+            while (!is_eof() && peek() != '}') {
+                std::string key = parse_identifier();
+                skip_whitespace();
+
+                if (peek() != '=')
+                    break;
+                advance();
+                skip_whitespace();
+
+                if (key == "lib") {
+                    dep.lib = parse_string();
+                } else if (key == "version") {
+                    dep.version = parse_string();
+                } else if (key == "headers") {
+                    dep.headers = parse_string_array();
+                } else {
+                    // Skip unknown string value
+                    if (peek() == '"') {
+                        parse_string();
+                    }
+                }
+
+                skip_whitespace();
+                if (peek() == ',') {
+                    advance();
+                    skip_whitespace();
+                }
+            }
+
+            if (peek() == '}')
+                advance();
+        }
+
+        deps[name] = dep;
+
+        skip_whitespace();
+        skip_comment();
+    }
+
+    return deps;
+}
+
+void SimpleTomlParser::parse_native_dep_platform_section(NativeDep& dep,
+                                                         const std::string& platform_name) {
+    NativeDepPlatform plat;
+
+    skip_whitespace();
+    skip_comment();
+
+    while (!is_eof() && peek() != '[') {
+        skip_whitespace();
+        skip_comment();
+
+        if (peek() == '[' || is_eof())
+            break;
+
+        std::string key = parse_identifier();
+        skip_whitespace();
+
+        if (peek() != '=') {
+            set_error("Expected '=' after key in native-deps platform section");
+            return;
+        }
+        advance();
+        skip_whitespace();
+
+        if (key == "runtime") {
+            plat.runtime = parse_string_array();
+        } else if (key == "link") {
+            plat.link = parse_string_array();
+        } else if (key == "source") {
+            plat.source = parse_string();
+        } else {
+            // Skip unknown value
+            if (peek() == '"') {
+                parse_string();
+            } else if (peek() == '[') {
+                parse_string_array();
+            }
+        }
+
+        skip_whitespace();
+        skip_comment();
+    }
+
+    dep.platforms[platform_name] = plat;
+}
+
 std::optional<Manifest> SimpleTomlParser::parse() {
     Manifest manifest;
 
@@ -639,14 +780,17 @@ std::optional<Manifest> SimpleTomlParser::parse() {
                 advance();
             }
 
-            std::string section = parse_identifier();
-
-            // Handle profile.debug or profile.release
-            std::string subsection;
-            if (peek() == '.') {
+            // Parse dotted section path: e.g., "native-deps.libpq.win-x64"
+            std::vector<std::string> section_parts;
+            section_parts.push_back(parse_identifier());
+            while (peek() == '.') {
                 advance();
-                subsection = parse_identifier();
+                section_parts.push_back(parse_identifier());
             }
+
+            std::string section = section_parts[0];
+            std::string subsection = section_parts.size() > 1 ? section_parts[1] : "";
+            std::string sub2 = section_parts.size() > 2 ? section_parts[2] : "";
 
             if (is_array && peek() == ']') {
                 advance(); // Skip second ']'
@@ -679,6 +823,20 @@ std::optional<Manifest> SimpleTomlParser::parse() {
                 manifest.bins.push_back(*bin);
             } else if (section == "dependencies") {
                 manifest.dependencies = parse_dependencies_section();
+            } else if (section == "native-deps" && subsection.empty()) {
+                // [native-deps] — top-level native deps with inline tables
+                manifest.native_deps = parse_native_deps_section();
+            } else if (section == "native-deps" && !subsection.empty() && !sub2.empty()) {
+                // [native-deps.libpq.win-x64] — platform-specific section
+                auto it = manifest.native_deps.find(subsection);
+                if (it == manifest.native_deps.end()) {
+                    // Create stub entry if top-level wasn't parsed yet
+                    NativeDep dep;
+                    dep.name = subsection;
+                    manifest.native_deps[subsection] = dep;
+                    it = manifest.native_deps.find(subsection);
+                }
+                parse_native_dep_platform_section(it->second, sub2);
             } else if (section == "build") {
                 auto build = parse_build_section();
                 if (!build)
@@ -691,8 +849,10 @@ std::optional<Manifest> SimpleTomlParser::parse() {
                 manifest.profiles[subsection] = *profile;
             }
         } else {
-            // Skip unknown content
-            advance();
+            // Skip unknown content (entire line)
+            while (!is_eof() && peek() != '\n' && peek() != '\r') {
+                advance();
+            }
         }
     }
 

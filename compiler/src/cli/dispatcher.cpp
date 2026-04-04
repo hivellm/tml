@@ -55,6 +55,7 @@ TML_MODULE("compiler")
 #include "commands/cmd_format.hpp"
 #include "commands/cmd_init.hpp"
 #include "commands/cmd_inspect.hpp"
+#include "commands/cmd_install.hpp"
 #include "commands/cmd_lint.hpp"
 #include "commands/cmd_mcp.hpp"
 #include "commands/cmd_pkg.hpp"
@@ -669,6 +670,10 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "deps") {
         return run_deps(argc, argv);
+    }
+
+    if (command == "install") {
+        return run_install(argc, argv);
     }
 
     if (command == "publish") {
