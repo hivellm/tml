@@ -47,6 +47,8 @@
 /// @return Exit code: 0 for success, non-zero for errors
 int main(int argc, char* argv[]) {
     bool verbose = false;
+    bool use_http = false;
+    int port = 25710;
 
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
@@ -54,6 +56,14 @@ int main(int argc, char* argv[]) {
 
         if (arg == "--verbose" || arg == "-v") {
             verbose = true;
+        } else if (arg == "--http") {
+            use_http = true;
+        } else if (arg.starts_with("--port=")) {
+            port = std::stoi(arg.substr(7));
+            use_http = true; // --port implies --http
+        } else if (arg == "--port" && i + 1 < argc) {
+            port = std::stoi(argv[++i]);
+            use_http = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cerr << R"(
 TML MCP Server - Model Context Protocol for TML Compiler
@@ -62,12 +72,20 @@ Usage: tml_mcp [options]
 
 Options:
   --verbose, -v    Enable verbose logging to stderr
+  --http           Use Streamable HTTP transport (default: stdio)
+  --port=PORT      Set HTTP port (default: 25710, implies --http)
   --help, -h       Show this help message
 
-Transport:
-  - Reads JSON-RPC 2.0 requests from stdin (newline-delimited)
-  - Writes JSON-RPC 2.0 responses to stdout (newline-delimited)
-  - Writes logs to stderr
+Transports:
+  stdio (default):
+    - Reads JSON-RPC 2.0 requests from stdin (newline-delimited)
+    - Writes JSON-RPC 2.0 responses to stdout (newline-delimited)
+    - Writes logs to stderr
+
+  HTTP (--http):
+    - Listens on localhost:PORT for POST /mcp requests
+    - Returns JSON-RPC 2.0 responses as HTTP 200
+    - Runs as a persistent daemon until killed
 
 Available tools:
   compile           Compile a TML source file
@@ -96,9 +114,10 @@ to avoid file locking issues during development.
         }
     }
 
+    std::string transport = use_http ? "http (port " + std::to_string(port) + ")" : "stdio";
     if (verbose) {
         TML_LOG_INFO("mcp", "Starting TML MCP server (standalone)...");
-        TML_LOG_INFO("mcp", "Transport: stdio");
+        TML_LOG_INFO("mcp", "Transport: " << transport);
         TML_LOG_INFO("mcp", "Protocol version: " << tml::mcp::MCP_PROTOCOL_VERSION);
     }
 
@@ -112,8 +131,12 @@ to avoid file locking issues during development.
         TML_LOG_INFO("mcp", "Server ready, waiting for requests...");
     }
 
-    // Run server (blocks until shutdown)
-    server.run();
+    // Run server (blocks until shutdown or process kill)
+    if (use_http) {
+        server.run_http(port);
+    } else {
+        server.run();
+    }
 
     if (verbose) {
         TML_LOG_INFO("mcp", "Server shutdown complete.");

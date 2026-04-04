@@ -9,8 +9,8 @@
       ]
     },
     "tml": {
-      "command": "./build/debug/bin/tml_mcp.exe",
-      "args": []
+      "type": "streamable-http",
+      "url": "http://localhost:25710/mcp"
     }
   }
 }

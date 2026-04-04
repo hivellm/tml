@@ -9,10 +9,18 @@
 //!
 //! ## Transport
 //!
-//! The server uses **stdio** transport:
+//! The server supports two transports:
+//!
+//! **stdio** (default):
 //! - Reads JSON-RPC requests from stdin (one per line)
 //! - Writes JSON-RPC responses to stdout (one per line)
 //! - Writes logs to stderr
+//!
+//! **Streamable HTTP** (`--http`):
+//! - Listens on `localhost:PORT` (default 3001)
+//! - Accepts `POST /mcp` with JSON-RPC body
+//! - Returns JSON-RPC response as HTTP 200
+//! - Runs as a persistent daemon until killed
 //!
 //! ## Protocol Flow
 //!
@@ -83,11 +91,22 @@ public:
     /// * `handler` - Function to handle tool invocations
     void register_tool(Tool tool, ToolHandler handler);
 
-    /// Runs the server, processing stdio.
+    /// Runs the server using stdio transport.
     ///
     /// This function blocks until shutdown is requested or stdin closes.
     /// Reads JSON-RPC requests from stdin and writes responses to stdout.
     void run();
+
+    /// Runs the server using Streamable HTTP transport.
+    ///
+    /// Listens on `localhost:port` for POST /mcp requests containing
+    /// JSON-RPC payloads. Runs as a persistent daemon until stop() is
+    /// called or the process is killed.
+    ///
+    /// # Arguments
+    ///
+    /// * `port` - TCP port to listen on (default 3001)
+    void run_http(int port = 25710);
 
     /// Stops the server.
     ///
@@ -145,6 +164,11 @@ private:
     auto handle_shutdown(json::JsonValue id) -> json::JsonRpcResponse;
     auto handle_tools_list(json::JsonValue id) -> json::JsonRpcResponse;
     auto handle_tools_call(json::JsonValue params, json::JsonValue id) -> json::JsonRpcResponse;
+
+    // HTTP transport helpers
+    void handle_http_connection(uintptr_t client_socket);
+    void send_http_response(uintptr_t client_socket, int status_code, const std::string& body);
+    void write_session_end_log();
 };
 
 } // namespace tml::mcp
