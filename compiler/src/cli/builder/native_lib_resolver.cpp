@@ -15,6 +15,7 @@ TML_MODULE("compiler")
 
 #include "cli/builder/native_lib_resolver.hpp"
 
+#include "cli/builder/build_config.hpp"
 #include "log/log.hpp"
 
 #ifdef _WIN32
@@ -419,6 +420,56 @@ NativeLibResolver::resolve_from_build_script(const std::set<std::string>& link_l
     for (const auto& lib : link_libs) {
         results.push_back(temp_resolver.resolve(lib));
     }
+    return results;
+}
+
+std::vector<ResolvedNativeLib>
+NativeLibResolver::resolve_package(const fs::path& package_dir) const {
+    std::vector<ResolvedNativeLib> results;
+
+    fs::path pkg_toml = package_dir / "package.toml";
+    auto manifest = Manifest::load(pkg_toml);
+    if (!manifest)
+        return results;
+
+    auto platform_name = platform_.native_dir_name();
+
+    for (const auto& [dep_name, dep] : manifest->native_deps) {
+        auto it = dep.platforms.find(platform_name);
+        if (it == dep.platforms.end())
+            continue;
+
+        const auto& plat = it->second;
+        ResolvedNativeLib resolved;
+        resolved.name = dep_name;
+        resolved.link_name = dep.lib.empty() ? dep_name : dep.lib;
+
+        // Check source dir in package
+        if (!plat.source.empty()) {
+            fs::path source_dir = package_dir / plat.source;
+            if (fs::exists(source_dir)) {
+                resolved.tier = NativeLibTier::ProjectLocal;
+                resolved.search_path = source_dir;
+                for (const auto& rt : plat.runtime) {
+                    fs::path rt_path = source_dir / rt;
+                    if (fs::exists(rt_path))
+                        resolved.runtime_libs.push_back(rt_path);
+                }
+                results.push_back(resolved);
+                TML_LOG_DEBUG("compiler", "[native] resolve_package: "
+                                              << dep_name << " found in package source: "
+                                              << source_dir.string());
+                continue;
+            }
+        }
+
+        // Fall back to standard resolution
+        auto fallback = resolve(resolved.link_name);
+        // Preserve the name from the manifest
+        fallback.name = dep_name;
+        results.push_back(fallback);
+    }
+
     return results;
 }
 

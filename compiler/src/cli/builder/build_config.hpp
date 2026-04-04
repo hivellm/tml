@@ -126,6 +126,8 @@ struct NativeDepPlatform {
     std::vector<std::string> runtime; ///< DLL/so/dylib files to copy at runtime
     std::vector<std::string> link;    ///< .lib/.a files for linking
     std::string source;               ///< Relative path from package root to native files dir
+    std::string download;             ///< URL for downloading prebuilt binaries
+    std::string sha256;               ///< SHA256 hash for download verification
 };
 
 /**
@@ -140,6 +142,11 @@ struct NativeDep {
     std::string version;                                ///< Version string (e.g., "16.0")
     std::vector<std::string> headers;                   ///< Header files (informational)
     std::map<std::string, NativeDepPlatform> platforms; ///< Keyed by platform name
+
+    /// Validate that required fields are present.
+    bool validate() const {
+        return !name.empty() && !lib.empty();
+    }
 };
 
 /**

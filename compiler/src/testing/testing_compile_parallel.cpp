@@ -7,6 +7,7 @@ TML_MODULE("test")
 //! - compile_unified_binary(): Zig-model unified binary compilation
 
 #include "cli/builder/build_script.hpp"
+#include "cli/builder/native_lib_resolver.hpp"
 #include "testing/testing_compile_internal.hpp"
 
 namespace tml::testing {
@@ -608,6 +609,19 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
     // Larger stack for unified binary (all tests share one stack)
     link_opts.link_flags.push_back("/STACK:134217728");
 #endif
+
+    // Use NativeLibResolver to copy ALL runtime DLLs to test cache
+    {
+        auto nlr_platform = cli::Platform::detect();
+        cli::NativeLibResolver nlr(nlr_platform);
+        nlr.set_project_root(fs::current_path());
+        for (const auto& lib : all_link_libs) {
+            auto resolved = nlr.resolve(lib);
+            if (resolved.tier != cli::NativeLibTier::NotFound) {
+                cli::NativeLibResolver::copy_runtime_libs({resolved}, cache_dir);
+            }
+        }
+    }
 
     TML_LOG_INFO("test", "[unified] Linking " << all_object_files.size() << " objects...");
     auto link_result = cli::link_objects(all_object_files, exe_path, g_clang_path, link_opts);

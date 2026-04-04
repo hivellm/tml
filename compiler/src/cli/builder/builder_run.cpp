@@ -518,6 +518,30 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     TML_LOG_DEBUG("build", "Running: " << run_cmd);
 
+    // Prepend native lib dirs to PATH so DLLs are found at runtime
+    {
+        auto nlr_p = Platform::detect();
+        NativeLibResolver nlr_env(nlr_p);
+        std::string native_dirs = fs::absolute(cache_dir).string();
+        auto compiler_native = nlr_env.get_compiler_native_dir();
+        if (!compiler_native.empty() && fs::exists(compiler_native)) {
+#ifdef _WIN32
+            native_dirs += ";" + compiler_native.string();
+#else
+            native_dirs += ":" + compiler_native.string();
+#endif
+        }
+#ifdef _WIN32
+        const char* existing_path = std::getenv("PATH");
+        std::string new_path = native_dirs + ";" + (existing_path ? existing_path : "");
+        _putenv_s("PATH", new_path.c_str());
+#else
+        const char* existing_path = std::getenv("LD_LIBRARY_PATH");
+        std::string new_path = native_dirs + ":" + (existing_path ? existing_path : "");
+        setenv("LD_LIBRARY_PATH", new_path.c_str(), 1);
+#endif
+    }
+
     int run_ret = std::system(run_cmd.c_str());
 
     // Clean up temporary executable (keep .obj in cache for reuse)
@@ -800,6 +824,30 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     }
     run_cmd += " > \"" + out_native + "\" 2>&1";
 #endif
+
+    // Prepend native lib dirs to PATH for second code path
+    {
+        auto nlr_p2 = Platform::detect();
+        NativeLibResolver nlr_env2(nlr_p2);
+        std::string native_dirs2 = fs::absolute(cache_dir).string();
+        auto cn2 = nlr_env2.get_compiler_native_dir();
+        if (!cn2.empty() && fs::exists(cn2)) {
+#ifdef _WIN32
+            native_dirs2 += ";" + cn2.string();
+#else
+            native_dirs2 += ":" + cn2.string();
+#endif
+        }
+#ifdef _WIN32
+        const char* ep2 = std::getenv("PATH");
+        std::string np2 = native_dirs2 + ";" + (ep2 ? ep2 : "");
+        _putenv_s("PATH", np2.c_str());
+#else
+        const char* ep2 = std::getenv("LD_LIBRARY_PATH");
+        std::string np2 = native_dirs2 + ":" + (ep2 ? ep2 : "");
+        setenv("LD_LIBRARY_PATH", np2.c_str(), 1);
+#endif
+    }
 
     int run_ret = std::system(run_cmd.c_str());
 

@@ -66,6 +66,10 @@ public:
                               const std::vector<fs::path>& link_search_paths,
                               const fs::path& package_dir) const;
 
+    /// Resolve all native libs declared in a package's package.toml.
+    /// Reads the [native-deps] section and resolves each dependency.
+    std::vector<ResolvedNativeLib> resolve_package(const fs::path& package_dir) const;
+
     /// Copy all runtime libraries to a target directory.
     /// Skips files that already exist with same size.
     static void copy_runtime_libs(const std::vector<ResolvedNativeLib>& libs,

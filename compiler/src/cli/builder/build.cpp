@@ -1044,6 +1044,17 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         link_options.link_flags.push_back("/STACK:67108864");
 #endif
 
+#if defined(__linux__)
+        // Set rpath to $ORIGIN so bundled executables find libs in their directory
+        if (options.bundle) {
+            link_options.link_flags.push_back("-Wl,-rpath,$ORIGIN");
+        }
+#elif defined(__APPLE__)
+        if (options.bundle) {
+            link_options.link_flags.push_back("-Wl,-rpath,@executable_path");
+        }
+#endif
+
         auto link_result = link_objects(object_files, final_output, clang, link_options);
         if (!link_result.success) {
             TML_LOG_ERROR("build", link_result.error_message);

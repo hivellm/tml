@@ -12,7 +12,11 @@ TML_MODULE("compiler")
 #include "cli/builder/native_lib_resolver.hpp"
 #include "log/log.hpp"
 
+#include <chrono>
+#include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -20,6 +24,36 @@ TML_MODULE("compiler")
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+/// Write a manifest.toml to a native library cache directory.
+/// Records the library name, version, platform, and installation timestamp.
+/// Does not overwrite existing manifests (preserves original install info).
+static void write_cache_manifest(const fs::path& cache_dir, const std::string& lib_name,
+                                 const std::string& version, const std::string& platform) {
+    auto manifest = cache_dir / "manifest.toml";
+    if (fs::exists(manifest))
+        return; // Don't overwrite existing manifest
+
+    std::ofstream ofs(manifest);
+    if (!ofs.is_open())
+        return;
+
+    ofs << "[native-lib]\n";
+    ofs << "name = \"" << lib_name << "\"\n";
+    ofs << "version = \"" << version << "\"\n";
+    ofs << "platform = \"" << platform << "\"\n";
+
+    // Timestamp
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf;
+#ifdef _WIN32
+    localtime_s(&tm_buf, &t);
+#else
+    localtime_r(&t, &tm_buf);
+#endif
+    ofs << "installed = \"" << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S") << "\"\n";
+}
 
 int run_install(int argc, char* argv[]) {
     bool verbose = false;
@@ -185,6 +219,9 @@ int run_install(int argc, char* argv[]) {
                     }
                 }
             }
+
+            // Write manifest.toml to cache dir for tracking
+            write_cache_manifest(dest_dir, dep_name, version, platform_name);
 
             libs_installed++;
             std::cout << "  " << pkg_name << "/" << dep_name << " v" << version << " ("

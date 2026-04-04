@@ -744,6 +744,10 @@ void SimpleTomlParser::parse_native_dep_platform_section(NativeDep& dep,
             plat.link = parse_string_array();
         } else if (key == "source") {
             plat.source = parse_string();
+        } else if (key == "download") {
+            plat.download = parse_string();
+        } else if (key == "sha256") {
+            plat.sha256 = parse_string();
         } else {
             // Skip unknown value
             if (peek() == '"') {
