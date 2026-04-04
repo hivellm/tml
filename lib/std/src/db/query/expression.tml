@@ -71,6 +71,9 @@ impl SortDir {
 ///   8 = IS NULL          (`left_sql` pre-rendered)
 ///   9 = IS NOT NULL      (`left_sql` pre-rendered)
 ///  10 = Raw SQL          (`text` holds the raw fragment)
+///  11 = Positional param (`int_val` holds the 1-based index, renders as `?`)
+///  12 = Named param      (`text` holds the name, renders as `:name`)
+///  13 = IN subquery      (`left_sql` holds col name, `right_sql` holds SELECT SQL)
 pub type Expr {
     tag: I32,
     text: Str,
@@ -110,6 +113,29 @@ impl Expr {
     /// Creates a raw SQL fragment (emitted verbatim).
     pub func raw(sql: Str) -> Expr {
         return Expr { tag: 10, text: sql, int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a positional parameter placeholder (`?`).
+    ///
+    /// `index` is 1-based and informational — the rendered SQL is always `?`.
+    /// Use this when binding parameters by position via prepared statements.
+    pub func param(index: I32) -> Expr {
+        return Expr { tag: 11, text: "", int_val: index as I64, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a named parameter placeholder (`:name`).
+    ///
+    /// Renders as `:name` in the SQL string, suitable for SQLite named bindings.
+    pub func named_param(name: Str) -> Expr {
+        return Expr { tag: 12, text: name, int_val: 0, float_val: 0.0, op: 0, left_sql: "", right_sql: "" }
+    }
+
+    /// Creates a `col IN (SELECT ...)` expression.
+    ///
+    /// `col` is the column name to test; `subquery_sql` is the complete SELECT
+    /// SQL string to embed (e.g. produced by `SelectQuery::to_sql()`).
+    pub func in_subquery(col: Str, subquery_sql: Str) -> Expr {
+        return Expr { tag: 13, text: "", int_val: 0, float_val: 0.0, op: 0, left_sql: col, right_sql: subquery_sql }
     }
 
     /// Returns `col = other` as a new expression.
@@ -191,6 +217,9 @@ impl Expr {
         }
         if this.tag == 8 { return this.left_sql + " IS NULL" }
         if this.tag == 9 { return this.left_sql + " IS NOT NULL" }
+        if this.tag == 11 { return "?" }
+        if this.tag == 12 { return ":" + this.text }
+        if this.tag == 13 { return this.left_sql + " IN (" + this.right_sql + ")" }
         return "?"
     }
 }

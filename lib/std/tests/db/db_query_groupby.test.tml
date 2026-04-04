@@ -1,0 +1,176 @@
+// Tests for Phase 1 additions: GROUP BY, HAVING, params, JOIN, subquery
+use test::{assert, assert_eq}
+use std::db::query::select::SelectQuery
+use std::db::query::expression::Expr
+use std::db::query::join::JoinClause
+
+// ── 1.1 GROUP BY ──────────────────────────────────────────────────────────
+
+@test
+func test_group_by() -> I32 {
+    let q = SelectQuery::new("orders").columns("user_id, COUNT(*)").group_by("user_id")
+    let sql = q.to_sql()
+    assert(sql.contains("GROUP BY user_id"), "has GROUP BY")
+    assert(sql.contains("SELECT user_id, COUNT(*) FROM orders"), "has select")
+    return 0
+}
+
+// ── 1.2 HAVING ────────────────────────────────────────────────────────────
+
+@test
+func test_having() -> I32 {
+    let q = SelectQuery::new("orders")
+        .columns("user_id, COUNT(*)")
+        .group_by("user_id")
+        .having("COUNT(*) > 5")
+    let sql = q.to_sql()
+    assert(sql.contains("GROUP BY user_id"), "has GROUP BY")
+    assert(sql.contains("HAVING COUNT(*) > 5"), "has HAVING")
+    return 0
+}
+
+@test
+func test_group_by_without_having() -> I32 {
+    let q = SelectQuery::new("products").group_by("category")
+    let sql = q.to_sql()
+    assert(sql.contains("GROUP BY category"), "has GROUP BY")
+    assert(not sql.contains("HAVING"), "no HAVING")
+    return 0
+}
+
+@test
+func test_having_order_after_where() -> I32 {
+    let expr = Expr::column("status").eq(Expr::str("active"))
+    let q = SelectQuery::new("sales")
+        .columns("region, SUM(amount)")
+        .where_expr(expr)
+        .group_by("region")
+        .having("SUM(amount) > 1000")
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE"), "has WHERE")
+    assert(sql.contains("GROUP BY region"), "has GROUP BY")
+    assert(sql.contains("HAVING SUM(amount) > 1000"), "has HAVING")
+    // Verify structure: WHERE ... GROUP BY ... HAVING by checking expected substring order
+    // The SQL should be: SELECT ... FROM ... WHERE ... GROUP BY region HAVING SUM(amount) > 1000
+    assert(sql.contains("WHERE status = 'active' GROUP BY region HAVING SUM(amount) > 1000"), "WHERE before GROUP BY before HAVING")
+    return 0
+}
+
+// ── 1.3 Expr::param ───────────────────────────────────────────────────────
+
+@test
+func test_expr_param() -> I32 {
+    let p = Expr::param(1)
+    assert_eq(p.to_sql(), "?", "param renders as ?")
+    return 0
+}
+
+@test
+func test_expr_param_multiple() -> I32 {
+    let p2 = Expr::param(2)
+    let p3 = Expr::param(3)
+    assert_eq(p2.to_sql(), "?", "p2 renders as ?")
+    assert_eq(p3.to_sql(), "?", "p3 renders as ?")
+    return 0
+}
+
+@test
+func test_expr_param_in_comparison() -> I32 {
+    let expr = Expr::column("age").gt(Expr::param(1))
+    let sql = expr.to_sql()
+    assert(sql.contains("age"), "has column")
+    assert(sql.contains(">"), "has op")
+    assert(sql.contains("?"), "has placeholder")
+    return 0
+}
+
+// ── 1.4 Expr::named_param ─────────────────────────────────────────────────
+
+@test
+func test_named_param() -> I32 {
+    let p = Expr::named_param("user_id")
+    assert_eq(p.to_sql(), ":user_id", "named param renders as :name")
+    return 0
+}
+
+@test
+func test_named_param_in_comparison() -> I32 {
+    let expr = Expr::column("id").eq(Expr::named_param("id"))
+    let sql = expr.to_sql()
+    assert(sql.contains("id"), "has column")
+    assert(sql.contains(":id"), "has named placeholder")
+    return 0
+}
+
+// ── 1.5 JOIN ──────────────────────────────────────────────────────────────
+
+@test
+func test_select_with_inner_join() -> I32 {
+    let clause = JoinClause::inner("orders", "orders.user_id = users.id")
+    let q = SelectQuery::new("users").join(clause)
+    let sql = q.to_sql()
+    assert(sql.contains("INNER JOIN orders ON orders.user_id = users.id"), "has INNER JOIN")
+    return 0
+}
+
+@test
+func test_select_with_left_join() -> I32 {
+    let clause = JoinClause::left("profiles", "profiles.user_id = users.id")
+    let q = SelectQuery::new("users").join(clause)
+    let sql = q.to_sql()
+    assert(sql.contains("LEFT JOIN profiles ON"), "has LEFT JOIN")
+    return 0
+}
+
+@test
+func test_select_with_multiple_joins() -> I32 {
+    let j1 = JoinClause::inner("orders", "orders.user_id = users.id")
+    let j2 = JoinClause::left("payments", "payments.order_id = orders.id")
+    let q = SelectQuery::new("users").join(j1).join(j2)
+    let sql = q.to_sql()
+    assert(sql.contains("INNER JOIN orders"), "has first join")
+    assert(sql.contains("LEFT JOIN payments"), "has second join")
+    return 0
+}
+
+@test
+func test_join_before_where() -> I32 {
+    let clause = JoinClause::inner("orders", "orders.user_id = users.id")
+    let expr = Expr::column("users.active").eq(Expr::int(1))
+    let q = SelectQuery::new("users").join(clause).where_expr(expr)
+    let sql = q.to_sql()
+    // Verify structure: FROM users INNER JOIN orders ... WHERE ...
+    assert(sql.contains("FROM users INNER JOIN orders ON orders.user_id = users.id WHERE"), "JOIN appears before WHERE")
+    return 0
+}
+
+// ── 1.6 / 1.7 Subquery ────────────────────────────────────────────────────
+
+@test
+func test_subquery_in_select() -> I32 {
+    let inner = SelectQuery::new("orders").columns("user_id").where_expr(Expr::column("total").gt(Expr::int(100)))
+    let q = SelectQuery::new("users").subquery("id", inner.to_sql())
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE id IN (SELECT user_id FROM orders"), "has IN subquery")
+    return 0
+}
+
+@test
+func test_expr_in_subquery() -> I32 {
+    let inner_sql = "SELECT user_id FROM orders WHERE total > 100"
+    let expr = Expr::in_subquery("id", inner_sql)
+    let sql = expr.to_sql()
+    assert_eq(sql, "id IN (SELECT user_id FROM orders WHERE total > 100)", "in_subquery expr")
+    return 0
+}
+
+@test
+func test_subquery_combined_with_where() -> I32 {
+    let inner = SelectQuery::new("bans").columns("user_id")
+    let expr = Expr::column("status").eq(Expr::str("active"))
+    let q = SelectQuery::new("users").where_expr(expr).subquery("id", inner.to_sql())
+    let sql = q.to_sql()
+    assert(sql.contains("WHERE"), "has WHERE")
+    assert(sql.contains("AND id IN ("), "has AND subquery")
+    return 0
+}

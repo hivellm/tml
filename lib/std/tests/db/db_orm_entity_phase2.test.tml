@@ -1,0 +1,183 @@
+// Tests for Phase 2 entity enhancements: unique, varchar, decimal, timestamp, created_at/updated_at
+use test::{assert, assert_eq}
+use std::db::orm::entity::Column
+use std::db::orm::entity::EntityMeta
+
+// ── 2.1 Column::unique() ──────────────────────────────────────────────────
+
+@test
+func test_column_unique() -> I32 {
+    let col = Column::text("email").unique()
+    assert(col.is_unique(), "is unique")
+    let ddl = col.to_ddl()
+    assert(ddl.contains("UNIQUE"), "has UNIQUE in DDL")
+    return 0
+}
+
+@test
+func test_column_unique_ddl() -> I32 {
+    let col = Column::text("username").unique()
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "username TEXT NOT NULL UNIQUE", "unique DDL")
+    return 0
+}
+
+@test
+func test_column_not_unique_by_default() -> I32 {
+    let col = Column::text("name")
+    assert(not col.is_unique(), "not unique by default")
+    let ddl = col.to_ddl()
+    assert(not ddl.contains("UNIQUE"), "no UNIQUE in DDL")
+    return 0
+}
+
+@test
+func test_column_unique_with_nullable() -> I32 {
+    let col = Column::text("code").unique().set_nullable()
+    let ddl = col.to_ddl()
+    assert(ddl.contains("UNIQUE"), "has UNIQUE")
+    assert(not ddl.contains("NOT NULL"), "nullable (no NOT NULL)")
+    return 0
+}
+
+// ── 2.2 Column::varchar(name, length) ─────────────────────────────────────
+
+@test
+func test_column_varchar() -> I32 {
+    let col = Column::varchar("name", 255)
+    assert_eq(col.col_name(), "name", "name")
+    assert_eq(col.col_type(), "VARCHAR(255)", "type")
+    let ddl = col.to_ddl()
+    assert(ddl.contains("VARCHAR(255)"), "DDL has VARCHAR(255)")
+    return 0
+}
+
+@test
+func test_column_varchar_ddl() -> I32 {
+    let col = Column::varchar("slug", 100)
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "slug VARCHAR(100) NOT NULL", "varchar DDL")
+    return 0
+}
+
+@test
+func test_column_varchar_unique() -> I32 {
+    let col = Column::varchar("email", 200).unique()
+    let ddl = col.to_ddl()
+    assert(ddl.contains("VARCHAR(200)"), "has varchar type")
+    assert(ddl.contains("UNIQUE"), "has UNIQUE")
+    return 0
+}
+
+// ── 2.3 Column::decimal(name, precision, scale) ───────────────────────────
+
+@test
+func test_column_decimal() -> I32 {
+    let col = Column::decimal("price", 10, 2)
+    assert_eq(col.col_name(), "price", "name")
+    assert_eq(col.col_type(), "DECIMAL(10, 2)", "type")
+    return 0
+}
+
+@test
+func test_column_decimal_ddl() -> I32 {
+    let col = Column::decimal("amount", 15, 4)
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "amount DECIMAL(15, 4) NOT NULL", "decimal DDL")
+    return 0
+}
+
+@test
+func test_column_decimal_nullable() -> I32 {
+    let col = Column::decimal("discount", 5, 2).set_nullable()
+    let ddl = col.to_ddl()
+    assert(ddl.contains("DECIMAL(5, 2)"), "has decimal type")
+    assert(not ddl.contains("NOT NULL"), "is nullable")
+    return 0
+}
+
+// ── 2.4 Column::timestamp(name) ───────────────────────────────────────────
+
+@test
+func test_column_timestamp() -> I32 {
+    let col = Column::timestamp("expires_at")
+    assert_eq(col.col_name(), "expires_at", "name")
+    assert_eq(col.col_type(), "TIMESTAMP", "type")
+    return 0
+}
+
+@test
+func test_column_timestamp_ddl() -> I32 {
+    let col = Column::timestamp("published_at")
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "published_at TIMESTAMP NOT NULL", "timestamp DDL")
+    return 0
+}
+
+@test
+func test_column_timestamp_nullable() -> I32 {
+    let col = Column::timestamp("deleted_at").set_nullable()
+    let ddl = col.to_ddl()
+    assert(ddl.contains("TIMESTAMP"), "has TIMESTAMP")
+    assert(not ddl.contains("NOT NULL"), "nullable")
+    return 0
+}
+
+// ── 2.5 Column::created_at() ──────────────────────────────────────────────
+
+@test
+func test_column_created_at() -> I32 {
+    let col = Column::created_at()
+    assert_eq(col.col_name(), "created_at", "name")
+    assert_eq(col.col_type(), "TIMESTAMP", "type")
+    assert(col.has_default_val(), "has default")
+    return 0
+}
+
+@test
+func test_column_created_at_ddl() -> I32 {
+    let col = Column::created_at()
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP", "created_at DDL")
+    return 0
+}
+
+// ── 2.6 Column::updated_at() ──────────────────────────────────────────────
+
+@test
+func test_column_updated_at() -> I32 {
+    let col = Column::updated_at()
+    assert_eq(col.col_name(), "updated_at", "name")
+    assert_eq(col.col_type(), "TIMESTAMP", "type")
+    assert(col.has_default_val(), "has default")
+    return 0
+}
+
+@test
+func test_column_updated_at_ddl() -> I32 {
+    let col = Column::updated_at()
+    let ddl = col.to_ddl()
+    assert_eq(ddl, "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP", "updated_at DDL")
+    return 0
+}
+
+// ── Combined entity table with new column types ───────────────────────────
+
+@test
+func test_entity_with_all_new_columns() -> I32 {
+    let products = EntityMeta::new("products", "id")
+        .column(Column::primary("id"))
+        .column(Column::varchar("name", 255))
+        .column(Column::decimal("price", 10, 2))
+        .column(Column::text("sku").unique())
+        .column(Column::timestamp("expires_at").set_nullable())
+        .column(Column::created_at())
+        .column(Column::updated_at())
+    let sql = products.create_table_sql()
+    assert(sql.contains("CREATE TABLE IF NOT EXISTS products"), "has create table")
+    assert(sql.contains("VARCHAR(255)"), "has varchar")
+    assert(sql.contains("DECIMAL(10, 2)"), "has decimal")
+    assert(sql.contains("UNIQUE"), "has unique")
+    assert(sql.contains("CURRENT_TIMESTAMP"), "has timestamp default")
+    return 0
+}

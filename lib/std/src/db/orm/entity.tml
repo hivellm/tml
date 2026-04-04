@@ -40,7 +40,8 @@
 /// Column metadata for an entity field.
 ///
 /// Each Column describes one database column: its name, SQL type,
-/// nullability, primary key status, auto-increment, and default value.
+/// nullability, primary key status, auto-increment, default value, and
+/// whether the column has a UNIQUE constraint.
 /// Builder methods allow chaining to configure columns fluently.
 pub type Column {
     name: Str,
@@ -49,48 +50,92 @@ pub type Column {
     primary_key: Bool,
     auto_increment: Bool,
     default_val: Str,
-    has_default: Bool
+    has_default: Bool,
+    is_unique_col: Bool
 }
 
 impl Column {
     /// Integer column (SQL type INTEGER).
     pub func integer(name: Str) -> Column {
-        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
     }
 
     /// Text column (SQL type TEXT).
     pub func text(name: Str) -> Column {
-        return Column { name: name, sql_type: "TEXT", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "TEXT", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
     }
 
     /// Real/float column (SQL type REAL).
     pub func real(name: Str) -> Column {
-        return Column { name: name, sql_type: "REAL", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "REAL", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
     }
 
     /// Boolean column (stored as INTEGER in SQLite).
     pub func boolean(name: Str) -> Column {
-        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
     }
 
     /// Blob column (SQL type BLOB).
     pub func blob(name: Str) -> Column {
-        return Column { name: name, sql_type: "BLOB", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "BLOB", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
     }
 
     /// Primary key auto-increment column (like TypeORM's @PrimaryGeneratedColumn).
     pub func primary(name: Str) -> Column {
-        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: true, auto_increment: true, default_val: "", has_default: false }
+        return Column { name: name, sql_type: "INTEGER", nullable: false, primary_key: true, auto_increment: true, default_val: "", has_default: false, is_unique_col: false }
+    }
+
+    /// VARCHAR column with explicit length (e.g. `VARCHAR(255)`).
+    ///
+    /// Produces DDL like `name VARCHAR(length) NOT NULL`.
+    pub func varchar(name: Str, length: I32) -> Column {
+        return Column { name: name, sql_type: "VARCHAR(" + length.to_string() + ")", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
+    }
+
+    /// DECIMAL column with precision and scale (e.g. `DECIMAL(10, 2)`).
+    ///
+    /// Produces DDL like `name DECIMAL(precision, scale) NOT NULL`.
+    pub func decimal(name: Str, precision: I32, scale: I32) -> Column {
+        return Column { name: name, sql_type: "DECIMAL(" + precision.to_string() + ", " + scale.to_string() + ")", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
+    }
+
+    /// TIMESTAMP column.
+    ///
+    /// Produces DDL like `name TIMESTAMP NOT NULL`.
+    pub func timestamp(name: Str) -> Column {
+        return Column { name: name, sql_type: "TIMESTAMP", nullable: false, primary_key: false, auto_increment: false, default_val: "", has_default: false, is_unique_col: false }
+    }
+
+    /// Auto-timestamp `created_at` column with DEFAULT CURRENT_TIMESTAMP.
+    ///
+    /// Produces `created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`.
+    pub func created_at() -> Column {
+        return Column { name: "created_at", sql_type: "TIMESTAMP", nullable: false, primary_key: false, auto_increment: false, default_val: "CURRENT_TIMESTAMP", has_default: true, is_unique_col: false }
+    }
+
+    /// Auto-timestamp `updated_at` column with DEFAULT CURRENT_TIMESTAMP.
+    ///
+    /// Produces `updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`.
+    /// In practice you would set this via a trigger or application logic on update.
+    pub func updated_at() -> Column {
+        return Column { name: "updated_at", sql_type: "TIMESTAMP", nullable: false, primary_key: false, auto_increment: false, default_val: "CURRENT_TIMESTAMP", has_default: true, is_unique_col: false }
     }
 
     /// Marks this column as nullable. Returns a new Column with nullable=true.
     pub func set_nullable(this) -> Column {
-        return Column { name: this.name, sql_type: this.sql_type, nullable: true, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: this.default_val, has_default: this.has_default }
+        return Column { name: this.name, sql_type: this.sql_type, nullable: true, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: this.default_val, has_default: this.has_default, is_unique_col: this.is_unique_col }
+    }
+
+    /// Adds a UNIQUE constraint to this column.
+    ///
+    /// Returns a new Column with the UNIQUE constraint set.
+    pub func unique(this) -> Column {
+        return Column { name: this.name, sql_type: this.sql_type, nullable: this.nullable, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: this.default_val, has_default: this.has_default, is_unique_col: true }
     }
 
     /// Sets a default value for this column. Returns a new Column with the default.
     pub func with_default(this, val: Str) -> Column {
-        return Column { name: this.name, sql_type: this.sql_type, nullable: this.nullable, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: val, has_default: true }
+        return Column { name: this.name, sql_type: this.sql_type, nullable: this.nullable, primary_key: this.primary_key, auto_increment: this.auto_increment, default_val: val, has_default: true, is_unique_col: this.is_unique_col }
     }
 
     /// Generates the column DDL fragment (e.g. "id INTEGER PRIMARY KEY AUTOINCREMENT").
@@ -99,6 +144,7 @@ impl Column {
         if this.primary_key { sql = sql + " PRIMARY KEY" }
         if this.auto_increment { sql = sql + " AUTOINCREMENT" }
         if not this.nullable and not this.primary_key { sql = sql + " NOT NULL" }
+        if this.is_unique_col { sql = sql + " UNIQUE" }
         if this.has_default { sql = sql + " DEFAULT " + this.default_val }
         return sql
     }
@@ -120,6 +166,9 @@ impl Column {
 
     /// Returns true if this column has a default value.
     pub func has_default_val(this) -> Bool { return this.has_default }
+
+    /// Returns true if this column has a UNIQUE constraint.
+    pub func is_unique(this) -> Bool { return this.is_unique_col }
 }
 
 /// Entity metadata — describes a database table.

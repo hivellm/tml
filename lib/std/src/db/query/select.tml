@@ -1,6 +1,7 @@
 //! SELECT query builder.
 
 use std::db::query::expression::Expr
+use std::db::query::join::JoinClause
 
 /// A SELECT query builder.
 pub type SelectQuery {
@@ -11,7 +12,16 @@ pub type SelectQuery {
     offset_val: I64,
     has_limit: Bool,
     has_offset: Bool,
-    has_where: Bool
+    has_where: Bool,
+    join_sql: Str,
+    has_join: Bool,
+    group_by_col: Str,
+    has_group_by: Bool,
+    having_clause: Str,
+    has_having: Bool,
+    subquery_col: Str,
+    subquery_sql: Str,
+    has_subquery: Bool
 }
 
 impl SelectQuery {
@@ -25,7 +35,16 @@ impl SelectQuery {
             offset_val: 0,
             has_limit: false,
             has_offset: false,
-            has_where: false
+            has_where: false,
+            join_sql: "",
+            has_join: false,
+            group_by_col: "",
+            has_group_by: false,
+            having_clause: "",
+            has_having: false,
+            subquery_col: "",
+            subquery_sql: "",
+            has_subquery: false
         }
     }
 
@@ -39,7 +58,16 @@ impl SelectQuery {
             offset_val: this.offset_val,
             has_limit: this.has_limit,
             has_offset: this.has_offset,
-            has_where: this.has_where
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
         }
     }
 
@@ -53,7 +81,16 @@ impl SelectQuery {
             offset_val: this.offset_val,
             has_limit: this.has_limit,
             has_offset: this.has_offset,
-            has_where: true
+            has_where: true,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
         }
     }
 
@@ -67,7 +104,16 @@ impl SelectQuery {
             offset_val: this.offset_val,
             has_limit: true,
             has_offset: this.has_offset,
-            has_where: this.has_where
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
         }
     }
 
@@ -81,15 +127,148 @@ impl SelectQuery {
             offset_val: n,
             has_limit: this.has_limit,
             has_offset: true,
-            has_where: this.has_where
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
+        }
+    }
+
+    /// Adds a JOIN clause (appended to any previously added joins).
+    ///
+    /// Multiple `.join()` calls accumulate: each rendered clause is appended
+    /// space-separated to the existing `join_sql`.
+    pub func join(this, clause: JoinClause) -> SelectQuery {
+        let new_join_sql = if this.has_join {
+            this.join_sql + " " + clause.to_sql()
+        } else {
+            clause.to_sql()
+        }
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: this.has_where,
+            join_sql: new_join_sql,
+            has_join: true,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
+        }
+    }
+
+    /// Adds a GROUP BY clause on the given column.
+    ///
+    /// Only the last `group_by()` call takes effect (single-column grouping).
+    pub func group_by(this, column: Str) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: column,
+            has_group_by: true,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
+        }
+    }
+
+    /// Adds a HAVING clause (must be used after `group_by`).
+    ///
+    /// The condition is a raw SQL fragment, e.g. `"COUNT(*) > 5"`.
+    pub func having(this, condition: Str) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: condition,
+            has_having: true,
+            subquery_col: this.subquery_col,
+            subquery_sql: this.subquery_sql,
+            has_subquery: this.has_subquery
+        }
+    }
+
+    /// Adds a WHERE col IN (subquery) clause.
+    ///
+    /// `col` is the column name to test, `sub_sql` is the complete SELECT SQL
+    /// for the subquery (e.g. produced by `inner.to_sql()`).
+    pub func subquery(this, col: Str, sub_sql: Str) -> SelectQuery {
+        return SelectQuery {
+            table: this.table,
+            columns: this.columns,
+            where_clause: this.where_clause,
+            limit_val: this.limit_val,
+            offset_val: this.offset_val,
+            has_limit: this.has_limit,
+            has_offset: this.has_offset,
+            has_where: this.has_where,
+            join_sql: this.join_sql,
+            has_join: this.has_join,
+            group_by_col: this.group_by_col,
+            has_group_by: this.has_group_by,
+            having_clause: this.having_clause,
+            has_having: this.has_having,
+            subquery_col: col,
+            subquery_sql: sub_sql,
+            has_subquery: true
         }
     }
 
     /// Renders the query to a SQL string.
+    ///
+    /// Clause order: SELECT … FROM … JOIN … WHERE … GROUP BY … HAVING … LIMIT … OFFSET …
     pub func to_sql(this) -> Str {
         var sql: Str = "SELECT " + this.columns + " FROM " + this.table
-        if this.has_where {
+        if this.has_join {
+            sql = sql + " " + this.join_sql
+        }
+        if this.has_subquery {
+            if this.has_where {
+                sql = sql + " WHERE " + this.where_clause + " AND " + this.subquery_col + " IN (" + this.subquery_sql + ")"
+            } else {
+                sql = sql + " WHERE " + this.subquery_col + " IN (" + this.subquery_sql + ")"
+            }
+        } else if this.has_where {
             sql = sql + " WHERE " + this.where_clause
+        }
+        if this.has_group_by {
+            sql = sql + " GROUP BY " + this.group_by_col
+        }
+        if this.has_having {
+            sql = sql + " HAVING " + this.having_clause
         }
         if this.has_limit {
             sql = sql + " LIMIT " + this.limit_val.to_string()

@@ -1,0 +1,283 @@
+// Tests for Phase 3 repository CRUD additions:
+// save, find_by, find_many, count_where, soft_delete, restore, increment, exists
+use test::{assert, assert_eq}
+use std::db::sqlite::connection::SqliteConnection
+use std::db::orm::repository::{save, find_by, find_many, count_where, soft_delete, restore, increment, exists}
+
+// Helper SQL to create a users table with soft-delete and a counter column
+func create_users_table(conn: ref SqliteConnection) {
+    let _ = conn.execute(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER NOT NULL DEFAULT 0, deleted_at TEXT)"
+    )
+}
+
+// ── 3.1 save (upsert) ─────────────────────────────────────────────────────
+
+@test
+func test_save_inserts_new_row() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            when save(ref c, "users", 1, "name", "Alice") {
+                Err(_) => { assert(false, "save failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "one row affected") }
+            }
+            // Verify the row exists
+            when find_by(ref c, "users", "name", "Alice") {
+                Err(_) => { assert(false, "find_by failed"); return 1 },
+                Ok(found) => { assert(found, "Alice found after save") }
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_save_replaces_existing_row() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            // Upsert with same PK but different name
+            when save(ref c, "users", 1, "name", "AliceUpdated") {
+                Err(_) => { assert(false, "upsert failed"); return 1 },
+                Ok(n) => { assert(n > 0, "rows affected") }
+            }
+            // Old name should be gone, new name present
+            when find_by(ref c, "users", "name", "AliceUpdated") {
+                Err(_) => { assert(false, "find_by after upsert failed"); return 1 },
+                Ok(found) => { assert(found, "updated name found") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.2 find_by ───────────────────────────────────────────────────────────
+
+@test
+func test_find_by_returns_true_when_found() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 5, "name", "Bob")
+            when find_by(ref c, "users", "name", "Bob") {
+                Err(_) => { assert(false, "find_by failed"); return 1 },
+                Ok(found) => { assert(found, "Bob exists") }
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_find_by_returns_false_when_not_found() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            when find_by(ref c, "users", "name", "Nobody") {
+                Err(_) => { assert(false, "find_by failed"); return 1 },
+                Ok(found) => { assert(not found, "Nobody not found") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.3 find_many ─────────────────────────────────────────────────────────
+
+@test
+func test_find_many_count() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            let _ = save(ref c, "users", 2, "name", "Bob")
+            let _ = save(ref c, "users", 3, "name", "Carol")
+            when find_many(ref c, "users", "deleted_at IS NULL", 10) {
+                Err(_) => { assert(false, "find_many failed"); return 1 },
+                Ok(n) => { assert_eq(n, 3, "3 active users") }
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_find_many_respects_limit() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "A")
+            let _ = save(ref c, "users", 2, "name", "B")
+            let _ = save(ref c, "users", 3, "name", "C")
+            let _ = save(ref c, "users", 4, "name", "D")
+            // Limit to 2 even though 4 rows match
+            when find_many(ref c, "users", "deleted_at IS NULL", 2) {
+                Err(_) => { assert(false, "find_many failed"); return 1 },
+                Ok(n) => { assert_eq(n, 2, "limited to 2") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.4 count_where ───────────────────────────────────────────────────────
+
+@test
+func test_count_where() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            let _ = save(ref c, "users", 2, "name", "Bob")
+            when count_where(ref c, "users", "name != 'Bob'") {
+                Err(_) => { assert(false, "count_where failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "1 non-Bob user") }
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_count_where_empty() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            when count_where(ref c, "users", "1 = 1") {
+                Err(_) => { assert(false, "count_where failed"); return 1 },
+                Ok(n) => { assert_eq(n, 0, "empty table = 0") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.5 soft_delete ───────────────────────────────────────────────────────
+
+@test
+func test_soft_delete() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            when soft_delete(ref c, "users", "id", 1, "2026-04-04 12:00:00") {
+                Err(_) => { assert(false, "soft_delete failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "one row soft-deleted") }
+            }
+            // Verify deleted_at is set
+            when count_where(ref c, "users", "deleted_at IS NOT NULL") {
+                Err(_) => { assert(false, "count_where failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "one row has deleted_at") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.6 restore ───────────────────────────────────────────────────────────
+
+@test
+func test_restore() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            // First soft-delete
+            let _ = soft_delete(ref c, "users", "id", 1, "2026-04-04 12:00:00")
+            // Then restore
+            when restore(ref c, "users", "id", 1) {
+                Err(_) => { assert(false, "restore failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "one row restored") }
+            }
+            // Verify deleted_at is NULL again
+            when count_where(ref c, "users", "deleted_at IS NULL") {
+                Err(_) => { assert(false, "count_where failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "row is active again") }
+            }
+        }
+    }
+    return 0
+}
+
+// ── 3.7 increment ─────────────────────────────────────────────────────────
+
+@test
+func test_increment() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            let _ = c.execute("CREATE TABLE counters (id INTEGER PRIMARY KEY, hits INTEGER NOT NULL DEFAULT 0)")
+            let _ = c.execute("INSERT INTO counters (id, hits) VALUES (1, 10)")
+            when increment(ref c, "counters", "hits", 5, "id", 1) {
+                Err(_) => { assert(false, "increment failed"); return 1 },
+                Ok(n) => { assert_eq(n, 1, "one row updated") }
+            }
+            // Verify the value
+            let val = c.query_one_i64("SELECT hits FROM counters WHERE id = 1", 1)
+            assert_eq(val, 15, "hits incremented to 15")
+        }
+    }
+    return 0
+}
+
+@test
+func test_increment_by_one() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            let _ = c.execute("CREATE TABLE counters (id INTEGER PRIMARY KEY, hits INTEGER NOT NULL DEFAULT 0)")
+            let _ = c.execute("INSERT INTO counters (id, hits) VALUES (1, 0)")
+            let _ = increment(ref c, "counters", "hits", 1, "id", 1)
+            let _ = increment(ref c, "counters", "hits", 1, "id", 1)
+            let _ = increment(ref c, "counters", "hits", 1, "id", 1)
+            let val = c.query_one_i64("SELECT hits FROM counters WHERE id = 1", 1)
+            assert_eq(val, 3, "hits = 3 after 3 increments")
+        }
+    }
+    return 0
+}
+
+// ── 3.8 exists ────────────────────────────────────────────────────────────
+
+@test
+func test_exists_found() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            let _ = save(ref c, "users", 1, "name", "Alice")
+            when exists(ref c, "users", "name", "Alice") {
+                Err(_) => { assert(false, "exists failed"); return 1 },
+                Ok(found) => { assert(found, "Alice exists") }
+            }
+        }
+    }
+    return 0
+}
+
+@test
+func test_exists_not_found() -> I32 {
+    when SqliteConnection::open_in_memory() {
+        Err(_) => { assert(false, "open failed"); return 1 },
+        Ok(mut c) => {
+            create_users_table(ref c)
+            when exists(ref c, "users", "name", "Ghost") {
+                Err(_) => { assert(false, "exists failed"); return 1 },
+                Ok(found) => { assert(not found, "Ghost does not exist") }
+            }
+        }
+    }
+    return 0
+}

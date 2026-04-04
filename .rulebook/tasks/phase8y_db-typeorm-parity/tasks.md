@@ -1,41 +1,41 @@
 # Tasks: TypeORM Feature Parity — From 66% to 90%+
 
-**Status**: Planning. 0% (0/40).
+**Status**: In Progress. 24/40 (60%). Phases 1-3 complete.
 **Baseline**: 42/64 TypeORM features (66%)
 **Target**: 58/64 features (90%+)
 
 ## Phase 1: Query Builder — GROUP BY, HAVING, Subqueries, Params (8 items)
 
-- [ ] 1.1 `db/query/select.tml` — Add `group_by(column: Str)` to SelectQuery
-- [ ] 1.2 `db/query/select.tml` — Add `having(condition: Str)` to SelectQuery
-- [ ] 1.3 `db/query/expression.tml` — Add `Expr::param(index: I32)` for `?` placeholder
-- [ ] 1.4 `db/query/expression.tml` — Add `Expr::named_param(name: Str)` for `:name` placeholder
-- [ ] 1.5 `db/query/select.tml` — Add `join(clause: JoinClause)` to SelectQuery for integrated JOINs
-- [ ] 1.6 `db/query/select.tml` — Add `subquery(sub: SelectQuery)` support in WHERE (IN subquery)
-- [ ] 1.7 `db/query/expression.tml` — Add `Expr::in_subquery(col, subquery_sql)` for `col IN (SELECT ...)`
-- [ ] 1.8 Tests: GROUP BY/HAVING/param/subquery rendering
+- [x] 1.1 `db/query/select.tml` — Add `group_by(column: Str)` to SelectQuery
+- [x] 1.2 `db/query/select.tml` — Add `having(condition: Str)` to SelectQuery
+- [x] 1.3 `db/query/expression.tml` — Add `Expr::param(index: I32)` for `?` placeholder
+- [x] 1.4 `db/query/expression.tml` — Add `Expr::named_param(name: Str)` for `:name` placeholder
+- [x] 1.5 `db/query/select.tml` — Add `join(clause: JoinClause)` to SelectQuery for integrated JOINs
+- [x] 1.6 `db/query/select.tml` — Add `subquery(sub: SelectQuery)` support in WHERE (IN subquery)
+- [x] 1.7 `db/query/expression.tml` — Add `Expr::in_subquery(col, subquery_sql)` for `col IN (SELECT ...)`
+- [x] 1.8 Tests: GROUP BY/HAVING/param/subquery rendering — `lib/std/tests/db/db_query_groupby.test.tml` (18 tests)
 
 ## Phase 2: Entity Enhancements — Timestamps, Unique, Length (7 items)
 
-- [ ] 2.1 `db/orm/entity.tml` — Add `Column::unique()` builder method
-- [ ] 2.2 `db/orm/entity.tml` — Add `Column::varchar(name, length)` with length constraint in DDL
-- [ ] 2.3 `db/orm/entity.tml` — Add `Column::decimal(name, precision, scale)` for numeric precision
-- [ ] 2.4 `db/orm/entity.tml` — Add `Column::timestamp(name)` for TIMESTAMP columns
-- [ ] 2.5 `db/orm/entity.tml` — Add `Column::created_at()` → `created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
-- [ ] 2.6 `db/orm/entity.tml` — Add `Column::updated_at()` → `updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
-- [ ] 2.7 Tests: unique DDL, varchar(N), decimal(P,S), auto-timestamp columns
+- [x] 2.1 `db/orm/entity.tml` — Add `Column::unique()` builder method
+- [x] 2.2 `db/orm/entity.tml` — Add `Column::varchar(name, length)` with length constraint in DDL
+- [x] 2.3 `db/orm/entity.tml` — Add `Column::decimal(name, precision, scale)` for numeric precision
+- [x] 2.4 `db/orm/entity.tml` — Add `Column::timestamp(name)` for TIMESTAMP columns
+- [x] 2.5 `db/orm/entity.tml` — Add `Column::created_at()` → `created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+- [x] 2.6 `db/orm/entity.tml` — Add `Column::updated_at()` → `updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+- [x] 2.7 Tests: unique DDL, varchar(N), decimal(P,S), auto-timestamp columns — `lib/std/tests/db/db_orm_entity_phase2.test.tml` (19 tests)
 
 ## Phase 3: Repository CRUD — Upsert, FindBy, Count, SoftDelete (9 items)
 
-- [ ] 3.1 `db/orm/repository.tml` — `save()` — INSERT OR REPLACE (upsert by PK)
-- [ ] 3.2 `db/orm/repository.tml` — `find_by(table, col, val)` — SELECT WHERE any column = value
-- [ ] 3.3 `db/orm/repository.tml` — `find_many(table, where_clause, limit)` — multi-row SELECT
-- [ ] 3.4 `db/orm/repository.tml` — `count_where(conn, table, condition)` — conditional COUNT
-- [ ] 3.5 `db/orm/repository.tml` — `soft_delete(conn, table, pk_col, pk_val)` — SET deleted_at = NOW
-- [ ] 3.6 `db/orm/repository.tml` — `restore(conn, table, pk_col, pk_val)` — SET deleted_at = NULL
-- [ ] 3.7 `db/orm/repository.tml` — `increment(conn, table, col, amount, pk_col, pk_val)` — atomic increment
-- [ ] 3.8 `db/orm/repository.tml` — `exists(conn, table, col, val)` — quick existence check
-- [ ] 3.9 Tests: upsert, findBy, count_where, soft_delete, restore, increment, exists
+- [x] 3.1 `db/orm/repository.tml` — `save()` — INSERT OR REPLACE (upsert by PK)
+- [x] 3.2 `db/orm/repository.tml` — `find_by(table, col, val)` — SELECT WHERE any column = value
+- [x] 3.3 `db/orm/repository.tml` — `find_many(table, where_clause, limit)` — multi-row SELECT
+- [x] 3.4 `db/orm/repository.tml` — `count_where(conn, table, condition)` — conditional COUNT
+- [x] 3.5 `db/orm/repository.tml` — `soft_delete(conn, table, pk_col, pk_val, timestamp)` — SET deleted_at = timestamp
+- [x] 3.6 `db/orm/repository.tml` — `restore(conn, table, pk_col, pk_val)` — SET deleted_at = NULL
+- [x] 3.7 `db/orm/repository.tml` — `increment(conn, table, col, amount, pk_col, pk_val)` — atomic increment
+- [x] 3.8 `db/orm/repository.tml` — `exists(conn, table, col, val)` — quick existence check
+- [x] 3.9 Tests: upsert, findBy, count_where, soft_delete, restore, increment, exists — `lib/std/tests/db/db_orm_repository_phase3.test.tml` (14 tests)
 
 ## Phase 4: Relations — Eager Loading, Cascade, JoinTable (8 items)
 
