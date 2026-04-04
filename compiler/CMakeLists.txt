@@ -1743,6 +1743,8 @@ add_library(tml_cli STATIC
     src/cli/builder/rlib.cpp
     src/cli/builder/builder_run.cpp
     src/cli/builder/run_profiled.cpp
+    src/cli/builder/platform.cpp
+    src/cli/builder/native_lib_resolver.cpp
     # Test system
     src/cli/commands/cmd_test.cpp
     src/testing/testing_process.cpp
