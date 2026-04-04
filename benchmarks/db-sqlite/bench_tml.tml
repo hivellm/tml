@@ -1,74 +1,98 @@
-/// TML SQLite Benchmark — insert, select, update, delete (in-memory)
+/// TML SQLite Benchmark — prepared statements with BEGIN/COMMIT transactions
+/// Run with: tml run benchmarks/db-sqlite/bench_tml.tml --release
+/// Output CSV: lang,op,iters,total_ns
 use std::db::sqlite::connection::SqliteConnection
 use std::db::sqlite::statement::SqliteStatement
 use std::time::Instant
 
 func main() {
     let mut conn = SqliteConnection::open_in_memory().unwrap()
-    conn.execute("CREATE TABLE World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)")
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=OFF")
+    conn.execute("CREATE TABLE World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)").unwrap()
+    conn.execute("PRAGMA journal_mode=WAL").unwrap()
+    conn.execute("PRAGMA synchronous=OFF").unwrap()
 
-    // Seed 100 rows
+    // Seed 100 rows using prepared statement + transaction
+    conn.begin().unwrap()
+    let seed_raw = conn.prepare("INSERT INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    let mut seed_stmt = SqliteStatement::new(seed_raw)
     var i: I64 = 1
     loop (i <= 100) {
-        let id: I64 = i
-        let val: I64 = i * 7 + 13
-        conn.execute("INSERT INTO World (id, randomNumber) VALUES (" + id.to_string() + ", " + val.to_string() + ")")
+        seed_stmt.bind_i64(1, i).unwrap()
+        seed_stmt.bind_i64(2, i * 7 + 13).unwrap()
+        seed_stmt.step()
+        seed_stmt.reset().unwrap()
         i = i + 1
     }
+    seed_stmt.finalize()
+    conn.commit().unwrap()
 
     let iters: I64 = 10000
 
-    // INSERT
+    // === INSERT with prepared statement + transaction ===
+    let ins_raw = conn.prepare("INSERT INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    let mut ins_stmt = SqliteStatement::new(ins_raw)
+    conn.begin().unwrap()
     let t1 = Instant::now()
     i = 0
     loop (i < iters) {
-        let id: I64 = 1000 + i
-        let val: I64 = i * 3
-        conn.execute("INSERT INTO World (id, randomNumber) VALUES (" + id.to_string() + ", " + val.to_string() + ")")
+        ins_stmt.bind_i64(1, 1000 + i).unwrap()
+        ins_stmt.bind_i64(2, i * 3).unwrap()
+        ins_stmt.step()
+        ins_stmt.reset().unwrap()
         i = i + 1
     }
     let insert_ns: I64 = t1.elapsed().as_nanos()
+    conn.commit().unwrap()
+    ins_stmt.finalize()
 
-    // SELECT
+    // === SELECT with prepared statement ===
+    let sel_raw = conn.prepare("SELECT id, randomNumber FROM World WHERE id = ?").unwrap()
+    let mut sel_stmt = SqliteStatement::new(sel_raw)
     let t2 = Instant::now()
     i = 0
     loop (i < iters) {
-        let pk: I64 = i + 1
-        let stmt_r = conn.prepare("SELECT id, randomNumber FROM World WHERE id = " + pk.to_string())
-        when stmt_r {
-            Ok(raw) => {
-                let mut stmt = SqliteStatement::new(raw)
-                stmt.step()
-                stmt.finalize()
-            },
-            Err(_) => {}
-        }
+        sel_stmt.bind_i64(1, i + 1).unwrap()
+        sel_stmt.step()
+        let _id = sel_stmt.column_i64(0)
+        let _rn = sel_stmt.column_i64(1)
+        sel_stmt.reset().unwrap()
         i = i + 1
     }
     let select_ns: I64 = t2.elapsed().as_nanos()
+    sel_stmt.finalize()
 
-    // UPDATE
+    // === UPDATE with prepared statement + transaction ===
+    let upd_raw = conn.prepare("UPDATE World SET randomNumber = ? WHERE id = ?").unwrap()
+    let mut upd_stmt = SqliteStatement::new(upd_raw)
+    conn.begin().unwrap()
     let t3 = Instant::now()
     i = 0
     loop (i < iters) {
-        let val: I64 = i * 11
-        let pk: I64 = i + 1
-        conn.execute("UPDATE World SET randomNumber = " + val.to_string() + " WHERE id = " + pk.to_string())
+        upd_stmt.bind_i64(1, i * 11).unwrap()
+        upd_stmt.bind_i64(2, i + 1).unwrap()
+        upd_stmt.step()
+        upd_stmt.reset().unwrap()
         i = i + 1
     }
     let update_ns: I64 = t3.elapsed().as_nanos()
+    conn.commit().unwrap()
+    upd_stmt.finalize()
 
-    // DELETE
+    // === DELETE with prepared statement + transaction ===
+    let del_raw = conn.prepare("DELETE FROM World WHERE id = ?").unwrap()
+    let mut del_stmt = SqliteStatement::new(del_raw)
+    conn.begin().unwrap()
     let t4 = Instant::now()
     i = 0
     loop (i < iters) {
-        let pk: I64 = 1000 + i
-        conn.execute("DELETE FROM World WHERE id = " + pk.to_string())
+        del_stmt.bind_i64(1, 1000 + i).unwrap()
+        del_stmt.step()
+        del_stmt.reset().unwrap()
         i = i + 1
     }
     let delete_ns: I64 = t4.elapsed().as_nanos()
+    conn.commit().unwrap()
+    del_stmt.finalize()
 
     conn.close()
 
