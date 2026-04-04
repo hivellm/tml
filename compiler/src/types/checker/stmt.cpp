@@ -139,17 +139,16 @@ auto TypeChecker::check_let_else(const parser::LetElseStmt& let_else) -> TypePtr
     // The pattern must be refutable (can fail to match)
     // The else block must diverge (return, panic, break, continue)
 
-    // TML requires explicit type annotation
-    if (!let_else.type_annotation.has_value()) {
-        error("TML requires explicit type annotation on 'let else' statements.", let_else.span,
-              "T011");
-        return make_unit();
+    // Type annotation is optional — infer from initializer if not provided
+    TypePtr scrutinee_type;
+    TypePtr init_type;
+    if (let_else.type_annotation.has_value()) {
+        scrutinee_type = resolve_type(**let_else.type_annotation);
+        init_type = check_expr(*let_else.init, scrutinee_type);
+    } else {
+        init_type = check_expr(*let_else.init);
+        scrutinee_type = init_type;
     }
-
-    TypePtr scrutinee_type = resolve_type(**let_else.type_annotation);
-
-    // Check the initializer expression
-    TypePtr init_type = check_expr(*let_else.init, scrutinee_type);
 
     // Check type compatibility
     TypePtr resolved_scrutinee = env_.resolve(scrutinee_type);
