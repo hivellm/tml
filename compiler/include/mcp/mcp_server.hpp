@@ -47,6 +47,7 @@
 #include <condition_variable>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -125,7 +126,9 @@ private:
     std::FILE* call_log_fp_ = nullptr;
     std::string session_id_;
     std::atomic<uint64_t> call_sequence_{0};
-    std::string last_tool_name_; // tracks preceding tool for research logging
+    std::string last_tool_name_;             // tracks preceding tool for research logging
+    std::map<std::string, int> tool_counts_; // per-tool call counts for session summary
+    int error_count_ = 0;                    // error count for session summary
     void init_call_logger();
     void log_tool_call(const std::string& tool_name, const std::string& params_json, bool is_error,
                        int64_t duration_ms, const std::string& result_text);

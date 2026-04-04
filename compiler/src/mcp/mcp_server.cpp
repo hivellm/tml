@@ -24,7 +24,11 @@ TML_MODULE("mcp")
 
 #include "json/json_parser.hpp"
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <future>
+
+namespace fs = std::filesystem;
 
 namespace tml::mcp {
 
@@ -56,16 +60,68 @@ void McpServer::init_call_logger() {
     }
 
     // Condition tracking — default is now "debug-layers" (Condition B).
-    // Set TML_DEBUG_LAYERS=0 to revert to baseline for comparison.
     const char* dl_env = std::getenv("TML_DEBUG_LAYERS");
     const char* condition =
         (dl_env != nullptr && std::string(dl_env) == "0") ? "baseline" : "debug-layers";
 
+    // 2.1: Detect active Rulebook task
+    std::string task_id;
+    {
+        std::error_code ec;
+        fs::path tasks_dir = fs::current_path() / ".rulebook" / "tasks";
+        if (fs::exists(tasks_dir, ec)) {
+            for (const auto& entry : fs::directory_iterator(tasks_dir, ec)) {
+                if (!entry.is_directory())
+                    continue;
+                fs::path meta = entry.path() / ".metadata.json";
+                if (!fs::exists(meta))
+                    continue;
+                // Read metadata to check status
+                std::ifstream mf(meta);
+                std::string content((std::istreambuf_iterator<char>(mf)),
+                                    std::istreambuf_iterator<char>());
+                if (content.find("\"in-progress\"") != std::string::npos) {
+                    task_id = entry.path().filename().string();
+                    break;
+                }
+            }
+        }
+    }
+
+    // 2.2: Model from env var
+    std::string model;
+    const char* model_env = std::getenv("TML_MODEL");
+    if (model_env != nullptr && model_env[0] != '\0') {
+        model = model_env;
+    }
+
+    // 2.4: CLAUDE.md hash (CRC32 of first 4KB for speed)
+    std::string claude_md_hash;
+    {
+        std::ifstream cf("CLAUDE.md", std::ios::binary);
+        if (cf.is_open()) {
+            char buf[4096];
+            cf.read(buf, sizeof(buf));
+            auto n = cf.gcount();
+            uint32_t crc = 0;
+            for (std::streamsize i = 0; i < n; i++) {
+                crc = crc ^ static_cast<uint32_t>(static_cast<uint8_t>(buf[i]));
+                for (int j = 0; j < 8; j++) {
+                    crc = (crc >> 1) ^ (0xEDB88320 & (-(crc & 1)));
+                }
+            }
+            char hex[9];
+            std::snprintf(hex, sizeof(hex), "%08x", crc);
+            claude_md_hash = hex;
+        }
+    }
+
     std::fprintf(call_log_fp_,
                  "{\"event\":\"session_start\",\"session\":\"%s\","
-                 "\"server\":\"%s\",\"version\":\"%s\",\"condition\":\"%s\"}\n",
+                 "\"server\":\"%s\",\"version\":\"%s\",\"condition\":\"%s\""
+                 ",\"task\":\"%s\",\"model\":\"%s\",\"claude_md_hash\":\"%s\"}\n",
                  session_id_.c_str(), server_info_.name.c_str(), server_info_.version.c_str(),
-                 condition);
+                 condition, task_id.c_str(), model.c_str(), claude_md_hash.c_str());
     std::fflush(call_log_fp_);
 }
 
@@ -189,6 +245,12 @@ void McpServer::log_tool_call(const std::string& tool_name, const std::string& p
                  error_type.c_str(), preceded_by.c_str(), test_target.c_str(), debug_layers_json,
                  static_cast<long long>(output_tokens), test_results_suffix.c_str());
     std::fflush(call_log_fp_);
+
+    // Track stats for session summary (2.3)
+    tool_counts_[tool_name]++;
+    if (is_error || error_type != "none") {
+        error_count_++;
+    }
 }
 
 // ============================================================================
@@ -253,11 +315,31 @@ void McpServer::run() {
         workers_cv_.wait(lock, [this] { return active_workers_.load() == 0; });
     }
 
-    // Write session end marker
+    // Write session end marker with auto-summary (2.3)
     if (call_log_fp_ != nullptr) {
+        auto total = static_cast<unsigned long long>(call_sequence_.load());
+
+        // Find dominant tool
+        std::string dominant_tool;
+        int max_count = 0;
+        int tools_used = 0;
+        for (const auto& [tool, count] : tool_counts_) {
+            tools_used++;
+            if (count > max_count) {
+                max_count = count;
+                dominant_tool = tool;
+            }
+        }
+
+        double error_rate = total > 0 ? static_cast<double>(error_count_) / total : 0.0;
+
         std::fprintf(call_log_fp_,
-                     "{\"event\":\"session_end\",\"session\":\"%s\",\"total_calls\":%llu}\n",
-                     session_id_.c_str(), static_cast<unsigned long long>(call_sequence_));
+                     "{\"event\":\"session_end\",\"session\":\"%s\","
+                     "\"total_calls\":%llu,\"tools_used\":%d,"
+                     "\"error_count\":%d,\"error_rate\":%.3f,"
+                     "\"dominant_tool\":\"%s\"}\n",
+                     session_id_.c_str(), total, tools_used, error_count_, error_rate,
+                     dominant_tool.c_str());
         std::fclose(call_log_fp_);
         call_log_fp_ = nullptr;
     }
