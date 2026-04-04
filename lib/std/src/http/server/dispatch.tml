@@ -538,6 +538,20 @@ pub func app_dispatch(shared: I64, method: Str, path: Str, body: Str, fd: I64, p
         return app_build_response(501, "application/json", "{\"error\":\"not implemented\"}")
     }
 
+    // ── CORS Preflight: auto-respond to OPTIONS with Allow headers ──
+    // RFC 7231 §4.3.7: OPTIONS request should return allowed methods.
+    // Browsers send OPTIONS before PUT/DELETE/PATCH (CORS preflight).
+    if method == "OPTIONS" {
+        return "HTTP/1.1 204 No Content\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD\r\n" +
+            "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n" +
+            "Access-Control-Max-Age: 86400\r\n" +
+            "Content-Length: 0\r\n" +
+            "Connection: keep-alive\r\n" +
+            "\r\n"
+    }
+
     // ── Route lookup: radix tree first (O(path_len)), linear scan fallback ──
     // param_count is written to params_buf + PARAM_COUNT_OFF by app_find_route/app_linear_lookup
     let midx: I64 = method_index(method)
