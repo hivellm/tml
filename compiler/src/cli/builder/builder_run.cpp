@@ -341,6 +341,57 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             }
         }
 
+        // Run build.tml for imported external packages (not just the source file's package)
+        if (compile.registry) {
+            std::set<std::string> imported_pkgs;
+            fs::path source_pkg_dir = detect_package_dir(fs::absolute(fs::path(path)));
+            std::string source_pkg_name =
+                source_pkg_dir.empty() ? "" : source_pkg_dir.filename().string();
+            for (const auto& [mod_path, _] : compile.registry->get_all_modules()) {
+                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
+                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                    continue;
+                }
+                auto sep = mod_path.find("::");
+                std::string pkg = (sep != std::string::npos) ? mod_path.substr(0, sep) : mod_path;
+                if (!source_pkg_name.empty() && pkg == source_pkg_name)
+                    continue;
+                if (imported_pkgs.count(pkg))
+                    continue;
+                imported_pkgs.insert(pkg);
+
+                fs::path pkg_dir = fs::path("lib") / pkg;
+                if (!fs::exists(pkg_dir / "build.tml"))
+                    continue;
+
+                auto pkg_bsr =
+                    detect_and_run_build_script((pkg_dir / "src" / "mod.tml").string(), verbose);
+                if (pkg_bsr.success) {
+                    for (const auto& sp : pkg_bsr.link_search_paths) {
+                        fs::path abs_path = sp.is_absolute() ? sp : pkg_dir / sp;
+                        link_options.library_search_paths.push_back(abs_path.string());
+                    }
+                    for (const auto& lib : pkg_bsr.link_libs) {
+                        if (lib.find('/') != std::string::npos ||
+                            lib.find('\\') != std::string::npos) {
+                            link_options.link_flags.push_back(lib);
+                        } else {
+                            link_options.link_flags.push_back("-l" + lib);
+                        }
+                    }
+                    // Copy artifacts to cache dir
+                    for (const auto& artifact : pkg_bsr.copy_artifacts) {
+                        fs::path src = artifact.is_absolute() ? artifact : pkg_dir / artifact;
+                        if (fs::exists(src)) {
+                            std::error_code ec;
+                            fs::copy_file(src, cache_dir / artifact.filename(),
+                                          fs::copy_options::overwrite_existing, ec);
+                        }
+                    }
+                }
+            }
+        }
+
 #ifdef _WIN32
         // Add Windows system libraries for socket support
         if ((compile.module && has_socket_functions(*compile.module)) ||
@@ -550,6 +601,57 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                         link_options.link_flags.push_back(lib);
                     } else {
                         link_options.link_flags.push_back("-l" + lib);
+                    }
+                }
+            }
+        }
+
+        // Run build.tml for imported external packages (not just the source file's package)
+        if (compile.registry) {
+            std::set<std::string> imported_pkgs;
+            fs::path source_pkg_dir = detect_package_dir(fs::absolute(fs::path(path)));
+            std::string source_pkg_name =
+                source_pkg_dir.empty() ? "" : source_pkg_dir.filename().string();
+            for (const auto& [mod_path, _] : compile.registry->get_all_modules()) {
+                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
+                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                    continue;
+                }
+                auto sep = mod_path.find("::");
+                std::string pkg = (sep != std::string::npos) ? mod_path.substr(0, sep) : mod_path;
+                if (!source_pkg_name.empty() && pkg == source_pkg_name)
+                    continue;
+                if (imported_pkgs.count(pkg))
+                    continue;
+                imported_pkgs.insert(pkg);
+
+                fs::path pkg_dir = fs::path("lib") / pkg;
+                if (!fs::exists(pkg_dir / "build.tml"))
+                    continue;
+
+                auto pkg_bsr =
+                    detect_and_run_build_script((pkg_dir / "src" / "mod.tml").string(), false);
+                if (pkg_bsr.success) {
+                    for (const auto& sp : pkg_bsr.link_search_paths) {
+                        fs::path abs_path = sp.is_absolute() ? sp : pkg_dir / sp;
+                        link_options.library_search_paths.push_back(abs_path.string());
+                    }
+                    for (const auto& lib : pkg_bsr.link_libs) {
+                        if (lib.find('/') != std::string::npos ||
+                            lib.find('\\') != std::string::npos) {
+                            link_options.link_flags.push_back(lib);
+                        } else {
+                            link_options.link_flags.push_back("-l" + lib);
+                        }
+                    }
+                    // Copy artifacts to cache dir
+                    for (const auto& artifact : pkg_bsr.copy_artifacts) {
+                        fs::path src = artifact.is_absolute() ? artifact : pkg_dir / artifact;
+                        if (fs::exists(src)) {
+                            std::error_code ec;
+                            fs::copy_file(src, cache_dir / artifact.filename(),
+                                          fs::copy_options::overwrite_existing, ec);
+                        }
                     }
                 }
             }

@@ -106,71 +106,7 @@ func pg_check_result(result: *Unit, conn: *Unit) -> Outcome[Unit, DbError] {
     return Ok(())
 }
 
-/// Builds a param values array with one I64 value (as text).
-/// Returns a heap-allocated array of 1 pointer; caller must free.
-func pg_bind_1_i64(p1: I64) -> *Unit {
-    let s1 = p1.to_string()
-    var params: *Unit = pg_null()
-    lowlevel {
-        let arr = mem_alloc(8)
-        ptr_write[I64](arr, s1 as I64)
-        params = arr as *Unit
-    }
-    return params
-}
-
-/// Builds a param values array with two I64 values (as text).
-func pg_bind_2_i64(p1: I64, p2: I64) -> *Unit {
-    let s1 = p1.to_string()
-    let s2 = p2.to_string()
-    var params: *Unit = pg_null()
-    lowlevel {
-        let arr = mem_alloc(16)
-        ptr_write[I64](arr, s1 as I64)
-        ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
-        params = arr as *Unit
-    }
-    return params
-}
-
-/// Builds a param values array with one Str value.
-func pg_bind_1_str(p1: Str) -> *Unit {
-    var params: *Unit = pg_null()
-    lowlevel {
-        let arr = mem_alloc(8)
-        ptr_write[I64](arr, p1 as I64)
-        params = arr as *Unit
-    }
-    return params
-}
-
-/// Builds a param values array with one Str then one I64 value.
-func pg_bind_str_i64(p1: Str, p2: I64) -> *Unit {
-    let s2 = p2.to_string()
-    var params: *Unit = pg_null()
-    lowlevel {
-        let arr = mem_alloc(16)
-        ptr_write[I64](arr, p1 as I64)
-        ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
-        params = arr as *Unit
-    }
-    return params
-}
-
-/// Builds a param values array with one I64 then one Str value.
-func pg_bind_i64_str(p1: I64, p2: Str) -> *Unit {
-    let s1 = p1.to_string()
-    var params: *Unit = pg_null()
-    lowlevel {
-        let arr = mem_alloc(16)
-        ptr_write[I64](arr, s1 as I64)
-        ptr_write[I64](ptr_offset(arr, 8), p2 as I64)
-        params = arr as *Unit
-    }
-    return params
-}
-
-/// Frees a param values array allocated by pg_bind_* functions.
+/// Frees a param values array.
 func pg_free_params(params: *Unit) {
     lowlevel {
         mem_free(params)
@@ -324,7 +260,13 @@ impl PgConnection {
 
     /// Queries a single I64 value with one I64 parameter.
     pub func query_one_i64(this, sql: Str, p1: I64) -> I64 {
-        let params = pg_bind_1_i64(p1)
+        let s1 = p1.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, s1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         if result == pg_null() {
@@ -348,7 +290,13 @@ impl PgConnection {
 
     /// Queries a single Str value with one I64 parameter.
     pub func query_one_str(this, sql: Str, p1: I64) -> Str {
-        let params = pg_bind_1_i64(p1)
+        let s1 = p1.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, s1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         if result == pg_null() {
@@ -443,7 +391,13 @@ impl Connection for PgConnection {
 
     /// Executes a parameterized statement with one I64 parameter.
     pub func execute_i64_params(this, sql: Str, p1: I64) -> Outcome[I64, DbError] {
-        let params = pg_bind_1_i64(p1)
+        let s1 = p1.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, s1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -456,7 +410,15 @@ impl Connection for PgConnection {
 
     /// Executes a parameterized statement with two I64 parameters.
     pub func execute_i64_2(this, sql: Str, p1: I64, p2: I64) -> Outcome[I64, DbError] {
-        let params = pg_bind_2_i64(p1, p2)
+        let s1 = p1.to_string()
+        let s2 = p2.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(16)
+            ptr_write[I64](arr, s1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -469,7 +431,12 @@ impl Connection for PgConnection {
 
     /// Executes a parameterized statement with one Str parameter.
     pub func execute_str(this, sql: Str, p1: Str) -> Outcome[I64, DbError] {
-        let params = pg_bind_1_str(p1)
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, p1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -482,7 +449,14 @@ impl Connection for PgConnection {
 
     /// Executes a parameterized statement with one Str then one I64 parameter.
     pub func execute_str_i64(this, sql: Str, p1: Str, p2: I64) -> Outcome[I64, DbError] {
-        let params = pg_bind_str_i64(p1, p2)
+        let s2 = p2.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(16)
+            ptr_write[I64](arr, p1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -495,7 +469,14 @@ impl Connection for PgConnection {
 
     /// Executes a parameterized statement with one I64 then one Str parameter.
     pub func execute_i64_str(this, sql: Str, p1: I64, p2: Str) -> Outcome[I64, DbError] {
-        let params = pg_bind_i64_str(p1, p2)
+        let s1 = p1.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(16)
+            ptr_write[I64](arr, s1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), p2 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -530,7 +511,13 @@ impl Connection for PgConnection {
 
     /// Queries whether at least one row exists, with an I64 parameter.
     pub func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError] {
-        let params = pg_bind_1_i64(p1)
+        let s1 = p1.to_string()
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, s1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)
@@ -545,7 +532,12 @@ impl Connection for PgConnection {
 
     /// Queries whether at least one row exists, with a Str parameter.
     pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
-        let params = pg_bind_1_str(p1)
+        var params: *Unit = pg_null()
+        lowlevel {
+            let arr = mem_alloc(8)
+            ptr_write[I64](arr, p1 as I64)
+            params = arr as *Unit
+        }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
         let chk = pg_check_result(result, this.pg_handle)

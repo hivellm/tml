@@ -512,6 +512,69 @@ std::string build_stdlib_object(const CompileConfig& config) {
 }
 
 // ============================================================================
+// Build script cache helpers
+// ============================================================================
+
+/// Returns cached BuildScriptResult if valid (cache newer than build.tml), or empty on miss.
+static cli::BuildScriptResult load_build_script_cache(const fs::path& pkg_dir) {
+    cli::BuildScriptResult result;
+    result.success = false;
+
+    auto cache_file =
+        fs::path("build/debug/build-scripts") / pkg_dir.filename() / "test_link_cache.txt";
+    auto build_script = pkg_dir / "build.tml";
+
+    if (!fs::exists(cache_file) || !fs::exists(build_script))
+        return result;
+
+    // Check if cache is newer than build.tml
+    auto cache_time = fs::last_write_time(cache_file);
+    auto script_time = fs::last_write_time(build_script);
+    if (script_time > cache_time)
+        return result; // stale cache
+
+    // Read cached directives
+    std::ifstream ifs(cache_file);
+    if (!ifs.is_open())
+        return result;
+
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (line.find("link-lib:") == 0) {
+            result.link_libs.insert(line.substr(9));
+        } else if (line.find("link-search:") == 0) {
+            result.link_search_paths.push_back(fs::path(line.substr(12)));
+        } else if (line.find("copy-artifact:") == 0) {
+            result.copy_artifacts.push_back(fs::path(line.substr(14)));
+        }
+    }
+    result.success = true;
+    return result;
+}
+
+/// Saves build.tml results to a per-package cache file.
+static void save_build_script_cache(const fs::path& pkg_dir, const cli::BuildScriptResult& bsr) {
+    auto cache_dir = fs::path("build/debug/build-scripts") / pkg_dir.filename();
+    std::error_code ec;
+    fs::create_directories(cache_dir, ec);
+
+    auto cache_file = cache_dir / "test_link_cache.txt";
+    std::ofstream ofs(cache_file);
+    if (!ofs.is_open())
+        return;
+
+    for (const auto& lib : bsr.link_libs) {
+        ofs << "link-lib:" << lib << "\n";
+    }
+    for (const auto& sp : bsr.link_search_paths) {
+        ofs << "link-search:" << sp.string() << "\n";
+    }
+    for (const auto& art : bsr.copy_artifacts) {
+        ofs << "copy-artifact:" << art.string() << "\n";
+    }
+}
+
+// ============================================================================
 // Single suite compilation
 // ============================================================================
 
@@ -1088,36 +1151,66 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 #endif
 
     // Run build.tml scripts for external packages (e.g., postgresql)
-    // Detect packages imported by scanning registry module paths for non-standard prefixes.
+    // Scan source files for "use <pkg>::" imports to detect non-standard packages.
+    // This approach works on both the first run and subsequent cached runs because it
+    // reads from the source files directly, bypassing the registry (which may be null
+    // when the incremental cache GREEN path is taken).
     {
         std::set<std::string> packages_checked;
-        if (registry) {
-            for (const auto& [mod_path, _] : registry->get_all_modules()) {
-                // Skip standard library and core modules
-                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
-                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+        for (const auto& test : suite.tests) {
+            std::ifstream ifs(test.file_path);
+            if (!ifs.is_open())
+                continue;
+            std::string line;
+            while (std::getline(ifs, line)) {
+                // Skip empty lines and comments
+                if (line.empty() || line[0] == '/' || line[0] == '#')
+                    continue;
+                // Look for "use <pkg>::" pattern
+                auto pos = line.find("use ");
+                if (pos == std::string::npos)
+                    continue;
+                std::string rest = line.substr(pos + 4);
+                // Trim leading whitespace
+                while (!rest.empty() && (rest[0] == ' ' || rest[0] == '\t')) {
+                    rest = rest.substr(1);
+                }
+                // Extract package name (before first "::")
+                auto sep = rest.find("::");
+                if (sep == std::string::npos)
+                    continue;
+                std::string pkg_name = rest.substr(0, sep);
+                // Skip standard packages
+                if (pkg_name == "core" || pkg_name == "std" || pkg_name == "test" ||
+                    pkg_name == "compiler") {
                     continue;
                 }
-                // Extract package name (first component of module path)
-                auto sep = mod_path.find("::");
-                std::string pkg_name =
-                    (sep != std::string::npos) ? mod_path.substr(0, sep) : mod_path;
-                if (packages_checked.count(pkg_name)) {
+                if (packages_checked.count(pkg_name))
                     continue;
-                }
                 packages_checked.insert(pkg_name);
 
                 // Check for build.tml in lib/<package>/
                 fs::path pkg_dir = fs::path("lib") / pkg_name;
                 fs::path build_script = pkg_dir / "build.tml";
-                if (!fs::exists(build_script)) {
+                if (!fs::exists(build_script))
                     continue;
+
+                // Try cached result first
+                auto cached = load_build_script_cache(pkg_dir);
+                cli::BuildScriptResult bsr;
+                bsr.success = false;
+                if (cached.success) {
+                    bsr = cached;
+                    TML_LOG_INFO("test",
+                                 "[compile] Using cached build.tml for package: " << pkg_name);
+                } else {
+                    TML_LOG_INFO("test", "[compile] Running build.tml for package: " << pkg_name);
+                    bsr = cli::detect_and_run_build_script((pkg_dir / "src" / "mod.tml").string(),
+                                                           verbose);
+                    if (bsr.success) {
+                        save_build_script_cache(pkg_dir, bsr);
+                    }
                 }
-
-                TML_LOG_INFO("test", "[compile] Running build.tml for package: " << pkg_name);
-
-                auto bsr = cli::detect_and_run_build_script((pkg_dir / "src" / "mod.tml").string(),
-                                                            verbose);
 
                 if (bsr.success) {
                     // Add link libraries

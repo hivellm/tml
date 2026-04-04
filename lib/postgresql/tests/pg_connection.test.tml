@@ -1,4 +1,0 @@
-// REMOVED — tests split into individual files:
-// pg_connect.test.tml, pg_execute.test.tml, pg_params.test.tml,
-// pg_query.test.tml, pg_transaction.test.tml, pg_statement.test.tml,
-// pg_dialect.test.tml, pg_types.test.tml

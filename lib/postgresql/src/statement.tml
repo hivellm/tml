@@ -189,6 +189,26 @@ func pg_free_params(params: *Unit) {
     }
 }
 
+/// Frees all owned string copies stored in param slots, then zeroes them.
+/// Each non-null slot is assumed to point to a `mem_alloc`-ed C string copy.
+func pg_free_param_strings(params: *Unit, count: I32) {
+    var i: I32 = 0
+    loop (i < count) {
+        let offset = (i as I64) * 8
+        var ptr_val: I64 = 0
+        lowlevel {
+            ptr_val = ptr_read[I64](ptr_offset(params, offset))
+        }
+        if ptr_val != 0 {
+            let ptr_to_free = ptr_val as *Unit
+            lowlevel {
+                mem_free(ptr_to_free)
+            }
+        }
+        i = i + 1
+    }
+}
+
 // ============================================================================
 // PgStatement
 // ============================================================================
@@ -390,48 +410,124 @@ impl PreparedStatement for PgStatement {
     /// Binds an I64 value to the parameter at the given 1-based index.
     ///
     /// The value is converted to its text representation (PostgreSQL text
-    /// protocol).  Index is 1-based: `bind_i64(1, 42)` binds the first
-    /// parameter.
+    /// protocol).  A heap copy of the string is stored so it remains valid
+    /// until `reset()` or `finalize()` frees it.
+    /// Index is 1-based: `bind_i64(1, 42)` binds the first parameter.
     pub func bind_i64(this, idx: I32, value: I64) -> Outcome[Unit, DbError] {
         if idx < 1 or idx > this.pg_param_count {
             return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
         }
         let text_val = value.to_string()
+        let len = strlen(text_val)
         let params = this.pg_params
-        pg_set_param_str(params, idx - 1, text_val)
+        let slot_offset = ((idx - 1) as I64) * 8
+        // Free any previous copy at this slot
+        var old_ptr: I64 = 0
+        lowlevel {
+            old_ptr = ptr_read[I64](ptr_offset(params, slot_offset))
+        }
+        if old_ptr != 0 {
+            let old = old_ptr as *Unit
+            lowlevel {
+                mem_free(old)
+            }
+        }
+        // Allocate a new C string copy that outlives this function
+        lowlevel {
+            let buf = mem_alloc(len + 1)
+            copy_nonoverlapping(text_val, buf, len)
+            ptr_write[U8](ptr_offset(buf, len), 0)
+            ptr_write[I64](ptr_offset(params, slot_offset), buf as I64)
+        }
         return Ok(())
     }
 
     /// Binds an F64 value to the parameter at the given 1-based index.
+    ///
+    /// A heap copy of the string representation is stored so it remains
+    /// valid until `reset()` or `finalize()` frees it.
     pub func bind_f64(this, idx: I32, value: F64) -> Outcome[Unit, DbError] {
         if idx < 1 or idx > this.pg_param_count {
             return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
         }
         let text_val = value.to_string()
+        let len = strlen(text_val)
         let params = this.pg_params
-        pg_set_param_str(params, idx - 1, text_val)
+        let slot_offset = ((idx - 1) as I64) * 8
+        // Free any previous copy at this slot
+        var old_ptr: I64 = 0
+        lowlevel {
+            old_ptr = ptr_read[I64](ptr_offset(params, slot_offset))
+        }
+        if old_ptr != 0 {
+            let old = old_ptr as *Unit
+            lowlevel {
+                mem_free(old)
+            }
+        }
+        // Allocate a new C string copy that outlives this function
+        lowlevel {
+            let buf = mem_alloc(len + 1)
+            copy_nonoverlapping(text_val, buf, len)
+            ptr_write[U8](ptr_offset(buf, len), 0)
+            ptr_write[I64](ptr_offset(params, slot_offset), buf as I64)
+        }
         return Ok(())
     }
 
     /// Binds a Str value to the parameter at the given 1-based index.
+    ///
+    /// A heap copy of the string is stored so it remains valid until
+    /// `reset()` or `finalize()` frees it.
     pub func bind_str(this, idx: I32, value: Str) -> Outcome[Unit, DbError] {
         if idx < 1 or idx > this.pg_param_count {
             return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
         }
+        let len = strlen(value)
         let params = this.pg_params
-        pg_set_param_str(params, idx - 1, value)
+        let slot_offset = ((idx - 1) as I64) * 8
+        // Free any previous copy at this slot
+        var old_ptr: I64 = 0
+        lowlevel {
+            old_ptr = ptr_read[I64](ptr_offset(params, slot_offset))
+        }
+        if old_ptr != 0 {
+            let old = old_ptr as *Unit
+            lowlevel {
+                mem_free(old)
+            }
+        }
+        // Allocate a new C string copy that outlives this function
+        lowlevel {
+            let buf = mem_alloc(len + 1)
+            copy_nonoverlapping(value, buf, len)
+            ptr_write[U8](ptr_offset(buf, len), 0)
+            ptr_write[I64](ptr_offset(params, slot_offset), buf as I64)
+        }
         return Ok(())
     }
 
     /// Binds NULL to the parameter at the given 1-based index.
     ///
-    /// Sets the parameter pointer to null, which PostgreSQL interprets as
-    /// SQL NULL.
+    /// Frees any previously bound owned string copy at this slot, then
+    /// sets the parameter pointer to null (SQL NULL).
     pub func bind_null(this, idx: I32) -> Outcome[Unit, DbError] {
         if idx < 1 or idx > this.pg_param_count {
             return Err(DbError::new(DbErrorKind::Query, "Parameter index out of range"))
         }
         let params = this.pg_params
+        let slot_offset = ((idx - 1) as I64) * 8
+        // Free any previous copy at this slot
+        var old_ptr: I64 = 0
+        lowlevel {
+            old_ptr = ptr_read[I64](ptr_offset(params, slot_offset))
+        }
+        if old_ptr != 0 {
+            let old = old_ptr as *Unit
+            lowlevel {
+                mem_free(old)
+            }
+        }
         pg_set_param_null(params, idx - 1)
         return Ok(())
     }
@@ -480,10 +576,11 @@ impl PreparedStatement for PgStatement {
         this.pg_row_count = 0
         this.pg_col_count = 0
 
-        // Reset all param slots to null
+        // Free owned string copies in param slots, then zero all slots
         let params = this.pg_params
         let count = this.pg_param_count
         if params != pg_null() and count > 0 {
+            pg_free_param_strings(params, count)
             pg_zero_params(params, count)
         }
         return Ok(())
@@ -519,8 +616,12 @@ impl PreparedStatement for PgStatement {
         if result != pg_null() {
             PQclear(result)
         }
-        // Free the param values array
+        // Free owned string copies in param slots, then free the array itself
         let params = this.pg_params
+        let count = this.pg_param_count
+        if params != pg_null() and count > 0 {
+            pg_free_param_strings(params, count)
+        }
         pg_free_params(params)
         // Deallocate the server-side prepared statement
         let conn = this.pg_conn
