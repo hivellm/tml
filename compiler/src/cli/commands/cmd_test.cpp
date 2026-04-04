@@ -136,6 +136,8 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--timeout=")) {
             opts.timeout_seconds = std::stoi(arg.substr(10));
+        } else if (arg.starts_with("--per-test-timeout=")) {
+            opts.per_test_timeout_ms = std::stoi(arg.substr(19));
         } else if (arg.starts_with("--group=") || arg.starts_with("--suite=")) {
             auto eq = arg.find('=');
             opts.suite_filters.push_back(arg.substr(eq + 1));
@@ -281,6 +283,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     // resource exhaustion crashes (each EXE loads ~100MB of runtime DLLs).
     tc.exec_concurrent = opts.coverage ? 2 : 0; // 2 for coverage, auto otherwise
     tc.timeout_seconds = opts.timeout_seconds;
+    tc.per_test_timeout_us = static_cast<int64_t>(opts.per_test_timeout_ms) * 1000;
     tc.no_cache = opts.no_cache;
     tc.verbose = opts.verbose;
     tc.profile = opts.profile;

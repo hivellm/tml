@@ -155,7 +155,8 @@ struct TestOptions {
     int test_threads = 0;              // Parallel test threads (0 = auto)
     bool release = false;              // Run in release mode
     std::string test_binary;           // Path to test binary (if provided)
-    int timeout_seconds = 20;          // Test timeout in seconds (default: 20s)
+    int timeout_seconds = 30;          // Test timeout in seconds (default: 30s)
+    int per_test_timeout_ms = 10000;   // Per-test timeout in milliseconds (default: 10s)
     bool no_color = false;             // Disable colored output
     bool no_cache = false;             // Disable build cache
     std::string save_baseline;         // Save benchmark results to file (for --bench)

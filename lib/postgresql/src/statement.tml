@@ -104,8 +104,7 @@ func pg_stmt_parse_i64(s: Str) -> I64 {
     // Check first byte for minus sign
     var first_byte: I64 = 0
     lowlevel {
-        let base = s as RawPtr
-        first_byte = ptr_read[U8](base) as I64
+        first_byte = ptr_read[U8](s) as I64
     }
     if first_byte == 45 {
         neg = true
@@ -115,8 +114,7 @@ func pg_stmt_parse_i64(s: Str) -> I64 {
     loop (i < slen) {
         var c: I64 = 0
         lowlevel {
-            let base = s as RawPtr
-            let addr = ptr_offset(base, i)
+            let addr = ptr_offset(s, i)
             c = ptr_read[U8](addr) as I64
         }
         if c >= 48 and c <= 57 {
@@ -158,9 +156,7 @@ func pg_alloc_params(n: I32) -> *Unit {
 func pg_set_param_str(params: *Unit, idx: I32, value: Str) {
     let offset = (idx as I64) * 8
     lowlevel {
-        let base = params as RawPtr
-        let str_ptr = value as RawPtr
-        ptr_write[I64](ptr_offset(base, offset), str_ptr as I64)
+        ptr_write[I64](ptr_offset(params, offset), value as I64)
     }
 }
 
@@ -168,8 +164,7 @@ func pg_set_param_str(params: *Unit, idx: I32, value: Str) {
 func pg_set_param_null(params: *Unit, idx: I32) {
     let offset = (idx as I64) * 8
     lowlevel {
-        let base = params as RawPtr
-        ptr_write[I64](ptr_offset(base, offset), 0)
+        ptr_write[I64](ptr_offset(params, offset), 0)
     }
 }
 
@@ -177,10 +172,9 @@ func pg_set_param_null(params: *Unit, idx: I32) {
 func pg_zero_params(params: *Unit, count: I32) {
     let size = (count as I64) * 8
     lowlevel {
-        let raw = params as RawPtr
         var j: I64 = 0
         loop (j < size) {
-            ptr_write[U8](ptr_offset(raw, j), 0)
+            ptr_write[U8](ptr_offset(params, j), 0)
             j = j + 1
         }
     }
@@ -190,7 +184,7 @@ func pg_zero_params(params: *Unit, count: I32) {
 func pg_free_params(params: *Unit) {
     if params != pg_null() {
         lowlevel {
-            mem_free(params as RawPtr)
+            mem_free(params)
         }
     }
 }

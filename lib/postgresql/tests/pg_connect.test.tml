@@ -1,0 +1,125 @@
+// PostgreSQL connection lifecycle tests.
+//
+// Requires: PostgreSQL running (see DATABASE_URL or PG_TEST_CONNSTR env var)
+//   docker run -d -p 5433:5432 \
+//     -e POSTGRES_DB=projectv -e POSTGRES_USER=projectv \
+//     -e POSTGRES_PASSWORD=projectv_dev postgres:16-alpine
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+/// Reads connection URL from DATABASE_URL env var, falls back to local dev default.
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+// ── Connection ───────────────────────────────────────────────────────────────
+
+/// Successful connect reports is_alive() == true.
+@test @slow_test
+func test_connect_success() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection should succeed")
+            return 1
+        },
+        Ok(mut conn) => {
+            assert(conn.is_alive(), "is_alive should be true after connect")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// Connecting to a bad host returns Err.
+@test @slow_test
+func test_connect_bad_host() -> I32 {
+    let result = PgConnection::connect("postgresql://x:x@nonexistent:9999/x?connect_timeout=1")
+    when result {
+        Err(_) => return 0,
+        Ok(mut conn) => {
+            assert(false, "connection to nonexistent host should fail")
+            conn.close()
+            return 1
+        }
+    }
+}
+
+/// close() makes is_alive() return false.
+@test @slow_test
+func test_close_makes_not_alive() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            conn.close()
+            assert(not conn.is_alive(), "is_alive should be false after close")
+            return 0
+        }
+    }
+}
+
+/// server_version() returns a positive integer (PG 16 = 160000+).
+@test @slow_test
+func test_server_version() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let ver = conn.server_version()
+            assert(ver > 0, "server_version should be positive")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// raw_handle() returns a non-null pointer.
+@test @slow_test
+func test_raw_handle() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let handle = conn.raw_handle()
+            assert(handle != 0 as *Unit, "raw_handle should be non-null")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// transaction_status() is 0 (idle) when not in a transaction.
+@test @slow_test
+func test_transaction_status_idle() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let status = conn.transaction_status()
+            assert_eq(status, 0, "transaction_status should be 0 (idle) outside a transaction")
+            conn.close()
+            return 0
+        }
+    }
+}

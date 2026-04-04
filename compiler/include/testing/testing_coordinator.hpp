@@ -58,11 +58,11 @@ struct TestConfig {
     bool fail_fast = true;    // Stop on first failure
     bool run_all_mode = true; // Use --run-all per suite instead of --test-index per test
     int64_t per_test_timeout_us =
-        100000;               // Max microseconds per test (100ms). Per-test limit — not per-suite.
-    bool list_suites = false; // Print suites and exit
-    int max_compile_suites = 0;      // Max suites to compile per run (0 = unlimited)
-    std::string root_dir;            // Discovery root (empty = cwd)
-    bool debug_layers = false;       // Emit multi-layer IR diagnostics on failure
+        10000000;               // Max microseconds per test (10s). Per-test limit — not per-suite.
+    bool list_suites = false;   // Print suites and exit
+    int max_compile_suites = 0; // Max suites to compile per run (0 = unlimited)
+    std::string root_dir;       // Discovery root (empty = cwd)
+    bool debug_layers = false;  // Emit multi-layer IR diagnostics on failure
     bool use_unified_binary = false; // Compile all tests into one mega-binary (Zig model)
 };
 

@@ -72,8 +72,7 @@ func pg_parse_i64(s: Str) -> I64 {
     loop (i < slen) {
         var c: I64 = 0
         lowlevel {
-            let base = s as RawPtr
-            let addr = ptr_offset(base, i)
+            let addr = ptr_offset(s, i)
             c = ptr_read[U8](addr) as I64
         }
         if c >= 48 and c <= 57 {
@@ -114,8 +113,7 @@ func pg_bind_1_i64(p1: I64) -> *Unit {
     var params: *Unit = pg_null()
     lowlevel {
         let arr = mem_alloc(8)
-        let s1_ptr = s1 as RawPtr
-        ptr_write[I64](arr, s1_ptr as I64)
+        ptr_write[I64](arr, s1 as I64)
         params = arr as *Unit
     }
     return params
@@ -128,10 +126,8 @@ func pg_bind_2_i64(p1: I64, p2: I64) -> *Unit {
     var params: *Unit = pg_null()
     lowlevel {
         let arr = mem_alloc(16)
-        let s1_ptr = s1 as RawPtr
-        let s2_ptr = s2 as RawPtr
-        ptr_write[I64](arr, s1_ptr as I64)
-        ptr_write[I64](ptr_offset(arr, 8), s2_ptr as I64)
+        ptr_write[I64](arr, s1 as I64)
+        ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
         params = arr as *Unit
     }
     return params
@@ -142,8 +138,7 @@ func pg_bind_1_str(p1: Str) -> *Unit {
     var params: *Unit = pg_null()
     lowlevel {
         let arr = mem_alloc(8)
-        let p1_ptr = p1 as RawPtr
-        ptr_write[I64](arr, p1_ptr as I64)
+        ptr_write[I64](arr, p1 as I64)
         params = arr as *Unit
     }
     return params
@@ -155,10 +150,8 @@ func pg_bind_str_i64(p1: Str, p2: I64) -> *Unit {
     var params: *Unit = pg_null()
     lowlevel {
         let arr = mem_alloc(16)
-        let p1_ptr = p1 as RawPtr
-        let s2_ptr = s2 as RawPtr
-        ptr_write[I64](arr, p1_ptr as I64)
-        ptr_write[I64](ptr_offset(arr, 8), s2_ptr as I64)
+        ptr_write[I64](arr, p1 as I64)
+        ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
         params = arr as *Unit
     }
     return params
@@ -170,10 +163,8 @@ func pg_bind_i64_str(p1: I64, p2: Str) -> *Unit {
     var params: *Unit = pg_null()
     lowlevel {
         let arr = mem_alloc(16)
-        let s1_ptr = s1 as RawPtr
-        let p2_ptr = p2 as RawPtr
-        ptr_write[I64](arr, s1_ptr as I64)
-        ptr_write[I64](ptr_offset(arr, 8), p2_ptr as I64)
+        ptr_write[I64](arr, s1 as I64)
+        ptr_write[I64](ptr_offset(arr, 8), p2 as I64)
         params = arr as *Unit
     }
     return params
@@ -182,7 +173,7 @@ func pg_bind_i64_str(p1: I64, p2: Str) -> *Unit {
 /// Frees a param values array allocated by pg_bind_* functions.
 func pg_free_params(params: *Unit) {
     lowlevel {
-        mem_free(params as RawPtr)
+        mem_free(params)
     }
 }
 
@@ -258,12 +249,9 @@ impl PgConnection {
         var params: *Unit = pg_null()
         lowlevel {
             let arr = mem_alloc(24)
-            let s1p = s1 as RawPtr
-            let s2p = s2 as RawPtr
-            let s3p = s3 as RawPtr
-            ptr_write[I64](arr, s1p as I64)
-            ptr_write[I64](ptr_offset(arr, 8), s2p as I64)
-            ptr_write[I64](ptr_offset(arr, 16), s3p as I64)
+            ptr_write[I64](arr, s1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), s2 as I64)
+            ptr_write[I64](ptr_offset(arr, 16), s3 as I64)
             params = arr as *Unit
         }
         let result = PQexecParams(this.pg_handle, sql, 3, pg_null(), params, pg_null(), pg_null(), 0)
@@ -281,10 +269,8 @@ impl PgConnection {
         var params: *Unit = pg_null()
         lowlevel {
             let arr = mem_alloc(16)
-            let p1p = p1 as RawPtr
-            let p2p = p2 as RawPtr
-            ptr_write[I64](arr, p1p as I64)
-            ptr_write[I64](ptr_offset(arr, 8), p2p as I64)
+            ptr_write[I64](arr, p1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), p2 as I64)
             params = arr as *Unit
         }
         let result = PQexecParams(this.pg_handle, sql, 2, pg_null(), params, pg_null(), pg_null(), 0)
@@ -303,12 +289,9 @@ impl PgConnection {
         var params: *Unit = pg_null()
         lowlevel {
             let arr = mem_alloc(24)
-            let p1p = p1 as RawPtr
-            let p2p = p2 as RawPtr
-            let s3p = s3 as RawPtr
-            ptr_write[I64](arr, p1p as I64)
-            ptr_write[I64](ptr_offset(arr, 8), p2p as I64)
-            ptr_write[I64](ptr_offset(arr, 16), s3p as I64)
+            ptr_write[I64](arr, p1 as I64)
+            ptr_write[I64](ptr_offset(arr, 8), p2 as I64)
+            ptr_write[I64](ptr_offset(arr, 16), s3 as I64)
             params = arr as *Unit
         }
         let result = PQexecParams(this.pg_handle, sql, 3, pg_null(), params, pg_null(), pg_null(), 0)

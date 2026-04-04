@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.2.12](docs/patches/v0.2.12.md) | 2026-04-04 | Test runner build.tml support, PostgreSQL test suite, RawPtr codegen fix, per-test timeout CLI |
 | [0.2.11](docs/patches/v0.2.11.md) | 2026-04-04 | AI library (`std::ia`): tensor, autograd, nn layers, optimizers, training — 34 files, 140 tests |
 | [0.2.10](docs/patches/v0.2.10.md) | 2026-04-03 | Codegen architecture: MIR validation (ICE), centralized ABI module, pub use re-exports, CGValue wrapper, response builder restored |
 | [0.2.9](docs/patches/v0.2.9.md) | 2026-04-03 | `std::db` module (ORM, query builders, migrations, SQLite adapter), SIMD strings (10x), SQLite 3-4x faster than Rust, `@column` field decorators, 4 codegen fixes |

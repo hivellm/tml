@@ -14,6 +14,7 @@ TML_MODULE("test")
 //!   6. get_runtime_objects() for CRT + runtime
 //!   7. link_objects() → .exe
 
+#include "cli/builder/build_script.hpp"
 #include "cli/builder/builder_internal.hpp"
 #include "cli/builder/compiler_setup.hpp"
 #include "cli/builder/object_compiler.hpp"
@@ -1085,6 +1086,71 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     // Increase default stack size (debug codegen uses many allocas)
     link_opts.link_flags.push_back("/STACK:67108864");
 #endif
+
+    // Run build.tml scripts for external packages (e.g., postgresql)
+    // Detect packages imported by scanning registry module paths for non-standard prefixes.
+    {
+        std::set<std::string> packages_checked;
+        if (registry) {
+            for (const auto& [mod_path, _] : registry->get_all_modules()) {
+                // Skip standard library and core modules
+                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
+                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                    continue;
+                }
+                // Extract package name (first component of module path)
+                auto sep = mod_path.find("::");
+                std::string pkg_name =
+                    (sep != std::string::npos) ? mod_path.substr(0, sep) : mod_path;
+                if (packages_checked.count(pkg_name)) {
+                    continue;
+                }
+                packages_checked.insert(pkg_name);
+
+                // Check for build.tml in lib/<package>/
+                fs::path pkg_dir = fs::path("lib") / pkg_name;
+                fs::path build_script = pkg_dir / "build.tml";
+                if (!fs::exists(build_script)) {
+                    continue;
+                }
+
+                TML_LOG_INFO("test", "[compile] Running build.tml for package: " << pkg_name);
+
+                auto bsr = cli::detect_and_run_build_script((pkg_dir / "src" / "mod.tml").string(),
+                                                            verbose);
+
+                if (bsr.success) {
+                    // Add link libraries
+                    for (const auto& lib : bsr.link_libs) {
+                        std::string flag = "-l" + lib;
+                        link_opts.link_flags.push_back(flag);
+                        TML_LOG_DEBUG("test", "[compile] build.tml link lib: " << flag);
+                    }
+                    // Add search paths via library_search_paths so link_objects
+                    // converts them to the correct platform format (/LIBPATH: on Windows)
+                    for (const auto& sp : bsr.link_search_paths) {
+                        fs::path abs_path = fs::absolute(pkg_dir / sp);
+                        link_opts.library_search_paths.push_back(abs_path.string());
+                        TML_LOG_DEBUG("test",
+                                      "[compile] build.tml search path: " << abs_path.string());
+                    }
+                    // Copy artifacts (e.g., DLLs) to the test cache directory
+                    for (const auto& artifact : bsr.copy_artifacts) {
+                        fs::path src = pkg_dir / artifact;
+                        if (fs::exists(src)) {
+                            fs::path dest = cache_dir / artifact.filename();
+                            std::error_code copy_ec;
+                            fs::copy_file(src, dest, fs::copy_options::overwrite_existing, copy_ec);
+                            if (!copy_ec) {
+                                TML_LOG_DEBUG("test",
+                                              "[compile] Copied artifact: " << dest.string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     auto link_result = cli::link_objects(all_object_files, exe_path, g_clang_path, link_opts);
 
