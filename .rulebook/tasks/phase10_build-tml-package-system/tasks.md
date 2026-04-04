@@ -1,6 +1,6 @@
 # Tasks: Rust-style build.tml + Native Lib Resolution
 
-**Status**: In Progress. 24/32 (75%). Phases 1-5 implemented, Phase 6 deferred (not blocking), Phase 7 pending.
+**Status**: Complete. 29/32 (91%). Phases 1-5 + 7 done. Phase 6 (cache) and Phase 2 (unit tests) deferred — not blocking PostgreSQL.
 **Depends on**: None (purely additive to existing compiler)
 **Blocks**: phase8f_db-postgres (PostgreSQL driver needs this to link libpq)
 
@@ -51,9 +51,13 @@
 
 ## Phase 7: End-to-End Validation
 
-- [ ] 7.1 Create `.sandbox/test_build_script/build.tml` — minimal build script that emits `tml:link-search=native` and `tml:warning=hello`
-- [ ] 7.2 Create `.sandbox/test_build_script/src/mod.tml` — minimal TML file
-- [ ] 7.3 Create `.sandbox/test_build_script/native/` with a dummy `.lib` file
-- [ ] 7.4 Verify `tml build .sandbox/test_build_script/src/mod.tml` detects build.tml, runs it, and passes search paths to linker
-- [ ] 7.5 Verify `tml:warning=` messages appear in build output
-- [ ] 7.6 Verify DLL copying works with `tml:copy-artifact=`
+- [x] 7.1 Created `.sandbox/test_build_script/build.tml` — emits all 6 directive types
+- [x] 7.2 Created `.sandbox/test_build_script/src/mod.tml` + `package.toml`
+- [x] 7.3 Created `.sandbox/test_build_script/native/dummy.txt`
+- [x] 7.4 Verified: build.tml detected, compiled, executed — search paths + link libs passed to linker
+- [x] 7.5 Verified: `tml:warning=` messages appear as `WARN [build]` in output
+- [x] 7.6 Verified: `tml:copy-artifact=native/dummy.txt` → `build/debug/dummy.txt` copied successfully
+- [x] 7.7 Fixed: recursion guard (building build.tml no longer recurses into itself)
+- [x] 7.8 Fixed: Windows cmd.exe quoting for paths with spaces
+- [x] 7.9 Fixed: `--out-dir=` flag (was `--output-dir` which doesn't exist)
+- [x] 7.10 Fixed: artifact copy in query-based path (was missing, only legacy path had it)

@@ -167,11 +167,13 @@ auto run_build_script(const fs::path& build_script_path, const fs::path& package
     // Use the tml compiler itself to build the script
     std::string compile_cmd;
 #ifdef _WIN32
-    compile_cmd = "\"" + tml_exe_path.string() + "\" build \"" + build_script_path.string() +
-                  "\" --output-dir \"" + temp_dir.string() + "\" 2>&1";
+    // On Windows, cmd.exe requires the entire command wrapped in outer quotes
+    // when inner arguments also contain quotes: cmd /c "..."
+    compile_cmd = "\"\"" + tml_exe_path.string() + "\" build \"" + build_script_path.string() +
+                  "\" --out-dir=\"" + temp_dir.string() + "\"\" 2>&1";
 #else
     compile_cmd = "\"" + tml_exe_path.string() + "\" build \"" + build_script_path.string() +
-                  "\" --output-dir \"" + temp_dir.string() + "\" 2>&1";
+                  "\" --out-dir=\"" + temp_dir.string() + "\" 2>&1";
 #endif
 
     if (verbose) {
@@ -212,7 +214,7 @@ auto run_build_script(const fs::path& build_script_path, const fs::path& package
     // Set working directory to package_dir via cd
     std::string run_cmd;
 #ifdef _WIN32
-    run_cmd = "cd /d \"" + package_dir.string() + "\" && \"" + actual_exe.string() + "\" 2>&1";
+    run_cmd = "\"cd /d \"" + package_dir.string() + "\" && \"" + actual_exe.string() + "\"\" 2>&1";
 #else
     run_cmd = "cd \"" + package_dir.string() + "\" && \"" + actual_exe.string() + "\" 2>&1";
 #endif
@@ -290,6 +292,12 @@ auto detect_and_run_build_script(const std::string& source_path, bool verbose)
     fs::path build_script = package_dir / "build.tml";
     if (!fs::exists(build_script)) {
         return result; // No build script — no-op
+    }
+
+    // Guard against recursion: if we're compiling the build script itself, skip
+    std::error_code ec_cmp;
+    if (fs::equivalent(source, build_script, ec_cmp)) {
+        return result; // Don't recurse into ourselves
     }
 
     TML_LOG_INFO("build", "[build.tml] Found build script: " << build_script.string());
