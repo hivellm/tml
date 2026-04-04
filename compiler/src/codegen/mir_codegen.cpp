@@ -743,6 +743,11 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
         std::string method_str;
         std::string path;
         std::string func_name;
+        // Original parameter types (before ptr-forcing) for thunk generation.
+        // Each entry is (llvm_type, param_name).
+        std::vector<std::pair<std::string, std::string>> param_types;
+        std::string return_type;
+        bool needs_thunk = false; // True if any param is an aggregate type
     };
     std::vector<RouteEntry> routes;
 
@@ -773,7 +778,91 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
             method_str = "OPTIONS";
             break;
         }
-        routes.push_back({method_str, func.route_info->path, func.name});
+
+        // Collect original param types for thunk generation.
+        // MIR codegen forces ALL struct/enum/class/union params to ptr (lines ~607-610,
+        // ~1414-1417), but fn-pointer call sites (dispatch.tml:668) pass structs by value.
+        // We need thunks to bridge this ABI gap.
+        RouteEntry entry;
+        entry.method_str = method_str;
+        entry.path = func.route_info->path;
+        entry.func_name = func.name;
+        entry.needs_thunk = false;
+
+        for (const auto& param : func.params) {
+            std::string ptype = mir_type_to_llvm(param.type);
+            if (ptype.starts_with("%struct.") || ptype.starts_with("%enum.") ||
+                ptype.starts_with("%class.") || ptype.starts_with("%union.")) {
+                entry.needs_thunk = true;
+            }
+            entry.param_types.push_back({ptype, param.name});
+        }
+
+        // Resolve return type
+        if (func.return_type) {
+            entry.return_type = mir_type_to_llvm(func.return_type);
+        } else {
+            entry.return_type = "void";
+        }
+
+        routes.push_back(std::move(entry));
+    }
+
+    // Emit ABI trampoline wrappers for route handlers with aggregate params.
+    // MIR codegen forces all struct/enum params to ptr in function definitions,
+    // but dispatch.tml calls handlers via fn pointers passing structs by value.
+    // The thunks receive params by value (matching the fn ptr ABI) and spill
+    // aggregate args to alloca before calling the real function with ptr args.
+    for (size_t i = 0; i < routes.size(); ++i) {
+        const auto& route = routes[i];
+        if (!route.needs_thunk)
+            continue;
+
+        std::string idx = std::to_string(i);
+        std::string thunk_name = "@__tml_route_thunk_" + idx;
+        std::string ret_type = route.return_type.empty() ? "void" : route.return_type;
+
+        // Build thunk parameter list (by-value types — matches fn ptr call ABI)
+        std::string thunk_params;
+        for (size_t j = 0; j < route.param_types.size(); ++j) {
+            if (j > 0)
+                thunk_params += ", ";
+            thunk_params += route.param_types[j].first + " %" + route.param_types[j].second;
+        }
+
+        emitln("; ABI trampoline: receives by-value structs, passes as ptr to real handler");
+        emitln("define " + ret_type + " " + thunk_name + "(" + thunk_params + ") {");
+        emitln("entry:");
+
+        // For each aggregate parameter, spill to alloca and pass as ptr.
+        // Non-aggregate params pass through unchanged.
+        std::string call_args;
+        for (size_t j = 0; j < route.param_types.size(); ++j) {
+            if (j > 0)
+                call_args += ", ";
+            const auto& [ptype, pname] = route.param_types[j];
+            bool is_aggregate = ptype.starts_with("%struct.") || ptype.starts_with("%enum.") ||
+                                ptype.starts_with("%class.") || ptype.starts_with("%union.");
+            if (is_aggregate) {
+                emitln("  %spill_" + pname + " = alloca " + ptype + ", align 8");
+                emitln("  store " + ptype + " %" + pname + ", ptr %spill_" + pname + ", align 8");
+                call_args += "ptr %spill_" + pname;
+            } else {
+                call_args += ptype + " %" + pname;
+            }
+        }
+
+        // Call the real function
+        if (ret_type == "void") {
+            emitln("  call void @" + quote_func_name(route.func_name) + "(" + call_args + ")");
+            emitln("  ret void");
+        } else {
+            emitln("  %ret = call " + ret_type + " @" + quote_func_name(route.func_name) + "(" +
+                   call_args + ")");
+            emitln("  ret " + ret_type + " %ret");
+        }
+        emitln("}");
+        emitln();
     }
 
     // Always emit __tml_register_routes — even if no routes exist (empty function).
@@ -806,8 +895,15 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
                    " x i8], ptr " + method_global + ", i32 0, i32 0");
             emitln("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) +
                    " x i8], ptr " + path_global + ", i32 0, i32 0");
-            emitln("  %handler_" + idx + " = ptrtoint ptr @" + quote_func_name(route.func_name) +
-                   " to i64");
+
+            // For routes with aggregate params, register the thunk instead of the real function
+            if (route.needs_thunk) {
+                emitln("  %handler_" + idx + " = ptrtoint ptr @__tml_route_thunk_" + idx +
+                       " to i64");
+            } else {
+                emitln("  %handler_" + idx + " = ptrtoint ptr @" +
+                       quote_func_name(route.func_name) + " to i64");
+            }
 
             // Write method ptr at offset + 0
             emitln("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");

@@ -43,6 +43,11 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         std::string method_str;
         std::string path;
         std::string func_name;
+        bool is_impl_method = false;
+        // Original parameter types (before ptr-forcing) for thunk generation.
+        // Each entry is (llvm_type, param_name), e.g. ("%struct.IncomingMessage", "req").
+        std::vector<std::pair<std::string, std::string>> param_types;
+        std::string return_type; // e.g. "ptr" for Str
     };
     std::vector<LegacyRouteEntry> route_functions;
 
@@ -246,7 +251,32 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                     if (func_name.substr(0, 4) == "tml_") {
                         func_name = func_name.substr(4);
                     }
-                    route_functions.push_back({method_str, full_path, func_name});
+                    // Collect parameter types for thunk generation.
+                    // impl.cpp:350-353 forces the first struct param to ptr, creating
+                    // an ABI mismatch with fn-pointer call sites (dispatch.tml:668).
+                    LegacyRouteEntry entry;
+                    entry.method_str = method_str;
+                    entry.path = full_path;
+                    entry.func_name = func_name;
+                    entry.is_impl_method = true;
+                    for (const auto& param : method.params) {
+                        std::string ptype = llvm_type_ptr(param.type);
+                        if (param.type && param.type->is<parser::FuncType>()) {
+                            ptype = "{ ptr, ptr }";
+                        }
+                        std::string pname = "arg";
+                        if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
+                            pname = param.pattern->as<parser::IdentPattern>().name;
+                        }
+                        entry.param_types.push_back({ptype, pname});
+                    }
+                    // Resolve return type
+                    if (method.return_type.has_value()) {
+                        entry.return_type = llvm_type_ptr(*method.return_type);
+                    } else {
+                        entry.return_type = "void";
+                    }
+                    route_functions.push_back(std::move(entry));
                 }
             }
         } else if (decl->is<parser::ClassDecl>()) {
@@ -270,7 +300,29 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                     if (func_name.substr(0, 4) == "tml_") {
                         func_name = func_name.substr(4);
                     }
-                    route_functions.push_back({method_str, full_path, func_name});
+                    // Class methods have the same ABI issue as impl methods
+                    LegacyRouteEntry entry;
+                    entry.method_str = method_str;
+                    entry.path = full_path;
+                    entry.func_name = func_name;
+                    entry.is_impl_method = true;
+                    for (const auto& param : method.params) {
+                        std::string ptype = llvm_type_ptr(param.type);
+                        if (param.type && param.type->is<parser::FuncType>()) {
+                            ptype = "{ ptr, ptr }";
+                        }
+                        std::string pname = "arg";
+                        if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
+                            pname = param.pattern->as<parser::IdentPattern>().name;
+                        }
+                        entry.param_types.push_back({ptype, pname});
+                    }
+                    if (method.return_type.has_value()) {
+                        entry.return_type = llvm_type_ptr(*method.return_type);
+                    } else {
+                        entry.return_type = "void";
+                    }
+                    route_functions.push_back(std::move(entry));
                 }
             }
         }
@@ -657,6 +709,63 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         emit_line(
             "; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
 
+        // Emit ABI trampoline wrappers for impl/class method routes.
+        // impl.cpp:350-353 forces the first struct param of static impl methods to ptr,
+        // but dispatch.tml:668 calls handlers as func(IncomingMessage, Response) -> Str
+        // passing structs by value. The thunks bridge this ABI gap by receiving params
+        // by value and passing the first struct param as a pointer to the real function.
+        for (size_t i = 0; i < route_functions.size(); ++i) {
+            const auto& route = route_functions[i];
+            if (!route.is_impl_method || route.param_types.empty())
+                continue;
+
+            std::string idx = std::to_string(i);
+            std::string thunk_name = "@__tml_route_thunk_" + idx;
+            std::string ret_type = route.return_type.empty() ? "void" : route.return_type;
+
+            // Build thunk parameter list (by-value struct types — matches fn ptr call ABI)
+            std::string thunk_params;
+            for (size_t j = 0; j < route.param_types.size(); ++j) {
+                if (j > 0)
+                    thunk_params += ", ";
+                thunk_params += route.param_types[j].first + " %" + route.param_types[j].second;
+            }
+
+            emit_line("");
+            emit_line("; ABI trampoline: receives by-value structs, passes first struct as ptr");
+            emit_line("define " + ret_type + " " + thunk_name + "(" + thunk_params + ") {");
+            emit_line("entry:");
+
+            // For the first struct parameter, alloca + store to get a pointer.
+            // impl.cpp forces only the first struct param to ptr; remaining params pass through.
+            std::string call_args;
+            for (size_t j = 0; j < route.param_types.size(); ++j) {
+                if (j > 0)
+                    call_args += ", ";
+                const auto& [ptype, pname] = route.param_types[j];
+                if (j == 0 && (ptype.find("%struct.") == 0 || ptype.find("%enum.") == 0)) {
+                    // Spill first struct param to memory and pass as ptr
+                    emit_line("  %spill_" + pname + " = alloca " + ptype + ", align 8");
+                    emit_line("  store " + ptype + " %" + pname + ", ptr %spill_" + pname +
+                              ", align 8");
+                    call_args += "ptr %spill_" + pname;
+                } else {
+                    call_args += ptype + " %" + pname;
+                }
+            }
+
+            // Call the real impl method function
+            if (ret_type == "void") {
+                emit_line("  call void @tml_" + route.func_name + "(" + call_args + ")");
+                emit_line("  ret void");
+            } else {
+                emit_line("  %ret = call " + ret_type + " @tml_" + route.func_name + "(" +
+                          call_args + ")");
+                emit_line("  ret " + ret_type + " %ret");
+            }
+            emit_line("}");
+        }
+
         if (!route_functions.empty()) {
             // Emit string constants for route methods and paths
             for (size_t i = 0; i < route_functions.size(); ++i) {
@@ -701,8 +810,15 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                           " x i8], ptr @.route.method." + idx + ", i32 0, i32 0");
                 emit_line("  %path_" + idx + " = getelementptr [" + std::to_string(path_len) +
                           " x i8], ptr @.route.path." + idx + ", i32 0, i32 0");
-                emit_line("  %handler_" + idx + " = ptrtoint ptr @tml_" + route.func_name +
-                          " to i64");
+
+                // For impl method routes, register the thunk instead of the real function
+                if (route.is_impl_method && !route.param_types.empty()) {
+                    emit_line("  %handler_" + idx + " = ptrtoint ptr @__tml_route_thunk_" + idx +
+                              " to i64");
+                } else {
+                    emit_line("  %handler_" + idx + " = ptrtoint ptr @tml_" + route.func_name +
+                              " to i64");
+                }
 
                 // Write method ptr at offset + 0
                 emit_line("  %method_i64_" + idx + " = ptrtoint ptr %method_" + idx + " to i64");
