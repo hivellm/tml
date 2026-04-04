@@ -1,0 +1,186 @@
+// Phase 4 tests — Relation cascade options, join table, inverse side,
+// eager_load_sql, and cascade SQL generation.
+
+use test::{assert, assert_eq}
+use std::db::orm::relation::{Relation, RelationType, CascadeOptions}
+use std::db::orm::eager::eager_load_sql
+use std::db::orm::cascade::{cascade_insert_sql, cascade_delete_sql}
+
+// ── 4.1 Cascade options ────────────────────────────────────────────────────
+
+@test
+func test_with_cascade_all() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let r = rel.with_cascade(true, true, true)
+    let c = r.get_cascade()
+    assert(c.on_insert, "on_insert")
+    assert(c.on_update, "on_update")
+    assert(c.on_delete, "on_delete")
+    return 0
+}
+
+@test
+func test_with_cascade_insert_only() -> I32 {
+    let rel = Relation::has_one("profile", "profiles", "user_id")
+    let r = rel.with_cascade(true, false, false)
+    let c = r.get_cascade()
+    assert(c.on_insert, "on_insert true")
+    assert(not c.on_update, "on_update false")
+    assert(not c.on_delete, "on_delete false")
+    return 0
+}
+
+@test
+func test_cascade_none_default() -> I32 {
+    let rel = Relation::has_many("tags", "tags", "post_id")
+    let c = rel.get_cascade()
+    assert(not c.on_insert, "no insert")
+    assert(not c.on_update, "no update")
+    assert(not c.on_delete, "no delete")
+    return 0
+}
+
+@test
+func test_cascade_options_none_helper() -> I32 {
+    let c = CascadeOptions::none()
+    assert(not c.on_insert, "none insert")
+    assert(not c.on_update, "none update")
+    assert(not c.on_delete, "none delete")
+    return 0
+}
+
+@test
+func test_cascade_options_all_helper() -> I32 {
+    let c = CascadeOptions::all()
+    assert(c.on_insert, "all insert")
+    assert(c.on_update, "all update")
+    assert(c.on_delete, "all delete")
+    return 0
+}
+
+// ── 4.2 Join table (M:N) ──────────────────────────────────────────────────
+
+@test
+func test_join_table_configured() -> I32 {
+    let rel = Relation::many_to_many("tags", "tags", "tag_id")
+    let r = rel.join_table("post_tags", "post_id", "tag_id")
+    assert(r.has_join_table_cfg(), "has join table")
+    assert_eq(r.pivot_table(), "post_tags", "pivot name")
+    return 0
+}
+
+@test
+func test_join_table_not_configured_by_default() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    assert(not rel.has_join_table_cfg(), "no join table")
+    assert_eq(rel.pivot_table(), "", "empty pivot")
+    return 0
+}
+
+@test
+func test_join_table_preserves_cascade() -> I32 {
+    let rel = Relation::many_to_many("tags", "tags", "tag_id")
+        .with_cascade(true, false, true)
+        .join_table("post_tags", "post_id", "tag_id")
+    let c = rel.get_cascade()
+    assert(c.on_insert, "cascade insert")
+    assert(not c.on_update, "no cascade update")
+    assert(c.on_delete, "cascade delete")
+    assert(rel.has_join_table_cfg(), "join table still set")
+    return 0
+}
+
+// ── 4.3 Inverse side ──────────────────────────────────────────────────────
+
+@test
+func test_inverse_side_set() -> I32 {
+    let rel = Relation::has_many("posts", "posts", "author_id")
+    let r = rel.inverse_side("author")
+    assert_eq(r.get_inverse(), "author", "inverse field")
+    return 0
+}
+
+@test
+func test_inverse_side_not_set_by_default() -> I32 {
+    let rel = Relation::has_one("profile", "profiles", "user_id")
+    assert_eq(rel.get_inverse(), "", "no inverse by default")
+    return 0
+}
+
+@test
+func test_inverse_side_chained_with_cascade() -> I32 {
+    let rel = Relation::has_many("posts", "posts", "author_id")
+        .with_cascade(false, false, true)
+        .inverse_side("author")
+    assert_eq(rel.get_inverse(), "author", "inverse")
+    let c = rel.get_cascade()
+    assert(c.on_delete, "cascade delete preserved")
+    return 0
+}
+
+// ── 4.4 eager_load_sql ────────────────────────────────────────────────────
+
+@test
+func test_eager_load_sql_no_relations() -> I32 {
+    let rels: List[Relation] = List::new()
+    let sql = eager_load_sql("users", ref rels)
+    assert_eq(sql, "SELECT * FROM users", "no joins")
+    return 0
+}
+
+@test
+func test_eager_load_sql_one_relation() -> I32 {
+    var rels: List[Relation] = List::new()
+    rels.push(Relation::has_many("orders", "orders", "user_id"))
+    let sql = eager_load_sql("users", ref rels)
+    assert(sql.contains("LEFT JOIN orders"), "has join")
+    assert(sql.contains("users.id = orders.user_id"), "join condition")
+    return 0
+}
+
+@test
+func test_eager_load_sql_two_relations() -> I32 {
+    var rels: List[Relation] = List::new()
+    rels.push(Relation::has_many("orders", "orders", "user_id"))
+    rels.push(Relation::has_one("profile", "profiles", "user_id"))
+    let sql = eager_load_sql("users", ref rels)
+    assert(sql.contains("LEFT JOIN orders"), "orders join")
+    assert(sql.contains("LEFT JOIN profiles"), "profiles join")
+    return 0
+}
+
+@test
+func test_eager_load_sql_belongs_to() -> I32 {
+    var rels: List[Relation] = List::new()
+    rels.push(Relation::belongs_to("user", "users", "user_id"))
+    let sql = eager_load_sql("orders", ref rels)
+    assert(sql.contains("LEFT JOIN users"), "users join")
+    assert(sql.contains("orders.user_id = users.id"), "fk condition")
+    return 0
+}
+
+// ── 4.6/4.7 cascade SQL helpers ──────────────────────────────────────────
+
+@test
+func test_cascade_insert_sql() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = cascade_insert_sql(ref rel, "total")
+    assert_eq(sql, "INSERT INTO orders (user_id, total) VALUES (?, ?)", "insert sql")
+    return 0
+}
+
+@test
+func test_cascade_delete_sql() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = cascade_delete_sql(ref rel)
+    assert_eq(sql, "DELETE FROM orders WHERE user_id = ?", "delete sql")
+    return 0
+}
+
+@test
+func test_cascade_insert_sql_has_one() -> I32 {
+    let rel = Relation::has_one("profile", "profiles", "user_id")
+    let sql = cascade_insert_sql(ref rel, "bio")
+    assert_eq(sql, "INSERT INTO profiles (user_id, bio) VALUES (?, ?)", "has_one insert sql")
+    return 0
+}

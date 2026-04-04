@@ -1,5 +1,5 @@
 //! Migration runner — applies and rolls back migrations.
-use std::db::sqlite::connection::SqliteConnection
+use std::db::driver::connection::Connection
 use std::db::error::{DbError, DbErrorKind}
 use std::db::migration::migration::Migration
 use std::db::migration::history
@@ -7,7 +7,7 @@ use std::db::migration::history
 /// Ensures the migration history table exists.
 ///
 /// Must be called once before any other migration operations.
-pub func ensure_history_table(conn: ref SqliteConnection) -> Outcome[Unit, DbError] {
+pub func ensure_history_table[C](conn: ref C) -> Outcome[Unit, DbError] where C: Connection {
     let result = conn.execute(history::create_history_sql())
     when result {
         Ok(_) => return Ok(()),
@@ -19,7 +19,7 @@ pub func ensure_history_table(conn: ref SqliteConnection) -> Outcome[Unit, DbErr
 ///
 /// On success, records the migration in `_tml_migrations` and commits.
 /// On failure, rolls back the transaction and returns the error.
-pub func apply_migration(conn: ref SqliteConnection, m: ref Migration) -> Outcome[Unit, DbError] {
+pub func apply_migration[C](conn: ref C, m: ref Migration) -> Outcome[Unit, DbError] where C: Connection {
     let begin_result = conn.begin()
     when begin_result {
         Ok(_) => {
@@ -56,7 +56,7 @@ pub func apply_migration(conn: ref SqliteConnection, m: ref Migration) -> Outcom
 ///
 /// On success, removes the migration record from `_tml_migrations` and commits.
 /// On failure, rolls back the transaction and returns the error.
-pub func rollback_migration(conn: ref SqliteConnection, m: ref Migration) -> Outcome[Unit, DbError] {
+pub func rollback_migration[C](conn: ref C, m: ref Migration) -> Outcome[Unit, DbError] where C: Connection {
     let begin_result = conn.begin()
     when begin_result {
         Ok(_) => {
@@ -90,7 +90,7 @@ pub func rollback_migration(conn: ref SqliteConnection, m: ref Migration) -> Out
 }
 
 /// Returns the current migration version (0 if no migrations have been applied).
-pub func current_version(conn: ref SqliteConnection) -> Outcome[I64, DbError] {
+pub func current_version[C](conn: ref C) -> Outcome[I64, DbError] where C: Connection {
     let sql = history::latest_version_sql()
     return conn.query_scalar_i64(sql)
 }

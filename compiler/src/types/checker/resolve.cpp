@@ -302,6 +302,15 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
         return type;
     }
 
+    // Check if this is a behavior used as a type — treat as implicit dyn
+    // This allows `ref Connection` to dispatch methods via the behavior definition
+    auto behavior_def = env_.lookup_behavior(name);
+    if (behavior_def) {
+        auto type = std::make_shared<Type>();
+        type->kind = DynBehaviorType{name, {}, false};
+        return type;
+    }
+
     // Check if this is an imported symbol from a module
     auto imported_path = env_.resolve_imported_symbol(name);
     if (imported_path.has_value()) {
@@ -329,6 +338,14 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
             if (enum_it != module->enums.end()) {
                 auto type = std::make_shared<Type>();
                 type->kind = NamedType{symbol_name, module_path, {}};
+                return type;
+            }
+
+            // Check if it's a behavior in the module
+            auto bhv_it = module->behaviors.find(symbol_name);
+            if (bhv_it != module->behaviors.end()) {
+                auto type = std::make_shared<Type>();
+                type->kind = DynBehaviorType{symbol_name, {}, false};
                 return type;
             }
         }

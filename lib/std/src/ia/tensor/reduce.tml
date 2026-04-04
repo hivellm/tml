@@ -1,0 +1,419 @@
+//! Reduction operations over tensor dimensions.
+//!
+//! Provides both global reductions (over all elements) and axis reductions
+//! (collapsing a single dimension) for tensors.
+
+use std::collections::List
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::shape::Shape
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Convert a flat row-major index into a list of per-dimension indices.
+func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
+    let rank = shape.rank()
+    let mut indices = List[I64]::new(rank)
+    // Pre-fill with zeros so set() works.
+    let mut k = 0
+    loop (k < rank) {
+        indices.push(0)
+        k = k + 1
+    }
+    let mut remaining = flat
+    let mut j = 0
+    loop (j < rank) {
+        // Stride for dimension j = product of all dims to the right.
+        let mut stride = 1
+        let mut s = j + 1
+        loop (s < rank) {
+            stride = stride * shape.dim(s)
+            s = s + 1
+        }
+        let idx = remaining / stride
+        indices.set(j, idx)
+        remaining = remaining - idx * stride
+        j = j + 1
+    }
+    indices
+}
+
+/// Convert multi-dimensional indices into a flat row-major index.
+func indices_to_flat(indices: ref List[I64], shape: ref Shape) -> I64 {
+    let rank = shape.rank()
+    let mut flat = 0
+    let mut stride = 1
+    let mut i = rank - 1
+    loop (i >= 0) {
+        flat = flat + indices.get(i) * stride
+        stride = stride * shape.dim(i)
+        i = i - 1
+    }
+    flat
+}
+
+/// Build a full input index list by inserting `dim_val` at position `dim`
+/// into the output indices (which have the reduced dimension removed).
+func build_input_indices(out_indices: ref List[I64], dim_val: I64, dim: I64, in_rank: I64) -> List[I64] {
+    let mut in_indices = List[I64]::new(in_rank)
+    let mut out_i = 0
+    let mut i = 0
+    loop (i < in_rank) {
+        if i == dim {
+            in_indices.push(dim_val)
+        } else {
+            in_indices.push(out_indices.get(out_i))
+            out_i = out_i + 1
+        }
+        i = i + 1
+    }
+    in_indices
+}
+
+/// Build the output shape dims list by removing dimension `dim` from the input shape.
+func output_shape_dims(a: ref Tensor, dim: I64) -> List[I64] {
+    let rank = a.rank()
+    let mut dims = List[I64]::new(rank - 1)
+    let mut i = 0
+    loop (i < rank) {
+        if i != dim {
+            dims.push(a.dim(i))
+        }
+        i = i + 1
+    }
+    dims
+}
+
+// ---------------------------------------------------------------------------
+// Global reductions (over all elements)
+// ---------------------------------------------------------------------------
+
+/// Sum all elements in the tensor.
+pub func sum(a: ref Tensor) -> F64 {
+    let n = a.numel()
+    let mut total = 0.0
+    let mut i = 0
+    loop (i < n) {
+        total = total + a.get_f64(i)
+        i = i + 1
+    }
+    total
+}
+
+/// Mean (average) of all elements in the tensor.
+pub func mean(a: ref Tensor) -> F64 {
+    let n = a.numel()
+    if n == 0 {
+        return 0.0
+    }
+    sum(a) / (n as F64)
+}
+
+/// Maximum element value in the tensor.
+///
+/// Returns the value of the first element if the tensor is empty.
+pub func max_val(a: ref Tensor) -> F64 {
+    let n = a.numel()
+    if n == 0 {
+        return 0.0
+    }
+    let mut best = a.get_f64(0)
+    let mut i = 1
+    loop (i < n) {
+        let v = a.get_f64(i)
+        if v > best {
+            best = v
+        }
+        i = i + 1
+    }
+    best
+}
+
+/// Minimum element value in the tensor.
+///
+/// Returns the value of the first element if the tensor is empty.
+pub func min_val(a: ref Tensor) -> F64 {
+    let n = a.numel()
+    if n == 0 {
+        return 0.0
+    }
+    let mut best = a.get_f64(0)
+    let mut i = 1
+    loop (i < n) {
+        let v = a.get_f64(i)
+        if v < best {
+            best = v
+        }
+        i = i + 1
+    }
+    best
+}
+
+/// Flat index of the maximum element in the tensor.
+///
+/// Returns 0 if the tensor is empty.
+pub func argmax(a: ref Tensor) -> I64 {
+    let n = a.numel()
+    if n == 0 {
+        return 0
+    }
+    let mut best_val = a.get_f64(0)
+    let mut best_idx = 0
+    let mut i = 1
+    loop (i < n) {
+        let v = a.get_f64(i)
+        if v > best_val {
+            best_val = v
+            best_idx = i
+        }
+        i = i + 1
+    }
+    best_idx
+}
+
+/// Flat index of the minimum element in the tensor.
+///
+/// Returns 0 if the tensor is empty.
+pub func argmin(a: ref Tensor) -> I64 {
+    let n = a.numel()
+    if n == 0 {
+        return 0
+    }
+    let mut best_val = a.get_f64(0)
+    let mut best_idx = 0
+    let mut i = 1
+    loop (i < n) {
+        let v = a.get_f64(i)
+        if v < best_val {
+            best_val = v
+            best_idx = i
+        }
+        i = i + 1
+    }
+    best_idx
+}
+
+// ---------------------------------------------------------------------------
+// Axis reductions (collapse one dimension)
+// ---------------------------------------------------------------------------
+
+/// Sum along a single dimension.
+///
+/// For a tensor of shape [d0, d1, d2] with dim=1, the result has shape [d0, d2]
+/// where result[i, k] = sum over j of input[i, j, k].
+pub func sum_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("sum_dim: dim out of range"))
+    }
+
+    let out_dims = output_shape_dims(a, dim)
+    let mut result = zeros(out_dims, a.dtype())
+    let out_numel = result.numel()
+    let dim_size = a.dim(dim)
+
+    let mut out_idx = 0
+    loop (out_idx < out_numel) {
+        let out_indices = flat_to_indices(out_idx, result.shape())
+        let mut acc = 0.0
+        let mut d = 0
+        loop (d < dim_size) {
+            let in_indices = build_input_indices(ref out_indices, d, dim, rank)
+            let in_flat = indices_to_flat(ref in_indices, a.shape())
+            acc = acc + a.get_f64(in_flat)
+            d = d + 1
+        }
+        result.set_f64(out_idx, acc)
+        out_idx = out_idx + 1
+    }
+
+    Ok(result)
+}
+
+/// Mean along a single dimension.
+///
+/// Each output element is the average of all input elements along `dim`.
+pub func mean_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("mean_dim: dim out of range"))
+    }
+
+    let dim_size = a.dim(dim)
+    let sum_result = sum_dim(a, dim)
+    when sum_result {
+        Err(e) => Err(e),
+        Ok(mut s) => {
+            let n = s.numel()
+            let divisor = dim_size as F64
+            let mut i = 0
+            loop (i < n) {
+                s.set_f64(i, s.get_f64(i) / divisor)
+                i = i + 1
+            }
+            Ok(s)
+        },
+    }
+}
+
+/// Maximum value along a single dimension.
+///
+/// For each output position, finds the maximum among all elements along `dim`.
+pub func max_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("max_dim: dim out of range"))
+    }
+
+    let out_dims = output_shape_dims(a, dim)
+    let mut result = zeros(out_dims, a.dtype())
+    let out_numel = result.numel()
+    let dim_size = a.dim(dim)
+
+    let mut out_idx = 0
+    loop (out_idx < out_numel) {
+        let out_indices = flat_to_indices(out_idx, result.shape())
+        // Initialise with the first element along the reduced dimension.
+        let first_in = build_input_indices(ref out_indices, 0, dim, rank)
+        let first_flat = indices_to_flat(ref first_in, a.shape())
+        let mut best = a.get_f64(first_flat)
+        let mut d = 1
+        loop (d < dim_size) {
+            let in_indices = build_input_indices(ref out_indices, d, dim, rank)
+            let in_flat = indices_to_flat(ref in_indices, a.shape())
+            let v = a.get_f64(in_flat)
+            if v > best {
+                best = v
+            }
+            d = d + 1
+        }
+        result.set_f64(out_idx, best)
+        out_idx = out_idx + 1
+    }
+
+    Ok(result)
+}
+
+/// Minimum value along a single dimension.
+///
+/// For each output position, finds the minimum among all elements along `dim`.
+pub func min_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("min_dim: dim out of range"))
+    }
+
+    let out_dims = output_shape_dims(a, dim)
+    let mut result = zeros(out_dims, a.dtype())
+    let out_numel = result.numel()
+    let dim_size = a.dim(dim)
+
+    let mut out_idx = 0
+    loop (out_idx < out_numel) {
+        let out_indices = flat_to_indices(out_idx, result.shape())
+        // Initialise with the first element along the reduced dimension.
+        let first_in = build_input_indices(ref out_indices, 0, dim, rank)
+        let first_flat = indices_to_flat(ref first_in, a.shape())
+        let mut best = a.get_f64(first_flat)
+        let mut d = 1
+        loop (d < dim_size) {
+            let in_indices = build_input_indices(ref out_indices, d, dim, rank)
+            let in_flat = indices_to_flat(ref in_indices, a.shape())
+            let v = a.get_f64(in_flat)
+            if v < best {
+                best = v
+            }
+            d = d + 1
+        }
+        result.set_f64(out_idx, best)
+        out_idx = out_idx + 1
+    }
+
+    Ok(result)
+}
+
+/// Index of the maximum value along a single dimension.
+///
+/// The result has I64 dtype and the same shape as the input with `dim` removed.
+/// Each output element holds the index (along `dim`) where the maximum occurs.
+pub func argmax_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("argmax_dim: dim out of range"))
+    }
+
+    let out_dims = output_shape_dims(a, dim)
+    let mut result = zeros(out_dims, DType::I64)
+    let out_numel = result.numel()
+    let dim_size = a.dim(dim)
+
+    let mut out_idx = 0
+    loop (out_idx < out_numel) {
+        let out_indices = flat_to_indices(out_idx, result.shape())
+        // Initialise with first element.
+        let first_in = build_input_indices(ref out_indices, 0, dim, rank)
+        let first_flat = indices_to_flat(ref first_in, a.shape())
+        let mut best_val = a.get_f64(first_flat)
+        let mut best_d = 0
+        let mut d = 1
+        loop (d < dim_size) {
+            let in_indices = build_input_indices(ref out_indices, d, dim, rank)
+            let in_flat = indices_to_flat(ref in_indices, a.shape())
+            let v = a.get_f64(in_flat)
+            if v > best_val {
+                best_val = v
+                best_d = d
+            }
+            d = d + 1
+        }
+        result.set_f64(out_idx, best_d as F64)
+        out_idx = out_idx + 1
+    }
+
+    Ok(result)
+}
+
+/// Index of the minimum value along a single dimension.
+///
+/// The result has I64 dtype and the same shape as the input with `dim` removed.
+/// Each output element holds the index (along `dim`) where the minimum occurs.
+pub func argmin_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("argmin_dim: dim out of range"))
+    }
+
+    let out_dims = output_shape_dims(a, dim)
+    let mut result = zeros(out_dims, DType::I64)
+    let out_numel = result.numel()
+    let dim_size = a.dim(dim)
+
+    let mut out_idx = 0
+    loop (out_idx < out_numel) {
+        let out_indices = flat_to_indices(out_idx, result.shape())
+        // Initialise with first element.
+        let first_in = build_input_indices(ref out_indices, 0, dim, rank)
+        let first_flat = indices_to_flat(ref first_in, a.shape())
+        let mut best_val = a.get_f64(first_flat)
+        let mut best_d = 0
+        let mut d = 1
+        loop (d < dim_size) {
+            let in_indices = build_input_indices(ref out_indices, d, dim, rank)
+            let in_flat = indices_to_flat(ref in_indices, a.shape())
+            let v = a.get_f64(in_flat)
+            if v < best_val {
+                best_val = v
+                best_d = d
+            }
+            d = d + 1
+        }
+        result.set_f64(out_idx, best_d as F64)
+        out_idx = out_idx + 1
+    }
+
+    Ok(result)
+}

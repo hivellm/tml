@@ -1,0 +1,34 @@
+use test::{assert, assert_eq}
+use std::db::orm::query_set::OrmQuerySet
+use std::db::orm::relation::Relation
+
+@test
+func test_qs5_join() -> I32 {
+    let sql = OrmQuerySet::new("users")
+        .join("LEFT JOIN orders ON orders.user_id = users.id")
+        .to_sql()
+    assert(sql.contains("LEFT JOIN"), "join")
+    return 0
+}
+
+@test
+func test_qs5_group_by() -> I32 {
+    let sql = OrmQuerySet::new("orders").group_by("user_id").to_sql()
+    assert(sql.contains("GROUP BY user_id"), "group by")
+    return 0
+}
+
+@test
+func test_qs5_having() -> I32 {
+    let sql = OrmQuerySet::new("orders").group_by("user_id").having("COUNT(*) > 5").to_sql()
+    assert(sql.contains("HAVING COUNT(*) > 5"), "having")
+    return 0
+}
+
+@test
+func test_qs5_with_relation() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = OrmQuerySet::new("users").with_relation(rel).to_sql()
+    assert(sql.contains("LEFT JOIN orders"), "eager join")
+    return 0
+}

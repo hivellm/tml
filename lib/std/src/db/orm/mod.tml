@@ -10,12 +10,16 @@
 //! | `entity`     | [`Column`], [`EntityMeta`] — entity/column definition     |
 //! | `model`      | [`Model`] behavior — contract for database-mapped types   |
 //! | `repository` | CRUD helpers using query builders                         |
-//! | `query_set`  | [`QuerySet`] — fluent query builder wrapping SelectQuery  |
+//! | `query_set`  | [`OrmQuerySet`] — fluent query builder wrapping SelectQuery |
 //! | `relation`   | [`Relation`], [`RelationType`] — relationship definitions |
+//! | `eager`      | [`eager_load_sql`], [`load_with`] — eager loading via JOINs |
+//! | `cascade`    | [`cascade_insert`], [`cascade_delete`] — cascading DML    |
 //! | `row_reader` | SQLite row reading helpers for ORM mapping                |
 pub mod entity
 pub mod model
 pub mod repository
 pub mod query_set
 pub mod relation
+pub mod eager
+pub mod cascade
 pub mod row_reader

@@ -1,0 +1,280 @@
+//! Tensor indexing and slicing operations.
+//!
+//! Provides slice, gather, and scatter operations following NumPy/PyTorch
+//! semantics.
+
+use std::collections::List
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::shape::Shape
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Convert a flat row-major index into a list of per-dimension indices.
+func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
+    let rank = shape.rank()
+    let mut indices = List[I64]::new(rank)
+    let mut k = 0
+    loop (k < rank) {
+        indices.push(0)
+        k = k + 1
+    }
+    let mut remaining = flat
+    let mut j = 0
+    loop (j < rank) {
+        let mut stride = 1
+        let mut s = j + 1
+        loop (s < rank) {
+            stride = stride * shape.dim(s)
+            s = s + 1
+        }
+        let idx = remaining / stride
+        indices.set(j, idx)
+        remaining = remaining - idx * stride
+        j = j + 1
+    }
+    indices
+}
+
+/// Convert multi-dimensional indices into a flat row-major index.
+func indices_to_flat(indices: ref List[I64], shape: ref Shape) -> I64 {
+    let rank = shape.rank()
+    let mut flat = 0
+    let mut stride = 1
+    let mut i = rank - 1
+    loop (i >= 0) {
+        flat = flat + indices.get(i) * stride
+        stride = stride * shape.dim(i)
+        i = i - 1
+    }
+    flat
+}
+
+// ---------------------------------------------------------------------------
+// Slice
+// ---------------------------------------------------------------------------
+
+/// Extract a sub-tensor along dimension `dim` from index `start` (inclusive)
+/// to `end` (exclusive).
+///
+/// The result has the same rank as `a`.  Dimension `dim` has size `end - start`;
+/// all other dimensions are unchanged.
+///
+/// For a tensor of shape [d0, d1, d2] with `dim=1`, `start=1`, `end=3`:
+/// - Output shape: [d0, 2, d2]
+/// - Output[i, j, k] = Input[i, start + j, k]
+///
+/// # Errors
+/// - `IaError::InvalidAxis` if `dim` is out of range.
+/// - `IaError::IndexOutOfBounds` if `start` or `end` are out of range, or
+///   `start >= end`.
+pub func slice(a: ref Tensor, dim: I64, start: I64, end: I64) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("slice: dim out of range"))
+    }
+    let dim_size = a.dim(dim)
+    if start < 0 or start >= dim_size {
+        return Err(IaError::IndexOutOfBounds("slice: start out of bounds"))
+    }
+    if end <= start or end > dim_size {
+        return Err(IaError::IndexOutOfBounds("slice: end out of bounds or not greater than start"))
+    }
+    // Build output shape: same as input but dim[dim] = end - start.
+    let slice_size = end - start
+    let mut out_dims = List[I64]::new(rank)
+    let mut d = 0
+    loop (d < rank) {
+        if d == dim {
+            out_dims.push(slice_size)
+        } else {
+            out_dims.push(a.dim(d))
+        }
+        d = d + 1
+    }
+    let out_shape = Shape::new(out_dims)
+    let n = out_shape.numel()
+    let mut zeros_dims = List[I64]::new(rank)
+    let mut zk = 0
+    loop (zk < rank) {
+        zeros_dims.push(out_shape.dim(zk))
+        zk = zk + 1
+    }
+    let mut result = zeros(zeros_dims, a.dtype())
+    // Map each output element to the corresponding input element.
+    let mut out_flat = 0
+    loop (out_flat < n) {
+        let out_indices = flat_to_indices(out_flat, ref out_shape)
+        // Build input indices: all dims same as output, except dim `dim`
+        // is offset by `start`.
+        let mut in_indices = List[I64]::new(rank)
+        let mut i = 0
+        loop (i < rank) {
+            if i == dim {
+                in_indices.push(out_indices.get(i) + start)
+            } else {
+                in_indices.push(out_indices.get(i))
+            }
+            i = i + 1
+        }
+        let in_flat = indices_to_flat(ref in_indices, a.shape())
+        result.set_f64(out_flat, a.get_f64(in_flat))
+        out_flat = out_flat + 1
+    }
+    Ok(result)
+}
+
+// ---------------------------------------------------------------------------
+// Gather
+// ---------------------------------------------------------------------------
+
+/// Gather elements from tensor `a` along dimension `dim` using `indices`.
+///
+/// `indices` must be a 1-D integer tensor.  The output has the same shape as
+/// `indices`.  For each position `i` in `indices`:
+///
+/// ```
+/// result[i] = a.select(dim, indices[i])
+/// ```
+///
+/// where `select(dim, idx)` means: for every multi-dim position, replace the
+/// `dim`-th index with `idx` and keep all other indices fixed to `i` (for 1-D
+/// `indices`).
+///
+/// Concretely, when `indices` is 1-D and `a` is N-D:
+/// - `result[i]` is the element of `a` at the position where the `dim`-th
+///   index equals `(I64)indices[i]` and all other indices are `i` (clamped to
+///   their respective dimensions).
+///
+/// For the common case where `a` is also 1-D this reduces to simple index
+/// lookup: `result[i] = a[indices[i]]`.
+///
+/// # Errors
+/// - `IaError::InvalidAxis` if `dim` is out of range.
+/// - `IaError::InvalidAxis` if `indices` is not 1-D.
+/// - `IaError::IndexOutOfBounds` if any index value is out of bounds for the
+///   gather dimension.
+pub func gather(a: ref Tensor, dim: I64, indices: ref Tensor) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("gather: dim out of range"))
+    }
+    if indices.rank() != 1 {
+        return Err(IaError::InvalidAxis("gather: indices must be a 1-D tensor"))
+    }
+    let n_idx = indices.numel()
+    let dim_size = a.dim(dim)
+    // Build output shape: same length as indices (1-D).
+    let mut out_dims = List[I64]::new(1)
+    out_dims.push(n_idx)
+    let mut result = zeros(out_dims, a.dtype())
+    let mut i = 0
+    loop (i < n_idx) {
+        let gather_idx = indices.get_f64(i) as I64
+        if gather_idx < 0 or gather_idx >= dim_size {
+            return Err(IaError::IndexOutOfBounds("gather: index out of bounds for gather dimension"))
+        }
+        // Build multi-dim index for source: use `i` clamped per dimension,
+        // except for `dim` which uses `gather_idx`.
+        let mut src_indices = List[I64]::new(rank)
+        let mut d = 0
+        loop (d < rank) {
+            if d == dim {
+                src_indices.push(gather_idx)
+            } else {
+                // Clamp `i` to the valid range for this dimension.
+                let d_size = a.dim(d)
+                let idx = i < d_size ? i : d_size - 1
+                src_indices.push(idx)
+            }
+            d = d + 1
+        }
+        let src_flat = indices_to_flat(ref src_indices, a.shape())
+        result.set_f64(i, a.get_f64(src_flat))
+        i = i + 1
+    }
+    Ok(result)
+}
+
+// ---------------------------------------------------------------------------
+// Scatter
+// ---------------------------------------------------------------------------
+
+/// Scatter values from `src` into a copy of `a` at positions given by `indices`.
+///
+/// This is the inverse of `gather`.  `indices` must be a 1-D integer tensor
+/// with the same length as `src`.  For each position `i`:
+///
+/// ```
+/// result[...gather position for indices[i]...] = src[i]
+/// ```
+///
+/// The positions follow the same mapping as `gather`: the `dim`-th index of
+/// the destination is `(I64)indices[i]`, and all other indices are derived
+/// from `i` (clamped to dimension bounds).
+///
+/// # Errors
+/// - `IaError::InvalidAxis` if `dim` is out of range.
+/// - `IaError::InvalidAxis` if `indices` or `src` are not 1-D.
+/// - `IaError::ShapeMismatch` if `indices.numel() != src.numel()`.
+/// - `IaError::IndexOutOfBounds` if any index value is out of bounds.
+pub func scatter(a: ref Tensor, dim: I64, indices: ref Tensor, src: ref Tensor) -> IaResult[Tensor] {
+    let rank = a.rank()
+    if dim < 0 or dim >= rank {
+        return Err(IaError::InvalidAxis("scatter: dim out of range"))
+    }
+    if indices.rank() != 1 {
+        return Err(IaError::InvalidAxis("scatter: indices must be a 1-D tensor"))
+    }
+    if src.rank() != 1 {
+        return Err(IaError::InvalidAxis("scatter: src must be a 1-D tensor"))
+    }
+    let n_idx = indices.numel()
+    if n_idx != src.numel() {
+        return Err(IaError::ShapeMismatch("scatter: indices and src must have the same number of elements"))
+    }
+    let dim_size = a.dim(dim)
+    // Start with a copy of `a`.
+    let na = a.numel()
+    let mut a_dims = List[I64]::new(rank)
+    let mut dk = 0
+    loop (dk < rank) {
+        a_dims.push(a.dim(dk))
+        dk = dk + 1
+    }
+    let mut result = zeros(a_dims, a.dtype())
+    let mut cp = 0
+    loop (cp < na) {
+        result.set_f64(cp, a.get_f64(cp))
+        cp = cp + 1
+    }
+    // Scatter src values into the result.
+    let mut i = 0
+    loop (i < n_idx) {
+        let scatter_idx = indices.get_f64(i) as I64
+        if scatter_idx < 0 or scatter_idx >= dim_size {
+            return Err(IaError::IndexOutOfBounds("scatter: index out of bounds for scatter dimension"))
+        }
+        // Build destination multi-dim index using the same mapping as gather.
+        let mut dst_indices = List[I64]::new(rank)
+        let mut d = 0
+        loop (d < rank) {
+            if d == dim {
+                dst_indices.push(scatter_idx)
+            } else {
+                let d_size = a.dim(d)
+                let idx = i < d_size ? i : d_size - 1
+                dst_indices.push(idx)
+            }
+            d = d + 1
+        }
+        let dst_flat = indices_to_flat(ref dst_indices, a.shape())
+        result.set_f64(dst_flat, src.get_f64(i))
+        i = i + 1
+    }
+    Ok(result)
+}

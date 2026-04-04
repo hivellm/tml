@@ -5,7 +5,7 @@
 //! via `conn.execute(sql)`.  Only one level of cascading (not recursive).
 
 use std::db::orm::relation::Relation
-use std::db::sqlite::connection::SqliteConnection
+use std::db::driver::connection::Connection
 use std::db::error::DbError
 
 /// Inserts a child row for a given parent PK using the relation's foreign key.
@@ -14,13 +14,13 @@ use std::db::error::DbError
 /// ```sql
 /// INSERT INTO <child_table> (<fk_col>, <value_col>) VALUES (<parent_pk>, '<child_val>')
 /// ```
-pub func cascade_insert(
-    conn: ref SqliteConnection,
+pub func cascade_insert[C](
+    conn: ref C,
     child_relation: ref Relation,
     parent_pk: I64,
     value_col: Str,
     child_val: Str
-) -> Outcome[I64, DbError] {
+) -> Outcome[I64, DbError] where C: Connection {
     let child_table = child_relation.foreign_table
     let fk_col = child_relation.foreign_key
     let sql = "INSERT INTO " + child_table + " (" + fk_col + ", " + value_col + ") VALUES (" + parent_pk.to_string() + ", '" + child_val + "')"
@@ -33,11 +33,11 @@ pub func cascade_insert(
 /// ```sql
 /// DELETE FROM <child_table> WHERE <fk_col> = <parent_pk>
 /// ```
-pub func cascade_delete(
-    conn: ref SqliteConnection,
+pub func cascade_delete[C](
+    conn: ref C,
     child_relation: ref Relation,
     parent_pk: I64
-) -> Outcome[I64, DbError] {
+) -> Outcome[I64, DbError] where C: Connection {
     let child_table = child_relation.foreign_table
     let fk_col = child_relation.foreign_key
     let sql = "DELETE FROM " + child_table + " WHERE " + fk_col + " = " + parent_pk.to_string()

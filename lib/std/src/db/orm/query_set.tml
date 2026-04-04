@@ -1,127 +1,283 @@
-//! QuerySet — TypeORM-style fluent query builder for ORM entities.
+//! OrmQuerySet — TypeORM-style fluent query builder for ORM entities.
 //!
 //! Wraps `SelectQuery` from `std::db::query::select` with ORM-friendly
-//! methods like `filter`, `select`, `limit`, `offset`, and `count_sql`.
+//! methods like `filter`, `select`, `limit`, `offset`, `join`, `group_by`,
+//! `having`, `with_relation`, and `count_sql`.
 //!
 //! Multiple calls to `filter` are ANDed together automatically,
 //! mimicking Django/TypeORM's chainable query builder pattern.
 
 use std::db::query::select::SelectQuery
 use std::db::query::expression::Expr
+use std::db::orm::relation::Relation
 
 /// A fluent query builder for entity queries (like TypeORM's createQueryBuilder).
 ///
-/// Internally delegates to SelectQuery for WHERE/LIMIT/OFFSET generation,
-/// and adds ORDER BY support (which SelectQuery doesn't have natively).
-pub type QuerySet {
+/// Internally delegates to SelectQuery for WHERE/LIMIT/OFFSET/GROUP BY/HAVING
+/// generation, and tracks JOINs and ORDER BY as raw SQL strings appended in
+/// `to_sql`.
+pub type OrmQuerySet {
     inner: SelectQuery,
     table: Str,
     where_str: Str,
     has_where: Bool,
     order_str: Str,
-    has_order: Bool
+    has_order: Bool,
+    group_str: Str,
+    has_group: Bool,
+    having_str: Str,
+    has_having: Bool,
+    join_str: Str,
+    has_join: Bool
 }
 
-impl QuerySet {
-    /// Creates a new QuerySet for the given table, selecting all columns.
-    pub func new(table: Str) -> QuerySet {
-        return QuerySet {
+impl OrmQuerySet {
+    /// Creates a new OrmQuerySet for the given table, selecting all columns.
+    pub func new(table: Str) -> OrmQuerySet {
+        return OrmQuerySet {
             inner: SelectQuery::new(table),
             table: table,
             where_str: "",
             has_where: false,
             order_str: "",
-            has_order: false
+            has_order: false,
+            group_str: "",
+            has_group: false,
+            having_str: "",
+            has_having: false,
+            join_str: "",
+            has_join: false
         }
     }
 
     /// Select specific columns (comma-separated string).
-    pub func select(this, cols: Str) -> QuerySet {
-        return QuerySet {
+    pub func select(this, cols: Str) -> OrmQuerySet {
+        return OrmQuerySet {
             inner: this.inner.columns(cols),
             table: this.table,
             where_str: this.where_str,
             has_where: this.has_where,
             order_str: this.order_str,
-            has_order: this.has_order
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
         }
     }
 
     /// Add a WHERE condition using an Expr.
     ///
     /// Multiple calls are ANDed together automatically.
-    pub func where_expr(this, expr: Expr) -> QuerySet {
+    pub func where_expr(this, expr: Expr) -> OrmQuerySet {
         let expr_sql = expr.to_sql()
         if this.has_where {
             let new_where = this.where_str + " AND " + expr_sql
-            return QuerySet {
+            return OrmQuerySet {
                 inner: SelectQuery::new(this.table).where_expr(Expr::raw(new_where)),
                 table: this.table,
                 where_str: new_where,
                 has_where: true,
                 order_str: this.order_str,
-                has_order: this.has_order
+                has_order: this.has_order,
+                group_str: this.group_str,
+                has_group: this.has_group,
+                having_str: this.having_str,
+                has_having: this.has_having,
+                join_str: this.join_str,
+                has_join: this.has_join
             }
         }
-        return QuerySet {
+        return OrmQuerySet {
             inner: this.inner.where_expr(expr),
             table: this.table,
             where_str: expr_sql,
             has_where: true,
             order_str: this.order_str,
-            has_order: this.has_order
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
         }
     }
 
     /// Add a WHERE condition from a raw SQL string (convenience).
     ///
     /// Multiple calls to filter are ANDed together.
-    pub func filter(this, condition: Str) -> QuerySet {
+    pub func filter(this, condition: Str) -> OrmQuerySet {
         return this.where_expr(Expr::raw(condition))
     }
 
     /// Set ORDER BY clause (raw SQL string, e.g. "name ASC").
-    pub func order_by(this, clause: Str) -> QuerySet {
-        return QuerySet {
+    pub func order_by(this, clause: Str) -> OrmQuerySet {
+        return OrmQuerySet {
             inner: this.inner,
             table: this.table,
             where_str: this.where_str,
             has_where: this.has_where,
             order_str: clause,
-            has_order: true
+            has_order: true,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
         }
     }
 
     /// Set the LIMIT clause.
-    pub func limit(this, n: I64) -> QuerySet {
-        return QuerySet {
+    pub func limit(this, n: I64) -> OrmQuerySet {
+        return OrmQuerySet {
             inner: this.inner.limit(n),
             table: this.table,
             where_str: this.where_str,
             has_where: this.has_where,
             order_str: this.order_str,
-            has_order: this.has_order
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
         }
     }
 
     /// Set the OFFSET clause.
-    pub func offset(this, n: I64) -> QuerySet {
-        return QuerySet {
+    pub func offset(this, n: I64) -> OrmQuerySet {
+        return OrmQuerySet {
             inner: this.inner.offset(n),
             table: this.table,
             where_str: this.where_str,
             has_where: this.has_where,
             order_str: this.order_str,
-            has_order: this.has_order
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
         }
+    }
+
+    /// Add a raw SQL JOIN clause to the query (5.1).
+    ///
+    /// The `join_clause` string is appended verbatim between the FROM clause
+    /// and the WHERE/GROUP BY/ORDER BY clauses.
+    ///
+    /// Example: `.join("LEFT JOIN orders ON orders.user_id = users.id")`
+    ///
+    /// Multiple calls to `join` accumulate in order.
+    pub func join(this, join_clause: Str) -> OrmQuerySet {
+        let new_joins = if this.has_join {
+            this.join_str + " " + join_clause
+        } else {
+            join_clause
+        }
+        return OrmQuerySet {
+            inner: this.inner,
+            table: this.table,
+            where_str: this.where_str,
+            has_where: this.has_where,
+            order_str: this.order_str,
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: new_joins,
+            has_join: true
+        }
+    }
+
+    /// Add a GROUP BY clause (5.2).
+    ///
+    /// Example: `.group_by("department_id")` → `GROUP BY department_id`.
+    pub func group_by(this, col: Str) -> OrmQuerySet {
+        return OrmQuerySet {
+            inner: this.inner.group_by(col),
+            table: this.table,
+            where_str: this.where_str,
+            has_where: this.has_where,
+            order_str: this.order_str,
+            has_order: this.has_order,
+            group_str: col,
+            has_group: true,
+            having_str: this.having_str,
+            has_having: this.has_having,
+            join_str: this.join_str,
+            has_join: this.has_join
+        }
+    }
+
+    /// Add a HAVING clause (5.2). Must follow `group_by`.
+    ///
+    /// Example: `.having("COUNT(*) > 5")` → `HAVING COUNT(*) > 5`.
+    pub func having(this, cond: Str) -> OrmQuerySet {
+        return OrmQuerySet {
+            inner: this.inner.having(cond),
+            table: this.table,
+            where_str: this.where_str,
+            has_where: this.has_where,
+            order_str: this.order_str,
+            has_order: this.has_order,
+            group_str: this.group_str,
+            has_group: this.has_group,
+            having_str: cond,
+            has_having: true,
+            join_str: this.join_str,
+            has_join: this.has_join
+        }
+    }
+
+    /// Shorthand for adding an eager JOIN from a Relation (5.3).
+    ///
+    /// Generates a LEFT JOIN on `source.local_key = target.foreign_key`
+    /// using the relation definition.
+    ///
+    /// Example:
+    /// ```
+    /// let rel = Relation::has_many("orders", "orders", "user_id")
+    /// query("users").with_relation(rel)
+    /// // → SELECT * FROM users LEFT JOIN orders ON users.id = orders.user_id
+    /// ```
+    pub func with_relation(this, rel: Relation) -> OrmQuerySet {
+        let join_sql = rel.join_sql(this.table)
+        return this.join(join_sql)
     }
 
     /// Renders the full SELECT query to a SQL string.
     ///
-    /// Appends ORDER BY after the base SelectQuery output (since
-    /// SelectQuery doesn't support ORDER BY natively yet).
+    /// The rendering order is:
+    ///   SELECT * FROM <table> [joins] [WHERE ...] [GROUP BY ...] [HAVING ...] [ORDER BY ...]
+    ///
+    /// When JOINs are present, the SQL is built from OrmQuerySet's tracked state
+    /// to insert JOINs in the correct position. Otherwise delegates to inner.to_sql().
     pub func to_sql(this) -> Str {
-        var sql: Str = this.inner.to_sql()
+        if not this.has_join {
+            var sql: Str = this.inner.to_sql()
+            if this.has_order {
+                sql = sql + " ORDER BY " + this.order_str
+            }
+            return sql
+        }
+        var sql: Str = "SELECT * FROM " + this.table + " " + this.join_str
+        if this.has_where {
+            sql = sql + " WHERE " + this.where_str
+        }
+        if this.has_group {
+            sql = sql + " GROUP BY " + this.group_str
+        }
+        if this.has_having {
+            sql = sql + " HAVING " + this.having_str
+        }
         if this.has_order {
             sql = sql + " ORDER BY " + this.order_str
         }
@@ -137,6 +293,6 @@ impl QuerySet {
         return sql
     }
 
-    /// Returns the table name this QuerySet operates on.
+    /// Returns the table name this OrmQuerySet operates on.
     pub func table_name(this) -> Str { return this.table }
 }

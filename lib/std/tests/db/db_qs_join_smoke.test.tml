@@ -1,0 +1,41 @@
+// Smoke test for OrmQuerySet — kept for regression testing of join/with_relation.
+use test::{assert, assert_eq}
+use std::db::orm::query_set::OrmQuerySet
+use std::db::orm::relation::Relation
+
+@test
+func test_qs_join_raw_smoke() -> I32 {
+    let sql = OrmQuerySet::new("users")
+        .join("LEFT JOIN orders ON orders.user_id = users.id")
+        .to_sql()
+    assert(sql.contains("LEFT JOIN"), "join")
+    return 0
+}
+
+@test
+func test_qs_with_relation_smoke() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = OrmQuerySet::new("users")
+        .with_relation(rel)
+        .to_sql()
+    assert(sql.contains("LEFT JOIN"), "join from relation")
+    return 0
+}
+
+@test
+func test_qs_group_by_smoke() -> I32 {
+    let sql = OrmQuerySet::new("orders").group_by("user_id").to_sql()
+    assert(sql.contains("GROUP BY user_id"), "group by no join")
+    return 0
+}
+
+@test
+func test_qs_join_then_group_by_smoke() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = OrmQuerySet::new("users")
+        .with_relation(rel)
+        .group_by("users.id")
+        .to_sql()
+    assert(sql.contains("GROUP BY users.id"), "group by with join")
+    return 0
+}

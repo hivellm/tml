@@ -1,5 +1,15 @@
 # TML Library Engineer Memory
 
+## TML Struct Syntax (CRITICAL)
+- `pub struct Foo { ... }` does NOT exist — use `pub type Foo { ... }` for record/struct types
+- `pub struct` causes P001 parse cascade on EVERYTHING after it in the file
+- Three valid type declarations: `pub enum`, `pub type Name = ...` (alias), `pub type Name { fields }` (struct)
+
+## Sub-module re-exports in mod.tml
+- Relative `pub use dtype::DType` fails if module isn't in the global AST yet
+- Use fully-qualified `pub use std::ia::tensor::dtype::DType` form to guarantee resolution
+- `pub use module::{A, B, C}` brace-imports work fine when using full paths
+
 ## DI Module (2026-04-03) — Phases 1-4 Complete
 - `lib/std/src/di/` — registry.tml, module.tml, application.tml, config.tml, mod.tml
 - Tests: 4 test files, 4/4 suites passing (24 tests total)

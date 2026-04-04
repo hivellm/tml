@@ -2,7 +2,7 @@
 // Tests that combine multiple db modules together.
 use test::{assert, assert_eq}
 use std::db::orm::entity::{Column, EntityMeta}
-use std::db::orm::query_set::QuerySet
+use std::db::orm::query_set::OrmQuerySet
 use std::db::orm::relation::Relation
 use std::db::query::expression::Expr
 use std::db::query::delete_query::DeleteQuery
@@ -53,7 +53,7 @@ func test_column_type_uuid() -> I32 {
 
 @test
 func test_queryset_count_sql() -> I32 {
-    let qs = QuerySet::new("users").filter("active = 1")
+    let qs = OrmQuerySet::new("users").filter("active = 1")
     let sql = qs.count_sql()
     assert(sql.contains("COUNT(*)"), "has count")
     assert(sql.contains("FROM users"), "has table")
@@ -63,7 +63,7 @@ func test_queryset_count_sql() -> I32 {
 
 @test
 func test_queryset_order_by() -> I32 {
-    let qs = QuerySet::new("products").order_by("price ASC")
+    let qs = OrmQuerySet::new("products").order_by("price ASC")
     let sql = qs.to_sql()
     assert(sql.contains("FROM products"), "has table")
     assert(sql.contains("ORDER BY price ASC"), "has order")

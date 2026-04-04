@@ -1,0 +1,18 @@
+//! Error types for the IA library.
+
+/// Errors that can occur in IA operations.
+pub enum IaError {
+    /// Shape mismatch between tensors.
+    ShapeMismatch(Str),
+    /// Invalid axis or dimension index.
+    InvalidAxis(Str),
+    /// Index out of bounds.
+    IndexOutOfBounds(Str),
+    /// Invalid dtype conversion.
+    InvalidDType(Str),
+    /// Generic error.
+    Other(Str),
+}
+
+/// Result type for IA operations.
+pub type IaResult[T] = Outcome[T, IaError]

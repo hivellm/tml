@@ -1,7 +1,7 @@
 // Tests: TypeORM-style entity definitions with decorators
 use test::{assert, assert_eq}
 use std::db::orm::entity::{Column, EntityMeta}
-use std::db::orm::query_set::QuerySet
+use std::db::orm::query_set::OrmQuerySet
 use std::db::orm::relation::{Relation, RelationType}
 use std::db::query::expression::Expr
 
@@ -62,7 +62,7 @@ func test_decorator_entity_instantiation() -> I32 {
 
 @test
 func test_decorator_entity_queryset() -> I32 {
-    let qs = QuerySet::new("users")
+    let qs = OrmQuerySet::new("users")
         .where_expr(Expr::column("age").gt(Expr::int(18)))
         .limit(10)
     let sql = qs.to_sql()

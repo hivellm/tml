@@ -1,0 +1,67 @@
+//! Data types supported by tensors.
+
+/// Supported numeric data types for tensor elements.
+pub enum DType {
+    /// 32-bit floating point.
+    F32,
+    /// 64-bit floating point.
+    F64,
+    /// 32-bit signed integer.
+    I32,
+    /// 64-bit signed integer.
+    I64,
+    /// Boolean (stored as 1 byte).
+    Bool,
+    /// 8-bit unsigned integer.
+    U8,
+    /// 32-bit unsigned integer.
+    U32,
+}
+
+impl DType {
+    /// Returns the size in bytes of a single element of this dtype.
+    pub func size_bytes(this) -> I64 {
+        when this {
+            DType::F32 => 4,
+            DType::F64 => 8,
+            DType::I32 => 4,
+            DType::I64 => 8,
+            DType::Bool => 1,
+            DType::U8 => 1,
+            DType::U32 => 4,
+        }
+    }
+
+    /// Returns the string name of this dtype.
+    pub func name(this) -> Str {
+        when this {
+            DType::F32 => "F32",
+            DType::F64 => "F64",
+            DType::I32 => "I32",
+            DType::I64 => "I64",
+            DType::Bool => "Bool",
+            DType::U8 => "U8",
+            DType::U32 => "U32",
+        }
+    }
+
+    /// Returns true if this dtype is a floating-point type.
+    pub func is_float(this) -> Bool {
+        when this {
+            DType::F32 => true,
+            DType::F64 => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this dtype is an integer type.
+    pub func is_int(this) -> Bool {
+        when this {
+            DType::I32 => true,
+            DType::I64 => true,
+            DType::U8 => true,
+            DType::U32 => true,
+            _ => false,
+        }
+    }
+}

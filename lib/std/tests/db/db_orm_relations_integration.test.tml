@@ -1,0 +1,49 @@
+// Phase 6.2 — Integration tests: relations (eager load SQL, cascade delete SQL).
+// Pure SQL-generation tests (no live SQLite connection required).
+
+use test::{assert, assert_eq}
+use std::db::orm::relation::Relation
+use std::db::orm::eager::eager_load_sql
+use std::db::orm::cascade::{cascade_insert_sql, cascade_delete_sql}
+use std::db::orm::query_set::OrmQuerySet
+
+@test
+func test_parent_child_eager_sql() -> I32 {
+    var rels: List[Relation] = List::new()
+    rels.push(Relation::has_many("posts", "posts", "author_id"))
+    let sql = eager_load_sql("users", ref rels)
+    assert(sql.contains("SELECT * FROM users"), "base select")
+    assert(sql.contains("LEFT JOIN posts ON users.id = posts.author_id"), "join")
+    return 0
+}
+
+@test
+func test_cascade_delete_child_sql() -> I32 {
+    let rel = Relation::has_many("posts", "posts", "author_id")
+        .with_cascade(false, false, true)
+    let sql = cascade_delete_sql(ref rel)
+    assert_eq(sql, "DELETE FROM posts WHERE author_id = ?", "cascade delete sql")
+    return 0
+}
+
+@test
+func test_cascade_insert_child_sql() -> I32 {
+    let rel = Relation::has_many("comments", "comments", "post_id")
+        .with_cascade(true, false, false)
+    let sql = cascade_insert_sql(ref rel, "body")
+    assert_eq(sql, "INSERT INTO comments (post_id, body) VALUES (?, ?)", "cascade insert sql")
+    return 0
+}
+
+@test
+func test_mnm_join_table_config() -> I32 {
+    let rel = Relation::many_to_many("tags", "tags", "tag_id")
+        .join_table("post_tags", "post_id", "tag_id")
+        .with_cascade(true, false, true)
+    assert(rel.has_join_table_cfg(), "has pivot")
+    assert_eq(rel.pivot_table(), "post_tags", "pivot name")
+    let c = rel.get_cascade()
+    assert(c.on_insert, "cascade insert")
+    assert(c.on_delete, "cascade delete")
+    return 0
+}

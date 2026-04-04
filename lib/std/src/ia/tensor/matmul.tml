@@ -1,0 +1,144 @@
+//! Matrix multiplication for tensors.
+//!
+//! Provides both a naive triple-loop implementation and a cache-friendly
+//! blocked (tiled) variant for better performance on large matrices.
+
+use std::collections::List
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::shape::Shape
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Build a dims list for a 2-D tensor result of shape [rows, cols].
+func make_2d_dims(rows: I64, cols: I64) -> List[I64] {
+    let mut dims = List[I64]::new(2)
+    dims.push(rows)
+    dims.push(cols)
+    dims
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/// Multiply two 2-D tensors: a[M, K] @ b[K, N] → result[M, N].
+///
+/// Both tensors must be rank 2 and their inner dimensions must match
+/// (a.dim(1) == b.dim(0)).  The result dtype matches `a`.
+pub func matmul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // Rank checks.
+    if a.rank() != 2 {
+        return Err(IaError::ShapeMismatch("matmul: first operand must be rank 2"))
+    }
+    if b.rank() != 2 {
+        return Err(IaError::ShapeMismatch("matmul: second operand must be rank 2"))
+    }
+
+    let m = a.dim(0)
+    let k = a.dim(1)
+    let k2 = b.dim(0)
+    let n = b.dim(1)
+
+    if k != k2 {
+        return Err(IaError::ShapeMismatch("matmul: inner dimensions do not match"))
+    }
+
+    let mut result = zeros(make_2d_dims(m, n), a.dtype())
+
+    let mut i = 0
+    loop (i < m) {
+        let mut j = 0
+        loop (j < n) {
+            let mut total = 0.0
+            let mut p = 0
+            loop (p < k) {
+                total = total + a.get_f64(i * k + p) * b.get_f64(p * n + j)
+                p = p + 1
+            }
+            result.set_f64(i * n + j, total)
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    Ok(result)
+}
+
+/// Cache-friendly blocked (tiled) matrix multiplication.
+///
+/// Produces the same result as `matmul` but processes data in tiles of
+/// `block_size × block_size` to improve cache utilisation on large matrices.
+///
+/// `block_size` must be > 0.  A value of 64 is a reasonable default.
+pub func matmul_blocked(a: ref Tensor, b: ref Tensor, block_size: I64) -> IaResult[Tensor] {
+    // Rank checks.
+    if a.rank() != 2 {
+        return Err(IaError::ShapeMismatch("matmul_blocked: first operand must be rank 2"))
+    }
+    if b.rank() != 2 {
+        return Err(IaError::ShapeMismatch("matmul_blocked: second operand must be rank 2"))
+    }
+
+    let m = a.dim(0)
+    let k = a.dim(1)
+    let k2 = b.dim(0)
+    let n = b.dim(1)
+
+    if k != k2 {
+        return Err(IaError::ShapeMismatch("matmul_blocked: inner dimensions do not match"))
+    }
+
+    if block_size <= 0 {
+        return Err(IaError::InvalidAxis("matmul_blocked: block_size must be > 0"))
+    }
+
+    let mut result = zeros(make_2d_dims(m, n), a.dtype())
+
+    // Outer tile loops over rows of A / rows of result.
+    let mut i = 0
+    loop (i < m) {
+        let i_end = (i + block_size) < m ? (i + block_size) : m
+
+        // Outer tile loop over columns of B / columns of result.
+        let mut j = 0
+        loop (j < n) {
+            let j_end = (j + block_size) < n ? (j + block_size) : n
+
+            // Tile loop along the shared dimension K.
+            let mut p = 0
+            loop (p < k) {
+                let p_end = (p + block_size) < k ? (p + block_size) : k
+
+                // Inner micro-kernel: multiply the sub-block and accumulate.
+                let mut ii = i
+                loop (ii < i_end) {
+                    let mut jj = j
+                    loop (jj < j_end) {
+                        let mut acc = result.get_f64(ii * n + jj)
+                        let mut pp = p
+                        loop (pp < p_end) {
+                            acc = acc + a.get_f64(ii * k + pp) * b.get_f64(pp * n + jj)
+                            pp = pp + 1
+                        }
+                        result.set_f64(ii * n + jj, acc)
+                        jj = jj + 1
+                    }
+                    ii = ii + 1
+                }
+
+                p = p + block_size
+            }
+
+            j = j + block_size
+        }
+
+        i = i + block_size
+    }
+
+    Ok(result)
+}

@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [route-thunk-abi-fix.md](route-thunk-abi-fix.md) - Route handler ABI trampoline wrappers: fn ptr call-site passes by-value, function def expects ptr (2026-04-03, FIXED)
 - [deep-module-private-imports-fix.md](deep-module-private-imports-fix.md) - load_module_from_file missing private_imports loading: deep module paths (4+ segments) undeclared in IR (2026-04-03, FIXED)
 - [struct-param-byptr-fix.md](struct-param-byptr-fix.md) - MIR codegen free function struct params: by-value definition vs by-pointer call site ABI mismatch (2026-04-03, FIXED)
 - [closure-ref-param-inference-fix.md](closure-ref-param-inference-fix.md) - Closure ref T param inference: type checker + AST codegen + auto-deref for inferred refs (2026-04-02, FIXED)

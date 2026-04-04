@@ -1,0 +1,128 @@
+//! Core Tensor type — a multi-dimensional array with typed storage.
+
+use std::collections::Buffer
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::shape::{Shape, Layout}
+
+/// A multi-dimensional array of numeric data.
+///
+/// Data is stored in a contiguous Buffer in row-major (C) order.
+/// Each element is stored according to its DType (F32=4 bytes, F64=8 bytes, etc.).
+pub type Tensor {
+    data: Buffer,
+    layout: Layout,
+    dtype: DType,
+}
+
+impl Tensor {
+    /// Creates a new tensor from a raw data buffer, layout, and dtype.
+    pub func from_raw(data: Buffer, layout: Layout, dtype: DType) -> Tensor {
+        Tensor {
+            data: data,
+            layout: layout,
+            dtype: dtype,
+        }
+    }
+
+    /// Returns a reference to the shape of this tensor.
+    pub func shape(this) -> ref Shape {
+        this.layout.shape()
+    }
+
+    /// Returns a reference to the layout.
+    pub func layout(this) -> ref Layout {
+        ref this.layout
+    }
+
+    /// Returns the dtype.
+    pub func dtype(this) -> DType {
+        this.dtype
+    }
+
+    /// Returns the total number of elements.
+    pub func numel(this) -> I64 {
+        this.layout.shape().numel()
+    }
+
+    /// Returns the number of dimensions (rank).
+    pub func rank(this) -> I64 {
+        this.layout.shape().rank()
+    }
+
+    /// Returns the size of dimension `i`.
+    pub func dim(this, i: I64) -> I64 {
+        this.layout.shape().dim(i)
+    }
+
+    /// Gets the F64 value at a flat index, converting from native dtype.
+    ///
+    /// This is the universal accessor — all dtypes are readable as F64.
+    pub func get_f64(this, flat_index: I64) -> F64 {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        when this.dtype {
+            DType::F32 => {
+                let v: F32 = this.data.read_f32_le(byte_offset)
+                v as F64
+            },
+            DType::F64 => this.data.read_f64_le(byte_offset),
+            DType::I32 => {
+                let v: I32 = this.data.read_i32_at(byte_offset)
+                v as F64
+            },
+            DType::I64 => {
+                let v: I64 = this.data.read_i64_at(byte_offset)
+                v as F64
+            },
+            DType::Bool => {
+                let v: I32 = this.data.read_u8(byte_offset)
+                v > 0 ? 1.0 : 0.0
+            },
+            DType::U8 => {
+                let v: I32 = this.data.read_u8(byte_offset)
+                v as F64
+            },
+            DType::U32 => {
+                let v: I64 = this.data.read_u32_le(byte_offset)
+                v as F64
+            },
+        }
+    }
+
+    /// Sets the F64 value at a flat index, converting to native dtype.
+    pub func set_f64(this, flat_index: I64, value: F64) {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        when this.dtype {
+            DType::F32 => this.data.write_f32_le(value as F32, byte_offset),
+            DType::F64 => this.data.write_f64_le(value, byte_offset),
+            DType::I32 => this.data.write_u32_le(value as I64, byte_offset),
+            DType::I64 => this.data.write_u64_le(value as I64, byte_offset),
+            DType::Bool => this.data.write_u8(value != 0.0 ? 1 : 0, byte_offset),
+            DType::U8 => this.data.write_u8(value as I64 as I32, byte_offset),
+            DType::U32 => this.data.write_u32_le(value as I64, byte_offset),
+        }
+    }
+
+    /// Gets the F32 value at a flat index (optimised for F32 tensors).
+    pub func get_f32(this, flat_index: I64) -> F32 {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        this.data.read_f32_le(byte_offset)
+    }
+
+    /// Sets the F32 value at a flat index (optimised for F32 tensors).
+    pub func set_f32(this, flat_index: I64, value: F32) {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        this.data.write_f32_le(value, byte_offset)
+    }
+
+    /// Gets the I64 value at a flat index.
+    pub func get_i64(this, flat_index: I64) -> I64 {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        this.data.read_i64_at(byte_offset)
+    }
+
+    /// Sets the I64 value at a flat index.
+    pub func set_i64(this, flat_index: I64, value: I64) {
+        let byte_offset = (this.layout.offset() + flat_index) * this.dtype.size_bytes()
+        this.data.write_u64_le(value, byte_offset)
+    }
+}

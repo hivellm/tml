@@ -7,7 +7,7 @@
 use std::db::orm::relation::Relation
 use std::db::query::select::SelectQuery
 use std::db::query::expression::Expr
-use std::db::sqlite::connection::SqliteConnection
+use std::db::driver::connection::Connection
 use std::db::error::DbError
 
 /// Generates a SELECT query with LEFT JOINs for all given relations.
@@ -38,7 +38,7 @@ pub func eager_load_sql(table: Str, relations: ref List[Relation]) -> Str {
 /// executes it, and returns the SQL string that was run.
 ///
 /// Returns `Ok(sql)` on success, `Err(e)` if execution fails.
-pub func load_with(conn: ref SqliteConnection, table: Str, pk: I64, relations: ref List[Relation]) -> Outcome[Str, DbError] {
+pub func load_with[C](conn: ref C, table: Str, pk: I64, relations: ref List[Relation]) -> Outcome[Str, DbError] where C: Connection {
     var q = SelectQuery::new(table)
     let n = relations.len()
     var i = 0

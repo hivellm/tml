@@ -1,0 +1,170 @@
+//! Shape, strides, and layout for tensor dimensions.
+
+use std::collections::List
+use std::ia::error::IaError
+
+/// Describes the dimensions of a tensor.
+pub type Shape {
+    dims: List[I64],
+}
+
+impl Shape {
+    /// Creates a new Shape from a list of dimensions.
+    pub func new(dims: List[I64]) -> Shape {
+        Shape { dims: dims }
+    }
+
+    /// Returns the number of dimensions (rank) of this shape.
+    pub func rank(this) -> I64 {
+        this.dims.len()
+    }
+
+    /// Returns the size of dimension `i`.
+    pub func dim(this, i: I64) -> I64 {
+        this.dims.get(i)
+    }
+
+    /// Returns the total number of elements (product of all dimensions).
+    /// Returns 1 for scalar shapes (rank 0).
+    pub func numel(this) -> I64 {
+        let mut result = 1
+        let mut i = 0
+        loop (i < this.dims.len()) {
+            result = result * this.dims.get(i)
+            i = i + 1
+        }
+        result
+    }
+
+    /// Returns true if this shape represents a scalar (rank 0).
+    pub func is_scalar(this) -> Bool {
+        this.dims.len() == 0
+    }
+
+    /// Returns true if this shape equals `other`.
+    pub func eq(this, other: ref Shape) -> Bool {
+        let n = this.dims.len()
+        if n != other.dims.len() {
+            return false
+        }
+        let mut i = 0
+        loop (i < n) {
+            if this.dims.get(i) != other.dims.get(i) {
+                return false
+            }
+            i = i + 1
+        }
+        true
+    }
+
+    /// Computes C-contiguous (row-major) strides for this shape.
+    ///
+    /// For a shape [d0, d1, ..., d_{n-1}], the strides are:
+    ///   stride[n-1] = 1
+    ///   stride[i]   = stride[i+1] * dims[i+1]
+    pub func contiguous_strides(this) -> List[I64] {
+        let n = this.dims.len()
+        let mut strides = List[I64]::new(n)
+        let mut i = 0
+        loop (i < n) {
+            strides.push(0)
+            i = i + 1
+        }
+        if n == 0 {
+            return strides
+        }
+        strides.set(n - 1, 1)
+        let mut j = n - 2
+        loop (j >= 0) {
+            let next_stride = strides.get(j + 1)
+            let next_dim = this.dims.get(j + 1)
+            strides.set(j, next_stride * next_dim)
+            j = j - 1
+        }
+        strides
+    }
+}
+
+/// Describes how tensor data is laid out in memory.
+pub type Layout {
+    shape: Shape,
+    strides: List[I64],
+    offset: I64,
+}
+
+impl Layout {
+    /// Creates a contiguous (row-major) layout for the given shape.
+    pub func contiguous(shape: Shape) -> Layout {
+        let strides = shape.contiguous_strides()
+        Layout {
+            shape: shape,
+            strides: strides,
+            offset: 0,
+        }
+    }
+
+    /// Returns true if this layout is contiguous (strides match row-major order).
+    pub func is_contiguous(this) -> Bool {
+        let expected = this.shape.contiguous_strides()
+        let n = this.strides.len()
+        if n != expected.len() {
+            return false
+        }
+        let mut i = 0
+        loop (i < n) {
+            if this.strides.get(i) != expected.get(i) {
+                return false
+            }
+            i = i + 1
+        }
+        true
+    }
+
+    /// Returns a reference to the shape.
+    pub func shape(this) -> ref Shape {
+        ref this.shape
+    }
+
+    /// Returns a reference to the strides list.
+    pub func strides(this) -> ref List[I64] {
+        ref this.strides
+    }
+
+    /// Returns the buffer offset (in elements) where this tensor's data begins.
+    pub func offset(this) -> I64 {
+        this.offset
+    }
+}
+
+/// Computes the broadcast shape of two shapes following NumPy rules.
+///
+/// Rules:
+/// 1. Pad the shorter shape with 1s on the left.
+/// 2. For each dimension pair:
+///    - If equal, keep the value.
+///    - If one is 1, use the other.
+///    - Otherwise, return IaError::ShapeMismatch.
+pub func broadcast_shape(a: ref Shape, b: ref Shape) -> Outcome[Shape, IaError] {
+    let ra = a.rank()
+    let rb = b.rank()
+    let out_rank = ra > rb ? ra : rb
+    let mut out_dims = List[I64]::new(out_rank)
+    let mut i = 0
+    loop (i < out_rank) {
+        let ai = ra - out_rank + i
+        let bi = rb - out_rank + i
+        let da = ai >= 0 ? a.dim(ai) : 1
+        let db = bi >= 0 ? b.dim(bi) : 1
+        if da == db {
+            out_dims.push(da)
+        } else if da == 1 {
+            out_dims.push(db)
+        } else if db == 1 {
+            out_dims.push(da)
+        } else {
+            return Err(IaError::ShapeMismatch("shapes are not broadcastable"))
+        }
+        i = i + 1
+    }
+    Ok(Shape::new(out_dims))
+}

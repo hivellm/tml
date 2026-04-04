@@ -1,0 +1,180 @@
+//! Tensor comparison operations.
+//!
+//! Element-wise comparison functions return F64 tensors where 1.0 represents
+//! true and 0.0 represents false.  This is the standard convention for
+//! numeric tensor libraries (NumPy, PyTorch) that use float storage for
+//! boolean masks.
+//!
+//! All binary comparison functions support NumPy-style broadcasting via the
+//! same `broadcast_shape` infrastructure used by `ops.tml`.
+
+use std::collections::List
+use std::ia::error::{IaError, IaResult}
+use std::ia::tensor::dtype::DType
+use std::ia::tensor::shape::{Shape, broadcast_shape}
+use std::ia::tensor::tensor::Tensor
+use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Internal helpers (same as ops.tml — kept local to avoid cross-file deps)
+// ---------------------------------------------------------------------------
+
+/// Convert a flat row-major index into a list of per-dimension indices.
+func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
+    let rank = shape.rank()
+    let mut indices = List[I64]::new(rank)
+    let mut k = 0
+    loop (k < rank) {
+        indices.push(0)
+        k = k + 1
+    }
+    let mut remaining = flat
+    let mut j = 0
+    loop (j < rank) {
+        let mut stride = 1
+        let mut s = j + 1
+        loop (s < rank) {
+            stride = stride * shape.dim(s)
+            s = s + 1
+        }
+        let idx = remaining / stride
+        indices.set(j, idx)
+        remaining = remaining - idx * stride
+        j = j + 1
+    }
+    indices
+}
+
+/// Given output multi-dimensional indices and a (possibly broadcast) source
+/// shape, compute the flat index into the source tensor.
+func broadcast_flat_index(out_indices: ref List[I64], src_shape: ref Shape) -> I64 {
+    let out_rank = out_indices.len()
+    let src_rank = src_shape.rank()
+    let offset = out_rank - src_rank
+    let mut flat = 0
+    let mut stride = 1
+    let mut i = src_rank - 1
+    loop (i >= 0) {
+        let dim_val = src_shape.dim(i)
+        let out_idx = out_indices.get(i + offset)
+        let src_idx = dim_val == 1 ? 0 : out_idx
+        flat = flat + src_idx * stride
+        stride = stride * dim_val
+        i = i - 1
+    }
+    flat
+}
+
+/// Apply a binary comparison function element-wise to two tensors with
+/// broadcasting support.  The result is an F64 tensor where 1.0 = true,
+/// 0.0 = false.
+func compare_binary_op(a: ref Tensor, b: ref Tensor, f: func(F64, F64) -> F64) -> IaResult[Tensor] {
+    let out_shape_result = broadcast_shape(a.shape(), b.shape())
+    when out_shape_result {
+        Err(e) => return Err(e),
+        Ok(out_shape) => {
+            let n = out_shape.numel()
+            let out_rank = out_shape.rank()
+            let mut out_dims = List[I64]::new(out_rank)
+            let mut d = 0
+            loop (d < out_rank) {
+                out_dims.push(out_shape.dim(d))
+                d = d + 1
+            }
+            // Comparison results are always stored as F64 (1.0 / 0.0).
+            let mut result = zeros(out_dims, DType::F64)
+            let mut i = 0
+            loop (i < n) {
+                let out_indices = flat_to_indices(i, ref out_shape)
+                let a_flat = broadcast_flat_index(ref out_indices, a.shape())
+                let b_flat = broadcast_flat_index(ref out_indices, b.shape())
+                result.set_f64(i, f(a.get_f64(a_flat), b.get_f64(b_flat)))
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Element-wise comparison — binary, with broadcasting
+// ---------------------------------------------------------------------------
+
+/// Element-wise equality: result[i] = 1.0 if a[i] == b[i], else 0.0.
+/// Supports broadcasting.
+pub func eq(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x == y ? 1.0 : 0.0 })
+}
+
+/// Element-wise inequality: result[i] = 1.0 if a[i] != b[i], else 0.0.
+/// Supports broadcasting.
+pub func ne(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x != y ? 1.0 : 0.0 })
+}
+
+/// Element-wise greater-than: result[i] = 1.0 if a[i] > b[i], else 0.0.
+/// Supports broadcasting.
+pub func gt(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x > y ? 1.0 : 0.0 })
+}
+
+/// Element-wise less-than: result[i] = 1.0 if a[i] < b[i], else 0.0.
+/// Supports broadcasting.
+pub func lt(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x < y ? 1.0 : 0.0 })
+}
+
+/// Element-wise greater-than-or-equal: result[i] = 1.0 if a[i] >= b[i], else 0.0.
+/// Supports broadcasting.
+pub func ge(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x >= y ? 1.0 : 0.0 })
+}
+
+/// Element-wise less-than-or-equal: result[i] = 1.0 if a[i] <= b[i], else 0.0.
+/// Supports broadcasting.
+pub func le(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x <= y ? 1.0 : 0.0 })
+}
+
+// ---------------------------------------------------------------------------
+// Conditional selection
+// ---------------------------------------------------------------------------
+
+/// Element-wise conditional selection.
+///
+/// For each element position `i`:
+/// ```
+/// result[i] = cond[i] != 0.0 ? a[i] : b[i]
+/// ```
+///
+/// All three tensors (`cond`, `a`, `b`) must have the same shape.
+/// Broadcasting is NOT applied — shapes must match exactly to keep semantics
+/// unambiguous.
+///
+/// # Errors
+/// Returns `IaError::ShapeMismatch` if any of the three shapes differ.
+pub func where_cond(cond: ref Tensor, a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    // All three must have the same shape.
+    if not cond.shape().eq(a.shape()) {
+        return Err(IaError::ShapeMismatch("where_cond: cond and a must have the same shape"))
+    }
+    if not a.shape().eq(b.shape()) {
+        return Err(IaError::ShapeMismatch("where_cond: a and b must have the same shape"))
+    }
+    let n = a.numel()
+    let rank = a.rank()
+    let mut out_dims = List[I64]::new(rank)
+    let mut d = 0
+    loop (d < rank) {
+        out_dims.push(a.dim(d))
+        d = d + 1
+    }
+    let mut result = zeros(out_dims, a.dtype())
+    let mut i = 0
+    loop (i < n) {
+        let val = cond.get_f64(i) != 0.0 ? a.get_f64(i) : b.get_f64(i)
+        result.set_f64(i, val)
+        i = i + 1
+    }
+    Ok(result)
+}

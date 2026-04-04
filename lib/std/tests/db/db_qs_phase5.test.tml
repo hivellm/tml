@@ -1,0 +1,77 @@
+// Phase 5b tests — OrmQuerySet with_relation and full chain (6 tests).
+
+use test::{assert, assert_eq}
+use std::db::orm::query_set::OrmQuerySet
+use std::db::orm::relation::Relation
+
+@test
+func test_queryset_with_relation_has_many() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = OrmQuerySet::new("users")
+        .with_relation(rel)
+        .to_sql()
+    assert(sql.contains("LEFT JOIN orders"), "eager join")
+    assert(sql.contains("users.id = orders.user_id"), "join condition")
+    return 0
+}
+
+@test
+func test_queryset_with_relation_belongs_to() -> I32 {
+    let rel = Relation::belongs_to("user", "users", "user_id")
+    let sql = OrmQuerySet::new("orders")
+        .with_relation(rel)
+        .to_sql()
+    assert(sql.contains("LEFT JOIN users"), "join users")
+    assert(sql.contains("orders.user_id = users.id"), "fk condition")
+    return 0
+}
+
+@test
+func test_queryset_with_relation_and_filter() -> I32 {
+    let rel = Relation::has_one("profile", "profiles", "user_id")
+    let sql = OrmQuerySet::new("users")
+        .with_relation(rel)
+        .filter("users.active = 1")
+        .to_sql()
+    assert(sql.contains("LEFT JOIN profiles"), "profile join")
+    assert(sql.contains("users.active = 1"), "filter")
+    return 0
+}
+
+@test
+func test_queryset_full_chain() -> I32 {
+    let rel = Relation::has_many("orders", "orders", "user_id")
+    let sql = OrmQuerySet::new("users")
+        .with_relation(rel)
+        .filter("users.active = 1")
+        .group_by("users.id")
+        .having("COUNT(orders.id) > 0")
+        .order_by("users.id ASC")
+        .limit(10)
+        .to_sql()
+    assert(sql.contains("FROM users"), "from")
+    assert(sql.contains("LEFT JOIN orders"), "join")
+    assert(sql.contains("users.active = 1"), "filter")
+    assert(sql.contains("GROUP BY users.id"), "group by")
+    assert(sql.contains("HAVING COUNT(orders.id) > 0"), "having")
+    assert(sql.contains("ORDER BY users.id ASC"), "order by")
+    return 0
+}
+
+@test
+func test_queryset_table_name() -> I32 {
+    let qs = OrmQuerySet::new("products")
+    assert_eq(qs.table_name(), "products", "table name")
+    return 0
+}
+
+@test
+func test_queryset_count_sql_with_filter() -> I32 {
+    let sql = OrmQuerySet::new("users")
+        .filter("active = 1")
+        .count_sql()
+    assert(sql.contains("COUNT(*)"), "count")
+    assert(sql.contains("FROM users"), "table")
+    assert(sql.contains("active = 1"), "filter")
+    return 0
+}

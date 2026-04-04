@@ -1,0 +1,57 @@
+// Phase 6.1 — Integration tests: entity lifecycle (define → DDL → query → update → delete).
+// Pure SQL-generation tests (no live SQLite connection required).
+
+use test::{assert, assert_eq}
+use std::db::orm::entity::{Column, EntityMeta}
+use std::db::orm::query_set::OrmQuerySet
+use std::db::orm::relation::Relation
+
+// ── Entity lifecycle SQL generation ───────────────────────────────────────
+
+@test
+func test_entity_create_table_sql() -> I32 {
+    let entity = EntityMeta::new("users", "id")
+        .column(Column::primary("id"))
+        .column(Column::text("name"))
+        .column(Column::text("email").unique())
+    let sql = entity.create_table_sql()
+    assert(sql.contains("CREATE TABLE IF NOT EXISTS users"), "create table")
+    assert(sql.contains("id INTEGER PRIMARY KEY AUTOINCREMENT"), "pk col")
+    assert(sql.contains("name TEXT"), "name col")
+    assert(sql.contains("UNIQUE"), "unique email")
+    return 0
+}
+
+@test
+func test_entity_drop_table_sql() -> I32 {
+    let entity = EntityMeta::new("sessions", "id")
+    let sql = entity.drop_table_sql()
+    assert_eq(sql, "DROP TABLE IF EXISTS sessions", "drop table")
+    return 0
+}
+
+@test
+func test_query_filter_and_limit() -> I32 {
+    let sql = OrmQuerySet::new("users")
+        .filter("active = 1")
+        .order_by("created_at DESC")
+        .limit(20)
+        .to_sql()
+    assert(sql.contains("WHERE active = 1"), "filter")
+    assert(sql.contains("ORDER BY created_at DESC"), "order")
+    assert(sql.contains("LIMIT 20"), "limit")
+    return 0
+}
+
+@test
+func test_query_with_offset() -> I32 {
+    let sql = OrmQuerySet::new("products")
+        .filter("in_stock = 1")
+        .limit(10)
+        .offset(30)
+        .to_sql()
+    assert(sql.contains("WHERE in_stock = 1"), "filter")
+    assert(sql.contains("LIMIT 10"), "limit")
+    assert(sql.contains("OFFSET 30"), "offset")
+    return 0
+}

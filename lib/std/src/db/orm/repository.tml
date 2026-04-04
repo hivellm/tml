@@ -4,13 +4,13 @@
 //! via `conn.execute(sql)` or `conn.query_scalar_i64(sql)`.  Only methods
 //! from the `Connection` behavior are used; no SQLite-specific helpers.
 
-use std::db::sqlite::connection::SqliteConnection
+use std::db::driver::connection::Connection
 use std::db::error::{DbError, DbErrorKind}
 use std::db::orm::entity::EntityMeta
 use std::db::orm::query_set::OrmQuerySet
 
 /// Creates the table for an entity (like TypeORM's synchronize).
-pub func sync_entity(conn: ref SqliteConnection, entity: ref EntityMeta) -> Outcome[Unit, DbError] {
+pub func sync_entity[C](conn: ref C, entity: ref EntityMeta) -> Outcome[Unit, DbError] where C: Connection {
     let result = conn.execute(entity.create_table_sql())
     when result {
         Ok(_) => Ok(()),
@@ -19,13 +19,13 @@ pub func sync_entity(conn: ref SqliteConnection, entity: ref EntityMeta) -> Outc
 }
 
 /// Inserts a row with an I64 primary key and a single Str value column.
-pub func insert_str(conn: ref SqliteConnection, table: Str, pk_val: I64, col_name: Str, col_val: Str) -> Outcome[I64, DbError] {
+pub func insert_str[C](conn: ref C, table: Str, pk_val: I64, col_name: Str, col_val: Str) -> Outcome[I64, DbError] where C: Connection {
     let sql = "INSERT INTO " + table + " (id, " + col_name + ") VALUES (" + pk_val.to_string() + ", '" + col_val + "')"
     return conn.execute(sql)
 }
 
 /// Returns whether a row with the given primary key exists.
-pub func find_one(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[Bool, DbError] {
+pub func find_one[C](conn: ref C, table: Str, pk_col: Str, pk_val: I64) -> Outcome[Bool, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM " + table + " WHERE " + pk_col + " = " + pk_val.to_string()
     let result = conn.query_scalar_i64(sql)
     when result {
@@ -35,31 +35,31 @@ pub func find_one(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I
 }
 
 /// Counts all rows in a table.
-pub func count(conn: ref SqliteConnection, table: Str) -> Outcome[I64, DbError] {
+pub func count[C](conn: ref C, table: Str) -> Outcome[I64, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM " + table
     return conn.query_scalar_i64(sql)
 }
 
 /// Deletes a row by primary key.
-pub func delete_by_id(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+pub func delete_by_id[C](conn: ref C, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "DELETE FROM " + table + " WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Updates a single I64 column by primary key.
-pub func update_i64_by_id(conn: ref SqliteConnection, table: Str, col: Str, new_val: I64, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+pub func update_i64_by_id[C](conn: ref C, table: Str, col: Str, new_val: I64, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "UPDATE " + table + " SET " + col + " = " + new_val.to_string() + " WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Updates a single Str column by primary key.
-pub func update_str_by_id(conn: ref SqliteConnection, table: Str, col: Str, new_val: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+pub func update_str_by_id[C](conn: ref C, table: Str, col: Str, new_val: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "UPDATE " + table + " SET " + col + " = '" + new_val + "' WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Executes raw SQL directly (for DDL or complex statements).
-pub func exec(conn: ref SqliteConnection, sql: Str) -> Outcome[I64, DbError] {
+pub func exec[C](conn: ref C, sql: Str) -> Outcome[I64, DbError] where C: Connection {
     return conn.execute(sql)
 }
 
@@ -69,13 +69,13 @@ pub func query(table: Str) -> OrmQuerySet {
 }
 
 /// Inserts or replaces a row (upsert) with an I64 primary key and a single Str value column.
-pub func save(conn: ref SqliteConnection, table: Str, pk_val: I64, col_name: Str, col_val: Str) -> Outcome[I64, DbError] {
+pub func save[C](conn: ref C, table: Str, pk_val: I64, col_name: Str, col_val: Str) -> Outcome[I64, DbError] where C: Connection {
     let sql = "INSERT OR REPLACE INTO " + table + " (id, " + col_name + ") VALUES (" + pk_val.to_string() + ", '" + col_val + "')"
     return conn.execute(sql)
 }
 
 /// Finds the first row where `col = val` (Str value).
-pub func find_by(conn: ref SqliteConnection, table: Str, col: Str, val: Str) -> Outcome[Bool, DbError] {
+pub func find_by[C](conn: ref C, table: Str, col: Str, val: Str) -> Outcome[Bool, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM " + table + " WHERE " + col + " = '" + val + "'"
     let result = conn.query_scalar_i64(sql)
     when result {
@@ -85,37 +85,37 @@ pub func find_by(conn: ref SqliteConnection, table: Str, col: Str, val: Str) -> 
 }
 
 /// Finds rows matching a WHERE clause, up to `limit` rows, returning the count found.
-pub func find_many(conn: ref SqliteConnection, table: Str, where_clause: Str, limit: I64) -> Outcome[I64, DbError] {
+pub func find_many[C](conn: ref C, table: Str, where_clause: Str, limit: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM (SELECT 1 FROM " + table + " WHERE " + where_clause + " LIMIT " + limit.to_string() + ")"
     return conn.query_scalar_i64(sql)
 }
 
 /// Counts rows matching a WHERE condition.
-pub func count_where(conn: ref SqliteConnection, table: Str, condition: Str) -> Outcome[I64, DbError] {
+pub func count_where[C](conn: ref C, table: Str, condition: Str) -> Outcome[I64, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM " + table + " WHERE " + condition
     return conn.query_scalar_i64(sql)
 }
 
 /// Soft-deletes a row by setting `deleted_at` to a timestamp string.
-pub func soft_delete(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64, timestamp: Str) -> Outcome[I64, DbError] {
+pub func soft_delete[C](conn: ref C, table: Str, pk_col: Str, pk_val: I64, timestamp: Str) -> Outcome[I64, DbError] where C: Connection {
     let sql = "UPDATE " + table + " SET deleted_at = '" + timestamp + "' WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Restores a soft-deleted row by setting `deleted_at` to NULL.
-pub func restore(conn: ref SqliteConnection, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+pub func restore[C](conn: ref C, table: Str, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "UPDATE " + table + " SET deleted_at = NULL WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Atomically increments an I64 column by the given amount.
-pub func increment(conn: ref SqliteConnection, table: Str, col: Str, amount: I64, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] {
+pub func increment[C](conn: ref C, table: Str, col: Str, amount: I64, pk_col: Str, pk_val: I64) -> Outcome[I64, DbError] where C: Connection {
     let sql = "UPDATE " + table + " SET " + col + " = " + col + " + " + amount.to_string() + " WHERE " + pk_col + " = " + pk_val.to_string()
     return conn.execute(sql)
 }
 
 /// Returns whether any row exists where `col = val` (Str value).
-pub func exists(conn: ref SqliteConnection, table: Str, col: Str, val: Str) -> Outcome[Bool, DbError] {
+pub func exists[C](conn: ref C, table: Str, col: Str, val: Str) -> Outcome[Bool, DbError] where C: Connection {
     let sql = "SELECT COUNT(*) FROM " + table + " WHERE " + col + " = '" + val + "'"
     let result = conn.query_scalar_i64(sql)
     when result {

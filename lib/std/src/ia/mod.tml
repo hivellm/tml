@@ -1,0 +1,15 @@
+//! TML AI Library (IA)
+//!
+//! Tensor operations, neural networks, and machine learning primitives.
+//!
+//! # Modules
+//!
+//! | Module    | Description                          |
+//! |-----------|--------------------------------------|
+//! | `error`   | [`IaError`], [`IaResult`] — error types for IA operations |
+//! | `tensor`  | Tensor types and operations          |
+
+pub mod tensor
+pub mod error
+
+pub use error::{IaError, IaResult}
