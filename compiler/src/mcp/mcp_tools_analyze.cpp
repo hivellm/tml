@@ -94,27 +94,41 @@ fs::path find_log() {
 
 std::vector<LogEntry> load_entries(const fs::path& log_path) {
     std::vector<LogEntry> entries;
-    std::ifstream ifs(log_path);
-    if (!ifs.is_open())
+    // Use C fopen with share-read to avoid conflicts with the log writer
+    FILE* fp = std::fopen(log_path.string().c_str(), "r");
+    if (!fp)
         return entries;
-    std::string line;
-    while (std::getline(ifs, line)) {
-        if (line.empty())
+    char line_buf[65536];
+    int line_num = 0;
+    int parsed = 0;
+    while (std::fgets(line_buf, sizeof(line_buf), fp)) {
+        line_num++;
+        std::string line(line_buf);
+        // Remove trailing newline
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            line.pop_back();
+        if (line.empty() || line[0] != '{')
             continue;
-        LogEntry e;
-        e.event = extract_json_string(line, "event");
-        if (e.event != "tool_call")
-            continue;
-        e.session = extract_json_string(line, "session");
-        e.tool = extract_json_string(line, "tool");
-        e.is_error = extract_json_bool(line, "is_error");
-        e.error_type = extract_json_string(line, "error_type");
-        e.preceded_by = extract_json_string(line, "preceded_by");
-        e.test_target = extract_json_string(line, "test_target");
-        e.duration_ms = extract_json_int(line, "duration_ms");
-        e.ts = extract_json_int(line, "ts");
-        entries.push_back(std::move(e));
+        try {
+            LogEntry e;
+            e.event = extract_json_string(line, "event");
+            if (e.event != "tool_call")
+                continue;
+            e.session = extract_json_string(line, "session");
+            e.tool = extract_json_string(line, "tool");
+            e.is_error = extract_json_bool(line, "is_error");
+            e.error_type = extract_json_string(line, "error_type");
+            e.preceded_by = extract_json_string(line, "preceded_by");
+            e.test_target = extract_json_string(line, "test_target");
+            e.duration_ms = extract_json_int(line, "duration_ms");
+            e.ts = extract_json_int(line, "ts");
+            entries.push_back(std::move(e));
+            parsed++;
+        } catch (...) {
+            std::fprintf(stderr, "[analyze] skipping bad line %d\n", line_num);
+        }
     }
+    std::fclose(fp);
     return entries;
 }
 
@@ -234,42 +248,65 @@ auto make_analyze_tool() -> Tool {
 }
 
 auto handle_analyze(const json::JsonValue& params) -> ToolResult {
-    auto* metric_val = params.get("metric");
-    if (!metric_val) {
-        return ToolResult::error("Missing required parameter: metric");
-    }
-    std::string metric = metric_val->as_string();
+    try {
+        std::fprintf(stderr, "[analyze] handler entered\n");
+        std::fflush(stderr);
 
-    auto log_path = find_log();
-    if (log_path.empty()) {
-        return ToolResult::error("mcp-call-log.jsonl not found. "
-                                 "Set TML_MCP_LOG_DIR or run from project root.");
-    }
+        auto* metric_val = params.get("metric");
+        if (!metric_val) {
+            return ToolResult::error("Missing required parameter: metric");
+        }
+        std::string metric = metric_val->as_string();
+        std::fprintf(stderr, "[analyze] metric=%s\n", metric.c_str());
+        std::fflush(stderr);
 
-    auto entries = load_entries(log_path);
-    if (entries.empty()) {
-        return ToolResult::text("{\"error\":\"no entries found\",\"log\":\"" + log_path.string() +
-                                "\"}");
-    }
+        std::fprintf(stderr, "[analyze] cwd=%s\n", fs::current_path().string().c_str());
+        std::fflush(stderr);
+        auto log_path = find_log();
+        if (log_path.empty()) {
+            return ToolResult::error("mcp-call-log.jsonl not found. "
+                                     "Set TML_MCP_LOG_DIR or run from project root.");
+        }
+        std::fprintf(stderr, "[analyze] log=%s\n", log_path.string().c_str());
+        std::fflush(stderr);
 
-    std::string result;
-    if (metric == "tool_distribution") {
-        result = metric_tool_distribution(entries);
-    } else if (metric == "error_rate") {
-        result = metric_error_rate(entries);
-    } else if (metric == "check_adoption") {
-        result = metric_check_adoption(entries);
-    } else if (metric == "debug_layers_usage") {
-        result = metric_debug_layers_usage(entries);
-    } else if (metric == "test_target_hotspots") {
-        result = metric_test_target_hotspots(entries);
-    } else {
-        return ToolResult::error("Unknown metric: " + metric +
-                                 ". Valid: tool_distribution, error_rate, check_adoption, "
-                                 "debug_layers_usage, test_target_hotspots");
-    }
+        auto entries = load_entries(log_path);
+        std::fprintf(stderr, "[analyze] loaded %zu entries\n", entries.size());
+        std::fflush(stderr);
 
-    return ToolResult::text(result);
+        if (entries.empty()) {
+            return ToolResult::text("{\"entries\":0,\"log\":\"" + log_path.string() + "\"}");
+        }
+
+        std::string result;
+        if (metric == "tool_distribution") {
+            result = metric_tool_distribution(entries);
+        } else if (metric == "error_rate") {
+            result = metric_error_rate(entries);
+        } else if (metric == "check_adoption") {
+            result = metric_check_adoption(entries);
+        } else if (metric == "debug_layers_usage") {
+            result = metric_debug_layers_usage(entries);
+        } else if (metric == "test_target_hotspots") {
+            result = metric_test_target_hotspots(entries);
+        } else {
+            return ToolResult::error("Unknown metric: " + metric +
+                                     ". Valid: tool_distribution, error_rate, check_adoption, "
+                                     "debug_layers_usage, test_target_hotspots");
+        }
+
+        std::fprintf(stderr, "[analyze] done, result size=%zu\n", result.size());
+        std::fflush(stderr);
+        return ToolResult::text(result);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[analyze] EXCEPTION: %s\n", e.what());
+        std::fflush(stderr);
+        return ToolResult::error(std::string("analyze crashed: ") + e.what());
+    } catch (...) {
+        std::fprintf(stderr, "[analyze] UNKNOWN EXCEPTION\n");
+        std::fflush(stderr);
+        return ToolResult::error("analyze crashed with unknown exception");
+    }
 }
 
 } // namespace tml::mcp
