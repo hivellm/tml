@@ -1,0 +1,114 @@
+// Tests for element-wise tensor operations: add, sub, mul, div, neg, abs_tensor, sqrt_tensor, clamp
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::tensor::ops::{add, sub, mul, div, neg, abs_tensor, sqrt_tensor, clamp}
+
+@test
+func test_add() -> I32 {
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.0)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(3)
+    data_b.push(4.0)
+    data_b.push(5.0)
+    data_b.push(6.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(3)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = add(ref a, ref b)
+    when result {
+        Ok(t) => {
+            assert_eq(t.numel(), 3, "add result should have 3 elements")
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 5.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "add element 0 should be 5.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 7.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "add element 1 should be 7.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 9.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "add element 2 should be 9.0")
+        },
+        Err(e) => assert(false, "add should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_sub() -> I32 {
+    let mut data_a = List[F64]::new(3)
+    data_a.push(4.0)
+    data_a.push(5.0)
+    data_a.push(6.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(3)
+    data_b.push(1.0)
+    data_b.push(2.0)
+    data_b.push(3.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(3)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = sub(ref a, ref b)
+    when result {
+        Ok(t) => {
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 3.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "sub element 0 should be 3.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 3.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "sub element 1 should be 3.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 3.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "sub element 2 should be 3.0")
+        },
+        Err(e) => assert(false, "sub should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_mul() -> I32 {
+    let mut data_a = List[F64]::new(3)
+    data_a.push(2.0)
+    data_a.push(3.0)
+    data_a.push(4.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(3)
+    data_b.push(5.0)
+    data_b.push(6.0)
+    data_b.push(7.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(3)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = mul(ref a, ref b)
+    when result {
+        Ok(t) => {
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 10.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "mul element 0 should be 10.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 18.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "mul element 1 should be 18.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 28.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "mul element 2 should be 28.0")
+        },
+        Err(e) => assert(false, "mul should not fail"),
+    }
+    return 0
+}

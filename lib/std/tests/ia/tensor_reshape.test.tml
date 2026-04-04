@@ -1,0 +1,139 @@
+// Reshape and dimension manipulation tests for std::ia tensor module.
+use test
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, zeros, reshape, transpose, squeeze, unsqueeze}
+
+@test
+func test_reshape() -> I32 {
+    // reshape [2,3] to [3,2], elements should be preserved in row-major order
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+
+    let mut new_dims = List[I64]::new(2)
+    new_dims.push(3)
+    new_dims.push(2)
+    let result = reshape(ref t, new_dims)
+    when result {
+        Err(e) => assert(false, "reshape should not fail for compatible shapes"),
+        Ok(r) => {
+            assert_eq(r.rank(), 2 as I64, "reshaped rank should be 2")
+            assert_eq(r.dim(0), 3 as I64, "reshaped dim 0 should be 3")
+            assert_eq(r.dim(1), 2 as I64, "reshaped dim 1 should be 2")
+            // Elements should be preserved in flat order: [1,2,3,4,5,6]
+            let v0 = r.get_f64(0)
+            let diff0 = v0 - 1.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "element 0 should be 1.0")
+            let v5 = r.get_f64(5)
+            let diff5 = v5 - 6.0
+            assert(diff5 > -0.001 and diff5 < 0.001, "element 5 should be 6.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_transpose() -> I32 {
+    // transpose [[1,2,3],[4,5,6]] → [[1,4],[2,5],[3,6]]
+    // A shape [2,3] flat [1,2,3,4,5,6]
+    // After transpose shape [3,2] flat [1,4,2,5,3,6]
+    let mut data = List[F64]::new(6)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    data.push(5.0)
+    data.push(6.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+
+    let result = transpose(ref t)
+    when result {
+        Err(e) => assert(false, "transpose should not fail for 2D tensor"),
+        Ok(r) => {
+            assert_eq(r.rank(), 2 as I64, "transposed rank should be 2")
+            assert_eq(r.dim(0), 3 as I64, "transposed dim 0 should be 3")
+            assert_eq(r.dim(1), 2 as I64, "transposed dim 1 should be 2")
+            // result[0,0] = 1.0, result[0,1] = 4.0
+            let v00 = r.get_f64(0)
+            let diff00 = v00 - 1.0
+            assert(diff00 > -0.001 and diff00 < 0.001, "transposed[0,0] should be 1.0")
+            let v01 = r.get_f64(1)
+            let diff01 = v01 - 4.0
+            assert(diff01 > -0.001 and diff01 < 0.001, "transposed[0,1] should be 4.0")
+            // result[1,0] = 2.0, result[1,1] = 5.0
+            let v10 = r.get_f64(2)
+            let diff10 = v10 - 2.0
+            assert(diff10 > -0.001 and diff10 < 0.001, "transposed[1,0] should be 2.0")
+            let v11 = r.get_f64(3)
+            let diff11 = v11 - 5.0
+            assert(diff11 > -0.001 and diff11 < 0.001, "transposed[1,1] should be 5.0")
+        },
+    }
+    return 0
+}
+
+@test
+func test_squeeze() -> I32 {
+    // squeeze tensor with shape [1,3,1] → [3]
+    let mut data = List[F64]::new(3)
+    data.push(10.0)
+    data.push(20.0)
+    data.push(30.0)
+    let mut dims = List[I64]::new(3)
+    dims.push(1)
+    dims.push(3)
+    dims.push(1)
+    let t = from_list_f64(data, dims)
+
+    let r = squeeze(ref t)
+    assert_eq(r.rank(), 1 as I64, "squeezed rank should be 1")
+    assert_eq(r.dim(0), 3 as I64, "squeezed dim 0 should be 3")
+    let v0 = r.get_f64(0)
+    let diff0 = v0 - 10.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "squeezed[0] should be 10.0")
+    let v2 = r.get_f64(2)
+    let diff2 = v2 - 30.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "squeezed[2] should be 30.0")
+    return 0
+}
+
+@test
+func test_unsqueeze() -> I32 {
+    // unsqueeze [3] at dim 0 → [1,3]
+    let mut data = List[F64]::new(3)
+    data.push(7.0)
+    data.push(8.0)
+    data.push(9.0)
+    let mut dims = List[I64]::new(1)
+    dims.push(3)
+    let t = from_list_f64(data, dims)
+
+    let result = unsqueeze(ref t, 0)
+    when result {
+        Err(e) => assert(false, "unsqueeze should not fail for valid dim 0"),
+        Ok(r) => {
+            assert_eq(r.rank(), 2 as I64, "unsqueezed rank should be 2")
+            assert_eq(r.dim(0), 1 as I64, "unsqueezed dim 0 should be 1")
+            assert_eq(r.dim(1), 3 as I64, "unsqueezed dim 1 should be 3")
+            let v0 = r.get_f64(0)
+            let diff0 = v0 - 7.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "unsqueezed[0] should be 7.0")
+            let v2 = r.get_f64(2)
+            let diff2 = v2 - 9.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "unsqueezed[2] should be 9.0")
+        },
+    }
+    return 0
+}

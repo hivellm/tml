@@ -12,6 +12,7 @@ pub enum CompareOp {
 }
 
 impl CompareOp {
+    /// Renders the comparison operator as its SQL symbol (e.g. `"="`, `"!="`, `"LIKE"`).
     pub func to_sql(this) -> Str {
         when this {
             CompareOp::Eq   => "=",
@@ -32,6 +33,7 @@ pub enum LogicOp {
 }
 
 impl LogicOp {
+    /// Renders the logical operator as its SQL keyword (`"AND"` or `"OR"`).
     pub func to_sql(this) -> Str {
         when this {
             LogicOp::And => "AND",
@@ -47,6 +49,7 @@ pub enum SortDir {
 }
 
 impl SortDir {
+    /// Renders the sort direction as its SQL keyword (`"ASC"` or `"DESC"`).
     pub func to_sql(this) -> Str {
         when this {
             SortDir::Asc  => "ASC",

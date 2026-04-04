@@ -44,6 +44,7 @@ impl DbErrorKind {
 }
 
 impl Display for DbErrorKind {
+    /// Formats the error kind as a short English label (e.g. `"Connection"`, `"Query"`).
     pub func to_string(this) -> Str {
         when this {
             DbErrorKind::Connection  => "Connection",

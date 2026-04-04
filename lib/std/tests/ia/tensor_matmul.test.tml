@@ -1,0 +1,137 @@
+// Matmul tests for std::ia tensor module.
+use test
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, zeros, matmul}
+use std::ia::error::IaError
+
+@test
+func test_matmul_2x2() -> I32 {
+    // A = [[1,2],[3,4]], B = [[5,6],[7,8]]
+    // Result = [[19,22],[43,50]]
+    let mut a_data = List[F64]::new(4)
+    a_data.push(1.0)
+    a_data.push(2.0)
+    a_data.push(3.0)
+    a_data.push(4.0)
+    let mut a_dims = List[I64]::new(2)
+    a_dims.push(2)
+    a_dims.push(2)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(4)
+    b_data.push(5.0)
+    b_data.push(6.0)
+    b_data.push(7.0)
+    b_data.push(8.0)
+    let mut b_dims = List[I64]::new(2)
+    b_dims.push(2)
+    b_dims.push(2)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = matmul(ref a, ref b)
+    when result {
+        Err(e) => assert(false, "matmul should not fail for valid 2x2"),
+        Ok(t) => {
+            let v00 = t.get_f64(0)
+            let diff00 = v00 - 19.0
+            assert(diff00 > -0.001 and diff00 < 0.001, "result[0,0] should be 19")
+            let v01 = t.get_f64(1)
+            let diff01 = v01 - 22.0
+            assert(diff01 > -0.001 and diff01 < 0.001, "result[0,1] should be 22")
+            let v10 = t.get_f64(2)
+            let diff10 = v10 - 43.0
+            assert(diff10 > -0.001 and diff10 < 0.001, "result[1,0] should be 43")
+            let v11 = t.get_f64(3)
+            let diff11 = v11 - 50.0
+            assert(diff11 > -0.001 and diff11 < 0.001, "result[1,1] should be 50")
+        },
+    }
+    return 0
+}
+
+@test
+func test_matmul_2x3_3x2() -> I32 {
+    // A shape [2,3] = [[1,2,3],[4,5,6]]
+    // B shape [3,2] = [[7,8],[9,10],[11,12]]
+    // Result shape [2,2] = [[58,64],[139,154]]
+    let mut a_data = List[F64]::new(6)
+    a_data.push(1.0)
+    a_data.push(2.0)
+    a_data.push(3.0)
+    a_data.push(4.0)
+    a_data.push(5.0)
+    a_data.push(6.0)
+    let mut a_dims = List[I64]::new(2)
+    a_dims.push(2)
+    a_dims.push(3)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(6)
+    b_data.push(7.0)
+    b_data.push(8.0)
+    b_data.push(9.0)
+    b_data.push(10.0)
+    b_data.push(11.0)
+    b_data.push(12.0)
+    let mut b_dims = List[I64]::new(2)
+    b_dims.push(3)
+    b_dims.push(2)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = matmul(ref a, ref b)
+    when result {
+        Err(e) => assert(false, "matmul should not fail for valid 2x3 @ 3x2"),
+        Ok(t) => {
+            assert_eq(t.rank(), 2 as I64, "result should be rank 2")
+            assert_eq(t.dim(0), 2 as I64, "result rows should be 2")
+            assert_eq(t.dim(1), 2 as I64, "result cols should be 2")
+            let v00 = t.get_f64(0)
+            let diff00 = v00 - 58.0
+            assert(diff00 > -0.001 and diff00 < 0.001, "result[0,0] should be 58")
+            let v01 = t.get_f64(1)
+            let diff01 = v01 - 64.0
+            assert(diff01 > -0.001 and diff01 < 0.001, "result[0,1] should be 64")
+            let v10 = t.get_f64(2)
+            let diff10 = v10 - 139.0
+            assert(diff10 > -0.001 and diff10 < 0.001, "result[1,0] should be 139")
+            let v11 = t.get_f64(3)
+            let diff11 = v11 - 154.0
+            assert(diff11 > -0.001 and diff11 < 0.001, "result[1,1] should be 154")
+        },
+    }
+    return 0
+}
+
+@test
+func test_matmul_shape_mismatch() -> I32 {
+    // A shape [2,3], B shape [2,2] — inner dims don't match
+    let mut a_data = List[F64]::new(6)
+    a_data.push(1.0)
+    a_data.push(2.0)
+    a_data.push(3.0)
+    a_data.push(4.0)
+    a_data.push(5.0)
+    a_data.push(6.0)
+    let mut a_dims = List[I64]::new(2)
+    a_dims.push(2)
+    a_dims.push(3)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(4)
+    b_data.push(1.0)
+    b_data.push(2.0)
+    b_data.push(3.0)
+    b_data.push(4.0)
+    let mut b_dims = List[I64]::new(2)
+    b_dims.push(2)
+    b_dims.push(2)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = matmul(ref a, ref b)
+    when result {
+        Ok(t) => assert(false, "should have gotten shape mismatch error"),
+        Err(e) => assert(true, "got expected error for shape mismatch"),
+    }
+    return 0
+}

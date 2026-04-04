@@ -37,6 +37,7 @@ impl ColumnType {
 }
 
 impl Display for ColumnType {
+    /// Formats the column type as its SQL-style type name (e.g. `"INTEGER"`, `"TEXT"`).
     pub func to_string(this) -> Str {
         when this {
             ColumnType::Integer   => "INTEGER",

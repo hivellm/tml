@@ -25,14 +25,17 @@ impl SqliteDialect {
 }
 
 impl Dialect for SqliteDialect {
+    /// Wraps `name` in double-quotes for SQLite (e.g. `"table_name"`).
     pub func quote_identifier(this, name: Str) -> Str {
         return "\"" + name + "\""
     }
 
+    /// Returns `"?"` — SQLite uses positional `?` placeholders regardless of `index`.
     pub func placeholder(this, index: I32) -> Str {
         return "?"
     }
 
+    /// Returns `true` because SQLite supports the `RETURNING` clause (since 3.35.0).
     pub func supports_returning(this) -> Bool {
         return true
     }

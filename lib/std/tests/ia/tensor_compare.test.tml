@@ -1,0 +1,125 @@
+// Comparison operation tests for std::ia tensor module.
+use test
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64, zeros, where_cond}
+use std::ia::tensor::compare
+
+@test
+func test_eq() -> I32 {
+    // eq([1,2,3], [1,2,4]) → [1.0, 1.0, 0.0]
+    let mut a_data = List[F64]::new(3)
+    a_data.push(1.0)
+    a_data.push(2.0)
+    a_data.push(3.0)
+    let mut a_dims = List[I64]::new(1)
+    a_dims.push(3)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(3)
+    b_data.push(1.0)
+    b_data.push(2.0)
+    b_data.push(4.0)
+    let mut b_dims = List[I64]::new(1)
+    b_dims.push(3)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = compare::eq(ref a, ref b)
+    when result {
+        Err(e) => assert(false, "eq should not fail for same-shape tensors"),
+        Ok(r) => {
+            let v0 = r.get_f64(0)
+            let diff0 = v0 - 1.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "eq[0] should be 1.0 (equal)")
+            let v1 = r.get_f64(1)
+            let diff1 = v1 - 1.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "eq[1] should be 1.0 (equal)")
+            let v2 = r.get_f64(2)
+            let diff2 = v2 - 0.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "eq[2] should be 0.0 (not equal)")
+        },
+    }
+    return 0
+}
+
+@test
+func test_gt() -> I32 {
+    // gt([3,1,4], [2,2,2]) → [1.0, 0.0, 1.0]
+    let mut a_data = List[F64]::new(3)
+    a_data.push(3.0)
+    a_data.push(1.0)
+    a_data.push(4.0)
+    let mut a_dims = List[I64]::new(1)
+    a_dims.push(3)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(3)
+    b_data.push(2.0)
+    b_data.push(2.0)
+    b_data.push(2.0)
+    let mut b_dims = List[I64]::new(1)
+    b_dims.push(3)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = compare::gt(ref a, ref b)
+    when result {
+        Err(e) => assert(false, "gt should not fail for same-shape tensors"),
+        Ok(r) => {
+            let v0 = r.get_f64(0)
+            let diff0 = v0 - 1.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "gt[0] should be 1.0 (3 > 2)")
+            let v1 = r.get_f64(1)
+            let diff1 = v1 - 0.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "gt[1] should be 0.0 (1 not > 2)")
+            let v2 = r.get_f64(2)
+            let diff2 = v2 - 1.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "gt[2] should be 1.0 (4 > 2)")
+        },
+    }
+    return 0
+}
+
+@test
+func test_where_cond() -> I32 {
+    // where_cond([1,0,1], [10,20,30], [40,50,60]) → [10,50,30]
+    let mut cond_data = List[F64]::new(3)
+    cond_data.push(1.0)
+    cond_data.push(0.0)
+    cond_data.push(1.0)
+    let mut cond_dims = List[I64]::new(1)
+    cond_dims.push(3)
+    let cond = from_list_f64(cond_data, cond_dims)
+
+    let mut a_data = List[F64]::new(3)
+    a_data.push(10.0)
+    a_data.push(20.0)
+    a_data.push(30.0)
+    let mut a_dims = List[I64]::new(1)
+    a_dims.push(3)
+    let a = from_list_f64(a_data, a_dims)
+
+    let mut b_data = List[F64]::new(3)
+    b_data.push(40.0)
+    b_data.push(50.0)
+    b_data.push(60.0)
+    let mut b_dims = List[I64]::new(1)
+    b_dims.push(3)
+    let b = from_list_f64(b_data, b_dims)
+
+    let result = where_cond(ref cond, ref a, ref b)
+    when result {
+        Err(e) => assert(false, "where_cond should not fail for same-shape tensors"),
+        Ok(r) => {
+            let v0 = r.get_f64(0)
+            let diff0 = v0 - 10.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "where_cond[0] should be 10.0 (cond=1 → a)")
+            let v1 = r.get_f64(1)
+            let diff1 = v1 - 50.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "where_cond[1] should be 50.0 (cond=0 → b)")
+            let v2 = r.get_f64(2)
+            let diff2 = v2 - 30.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "where_cond[2] should be 30.0 (cond=1 → a)")
+        },
+    }
+    return 0
+}

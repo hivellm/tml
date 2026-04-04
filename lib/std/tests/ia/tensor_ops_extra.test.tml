@@ -1,0 +1,90 @@
+// Tests for additional element-wise tensor operations: div, neg, abs_tensor, sqrt_tensor, clamp, pow_tensor, floor_tensor, ceil_tensor, exp_tensor, log_tensor
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, from_list_f64}
+use std::ia::tensor::ops
+
+@test
+func test_div() -> I32 {
+    // div([10,20,30], [2,4,5]) → [5,5,6]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(10.0)
+    data_a.push(20.0)
+    data_a.push(30.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let mut data_b = List[F64]::new(3)
+    data_b.push(2.0)
+    data_b.push(4.0)
+    data_b.push(5.0)
+    let mut dims_b = List[I64]::new(1)
+    dims_b.push(3)
+    let b = from_list_f64(data_b, dims_b)
+
+    let result = ops::div(ref a, ref b)
+    when result {
+        Ok(t) => {
+            let v0 = t.get_f64(0)
+            let diff0 = v0 - 5.0
+            assert(diff0 > -0.001 and diff0 < 0.001, "div element 0 should be 5.0")
+            let v1 = t.get_f64(1)
+            let diff1 = v1 - 5.0
+            assert(diff1 > -0.001 and diff1 < 0.001, "div element 1 should be 5.0")
+            let v2 = t.get_f64(2)
+            let diff2 = v2 - 6.0
+            assert(diff2 > -0.001 and diff2 < 0.001, "div element 2 should be 6.0")
+        },
+        Err(e) => assert(false, "div should not fail"),
+    }
+    return 0
+}
+
+@test
+func test_neg() -> I32 {
+    // neg([1,-2,3]) → [-1,2,-3]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(1.0)
+    data_a.push(-2.0)
+    data_a.push(3.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::neg(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - (-1.0)
+    assert(diff0 > -0.001 and diff0 < 0.001, "neg element 0 should be -1.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 2.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "neg element 1 should be 2.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - (-3.0)
+    assert(diff2 > -0.001 and diff2 < 0.001, "neg element 2 should be -3.0")
+    return 0
+}
+
+@test
+func test_abs() -> I32 {
+    // abs([-1,2,-3]) → [1,2,3]
+    let mut data_a = List[F64]::new(3)
+    data_a.push(-1.0)
+    data_a.push(2.0)
+    data_a.push(-3.0)
+    let mut dims_a = List[I64]::new(1)
+    dims_a.push(3)
+    let a = from_list_f64(data_a, dims_a)
+
+    let t = ops::abs_tensor(ref a)
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 1.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "abs element 0 should be 1.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 2.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "abs element 1 should be 2.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 3.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "abs element 2 should be 3.0")
+    return 0
+}

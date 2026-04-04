@@ -1,4 +1,4 @@
-//! Element-wise tensor operations.
+//! Element-wise tensor operations. // v2
 //!
 //! Provides unary and binary element-wise operations with NumPy-compatible
 //! broadcasting for binary operations.
@@ -10,6 +10,11 @@ use std::ia::tensor::dtype::DType
 use std::ia::tensor::shape::{Shape, broadcast_shape}
 use std::ia::tensor::tensor::Tensor
 use std::ia::tensor::init::zeros
+
+// ---------------------------------------------------------------------------
+// Cache bust: v2 rewrite — closures removed, all explicit loops
+// ---------------------------------------------------------------------------
+func _ops_v2() -> I64 { 2 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -27,18 +32,16 @@ func shape_dims(t: ref Tensor) -> List[I64] {
     dims
 }
 
-/// Apply a unary function to every element and return a new tensor of the
-/// same shape and dtype.
-func unary_op(a: ref Tensor, f: func(F64) -> F64) -> Tensor {
-    let n = a.numel()
-    let dims = shape_dims(a)
-    let mut result = zeros(dims, a.dtype())
+/// Convert a Shape into a dims List[I64] for the `zeros` call.
+func shape_to_dims(s: ref Shape) -> List[I64] {
+    let rank = s.rank()
+    let mut dims = List[I64]::new(rank)
     let mut i = 0
-    loop (i < n) {
-        result.set_f64(i, f(a.get_f64(i)))
+    loop (i < rank) {
+        dims.push(s.dim(i))
         i = i + 1
     }
-    result
+    dims
 }
 
 /// Convert a flat (row-major) index into a list of per-dimension indices for
@@ -94,29 +97,91 @@ func broadcast_flat_index(out_indices: ref List[I64], src_shape: ref Shape) -> I
     flat
 }
 
-/// Apply a binary function element-wise to two tensors, supporting NumPy-style
-/// broadcasting.  The output dtype matches tensor `a`.
-func binary_op(a: ref Tensor, b: ref Tensor, f: func(F64, F64) -> F64) -> IaResult[Tensor] {
-    let out_shape_result = broadcast_shape(a.shape(), b.shape())
-    when out_shape_result {
-        Err(e) => return Err(e),
+// ---------------------------------------------------------------------------
+// Element-wise arithmetic — binary, with broadcasting
+// ---------------------------------------------------------------------------
+
+/// Element-wise addition.  Supports broadcasting.
+pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
         Ok(out_shape) => {
-            let n = out_shape.numel()
-            let out_rank = out_shape.rank()
-            // Build a dims list for zeros().
-            let mut out_dims = List[I64]::new(out_rank)
-            let mut d = 0
-            loop (d < out_rank) {
-                out_dims.push(out_shape.dim(d))
-                d = d + 1
-            }
+            let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
+            let n = out_shape.numel()
             let mut i = 0
             loop (i < n) {
-                let out_indices = flat_to_indices(i, ref out_shape)
-                let a_flat = broadcast_flat_index(ref out_indices, a.shape())
-                let b_flat = broadcast_flat_index(ref out_indices, b.shape())
-                result.set_f64(i, f(a.get_f64(a_flat), b.get_f64(b_flat)))
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) + b.get_f64(b_idx))
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
+}
+
+/// Element-wise subtraction.  Supports broadcasting.
+pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, a.dtype())
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) - b.get_f64(b_idx))
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
+}
+
+/// Element-wise multiplication.  Supports broadcasting.
+pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, a.dtype())
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) * b.get_f64(b_idx))
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
+}
+
+/// Element-wise division.  Supports broadcasting.
+pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, a.dtype())
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) / b.get_f64(b_idx))
                 i = i + 1
             }
             Ok(result)
@@ -125,72 +190,113 @@ func binary_op(a: ref Tensor, b: ref Tensor, f: func(F64, F64) -> F64) -> IaResu
 }
 
 // ---------------------------------------------------------------------------
-// Element-wise arithmetic — binary, with broadcasting
-// ---------------------------------------------------------------------------
-
-/// Element-wise addition.  Supports broadcasting.
-pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    binary_op(a, b, do(x: F64, y: F64) -> F64 { x + y })
-}
-
-/// Element-wise subtraction.  Supports broadcasting.
-pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    binary_op(a, b, do(x: F64, y: F64) -> F64 { x - y })
-}
-
-/// Element-wise multiplication.  Supports broadcasting.
-pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    binary_op(a, b, do(x: F64, y: F64) -> F64 { x * y })
-}
-
-/// Element-wise division.  Supports broadcasting.
-pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    binary_op(a, b, do(x: F64, y: F64) -> F64 { x / y })
-}
-
-// ---------------------------------------------------------------------------
 // Element-wise unary operations
 // ---------------------------------------------------------------------------
 
 /// Negate every element.
 pub func neg(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { 0.0 - x })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, 0.0 - a.get_f64(i))
+        i = i + 1
+    }
+    result
 }
 
 /// Absolute value of every element.
 /// Named `abs_tensor` to avoid shadowing `std::math::abs`.
 pub func abs_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { abs(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        let v = a.get_f64(i)
+        result.set_f64(i, v < 0.0 ? (0.0 - v) : v)
+        i = i + 1
+    }
+    result
 }
 
 /// Compute e^x for every element.
 pub func exp_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { exp(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, exp(a.get_f64(i)))
+        i = i + 1
+    }
+    result
 }
 
 /// Compute the natural logarithm ln(x) for every element.
 pub func log_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { ln(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, ln(a.get_f64(i)))
+        i = i + 1
+    }
+    result
 }
 
 /// Compute the square root of every element.
 pub func sqrt_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { sqrt(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, sqrt(a.get_f64(i)))
+        i = i + 1
+    }
+    result
 }
 
 /// Raise every element to the given `exponent`.
 pub func pow_tensor(a: ref Tensor, exponent: F64) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { pow(x, exponent) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, pow(a.get_f64(i), exponent))
+        i = i + 1
+    }
+    result
 }
 
 /// Round every element down to the nearest integer.
 pub func floor_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { floor(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, floor(a.get_f64(i)))
+        i = i + 1
+    }
+    result
 }
 
 /// Round every element up to the nearest integer.
 pub func ceil_tensor(a: ref Tensor) -> Tensor {
-    unary_op(a, do(x: F64) -> F64 { ceil(x) })
+    let dims = shape_dims(a)
+    let mut result = zeros(dims, a.dtype())
+    let n = a.numel()
+    let mut i = 0
+    loop (i < n) {
+        result.set_f64(i, ceil(a.get_f64(i)))
+        i = i + 1
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------

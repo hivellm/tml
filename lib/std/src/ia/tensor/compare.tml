@@ -19,6 +19,18 @@ use std::ia::tensor::init::zeros
 // Internal helpers (same as ops.tml — kept local to avoid cross-file deps)
 // ---------------------------------------------------------------------------
 
+/// Convert a Shape into a dims List[I64] for the `zeros` call.
+func shape_to_dims(s: ref Shape) -> List[I64] {
+    let rank = s.rank()
+    let mut dims = List[I64]::new(rank)
+    let mut i = 0
+    loop (i < rank) {
+        dims.push(s.dim(i))
+        i = i + 1
+    }
+    dims
+}
+
 /// Convert a flat row-major index into a list of per-dimension indices.
 func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
     let rank = shape.rank()
@@ -65,37 +77,6 @@ func broadcast_flat_index(out_indices: ref List[I64], src_shape: ref Shape) -> I
     flat
 }
 
-/// Apply a binary comparison function element-wise to two tensors with
-/// broadcasting support.  The result is an F64 tensor where 1.0 = true,
-/// 0.0 = false.
-func compare_binary_op(a: ref Tensor, b: ref Tensor, f: func(F64, F64) -> F64) -> IaResult[Tensor] {
-    let out_shape_result = broadcast_shape(a.shape(), b.shape())
-    when out_shape_result {
-        Err(e) => return Err(e),
-        Ok(out_shape) => {
-            let n = out_shape.numel()
-            let out_rank = out_shape.rank()
-            let mut out_dims = List[I64]::new(out_rank)
-            let mut d = 0
-            loop (d < out_rank) {
-                out_dims.push(out_shape.dim(d))
-                d = d + 1
-            }
-            // Comparison results are always stored as F64 (1.0 / 0.0).
-            let mut result = zeros(out_dims, DType::F64)
-            let mut i = 0
-            loop (i < n) {
-                let out_indices = flat_to_indices(i, ref out_shape)
-                let a_flat = broadcast_flat_index(ref out_indices, a.shape())
-                let b_flat = broadcast_flat_index(ref out_indices, b.shape())
-                result.set_f64(i, f(a.get_f64(a_flat), b.get_f64(b_flat)))
-                i = i + 1
-            }
-            Ok(result)
-        },
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Element-wise comparison — binary, with broadcasting
 // ---------------------------------------------------------------------------
@@ -103,37 +84,148 @@ func compare_binary_op(a: ref Tensor, b: ref Tensor, f: func(F64, F64) -> F64) -
 /// Element-wise equality: result[i] = 1.0 if a[i] == b[i], else 0.0.
 /// Supports broadcasting.
 pub func eq(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x == y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                let va = a.get_f64(a_idx)
+                let vb = b.get_f64(b_idx)
+                let diff = va - vb
+                let is_eq = diff > -0.0000001 and diff < 0.0000001
+                result.set_f64(i, is_eq ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 /// Element-wise inequality: result[i] = 1.0 if a[i] != b[i], else 0.0.
 /// Supports broadcasting.
 pub func ne(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x != y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                let va = a.get_f64(a_idx)
+                let vb = b.get_f64(b_idx)
+                let diff = va - vb
+                let eps = 0.0000001
+                let is_ne = diff <= (0.0 - eps) or diff >= eps
+                result.set_f64(i, is_ne ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 /// Element-wise greater-than: result[i] = 1.0 if a[i] > b[i], else 0.0.
 /// Supports broadcasting.
 pub func gt(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x > y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) > b.get_f64(b_idx) ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 /// Element-wise less-than: result[i] = 1.0 if a[i] < b[i], else 0.0.
 /// Supports broadcasting.
 pub func lt(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x < y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) < b.get_f64(b_idx) ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 /// Element-wise greater-than-or-equal: result[i] = 1.0 if a[i] >= b[i], else 0.0.
 /// Supports broadcasting.
 pub func ge(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x >= y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) >= b.get_f64(b_idx) ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 /// Element-wise less-than-or-equal: result[i] = 1.0 if a[i] <= b[i], else 0.0.
 /// Supports broadcasting.
 pub func le(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
-    compare_binary_op(a, b, do(x: F64, y: F64) -> F64 { x <= y ? 1.0 : 0.0 })
+    let bc = broadcast_shape(a.shape(), b.shape())
+    when bc {
+        Err(e) => Err(e),
+        Ok(out_shape) => {
+            let out_dims = shape_to_dims(ref out_shape)
+            let mut result = zeros(out_dims, DType::F64)
+            let n = out_shape.numel()
+            let mut i = 0
+            loop (i < n) {
+                let indices = flat_to_indices(i, ref out_shape)
+                let a_idx = broadcast_flat_index(ref indices, a.shape())
+                let b_idx = broadcast_flat_index(ref indices, b.shape())
+                result.set_f64(i, a.get_f64(a_idx) <= b.get_f64(b_idx) ? 1.0 : 0.0)
+                i = i + 1
+            }
+            Ok(result)
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------

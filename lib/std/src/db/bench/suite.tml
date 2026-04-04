@@ -13,6 +13,7 @@ pub enum BenchOp {
 }
 
 impl BenchOp {
+    /// Returns a short snake_case identifier for the benchmark operation (e.g. `"insert_single"`).
     pub func name(this) -> Str {
         when this {
             BenchOp::InsertSingle   => "insert_single",
@@ -32,6 +33,7 @@ pub func techempower_world_sql() -> Str {
     return "CREATE TABLE IF NOT EXISTS World (id INTEGER PRIMARY KEY, randomNumber INTEGER NOT NULL)"
 }
 
+/// Returns the TechEmpower Fortune table DDL for use in benchmark setup.
 pub func techempower_fortune_sql() -> Str {
     return "CREATE TABLE IF NOT EXISTS Fortune (id INTEGER PRIMARY KEY, message TEXT NOT NULL)"
 }

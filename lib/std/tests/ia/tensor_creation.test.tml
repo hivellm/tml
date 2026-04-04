@@ -1,0 +1,120 @@
+// Tests for tensor creation functions: zeros, ones, full, from_list_f64, arange, linspace
+use test::{assert, assert_eq}
+use std::collections::List
+use std::ia::tensor::{Tensor, DType, zeros, ones, full, from_list_f64, arange, linspace}
+
+@test
+func test_zeros_f64() -> I32 {
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(3)
+    let t = zeros(dims, DType::F64)
+    assert_eq(t.numel(), 6, "zeros 2x3 should have 6 elements")
+    assert_eq(t.rank(), 2, "zeros 2x3 should have rank 2")
+    assert_eq(t.dim(0), 2, "zeros dim 0 should be 2")
+    assert_eq(t.dim(1), 3, "zeros dim 1 should be 3")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 0.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "zeros element 0 should be 0.0")
+    let v5 = t.get_f64(5)
+    let diff5 = v5 - 0.0
+    assert(diff5 > -0.001 and diff5 < 0.001, "zeros element 5 should be 0.0")
+    return 0
+}
+
+@test
+func test_ones_f32() -> I32 {
+    let mut dims = List[I64]::new(2)
+    dims.push(3)
+    dims.push(2)
+    let t = ones(dims, DType::F32)
+    assert_eq(t.numel(), 6, "ones 3x2 should have 6 elements")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 1.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "ones element 0 should be 1.0")
+    let v5 = t.get_f64(5)
+    let diff5 = v5 - 1.0
+    assert(diff5 > -0.001 and diff5 < 0.001, "ones element 5 should be 1.0")
+    return 0
+}
+
+@test
+func test_full() -> I32 {
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(2)
+    let t = full(dims, 3.14, DType::F64)
+    assert_eq(t.numel(), 4, "full 2x2 should have 4 elements")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 3.14
+    assert(diff0 > -0.001 and diff0 < 0.001, "full element 0 should be ~3.14")
+    let v3 = t.get_f64(3)
+    let diff3 = v3 - 3.14
+    assert(diff3 > -0.001 and diff3 < 0.001, "full element 3 should be ~3.14")
+    return 0
+}
+
+@test
+func test_from_list_f64() -> I32 {
+    let mut data = List[F64]::new(4)
+    data.push(1.0)
+    data.push(2.0)
+    data.push(3.0)
+    data.push(4.0)
+    let mut dims = List[I64]::new(2)
+    dims.push(2)
+    dims.push(2)
+    let t = from_list_f64(data, dims)
+    assert_eq(t.numel(), 4, "from_list_f64 2x2 should have 4 elements")
+    assert_eq(t.rank(), 2, "from_list_f64 should have rank 2")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 1.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "element 0 should be 1.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 2.0
+    assert(diff1 > -0.001 and diff1 < 0.001, "element 1 should be 2.0")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 3.0
+    assert(diff2 > -0.001 and diff2 < 0.001, "element 2 should be 3.0")
+    let v3 = t.get_f64(3)
+    let diff3 = v3 - 4.0
+    assert(diff3 > -0.001 and diff3 < 0.001, "element 3 should be 4.0")
+    return 0
+}
+
+@test
+func test_arange() -> I32 {
+    let t = arange(0.0, 5.0, 1.0, DType::F64)
+    assert_eq(t.numel(), 5, "arange(0,5,1) should have 5 elements")
+    assert_eq(t.rank(), 1, "arange should have rank 1")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 0.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "arange element 0 should be 0.0")
+    let v4 = t.get_f64(4)
+    let diff4 = v4 - 4.0
+    assert(diff4 > -0.001 and diff4 < 0.001, "arange element 4 should be 4.0")
+    return 0
+}
+
+@test
+func test_linspace() -> I32 {
+    let t = linspace(0.0, 1.0, 5)
+    assert_eq(t.numel(), 5, "linspace(0,1,5) should have 5 elements")
+    assert_eq(t.rank(), 1, "linspace should have rank 1")
+    let v0 = t.get_f64(0)
+    let diff0 = v0 - 0.0
+    assert(diff0 > -0.001 and diff0 < 0.001, "linspace element 0 should be 0.0")
+    let v1 = t.get_f64(1)
+    let diff1 = v1 - 0.25
+    assert(diff1 > -0.001 and diff1 < 0.001, "linspace element 1 should be 0.25")
+    let v2 = t.get_f64(2)
+    let diff2 = v2 - 0.5
+    assert(diff2 > -0.001 and diff2 < 0.001, "linspace element 2 should be 0.5")
+    let v3 = t.get_f64(3)
+    let diff3 = v3 - 0.75
+    assert(diff3 > -0.001 and diff3 < 0.001, "linspace element 3 should be 0.75")
+    let v4 = t.get_f64(4)
+    let diff4 = v4 - 1.0
+    assert(diff4 > -0.001 and diff4 < 0.001, "linspace element 4 should be 1.0")
+    return 0
+}

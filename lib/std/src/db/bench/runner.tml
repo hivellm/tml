@@ -10,14 +10,19 @@ pub type BenchConfig {
 }
 
 impl BenchConfig {
+    /// Creates a new benchmark configuration with a name and the number of measurement iterations.
+    ///
+    /// Warmup defaults to 5 iterations.
     pub func new(name: Str, iterations: I64) -> BenchConfig {
         return BenchConfig { warmup_iterations: 5, measure_iterations: iterations, config_name: name }
     }
 
+    /// Returns a copy of this configuration with the warmup iteration count set to `warmup`.
     pub func with_warmup(this, warmup: I64) -> BenchConfig {
         return BenchConfig { warmup_iterations: warmup, measure_iterations: this.measure_iterations, config_name: this.config_name }
     }
 
+    /// Returns the benchmark configuration name.
     pub func name(this) -> Str { return this.config_name }
 }
 
@@ -37,6 +42,9 @@ pub type BenchmarkResult {
     br_stats: BenchmarkStats
 }
 
+/// Constructs a `BenchmarkStats` value from pre-computed timing aggregates.
+///
+/// `mean` is the average nanoseconds per operation; `ops` is operations per second.
 func make_bstats(iterations: I64, total_ns: I64, min_ns: I64, max_ns: I64, mean: I64, ops: I64) -> BenchmarkStats {
     return BenchmarkStats {
         st_iterations: iterations,
@@ -49,6 +57,10 @@ func make_bstats(iterations: I64, total_ns: I64, min_ns: I64, max_ns: I64, mean:
 }
 
 impl BenchmarkResult {
+    /// Creates a `BenchmarkResult` by computing mean and ops/sec from raw timing data.
+    ///
+    /// `total_ns` is the sum of all per-iteration durations.  `min_ns` and `max_ns`
+    /// are the fastest and slowest individual iterations respectively.
     pub func new(name: Str, iterations: I64, total_ns: I64, min_ns: I64, max_ns: I64) -> BenchmarkResult {
         var mean: I64 = 0
         if iterations > 0 { mean = total_ns / iterations }
@@ -67,12 +79,19 @@ impl BenchmarkResult {
         return n + ": " + m.to_string() + " ns/op (" + o.to_string() + " ops/sec, " + i.to_string() + " iters)"
     }
 
+    /// Returns the benchmark name.
     pub func name(this) -> Str { return this.br_name }
+    /// Returns the mean (average) duration per operation in nanoseconds.
     pub func mean_ns(this) -> I64 { return this.br_stats.st_mean_ns }
+    /// Returns the throughput in operations per second.
     pub func ops_per_sec(this) -> I64 { return this.br_stats.st_ops_sec }
+    /// Returns the fastest individual iteration duration in nanoseconds.
     pub func min_ns(this) -> I64 { return this.br_stats.st_min_ns }
+    /// Returns the slowest individual iteration duration in nanoseconds.
     pub func max_ns(this) -> I64 { return this.br_stats.st_max_ns }
+    /// Returns the total elapsed time across all iterations in nanoseconds.
     pub func total_ns(this) -> I64 { return this.br_stats.st_total_ns }
+    /// Returns the number of measurement iterations that were executed.
     pub func iterations(this) -> I64 { return this.br_stats.st_iterations }
 }
 
