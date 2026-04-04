@@ -115,6 +115,100 @@ Source: Real bugs from TML development history (git log). Each bug has:
 - ANOVA for cross-condition comparison
 - Effect size (Cohen's d) for practical significance
 
+## Condition D: Enhanced Logging
+
+Condition D extends the JSONL schema with richer per-call context to enable
+deeper analysis (prompt engineering effects, per-test-result attribution,
+session-level behavioral metrics).
+
+### New Schema Fields
+
+**`session_start` additions:**
+```json
+{
+  "event": "session_start",
+  "session": "1742902141234-a3f2",
+  "ts": "2026-04-04T12:00:00Z",
+  "model": "claude-opus-4-6",
+  "condition": "enhanced",
+  "claude_md_hash": "sha256:abc123...",
+  "rule_versions": {
+    "check-before-test": 3,
+    "debug-layers": 2
+  }
+}
+```
+
+**`tool_call` additions:**
+```json
+{
+  "event": "tool_call",
+  "session": "...",
+  "seq": 4,
+  "ts": "2026-04-04T12:00:05Z",
+  "tool": "test",
+  "params": { "suite": "core/str", "debug_layers": true },
+  "duration_ms": 1240,
+  "is_error": false,
+  "error_class": null,
+  "preceded_by": "check",
+  "test_result": {
+    "total": 42,
+    "passed": 41,
+    "failed": 1,
+    "failures": ["test_split_empty"]
+  }
+}
+```
+
+**New fields (all optional for backward compatibility):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | string | LLM model used (e.g. `claude-opus-4-6`) |
+| `condition` | string | A/B condition name (`baseline`, `debug-layers`, `enhanced`) |
+| `claude_md_hash` | string | SHA-256 of CLAUDE.md at session start |
+| `rule_versions` | object | Per-rule version counters from CLAUDE.md |
+| `error_class` | string\|null | Error classification: `type_error`, `codegen`, `runtime`, `test_failure`, `timeout` |
+| `preceded_by` | string\|null | Tool called immediately before this one |
+| `test_result` | object\|null | Structured test output (for `test` tool calls only) |
+
+### Analysis Pipeline (JSONL → SQLite → Query → Visualize)
+
+```
+mcp-call-log.jsonl
+    │
+    ▼  migrate_to_sqlite.py
+docs/papers/llm-ir-debugging/mcp_research.db   (SQLite)
+    │
+    ├─ sessions table: session metadata + aggregated metrics
+    ├─ tool_calls table: every call with classifications
+    └─ transitions table: tool-to-tool edges for Markov analysis
+    │
+    ▼  query.py
+Structured metrics: tool adoption rates, error classification,
+                    session-level behavioral summaries
+    │
+    ▼  visualize.py / generate_dashboard.py
+HTML charts, markdown tables, PNG figures for paper
+```
+
+**Key queries:**
+- `query.py --adoption --by-week` — weekly adoption time series
+- `query.py --error-class --by-condition` — error rate by category and condition
+- `query.py --transitions --heatmap` — tool transition probabilities
+- `query.py --compare baseline enhanced` — side-by-side condition stats
+
+### Activation Criteria
+
+Condition D is active when:
+1. MCP server emits `model`, `claude_md_hash`, `preceded_by` in every `tool_call`
+2. `test` tool calls include `test_result` in structured output
+3. `error_class` is populated by the MCP error classifier
+
+Until then, Condition C (debug-layers) remains active and Condition D fields
+are collected opportunistically from sessions where they appear.
+
 ## Condition B Activation Log
 
 **Date**: 2026-03-26
