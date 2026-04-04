@@ -46,7 +46,36 @@ namespace {
 
 /// Ensure required DLLs are in the given directory (for Windows runtime dependencies).
 /// Copies vcpkg DLLs (zlib, zstd, brotli) next to the executable so they're found at runtime.
+///
+/// Resolution order:
+///   Tier 0 (compiler-bundled): <exe_dir>/../lib/native/<platform>/ — populated by build.bat
+///   Legacy fallback: hardcoded vcpkg paths (deprecated)
 static void ensure_runtime_dlls(const fs::path& target_dir) {
+    // Try NativeLibResolver Tier 0 first (compiler-bundled native libs)
+    {
+        auto platform = Platform::detect();
+        NativeLibResolver resolver(platform);
+        auto compiler_native = resolver.get_compiler_native_dir();
+        if (!compiler_native.empty() && fs::exists(compiler_native)) {
+            std::error_code ec;
+            for (const auto& entry : fs::directory_iterator(compiler_native, ec)) {
+                if (!entry.is_regular_file())
+                    continue;
+                auto ext = entry.path().extension().string();
+                if (ext == ".dll" || ext == ".so" || ext == ".dylib") {
+                    auto dest = target_dir / entry.path().filename();
+                    if (!fs::exists(dest)) {
+                        fs::copy_file(entry.path(), dest, fs::copy_options::skip_existing, ec);
+                    }
+                }
+            }
+            return; // Tier 0 handled it — skip legacy vcpkg path
+        }
+    }
+
+    // Legacy fallback: hardcoded vcpkg paths (DEPRECATED)
+    TML_LOG_DEBUG("build", "[native] DEPRECATED: using hardcoded vcpkg paths for runtime DLLs. "
+                           "Run 'scripts/build.bat' to populate compiler native lib directory.");
 #ifdef _WIN32
     // vcpkg DLLs that may be needed by tml_zlib_runtime
     static const std::vector<std::string> dll_names = {"zlib1.dll",        "zstd.dll",

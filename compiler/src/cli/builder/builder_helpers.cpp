@@ -15,6 +15,8 @@ TML_MODULE("compiler")
 //! - **Module Helpers**: Runtime object collection for linking
 
 #include "builder_internal.hpp"
+#include "cli/builder/native_lib_resolver.hpp"
+#include "cli/builder/platform.hpp"
 
 namespace tml::cli::build {
 
@@ -225,6 +227,28 @@ fs::path get_run_cache_dir() {
 OpenSSLPaths find_openssl() {
     OpenSSLPaths result;
 
+    // Check NativeLibResolver Tier 0 first (compiler-bundled native libs)
+    {
+        auto platform = Platform::detect();
+        NativeLibResolver resolver(platform);
+        auto compiler_native = resolver.get_compiler_native_dir();
+        if (!compiler_native.empty() && fs::exists(compiler_native)) {
+            if (fs::exists(compiler_native / "libcrypto.lib")) {
+                result.found = true;
+                result.lib_dir = compiler_native;
+                result.crypto_lib = "libcrypto.lib";
+                result.ssl_lib = "libssl.lib";
+                TML_LOG_DEBUG("build", "OpenSSL found via compiler-bundled native libs: "
+                                           << compiler_native.string());
+                return result;
+            }
+        }
+    }
+
+    // Legacy: vcpkg search (DEPRECATED)
+    TML_LOG_DEBUG("build", "[native] DEPRECATED: searching vcpkg for OpenSSL. "
+                           "Will use compiler-bundled native libs in future.");
+
 #ifdef _WIN32
     // Check vcpkg_installed first (project-local)
     fs::path project_root = find_project_root();
@@ -280,6 +304,27 @@ OpenSSLPaths find_openssl() {
 
 SQLite3Paths find_sqlite3() {
     SQLite3Paths result;
+
+    // Check NativeLibResolver Tier 0 first (compiler-bundled native libs)
+    {
+        auto platform = Platform::detect();
+        NativeLibResolver resolver(platform);
+        auto compiler_native = resolver.get_compiler_native_dir();
+        if (!compiler_native.empty() && fs::exists(compiler_native)) {
+            fs::path lib = compiler_native / "sqlite3.lib";
+            if (fs::exists(lib)) {
+                result.found = true;
+                result.lib_path = lib;
+                TML_LOG_DEBUG("build",
+                              "SQLite3 found via compiler-bundled native libs: " << lib.string());
+                return result;
+            }
+        }
+    }
+
+    // Legacy: vcpkg search (DEPRECATED)
+    TML_LOG_DEBUG("build", "[native] DEPRECATED: searching vcpkg for SQLite3. "
+                           "Will use compiler-bundled native libs in future.");
 
 #ifdef _WIN32
     // Check vcpkg_installed (project-local)

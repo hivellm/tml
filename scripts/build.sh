@@ -174,6 +174,57 @@ if [ -f "compile_commands.json" ]; then
     cp compile_commands.json "$ROOT_DIR/build/"
 fi
 
+# Copy native libraries to compiler install layout (Tier 0: compiler-bundled)
+NATIVE_ARCH=$(uname -m)
+NATIVE_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$NATIVE_OS" in
+    linux)  NATIVE_PLATFORM="linux-x64" ;;
+    darwin)
+        if [ "$NATIVE_ARCH" = "arm64" ] || [ "$NATIVE_ARCH" = "aarch64" ]; then
+            NATIVE_PLATFORM="macos-arm64"
+        else
+            NATIVE_PLATFORM="macos-x64"
+        fi
+        ;;
+    *)      NATIVE_PLATFORM="linux-x64" ;;
+esac
+
+NATIVE_DIR="$OUTPUT_DIR/lib/native/$NATIVE_PLATFORM"
+mkdir -p "$NATIVE_DIR"
+
+# Try vcpkg first (Linux x64)
+VCPKG_LIB="$ROOT_DIR/vcpkg_installed/x64-linux/lib"
+if [ -d "$VCPKG_LIB" ]; then
+    echo "Copying native libraries to $NATIVE_DIR..."
+    for f in libcrypto.so libssl.so libz.so libzstd.so libbrotlicommon.so libbrotlidec.so libbrotlienc.so libsqlite3.so; do
+        src="$VCPKG_LIB/$f"
+        if [ -f "$src" ]; then
+            cp -f "$src" "$NATIVE_DIR/" 2>/dev/null || true
+        fi
+        # Also copy versioned symlinks
+        for versioned in "$VCPKG_LIB/$f".*; do
+            if [ -f "$versioned" ]; then
+                cp -f "$versioned" "$NATIVE_DIR/" 2>/dev/null || true
+            fi
+        done
+    done
+    for f in libcrypto.a libssl.a libz.a libzstd.a libbrotlidec.a libbrotlienc.a libbrotlicommon.a libsqlite3.a; do
+        if [ -f "$VCPKG_LIB/$f" ]; then
+            cp -f "$VCPKG_LIB/$f" "$NATIVE_DIR/" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Try system pkg-config for shared libs (fallback)
+if [ ! -f "$NATIVE_DIR/libcrypto.so" ] && command -v pkg-config &>/dev/null; then
+    CRYPTO_DIR=$(pkg-config --variable=libdir openssl 2>/dev/null || true)
+    if [ -n "$CRYPTO_DIR" ] && [ -d "$CRYPTO_DIR" ]; then
+        echo "Copying system OpenSSL from $CRYPTO_DIR..."
+        cp -f "$CRYPTO_DIR"/libcrypto.so* "$NATIVE_DIR/" 2>/dev/null || true
+        cp -f "$CRYPTO_DIR"/libssl.so* "$NATIVE_DIR/" 2>/dev/null || true
+    fi
+fi
+
 # Print result
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"

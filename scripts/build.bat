@@ -383,6 +383,21 @@ if "%ENABLE_PACK%"=="1" (
     )
 )
 
+:: Copy native libraries to compiler install layout (Tier 0: compiler-bundled)
+set "NATIVE_DIR=%OUTPUT_DIR%\lib\native\win-x64"
+if not exist "%NATIVE_DIR%" mkdir "%NATIVE_DIR%"
+set "VCPKG_BIN=%ROOT_DIR%\vcpkg_installed\x64-windows\bin"
+set "VCPKG_LIB=%ROOT_DIR%\vcpkg_installed\x64-windows\lib"
+if exist "%VCPKG_BIN%" (
+    echo Copying native libraries to %NATIVE_DIR%...
+    for %%F in (zlib1.dll zstd.dll brotlicommon.dll brotlidec.dll brotlienc.dll sqlite3.dll libcrypto-3-x64.dll libssl-3-x64.dll) do (
+        if exist "%VCPKG_BIN%\%%F" copy /Y "%VCPKG_BIN%\%%F" "%NATIVE_DIR%\" >nul 2>&1
+    )
+    for %%F in (libcrypto.lib libssl.lib zlib.lib zstd.lib brotlidec.lib brotlienc.lib brotlicommon.lib sqlite3.lib) do (
+        if exist "%VCPKG_LIB%\%%F" copy /Y "%VCPKG_LIB%\%%F" "%NATIVE_DIR%\" >nul 2>&1
+    )
+)
+
 :: Print result
 echo.
 echo ========================================
