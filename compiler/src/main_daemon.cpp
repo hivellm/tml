@@ -204,6 +204,19 @@ public:
 #endif
     }
 
+    // Send without waiting for response (for notifications)
+    void fire(const std::string& json_line) {
+        if (!alive_)
+            return;
+        std::string line = json_line + "\n";
+#ifdef _WIN32
+        DWORD written;
+        WriteFile(stdin_wr_, line.c_str(), (DWORD)line.size(), &written, nullptr);
+#else
+        (void)write(stdin_wr_fd_, line.c_str(), line.size());
+#endif
+    }
+
     bool is_alive() const {
         return alive_;
     }
@@ -295,7 +308,15 @@ int main(int /*argc*/, char* /*argv*/[]) {
             std::fprintf(stderr, "[daemon] MCP restarted and re-initialized\n");
         }
 
-        // Proxy request to subprocess
+        // Check if this is a notification (no "id" field) — fire and forget
+        bool is_notification = (line.find("\"id\"") == std::string::npos);
+        if (is_notification) {
+            // Send to subprocess but don't wait for response
+            mcp.fire(line);
+            continue;
+        }
+
+        // Proxy request to subprocess (waits for response)
         std::string response = mcp.send(line);
 
         if (response.empty()) {
