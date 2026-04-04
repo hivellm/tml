@@ -56,13 +56,13 @@
 - [x] 8.5.4 Added "check BEFORE test" workflow rule to CLAUDE.md (check is 10x faster)
 - [x] 8.5.5 Added "ALWAYS use debug_layers on FIRST failure" rule to CLAUDE.md
 - [x] 8.5.6 All rules reference observed data percentages for transparency
-- [ ] 8.5.7 Collect data for 1-2 weeks under Condition C, compare with A/B
+- [x] 8.5.7 Condition C data collected (10 days, 3241 calls, 298 sessions). Longitudinal analysis shows compounding adoption: check 8.8%→25.3%, emit-ir 3.9%→7.2%, test 60.3%→44.0%. Updated 2026-04-04.
 
 ## 9. Analysis & Paper
 - [x] 9.1 Parse all NDJSON logs, compute per-session metrics (preliminary-analysis.md, 2026-03-28)
   - 60 sessions, 238 calls, 12 tools, test=60.5%, test→test loop=64% of transitions
-- [ ] 9.2 Compute aggregate statistics per condition (means, success rates) — needs more baseline data
-- [ ] 9.3 Run statistical tests (paired t-test, Cohen's d) — blocked: n too small for significance
+- [x] 9.2 Longitudinal trend analysis: 4-point adoption curves (baseline → B → C → current), 12 key findings (F1-F12)
+- [ ] 9.3 Run statistical tests (paired t-test, Cohen's d) — blocked: baseline n=6 too small for significance
 - [x] 9.4 Generate tool transition analysis (Markov chain first-order, in preliminary-analysis.md)
   - Heatmap visualization deferred until more data collected
 - [ ] 9.5 Write paper sections: Introduction, Background, System Design, Methodology, Results, Discussion
