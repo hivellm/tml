@@ -1,0 +1,321 @@
+// PostgreSQL scalar query, query helper, and existence check tests.
+//
+// Covers:
+//   PgConnection::query_scalar_i64, query_scalar_str,
+//   query_one_i64, query_one_str,
+//   exists_by_i64, exists_by_str
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+/// Reads connection URL from DATABASE_URL env var, falls back to local dev default.
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+/// query_scalar_i64 — SELECT COUNT(*).
+@test @slow_test
+func test_query_scalar_i64_count() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_count")
+            let _ = conn.execute("CREATE TABLE tml_test_scalar_count (id SERIAL PRIMARY KEY)")
+            let _ = conn.execute("INSERT INTO tml_test_scalar_count DEFAULT VALUES")
+            let _ = conn.execute("INSERT INTO tml_test_scalar_count DEFAULT VALUES")
+            let _ = conn.execute("INSERT INTO tml_test_scalar_count DEFAULT VALUES")
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_count")
+            when count_r {
+                Err(_) => {
+                    assert(false, "COUNT query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_count")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 3, "COUNT(*) should return 3")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_scalar_count")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// query_scalar_i64 — SELECT SUM(column).
+@test @slow_test
+func test_query_scalar_i64_sum() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_sum")
+            let _ = conn.execute("CREATE TABLE tml_test_scalar_sum (n BIGINT)")
+            let _ = conn.execute("INSERT INTO tml_test_scalar_sum VALUES (10),(20),(30)")
+
+            let sum_r = conn.query_scalar_i64("SELECT SUM(n) FROM tml_test_scalar_sum")
+            when sum_r {
+                Err(_) => {
+                    assert(false, "SUM query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_sum")
+                    conn.close()
+                    return 1
+                },
+                Ok(sum) => {
+                    assert_eq(sum, 60, "SUM(10, 20, 30) should be 60")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_scalar_sum")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// query_scalar_str — SELECT a single text value.
+@test @slow_test
+func test_query_scalar_str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_str")
+            let _ = conn.execute("CREATE TABLE tml_test_scalar_str (msg TEXT)")
+            let _ = conn.execute("INSERT INTO tml_test_scalar_str VALUES ('expected_value')")
+
+            let val_r = conn.query_scalar_str("SELECT msg FROM tml_test_scalar_str LIMIT 1")
+            when val_r {
+                Err(_) => {
+                    assert(false, "scalar str query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(val) => {
+                    assert_eq(val, "expected_value", "scalar str result should match inserted value")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_scalar_str")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// query_scalar_i64 returns 0 when table is empty.
+@test @slow_test
+func test_query_scalar_empty_table() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_empty")
+            let _ = conn.execute("CREATE TABLE tml_test_scalar_empty (n BIGINT)")
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_empty")
+            when count_r {
+                Err(_) => {
+                    assert(false, "COUNT on empty table failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_empty")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 0, "empty table COUNT should be 0")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_scalar_empty")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// query_one_i64 — returns an I64 value with an I64 parameter.
+@test @slow_test
+func test_query_one_i64() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_query_one_i64")
+            let _ = conn.execute("CREATE TABLE tml_test_query_one_i64 (id BIGINT, score BIGINT)")
+            let _ = conn.execute("INSERT INTO tml_test_query_one_i64 VALUES (1, 100),(2, 200),(3, 300)")
+
+            let score = conn.query_one_i64("SELECT score FROM tml_test_query_one_i64 WHERE id = $1", 2)
+            assert_eq(score, 200, "query_one_i64 should return 200 for id=2")
+
+            let _ = conn.execute("DROP TABLE tml_test_query_one_i64")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// query_one_str — returns a Str value with an I64 parameter.
+@test @slow_test
+func test_query_one_str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_query_one_str")
+            let _ = conn.execute("CREATE TABLE tml_test_query_one_str (id BIGINT, name TEXT)")
+            let _ = conn.execute("INSERT INTO tml_test_query_one_str VALUES (1, 'alpha'),(2, 'beta'),(3, 'gamma')")
+
+            let name = conn.query_one_str("SELECT name FROM tml_test_query_one_str WHERE id = $1", 3)
+            assert_eq(name, "gamma", "query_one_str should return 'gamma' for id=3")
+
+            let _ = conn.execute("DROP TABLE tml_test_query_one_str")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// exists_by_i64 returns true when row exists.
+@test @slow_test
+func test_exists_by_i64_found() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64")
+            let _ = conn.execute("CREATE TABLE tml_test_exists_i64 (id BIGINT PRIMARY KEY)")
+            let _ = conn.execute("INSERT INTO tml_test_exists_i64 VALUES (10),(20),(30)")
+
+            let exists_r = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64 WHERE id = $1", 20)
+            when exists_r {
+                Err(_) => {
+                    assert(false, "exists_by_i64 query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(found) => {
+                    assert(found, "exists_by_i64 should return true for id=20")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exists_i64")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// exists_by_i64 returns false when row does not exist.
+@test @slow_test
+func test_exists_by_i64_not_found() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64_nf")
+            let _ = conn.execute("CREATE TABLE tml_test_exists_i64_nf (id BIGINT PRIMARY KEY)")
+            let _ = conn.execute("INSERT INTO tml_test_exists_i64_nf VALUES (1)")
+
+            let exists_r = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64_nf WHERE id = $1", 999)
+            when exists_r {
+                Err(_) => {
+                    assert(false, "exists_by_i64 query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64_nf")
+                    conn.close()
+                    return 1
+                },
+                Ok(found) => {
+                    assert(not found, "exists_by_i64 should return false for missing id=999")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exists_i64_nf")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// exists_by_str — returns true/false for present/absent string.
+@test @slow_test
+func test_exists_by_str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_str")
+            let _ = conn.execute("CREATE TABLE tml_test_exists_str (tag TEXT UNIQUE)")
+            let _ = conn.execute("INSERT INTO tml_test_exists_str VALUES ('present')")
+
+            let found_r = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "present")
+            when found_r {
+                Err(_) => {
+                    assert(false, "exists_by_str query failed (present)")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(found) => {
+                    assert(found, "exists_by_str should return true for 'present'")
+                }
+            }
+
+            let missing_r = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "absent")
+            when missing_r {
+                Err(_) => {
+                    assert(false, "exists_by_str query failed (absent)")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(found) => {
+                    assert(not found, "exists_by_str should return false for 'absent'")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exists_str")
+            conn.close()
+            return 0
+        }
+    }
+}

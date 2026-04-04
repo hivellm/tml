@@ -1,0 +1,49 @@
+// PostgreSQL dialect tests — no database connection required.
+//
+// Covers:
+//   PostgresDialect::new, placeholder, quote_identifier, supports_returning
+
+use test::{assert, assert_eq}
+use postgresql::dialect::PostgresDialect
+
+/// placeholder() returns $1, $2, $3.
+@test
+func test_dialect_placeholder() -> I32 {
+    let d = PostgresDialect::new()
+    let p1 = d.placeholder(1)
+    assert_eq(p1, "$1", "placeholder(1) should return '$1'")
+
+    let p2 = d.placeholder(2)
+    assert_eq(p2, "$2", "placeholder(2) should return '$2'")
+
+    let p10 = d.placeholder(10)
+    assert_eq(p10, "$10", "placeholder(10) should return '$10'")
+
+    return 0
+}
+
+/// quote_identifier() wraps name in double quotes.
+@test
+func test_dialect_quote_identifier() -> I32 {
+    let d = PostgresDialect::new()
+
+    let quoted = d.quote_identifier("table_name")
+    assert_eq(quoted, "\"table_name\"", "quote_identifier should wrap in double quotes")
+
+    let quoted2 = d.quote_identifier("MyTable")
+    assert_eq(quoted2, "\"MyTable\"", "quote_identifier should preserve case inside quotes")
+
+    let quoted3 = d.quote_identifier("user")
+    assert_eq(quoted3, "\"user\"", "quote_identifier on reserved keyword should wrap it")
+
+    return 0
+}
+
+/// supports_returning() returns true.
+@test
+func test_dialect_supports_returning() -> I32 {
+    let d = PostgresDialect::new()
+    let supported = d.supports_returning()
+    assert(supported, "PostgreSQL dialect must support RETURNING clause")
+    return 0
+}

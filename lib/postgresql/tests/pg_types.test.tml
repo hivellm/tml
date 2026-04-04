@@ -1,0 +1,237 @@
+// PostgreSQL type OID mapping tests — no database connection required.
+//
+// Covers:
+//   from_pg_oid, to_pg_type, from_pg_type_name,
+//   all PG_*_OID constants
+
+use test::{assert, assert_eq}
+use postgresql::types::{from_pg_oid, to_pg_type, from_pg_type_name, PG_INT4_OID, PG_TEXT_OID, PG_FLOAT8_OID, PG_BOOL_OID, PG_BYTEA_OID, PG_TIMESTAMP_OID, PG_UUID_OID, PG_JSONB_OID, PG_INT8_OID, PG_INT2_OID, PG_FLOAT4_OID, PG_NUMERIC_OID, PG_VARCHAR_OID, PG_BPCHAR_OID}
+use std::db::types::ColumnType
+
+/// from_pg_oid — all known OID constants map to correct ColumnType.
+@test
+func test_from_pg_oid() -> I32 {
+    // Integer types
+    let int4 = from_pg_oid(PG_INT4_OID)
+    when int4 {
+        ColumnType::Integer => {},
+        _ => { assert(false, "PG_INT4_OID should map to ColumnType::Integer") }
+    }
+
+    let int8 = from_pg_oid(PG_INT8_OID)
+    when int8 {
+        ColumnType::Integer => {},
+        _ => { assert(false, "PG_INT8_OID should map to ColumnType::Integer") }
+    }
+
+    let int2 = from_pg_oid(PG_INT2_OID)
+    when int2 {
+        ColumnType::Integer => {},
+        _ => { assert(false, "PG_INT2_OID should map to ColumnType::Integer") }
+    }
+
+    // Floating-point types
+    let float8 = from_pg_oid(PG_FLOAT8_OID)
+    when float8 {
+        ColumnType::Float => {},
+        _ => { assert(false, "PG_FLOAT8_OID should map to ColumnType::Float") }
+    }
+
+    let float4 = from_pg_oid(PG_FLOAT4_OID)
+    when float4 {
+        ColumnType::Float => {},
+        _ => { assert(false, "PG_FLOAT4_OID should map to ColumnType::Float") }
+    }
+
+    let numeric = from_pg_oid(PG_NUMERIC_OID)
+    when numeric {
+        ColumnType::Float => {},
+        _ => { assert(false, "PG_NUMERIC_OID should map to ColumnType::Float") }
+    }
+
+    // Text types
+    let text = from_pg_oid(PG_TEXT_OID)
+    when text {
+        ColumnType::Text => {},
+        _ => { assert(false, "PG_TEXT_OID should map to ColumnType::Text") }
+    }
+
+    let varchar = from_pg_oid(PG_VARCHAR_OID)
+    when varchar {
+        ColumnType::Text => {},
+        _ => { assert(false, "PG_VARCHAR_OID should map to ColumnType::Text") }
+    }
+
+    let jsonb = from_pg_oid(PG_JSONB_OID)
+    when jsonb {
+        ColumnType::Text => {},
+        _ => { assert(false, "PG_JSONB_OID should map to ColumnType::Text") }
+    }
+
+    // Boolean
+    let bool_type = from_pg_oid(PG_BOOL_OID)
+    when bool_type {
+        ColumnType::Boolean => {},
+        _ => { assert(false, "PG_BOOL_OID should map to ColumnType::Boolean") }
+    }
+
+    // Binary
+    let bytea = from_pg_oid(PG_BYTEA_OID)
+    when bytea {
+        ColumnType::Blob => {},
+        _ => { assert(false, "PG_BYTEA_OID should map to ColumnType::Blob") }
+    }
+
+    // Timestamp
+    let ts = from_pg_oid(PG_TIMESTAMP_OID)
+    when ts {
+        ColumnType::Timestamp => {},
+        _ => { assert(false, "PG_TIMESTAMP_OID should map to ColumnType::Timestamp") }
+    }
+
+    // UUID
+    let uuid = from_pg_oid(PG_UUID_OID)
+    when uuid {
+        ColumnType::Uuid => {},
+        _ => { assert(false, "PG_UUID_OID should map to ColumnType::Uuid") }
+    }
+
+    // Unknown OID defaults to Text
+    let unknown = from_pg_oid(99999)
+    when unknown {
+        ColumnType::Text => {},
+        _ => { assert(false, "unknown OID should default to ColumnType::Text") }
+    }
+
+    return 0
+}
+
+/// to_pg_type — all ColumnType variants produce the correct PG type name.
+@test
+func test_to_pg_type() -> I32 {
+    let int_name = to_pg_type(ColumnType::Integer)
+    assert_eq(int_name, "BIGINT", "ColumnType::Integer should produce 'BIGINT'")
+
+    let float_name = to_pg_type(ColumnType::Float)
+    assert_eq(float_name, "DOUBLE PRECISION", "ColumnType::Float should produce 'DOUBLE PRECISION'")
+
+    let text_name = to_pg_type(ColumnType::Text)
+    assert_eq(text_name, "TEXT", "ColumnType::Text should produce 'TEXT'")
+
+    let blob_name = to_pg_type(ColumnType::Blob)
+    assert_eq(blob_name, "BYTEA", "ColumnType::Blob should produce 'BYTEA'")
+
+    let bool_name = to_pg_type(ColumnType::Boolean)
+    assert_eq(bool_name, "BOOLEAN", "ColumnType::Boolean should produce 'BOOLEAN'")
+
+    let ts_name = to_pg_type(ColumnType::Timestamp)
+    assert_eq(ts_name, "TIMESTAMPTZ", "ColumnType::Timestamp should produce 'TIMESTAMPTZ'")
+
+    let uuid_name = to_pg_type(ColumnType::Uuid)
+    assert_eq(uuid_name, "UUID", "ColumnType::Uuid should produce 'UUID'")
+
+    return 0
+}
+
+/// from_pg_type_name — string names map correctly to ColumnType.
+@test
+func test_from_pg_type_name() -> I32 {
+    // Integer names
+    let int4_t = from_pg_type_name("int4")
+    when int4_t {
+        ColumnType::Integer => {},
+        _ => { assert(false, "'int4' should map to Integer") }
+    }
+
+    let bigint_t = from_pg_type_name("bigint")
+    when bigint_t {
+        ColumnType::Integer => {},
+        _ => { assert(false, "'bigint' should map to Integer") }
+    }
+
+    let integer_t = from_pg_type_name("integer")
+    when integer_t {
+        ColumnType::Integer => {},
+        _ => { assert(false, "'integer' should map to Integer") }
+    }
+
+    // Float names
+    let float8_t = from_pg_type_name("float8")
+    when float8_t {
+        ColumnType::Float => {},
+        _ => { assert(false, "'float8' should map to Float") }
+    }
+
+    let real_t = from_pg_type_name("real")
+    when real_t {
+        ColumnType::Float => {},
+        _ => { assert(false, "'real' should map to Float") }
+    }
+
+    let numeric_t = from_pg_type_name("numeric")
+    when numeric_t {
+        ColumnType::Float => {},
+        _ => { assert(false, "'numeric' should map to Float") }
+    }
+
+    // Boolean
+    let bool_t = from_pg_type_name("bool")
+    when bool_t {
+        ColumnType::Boolean => {},
+        _ => { assert(false, "'bool' should map to Boolean") }
+    }
+
+    let boolean_t = from_pg_type_name("boolean")
+    when boolean_t {
+        ColumnType::Boolean => {},
+        _ => { assert(false, "'boolean' should map to Boolean") }
+    }
+
+    // Binary
+    let bytea_t = from_pg_type_name("bytea")
+    when bytea_t {
+        ColumnType::Blob => {},
+        _ => { assert(false, "'bytea' should map to Blob") }
+    }
+
+    // Timestamp
+    let timestamp_t = from_pg_type_name("timestamp")
+    when timestamp_t {
+        ColumnType::Timestamp => {},
+        _ => { assert(false, "'timestamp' should map to Timestamp") }
+    }
+
+    let date_t = from_pg_type_name("date")
+    when date_t {
+        ColumnType::Timestamp => {},
+        _ => { assert(false, "'date' should map to Timestamp") }
+    }
+
+    // UUID
+    let uuid_t = from_pg_type_name("uuid")
+    when uuid_t {
+        ColumnType::Uuid => {},
+        _ => { assert(false, "'uuid' should map to Uuid") }
+    }
+
+    // Text and unknown
+    let text_t = from_pg_type_name("text")
+    when text_t {
+        ColumnType::Text => {},
+        _ => { assert(false, "'text' should map to Text") }
+    }
+
+    let unknown_t = from_pg_type_name("nonexistent_type")
+    when unknown_t {
+        ColumnType::Text => {},
+        _ => { assert(false, "unknown type name should default to Text") }
+    }
+
+    let empty_t = from_pg_type_name("")
+    when empty_t {
+        ColumnType::Text => {},
+        _ => { assert(false, "empty type name should default to Text") }
+    }
+
+    return 0
+}

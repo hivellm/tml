@@ -1,0 +1,388 @@
+// PostgreSQL parameterized execute_* method tests.
+//
+// Covers:
+//   PgConnection::execute_i64_params, execute_i64_2, execute_str,
+//   execute_str_i64, execute_i64_str, execute_3_i64, execute_2str, execute_2str_i64
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+/// Reads connection URL from DATABASE_URL env var, falls back to local dev default.
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+/// execute_i64_params — INSERT with one I64 ($1).
+@test @slow_test
+func test_execute_i64_params() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_p")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_i64_p (id BIGINT PRIMARY KEY)")
+
+            let ins = conn.execute_i64_params("INSERT INTO tml_test_exec_i64_p (id) VALUES ($1)", 42)
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_i64_params should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_p")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_p WHERE id = 42")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_p")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "parameterized insert should have persisted row with id=42")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_i64_p")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_i64_2 — INSERT with two I64 params ($1, $2).
+@test @slow_test
+func test_execute_i64_2() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_2")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_i64_2 (a BIGINT, b BIGINT)")
+
+            let ins = conn.execute_i64_2("INSERT INTO tml_test_exec_i64_2 (a, b) VALUES ($1, $2)", 10, 20)
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_i64_2 should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_2")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let sum_r = conn.query_scalar_i64("SELECT a + b FROM tml_test_exec_i64_2 LIMIT 1")
+            when sum_r {
+                Err(_) => {
+                    assert(false, "sum query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_2")
+                    conn.close()
+                    return 1
+                },
+                Ok(sum) => {
+                    assert_eq(sum, 30, "a=10 + b=20 should equal 30")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_i64_2")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_str — INSERT with one Str param ($1).
+@test @slow_test
+func test_execute_str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_str (val TEXT)")
+
+            let ins = conn.execute_str("INSERT INTO tml_test_exec_str (val) VALUES ($1)", "hello_world")
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_str should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str WHERE val = 'hello_world'")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "str param insert should persist")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_str")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_str_i64 — INSERT with Str + I64 params.
+@test @slow_test
+func test_execute_str_i64() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str_i64")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_str_i64 (name TEXT, score BIGINT)")
+
+            let ins = conn.execute_str_i64("INSERT INTO tml_test_exec_str_i64 (name, score) VALUES ($1, $2)", "alice", 99)
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_str_i64 should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str_i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str_i64 WHERE name = 'alice' AND score = 99")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str_i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "row with name=alice and score=99 should exist")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_str_i64")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_i64_str — INSERT with I64 + Str params.
+@test @slow_test
+func test_execute_i64_str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_str")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_i64_str (id BIGINT, label TEXT)")
+
+            let ins = conn.execute_i64_str("INSERT INTO tml_test_exec_i64_str (id, label) VALUES ($1, $2)", 7, "lucky")
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_i64_str should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_str WHERE id = 7 AND label = 'lucky'")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_str")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "row with id=7 and label=lucky should exist")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_i64_str")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_3_i64 — INSERT with three I64 params.
+@test @slow_test
+func test_execute_3_i64() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_3i64")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_3i64 (x BIGINT, y BIGINT, z BIGINT)")
+
+            let ins = conn.execute_3_i64("INSERT INTO tml_test_exec_3i64 (x, y, z) VALUES ($1, $2, $3)", 1, 2, 3)
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_3_i64 should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_3i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let sum_r = conn.query_scalar_i64("SELECT x + y + z FROM tml_test_exec_3i64 LIMIT 1")
+            when sum_r {
+                Err(_) => {
+                    assert(false, "sum query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_3i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(sum) => {
+                    assert_eq(sum, 6, "x=1 + y=2 + z=3 should equal 6")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_3i64")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_2str — INSERT with two Str params.
+@test @slow_test
+func test_execute_2str() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_2str (first TEXT, last TEXT)")
+
+            let ins = conn.execute_2str("INSERT INTO tml_test_exec_2str (first, last) VALUES ($1, $2)", "John", "Doe")
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_2str should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str WHERE first = 'John' AND last = 'Doe'")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "row with first=John and last=Doe should exist")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_2str")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute_2str_i64 — INSERT with two Str + one I64 param.
+@test @slow_test
+func test_execute_2str_i64() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str_i64")
+            let _ = conn.execute("CREATE TABLE tml_test_exec_2str_i64 (city TEXT, country TEXT, pop BIGINT)")
+
+            let ins = conn.execute_2str_i64("INSERT INTO tml_test_exec_2str_i64 (city, country, pop) VALUES ($1, $2, $3)", "Lisbon", "Portugal", 500000)
+            when ins {
+                Err(_) => {
+                    assert(false, "execute_2str_i64 should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str_i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "should insert 1 row")
+                }
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str_i64 WHERE city = 'Lisbon' AND pop = 500000")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str_i64")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "row with city=Lisbon and pop=500000 should exist")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_exec_2str_i64")
+            conn.close()
+            return 0
+        }
+    }
+}

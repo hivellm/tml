@@ -1,0 +1,215 @@
+// PostgreSQL transaction tests.
+//
+// Covers:
+//   PgConnection::begin, commit, rollback, transaction_status
+//   nested DML operations within a single transaction
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+/// Reads connection URL from DATABASE_URL env var, falls back to local dev default.
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+/// begin + commit — committed data is visible after commit.
+@test @slow_test
+func test_transaction_commit() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_commit")
+            let _ = conn.execute("CREATE TABLE tml_test_tx_commit (id INTEGER PRIMARY KEY)")
+
+            let begin_r = conn.begin()
+            when begin_r {
+                Err(_) => {
+                    assert(false, "BEGIN failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_commit")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            let _ = conn.execute("INSERT INTO tml_test_tx_commit VALUES (42)")
+
+            let commit_r = conn.commit()
+            when commit_r {
+                Err(_) => {
+                    assert(false, "COMMIT failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_commit")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_commit WHERE id = 42")
+            when count_r {
+                Err(_) => {
+                    assert(false, "verify query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_commit")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 1, "committed row must be visible")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_tx_commit")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// begin + rollback — rolled-back data is NOT visible after rollback.
+@test @slow_test
+func test_transaction_rollback() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_rollback")
+            let _ = conn.execute("CREATE TABLE tml_test_tx_rollback (id INTEGER PRIMARY KEY)")
+
+            let begin_r = conn.begin()
+            when begin_r {
+                Err(_) => {
+                    assert(false, "BEGIN failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_rollback")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            let _ = conn.execute("INSERT INTO tml_test_tx_rollback VALUES (99)")
+
+            let rollback_r = conn.rollback()
+            when rollback_r {
+                Err(_) => {
+                    assert(false, "ROLLBACK failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_rollback")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_rollback")
+            when count_r {
+                Err(_) => {
+                    assert(false, "verify query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_rollback")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 0, "rolled-back row must not be visible")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_tx_rollback")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// transaction_status() changes from idle to in-transaction during begin.
+@test @slow_test
+func test_transaction_status_changes() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let idle_status = conn.transaction_status()
+            assert_eq(idle_status, 0, "status should be 0 (idle) before BEGIN")
+
+            let _ = conn.begin()
+            let tx_status = conn.transaction_status()
+            // After BEGIN, status should be non-zero (1=active or 2=in-transaction)
+            assert(tx_status > 0, "transaction_status should be > 0 inside transaction")
+
+            let _ = conn.rollback()
+            let after_status = conn.transaction_status()
+            assert_eq(after_status, 0, "status should return to 0 after ROLLBACK")
+
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// Multiple DML operations within a single transaction all commit atomically.
+@test @slow_test
+func test_nested_operations_in_tx() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_nested_tx")
+            let _ = conn.execute("CREATE TABLE tml_test_nested_tx (id INTEGER PRIMARY KEY, val TEXT)")
+
+            let _ = conn.begin()
+            let _ = conn.execute("INSERT INTO tml_test_nested_tx VALUES (1, 'one')")
+            let _ = conn.execute("INSERT INTO tml_test_nested_tx VALUES (2, 'two')")
+            let _ = conn.execute("INSERT INTO tml_test_nested_tx VALUES (3, 'three')")
+            let _ = conn.execute("UPDATE tml_test_nested_tx SET val = 'ONE' WHERE id = 1")
+            let _ = conn.commit()
+
+            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_nested_tx")
+            when count_r {
+                Err(_) => {
+                    assert(false, "count query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_nested_tx")
+                    conn.close()
+                    return 1
+                },
+                Ok(count) => {
+                    assert_eq(count, 3, "all 3 rows should be visible after tx commit")
+                }
+            }
+
+            let val_r = conn.query_scalar_str("SELECT val FROM tml_test_nested_tx WHERE id = 1")
+            when val_r {
+                Err(_) => {
+                    assert(false, "val query failed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_nested_tx")
+                    conn.close()
+                    return 1
+                },
+                Ok(val) => {
+                    assert_eq(val, "ONE", "UPDATE within tx should have committed")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_nested_tx")
+            conn.close()
+            return 0
+        }
+    }
+}

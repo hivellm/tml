@@ -1,0 +1,213 @@
+// PostgreSQL DDL, DML, affected-rows, and error-handling tests.
+//
+// Covers:
+//   PgConnection::execute — CREATE, DROP, INSERT, UPDATE, DELETE, error cases
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+/// Reads connection URL from DATABASE_URL env var, falls back to local dev default.
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+/// CREATE TABLE then DROP TABLE both succeed.
+@test @slow_test
+func test_create_drop_table() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_create_drop")
+
+            let create = conn.execute("CREATE TABLE tml_test_create_drop (id SERIAL PRIMARY KEY, val TEXT)")
+            when create {
+                Err(_) => {
+                    assert(false, "CREATE TABLE should succeed")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            let drop = conn.execute("DROP TABLE tml_test_create_drop")
+            when drop {
+                Err(_) => {
+                    assert(false, "DROP TABLE should succeed")
+                    conn.close()
+                    return 1
+                },
+                Ok(_) => {}
+            }
+
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute() with invalid SQL returns Err.
+@test @slow_test
+func test_execute_error_bad_sql() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let bad = conn.execute("THIS IS NOT VALID SQL AT ALL !!!")
+            when bad {
+                Err(_) => {
+                    conn.close()
+                    return 0
+                },
+                Ok(_) => {
+                    assert(false, "invalid SQL should return Err")
+                    conn.close()
+                    return 1
+                }
+            }
+        }
+    }
+}
+
+/// INSERT returns affected row count of 1.
+@test @slow_test
+func test_insert_affected_rows() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_insert_rows")
+            let _ = conn.execute("CREATE TABLE tml_test_insert_rows (id SERIAL PRIMARY KEY, val TEXT)")
+
+            let ins = conn.execute("INSERT INTO tml_test_insert_rows (val) VALUES ('hello')")
+            when ins {
+                Err(_) => {
+                    assert(false, "INSERT should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_insert_rows")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 1, "INSERT of one row should return 1 affected row")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_insert_rows")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// UPDATE N rows returns N.
+@test @slow_test
+func test_update_affected_rows() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_update_rows")
+            let _ = conn.execute("CREATE TABLE tml_test_update_rows (id SERIAL PRIMARY KEY, score INTEGER DEFAULT 0)")
+            let _ = conn.execute("INSERT INTO tml_test_update_rows DEFAULT VALUES")
+            let _ = conn.execute("INSERT INTO tml_test_update_rows DEFAULT VALUES")
+            let _ = conn.execute("INSERT INTO tml_test_update_rows DEFAULT VALUES")
+
+            let upd = conn.execute("UPDATE tml_test_update_rows SET score = 10")
+            when upd {
+                Err(_) => {
+                    assert(false, "UPDATE should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_update_rows")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 3, "UPDATE of 3 rows should return 3 affected rows")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_update_rows")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// DELETE returns the correct count.
+@test @slow_test
+func test_delete_affected_rows() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let _ = conn.execute("DROP TABLE IF EXISTS tml_test_delete_rows")
+            let _ = conn.execute("CREATE TABLE tml_test_delete_rows (id INTEGER PRIMARY KEY)")
+            let _ = conn.execute("INSERT INTO tml_test_delete_rows VALUES (1),(2),(3),(4),(5)")
+
+            let del = conn.execute("DELETE FROM tml_test_delete_rows WHERE id <= 3")
+            when del {
+                Err(_) => {
+                    assert(false, "DELETE should succeed")
+                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_delete_rows")
+                    conn.close()
+                    return 1
+                },
+                Ok(rows) => {
+                    assert_eq(rows, 3, "DELETE of 3 rows should return 3")
+                }
+            }
+
+            let _ = conn.execute("DROP TABLE tml_test_delete_rows")
+            conn.close()
+            return 0
+        }
+    }
+}
+
+/// execute() with completely invalid SQL returns Err.
+@test @slow_test
+func test_execute_syntax_error() -> I32 {
+    let result = PgConnection::connect(database_url())
+    when result {
+        Err(_) => {
+            assert(false, "connection failed")
+            return 1
+        },
+        Ok(mut conn) => {
+            let bad_r = conn.execute("SELEKT * FRUM nonexistent_table_xyz")
+            when bad_r {
+                Err(_) => {
+                    // Expected — invalid SQL
+                    conn.close()
+                    return 0
+                },
+                Ok(_) => {
+                    assert(false, "invalid SQL should return Err")
+                    conn.close()
+                    return 1
+                }
+            }
+        }
+    }
+}
