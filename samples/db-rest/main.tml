@@ -6,7 +6,8 @@
 ///   - UsersController struct holding the DB path for per-request connections
 ///   - Response builder: res.json(), res.status()
 ///   - Path parameter extraction with app_get_param(req, "id")
-///   - Text builder for constructing JSON response bodies
+///   - std::json::Builder for constructing JSON response bodies
+///   - std::json::Json::parse for reading JSON request bodies
 ///
 /// Run:   tml run samples/db-rest/main.tml
 /// Test:
@@ -25,7 +26,7 @@ use std::http::app::controller::Controller
 use std::http::server::dispatch::app_get_param
 use std::http::server::incoming::IncomingMessage
 use std::http::framework::response_builder::Response
-use std::text::Text
+use std::json::{Builder, object, array, Json, parse}
 
 // ============================================================================
 // DB path — file-based SQLite so state persists across HTTP requests.
@@ -35,77 +36,16 @@ use std::text::Text
 func db_file() -> Str { return "users.db" }
 
 // ============================================================================
-// JSON helpers — build JSON strings with Text
+// JSON helpers — build JSON strings with std::json::Builder
 // ============================================================================
 
 /// Serialize a single user row to a JSON object string.
 func user_to_json(id: I64, name: Str, email: Str) -> Str {
-    let mut t = Text::new()
-    t.push_str(`{"id":`)
-    t.push_str(id.to_string())
-    t.push_str(`,"name":"`)
-    t.push_str(name)
-    t.push_str(`","email":"`)
-    t.push_str(email)
-    t.push_str(`"}`)
-    return t.as_str()
-}
-
-/// Escape a Str value for safe inclusion in a JSON string.
-/// Handles the most common cases: backslash, double-quote, newline, tab.
-func json_escape(s: Str) -> Str {
-    let mut t = Text::new()
-    let n = s.len()
-    var i: I64 = 0
-    loop (i < n) {
-        let ch = s.char_at(i)
-        if ch == 34 {       // '"'
-            t.push_str("\\\"")
-        } else if ch == 92 {  // '\'
-            t.push_str("\\\\")
-        } else if ch == 10 {  // newline
-            t.push_str("\\n")
-        } else if ch == 13 {  // carriage return
-            t.push_str("\\r")
-        } else if ch == 9 {   // tab
-            t.push_str("\\t")
-        } else {
-            t.push(ch)
-        }
-        i = i + 1
-    }
-    return t.as_str()
-}
-
-/// Extract a string field value from a simple flat JSON object.
-/// Finds `"key":"value"` and returns the value string.
-/// Returns "" if the key is not found.
-func json_get_str(json: Str, key: Str) -> Str {
-    let needle = "\"" + key + "\":\""
-    let needle_len = needle.len()
-    let json_len = json.len()
-    var i: I64 = 0
-    loop (i + needle_len <= json_len) {
-        let sub = json.slice(i, i + needle_len)
-        if sub == needle {
-            // Found the key — scan forward for the closing '"'
-            var j: I64 = i + needle_len
-            var end: I64 = j
-            loop (end < json_len) {
-                let ch = json.char_at(end)
-                if ch == 92 {   // backslash — skip next char
-                    end = end + 2
-                } else if ch == 34 {  // closing '"'
-                    return json.slice(j, end)
-                } else {
-                    end = end + 1
-                }
-            }
-            return ""
-        }
-        i = i + 1
-    }
-    return ""
+    var b = object()
+    b.kn("id", id)
+    b.ks("name", name)
+    b.ks("email", email)
+    return b.build()
 }
 
 // ============================================================================
@@ -158,23 +98,20 @@ func list_users(req: IncomingMessage, res: Response) -> Str {
                 },
                 Ok(raw_stmt) => {
                     let mut stmt = SqliteStatement::new(raw_stmt)
-                    let mut buf = Text::new()
-                    buf.push_str("[")
-                    var first: Bool = true
+                    var a = array()
                     loop (stmt.step()) {
                         let id    = stmt.column_i64(0)
                         let name  = stmt.column_str(1)
                         let email = stmt.column_str(2)
-                        if not first {
-                            buf.push_str(",")
-                        }
-                        first = false
-                        buf.push_str(user_to_json(id, name, email))
+                        a.obj()
+                        a.kn("id", id)
+                        a.ks("name", name)
+                        a.ks("email", email)
+                        a.end_obj()
                     }
-                    buf.push_str("]")
                     stmt.finalize()
                     conn.close()
-                    return res.json(buf.as_str())
+                    return res.json(a.build())
                 }
             }
         }
@@ -230,15 +167,27 @@ func create_user(req: IncomingMessage, res: Response) -> Str {
         return res.status(400).json(`{"error":"request body required"}` as Str)
     }
 
-    let name  = json_get_str(body, "name")
-    let email = json_get_str(body, "email")
+    when parse(body) {
+        Nothing => {
+            return res.status(400).json(`{"error":"invalid JSON body"}` as Str)
+        },
+        Just(parsed) => {
+            let name  = parsed.get_string("name").unwrap_or("")
+            let email = parsed.get_string("email").unwrap_or("")
 
-    if name.len() == 0 {
-        return res.status(400).json(`{"error":"name is required"}` as Str)
+            if name.len() == 0 {
+                return res.status(400).json(`{"error":"name is required"}` as Str)
+            }
+            if email.len() == 0 {
+                return res.status(400).json(`{"error":"email is required"}` as Str)
+            }
+
+            return create_user_inner(res, name, email)
+        }
     }
-    if email.len() == 0 {
-        return res.status(400).json(`{"error":"email is required"}` as Str)
-    }
+}
+
+func create_user_inner(res: Response, name: Str, email: Str) -> Str {
 
     when SqliteConnection::open(db_file()) {
         Err(_) => {
@@ -271,15 +220,12 @@ func create_user(req: IncomingMessage, res: Response) -> Str {
                             stmt.finalize()
                             conn.close()
 
-                            let mut t = Text::new()
-                            t.push_str(`{"id":`)
-                            t.push_str(inserted_id.to_string())
-                            t.push_str(`,"name":"`)
-                            t.push_str(json_escape(name))
-                            t.push_str(`","email":"`)
-                            t.push_str(json_escape(email))
-                            t.push_str(`","created":true}`)
-                            return res.status(201).json(t.as_str())
+                            var b = object()
+                            b.kn("id", inserted_id)
+                            b.ks("name", name)
+                            b.ks("email", email)
+                            b.kb("created", true)
+                            return res.status(201).json(b.build())
                         }
                     }
                 }
@@ -318,11 +264,10 @@ func delete_user(req: IncomingMessage, res: Response) -> Str {
                             )
                             conn.close()
 
-                            let mut t = Text::new()
-                            t.push_str(`{"id":`)
-                            t.push_str(id.to_string())
-                            t.push_str(`,"deleted":true}`)
-                            return res.json(t.as_str())
+                            var b = object()
+                            b.kn("id", id)
+                            b.kb("deleted", true)
+                            return res.json(b.build())
                         }
                     }
                 }
@@ -346,11 +291,11 @@ func health_check(req: IncomingMessage, res: Response) -> Str {
                 },
                 Ok(n) => {
                     conn.close()
-                    let mut t = Text::new()
-                    t.push_str(`{"status":"healthy","db":"sqlite","user_count":`)
-                    t.push_str(n.to_string())
-                    t.push_str(`}`)
-                    return res.json(t.as_str())
+                    var b = object()
+                    b.ks("status", "healthy")
+                    b.ks("db", "sqlite")
+                    b.kn("user_count", n)
+                    return res.json(b.build())
                 }
             }
         }
