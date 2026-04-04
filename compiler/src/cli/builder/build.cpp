@@ -897,7 +897,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             // Check if it's a path (contains / or \) or a library name
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
                 // Full path to library file
-                link_options.link_flags.push_back("\"" + lib + "\"");
+                link_options.link_flags.push_back(lib);
             } else {
                 // Library name - use -l flag
                 link_options.link_flags.push_back("-l" + lib);
@@ -914,7 +914,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             }
             for (const auto& lib : build_script_result.link_libs) {
                 if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                    link_options.link_flags.push_back("\"" + lib + "\"");
+                    link_options.link_flags.push_back(lib);
                 } else {
                     link_options.link_flags.push_back("-l" + lib);
                 }
@@ -1336,7 +1336,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         }
         for (const auto& lib : bs_result.link_libs) {
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                link_options.link_flags.push_back("\"" + lib + "\"");
+                link_options.link_flags.push_back(lib);
             } else {
                 link_options.link_flags.push_back("-l" + lib);
             }

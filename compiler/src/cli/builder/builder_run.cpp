@@ -316,7 +316,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         // Add @link libraries from FFI decorators
         for (const auto& lib : compile.link_libs) {
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                link_options.link_flags.push_back("\"" + lib + "\"");
+                link_options.link_flags.push_back(lib);
             } else {
                 link_options.link_flags.push_back("-l" + lib);
             }
@@ -333,7 +333,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
                 }
                 for (const auto& lib : bs_result.link_libs) {
                     if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                        link_options.link_flags.push_back("\"" + lib + "\"");
+                        link_options.link_flags.push_back(lib);
                     } else {
                         link_options.link_flags.push_back("-l" + lib);
                     }
@@ -530,7 +530,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         // Add @link libraries from FFI decorators
         for (const auto& lib : compile.link_libs) {
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                link_options.link_flags.push_back("\"" + lib + "\"");
+                link_options.link_flags.push_back(lib);
             } else {
                 link_options.link_flags.push_back("-l" + lib);
             }
@@ -547,7 +547,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                 }
                 for (const auto& lib : bs_result.link_libs) {
                     if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                        link_options.link_flags.push_back("\"" + lib + "\"");
+                        link_options.link_flags.push_back(lib);
                     } else {
                         link_options.link_flags.push_back("-l" + lib);
                     }

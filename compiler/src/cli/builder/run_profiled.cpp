@@ -270,7 +270,7 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
 
         for (const auto& lib : llvm_gen.get_link_libs()) {
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                link_options.link_flags.push_back("\"" + lib + "\"");
+                link_options.link_flags.push_back(lib);
             } else {
                 link_options.link_flags.push_back("-l" + lib);
             }
@@ -287,7 +287,7 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
                 }
                 for (const auto& lib : bs_result.link_libs) {
                     if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                        link_options.link_flags.push_back("\"" + lib + "\"");
+                        link_options.link_flags.push_back(lib);
                     } else {
                         link_options.link_flags.push_back("-l" + lib);
                     }
