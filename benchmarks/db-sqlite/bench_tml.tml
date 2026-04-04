@@ -1,6 +1,10 @@
 /// TML SQLite Benchmark — prepared statements with BEGIN/COMMIT transactions
 /// Run with: tml run benchmarks/db-sqlite/bench_tml.tml --release
-/// Output CSV: lang,op,iters,total_ns
+///
+/// NOTE: Run this benchmark 3 times and take the median result for fair comparison.
+///       The first run may include cold-start overhead (OS file cache, CPU branch prediction).
+///
+/// Output: human-readable table + CSV line per operation (lang,op,iters,total_ns,ns_per_op,min_ns,max_ns)
 use std::db::sqlite::connection::SqliteConnection
 use std::db::sqlite::statement::SqliteStatement
 use std::time::Instant
@@ -27,18 +31,39 @@ func main() {
     conn.commit().unwrap()
 
     let iters: I64 = 10000
+    let warmup: I64 = 1000
 
     // === INSERT with prepared statement + transaction ===
     let ins_raw = conn.prepare("INSERT INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
     let mut ins_stmt = SqliteStatement::new(ins_raw)
+
+    // Warmup: 1000 iterations to prime SQLite page cache and branch predictor
     conn.begin().unwrap()
-    let t1 = Instant::now()
     i = 0
-    loop (i < iters) {
-        ins_stmt.bind_i64(1, 1000 + i).unwrap()
+    loop (i < warmup) {
+        ins_stmt.bind_i64(1, 900000 + i).unwrap()
         ins_stmt.bind_i64(2, i * 3).unwrap()
         ins_stmt.step()
         ins_stmt.reset().unwrap()
+        i = i + 1
+    }
+    conn.commit().unwrap()
+
+    // Timed run
+    conn.begin().unwrap()
+    var insert_min_ns: I64 = 9223372036854775807
+    var insert_max_ns: I64 = 0
+    let t1 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let op_start = Instant::now()
+        ins_stmt.bind_i64(1, 1000000 + i).unwrap()
+        ins_stmt.bind_i64(2, i * 3).unwrap()
+        ins_stmt.step()
+        ins_stmt.reset().unwrap()
+        let op_ns: I64 = op_start.elapsed().as_nanos()
+        insert_min_ns = min_i64(insert_min_ns, op_ns)
+        insert_max_ns = max_i64(insert_max_ns, op_ns)
         i = i + 1
     }
     let insert_ns: I64 = t1.elapsed().as_nanos()
@@ -48,14 +73,33 @@ func main() {
     // === SELECT with prepared statement ===
     let sel_raw = conn.prepare("SELECT id, randomNumber FROM World WHERE id = ?").unwrap()
     let mut sel_stmt = SqliteStatement::new(sel_raw)
-    let t2 = Instant::now()
+
+    // Warmup
     i = 0
-    loop (i < iters) {
-        sel_stmt.bind_i64(1, i + 1).unwrap()
+    loop (i < warmup) {
+        sel_stmt.bind_i64(1, (i % 100) + 1).unwrap()
         sel_stmt.step()
         let _id = sel_stmt.column_i64(0)
         let _rn = sel_stmt.column_i64(1)
         sel_stmt.reset().unwrap()
+        i = i + 1
+    }
+
+    // Timed run
+    var select_min_ns: I64 = 9223372036854775807
+    var select_max_ns: I64 = 0
+    let t2 = Instant::now()
+    i = 0
+    loop (i < iters) {
+        let op_start = Instant::now()
+        sel_stmt.bind_i64(1, (i % 100) + 1).unwrap()
+        sel_stmt.step()
+        let _id = sel_stmt.column_i64(0)
+        let _rn = sel_stmt.column_i64(1)
+        sel_stmt.reset().unwrap()
+        let op_ns: I64 = op_start.elapsed().as_nanos()
+        select_min_ns = min_i64(select_min_ns, op_ns)
+        select_max_ns = max_i64(select_max_ns, op_ns)
         i = i + 1
     }
     let select_ns: I64 = t2.elapsed().as_nanos()
@@ -64,14 +108,34 @@ func main() {
     // === UPDATE with prepared statement + transaction ===
     let upd_raw = conn.prepare("UPDATE World SET randomNumber = ? WHERE id = ?").unwrap()
     let mut upd_stmt = SqliteStatement::new(upd_raw)
+
+    // Warmup
     conn.begin().unwrap()
+    i = 0
+    loop (i < warmup) {
+        upd_stmt.bind_i64(1, i * 11).unwrap()
+        upd_stmt.bind_i64(2, (i % 100) + 1).unwrap()
+        upd_stmt.step()
+        upd_stmt.reset().unwrap()
+        i = i + 1
+    }
+    conn.commit().unwrap()
+
+    // Timed run
+    conn.begin().unwrap()
+    var update_min_ns: I64 = 9223372036854775807
+    var update_max_ns: I64 = 0
     let t3 = Instant::now()
     i = 0
     loop (i < iters) {
+        let op_start = Instant::now()
         upd_stmt.bind_i64(1, i * 11).unwrap()
-        upd_stmt.bind_i64(2, i + 1).unwrap()
+        upd_stmt.bind_i64(2, (i % 100) + 1).unwrap()
         upd_stmt.step()
         upd_stmt.reset().unwrap()
+        let op_ns: I64 = op_start.elapsed().as_nanos()
+        update_min_ns = min_i64(update_min_ns, op_ns)
+        update_max_ns = max_i64(update_max_ns, op_ns)
         i = i + 1
     }
     let update_ns: I64 = t3.elapsed().as_nanos()
@@ -81,13 +145,61 @@ func main() {
     // === DELETE with prepared statement + transaction ===
     let del_raw = conn.prepare("DELETE FROM World WHERE id = ?").unwrap()
     let mut del_stmt = SqliteStatement::new(del_raw)
+
+    // Warmup — insert rows to delete during warmup
     conn.begin().unwrap()
+    let warmup_ins_raw = conn.prepare("INSERT OR IGNORE INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    let mut warmup_ins_stmt = SqliteStatement::new(warmup_ins_raw)
+    i = 0
+    loop (i < warmup) {
+        warmup_ins_stmt.bind_i64(1, 2000000 + i).unwrap()
+        warmup_ins_stmt.bind_i64(2, i).unwrap()
+        warmup_ins_stmt.step()
+        warmup_ins_stmt.reset().unwrap()
+        i = i + 1
+    }
+    conn.commit().unwrap()
+    warmup_ins_stmt.finalize()
+
+    conn.begin().unwrap()
+    i = 0
+    loop (i < warmup) {
+        del_stmt.bind_i64(1, 2000000 + i).unwrap()
+        del_stmt.step()
+        del_stmt.reset().unwrap()
+        i = i + 1
+    }
+    conn.commit().unwrap()
+
+    // Insert rows for the timed delete run
+    conn.begin().unwrap()
+    let del_ins_raw = conn.prepare("INSERT OR IGNORE INTO World (id, randomNumber) VALUES (?, ?)").unwrap()
+    let mut del_ins_stmt = SqliteStatement::new(del_ins_raw)
+    i = 0
+    loop (i < iters) {
+        del_ins_stmt.bind_i64(1, 3000000 + i).unwrap()
+        del_ins_stmt.bind_i64(2, i).unwrap()
+        del_ins_stmt.step()
+        del_ins_stmt.reset().unwrap()
+        i = i + 1
+    }
+    conn.commit().unwrap()
+    del_ins_stmt.finalize()
+
+    // Timed run
+    conn.begin().unwrap()
+    var delete_min_ns: I64 = 9223372036854775807
+    var delete_max_ns: I64 = 0
     let t4 = Instant::now()
     i = 0
     loop (i < iters) {
-        del_stmt.bind_i64(1, 1000 + i).unwrap()
+        let op_start = Instant::now()
+        del_stmt.bind_i64(1, 3000000 + i).unwrap()
         del_stmt.step()
         del_stmt.reset().unwrap()
+        let op_ns: I64 = op_start.elapsed().as_nanos()
+        delete_min_ns = min_i64(delete_min_ns, op_ns)
+        delete_max_ns = max_i64(delete_max_ns, op_ns)
         i = i + 1
     }
     let delete_ns: I64 = t4.elapsed().as_nanos()
@@ -96,9 +208,52 @@ func main() {
 
     conn.close()
 
-    // Output CSV: lang,op,iters,total_ns
-    println("tml,insert," + iters.to_string() + "," + insert_ns.to_string())
-    println("tml,select," + iters.to_string() + "," + select_ns.to_string())
-    println("tml,update," + iters.to_string() + "," + update_ns.to_string())
-    println("tml,delete," + iters.to_string() + "," + delete_ns.to_string())
+    // Compute ns/op
+    let insert_avg: I64 = insert_ns / iters
+    let select_avg: I64 = select_ns / iters
+    let update_avg: I64 = update_ns / iters
+    let delete_avg: I64 = delete_ns / iters
+
+    // Print human-readable summary table
+    println("")
+    println("=== TML SQLite Benchmark Results ===")
+    println("Iterations: " + iters.to_string() + " (+ " + warmup.to_string() + " warmup)")
+    println("NOTE: Run 3 times and take the median for fair comparison.")
+    println("")
+    println("Operation  | Total (ms)  | Avg ns/op | Min ns/op | Max ns/op")
+    println("-----------|-------------|-----------|-----------|----------")
+    println("INSERT     | " + pad_right((insert_ns / 1000000).to_string(), 11) + " | " + pad_right(insert_avg.to_string(), 9) + " | " + pad_right(insert_min_ns.to_string(), 9) + " | " + insert_max_ns.to_string())
+    println("SELECT     | " + pad_right((select_ns / 1000000).to_string(), 11) + " | " + pad_right(select_avg.to_string(), 9) + " | " + pad_right(select_min_ns.to_string(), 9) + " | " + select_max_ns.to_string())
+    println("UPDATE     | " + pad_right((update_ns / 1000000).to_string(), 11) + " | " + pad_right(update_avg.to_string(), 9) + " | " + pad_right(update_min_ns.to_string(), 9) + " | " + update_max_ns.to_string())
+    println("DELETE     | " + pad_right((delete_ns / 1000000).to_string(), 11) + " | " + pad_right(delete_avg.to_string(), 9) + " | " + pad_right(delete_min_ns.to_string(), 9) + " | " + delete_max_ns.to_string())
+    println("")
+
+    // Output CSV for comparison scripts: lang,op,iters,total_ns,ns_per_op,min_ns,max_ns
+    println("--- CSV (for comparison scripts) ---")
+    println("tml,insert," + iters.to_string() + "," + insert_ns.to_string() + "," + insert_avg.to_string() + "," + insert_min_ns.to_string() + "," + insert_max_ns.to_string())
+    println("tml,select," + iters.to_string() + "," + select_ns.to_string() + "," + select_avg.to_string() + "," + select_min_ns.to_string() + "," + select_max_ns.to_string())
+    println("tml,update," + iters.to_string() + "," + update_ns.to_string() + "," + update_avg.to_string() + "," + update_min_ns.to_string() + "," + update_max_ns.to_string())
+    println("tml,delete," + iters.to_string() + "," + delete_ns.to_string() + "," + delete_avg.to_string() + "," + delete_min_ns.to_string() + "," + delete_max_ns.to_string())
+}
+
+@extern("strlen")
+func c_strlen(s: Str) -> I64
+
+// Right-pad a string with spaces to a given width
+func pad_right(s: Str, width: I64) -> Str {
+    var result: Str = s
+    var len: I64 = c_strlen(s)
+    loop (len < width) {
+        result = result + " "
+        len = len + 1
+    }
+    result
+}
+
+func min_i64(a: I64, b: I64) -> I64 {
+    when a < b { true => a, false => b }
+}
+
+func max_i64(a: I64, b: I64) -> I64 {
+    when a > b { true => a, false => b }
 }
