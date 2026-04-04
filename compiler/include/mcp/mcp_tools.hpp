@@ -580,4 +580,10 @@ auto make_debug_tool() -> Tool;
 /// Result with program output, exit code, and any panic backtraces.
 auto handle_debug(const json::JsonValue& params) -> ToolResult;
 
+/// Creates the `analyze` MCP tool for inline research queries.
+auto make_analyze_tool() -> Tool;
+
+/// Handles the `analyze` tool — reads mcp-call-log.jsonl and returns metrics.
+auto handle_analyze(const json::JsonValue& params) -> ToolResult;
+
 } // namespace tml::mcp

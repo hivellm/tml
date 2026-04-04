@@ -1306,6 +1306,7 @@ add_library(tml_mcp_lib STATIC
     src/mcp/mcp_types.cpp
     src/mcp/mcp_server.cpp
     src/mcp/mcp_tools.cpp
+    src/mcp/mcp_tools_analyze.cpp
     src/mcp/mcp_tools_codegen.cpp
     src/mcp/mcp_tools_debug.cpp
     src/mcp/mcp_tools_docs.cpp

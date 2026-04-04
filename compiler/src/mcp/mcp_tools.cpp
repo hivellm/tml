@@ -206,6 +206,7 @@ void register_compiler_tools(McpServer& server) {
     server.register_tool(make_inspect_tool(), handle_inspect);
     server.register_tool(make_profile_tool(), handle_profile);
     server.register_tool(make_debug_tool(), handle_debug);
+    server.register_tool(make_analyze_tool(), handle_analyze);
 }
 
 // ============================================================================
