@@ -11,6 +11,11 @@ use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
 use std::db::error::DbError
 
+// NOTE: load_with() takes ref SqliteConnection for now because TML's codegen
+// doesn't support behavior dispatch through ref (ref dyn Connection).
+// When that's fixed, change to `conn: ref Connection` for database-agnostic usage.
+// The Connection behavior already defines execute() which is all load_with needs.
+
 /// Generates a SELECT query with LEFT JOINs for all given relations.
 ///
 /// Produces:

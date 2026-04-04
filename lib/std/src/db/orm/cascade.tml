@@ -9,6 +9,11 @@ use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
 use std::db::error::DbError
 
+// NOTE: cascade functions take ref SqliteConnection for now because TML's codegen
+// doesn't support behavior dispatch through ref (ref dyn Connection).
+// When that's fixed, change to `conn: ref Connection` for database-agnostic usage.
+// Connection behavior already defines execute_i64_params/execute_i64_str.
+
 /// Inserts a child row for a given parent PK using the relation's foreign key.
 ///
 /// Generates:
