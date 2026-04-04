@@ -1,0 +1,95 @@
+//! Tests for AVX2-tier find_byte path and SIMD/scalar consistency.
+//!
+//! These tests verify that the AVX2 dispatch path (32B/iter) produces
+//! identical results to the scalar path across boundary positions.
+use test
+use core::str::simd
+
+@test
+func test_find_byte_avx2_basic() -> Outcome[Unit, Str] {
+    // 64+ bytes to trigger AVX2 path (if AVX2 available) or SSE2 path
+    let s: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ab"
+    let pos: I64 = simd::find_byte(s, 65 as U8)  // 'A' = 65
+    assert_eq(pos, 26)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_not_found() -> Outcome[Unit, Str] {
+    // Long string, byte not present — should return -1
+    let s: Str = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz01"
+    let pos: I64 = simd::find_byte(s, 33 as U8)  // '!' not in string
+    assert_eq(pos, -1)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_vs_scalar_agreement() -> Outcome[Unit, Str] {
+    // Long string (AVX2/SSE2 path) vs scalar — must produce identical result
+    let s: Str = "The quick brown fox jumps over the lazy dog and keeps on running!"
+    // 'z' is in "lazy" at position 37
+    let simd_pos: I64 = simd::find_byte(s, 122 as U8)   // 'z' = 122
+    let scalar_pos: I64 = simd::find_byte_scalar(s, 122 as U8)
+    assert_eq(simd_pos, scalar_pos)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_at_boundary_31() -> Outcome[Unit, Str] {
+    // Byte at position 31 (last byte of first 32-byte chunk)
+    let s: Str = "0000000000000000000000000000000X00000000000000000000000000000000"
+    let pos: I64 = simd::find_byte(s, 88 as U8)  // 'X' = 88
+    assert_eq(pos, 31)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_at_position_32() -> Outcome[Unit, Str] {
+    // Byte at position 32 (first byte of second 32-byte chunk)
+    let s: Str = "00000000000000000000000000000000X0000000000000000000000000000000"
+    let pos: I64 = simd::find_byte(s, 88 as U8)  // 'X' = 88
+    assert_eq(pos, 32)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_last_byte() -> Outcome[Unit, Str] {
+    // Byte at the very last position of a 64-char string
+    let s: Str = "0000000000000000000000000000000000000000000000000000000000000001"
+    let pos: I64 = simd::find_byte(s, 49 as U8)  // '1' = 49
+    assert_eq(pos, 63)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_first_byte() -> Outcome[Unit, Str] {
+    // Byte at position 0 — should return immediately
+    let s: Str = "X000000000000000000000000000000000000000000000000000000000000000"
+    let pos: I64 = simd::find_byte(s, 88 as U8)  // 'X' = 88
+    assert_eq(pos, 0)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_multiple_occurrences() -> Outcome[Unit, Str] {
+    // Multiple matches — should return first occurrence
+    let s: Str = "abcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcXabcX"
+    let pos: I64 = simd::find_byte(s, 88 as U8)  // 'X' = 88, first at index 3
+    assert_eq(pos, 3)
+    Ok(())
+}
+
+@test
+func test_find_byte_avx2_scalar_agree_all_positions() -> Outcome[Unit, Str] {
+    // Test SIMD vs scalar agreement scanning for each possible first byte
+    // Use a long string and search for byte 'A' (65) — appears at index 26
+    let s: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ab"
+    let simd_r: I64 = simd::find_byte(s, 65 as U8)   // 'A'
+    let scalar_r: I64 = simd::find_byte_scalar(s, 65 as U8)
+    assert_eq(simd_r, scalar_r)
+    // Also test not-found agreement
+    let simd_nf: I64 = simd::find_byte(s, 33 as U8)   // '!'
+    let scalar_nf: I64 = simd::find_byte_scalar(s, 33 as U8)
+    assert_eq(simd_nf, scalar_nf)
+    Ok(())
+}

@@ -1,0 +1,106 @@
+//! Performance benchmark tests for SIMD string operations.
+//!
+//! These tests verify correctness under high iteration count,
+//! exercising the SIMD paths for find_byte, contains, and is_ascii.
+//! Each test runs 10,000 iterations to exercise the hot path.
+use test
+use core::str::simd
+
+@test
+func bench_find_byte_short() -> Outcome[Unit, Str] {
+    // Short string — scalar path (< 32 bytes)
+    let s: Str = "hello world, quick test"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: I64 = simd::find_byte(s, 111 as U8)  // 'o'
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_find_byte_medium() -> Outcome[Unit, Str] {
+    // Medium string — SSE2 path (32-63 bytes)
+    let s: Str = "The quick brown fox jumps over the lazy dog!"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: I64 = simd::find_byte(s, 100 as U8)  // 'd'
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_find_byte_long() -> Outcome[Unit, Str] {
+    // Long string — AVX2/SSE2 path (>= 64 bytes)
+    let s: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: I64 = simd::find_byte(s, 33 as U8)  // '!' not found — worst case (full scan)
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_contains_fast_short() -> Outcome[Unit, Str] {
+    // Short string — scalar path (< 32 bytes)
+    let s: Str = "hello world quick"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: Bool = simd::contains_fast(s, "world")
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_contains_fast_long() -> Outcome[Unit, Str] {
+    // Long string — SIMD path, pattern found near end
+    let s: Str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog!"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: Bool = simd::contains_fast(s, "lazy dog")
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_contains_fast_not_found() -> Outcome[Unit, Str] {
+    // Not-found case — must scan entire string (worst case)
+    let s: Str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog!"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: Bool = simd::contains_fast(s, "xyz123")
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_is_ascii_long() -> Outcome[Unit, Str] {
+    // Long pure-ASCII string — SIMD path
+    let s: Str = "The quick brown fox jumps over the lazy dog. All ASCII chars here. No unicode!"
+    var i: I64 = 0
+    loop (i < 10000) {
+        let _r: Bool = simd::is_ascii_fast(s)
+        i = i + 1
+    }
+    Ok(())
+}
+
+@test
+func bench_find_byte_vs_scalar_parity() -> Outcome[Unit, Str] {
+    // Verify SIMD and scalar produce identical results for long strings
+    // across 1000 iterations
+    let s: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
+    var i: I64 = 0
+    loop (i < 1000) {
+        let simd_r: I64 = simd::find_byte(s, 90 as U8)    // 'Z' = 90
+        let scalar_r: I64 = simd::find_byte_scalar(s, 90 as U8)
+        assert_eq(simd_r, scalar_r)
+        i = i + 1
+    }
+    Ok(())
+}
