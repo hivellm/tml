@@ -1,0 +1,25 @@
+// Test for SqliteStatement::execute_bound convenience API
+// Added in DB Performance Tier 2 (item 2.4)
+use test::{assert, assert_eq}
+use std::db::sqlite::statement::SqliteStatement
+use std::sqlite::Database
+
+@test
+func test_execute_bound() -> I32 {
+    let db = Database::open_in_memory().unwrap()
+    let _ = db.exec("CREATE TABLE log (msg TEXT)")
+    let raw = db.prepare("INSERT INTO log VALUES (?1)").unwrap()
+    let mut s = SqliteStatement::new(raw)
+    let _ = s.bind_str(1, "alpha")
+    let _ = s.execute_bound()
+    let _ = s.bind_str(1, "beta")
+    let _ = s.execute_bound()
+    s.finalize()
+    let q = db.prepare("SELECT COUNT(*) FROM log").unwrap()
+    assert(q.step(), "has count row")
+    let n = q.column_i64(0)
+    q.finalize()
+    db.close()
+    assert_eq(n, 2, "two rows")
+    return 0
+}

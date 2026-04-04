@@ -1,6 +1,8 @@
 # Codegen Debugger Memory
 
 ## Index
+- [deep-module-private-imports-fix.md](deep-module-private-imports-fix.md) - load_module_from_file missing private_imports loading: deep module paths (4+ segments) undeclared in IR (2026-04-03, FIXED)
+- [struct-param-byptr-fix.md](struct-param-byptr-fix.md) - MIR codegen free function struct params: by-value definition vs by-pointer call site ABI mismatch (2026-04-03, FIXED)
 - [closure-ref-param-inference-fix.md](closure-ref-param-inference-fix.md) - Closure ref T param inference: type checker + AST codegen + auto-deref for inferred refs (2026-04-02, FIXED)
 - [nested-generic-typesubs-fix.md](nested-generic-typesubs-fix.md) - Nested generic type_subs: where-clause constraint destructuring for flatten/transpose (2026-03-30, PARTIAL — 2/5 fixed, 3 blocked by module registry gap)
 - [where-clause-type-resolution.md](where-clause-type-resolution.md) - Where clause type param resolution: ClosureType handling, best-impl selection, associated type substitution (2026-03-30, FIXED)

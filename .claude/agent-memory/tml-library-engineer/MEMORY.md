@@ -1,5 +1,30 @@
 # TML Library Engineer Memory
 
+## DI Module (2026-04-03) — Phases 1-4 Complete
+- `lib/std/src/di/` — registry.tml, module.tml, application.tml, config.tml, mod.tml
+- Tests: 4 test files, 4/4 suites passing (24 tests total)
+- **GlobalASTCache stale IR bug**: When config.tml was first compiled with `str_parse_i64` returning `Maybe[I64]`, then source was fixed, the GlobalASTCache still served stale IR with wrong `i32` return for `@tml_str_parse_i64`. **Fix: rename struct** (`Config` → `InjectedConfig`) — forces fresh layout in GlobalASTCache.
+- **`use core::str::basic::len as str_len` → `@tml_str_len` undefined**: Imported free functions get a mangled TML name, but linker expects C name. Fix: use local `@extern("strlen") func di_c_strlen(s: Str) -> I64` declaration.
+- **Integer parsing with `Maybe[I64]` cross-module**: Avoid entirely. Implement `config_parse_i64` as a module-private free function returning `I64` directly (uses `lowlevel { ptr_read[U8] }` inline parser).
+- **Module.import_module**: Uses `keys()/values()` on HashMap to enumerate entries for merge loop.
+- `InjectedConfig` (not `Config`) — final type name to avoid cache collision.
+
+## db Benchmark Module (2026-04-03) — COMPLETE
+- `lib/std/src/db/bench/` — runner.tml, stats.tml, suite.tml, report.tml, reference.tml, mod.tml
+- Tests: db_bench.test.tml — 13 tests, 21/21 std/db suite passing
+- **CRITICAL BUG WORKAROUND**: GlobalASTCache caches struct type layouts permanently. If a struct named X is compiled once with wrong field layout, ALL subsequent compilations use the wrong layout even after source changes. Fix: rename the struct (BenchResult→BenchmarkResult avoids the stale cache).
+- **CRITICAL BUG**: HIR path struct field GEPs ALL resolve to index 0 when method names match field names. Fix: use distinct field names (prefixed: br_name, st_mean_ns) that never match method names.
+- **CRITICAL BUG**: `var` in struct constructor forces HIR path with all-GEP-index-0 bug. Fix: extract var logic into helper function that returns the result; the helper with only a struct literal goes through THIR insertvalue path correctly.
+- **CACHE NOTE**: `no_cache=true` on mcp__tml__test bypasses test-result cache but NOT the incremental IR cache (incr.bin). Struct type definitions from GlobalASTCache persist across runs. Only renaming the struct forces a fresh layout.
+- Report functions use `ref BenchmarkResult` parameter — works correctly.
+
+## db ORM Module (2026-04-02) — COMPLETE
+- `lib/std/src/db/orm/` — model.tml, field.tml, mapper.tml, row_reader.tml, sql_builder.tml, repository.tml, query_set.tml, relation.tml, mod.tml
+- Tests: db_orm.test.tml — 12/12 suite passing (all std/db tests)
+- **CRITICAL**: Any file importing `SqliteStatement` causes linker to require sqlite3.lib. Split modules: pure SQL builders (no sqlite dep) vs sqlite-executing code. Tests import pure modules only.
+- Pattern: `sql_builder.tml` (pure Str functions) + `repository.tml` (uses SqliteConnection/Statement). Tests use sql_builder, not repository.
+- `mapper.tml` is pure (only `quote_str`); `row_reader.tml` has the sqlite-dependent `read_i64/str/f64/bool` helpers.
+
 ## db Schema & Migration Module (2026-04-02) — COMPLETE
 - `lib/std/src/db/schema/` — table.tml (ColumnDef, IndexDef, ForeignKeyDef), introspect.tml
 - `lib/std/src/db/query/` — create_table.tml, alter_table.tml, drop_table.tml
