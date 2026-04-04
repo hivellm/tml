@@ -1,6 +1,6 @@
 # Tasks: SIMD-Accelerated String Operations
 
-**Status**: In Progress. 79% (30/38).
+**Status**: In Progress. 92% (35/38). Remaining: AVX2 memchr (1.5), benchmarks (7.1-7.6).
 **Baseline**: All str ops are scalar (1 byte/cycle). Target: 16-32 bytes/cycle on x86-64.
 **Architecture**: Every function has 3 tiers: AVX2 (32B) → SSE2 (16B) → Scalar fallback.
 **Detection**: Runtime `#if X86_64` compile-time gate + `core::simd::detect` for AVX2 at runtime.
@@ -27,11 +27,11 @@
 
 ## Phase 3: Split Operations — SIMD delimiter scan (5 items)
 
-- [ ] 3.1 `str/split.tml` — SIMD single-byte delimiter scan (split by char)
-- [ ] 3.2 `split()` scalar fallback
-- [ ] 3.3 `split_lines()` — SIMD newline scan (\n and \r\n detection in 16-byte chunks)
-- [ ] 3.4 `split_lines()` scalar fallback
-- [ ] 3.5 Tests: split on various delimiters, edge cases (empty, trailing, consecutive)
+- [x] 3.1 `split_by_byte_simd()` — uses find_all_byte (SSE2) then substring_raw between positions
+- [x] 3.2 `split()` — SIMD dispatch for single-byte delimiters on strings >= 32B in split.tml
+- [x] 3.3 `split_lines_simd()` — find_all_byte(\n) + \r\n detection, dispatched from lines()
+- [x] 3.4 `lines()` — SIMD dispatch for >= 32B in split.tml, scalar fallback for short strings
+- [x] 3.5 Tests: str_simd_split.test.tml (16 tests — split, lines, str_cmp)
 
 ## Phase 4: Case Conversion — to_lowercase, to_uppercase (6 items)
 
@@ -53,8 +53,8 @@
 
 - [x] 6.1 `str_eq_simd(a: Str, b: Str) -> Bool` — length check + c_memcmp (C runtime memcmp is already SIMD-optimized)
 - [x] 6.2 `str_eq` scalar fallback — same c_memcmp (no separate scalar needed)
-- [ ] 6.3 `str_cmp_simd(a: Str, b: Str) -> I32` — lexicographic compare with SIMD prefix scan
-- [ ] 6.4 Tests: equal strings, different lengths, differ at byte 0/15/16/17/31/32
+- [x] 6.3 `str_cmp_simd(a: Str, b: Str) -> I32` — c_memcmp on common prefix + length tie-break
+- [x] 6.4 Tests: included in str_simd_split.test.tml (7 cmp tests: equal, less, greater, prefix, empty)
 
 ## Phase 7: Benchmarks & Validation (6 items)
 

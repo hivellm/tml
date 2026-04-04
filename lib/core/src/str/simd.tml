@@ -930,3 +930,165 @@ pub func find_all_byte(s: Str, byte: U8) -> List[I64] {
 
     return positions
 }
+
+// ============================================================================
+// substring_raw — allocate a new Str from a byte range of an existing Str
+// ============================================================================
+
+/// Allocate a new null-terminated Str from the byte range [start, end) of `s`.
+/// Returns an empty string literal when the range is empty or reversed.
+/// Used internally by split_by_byte_simd and split_lines_simd.
+func substring_raw(s: Str, start: I64, end: I64) -> Str {
+    let sub_len: I64 = end - start
+    if sub_len <= 0 {
+        return ""
+    }
+    let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
+    let src: I64 = s as I64
+    lowlevel { copy_nonoverlapping((src + start) as *U8, buf as *U8, sub_len) }
+    let null_p: *U8 = (buf as I64 + sub_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+// ============================================================================
+// split_by_byte_simd — SIMD-accelerated single-byte delimiter split
+// ============================================================================
+
+/// SIMD-accelerated split by single-byte delimiter.
+///
+/// Uses `find_all_byte` to locate all delimiter positions in one SIMD pass,
+/// then slices out each segment. Allocates a fresh Str per segment.
+///
+/// Returns a `List[Str]` of substrings (including empty segments for
+/// consecutive delimiters). Always has at least one element.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// let parts = simd::split_by_byte_simd("a,b,c", 44 as U8)
+/// assert(parts.len() == 3)
+/// ```
+pub func split_by_byte_simd(s: Str, delim_byte: U8) -> List[Str] {
+    let s_len: I64 = len(s)
+    let positions: List[I64] = find_all_byte(s, delim_byte)
+    var result: List[Str] = List[Str]::new(positions.len() + 1)
+    var start: I64 = 0
+    var i: I64 = 0
+    loop (i < positions.len()) {
+        let pos: I64 = positions.get(i)
+        result.push(substring_raw(s, start, pos))
+        start = pos + 1
+        i = i + 1
+    }
+    // Last segment: from after the final delimiter to end of string
+    result.push(substring_raw(s, start, s_len))
+    return result
+}
+
+// ============================================================================
+// split_lines_simd — SIMD-accelerated newline splitting
+// ============================================================================
+
+/// SIMD-accelerated line splitting.
+///
+/// Handles both `\n` (LF) and `\r\n` (CRLF) line endings.
+/// Uses `find_all_byte` to locate all `\n` bytes in one SIMD pass.
+/// Each resulting segment is allocated as a fresh `Str`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// let lines = simd::split_lines_simd("line1\nline2\nline3")
+/// assert(lines.len() == 3)
+/// ```
+pub func split_lines_simd(s: Str) -> List[Str] {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var result: List[Str] = List[Str]::new(16)
+
+    // Locate all \n (byte 10) positions via SIMD
+    let nl_positions: List[I64] = find_all_byte(s, 10 as U8)
+
+    var start: I64 = 0
+    var i: I64 = 0
+    loop (i < nl_positions.len()) {
+        var end: I64 = nl_positions.get(i)
+        // Strip trailing \r if this is a CRLF sequence
+        if end > start {
+            let prev_p: *U8 = (s_base + end - 1) as *U8
+            let prev_b: U8 = lowlevel { ptr_read[U8](prev_p) }
+            if (prev_b as I32) == 13 {
+                end = end - 1
+            }
+        }
+        result.push(substring_raw(s, start, end))
+        start = nl_positions.get(i) + 1
+        i = i + 1
+    }
+    // Trailing content after the last newline (or the whole string if no newlines)
+    if start <= s_len {
+        result.push(substring_raw(s, start, s_len))
+    }
+    return result
+}
+
+// ============================================================================
+// str_cmp_simd — SIMD-accelerated lexicographic string comparison
+// ============================================================================
+
+/// SIMD-accelerated lexicographic string comparison.
+///
+/// Returns `-1` if `a < b`, `0` if `a == b`, or `1` if `a > b`.
+///
+/// Delegates the byte-level comparison to `c_memcmp` (which the OS/libc
+/// already implements with SIMD), then resolves ties by comparing lengths.
+/// This is equivalent to Rust's `str::cmp` semantics.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::str_cmp_simd("abc", "abd") == -1)
+/// assert(simd::str_cmp_simd("xyz", "abc") == 1)
+/// assert(simd::str_cmp_simd("hello", "hello") == 0)
+/// assert(simd::str_cmp_simd("hello", "helloworld") == -1)
+/// ```
+pub func str_cmp_simd(a: Str, b: Str) -> I32 {
+    let a_len: I64 = len(a)
+    let b_len: I64 = len(b)
+    var min_len: I64 = b_len
+    if a_len < b_len {
+        min_len = a_len
+    }
+
+    if min_len == 0 {
+        if a_len < b_len {
+            return -1
+        }
+        if a_len > b_len {
+            return 1
+        }
+        return 0
+    }
+
+    // Compare the common prefix using c_memcmp (already SIMD-optimised by libc)
+    let cmp: I32 = c_memcmp(a as *U8, b as *U8, min_len)
+    if cmp != 0 {
+        if cmp < 0 {
+            return -1
+        }
+        return 1
+    }
+
+    // Common prefix is equal; shorter string sorts first
+    if a_len < b_len {
+        return -1
+    }
+    if a_len > b_len {
+        return 1
+    }
+    return 0
+}

@@ -2,6 +2,8 @@
 
 use core::str::basic::{len, substring}
 use core::str::search::{find, rfind}
+use core::str::simd
+use std::collections::list::List
 
 // ============================================================================
 // FFI declarations for optimized C library string functions
@@ -55,6 +57,11 @@ pub func split(s: Str, delimiter: Str) -> List[Str] {
     if d_len == 0 {
         result.push(s)
         return result
+    }
+    // SIMD fast path: single-byte delimiter on strings long enough for SIMD to pay off
+    if d_len == 1 and s_len >= 32 {
+        let d_byte: U8 = lowlevel { ptr_read[U8](delimiter as *U8) }
+        return simd::split_by_byte_simd(s, d_byte)
     }
     let s_base: I64 = s as I64
     let d_base: I64 = delimiter as I64
@@ -133,6 +140,10 @@ pub func lines(s: Str) -> List[Str] {
     let s_len: I64 = len(s)
     if s_len == 0 {
         return result
+    }
+    // SIMD fast path for strings long enough to benefit from the SIMD scan
+    if s_len >= 32 {
+        return simd::split_lines_simd(s)
     }
     let src: I64 = s as I64
     var start: I64 = 0

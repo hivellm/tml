@@ -1,0 +1,140 @@
+use test
+use core::str::simd
+use std::collections::list::List
+
+// ============================================================================
+// split_by_byte_simd tests
+// ============================================================================
+
+@test
+func test_split_by_byte_basic() -> Outcome[Unit, Str] {
+    // Short string (scalar path, < 32 bytes)
+    let parts: List[Str] = simd::split_by_byte_simd("a,b,c", 44 as U8)
+    assert_eq(parts.len(), 3)
+    Ok(())
+}
+
+@test
+func test_split_by_byte_long() -> Outcome[Unit, Str] {
+    // Long string (SIMD path, >= 32 bytes): has commas spread across the string
+    let s: Str = "hello,world,testing,data,values,extra,items,final,ending,ok"
+    let parts: List[Str] = simd::split_by_byte_simd(s, 44 as U8)
+    assert_true(parts.len() > 5)
+    Ok(())
+}
+
+@test
+func test_split_by_byte_no_delimiter() -> Outcome[Unit, Str] {
+    // No delimiter present — should return a single-element list
+    let parts: List[Str] = simd::split_by_byte_simd("hello", 44 as U8)
+    assert_eq(parts.len(), 1)
+    Ok(())
+}
+
+@test
+func test_split_by_byte_leading_delimiter() -> Outcome[Unit, Str] {
+    // Leading delimiter produces an empty first segment
+    let parts: List[Str] = simd::split_by_byte_simd(",a,b", 44 as U8)
+    assert_eq(parts.len(), 3)
+    Ok(())
+}
+
+@test
+func test_split_by_byte_trailing_delimiter() -> Outcome[Unit, Str] {
+    // Trailing delimiter produces an empty last segment
+    let parts: List[Str] = simd::split_by_byte_simd("a,b,", 44 as U8)
+    assert_eq(parts.len(), 3)
+    Ok(())
+}
+
+// ============================================================================
+// split_lines_simd tests
+// ============================================================================
+
+@test
+func test_split_lines_basic() -> Outcome[Unit, Str] {
+    let ls: List[Str] = simd::split_lines_simd("line1\nline2\nline3")
+    assert_eq(ls.len(), 3)
+    Ok(())
+}
+
+@test
+func test_split_lines_crlf() -> Outcome[Unit, Str] {
+    // CRLF line endings: \r\n should be treated as a single newline
+    let ls: List[Str] = simd::split_lines_simd("line1\r\nline2\r\nline3")
+    assert_eq(ls.len(), 3)
+    Ok(())
+}
+
+@test
+func test_split_lines_single_line() -> Outcome[Unit, Str] {
+    // No newlines — one segment
+    let ls: List[Str] = simd::split_lines_simd("single line no newline")
+    assert_eq(ls.len(), 1)
+    Ok(())
+}
+
+@test
+func test_split_lines_trailing_newline() -> Outcome[Unit, Str] {
+    // Trailing newline adds an empty final segment
+    let ls: List[Str] = simd::split_lines_simd("line1\nline2\n")
+    assert_eq(ls.len(), 3)
+    Ok(())
+}
+
+// ============================================================================
+// str_cmp_simd tests
+// ============================================================================
+
+@test
+func test_str_cmp_equal() -> Outcome[Unit, Str] {
+    let r: I32 = simd::str_cmp_simd("hello", "hello")
+    assert_eq(r, 0)
+    Ok(())
+}
+
+@test
+func test_str_cmp_less() -> Outcome[Unit, Str] {
+    // "abc" < "abd" lexicographically
+    let r: I32 = simd::str_cmp_simd("abc", "abd")
+    assert_eq(r, -1)
+    Ok(())
+}
+
+@test
+func test_str_cmp_greater() -> Outcome[Unit, Str] {
+    // "xyz" > "abc" lexicographically
+    let r: I32 = simd::str_cmp_simd("xyz", "abc")
+    assert_eq(r, 1)
+    Ok(())
+}
+
+@test
+func test_str_cmp_prefix_shorter() -> Outcome[Unit, Str] {
+    // "hello" < "helloworld" — shorter prefix sorts first
+    let r: I32 = simd::str_cmp_simd("hello", "helloworld")
+    assert_eq(r, -1)
+    Ok(())
+}
+
+@test
+func test_str_cmp_prefix_longer() -> Outcome[Unit, Str] {
+    // "helloworld" > "hello"
+    let r: I32 = simd::str_cmp_simd("helloworld", "hello")
+    assert_eq(r, 1)
+    Ok(())
+}
+
+@test
+func test_str_cmp_empty_strings() -> Outcome[Unit, Str] {
+    let r: I32 = simd::str_cmp_simd("", "")
+    assert_eq(r, 0)
+    Ok(())
+}
+
+@test
+func test_str_cmp_empty_vs_nonempty() -> Outcome[Unit, Str] {
+    let r: I32 = simd::str_cmp_simd("", "a")
+    assert_eq(r, -1)
+    Ok(())
+}
