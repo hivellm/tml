@@ -1954,6 +1954,19 @@ endif()
 target_link_libraries(tml_mcp PRIVATE tml_mcp_lib tml_codegen tml_doc tml_search tml_log)
 target_include_directories(tml_mcp PRIVATE include src)
 
+# MCP Daemon — HTTP proxy + subprocess supervisor
+if(TML_USE_ZIG_CC)
+    add_executable(tml_daemon src/main_daemon.cpp)
+else()
+    add_executable(tml_daemon src/main_daemon.cpp src/tml.rc)
+endif()
+target_link_libraries(tml_daemon PRIVATE tml_log)
+if(WIN32)
+    target_link_libraries(tml_daemon PRIVATE ws2_32)
+endif()
+target_include_directories(tml_daemon PRIVATE include src)
+set_target_properties(tml_daemon PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/bin")
+
 # Tests
 if(TML_BUILD_TESTS)
     enable_testing()
