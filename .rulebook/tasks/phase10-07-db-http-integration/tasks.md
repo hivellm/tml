@@ -1,11 +1,11 @@
 # Tasks: Database Library — HTTP + DB Integration
 
-**Status**: Planning. 0% (0/10).
+**Status**: In progress. 10% (1/10).
 **Depends on**: phase8c_db-orm, phase8f_db-postgres, std::http
 
 ## Phase 1: REST API Examples
 
-- [ ] 1.1 examples/db/rest_sqlite.tml — CRUD API with SQLite + ORM
+- [x] 1.1 samples/db-rest/main.tml — CRUD API with SQLite (GET/POST/DELETE /api/users, file-based DB, type-checks pass)
 - [ ] 1.2 examples/db/rest_postgres.tml — CRUD API with PostgreSQL
 - [ ] 1.3 examples/db/blog_app.tml — Full blog with migrations
 

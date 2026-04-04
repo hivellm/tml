@@ -1,0 +1,418 @@
+/// SQLite CRUD REST API Example
+///
+/// Demonstrates a complete SQLite-backed REST API using:
+///   - std::db::sqlite::connection::SqliteConnection (file-based DB, persists across requests)
+///   - std::http::app::App with @Get/@Post/@Delete route handlers
+///   - UsersController struct holding the DB path for per-request connections
+///   - Response builder: res.json(), res.status()
+///   - Path parameter extraction with app_get_param(req, "id")
+///   - Text builder for constructing JSON response bodies
+///
+/// Run:   tml run samples/db-rest/main.tml
+/// Test:
+///   curl http://localhost:3000/api/users
+///   curl http://localhost:3000/api/users/1
+///   curl -X POST http://localhost:3000/api/users \
+///        -H 'Content-Type: application/json' \
+///        -d '{"name":"carol","email":"carol@example.com"}'
+///   curl -X DELETE http://localhost:3000/api/users/1
+///   curl http://localhost:3000/api/health
+
+use std::db::sqlite::connection::SqliteConnection
+use std::db::sqlite::statement::SqliteStatement
+use std::http::app::App
+use std::http::app::controller::Controller
+use std::http::server::dispatch::app_get_param
+use std::http::server::incoming::IncomingMessage
+use std::http::framework::response_builder::Response
+use std::text::Text
+
+// ============================================================================
+// DB path — file-based SQLite so state persists across HTTP requests.
+// Each request handler opens a fresh connection to this file.
+// ============================================================================
+
+func db_file() -> Str { return "users.db" }
+
+// ============================================================================
+// JSON helpers — build JSON strings with Text
+// ============================================================================
+
+/// Serialize a single user row to a JSON object string.
+func user_to_json(id: I64, name: Str, email: Str) -> Str {
+    let mut t = Text::new()
+    t.push_str(`{"id":`)
+    t.push_str(id.to_string())
+    t.push_str(`,"name":"`)
+    t.push_str(name)
+    t.push_str(`","email":"`)
+    t.push_str(email)
+    t.push_str(`"}`)
+    return t.as_str()
+}
+
+/// Escape a Str value for safe inclusion in a JSON string.
+/// Handles the most common cases: backslash, double-quote, newline, tab.
+func json_escape(s: Str) -> Str {
+    let mut t = Text::new()
+    let n = s.len()
+    var i: I64 = 0
+    loop (i < n) {
+        let ch = s.char_at(i)
+        if ch == 34 {       // '"'
+            t.push_str("\\\"")
+        } else if ch == 92 {  // '\'
+            t.push_str("\\\\")
+        } else if ch == 10 {  // newline
+            t.push_str("\\n")
+        } else if ch == 13 {  // carriage return
+            t.push_str("\\r")
+        } else if ch == 9 {   // tab
+            t.push_str("\\t")
+        } else {
+            t.push(ch)
+        }
+        i = i + 1
+    }
+    return t.as_str()
+}
+
+/// Extract a string field value from a simple flat JSON object.
+/// Finds `"key":"value"` and returns the value string.
+/// Returns "" if the key is not found.
+func json_get_str(json: Str, key: Str) -> Str {
+    let needle = "\"" + key + "\":\""
+    let needle_len = needle.len()
+    let json_len = json.len()
+    var i: I64 = 0
+    loop (i + needle_len <= json_len) {
+        let sub = json.slice(i, i + needle_len)
+        if sub == needle {
+            // Found the key — scan forward for the closing '"'
+            var j: I64 = i + needle_len
+            var end: I64 = j
+            loop (end < json_len) {
+                let ch = json.char_at(end)
+                if ch == 92 {   // backslash — skip next char
+                    end = end + 2
+                } else if ch == 34 {  // closing '"'
+                    return json.slice(j, end)
+                } else {
+                    end = end + 1
+                }
+            }
+            return ""
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+// ============================================================================
+// Schema + seed — run once at startup
+// ============================================================================
+
+func init_db(conn: mut ref SqliteConnection) {
+    // Create users table (AUTOINCREMENT ensures ids are never reused).
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (" +
+        "  id    INTEGER PRIMARY KEY AUTOINCREMENT," +
+        "  name  TEXT    NOT NULL," +
+        "  email TEXT    NOT NULL UNIQUE" +
+        ")"
+    )
+
+    // Seed with 3 sample users — INSERT OR IGNORE so re-runs are idempotent.
+    let _ = conn.execute_2str(
+        "INSERT OR IGNORE INTO users (name, email) VALUES (?1, ?2)",
+        "Alice", "alice@example.com"
+    )
+    let _ = conn.execute_2str(
+        "INSERT OR IGNORE INTO users (name, email) VALUES (?1, ?2)",
+        "Bob", "bob@example.com"
+    )
+    let _ = conn.execute_2str(
+        "INSERT OR IGNORE INTO users (name, email) VALUES (?1, ?2)",
+        "Charlie", "charlie@example.com"
+    )
+}
+
+// ============================================================================
+// Route handlers — free functions, each opens a fresh file-based connection.
+//
+// Opening a SQLite file connection per-request is safe and idiomatic for
+// demonstration purposes. Production apps would use a connection pool.
+// ============================================================================
+
+/// GET /api/users — list all users as a JSON array.
+@Get("/api/users")
+func list_users(req: IncomingMessage, res: Response) -> Str {
+    when SqliteConnection::open(db_file()) {
+        Err(e) => {
+            return res.status(500).json(`{"error":"db unavailable"}` as Str)
+        },
+        Ok(mut conn) => {
+            when conn.prepare("SELECT id, name, email FROM users ORDER BY id") {
+                Err(_) => {
+                    return res.status(500).json(`{"error":"query failed"}` as Str)
+                },
+                Ok(raw_stmt) => {
+                    let mut stmt = SqliteStatement::new(raw_stmt)
+                    let mut buf = Text::new()
+                    buf.push_str("[")
+                    var first: Bool = true
+                    loop (stmt.step()) {
+                        let id    = stmt.column_i64(0)
+                        let name  = stmt.column_str(1)
+                        let email = stmt.column_str(2)
+                        if not first {
+                            buf.push_str(",")
+                        }
+                        first = false
+                        buf.push_str(user_to_json(id, name, email))
+                    }
+                    buf.push_str("]")
+                    stmt.finalize()
+                    conn.close()
+                    return res.json(buf.as_str())
+                }
+            }
+        }
+    }
+}
+
+/// GET /api/users/:id — get one user by id.
+@Get("/api/users/:id")
+func get_user(req: IncomingMessage, res: Response) -> Str {
+    let id_str = app_get_param(req, "id")
+    when id_str.parse_i64() {
+        Nothing => {
+            return res.status(400).json(`{"error":"invalid id"}` as Str)
+        },
+        Just(id) => {
+            when SqliteConnection::open(db_file()) {
+                Err(_) => {
+                    return res.status(500).json(`{"error":"db unavailable"}` as Str)
+                },
+                Ok(mut conn) => {
+                    when conn.prepare("SELECT id, name, email FROM users WHERE id = ?1") {
+                        Err(_) => {
+                            return res.status(500).json(`{"error":"query failed"}` as Str)
+                        },
+                        Ok(raw_stmt) => {
+                            let mut stmt = SqliteStatement::new(raw_stmt)
+                            let _ = stmt.bind_i64(1, id)
+                            if stmt.step() {
+                                let uid   = stmt.column_i64(0)
+                                let name  = stmt.column_str(1)
+                                let email = stmt.column_str(2)
+                                stmt.finalize()
+                                conn.close()
+                                return res.json(user_to_json(uid, name, email))
+                            }
+                            stmt.finalize()
+                            conn.close()
+                            return res.status(404).json(`{"error":"user not found"}` as Str)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// POST /api/users — create a new user from JSON body.
+/// Expected body: {"name":"...","email":"..."}
+@Post("/api/users")
+func create_user(req: IncomingMessage, res: Response) -> Str {
+    let body = req.body()
+    if body.len() == 0 {
+        return res.status(400).json(`{"error":"request body required"}` as Str)
+    }
+
+    let name  = json_get_str(body, "name")
+    let email = json_get_str(body, "email")
+
+    if name.len() == 0 {
+        return res.status(400).json(`{"error":"name is required"}` as Str)
+    }
+    if email.len() == 0 {
+        return res.status(400).json(`{"error":"email is required"}` as Str)
+    }
+
+    when SqliteConnection::open(db_file()) {
+        Err(_) => {
+            return res.status(500).json(`{"error":"db unavailable"}` as Str)
+        },
+        Ok(mut conn) => {
+            when conn.execute_2str(
+                "INSERT INTO users (name, email) VALUES (?1, ?2)",
+                name, email
+            ) {
+                Err(_) => {
+                    return res.status(409).json(
+                        `{"error":"email already exists or constraint violated"}` as Str
+                    )
+                },
+                Ok(_rows) => {
+                    // Retrieve the new row's id via a Str-param prepared statement.
+                    when conn.prepare("SELECT id FROM users WHERE email = ?1") {
+                        Err(_) => {
+                            conn.close()
+                            return res.status(500).json(`{"error":"id lookup failed"}` as Str)
+                        },
+                        Ok(raw_stmt) => {
+                            let mut stmt = SqliteStatement::new(raw_stmt)
+                            let _ = stmt.bind_str(1, email)
+                            var inserted_id: I64 = 0
+                            if stmt.step() {
+                                inserted_id = stmt.column_i64(0)
+                            }
+                            stmt.finalize()
+                            conn.close()
+
+                            let mut t = Text::new()
+                            t.push_str(`{"id":`)
+                            t.push_str(inserted_id.to_string())
+                            t.push_str(`,"name":"`)
+                            t.push_str(json_escape(name))
+                            t.push_str(`","email":"`)
+                            t.push_str(json_escape(email))
+                            t.push_str(`","created":true}`)
+                            return res.status(201).json(t.as_str())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// DELETE /api/users/:id — delete a user by id.
+@Delete("/api/users/:id")
+func delete_user(req: IncomingMessage, res: Response) -> Str {
+    let id_str = app_get_param(req, "id")
+    when id_str.parse_i64() {
+        Nothing => {
+            return res.status(400).json(`{"error":"invalid id"}` as Str)
+        },
+        Just(id) => {
+            when SqliteConnection::open(db_file()) {
+                Err(_) => {
+                    return res.status(500).json(`{"error":"db unavailable"}` as Str)
+                },
+                Ok(mut conn) => {
+                    // Verify the user exists before attempting deletion.
+                    when conn.exists_by_i64("SELECT 1 FROM users WHERE id = ?1", id) {
+                        Err(_) => {
+                            conn.close()
+                            return res.status(500).json(`{"error":"lookup failed"}` as Str)
+                        },
+                        Ok(found) => {
+                            if not found {
+                                conn.close()
+                                return res.status(404).json(`{"error":"user not found"}` as Str)
+                            }
+                            let _ = conn.execute_i64_params(
+                                "DELETE FROM users WHERE id = ?1", id
+                            )
+                            conn.close()
+
+                            let mut t = Text::new()
+                            t.push_str(`{"id":`)
+                            t.push_str(id.to_string())
+                            t.push_str(`,"deleted":true}`)
+                            return res.json(t.as_str())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// GET /api/health — return server status and live user count from DB.
+@Get("/api/health")
+func health_check(req: IncomingMessage, res: Response) -> Str {
+    when SqliteConnection::open(db_file()) {
+        Err(_) => {
+            return res.status(500).json(`{"status":"degraded","db":"unreachable"}` as Str)
+        },
+        Ok(mut conn) => {
+            when conn.query_scalar_i64("SELECT COUNT(*) FROM users") {
+                Err(_) => {
+                    conn.close()
+                    return res.status(500).json(`{"status":"degraded"}` as Str)
+                },
+                Ok(n) => {
+                    conn.close()
+                    let mut t = Text::new()
+                    t.push_str(`{"status":"healthy","db":"sqlite","user_count":`)
+                    t.push_str(n.to_string())
+                    t.push_str(`}`)
+                    return res.json(t.as_str())
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Controller — registers all routes into the App
+// ============================================================================
+
+@Controller("/api")
+type UsersController {}
+
+impl Controller for UsersController {
+    func prefix(this) -> Str { return "/api" }
+
+    func register(this, app: mut ref App) {
+        app.get("/api/health",       health_check as I64)
+        app.get("/api/users",        list_users   as I64)
+        app.get("/api/users/:id",    get_user     as I64)
+        app.post("/api/users",       create_user  as I64)
+        app.delete("/api/users/:id", delete_user  as I64)
+    }
+}
+
+// ============================================================================
+// Application bootstrap
+// ============================================================================
+
+pub func main() -> I32 {
+    // 1. Create and seed the SQLite database (creates users.db in CWD).
+    when SqliteConnection::open(db_file()) {
+        Err(e) => {
+            println("Failed to open database: " + e.to_string())
+            return 1
+        },
+        Ok(mut conn) => {
+            init_db(ref conn)
+            conn.close()
+        }
+    }
+
+    // 2. Build the App and register all routes via the controller.
+    var app: App = App::new()
+    let ctrl = UsersController {}
+    ctrl.register(ref app)
+
+    // 3. Print startup info.
+    println("SQLite CRUD REST API — http://localhost:3000")
+    println("Database: " + db_file() + " (file-based, persists across restarts)")
+    println("")
+    println("Routes:")
+    println("  GET    /api/health")
+    println("  GET    /api/users")
+    println("  GET    /api/users/:id")
+    println("  POST   /api/users        body: {\"name\":\"...\",\"email\":\"...\"}")
+    println("  DELETE /api/users/:id")
+    println("")
+    println("Seeded 3 users: Alice, Bob, Charlie")
+    println("")
+
+    // 4. Start listening — blocks until the process is killed.
+    app.listen(3000)
+    return 0
+}
