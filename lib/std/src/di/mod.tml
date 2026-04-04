@@ -17,3 +17,4 @@ pub mod registry
 pub mod module
 pub mod application
 pub mod config
+pub mod http_integration

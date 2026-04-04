@@ -1,0 +1,100 @@
+//! HTTP Integration — wire DI modules to an HTTP server.
+//!
+//! Combines `bootstrap_modules` (DI wiring) with `App::listen` (HTTP server startup).
+//! This is the standard entry point for TML web applications that use the DI system.
+//!
+//! ```tml
+//! use std::di::application::AppConfig
+//! use std::di::module::Module
+//! use std::di::http_integration::start_application
+//!
+//! func main() -> I32 {
+//!     let cfg = AppConfig::new(3000).with_cors("*")
+//!     var m = Module::new("app").provide("db", 0)
+//!     start_application(cfg, m)
+//!     return 0
+//! }
+//! ```
+
+use std::di::module::Module
+use std::di::application::{AppConfig, ApplicationInfo, bootstrap_modules}
+use std::http::app::App
+
+/// Bootstrap a DI application and start the HTTP server.
+///
+/// Combines DI module wiring with HTTP server startup in one call.
+/// The server listens on `config.port` and blocks until shutdown.
+///
+/// Routes must be registered on the App before or after this call if
+/// using the manual registration pattern. For decorator-based routing
+/// (@Get, @Post, etc.), the compiler-generated `__tml_register_routes`
+/// function should be called before `start_application`.
+///
+/// # Example
+///
+/// ```tml
+/// use std::di::application::AppConfig
+/// use std::di::module::Module
+/// use std::di::http_integration::start_application
+///
+/// func main() -> I32 {
+///     let cfg = AppConfig::new(3000)
+///     var m = Module::new("app")
+///     start_application(cfg, m)
+///     return 0
+/// }
+/// ```
+pub func start_application(config: AppConfig, module: Module) -> ApplicationInfo {
+    let info = bootstrap_modules(config, module)
+    println("Starting server on port " + config.port.to_string() + " (" + info.total_services.to_string() + " services, " + info.total_controllers.to_string() + " controllers)")
+    var app: App = App::new()
+    app.listen(config.port as I64)
+    return info
+}
+
+/// Bootstrap a DI application and start the HTTP server with IOCP (Windows, highest throughput).
+///
+/// Same as `start_application` but uses Windows I/O Completion Ports for async I/O.
+/// Only meaningful on Windows — falls back to thread-pool mode on other platforms.
+///
+/// # Example
+///
+/// ```tml
+/// use std::di::http_integration::start_application_iocp
+/// // ...
+/// start_application_iocp(cfg, m)
+/// ```
+pub func start_application_iocp(config: AppConfig, module: Module) -> ApplicationInfo {
+    let info = bootstrap_modules(config, module)
+    println("Starting IOCP server on port " + config.port.to_string() + " (" + info.total_services.to_string() + " services, " + info.total_controllers.to_string() + " controllers)")
+    var app: App = App::new()
+    app.listen_iocp(config.port as I64)
+    return info
+}
+
+/// Bootstrap a DI application and start the HTTP server with a pre-configured App.
+///
+/// Use this when you need to register routes, middleware, or hooks on the App
+/// before starting the server. The App is passed in by the caller.
+///
+/// # Example
+///
+/// ```tml
+/// use std::di::http_integration::start_application_with_app
+/// use std::http::app::App
+///
+/// func main() -> I32 {
+///     let cfg = AppConfig::new(3000)
+///     var m = Module::new("app")
+///     var app: App = App::new()
+///     app.get("/health", handle_health as I64)
+///     start_application_with_app(cfg, m, app)
+///     return 0
+/// }
+/// ```
+pub func start_application_with_app(config: AppConfig, module: Module, app: App) -> ApplicationInfo {
+    let info = bootstrap_modules(config, module)
+    println("Starting server on port " + config.port.to_string() + " (" + info.total_services.to_string() + " services, " + info.total_controllers.to_string() + " controllers)")
+    app.listen(config.port as I64)
+    return info
+}
