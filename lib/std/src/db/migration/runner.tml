@@ -1,4 +1,5 @@
 //! Migration runner — applies and rolls back migrations.
+use std::db::driver::connection::Connection
 use std::db::sqlite::connection::SqliteConnection
 use std::db::sqlite::statement::SqliteStatement
 use std::db::error::{DbError, DbErrorKind}

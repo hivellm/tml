@@ -53,77 +53,13 @@ impl SqliteConnection {
         }
     }
 
-    /// Begins a deferred transaction.
-    pub func begin(this) -> Outcome[Unit, DbError] {
-        let result = this.db.begin()
-        when result {
-            Ok(_)    => return Ok(()),
-            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
-        }
-    }
-
-    /// Commits the current transaction.
-    pub func commit(this) -> Outcome[Unit, DbError] {
-        let result = this.db.commit()
-        when result {
-            Ok(_)    => return Ok(()),
-            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
-        }
-    }
-
-    /// Rolls back the current transaction.
-    pub func rollback(this) -> Outcome[Unit, DbError] {
-        let result = this.db.rollback()
-        when result {
-            Ok(_)    => return Ok(()),
-            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
-        }
-    }
-
     /// Returns a reference to the underlying `Database` for advanced or
     /// driver-specific usage.
     pub func raw_database(this) -> ref Database {
         ref this.db
     }
 
-    // ── Parameterized execute helpers ─────────────────────────────────────
-
-    /// Executes a parameterized statement with one I64 parameter.
-    ///
-    /// Prepares the SQL, binds `p1` at position 1, executes, finalizes.
-    /// Returns the number of rows affected.
-    pub func execute_i64_params(this, sql: Str, p1: I64) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_i64(1, p1)
-                stmt.step()
-                let changes = this.db.changes() as I64
-                stmt.finalize()
-                return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    /// Executes a parameterized statement with two I64 parameters.
-    ///
-    /// Binds `p1` at position 1, `p2` at position 2.
-    /// Returns the number of rows affected.
-    pub func execute_i64_2(this, sql: Str, p1: I64, p2: I64) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_i64(1, p1)
-                let _ = stmt.bind_i64(2, p2)
-                stmt.step()
-                let changes = this.db.changes() as I64
-                stmt.finalize()
-                return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
+    // ── SQLite-specific helpers (not part of Connection behavior) ─────────
 
     /// Executes a parameterized statement with three I64 parameters.
     ///
@@ -136,24 +72,6 @@ impl SqliteConnection {
                 let _ = stmt.bind_i64(1, p1)
                 let _ = stmt.bind_i64(2, p2)
                 let _ = stmt.bind_i64(3, p3)
-                stmt.step()
-                let changes = this.db.changes() as I64
-                stmt.finalize()
-                return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    /// Executes a parameterized statement with one Str parameter.
-    ///
-    /// Prepares the SQL, binds `p1` at position 1, executes, finalizes.
-    /// Returns the number of rows affected.
-    pub func execute_str(this, sql: Str, p1: Str) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_str(1, p1)
                 stmt.step()
                 let changes = this.db.changes() as I64
                 stmt.finalize()
@@ -182,44 +100,6 @@ impl SqliteConnection {
         }
     }
 
-    /// Executes a parameterized statement with one Str param then one I64 param.
-    ///
-    /// Binds `p1` (Str) at position 1, `p2` (I64) at position 2.
-    /// Returns the number of rows affected.
-    pub func execute_str_i64(this, sql: Str, p1: Str, p2: I64) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_str(1, p1)
-                let _ = stmt.bind_i64(2, p2)
-                stmt.step()
-                let changes = this.db.changes() as I64
-                stmt.finalize()
-                return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    /// Executes a parameterized statement with one I64 parameter then one Str parameter.
-    ///
-    /// Binds `p1` (I64) at position 1, `p2` (Str) at position 2.
-    /// Returns the number of rows affected.
-    pub func execute_i64_str(this, sql: Str, p1: I64, p2: Str) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_i64(1, p1)
-                let _ = stmt.bind_str(2, p2)
-                stmt.step()
-                let changes = this.db.changes() as I64
-                stmt.finalize()
-                return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
     /// Executes a parameterized statement with two Str parameters then one I64 parameter.
     ///
     /// Binds `p1` (Str) at position 1, `p2` (Str) at position 2, `p3` (I64) at position 3.
@@ -235,59 +115,6 @@ impl SqliteConnection {
                 let changes = this.db.changes() as I64
                 stmt.finalize()
                 return Ok(changes)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    // ── Existence / scalar queries ────────────────────────────────────────
-
-    /// Queries with one I64 parameter and returns whether at least one row exists.
-    ///
-    /// Binds `p1` at position 1, steps once, and returns `true` if a row was found.
-    pub func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_i64(1, p1)
-                let found = stmt.step()
-                stmt.finalize()
-                return Ok(found)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    /// Queries whether at least one row exists, with a Str parameter.
-    ///
-    /// Binds `p1` (Str) at position 1, steps once, returns `true` if a row was found.
-    pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                let _ = stmt.bind_str(1, p1)
-                let found = stmt.step()
-                stmt.finalize()
-                return Ok(found)
-            },
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
-        }
-    }
-
-    /// Queries a single I64 scalar value (e.g. `COUNT(*)`).
-    ///
-    /// Steps once and reads column 0 as I64.  Returns 0 if no row is produced.
-    pub func query_scalar_i64(this, sql: Str) -> Outcome[I64, DbError] {
-        let stmt_result = this.db.prepare(sql)
-        when stmt_result {
-            Ok(mut stmt) => {
-                if stmt.step() {
-                    let v = stmt.column_i64(0)
-                    stmt.finalize()
-                    return Ok(v)
-                }
-                stmt.finalize()
-                return Ok(0)
             },
             Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
         }
@@ -377,5 +204,155 @@ impl Connection for SqliteConnection {
     /// Closes the database connection and releases all SQLite resources.
     pub func close(mut this) {
         this.db.close()
+    }
+
+    /// Begins a deferred transaction.
+    pub func begin(this) -> Outcome[Unit, DbError] {
+        let result = this.db.begin()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Commits the current transaction.
+    pub func commit(this) -> Outcome[Unit, DbError] {
+        let result = this.db.commit()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Rolls back the current transaction.
+    pub func rollback(this) -> Outcome[Unit, DbError] {
+        let result = this.db.rollback()
+        when result {
+            Ok(_)    => return Ok(()),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Transaction, msg)),
+        }
+    }
+
+    /// Executes a parameterized statement with one I64 parameter.
+    pub func execute_i64_params(this, sql: Str, p1: I64) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with two I64 parameters.
+    pub func execute_i64_2(this, sql: Str, p1: I64, p2: I64) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                let _ = stmt.bind_i64(2, p2)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with one Str parameter.
+    pub func execute_str(this, sql: Str, p1: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with one Str then one I64 parameter.
+    pub func execute_str_i64(this, sql: Str, p1: Str, p2: I64) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                let _ = stmt.bind_i64(2, p2)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with one I64 then one Str parameter.
+    pub func execute_i64_str(this, sql: Str, p1: I64, p2: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                let _ = stmt.bind_str(2, p2)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Queries a single I64 scalar value (e.g. `COUNT(*)`).
+    pub func query_scalar_i64(this, sql: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                if stmt.step() {
+                    let v = stmt.column_i64(0)
+                    stmt.finalize()
+                    return Ok(v)
+                }
+                stmt.finalize()
+                return Ok(0)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Queries whether at least one row exists, with an I64 parameter.
+    pub func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                let found = stmt.step()
+                stmt.finalize()
+                return Ok(found)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Queries whether at least one row exists, with a Str parameter.
+    pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                let found = stmt.step()
+                stmt.finalize()
+                return Ok(found)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
     }
 }

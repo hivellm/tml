@@ -1,0 +1,60 @@
+//! Eager loading — generates LEFT JOIN SQL for loading relations in a single query.
+//!
+//! Inspired by TypeORM's eager relations feature and `QueryBuilder::leftJoinAndSelect`.
+//! `eager_load_sql` produces the SQL string; `load_with` executes it and returns the SQL
+//! (for now) so callers can feed it to their own row-mapping logic.
+
+use std::db::orm::relation::Relation
+use std::db::query::select::SelectQuery
+use std::db::query::expression::Expr
+use std::db::driver::connection::Connection
+use std::db::sqlite::connection::SqliteConnection
+use std::db::error::DbError
+
+/// Generates a SELECT query with LEFT JOINs for all given relations.
+///
+/// Produces:
+/// ```sql
+/// SELECT * FROM <table>
+///   LEFT JOIN <r1.foreign_table> ON <table>.<r1.local_key> = <r1.foreign_table>.<r1.foreign_key>
+///   LEFT JOIN <r2.foreign_table> ON …
+/// ```
+///
+/// This is the pure SQL-generation side; no database connection is needed.
+pub func eager_load_sql(table: Str, relations: ref List[Relation]) -> Str {
+    var q = SelectQuery::new(table)
+    let n = relations.len()
+    var i = 0
+    loop (i < n) {
+        let rel = relations.get(i)
+        q = q.join(rel.to_join(table))
+        i = i + 1
+    }
+    return q.to_sql()
+}
+
+/// Executes the eager-loading query for a specific parent row identified by its PK.
+///
+/// Binds `pk` as a WHERE condition (`<table>.id = <pk>`) on top of the JOIN query,
+/// executes it, and returns the SQL string that was run (so callers can inspect it
+/// or route results through their own row-reader).
+///
+/// Returns `Ok(sql)` on success, `Err(e)` if execution fails.
+pub func load_with(conn: ref SqliteConnection, table: Str, pk: I64, relations: ref List[Relation]) -> Outcome[Str, DbError] {
+    var q = SelectQuery::new(table)
+    let n = relations.len()
+    var i = 0
+    loop (i < n) {
+        let rel = relations.get(i)
+        q = q.join(rel.to_join(table))
+        i = i + 1
+    }
+    let pk_cond = table + ".id = " + pk.to_string()
+    q = q.where_expr(Expr::raw(pk_cond))
+    let sql = q.to_sql()
+    let result = conn.execute(sql)
+    when result {
+        Ok(_)  => Ok(sql),
+        Err(e) => Err(e)
+    }
+}
