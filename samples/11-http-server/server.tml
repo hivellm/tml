@@ -66,7 +66,7 @@ pub func main() -> I32 {
     app.delete("/api/users/:id", handle_user_delete as I64)
     app.get("/*", handle_not_found as I64)
 
-    println("TML HTTP Server on http://localhost:3000")
-    app.listen(3000)
+    println("TML HTTP Server on http://localhost:15100")
+    app.listen(15100)
     return 0
 }
