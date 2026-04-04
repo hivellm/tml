@@ -1,6 +1,7 @@
 //! String transformation operations: trim, case conversion, and related utilities.
 
 use core::str::basic::{len, substring}
+use core::str::simd
 
 // ============================================================================
 // Whitespace helper
@@ -29,6 +30,19 @@ pub func trim(s: Str) -> Str {
     if s_len == 0 {
         return ""
     }
+    // SIMD fast path: use SSE2 for strings >= 32 bytes
+    if s_len >= 32 {
+        let st: I64 = simd::trim_start_simd(s)
+        if st >= s_len {
+            return ""
+        }
+        let en: I64 = simd::trim_end_simd(s)
+        if st >= en {
+            return ""
+        }
+        return substring(s, st, en)
+    }
+    // Scalar path for short strings
     let src: I64 = s as I64
     var st: I64 = 0
     loop (st < s_len) {
@@ -67,6 +81,18 @@ pub func trim_start(s: Str) -> Str {
     if s_len == 0 {
         return ""
     }
+    // SIMD fast path: use SSE2 for strings >= 32 bytes
+    if s_len >= 32 {
+        let st: I64 = simd::trim_start_simd(s)
+        if st == 0 {
+            return s
+        }
+        if st >= s_len {
+            return ""
+        }
+        return substring(s, st, s_len)
+    }
+    // Scalar path for short strings
     let src: I64 = s as I64
     var st: I64 = 0
     loop (st < s_len) {
@@ -96,6 +122,18 @@ pub func trim_end(s: Str) -> Str {
     if s_len == 0 {
         return ""
     }
+    // SIMD fast path: use SSE2-backed scalar backward scan for strings >= 32 bytes
+    if s_len >= 32 {
+        let en: I64 = simd::trim_end_simd(s)
+        if en == s_len {
+            return s
+        }
+        if en == 0 {
+            return ""
+        }
+        return substring(s, 0, en)
+    }
+    // Scalar path for short strings
     let src: I64 = s as I64
     var en: I64 = s_len
     loop (en > 0) {
@@ -203,6 +241,11 @@ pub func to_uppercase(s: Str) -> Str {
     if s_len == 0 {
         return ""
     }
+    // SIMD fast path: SSE2 processes 16 bytes per cycle for strings >= 32 bytes
+    if s_len >= 32 {
+        return simd::to_uppercase_simd(s)
+    }
+    // Scalar path for short strings
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
     let src: I64 = s as I64
     let dst: I64 = buf as I64
@@ -238,6 +281,11 @@ pub func to_lowercase(s: Str) -> Str {
     if s_len == 0 {
         return ""
     }
+    // SIMD fast path: SSE2 processes 16 bytes per cycle for strings >= 32 bytes
+    if s_len >= 32 {
+        return simd::to_lowercase_simd(s)
+    }
+    // Scalar path for short strings
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
     let src: I64 = s as I64
     let dst: I64 = buf as I64

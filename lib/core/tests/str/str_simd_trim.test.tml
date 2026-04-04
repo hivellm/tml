@@ -1,0 +1,160 @@
+// Tests for SIMD-accelerated trim, case conversion, and equality functions.
+// These functions are in core::str::simd and dispatched from core::str::transform
+// for strings >= 32 bytes.
+use test::{assert, assert_eq}
+use core::str::simd
+
+// ============================================================================
+// trim_start_simd
+// ============================================================================
+
+@test
+func test_trim_start_simd_leading_spaces() -> I32 {
+    // String >= 32 bytes with leading whitespace — exercises full SIMD path
+    let s = "   hello world this is a long string"
+    let idx = simd::trim_start_simd(s)
+    assert_eq(idx, 3 as I64, "leading spaces: start index")
+    return 0
+}
+
+@test
+func test_trim_start_simd_no_leading_whitespace() -> I32 {
+    let s = "hello world this is a long string   "
+    let idx = simd::trim_start_simd(s)
+    assert_eq(idx, 0 as I64, "no leading whitespace: start index is 0")
+    return 0
+}
+
+@test
+func test_trim_start_simd_all_whitespace() -> I32 {
+    let s = "                                    "
+    let s_len = 36 as I64
+    let idx = simd::trim_start_simd(s)
+    assert_eq(idx, s_len, "all whitespace: start index equals length")
+    return 0
+}
+
+// ============================================================================
+// trim_end_simd
+// ============================================================================
+
+@test
+func test_trim_end_simd_trailing_spaces() -> I32 {
+    let s = "hello world this is a long string   "
+    let idx = simd::trim_end_simd(s)
+    assert_eq(idx, 33 as I64, "trailing spaces: end index")
+    return 0
+}
+
+@test
+func test_trim_end_simd_no_trailing_whitespace() -> I32 {
+    let s = "   hello world this is a long string"
+    let s_len = 36 as I64
+    let idx = simd::trim_end_simd(s)
+    assert_eq(idx, s_len, "no trailing whitespace: end index equals length")
+    return 0
+}
+
+@test
+func test_trim_end_simd_all_whitespace() -> I32 {
+    let s = "                                    "
+    let idx = simd::trim_end_simd(s)
+    assert_eq(idx, 0 as I64, "all whitespace: end index is 0")
+    return 0
+}
+
+// ============================================================================
+// to_uppercase_simd
+// ============================================================================
+
+@test
+func test_to_uppercase_simd_basic() -> I32 {
+    // >= 32 bytes to exercise SIMD path
+    let s = "hello world this is a long string!!"
+    let result = simd::to_uppercase_simd(s)
+    assert_eq(result, "HELLO WORLD THIS IS A LONG STRING!!", "to_uppercase_simd basic")
+    return 0
+}
+
+@test
+func test_to_uppercase_simd_mixed() -> I32 {
+    let s = "Hello World This Is A Long String123"
+    let result = simd::to_uppercase_simd(s)
+    assert_eq(result, "HELLO WORLD THIS IS A LONG STRING123", "to_uppercase_simd mixed case")
+    return 0
+}
+
+@test
+func test_to_uppercase_simd_digits_symbols_unchanged() -> I32 {
+    let s = "1234567890!@#$%^&*()abcdefghijklmnop"
+    let result = simd::to_uppercase_simd(s)
+    assert_eq(result, "1234567890!@#$%^&*()ABCDEFGHIJKLMNOP", "digits and symbols unchanged")
+    return 0
+}
+
+// ============================================================================
+// to_lowercase_simd
+// ============================================================================
+
+@test
+func test_to_lowercase_simd_basic() -> I32 {
+    let s = "HELLO WORLD THIS IS A LONG STRING!!"
+    let result = simd::to_lowercase_simd(s)
+    assert_eq(result, "hello world this is a long string!!", "to_lowercase_simd basic")
+    return 0
+}
+
+@test
+func test_to_lowercase_simd_mixed() -> I32 {
+    let s = "Hello World This Is A Long String123"
+    let result = simd::to_lowercase_simd(s)
+    assert_eq(result, "hello world this is a long string123", "to_lowercase_simd mixed case")
+    return 0
+}
+
+@test
+func test_to_lowercase_simd_digits_symbols_unchanged() -> I32 {
+    let s = "1234567890!@#$%^&*()ABCDEFGHIJKLMNOP"
+    let result = simd::to_lowercase_simd(s)
+    assert_eq(result, "1234567890!@#$%^&*()abcdefghijklmnop", "digits and symbols unchanged")
+    return 0
+}
+
+// ============================================================================
+// str_eq_simd
+// ============================================================================
+
+@test
+func test_str_eq_simd_equal() -> I32 {
+    assert(simd::str_eq_simd("hello", "hello"), "equal strings")
+    return 0
+}
+
+@test
+func test_str_eq_simd_not_equal() -> I32 {
+    assert(not simd::str_eq_simd("hello", "world"), "different strings")
+    return 0
+}
+
+@test
+func test_str_eq_simd_different_lengths() -> I32 {
+    assert(not simd::str_eq_simd("hello", "hello world"), "different lengths")
+    return 0
+}
+
+@test
+func test_str_eq_simd_empty() -> I32 {
+    assert(simd::str_eq_simd("", ""), "both empty")
+    assert(not simd::str_eq_simd("", "a"), "one empty one not")
+    return 0
+}
+
+@test
+func test_str_eq_simd_long_strings() -> I32 {
+    let a = "hello world this is a long string to test"
+    let b = "hello world this is a long string to test"
+    let c = "hello world this is a long string to XXXX"
+    assert(simd::str_eq_simd(a, b), "equal long strings")
+    assert(not simd::str_eq_simd(a, c), "unequal long strings")
+    return 0
+}

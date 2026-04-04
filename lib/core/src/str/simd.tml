@@ -8,7 +8,8 @@
 
 use core::str::basic::len
 use core::simd::i8x16::I8x16
-use core::runtime::intrinsics::{sse2_cmpeq_epi8, sse2_movemask_epi8, simd_load_ptr}
+use core::runtime::intrinsics::{sse2_cmpeq_epi8, sse2_movemask_epi8, simd_load_ptr, sse2_storeu_si128, sse2_cmpgt_epi8, sse2_and_si128}
+use std::collections::list::List
 
 @extern("memcmp")
 func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
@@ -436,6 +437,288 @@ pub func count_byte_scalar(s: Str, byte: U8) -> I64 {
 }
 
 // ============================================================================
+// trim_start_simd / trim_end_simd — SIMD-accelerated whitespace trimming
+// ============================================================================
+
+/// Find the index of the first non-whitespace byte using SIMD.
+///
+/// Whitespace is defined as: space (32), tab (9), newline (10), carriage return (13).
+/// Returns the byte index of the first non-whitespace byte, or `s_len` if the entire
+/// string is whitespace. Designed to be called by `trim` and `trim_start` as a fast
+/// path for strings >= 32 bytes.
+///
+/// Uses SSE2 PCMPEQB to compare 16 bytes at a time against each whitespace character,
+/// ORing the results together. When a chunk is not entirely whitespace the bitmask
+/// gives the exact position of the first non-whitespace byte.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::trim_start_simd("   hello") == 3)
+/// assert(simd::trim_start_simd("hello") == 0)
+/// assert(simd::trim_start_simd("   ") == 3)
+/// ```
+pub func trim_start_simd(s: Str) -> I64 {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+
+    // Whitespace splats: space(32), tab(9), newline(10), carriage-return(13)
+    // Hoisted outside the loop for performance; codegen will keep them in registers.
+    // Note: the linter incorrectly reports these as "unused" because it does not track
+    // variables used as arguments to lowlevel{} intrinsic calls — they ARE used below.
+    let sp_vec: I8x16 = I8x16::splat(32 as I8)
+    let tab_vec: I8x16 = I8x16::splat(9 as I8)
+    let nl_vec: I8x16 = I8x16::splat(10 as I8)
+    let cr_vec: I8x16 = I8x16::splat(13 as I8)
+
+    var pos: I64 = 0
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
+        // OR four PCMPEQB results — one per whitespace character.
+        // Each intermediate MUST be bound to a named variable: passing lowlevel{} blocks
+        // as method arguments (.bor(lowlevel{...})) causes "Unknown method: bor" in codegen.
+        let eq_sp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, sp_vec) }
+        let eq_tab: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, tab_vec) }
+        let eq_nl: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, nl_vec) }
+        let eq_cr: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, cr_vec) }
+        let ws_ab: I8x16 = eq_sp.bor(eq_tab)
+        let ws_cd: I8x16 = eq_nl.bor(eq_cr)
+        let ws: I8x16 = ws_ab.bor(ws_cd)
+        let mask: I32 = lowlevel { sse2_movemask_epi8(ws) }
+        // 65535 (0xFFFF) means all 16 bytes are whitespace — skip the whole chunk
+        if mask != 65535 {
+            // At least one non-whitespace byte: invert to find the first non-whitespace bit
+            // movemask returns a 16-bit value in a 32-bit integer; mask off upper bits
+            let inv: I32 = (mask ^ 65535) & 65535
+            return pos + ctz(inv) as I64
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail for the remaining < 16 bytes
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        let b: I32 = (lowlevel { ptr_read[U8](p) }) as I32
+        if b != 32 and b != 9 and b != 10 and b != 13 {
+            return pos
+        }
+        pos = pos + 1
+    }
+    return s_len
+}
+
+/// Find the exclusive end index of the last non-whitespace byte using SIMD.
+///
+/// Returns the byte index *after* the last non-whitespace byte, i.e. the end
+/// position for a trim operation (exclusive). Returns 0 if the entire string
+/// is whitespace. Designed to be called by `trim` and `trim_end` as a fast path
+/// for strings >= 32 bytes.
+///
+/// Uses a scalar backward scan. For typical inputs trailing whitespace is very
+/// short (< 10 bytes), so the scalar scan exits almost immediately. The
+/// allocation and output are the same as the SIMD forward scan path.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::trim_end_simd("hello   ") == 5)
+/// assert(simd::trim_end_simd("hello") == 5)
+/// assert(simd::trim_end_simd("   ") == 0)
+/// ```
+pub func trim_end_simd(s: Str) -> I64 {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var en: I64 = s_len
+    loop (en > 0) {
+        let p: *U8 = (s_base + en - 1) as *U8
+        let b: I32 = (lowlevel { ptr_read[U8](p) }) as I32
+        if b != 32 and b != 9 and b != 10 and b != 13 {
+            return en
+        }
+        en = en - 1
+    }
+    return 0
+}
+
+// ============================================================================
+// to_uppercase_simd / to_lowercase_simd — SIMD ASCII case conversion
+// ============================================================================
+
+/// Convert ASCII lowercase letters to uppercase using SIMD.
+///
+/// Processes 16 bytes per cycle using SSE2 signed-compare range detection and
+/// BLENDVB-style `select`. Non-ASCII and non-lowercase bytes are copied
+/// unchanged. The result is a newly allocated null-terminated string.
+///
+/// Strategy per 16-byte chunk:
+///   1. Find bytes where b > 96  (`a`-1) AND b < 123  (`z`+1) → lowercase range
+///   2. Compute `chunk - 32` for the entire vector
+///   3. `select(is_lower_mask, lowered_minus_32, chunk)` to pick corrected bytes
+///   4. Store 16 bytes with `sse2_storeu_si128` (unaligned)
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::to_uppercase_simd("hello world") == "HELLO WORLD")
+/// assert(simd::to_uppercase_simd("Hello123") == "HELLO123")
+/// ```
+pub func to_uppercase_simd(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let dst: I64 = buf as I64
+
+    // Threshold splats for lowercase detection: 'a'-1=96, 'z'+1=123, case offset=32.
+    // Note: the linter incorrectly reports these as "unused" because it does not track
+    // variables used as arguments to lowlevel{} intrinsic calls — they ARE used below.
+    let below_a: I8x16 = I8x16::splat(96 as I8)
+    let above_z: I8x16 = I8x16::splat(123 as I8)
+    let case32: I8x16 = I8x16::splat(32 as I8)
+    var pos: I64 = 0
+
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
+        // Detect lowercase bytes ['a'..'z'] (97–122).
+        // Each intermediate MUST be bound to a named variable before use in method calls;
+        // passing lowlevel{} blocks as method arguments causes codegen failures.
+        let gt_96: I8x16 = lowlevel { sse2_cmpgt_epi8(chunk, below_a) }
+        let lt_123: I8x16 = lowlevel { sse2_cmpgt_epi8(above_z, chunk) }
+        let is_lower: I8x16 = lowlevel { sse2_and_si128(gt_96, lt_123) }
+        // is_lower lanes: 0xFF (-1 signed, all bits set) where lowercase, 0x00 elsewhere.
+        // is_lower & 32 → 32 where lowercase, 0 elsewhere.
+        // chunk - (is_lower & 32) subtracts 32 from lowercase bytes, leaves others untouched.
+        let delta: I8x16 = is_lower.band(case32)
+        let result: I8x16 = chunk.sub(delta)
+        // Unaligned store of 16 bytes to destination
+        let dp: *I8x16 = (dst + pos) as *I8x16
+        lowlevel { sse2_storeu_si128[I8x16](dp, result) }
+        pos = pos + 16
+    }
+
+    // Scalar tail for remaining < 16 bytes
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        var ch: I32 = (lowlevel { ptr_read[U8](p) }) as I32
+        if ch >= 97 and ch <= 122 {
+            ch = ch - 32
+        }
+        let dp: *U8 = (dst + pos) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        pos = pos + 1
+    }
+
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+/// Convert ASCII uppercase letters to lowercase using SIMD.
+///
+/// Processes 16 bytes per cycle using SSE2 signed-compare range detection and
+/// `select`. Non-ASCII and non-uppercase bytes are copied unchanged.
+/// The result is a newly allocated null-terminated string.
+///
+/// Strategy per 16-byte chunk:
+///   1. Find bytes where b > 64  (`A`-1) AND b < 91  (`Z`+1) → uppercase range
+///   2. Compute `chunk + 32` for the entire vector
+///   3. `select(is_upper_mask, upped_plus_32, chunk)` to pick corrected bytes
+///   4. Store 16 bytes with `sse2_storeu_si128` (unaligned)
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::to_lowercase_simd("HELLO WORLD") == "hello world")
+/// assert(simd::to_lowercase_simd("Hello123") == "hello123")
+/// ```
+pub func to_lowercase_simd(s: Str) -> Str {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    let dst: I64 = buf as I64
+
+    // Threshold splats for uppercase detection: 'A'-1=64, 'Z'+1=91, case offset=32.
+    // Note: the linter incorrectly reports these as "unused" because it does not track
+    // variables used as arguments to lowlevel{} intrinsic calls — they ARE used below.
+    let below_A: I8x16 = I8x16::splat(64 as I8)
+    let above_Z: I8x16 = I8x16::splat(91 as I8)
+    let case32: I8x16 = I8x16::splat(32 as I8)
+
+    var pos: I64 = 0
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
+        // Detect uppercase bytes ['A'..'Z'] (65–90).
+        // Each intermediate MUST be bound to a named variable before use in method calls;
+        // passing lowlevel{} blocks as method arguments causes codegen failures.
+        let gt_64: I8x16 = lowlevel { sse2_cmpgt_epi8(chunk, below_A) }
+        let lt_91: I8x16 = lowlevel { sse2_cmpgt_epi8(above_Z, chunk) }
+        let is_upper: I8x16 = lowlevel { sse2_and_si128(gt_64, lt_91) }
+        // is_upper lanes: 0xFF (-1 signed, all bits set) where uppercase, 0x00 elsewhere.
+        // is_upper & 32 → 32 where uppercase, 0 elsewhere.
+        // chunk + (is_upper & 32) adds 32 to uppercase bytes, leaves others untouched.
+        let delta: I8x16 = is_upper.band(case32)
+        let result: I8x16 = chunk.add(delta)
+        // Unaligned store of 16 bytes to destination
+        let dp: *I8x16 = (dst + pos) as *I8x16
+        lowlevel { sse2_storeu_si128[I8x16](dp, result) }
+        pos = pos + 16
+    }
+
+    // Scalar tail for remaining < 16 bytes
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        var ch: I32 = (lowlevel { ptr_read[U8](p) }) as I32
+        if ch >= 65 and ch <= 90 {
+            ch = ch + 32
+        }
+        let dp: *U8 = (dst + pos) as *U8
+        lowlevel { ptr_write[U8](dp, ch as U8) }
+        pos = pos + 1
+    }
+
+    let null_p: *U8 = (dst + s_len) as *U8
+    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    return buf as Str
+}
+
+// ============================================================================
+// str_eq_simd — SIMD-accelerated string equality
+// ============================================================================
+
+/// Check whether two strings are byte-for-byte equal using SIMD memcmp.
+///
+/// Returns false immediately if lengths differ. For equal-length strings
+/// delegates to the C runtime `memcmp`, which uses SSE2/AVX2 on modern
+/// systems and is already heavily optimized. Providing this as an explicit
+/// entry point allows callers to avoid the length check overhead when they
+/// already know both strings are non-empty and have the same length.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::str_eq_simd("hello", "hello") == true)
+/// assert(simd::str_eq_simd("hello", "world") == false)
+/// assert(simd::str_eq_simd("", "") == true)
+/// ```
+pub func str_eq_simd(a: Str, b: Str) -> Bool {
+    let a_len: I64 = len(a)
+    let b_len: I64 = len(b)
+    if a_len != b_len {
+        return false
+    }
+    if a_len == 0 {
+        return true
+    }
+    let a_ptr: *U8 = a as *U8
+    let b_ptr: *U8 = b as *U8
+    return c_memcmp(a_ptr, b_ptr, a_len) == 0
+}
+
+// ============================================================================
 // is_ascii_fast — SIMD-accelerated ASCII validation
 // ============================================================================
 
@@ -460,14 +743,13 @@ pub func is_ascii_fast(s: Str) -> Bool {
     var pos: I64 = 0
 
     // High-bit mask: 0x80 in each byte position (as signed I8, this is -128)
-    let high_bit: I8x16 = I8x16::splat(-128 as I8)
-
     // SSE2: check 16 bytes at a time
-    // AND chunk with 0x80 mask — any byte >= 128 will have its high bit set,
-    // producing a non-zero movemask.
+    // AND chunk with 0x80 mask (-128 as I8) — any byte >= 128 has its sign bit set,
+    // producing a non-zero movemask. Splat is inlined to avoid an unused-variable warning
+    // from the linter when the value is only consumed inside a method argument.
     loop (pos + 16 <= s_len) {
         let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
-        let masked: I8x16 = chunk.band(high_bit)
+        let masked: I8x16 = chunk.band(I8x16::splat(-128 as I8))
         let mask: I32 = lowlevel { sse2_movemask_epi8(masked) }
         if mask != 0 {
             return false
@@ -509,4 +791,142 @@ pub func is_ascii_scalar(s: Str) -> Bool {
 /// Assumes caller checked string is non-empty and >= 32 bytes.
 pub func is_ascii_simd(s: Str) -> Bool {
     return is_ascii_fast(s)
+}
+
+// ============================================================================
+// rfind_simd — SIMD-accelerated reverse find
+// ============================================================================
+
+/// SIMD-accelerated reverse find returning Maybe[I64].
+///
+/// Scans forward through the entire string, tracking the last match seen.
+/// Uses SSE2 first-byte scan + memcmp verification, processing 16 bytes per cycle.
+/// Returns Just(index) of the LAST (rightmost) occurrence, or Nothing.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// assert(simd::rfind_simd("hello hello", "hello") == Just(6))
+/// assert(simd::rfind_simd("aaa", "a") == Just(2))
+/// assert(simd::rfind_simd("hello", "xyz") == Nothing)
+/// ```
+pub func rfind_simd(s: Str, pattern: Str) -> Maybe[I64] {
+    let s_len: I64 = len(s)
+    let p_len: I64 = len(pattern)
+    if p_len == 0 { return Just(s_len) }
+    if p_len > s_len { return Nothing }
+
+    let s_base: I64 = s as I64
+    let p_ptr: *U8 = pattern as *U8
+    let limit: I64 = s_len - p_len
+
+    let first: U8 = lowlevel { ptr_read[U8](p_ptr) }
+    let needle: I8x16 = I8x16::splat(first as I8)
+    var last_match: I64 = -1
+    var pos: I64 = 0
+
+    // Forward SIMD scan — collect all first-byte candidates, keep the rightmost valid match
+    loop (pos + 16 <= s_len and pos <= limit) {
+        let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        var mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+
+        // Process all matching bit positions in this 16-byte window
+        loop (mask != 0) {
+            let bit: I32 = ctz(mask)
+            let candidate: I64 = pos + bit as I64
+            if candidate <= limit {
+                if c_memcmp((s_base + candidate) as *U8, p_ptr, p_len) == 0 {
+                    last_match = candidate
+                }
+            }
+            // Clear the lowest set bit: mask &= mask - 1
+            mask = mask & (mask - 1)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail for positions not covered by full SIMD chunks
+    loop (pos <= limit) {
+        if c_memcmp((s_base + pos) as *U8, p_ptr, p_len) == 0 {
+            last_match = pos
+        }
+        pos = pos + 1
+    }
+
+    if last_match >= 0 {
+        return Just(last_match)
+    }
+    return Nothing
+}
+
+// ============================================================================
+// find_all_byte — SIMD-accelerated collection of all byte positions
+// ============================================================================
+
+/// Find all positions of a single byte in a string using SIMD.
+///
+/// Returns a List[I64] containing the byte index of every occurrence.
+/// Uses SSE2 to process 16 bytes at a time for strings >= 32 bytes.
+/// Used internally by split operations to find all delimiter positions.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::str::simd
+/// let positions = simd::find_all_byte("a,b,c", ',' as U8)
+/// assert(positions.len() == 2)
+/// assert(positions[0] == 1)
+/// assert(positions[1] == 3)
+/// ```
+pub func find_all_byte(s: Str, byte: U8) -> List[I64] {
+    let s_len: I64 = len(s)
+    let s_base: I64 = s as I64
+    var positions: List[I64] = List[I64]::new(16)
+
+    if s_len < 32 {
+        // Scalar path for short strings
+        var i: I64 = 0
+        loop (i < s_len) {
+            let p: *U8 = (s_base + i) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](p) }
+            if b == byte {
+                positions.push(i)
+            }
+            i = i + 1
+        }
+        return positions
+    }
+
+    let needle: I8x16 = I8x16::splat(byte as I8)
+    var pos: I64 = 0
+
+    // SIMD scan: process 16 bytes at a time
+    loop (pos + 16 <= s_len) {
+        let chunk: I8x16 = lowlevel { simd_load_ptr[I8x16]((s_base + pos) as *Unit) }
+        let cmp: I8x16 = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
+        var mask: I32 = lowlevel { sse2_movemask_epi8(cmp) }
+
+        // Extract each matching byte position from the bitmask
+        loop (mask != 0) {
+            let bit: I32 = ctz(mask)
+            positions.push(pos + bit as I64)
+            // Clear the lowest set bit
+            mask = mask & (mask - 1)
+        }
+        pos = pos + 16
+    }
+
+    // Scalar tail for remaining bytes beyond the last full 16-byte chunk
+    loop (pos < s_len) {
+        let p: *U8 = (s_base + pos) as *U8
+        let b: U8 = lowlevel { ptr_read[U8](p) }
+        if b == byte {
+            positions.push(pos)
+        }
+        pos = pos + 1
+    }
+
+    return positions
 }

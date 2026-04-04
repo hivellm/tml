@@ -152,6 +152,11 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
     if p_len > s_len {
         return Nothing
     }
+    // SIMD path for long strings
+    if s_len >= 32 {
+        return simd::rfind_simd(s, pattern)
+    }
+    // Scalar path for short strings
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     var i: I64 = s_len - p_len

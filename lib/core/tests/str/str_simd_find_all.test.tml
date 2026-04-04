@@ -1,0 +1,42 @@
+// Tests for simd::find_all_byte — SIMD byte position collection // v2
+use test::{assert, assert_eq}
+use core::str::simd
+
+// ============================================================================
+// find_all_byte — scalar path (short strings, < 32 bytes)
+// ============================================================================
+
+@test
+func test_find_all_byte_scalar_multiple() -> I32 {
+    // 'l' = 108, appears at index 2, 3, 9 in "hello world"
+    let positions = simd::find_all_byte("hello world", 108 as U8)
+    assert_eq(positions.len(), 3 as I64, "should find 3 'l' bytes in 'hello world'")
+    assert_eq(positions.get(0), 2 as I64, "first 'l' at index 2")
+    assert_eq(positions.get(1), 3 as I64, "second 'l' at index 3")
+    assert_eq(positions.get(2), 9 as I64, "third 'l' at index 9")
+    return 0
+}
+
+@test
+func test_find_all_byte_scalar_not_found() -> I32 {
+    // 'z' = 122, not in "hello"
+    let positions = simd::find_all_byte("hello", 122 as U8)
+    assert_eq(positions.len(), 0 as I64, "should find 0 occurrences of 'z' in 'hello'")
+    return 0
+}
+
+// ============================================================================
+// find_all_byte — SIMD path (long strings, >= 32 bytes)
+// ============================================================================
+
+@test
+func test_find_all_byte_simd_long() -> I32 {
+    // 48 bytes, all 'a' — 'a' = 97
+    let long: Str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    let positions = simd::find_all_byte(long, 97 as U8)
+    assert_eq(positions.len(), 48 as I64, "should find 48 'a' bytes in 48-char all-a string")
+    // Verify first and last positions via .get()
+    assert_eq(positions.get(0), 0 as I64, "first position should be 0")
+    assert_eq(positions.get(47), 47 as I64, "last position should be 47")
+    return 0
+}

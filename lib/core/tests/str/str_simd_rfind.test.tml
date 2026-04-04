@@ -1,0 +1,56 @@
+// Tests for rfind_simd and find_all_byte — new SIMD reverse-find and byte-collection functions // v1
+use test::{assert, assert_eq}
+use core::str::simd
+
+// ============================================================================
+// rfind_simd — long string (>= 32 bytes, triggers SIMD path)
+// ============================================================================
+
+@test
+func test_rfind_simd_last_occurrence() -> I32 {
+    // 48 bytes: contains "hello" twice — at index 0 and index 38
+    let long: Str = "hello_world_abcdefghijklmnopqrstuvwxy_hello"
+    // "hello" appears at 0 and 38 — rfind_simd should return 38
+    let result = simd::rfind_simd(long, "hello")
+    when result {
+        Just(idx) => {
+            assert_eq(idx, 38, "rfind_simd should return the LAST occurrence at index 38")
+        },
+        Nothing => {
+            assert(false, "rfind_simd should have found 'hello'")
+        },
+    }
+    return 0
+}
+
+@test
+func test_rfind_simd_not_found() -> I32 {
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    let result = simd::rfind_simd(long, "ZZZ")
+    when result {
+        Just(_) => {
+            assert(false, "rfind_simd should return Nothing for missing pattern")
+        },
+        Nothing => {
+            assert(true, "rfind_simd correctly returned Nothing")
+        },
+    }
+    return 0
+}
+
+@test
+func test_rfind_simd_single_occurrence() -> I32 {
+    // Long string with only one occurrence of the pattern
+    let long: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
+    // "GHIJ" appears once at index 32
+    let result = simd::rfind_simd(long, "GHIJ")
+    when result {
+        Just(idx) => {
+            assert_eq(idx, 32, "rfind_simd single occurrence should be at index 32")
+        },
+        Nothing => {
+            assert(false, "rfind_simd should have found 'GHIJ'")
+        },
+    }
+    return 0
+}

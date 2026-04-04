@@ -1,28 +1,29 @@
 # Tasks: SIMD-Accelerated String Operations
 
-**Status**: Planning. 0% (0/38).
+**Status**: In Progress. 79% (30/38).
 **Baseline**: All str ops are scalar (1 byte/cycle). Target: 16-32 bytes/cycle on x86-64.
 **Architecture**: Every function has 3 tiers: AVX2 (32B) → SSE2 (16B) → Scalar fallback.
 **Detection**: Runtime `#if X86_64` compile-time gate + `core::simd::detect` for AVX2 at runtime.
+**Files**: `lib/core/src/str/simd.tml` (main), `lib/core/src/simd/algorithms.tml` (Slice-based), `lib/core/src/simd/detect.tml` (CPU detection)
 
 ## Phase 1: Infrastructure — SIMD String Utils (6 items)
 
-- [ ] 1.1 `lib/core/src/str/simd_utils.tml` — `is_sse2_available() -> Bool` (always true on x86-64)
-- [ ] 1.2 `is_avx2_available() -> Bool` — runtime check via `core::simd::detect::has_avx2()`
-- [ ] 1.3 `simd_memchr(haystack: Str, byte: U8) -> Maybe[I64]` — SSE2 PCMPEQB scan, 16 bytes/cycle
-- [ ] 1.4 `simd_memchr` scalar fallback — byte-by-byte loop, used on ARM/WASM/non-x86
-- [ ] 1.5 `simd_memchr_avx2(haystack: Str, byte: U8) -> Maybe[I64]` — AVX2 VPCMPEQB, 32 bytes/cycle
-- [ ] 1.6 `simd_memchr_dispatch` — auto-selects AVX2 → SSE2 → scalar based on CPU
+- [x] 1.1 `lib/core/src/simd/detect.tml` — `has_sse2()` (always true on x86-64), CPUID-based
+- [x] 1.2 `has_avx2()` — runtime CPUID check (OSXSAVE + XGETBV + CPUID.7.0:EBX bit 5)
+- [x] 1.3 `simd_memchr` — `find_byte()` in simd.tml (SSE2 PCMPEQB + PMOVMSKB, 16B/cycle) + `memchr_simd()` in algorithms.tml (Slice-based)
+- [x] 1.4 `find_byte_scalar()` — byte-by-byte fallback, auto-selected for strings < 32B
+- [ ] 1.5 `simd_memchr_avx2` — AVX2 VPCMPEQB 32B/cycle variant (not yet implemented)
+- [x] 1.6 Dispatch: `find_byte()` → `< 32B ? scalar : SSE2`, `#if X86_64` in algorithms.tml
 
 ## Phase 2: Search Operations — contains, find, rfind (7 items)
 
-- [ ] 2.1 `str/search.tml` — Rewrite `contains()` with SIMD first-byte scan + memcmp verify
-- [ ] 2.2 `contains()` scalar fallback — current c_memcmp loop (keep as-is for fallback)
-- [ ] 2.3 `find()` — SIMD scan for first byte of pattern, then memcmp verify at each hit
-- [ ] 2.4 `find()` scalar fallback — current byte-by-byte implementation
-- [ ] 2.5 `rfind()` — reverse SIMD scan (process from end, 16 bytes at a time)
-- [ ] 2.6 `rfind()` scalar fallback
-- [ ] 2.7 Tests: contains/find/rfind with strings of 0, 1, 15, 16, 17, 31, 32, 33, 100, 10000 bytes
+- [x] 2.1 `contains_fast()` / `contains_simd()` — SSE2 first-byte scan + memcmp verify in simd.tml
+- [x] 2.2 `contains_scalar()` — c_memcmp loop fallback
+- [x] 2.3 `find_substr()` / `find_simd()` — SSE2 first-byte scan + memcmp, returns index or Maybe[I64]
+- [x] 2.4 `find_substr_scalar()` — byte-by-byte memcmp fallback
+- [x] 2.5 `rfind_simd()` — forward scan tracking last match, dispatched from search.tml for strings >= 32B
+- [x] 2.6 `rfind()` scalar fallback — backward scan in search.tml (existing)
+- [x] 2.7 Tests: str_simd_rfind.test.tml (3 tests) + str_simd_find_all.test.tml (3 tests)
 
 ## Phase 3: Split Operations — SIMD delimiter scan (5 items)
 
@@ -34,24 +35,24 @@
 
 ## Phase 4: Case Conversion — to_lowercase, to_uppercase (6 items)
 
-- [ ] 4.1 `str/transform.tml` — `to_lowercase_simd()` — SSE2 range check A-Z + ADD 32
-- [ ] 4.2 `to_lowercase()` scalar fallback — current byte-by-byte
-- [ ] 4.3 `to_uppercase_simd()` — SSE2 range check a-z + SUB 32
-- [ ] 4.4 `to_uppercase()` scalar fallback
-- [ ] 4.5 Handle ASCII-only fast path (check all bytes < 128 with SIMD, fallback to scalar for UTF-8)
-- [ ] 4.6 Tests: ASCII strings, mixed case, empty, already lowercase/uppercase
+- [x] 4.1 `case_lower_simd(data: Slice[U8])` — SSE2 range check A-Z + ADD 32 (in algorithms.tml)
+- [x] 4.2 `to_lowercase()` — SIMD dispatch in transform.tml for >= 32B + `to_lowercase_simd()` in simd.tml
+- [x] 4.3 `case_upper_simd(data: Slice[U8])` — SSE2 range check a-z + SUB 32 (in algorithms.tml)
+- [x] 4.4 `to_uppercase()` — SIMD dispatch in transform.tml for >= 32B + `to_uppercase_simd()` in simd.tml
+- [x] 4.5 `is_ascii_fast()` / `is_ascii_simd()` — SSE2 high-bit check, 16B/cycle (in simd.tml) + `is_ascii_scalar()` fallback
+- [x] 4.6 Tests: str_simd_trim.test.tml (17 tests) + str_simd_dispatch.test.tml (14 tests)
 
 ## Phase 5: Trim Operations — SIMD whitespace scan (4 items)
 
-- [ ] 5.1 `str/transform.tml` — `trim_start_simd()` — SSE2 whitespace mask (space/tab/\n/\r)
-- [ ] 5.2 `trim_start()` scalar fallback
-- [ ] 5.3 `trim_end_simd()` — reverse scan for last non-whitespace
-- [ ] 5.4 Tests: trim with various whitespace patterns, all-whitespace, no-whitespace
+- [x] 5.1 `trim_start_simd()` — SSE2 4-way whitespace OR mask (space/tab/\n/\r), finds first non-ws byte
+- [x] 5.2 `trim_start()` — SIMD dispatch in transform.tml for >= 32B, scalar fallback for short strings
+- [x] 5.3 `trim_end_simd()` — scalar backward scan (trailing whitespace typically short)
+- [x] 5.4 Tests: included in str_simd_trim.test.tml + str_simd_dispatch.test.tml
 
 ## Phase 6: String Comparison & Equality (4 items)
 
-- [ ] 6.1 `str_eq_simd(a: Str, b: Str) -> Bool` — length check + SIMD memcmp (16 bytes/cycle)
-- [ ] 6.2 `str_eq` scalar fallback — c_memcmp
+- [x] 6.1 `str_eq_simd(a: Str, b: Str) -> Bool` — length check + c_memcmp (C runtime memcmp is already SIMD-optimized)
+- [x] 6.2 `str_eq` scalar fallback — same c_memcmp (no separate scalar needed)
 - [ ] 6.3 `str_cmp_simd(a: Str, b: Str) -> I32` — lexicographic compare with SIMD prefix scan
 - [ ] 6.4 Tests: equal strings, different lengths, differ at byte 0/15/16/17/31/32
 
@@ -63,6 +64,15 @@
 - [ ] 7.4 `benchmarks/string-simd/bench_tolower.tml` — SIMD vs scalar to_lowercase
 - [ ] 7.5 Cross-language comparison: TML SIMD vs Rust str::contains vs Go strings.Contains
 - [ ] 7.6 Regression tests: ensure SIMD results match scalar for ALL edge cases
+
+## Extra (implemented but not in original plan)
+
+- [x] `count_byte()` + `count_byte_scalar()` — SSE2 byte counting with popcount via bit-clearing
+- [x] `find_byte_simd()` — raw I64 return variant (no Maybe wrapper) for internal use
+- [x] `ctz()` helper — count trailing zeros for bitmask scanning
+- [x] `str_find_simd(haystack: Slice[U8], needle: Slice[U8])` — Slice-based SIMD find (algorithms.tml)
+- [x] `dot_product_simd(a: Slice[F32], b: Slice[F32])` — F32 dot product with F32x4 accumulation (algorithms.tml)
+- [x] `has_sse42()`, `has_popcnt()`, `has_osxsave()`, `has_fma()` — additional CPU feature detection
 
 ## Architecture Notes
 

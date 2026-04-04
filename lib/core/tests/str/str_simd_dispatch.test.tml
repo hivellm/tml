@@ -1,0 +1,125 @@
+// Tests that verify the SIMD dispatch path in transform.tml for strings >= 32 bytes.
+// The public functions trim/trim_start/trim_end/to_uppercase/to_lowercase dispatch
+// to SIMD for strings >= 32 bytes and use scalar for shorter strings.
+use test::{assert, assert_eq}
+
+// ============================================================================
+// trim — SIMD dispatch path (>= 32 bytes)
+// ============================================================================
+
+@test
+func test_trim_simd_dispatch_leading_trailing() -> I32 {
+    // 38 chars total — exercises SIMD path
+    let s = "   hello world this is a long string   "
+    assert_eq(s.trim(), "hello world this is a long string", "trim leading+trailing")
+    return 0
+}
+
+@test
+func test_trim_simd_dispatch_all_whitespace() -> I32 {
+    let s = "                                    "
+    assert_eq(s.trim(), "", "trim all whitespace returns empty")
+    return 0
+}
+
+@test
+func test_trim_simd_dispatch_no_whitespace() -> I32 {
+    let s = "helloworldthisisalongstringnopadding"
+    assert_eq(s.trim(), "helloworldthisisalongstringnopadding", "trim no-op on long string")
+    return 0
+}
+
+@test
+func test_trim_simd_dispatch_tabs_newlines() -> I32 {
+    let s = "\t\n  hello world this is a test  \n\t"
+    assert_eq(s.trim(), "hello world this is a test", "trim mixed whitespace")
+    return 0
+}
+
+// ============================================================================
+// trim_start — SIMD dispatch path
+// ============================================================================
+
+@test
+func test_trim_start_simd_dispatch() -> I32 {
+    let s = "   hello world this is a long string   "
+    assert_eq(s.trim_start(), "hello world this is a long string   ", "trim_start removes leading")
+    return 0
+}
+
+@test
+func test_trim_start_simd_dispatch_no_leading() -> I32 {
+    let s = "hello world this is a long string   "
+    assert_eq(s.trim_start(), "hello world this is a long string   ", "trim_start no-op")
+    return 0
+}
+
+// ============================================================================
+// trim_end — SIMD dispatch path
+// ============================================================================
+
+@test
+func test_trim_end_simd_dispatch() -> I32 {
+    let s = "   hello world this is a long string   "
+    assert_eq(s.trim_end(), "   hello world this is a long string", "trim_end removes trailing")
+    return 0
+}
+
+@test
+func test_trim_end_simd_dispatch_no_trailing() -> I32 {
+    let s = "   hello world this is a long string"
+    assert_eq(s.trim_end(), "   hello world this is a long string", "trim_end no-op")
+    return 0
+}
+
+// ============================================================================
+// to_uppercase — SIMD dispatch path (>= 32 bytes)
+// ============================================================================
+
+@test
+func test_to_uppercase_simd_dispatch() -> I32 {
+    let s = "hello world this is a long string!!"
+    assert_eq(s.to_uppercase(), "HELLO WORLD THIS IS A LONG STRING!!", "to_uppercase SIMD")
+    return 0
+}
+
+@test
+func test_to_uppercase_scalar_fallback() -> I32 {
+    // Short string — scalar path
+    assert_eq("hello".to_uppercase(), "HELLO", "to_uppercase scalar short")
+    return 0
+}
+
+@test
+func test_to_uppercase_boundary() -> I32 {
+    // Exactly 32 bytes — hits SIMD path threshold
+    let s = "abcdefghijklmnopqrstuvwxyz123456"
+    assert_eq(s.to_uppercase(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", "to_uppercase at 32-byte boundary")
+    return 0
+}
+
+// ============================================================================
+// to_lowercase — SIMD dispatch path (>= 32 bytes)
+// ============================================================================
+
+@test
+func test_to_lowercase_simd_dispatch() -> I32 {
+    let s = "HELLO WORLD THIS IS A LONG STRING!!"
+    assert_eq(s.to_lowercase(), "hello world this is a long string!!", "to_lowercase SIMD")
+    return 0
+}
+
+@test
+func test_to_lowercase_scalar_fallback() -> I32 {
+    // Short string — scalar path
+    assert_eq("HELLO".to_lowercase(), "hello", "to_lowercase scalar short")
+    return 0
+}
+
+@test
+func test_to_lowercase_boundary() -> I32 {
+    // Exactly 32 bytes — hits SIMD path threshold
+    let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+    assert_eq(s.to_lowercase(), "abcdefghijklmnopqrstuvwxyz123456", "to_lowercase at 32-byte boundary")
+    return 0
+}
