@@ -1,4 +1,4 @@
-//! SQLite connection adapter.
+//! SQLite connection adapter. // v2
 //!
 //! [`SqliteConnection`] wraps a [`sqlite::Database`] and maps its
 //! `Outcome[_, Str]` errors into [`DbError`] values, providing a
@@ -85,32 +85,9 @@ impl SqliteConnection {
     pub func raw_database(this) -> ref Database {
         ref this.db
     }
-}
 
-impl Connection for SqliteConnection {
-    /// Executes a SQL statement that does not return rows.
-    ///
-    /// Returns the number of rows affected.
-    pub func execute(this, sql: Str) -> Outcome[I64, DbError] {
-        let result = this.db.exec(sql)
-        when result {
-            Ok(_)    => return Ok(this.db.changes() as I64),
-            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
-        }
-    }
+    // ── Parameterized execute helpers ─────────────────────────────────────
 
-    /// Returns `true` if the connection is currently open.
-    pub func is_alive(this) -> Bool {
-        this.db.is_open()
-    }
-
-    /// Closes the database connection and releases all SQLite resources.
-    pub func close(mut this) {
-        this.db.close()
-    }
-}
-
-impl SqliteConnection {
     /// Executes a parameterized statement with one I64 parameter.
     ///
     /// Prepares the SQL, binds `p1` at position 1, executes, finalizes.
@@ -148,6 +125,63 @@ impl SqliteConnection {
         }
     }
 
+    /// Executes a parameterized statement with three I64 parameters.
+    ///
+    /// Binds `p1`, `p2`, `p3` at positions 1, 2, 3 respectively.
+    /// Returns the number of rows affected.
+    pub func execute_3_i64(this, sql: Str, p1: I64, p2: I64, p3: I64) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                let _ = stmt.bind_i64(2, p2)
+                let _ = stmt.bind_i64(3, p3)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with one Str parameter.
+    ///
+    /// Prepares the SQL, binds `p1` at position 1, executes, finalizes.
+    /// Returns the number of rows affected.
+    pub func execute_str(this, sql: Str, p1: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with two Str parameters.
+    ///
+    /// Binds `p1` at position 1, `p2` at position 2.
+    /// Returns the number of rows affected.
+    pub func execute_2str(this, sql: Str, p1: Str, p2: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                let _ = stmt.bind_str(2, p2)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
     /// Executes a parameterized statement with one Str param then one I64 param.
     ///
     /// Binds `p1` (Str) at position 1, `p2` (I64) at position 2.
@@ -167,6 +201,47 @@ impl SqliteConnection {
         }
     }
 
+    /// Executes a parameterized statement with one I64 parameter then one Str parameter.
+    ///
+    /// Binds `p1` (I64) at position 1, `p2` (Str) at position 2.
+    /// Returns the number of rows affected.
+    pub func execute_i64_str(this, sql: Str, p1: I64, p2: Str) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                let _ = stmt.bind_str(2, p2)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Executes a parameterized statement with two Str parameters then one I64 parameter.
+    ///
+    /// Binds `p1` (Str) at position 1, `p2` (Str) at position 2, `p3` (I64) at position 3.
+    /// Returns the number of rows affected.
+    pub func execute_2str_i64(this, sql: Str, p1: Str, p2: Str, p3: I64) -> Outcome[I64, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
+                let _ = stmt.bind_str(2, p2)
+                let _ = stmt.bind_i64(3, p3)
+                stmt.step()
+                let changes = this.db.changes() as I64
+                stmt.finalize()
+                return Ok(changes)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    // ── Existence / scalar queries ────────────────────────────────────────
+
     /// Queries with one I64 parameter and returns whether at least one row exists.
     ///
     /// Binds `p1` at position 1, steps once, and returns `true` if a row was found.
@@ -175,6 +250,22 @@ impl SqliteConnection {
         when stmt_result {
             Ok(mut stmt) => {
                 let _ = stmt.bind_i64(1, p1)
+                let found = stmt.step()
+                stmt.finalize()
+                return Ok(found)
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Queries whether at least one row exists, with a Str parameter.
+    ///
+    /// Binds `p1` (Str) at position 1, steps once, returns `true` if a row was found.
+    pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_str(1, p1)
                 let found = stmt.step()
                 stmt.finalize()
                 return Ok(found)
@@ -200,5 +291,91 @@ impl SqliteConnection {
             },
             Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
         }
+    }
+
+    /// Queries a single Str scalar value (e.g. a name or status column).
+    ///
+    /// Steps once and reads column 0 as Str.  Returns an empty string if no row is produced.
+    pub func query_scalar_str(this, sql: Str) -> Outcome[Str, DbError] {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                if stmt.step() {
+                    let v = stmt.column_str(0)
+                    stmt.finalize()
+                    return Ok(v)
+                }
+                stmt.finalize()
+                return Ok("")
+            },
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg))
+        }
+    }
+
+    /// Queries a single I64 value with one I64 parameter.
+    ///
+    /// Binds `p1` at position 1, steps once, and returns the column 0 value
+    /// if a row exists, or `0` if the query returned no rows or the prepare failed.
+    /// Use `exists_by_i64` first if you need to distinguish no-row from zero.
+    pub func query_one_i64(this, sql: Str, p1: I64) -> I64 {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                if stmt.step() {
+                    let v = stmt.column_i64(0)
+                    stmt.finalize()
+                    return v
+                }
+                stmt.finalize()
+                return 0
+            },
+            Err(_) => return 0
+        }
+    }
+
+    /// Queries a single Str value with one I64 parameter.
+    ///
+    /// Binds `p1` at position 1, steps once, and returns the column 0 string
+    /// if a row exists, or `""` if the query returned no rows or the prepare failed.
+    /// Use `exists_by_i64` first if you need to distinguish no-row from empty string.
+    pub func query_one_str(this, sql: Str, p1: I64) -> Str {
+        let stmt_result = this.db.prepare(sql)
+        when stmt_result {
+            Ok(mut stmt) => {
+                let _ = stmt.bind_i64(1, p1)
+                if stmt.step() {
+                    let v = stmt.column_str(0)
+                    stmt.finalize()
+                    return v
+                }
+                stmt.finalize()
+                return ""
+            },
+            Err(_) => return ""
+        }
+    }
+}
+
+impl Connection for SqliteConnection {
+    /// Executes a SQL statement that does not return rows.
+    ///
+    /// Returns the number of rows affected.
+    pub func execute(this, sql: Str) -> Outcome[I64, DbError] {
+        let result = this.db.exec(sql)
+        when result {
+            Ok(_)    => return Ok(this.db.changes() as I64),
+            Err(msg) => return Err(DbError::new(DbErrorKind::Query, msg)),
+        }
+    }
+
+    /// Returns `true` if the connection is currently open.
+    pub func is_alive(this) -> Bool {
+        this.db.is_open()
+    }
+
+    /// Closes the database connection and releases all SQLite resources.
+    pub func close(mut this) {
+        this.db.close()
     }
 }

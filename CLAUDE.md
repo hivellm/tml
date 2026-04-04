@@ -37,6 +37,42 @@ Main: *verifies* *commits* *reports to user*
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**
 
+## ⛔ MANDATORY: Never Stop to Ask "Continue?" — Finish 100% ⛔
+
+**When given a task, complete it 100% without stopping to ask the user if you should continue.**
+
+This is a HARD REQUIREMENT. The user should not have to type "continue" or "sim" repeatedly. Once a task is started, work through ALL items until completion, then report the final result.
+
+**Rules:**
+1. **Never ask "want me to continue?"** — just continue
+2. **Never ask "should I proceed?"** — just proceed
+3. **Complete all items in a task** before reporting back
+4. **If a task has phases**, do all phases sequentially without pausing
+5. **Only stop for genuine blockers** that require user input (e.g., design decisions, authorization for destructive operations)
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Escalate to Team After 2 Failed Attempts ⛔
+
+**If an agent fails to resolve a problem after 2 attempts, STOP guessing and launch a team-lead agent for proper root cause analysis.**
+
+This is a HARD REQUIREMENT. Blind retries waste time and tokens. After 2 failures:
+
+1. **STOP** the current approach immediately
+2. **Launch a team-lead agent** with:
+   - A `deep-analysis-reviewer` to diagnose the root cause
+   - A `researcher` to gather context from the codebase
+   - The relevant specialist to implement the fix
+3. **Never ask the user to delete files or run commands** as a workaround without first understanding WHY
+
+**The team must:**
+- Read error messages carefully
+- Trace the root cause through the code
+- Propose a fix based on understanding, not guessing
+- Test the fix before reporting
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: NEVER Defer — Implement or Build the Infrastructure ⛔
 
 **If a task item requires infrastructure that doesn't exist, BUILD THE INFRASTRUCTURE. Do not mark it as "deferred".**

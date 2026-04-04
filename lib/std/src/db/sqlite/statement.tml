@@ -124,3 +124,16 @@ impl PreparedStatement for SqliteStatement {
         this.stmt.finalize()
     }
 }
+
+impl SqliteStatement {
+    /// Steps the statement and immediately resets it for re-execution.
+    ///
+    /// Convenience method for INSERT / UPDATE / DELETE patterns where you want
+    /// to execute the already-bound statement and then prepare it for the next
+    /// set of bindings.  Returns `true` if a row was produced (unusual for DML).
+    pub func execute_bound(mut this) -> Bool {
+        let had_row = this.stmt.step()
+        let _ = this.stmt.reset()
+        return had_row
+    }
+}
