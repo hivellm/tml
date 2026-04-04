@@ -137,6 +137,10 @@ void ThirMirBuilder::build_function(const thir::ThirFunction& func) {
         p.name = param.name;
         p.type = convert_type(param.type);
         p.value_id = mir_func.fresh_value();
+        // Propagate HTTP parameter extraction metadata from THIR
+        p.extraction.kind =
+            static_cast<mir::ParamExtractionKind>(static_cast<int>(param.extraction.kind));
+        p.extraction.key = param.extraction.key;
         mir_func.params.push_back(std::move(p));
     }
 

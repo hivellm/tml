@@ -93,11 +93,31 @@ struct RouteInfo {
 ///     func move_by(mut this, dx: I32) { ... } // Mutable self
 /// }
 /// ```
+/// The kind of parameter extraction for HTTP handler parameters.
+///
+/// Used by the HTTP framework to generate extraction code for route handler parameters.
+/// These correspond to decorators like `@Param("id")`, `@Query("page")`, `@Body`,
+/// `@Headers("name")`.
+enum class ParamExtractionKind {
+    None,       ///< No extraction — regular parameter.
+    PathParam,  ///< `@Param("name")` — extract from URL path segment.
+    QueryParam, ///< `@Query("name")` — extract from query string.
+    Body,       ///< `@Body` — extract from request body.
+    Header,     ///< `@Headers("name")` — extract from HTTP header.
+};
+
+/// Metadata about how a parameter should be extracted from an HTTP request.
+struct ParamExtractionInfo {
+    ParamExtractionKind kind = ParamExtractionKind::None;
+    std::string key; ///< Extraction key (e.g., "id" for `@Param("id")`). Empty for `@Body`.
+};
+
 struct HirParam {
     std::string name;
     HirType type;
     bool is_mut;
     SourceSpan span;
+    ParamExtractionInfo extraction; ///< HTTP parameter extraction metadata.
 };
 
 /// A function declaration in HIR.

@@ -166,6 +166,10 @@ void HirMirBuilder::build_function(const hir::HirFunction& func) {
         mir_param.name = param.name;
         mir_param.type = convert_type(param.type);
         mir_param.value_id = mir_func.fresh_value();
+        // Propagate HTTP parameter extraction metadata from HIR
+        mir_param.extraction.kind =
+            static_cast<mir::ParamExtractionKind>(static_cast<int>(param.extraction.kind));
+        mir_param.extraction.key = param.extraction.key;
 
         mir_func.params.push_back(mir_param);
 

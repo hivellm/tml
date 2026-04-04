@@ -938,6 +938,9 @@ void HirBinaryWriter::write_param(const HirParam& param) {
     write_type(param.type);
     write_bool(param.is_mut);
     write_span(param.span);
+    // Parameter extraction metadata (HTTP decorators: @Param, @Query, @Body, @Headers)
+    write_u8(static_cast<uint8_t>(param.extraction.kind));
+    write_string(param.extraction.key);
 }
 
 /// Writes a struct field.

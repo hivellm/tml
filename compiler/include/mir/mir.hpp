@@ -778,13 +778,34 @@ struct BasicBlock {
 };
 
 // ============================================================================
+// Parameter Extraction (HTTP decorators)
+// ============================================================================
+
+/// The kind of parameter extraction for HTTP handler parameters.
+/// Mirrors hir::ParamExtractionKind for the MIR layer.
+enum class ParamExtractionKind {
+    None,       ///< No extraction — regular parameter.
+    PathParam,  ///< `@Param("name")` — extract from URL path segment.
+    QueryParam, ///< `@Query("name")` — extract from query string.
+    Body,       ///< `@Body` — extract from request body.
+    Header,     ///< `@Headers("name")` — extract from HTTP header.
+};
+
+/// Metadata about how a parameter should be extracted from an HTTP request.
+struct ParamExtractionInfo {
+    ParamExtractionKind kind = ParamExtractionKind::None;
+    std::string key; ///< Extraction key (e.g., "id" for `@Param("id")`). Empty for `@Body`.
+};
+
+// ============================================================================
 // Function
 // ============================================================================
 
 struct FunctionParam {
     std::string name;
     MirTypePtr type;
-    ValueId value_id; // SSA value for this parameter
+    ValueId value_id;               // SSA value for this parameter
+    ParamExtractionInfo extraction; ///< HTTP parameter extraction metadata.
 };
 
 // ============================================================================

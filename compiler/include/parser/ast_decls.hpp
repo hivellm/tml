@@ -145,6 +145,8 @@ struct FuncParam {
     PatternPtr pattern; ///< Parameter pattern (e.g., `x`, `(a, b)`).
     TypePtr type;       ///< Parameter type.
     SourceSpan span;    ///< Source location.
+    std::vector<Decorator>
+        decorators; ///< Parameter decorators (e.g., `@Param("id")`, `@Query("page")`).
 };
 
 /// A function contract clause (pre/post condition).

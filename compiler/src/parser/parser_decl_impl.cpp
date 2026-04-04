@@ -800,6 +800,15 @@ auto Parser::parse_func_params() -> Result<std::vector<FuncParam>, ParseError> {
 }
 
 auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
+    // Parse optional decorators before parameter (e.g., @Param("id"), @Query("page"))
+    std::vector<Decorator> param_decorators;
+    if (check(lexer::TokenKind::At)) {
+        auto decos_result = parse_decorators();
+        if (is_err(decos_result))
+            return unwrap_err(decos_result);
+        param_decorators = std::move(unwrap(decos_result));
+    }
+
     auto pattern_result = parse_pattern();
     if (is_err(pattern_result))
         return unwrap_err(pattern_result);
@@ -824,14 +833,18 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
                                                                  .lifetime = std::nullopt,
                                                                  .span = span},
                                                  .span = span});
-            return FuncParam{
-                .pattern = std::move(pattern), .type = std::move(this_type), .span = span};
+            return FuncParam{.pattern = std::move(pattern),
+                             .type = std::move(this_type),
+                             .span = span,
+                             .decorators = std::move(param_decorators)};
         } else {
             // 'this' without type - use This type implicitly (immutable, passed by value/ref)
             auto this_type = make_box<Type>(
                 Type{.kind = NamedType{TypePath{{"This"}, span}, {}, span}, .span = span});
-            return FuncParam{
-                .pattern = std::move(pattern), .type = std::move(this_type), .span = span};
+            return FuncParam{.pattern = std::move(pattern),
+                             .type = std::move(this_type),
+                             .span = span,
+                             .decorators = std::move(param_decorators)};
         }
     }
 
@@ -846,7 +859,10 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
 
     auto span = SourceSpan::merge(pattern->span, type->span);
 
-    return FuncParam{.pattern = std::move(pattern), .type = std::move(type), .span = span};
+    return FuncParam{.pattern = std::move(pattern),
+                     .type = std::move(type),
+                     .span = span,
+                     .decorators = std::move(param_decorators)};
 }
 
 } // namespace tml::parser

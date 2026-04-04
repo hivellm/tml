@@ -101,7 +101,10 @@ auto ThirLower::lower_behavior(const hir::HirBehavior& b) -> ThirBehavior {
         method.span = m.span;
 
         for (const auto& p : m.params) {
-            method.params.push_back({p.name, p.type, p.is_mut, p.span});
+            thir::ParamExtractionInfo ext;
+            ext.kind = static_cast<thir::ParamExtractionKind>(static_cast<int>(p.extraction.kind));
+            ext.key = p.extraction.key;
+            method.params.push_back({p.name, p.type, p.is_mut, p.span, std::move(ext)});
         }
 
         if (m.default_body) {
@@ -147,7 +150,10 @@ auto ThirLower::lower_function(const hir::HirFunction& func) -> ThirFunction {
     result.span = func.span;
 
     for (const auto& p : func.params) {
-        result.params.push_back({p.name, p.type, p.is_mut, p.span});
+        thir::ParamExtractionInfo ext;
+        ext.kind = static_cast<thir::ParamExtractionKind>(static_cast<int>(p.extraction.kind));
+        ext.key = p.extraction.key;
+        result.params.push_back({p.name, p.type, p.is_mut, p.span, std::move(ext)});
     }
 
     if (func.body) {

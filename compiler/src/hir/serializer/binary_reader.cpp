@@ -1025,6 +1025,9 @@ auto HirBinaryReader::read_param() -> HirParam {
     param.type = read_type();
     param.is_mut = read_bool();
     param.span = read_span();
+    // Parameter extraction metadata (HTTP decorators: @Param, @Query, @Body, @Headers)
+    param.extraction.kind = static_cast<ParamExtractionKind>(read_u8());
+    param.extraction.key = read_string();
     return param;
 }
 

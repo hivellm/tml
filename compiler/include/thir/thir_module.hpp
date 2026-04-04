@@ -26,12 +26,29 @@ struct RouteInfo {
 // Declaration Types
 // ============================================================================
 
+/// The kind of parameter extraction for HTTP handler parameters.
+/// Mirrors hir::ParamExtractionKind for the THIR layer.
+enum class ParamExtractionKind {
+    None,       ///< No extraction — regular parameter.
+    PathParam,  ///< `@Param("name")` — extract from URL path segment.
+    QueryParam, ///< `@Query("name")` — extract from query string.
+    Body,       ///< `@Body` — extract from request body.
+    Header,     ///< `@Headers("name")` — extract from HTTP header.
+};
+
+/// Metadata about how a parameter should be extracted from an HTTP request.
+struct ParamExtractionInfo {
+    ParamExtractionKind kind = ParamExtractionKind::None;
+    std::string key; ///< Extraction key (e.g., "id" for `@Param("id")`). Empty for `@Body`.
+};
+
 /// A function parameter.
 struct ThirParam {
     std::string name;
     ThirType type;
     bool is_mut;
     SourceSpan span;
+    ParamExtractionInfo extraction; ///< HTTP parameter extraction metadata.
 };
 
 /// A function declaration in THIR.

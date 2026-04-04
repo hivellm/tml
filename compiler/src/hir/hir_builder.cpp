@@ -59,6 +59,45 @@ TML_MODULE("compiler")
 namespace tml::hir {
 
 // ============================================================================
+// Parameter Extraction Helper
+// ============================================================================
+//
+// Converts AST parameter decorators (@Param, @Query, @Body, @Headers) into
+// HIR ParamExtractionInfo for HTTP route handler parameter extraction.
+//
+
+static ParamExtractionInfo extract_param_info(const std::vector<parser::Decorator>& decorators) {
+    for (const auto& deco : decorators) {
+        ParamExtractionKind kind = ParamExtractionKind::None;
+        if (deco.name == "Param") {
+            kind = ParamExtractionKind::PathParam;
+        } else if (deco.name == "Query") {
+            kind = ParamExtractionKind::QueryParam;
+        } else if (deco.name == "Body") {
+            kind = ParamExtractionKind::Body;
+        } else if (deco.name == "Headers") {
+            kind = ParamExtractionKind::Header;
+        }
+
+        if (kind != ParamExtractionKind::None) {
+            std::string key;
+            // Extract the key from the first string argument, if present.
+            // e.g., @Param("id") → key = "id"
+            if (!deco.args.empty() && deco.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = deco.args[0]->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                    if (auto* sv = std::get_if<lexer::StringValue>(&lit.token.value)) {
+                        key = sv->value;
+                    }
+                }
+            }
+            return ParamExtractionInfo{kind, std::move(key)};
+        }
+    }
+    return ParamExtractionInfo{};
+}
+
+// ============================================================================
 // MonomorphizationCache
 // ============================================================================
 //
@@ -301,6 +340,7 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
         }
         hir_param.type = resolve_type(*param.type);
         hir_param.span = param.span;
+        hir_param.extraction = extract_param_info(param.decorators);
         hir_func.params.push_back(std::move(hir_param));
     }
 
@@ -449,6 +489,7 @@ auto HirBuilder::lower_behavior(const parser::TraitDecl& trait_decl) -> HirBehav
             }
             hir_param.type = resolve_type(*param.type);
             hir_param.span = param.span;
+            hir_param.extraction = extract_param_info(param.decorators);
             hir_method.params.push_back(std::move(hir_param));
         }
 
@@ -737,6 +778,7 @@ auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> Hir
                     hir_param.type = resolve_type(*param.type);
                 }
                 hir_param.span = param.span;
+                hir_param.extraction = extract_param_info(param.decorators);
                 hir_func.params.push_back(std::move(hir_param));
             }
 
