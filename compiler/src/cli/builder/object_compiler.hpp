@@ -105,6 +105,7 @@ struct LinkOptions {
     int lto_jobs = 0;                         // Parallel LTO jobs (0 = auto)
     std::vector<fs::path> additional_objects; // Runtime libs, etc.
     std::vector<std::string> link_flags;
+    std::vector<std::string> library_search_paths; // -L flags from build.tml
     std::string target_triple;         // Target triple for cross-compilation (empty = host)
     std::string sysroot;               // Sysroot path for cross-compilation
     bool force_subprocess_lld = false; // Skip in-process LLD (avoids deadlocks)

@@ -24,6 +24,7 @@ TML_MODULE("compiler")
 //! 2. Object/exe cache: content-hash in `build/debug/.run-cache/`
 
 #include "builder_internal.hpp"
+#include "cli/builder/build_script.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
@@ -321,6 +322,25 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             }
         }
 
+        // Add libraries and search paths from build.tml
+        {
+            auto bs_result = detect_and_run_build_script(path, verbose);
+            if (bs_result.success) {
+                fs::path package_dir = detect_package_dir(fs::absolute(fs::path(path)));
+                for (const auto& sp : bs_result.link_search_paths) {
+                    fs::path abs_path = sp.is_absolute() ? sp : package_dir / sp;
+                    link_options.library_search_paths.push_back(abs_path.string());
+                }
+                for (const auto& lib : bs_result.link_libs) {
+                    if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                        link_options.link_flags.push_back("\"" + lib + "\"");
+                    } else {
+                        link_options.link_flags.push_back("-l" + lib);
+                    }
+                }
+            }
+        }
+
 #ifdef _WIN32
         // Add Windows system libraries for socket support
         if ((compile.module && has_socket_functions(*compile.module)) ||
@@ -513,6 +533,25 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                 link_options.link_flags.push_back("\"" + lib + "\"");
             } else {
                 link_options.link_flags.push_back("-l" + lib);
+            }
+        }
+
+        // Add libraries and search paths from build.tml
+        {
+            auto bs_result = detect_and_run_build_script(path, false);
+            if (bs_result.success) {
+                fs::path package_dir = detect_package_dir(fs::absolute(fs::path(path)));
+                for (const auto& sp : bs_result.link_search_paths) {
+                    fs::path abs_path = sp.is_absolute() ? sp : package_dir / sp;
+                    link_options.library_search_paths.push_back(abs_path.string());
+                }
+                for (const auto& lib : bs_result.link_libs) {
+                    if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                        link_options.link_flags.push_back("\"" + lib + "\"");
+                    } else {
+                        link_options.link_flags.push_back("-l" + lib);
+                    }
+                }
             }
         }
 

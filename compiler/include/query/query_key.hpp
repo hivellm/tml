@@ -223,6 +223,7 @@ struct CodegenUnitResult {
     std::string llvm_ir;               ///< IR text (LLVM IR or Cranelift IR)
     std::filesystem::path object_file; ///< Direct object file (Cranelift path)
     std::set<std::string> link_libs;
+    std::set<std::string> link_search_paths; ///< Library search paths from build.tml (-L flags)
     bool success = false;
     std::string error_message;
 

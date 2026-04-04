@@ -28,6 +28,7 @@ TML_MODULE("compiler")
 //! Use `--no-cache` to force recompilation.
 
 #include "builder_internal.hpp"
+#include "cli/builder/build_script.hpp"
 #include "codegen/codegen_backend.hpp"
 #include "codegen/codegen_partitioner.hpp"
 #include "query/query_context.hpp"
@@ -78,6 +79,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         TML_LOG_ERROR("build", e.what());
         return 1;
     }
+
+    // --- Build Script Phase ---
+    // Check if the source file's package has a build.tml and execute it.
+    auto build_script_result = detect_and_run_build_script(path, verbose);
 
     // Run preprocessor to handle #if/#define/#ifdef etc.
     auto preproc_result = preprocess_source(source_code, path, options);
@@ -899,6 +904,23 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             }
         }
 
+        // Add libraries and search paths from build.tml
+        if (build_script_result.success) {
+            fs::path package_dir = detect_package_dir(fs::absolute(fs::path(path)));
+            for (const auto& sp : build_script_result.link_search_paths) {
+                // Resolve relative paths against the package directory
+                fs::path abs_path = sp.is_absolute() ? sp : package_dir / sp;
+                link_options.library_search_paths.push_back(abs_path.string());
+            }
+            for (const auto& lib : build_script_result.link_libs) {
+                if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                    link_options.link_flags.push_back("\"" + lib + "\"");
+                } else {
+                    link_options.link_flags.push_back("-l" + lib);
+                }
+            }
+        }
+
 #ifdef _WIN32
         // Add Windows system libraries for socket support
         if (has_socket_functions(module) || registry->has_module("std::net") ||
@@ -932,6 +954,28 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         if (!link_result.success) {
             TML_LOG_ERROR("build", link_result.error_message);
             return 1;
+        }
+    }
+
+    // Copy artifacts from build.tml to output directory
+    if (build_script_result.success && !build_script_result.copy_artifacts.empty()) {
+        fs::path package_dir = detect_package_dir(fs::absolute(fs::path(path)));
+        for (const auto& artifact : build_script_result.copy_artifacts) {
+            fs::path src = artifact.is_absolute() ? artifact : package_dir / artifact;
+            fs::path dst = build_dir / artifact.filename();
+            if (fs::exists(src)) {
+                std::error_code ec;
+                fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                if (ec) {
+                    TML_LOG_WARN("build", "[build.tml] Failed to copy artifact: "
+                                              << src.string() << " (" << ec.message() << ")");
+                } else {
+                    TML_LOG_INFO("build", "[build.tml] Copied " << artifact.filename().string()
+                                                                << " -> " << build_dir.string());
+                }
+            } else {
+                TML_LOG_WARN("build", "[build.tml] Artifact not found: " << src.string());
+            }
         }
     }
 
@@ -1279,6 +1323,25 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
             link_options.link_flags.push_back("\"" + lib + "\"");
         } else {
             link_options.link_flags.push_back("-l" + lib);
+        }
+    }
+
+    // Add libraries and search paths from build.tml
+    {
+        auto bs_result = detect_and_run_build_script(path, verbose);
+        if (bs_result.success) {
+            fs::path package_dir = detect_package_dir(fs::absolute(fs::path(path)));
+            for (const auto& sp : bs_result.link_search_paths) {
+                fs::path abs_path = sp.is_absolute() ? sp : package_dir / sp;
+                link_options.library_search_paths.push_back(abs_path.string());
+            }
+            for (const auto& lib : bs_result.link_libs) {
+                if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                    link_options.link_flags.push_back("\"" + lib + "\"");
+                } else {
+                    link_options.link_flags.push_back("-l" + lib);
+                }
+            }
         }
     }
 

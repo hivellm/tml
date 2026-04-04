@@ -51,6 +51,7 @@ struct CodegenResult {
     std::string llvm_ir;
     fs::path object_file;
     std::set<std::string> link_libs;
+    std::set<std::string> link_search_paths; ///< Library search paths from build.tml (-L flags)
     std::string error_message;
 };
 

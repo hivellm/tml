@@ -652,6 +652,11 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
             cmd << " \"" << to_forward_slashes(obj) << "\"";
         }
 
+        // Library search paths from build.tml
+        for (const auto& sp : options.library_search_paths) {
+            cmd << " -L\"" << to_forward_slashes(fs::path(sp)) << "\"";
+        }
+
         // Additional link flags
         for (const auto& flag : options.link_flags) {
             cmd << " " << flag;
@@ -832,6 +837,11 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
     lld_opts.target_triple = options.target_triple;
     lld_opts.extra_flags = options.link_flags;
     lld_opts.force_subprocess = options.force_subprocess_lld;
+
+    // Add library search paths from build.tml
+    for (const auto& sp : options.library_search_paths) {
+        lld_opts.library_paths.push_back(fs::path(sp));
+    }
 
     // Convert additional objects to library paths
     for (const auto& obj : options.additional_objects) {

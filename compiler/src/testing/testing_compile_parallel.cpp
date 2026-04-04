@@ -6,6 +6,7 @@ TML_MODULE("test")
 //! - compile_suites_parallel(): parallel suite compilation with thread pool
 //! - compile_unified_binary(): Zig-model unified binary compilation
 
+#include "cli/builder/build_script.hpp"
 #include "testing/testing_compile_internal.hpp"
 
 namespace tml::testing {
@@ -482,6 +483,27 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
 
     for (const auto& lib : all_link_libs) {
         link_opts.link_flags.push_back(lib);
+    }
+
+    // Add libraries and search paths from build.tml for any imported packages
+    for (const auto& suite : suites) {
+        for (const auto& test : suite.tests) {
+            auto bs_result = cli::detect_and_run_build_script(test.file_path, false);
+            if (bs_result.success) {
+                fs::path package_dir =
+                    cli::detect_package_dir(fs::absolute(fs::path(test.file_path)));
+                for (const auto& sp : bs_result.link_search_paths) {
+                    fs::path abs_path = sp.is_absolute() ? sp : package_dir / sp;
+                    link_opts.library_search_paths.push_back(abs_path.string());
+                }
+                for (const auto& lib : bs_result.link_libs) {
+                    link_opts.link_flags.push_back(
+                        (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos)
+                            ? "\"" + lib + "\""
+                            : "-l" + lib);
+                }
+            }
+        }
     }
 
 #ifdef _WIN32

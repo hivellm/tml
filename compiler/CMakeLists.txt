@@ -1732,6 +1732,7 @@ add_library(tml_cli STATIC
     # Builder modules
     src/cli/builder/build.cpp
     src/cli/builder/build_cache.cpp
+    src/cli/builder/build_script.cpp
     src/cli/builder/build_config.cpp
     src/cli/builder/compiler_setup.cpp
     src/cli/builder/dependency_resolver.cpp
