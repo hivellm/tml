@@ -1,6 +1,6 @@
 # Tasks: NestJS-Style HTTP Decorators — Full API Framework
 
-**Status**: In Progress. 91% (50/55). Phases 1-8 complete. Phase 9 (full example + docs) remaining.
+**Status**: In Progress. 96% (53/55). Phases 1-8 complete. Phase 9 partially done (9.1, 9.2, 9.5 complete; 9.3 db ORM integration and 9.4 JWT auth deferred).
 **Existing infra**: @Get/@Post codegen works, radix-tree router, App.listen(), IncomingMessage, app_build_response
 **Target API**:
 ```tml
@@ -130,11 +130,11 @@ impl UserController {
 ## Phase 9: Full Example App + Documentation (5 items)
 
 ### Example: REST API
-- [ ] 9.1 `samples/api/` — complete CRUD API with @Controller, @Get/@Post/@Put/@Delete
-- [ ] 9.2 User entity + UserService + UserController pattern
-- [ ] 9.3 Integration with std::db ORM (SqliteConnection + repository)
-- [ ] 9.4 Auth guard + JWT-style token validation
-- [ ] 9.5 Documentation: "Building a REST API with TML" guide in docs/user/
+- [x] 9.1 `samples/api/main.tml` — complete CRUD API with @Controller, @Get/@Post/@Put/@Delete — compiles clean
+- [x] 9.2 User entity + UserService + UserController pattern — UserService (find_all, find_by_id, create, update, delete_by_id), UserController implements Controller behavior
+- [ ] 9.3 Integration with std::db ORM (SqliteConnection + repository) — deferred: requires linking sqlite3.lib from sample context
+- [ ] 9.4 Auth guard + JWT-style token validation — deferred: requires @UseGuards compiler support (Phase 5.2)
+- [x] 9.5 Documentation: `docs/user/rest-api-guide.md` — covers @Controller, handler signature, route params, Response builder, DI integration, template literals, all HTTP methods, startup options
 
 ## Architecture Notes
 
