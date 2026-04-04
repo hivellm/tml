@@ -113,6 +113,19 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
             decorator.name == "Options") {
             error("@" + decorator.name + " is only valid on function declarations, not types",
                   decorator.span, "T090");
+        } else if (decorator.name == "Controller") {
+            // Validate @Controller arguments
+            if (decorator.args.empty()) {
+                error("@Controller requires a path prefix argument, e.g. @Controller(\"/users\")",
+                      decorator.span, "T090");
+            } else if (decorator.args.size() > 1) {
+                error("@Controller takes exactly one path prefix argument", decorator.span, "T090");
+            } else if (!decorator.args[0]->is<parser::LiteralExpr>() ||
+                       decorator.args[0]->as<parser::LiteralExpr>().token.kind !=
+                           lexer::TokenKind::StringLiteral) {
+                error("@Controller argument must be a string literal, e.g. @Controller(\"/users\")",
+                      decorator.span, "T090");
+            }
         } else if (decorator.name == "interior_mutable") {
             is_interior_mutable = true;
         } else if (decorator.name == "derive") {

@@ -496,12 +496,50 @@ auto HirBuilder::lower_impl(const parser::ImplDecl& impl_decl) -> HirImpl {
     // Set the context for resolving 'This'/'Self' types in method parameters
     current_impl_self_type_ = hir_impl.self_type;
 
+    // Check if the target type has @Controller decorator — extract route prefix
+    std::string controller_prefix;
+    auto struct_it = struct_decl_map_.find(hir_impl.type_name);
+    if (struct_it != struct_decl_map_.end()) {
+        for (const auto& decorator : struct_it->second->decorators) {
+            if (decorator.name == "Controller" && !decorator.args.empty()) {
+                if (decorator.args[0]->is<parser::LiteralExpr>()) {
+                    const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                        controller_prefix = lit.token.string_value().value;
+                        // Remove trailing slash from prefix to avoid double slashes
+                        while (controller_prefix.size() > 1 && controller_prefix.back() == '/') {
+                            controller_prefix.pop_back();
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     // Methods - mangle names with type prefix to avoid collisions
     // e.g., Button::draw -> Button__draw, matching CallInst resolution
     for (const auto& method : impl_decl.methods) {
         hir_impl.methods.push_back(lower_function(method));
         auto& hir_method = hir_impl.methods.back();
         hir_method.mangled_name = hir_impl.type_name + "__" + hir_method.name;
+
+        // If this type has @Controller prefix and the method has a route decorator,
+        // prepend the controller prefix to the route path.
+        // e.g., @Controller("/users") + @Get("/:id") → route path "/users/:id"
+        if (!controller_prefix.empty() && hir_method.route_info.has_value()) {
+            std::string method_path = hir_method.route_info->path;
+            // Ensure method_path starts with /
+            if (method_path.empty() || method_path[0] != '/') {
+                method_path = "/" + method_path;
+            }
+            // Avoid double slash: if prefix is "/users" and path is "/", result is "/users"
+            if (method_path == "/") {
+                hir_method.route_info->path = controller_prefix;
+            } else {
+                hir_method.route_info->path = controller_prefix + method_path;
+            }
+        }
     }
 
     // Clear the context
@@ -609,6 +647,24 @@ auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> Hir
     // Set context for resolving 'This'/'Self' in methods
     current_impl_self_type_ = hir_impl.self_type;
 
+    // Check if the class has @Controller decorator — extract route prefix
+    std::string controller_prefix;
+    for (const auto& decorator : class_decl.decorators) {
+        if (decorator.name == "Controller" && !decorator.args.empty()) {
+            if (decorator.args[0]->is<parser::LiteralExpr>()) {
+                const auto& lit = decorator.args[0]->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                    controller_prefix = lit.token.string_value().value;
+                    // Remove trailing slash from prefix to avoid double slashes
+                    while (controller_prefix.size() > 1 && controller_prefix.back() == '/') {
+                        controller_prefix.pop_back();
+                    }
+                }
+            }
+            break;
+        }
+    }
+
     // Lower class methods directly (avoiding copy issues with BlockExpr)
     for (const auto& method : class_decl.methods) {
         if (!method.is_abstract && method.body) {
@@ -707,6 +763,19 @@ auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> Hir
 
             current_func_name_.clear();
             current_return_type_ = nullptr;
+
+            // Apply @Controller prefix to route path if present
+            if (!controller_prefix.empty() && hir_func.route_info.has_value()) {
+                std::string method_path = hir_func.route_info->path;
+                if (method_path.empty() || method_path[0] != '/') {
+                    method_path = "/" + method_path;
+                }
+                if (method_path == "/") {
+                    hir_func.route_info->path = controller_prefix;
+                } else {
+                    hir_func.route_info->path = controller_prefix + method_path;
+                }
+            }
 
             hir_impl.methods.push_back(std::move(hir_func));
         }
