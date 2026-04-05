@@ -81,6 +81,65 @@ build-system change with no impact on the TML compiler or generated code.
 
 ---
 
+## Phase 1b: Bundle Clang (tml-cc / tml-cxx) (2-4 weeks)
+
+### Objective
+
+Package Clang 20 as `tml-cc.exe` and `tml-cxx.exe` — the C/C++ compiler frontend for
+TML's toolchain. After this phase, no externally installed compiler (Zig, MSVC, or system
+Clang) is required to build TML or TML programs.
+
+### Why
+
+- Eliminates the dependency on any external compiler (Zig, MSVC, or system Clang)
+- TML already links against LLVM; the Clang frontend is the same codebase, so adding it
+  is an incremental dependency rather than a new technology
+- Users get a complete toolchain in one download with no installation prerequisites
+
+### Tasks
+
+1. Add Clang frontend libraries to `CMakeLists.txt`:
+   `clangDriver`, `clangFrontend`, `clangCodeGen`, `clangSerialization`,
+   `clangTooling`, and their transitive dependencies.
+2. Create `compiler/src/launcher/cc_main.cpp`: thin driver that invokes Clang's
+   `CompilerInvocation` API with sysroot pointing to TML's bundled headers.
+3. Create `tml-cc.exe` build target: the C compiler binary.
+4. Create `tml-cxx.exe` build target: same driver with C++ defaults (`-std=c++20`,
+   `-stdlib=libc++`, `-nostdinc++` pointing to bundled libc++ headers).
+5. Bundle UCRT headers from Windows SDK (or detect system SDK path and copy at install
+   time). Target directory: `<tml-root>/include/ucrt/` and `<tml-root>/include/win32/`.
+6. Bundle libc++ headers from the LLVM project source tree (already present in
+   `src/llvm-project/libcxx/include/`).
+7. Create the sysroot directory structure: `<tml-root>/include/`, `<tml-root>/lib/x64/`.
+8. Set the default target triple based on host OS detection at startup:
+   `x86_64-windows-msvc` (Windows), `x86_64-linux-gnu` (Linux).
+9. Update `cmake/tml-toolchain.cmake` to point `CMAKE_C_COMPILER` and
+   `CMAKE_CXX_COMPILER` to `tml-cc.exe` and `tml-cxx.exe` respectively, and set
+   `CMAKE_LINKER` to the system lld-link initially (replaced by tml-link in Phase 3).
+10. Test: build the TML compiler using `tml-cc`/`tml-cxx` via the toolchain file.
+    All tests must pass with zero regressions.
+
+### Acceptance Criteria
+
+- `tml-cc hello.c -o hello.obj` produces a valid COFF object file without any external
+  compiler installed.
+- `tml-cxx main.cpp -o main.obj` compiles C++20 code using bundled libc++ headers.
+- TML compiler builds successfully using `tml-cc`/`tml-cxx` (all ~100,000 lines of C++).
+- `scripts/build.bat --tml-cc` uses the new toolchain path.
+- No Zig, no MSVC, no system Clang required on the build machine.
+
+### Risk: MEDIUM
+
+- The Clang library API (`CompilerInvocation`) is not as stable as the command-line
+  interface; version skew between headers requires careful pinning.
+- Header bundling increases the distribution size (~50MB compressed, ~200MB uncompressed).
+- Some Windows SDK headers may have licensing restrictions that affect redistribution;
+  legal review required before shipping.
+- Fallback: if library API proves too unstable, implement `tml-cc.exe` as a thin process
+  launcher for the vendored `clang.exe` binary instead of an in-process API call.
+
+---
+
 ## Phase 2: In-Memory Object Passing (2-4 weeks)
 
 ### Objective
@@ -410,6 +469,44 @@ CMake builds.
 3. Integration test: build the TML compiler itself using `tml-toolchain.cmake`. The
    resulting `tml.exe` must pass the full test suite.
 
+#### 3h: C++ Object File Support (1-2 weeks)
+
+Full support for C++ object files is required so that tml-link can link the TML compiler
+itself (a ~100,000-line C++ codebase). Phase 3a–3g establish the core linker; this
+sub-phase adds the C++-specific features that the earlier sub-phases defer.
+
+**Tasks:**
+
+1. **Exception handling (SEH unwind tables).** Parse `.pdata` and `.xdata` sections from
+   input objects. Merge them into the output `.pdata` and `.xdata` sections. Ensure all
+   `RUNTIME_FUNCTION` entries have correct RVAs after section layout. Verify with
+   `dumpbin /unwindinfo` against LLD output.
+
+2. **COMDAT group selection (full policy set).** Implement all five selection types:
+   - `IMAGE_COMDAT_SELECT_ANY` — keep any one definition (first encountered)
+   - `IMAGE_COMDAT_SELECT_LARGEST` — keep the largest definition
+   - `IMAGE_COMDAT_SELECT_NEWEST` — keep the definition with the latest timestamp
+   - `IMAGE_COMDAT_SELECT_EXACT_MATCH` — all definitions must be identical
+   - `IMAGE_COMDAT_SELECT_ASSOCIATIVE` — follow the selection of another section
+   Phase 3b implements basic COMDAT; this extends it to all five policies.
+
+3. **`.CRT$` section ordering.** Collect all `.CRT$XCU` sections (static constructors)
+   and `.CRT$XTU` sections (static destructors) from input objects. Sort by section name
+   suffix (alphabetical) to determine initialization order. Merge into the output image
+   so the CRT startup code correctly walks the function pointer arrays.
+
+4. **Thread-local storage (TLS) directory.** Parse `.tls` and `.tls$` sections from
+   input objects. Build the PE TLS directory (`IMAGE_TLS_DIRECTORY64`) with correct
+   `StartAddressOfRawData`, `EndAddressOfRawData`, `AddressOfIndex`, and
+   `AddressOfCallBacks` fields. Set the PE data directory entry for TLS.
+
+5. **Integration test: link TML compiler with tml-link.** After steps 1–4, attempt to
+   link the full TML compiler (`tml_compiler.dll` and `tml.exe`) using `tml-link` in
+   place of LLD-COFF. All SEH frames, static constructors, and TLS must work correctly.
+
+6. **Acceptance test.** The resulting `tml.exe` (linked by tml-link) must pass the full
+   TML test suite — the same acceptance bar as building with LLD.
+
 ### Acceptance Criteria
 
 - All TML tests pass when `tml-link.exe` replaces LLD-COFF.
@@ -617,42 +714,78 @@ chained fixups format used in recent macOS versions.
 
 ---
 
+## Phase 6: Advanced Features (ongoing)
+
+### 6a: PDB Debug Info Generation (4-6 weeks)
+
+Full Windows debug info support for Visual Studio and WinDbg integration.
+
+1. Parse CodeView debug sections (`.debug$S` for symbols, `.debug$T` for types)
+   from each input object file.
+2. Implement PDB Multi-Stream File (MSF) writer: SuperBlock, stream directory,
+   FPM (Free Page Map), named streams.
+3. Write TPI stream (Type Info): merge and deduplicate type records across
+   compilation units using hash-based deduplication.
+4. Write DBI stream (Debug Info): module info, section contributions, source
+   file info, optional header data.
+5. Write symbol records to module streams: `S_GPROC32`, `S_LPROC32`,
+   `S_GDATA32`, `S_UDT`, etc.
+6. Write Section Map and File Info substreams.
+7. Generate public symbol hash table for fast address-to-symbol lookup.
+8. Integration test: link a TML program with `/DEBUG`, open in Visual Studio,
+   verify breakpoints and variable inspection work.
+
+### 6b: Link-Time Optimization (2-4 weeks)
+
+Whole-program optimization across compilation units.
+
+1. Accept LLVM bitcode (`.bc`) inputs alongside COFF objects.
+2. Run LLVM LTO pipeline: inter-procedural optimization, dead function
+   elimination across CUs, cross-module inlining.
+3. Merge bitcode modules → optimize → codegen → link as normal.
+4. Support both Full LTO and Thin LTO modes.
+5. Integration test: compile TML test suite with LTO, verify correctness
+   and measure binary size reduction.
+
+### 6c: Profile-Guided Optimization (2-4 weeks)
+
+Runtime-informed layout optimization.
+
+1. Accept `.profdata` files from instrumented runs (`llvm-profdata merge`).
+2. Parse function execution counts and branch frequencies.
+3. Reorder functions in `.text` by hotness (hot functions contiguous,
+   cold functions at end of section).
+4. Hot/cold splitting: split rarely-executed paths into `.text.cold`.
+5. Integration test: profile a TML benchmark, relink with PGO, measure
+   instruction cache miss reduction.
+
+### 6d: Thin LTO (2-4 weeks)
+
+Scalable LTO for large codebases.
+
+1. Parallel per-module optimization (each CU optimized independently with
+   cross-module summary information).
+2. Summary-based whole-program analysis: import lists, type metadata,
+   devirtualization candidates.
+3. Parallel codegen after optimization.
+4. Integration test: compile TML compiler itself with Thin LTO, verify
+   build time improvement vs Full LTO.
+
+---
+
 ## Dependencies and Critical Path
 
 ```
-Phase 1 ──────────────────────────────────────────────────────────────┐
-(Zig CC removal — 1-2 weeks)                                          │
-  │                                                                   │
-  ▼                                                                   │
-Phase 2 ──────────────────────────────────────────────────────────────┤
-(In-memory obj passing — 2-4 weeks)                                   │
-  │                                                                   │
-  ▼                                                                   │
-Phase 3 ──────────────────────────────────────────┐                   │
-(Custom PE/COFF linker — 4-8 weeks)               │                   │
-  │                                               │                   │
-  ▼                                               ▼                   │
-Phase 4                                       Phase 5                 │
-(Incremental linking — 4-8 weeks)         (ELF/Mach-O — 4-8 weeks)  │
-                                                                      │
-All phases require Phase 1 to be complete ────────────────────────────┘
+Phase 1 ─→ Phase 1b ─→ Phase 2 ─→ Phase 3 ─┬─→ Phase 4 (incremental)
+(Zig CC)   (tml-cc)    (in-mem)   (tml-link) ├─→ Phase 5 (ELF/Mach-O)
+                                              └─→ Phase 6 (PDB/LTO/PGO)
 ```
 
-Phase 1 is a prerequisite for all later phases: without a Zig-free build, CI on
-non-Zig machines cannot validate Phase 2+ work.
-
-Phase 2 is a prerequisite for Phase 3: the in-memory buffer pipeline is the
-interface that tml-link consumes. Phase 3 implemented against the file-based path
-would require rework.
-
-Phase 3 is a prerequisite for Phase 4: incremental linking requires the custom
-linker's state file and jump table design. LLD cannot be incrementally patched.
-
-Phase 3 is also a prerequisite for Phase 5: the ELF and Mach-O backends reuse the
-Phase 3 symbol resolution and section layout code; only the writer changes.
-
-Phases 4 and 5 are independent of each other and can be developed in parallel by
-separate engineers.
+- **Phase 1** is prerequisite for all: without a Zig-free build, CI cannot validate later work.
+- **Phase 1b** depends on Phase 1: tml-cc replaces the compiler that Phase 1 validates.
+- **Phase 2** depends on Phase 1b: in-memory buffer pipeline is the interface tml-link consumes.
+- **Phase 3** depends on Phase 2: custom linker consumes in-memory objects.
+- **Phases 4, 5, 6** depend on Phase 3 and can be developed in parallel by separate engineers.
 
 ---
 
@@ -661,24 +794,29 @@ separate engineers.
 | Phase | Engineers | Duration | Notes |
 |-------|-----------|----------|-------|
 | Phase 1 | 1 | 1-2 weeks | Build system only, no compiler changes |
+| Phase 1b | 1 | 2-4 weeks | Clang library integration, header bundling |
 | Phase 2 | 1 | 2-4 weeks | Requires LLVM/LLD API familiarity |
 | Phase 3 | 1-2 | 4-8 weeks | Largest phase; sub-phases can parallelize |
 | Phase 4 | 1 | 4-8 weeks | Requires Phase 3 complete |
 | Phase 5a (ELF) | 1 | 3-5 weeks | Requires Phase 3 complete |
 | Phase 5b (Mach-O) | 1 | 2-4 weeks | Optional; requires Phase 5a for reference |
+| Phase 6a (PDB) | 1 | 4-6 weeks | Complex format; requires Phase 3 |
+| Phase 6b (LTO) | 1 | 2-4 weeks | LLVM bitcode integration |
+| Phase 6c (PGO) | 1 | 2-4 weeks | Profile data parsing + section reordering |
+| Phase 6d (Thin LTO) | 1 | 2-4 weeks | Parallel optimization pipeline |
 
 ## Total Timeline
 
 | Scenario | Duration |
 |----------|----------|
-| Minimum (sequential, best case) | 14-17 weeks |
-| Realistic (with debugging and iteration) | 20-28 weeks |
-| Full (all phases including Mach-O) | 28-40 weeks |
+| Core toolchain (Phases 1-3, tml-cc + tml-link) | 12-18 weeks |
+| With incremental linking (+ Phase 4) | 16-26 weeks |
+| Full cross-platform (+ Phase 5) | 20-34 weeks |
+| Complete with advanced features (+ Phase 6) | 30-50 weeks |
 
 Phase 3 is the dominant risk. A two-engineer team working Phase 3 sub-phases in
-parallel (3a/3b in parallel, then 3c/3d in parallel, then 3e/3f/3g) could compress
-the Phase 3 timeline to 3-4 weeks rather than 4-8, reducing the total realistic
-estimate to 14-20 weeks.
+parallel (3a/3b in parallel, then 3c/3d in parallel, then 3e/3f/3g/3h) could compress
+the Phase 3 timeline to 3-4 weeks rather than 4-8.
 
 ---
 

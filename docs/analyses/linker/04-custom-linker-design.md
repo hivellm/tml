@@ -10,17 +10,19 @@
 
 ## 1. Design Philosophy
 
-tml-link is a purpose-built linker for the TML toolchain. It is not a general-purpose
-replacement for LLD, MSVC link.exe, or GNU ld. Every design decision is driven by one
-question: **what does TML need to ship fast, correct, native binaries with sub-10ms
-iteration time?**
+tml-link is a purpose-built linker for the TML toolchain. Every design decision is driven
+by one question: **what does TML need to ship fast, correct, native binaries with sub-10ms
+iteration time?** While designed primarily for TML's needs, tml-link handles the full scope
+of C and C++ linking to serve as a complete toolchain replacement.
 
 ### Core Tenets
 
-**TML-specific, not general-purpose.** tml-link targets the output of TML's LLVM backend.
-That output is predictable: no C++ exception tables, no DWARF unless `--debug`, no
-Objective-C runtime metadata, no .NET MSIL. This predictability allows aggressive
-simplification of the linker core.
+**TML-specific, optimized for TML workloads.** tml-link targets the output of TML's LLVM
+backend and the TML compiler's C++ source. TML programs produce predictable output (no
+Objective-C runtime metadata, no .NET MSIL), enabling aggressive optimization of the
+common path. However, tml-link also handles the full C++ object file feature set — exception
+tables, COMDAT, TLS, static constructors — because it must link the TML compiler itself,
+which is ~100,000 lines of C++.
 
 **CMake-compatible CLI.** tml-link accepts the full MSVC link.exe command-line interface on
 Windows and the GNU ld interface on Linux. Any CMake project that sets `CMAKE_LINKER` can
@@ -40,6 +42,92 @@ is under 5ms for single-function changes.
 **Single binary distribution.** tml-link.exe ships as part of the TML distribution alongside
 tml.exe, tml-cc.exe, and tml-cxx.exe. It requires no Visual Studio installation, no
 MSVC redistributable, and no separate linker download.
+
+---
+
+## 1b. Full Toolchain Architecture
+
+### Overview
+
+tml-link is one component of TML's self-contained toolchain. The complete distribution
+includes:
+
+| Binary | Purpose | Wraps/Implements |
+|--------|---------|-----------------|
+| `tml.exe` | TML compiler | Query-based pipeline + LLVM backend |
+| `tml-cc.exe` | C compiler | Bundled Clang 20 with TML sysroot |
+| `tml-cxx.exe` | C++ compiler | Bundled Clang 20 with C++ stdlib |
+| `tml-link.exe` | Linker | Custom PE/COFF, ELF, Mach-O |
+| `tml-ar.exe` | Archiver | COFF/ELF archive creation |
+
+### Bundled Clang Approach
+
+Like Zig, TML bundles Clang as its C/C++ compiler frontend. The approach:
+
+1. **Ship Clang as a library** (libclang-cpp.dll or static link)
+   - Clang's driver API allows invoking compilation without subprocess
+   - Same approach Zig uses: Zig embeds a Clang 20 frontend
+   - TML already links against LLVM; adding Clang frontend is incremental
+
+2. **Bundle system headers**
+   - Windows: UCRT headers + Windows SDK headers (subset needed for compilation)
+   - Linux: musl libc headers (like Zig) or glibc headers
+   - C++ stdlib: libc++ headers (LLVM's C++ standard library)
+   - These are ~50MB compressed, ~200MB uncompressed
+
+3. **Bundle system libraries**
+   - Windows: UCRT import libs, vcruntime import libs, kernel32.lib, etc.
+   - OR: generate import libraries from .dll files (like Zig does with `zig dlltool`)
+   - Linux: bundle crt1.o, crti.o, crtn.o + libc.a/libc.so stubs
+
+### How tml-cc / tml-cxx Work
+
+```
+tml-cc hello.c -o hello.obj
+```
+
+Internally:
+1. Invokes Clang driver with TML's bundled sysroot
+2. Sets target triple (x86_64-windows-msvc or x86_64-linux-gnu)
+3. Adds bundled include paths (UCRT headers, Windows SDK headers)
+4. Compiles to .obj/.o (COFF on Windows, ELF on Linux)
+5. If linking requested (-o hello.exe), invokes tml-link
+
+### C++ Object File Requirements
+
+When linking C++ objects (e.g., building the TML compiler), tml-link must handle:
+
+| Feature | Section(s) | Complexity |
+|---------|-----------|------------|
+| Virtual tables (vtables) | .rdata | Low — just data |
+| RTTI (type_info) | .rdata | Low — just data |
+| Exception handling (SEH) | .pdata, .xdata | HIGH — unwind tables |
+| COMDAT (templates) | .text$name, .rdata$name | Medium — group selection |
+| Thread-local storage (TLS) | .tls, .tls$ | Medium — TLS directory |
+| Static constructors | .CRT$XCU | Medium — CRT init order |
+| Static destructors | .CRT$XTU | Medium — CRT term order |
+| Debug info (PDB) | .debug$S, .debug$T | HIGH — CodeView format |
+| Stack cookies (/GS) | Referenced via __security_cookie | Low — just a symbol |
+| Control Flow Guard | .gfids, .giats | Medium — CFG tables |
+
+### Self-Bootstrapping Path
+
+**Stage 1: tml-cc builds, system links** (current state, with Zig)
+- C++ compilation: Zig CC (Clang wrapper)
+- Linking: embedded LLD
+- TML programs: LLVM backend + embedded LLD
+
+**Stage 2: tml-cc builds, tml-link links** (target)
+- C++ compilation: tml-cc (bundled Clang)
+- Linking: tml-link (custom)
+- TML programs: LLVM backend + tml-link
+- No external dependencies except OS
+
+**Stage 3: TML builds itself** (future — self-hosting)
+- TML compiler rewritten in TML
+- TML compiles itself using tml-link
+- C++ only needed for LLVM backend
+- Full bootstrap: tml.exe → new tml.exe
 
 ---
 
