@@ -63,7 +63,7 @@ Ralph is currently in alpha but demonstrates potential for AI-first development:
 
 ---
 
-## 12.4 LLM-IR-Debugging Research
+## 12.4 LLM-IR-Debugging Research [36]
 
 ### 12.4.1 Research Question
 

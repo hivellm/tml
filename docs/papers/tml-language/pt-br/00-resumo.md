@@ -1,0 +1,13 @@
+# TML: Uma Linguagem de Programação de Sistemas Projetada para Geração de Código por LLMs
+
+## Resumo
+
+Apresentamos o TML (To Machine Language), uma linguagem de programação de sistemas compilada e com tipagem estática que introduz a compatibilidade com LLMs como uma restrição de design de primeira classe, ao lado dos objetivos tradicionais de segurança, desempenho e expressividade. O TML combina semântica de ownership inspirada no Rust com uma sintaxe inovadora baseada em palavras-chave, projetada para minimizar a ambiguidade que causa erros no código gerado por LLMs. A linguagem possui uma gramática LL(1) onde cada token tem um único significado, nomes de tipos autodocumentados (`Maybe[T]`, `Outcome[T,E]`, `Heap[T]`) e palavras-chave em inglês para operadores e fluxo de controle (`and`, `or`, `not`, `when`, `behavior`).
+
+O compilador TML implementa um pipeline de compilação por consultas demanda-dirigida com cinco camadas de representação intermediária (AST, HIR, THIR, MIR, LLVM IR), 52 passos de otimização MIR, LLVM e LLD embutidos, e compilação incremental com invalidação de cache baseada em fingerprints. A biblioteca padrão oferece mais de 500 tipos e 5.000 funções distribuídos nas bibliotecas core, standard e test, incluindo suporte nativo a HTTP, JSON, criptografia, drivers de banco de dados e SIMD.
+
+O TML introduz diversas inovações para o desenvolvimento assistido por IA: um servidor Model Context Protocol (MCP) que expõe todas as operações do compilador como chamadas de ferramentas estruturadas; um recurso de camadas de debug que emite HIR, MIR e LLVM IR para testes com falha, com dicas de diagnóstico identificando a camada de compilação onde o erro ocorre; e uma metodologia sistemática de Rust-como-Referência para avaliar a qualidade do código gerado em comparação com a saída do rustc.
+
+Descrevemos as decisões de sintaxe do TML e suas justificativas, analisamos a arquitetura do compilador com comparações ao rustc, GCC, Clang e o compilador Go, apresentamos o design do pipeline de IR em múltiplas camadas, avaliamos o conjunto de 52 passos de otimização MIR e fornecemos comparações abrangentes de recursos em relação ao Rust, C++, Go, Python, Zig, Swift e Kotlin em mais de 30 dimensões. Argumentamos que a emergência dos LLMs como geradores de código cria um novo espaço de design para linguagens de programação — que o TML é o primeiro a explorar sistematicamente.
+
+**Palavras-chave:** design de linguagem de programação, arquitetura de compilador, geração de código por LLM, sistema de tipos com ownership, representação intermediária, LLVM, programação de sistemas

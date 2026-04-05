@@ -67,7 +67,7 @@ The central thesis of this paper — that keyword-based, LL(1) syntax improves L
 3. **Error taxonomy**: Systematic classification of LLM generation errors by language, identifying which errors are syntax-induced versus semantic.
 4. **Longitudinal study**: As LLM training data includes more TML code, does generation accuracy improve faster than for other languages?
 
-The ongoing LLM IR debugging research project (`docs/papers/llm-ir-debugging/`) provides infrastructure for some of these experiments, with tool usage logging and structured data collection already in place.
+The ongoing LLM IR debugging research project [36] provides infrastructure for some of these experiments, with tool usage logging and structured data collection already in place.
 
 ---
 

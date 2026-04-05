@@ -189,7 +189,7 @@ Every MCP tool invocation is logged to `mcp-call-log.jsonl` with:
 - Session identifier
 - Sequence number
 
-This data enables research into how LLMs use compiler tools — which tools are most effective, what patterns lead to successful debugging, and how tool usage correlates with code quality. A companion research project (`docs/papers/llm-ir-debugging/`) analyzes this data to improve both the tools and the LLM's debugging strategies.
+This data enables research into how LLMs use compiler tools — which tools are most effective, what patterns lead to successful debugging, and how tool usage correlates with code quality. A companion research project [36] analyzes this data to improve both the tools and the LLM's debugging strategies.
 
 ---
 
@@ -233,4 +233,4 @@ TML's LLM-first design is based on hypotheses about LLM behavior that are suppor
 
 5. **Generalization**: Do TML's principles transfer to other language designs? Could an existing language (Rust, Go) adopt LLM-friendly syntax without breaking backward compatibility?
 
-These questions motivate ongoing research, including the LLM IR debugging study described in the companion paper (`docs/papers/llm-ir-debugging/`).
+These questions motivate ongoing research, including the LLM IR debugging study described in the companion paper [36].

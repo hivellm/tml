@@ -20,6 +20,7 @@
 12. [Testing Infrastructure](11-testing-infra.md)
 13. [Ecosystem](12-ecosystem.md)
 14. [Future Work and Conclusion](13-future-work.md)
+15. [References](14-references.md)
 
 ---
 
@@ -27,7 +28,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total sections | 14 |
+| Total sections | 15 |
 | Total lines | ~2,531 |
 | Total size | ~142 KB |
 | Estimated word count | ~25,000 |
