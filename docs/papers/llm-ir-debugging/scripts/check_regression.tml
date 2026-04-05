@@ -38,7 +38,7 @@ func main() {
     // We'll use a simple approach: count all calls as "current"
     // since we don't have date filtering without datetime parsing
     var line = reader.read_line()
-    loop (line != "") {
+    loop (line.len() > 0) {
         let Just(json) = parse(line) else {
             line = reader.read_line()
             continue
