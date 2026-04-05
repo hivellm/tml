@@ -30,15 +30,9 @@ impl[I: Iterator, F, B] Iterator for FilterMap[I, F] where F = func(I::Item) -> 
 
     pub func next(mut this) -> Maybe[B] {
         loop (true) {
-            when this.iter.next() {
-                Just(item) => {
-                    when this.f(item) {
-                        Just(mapped) => return Just(mapped),
-                        Nothing => {}
-                    }
-                },
-                Nothing => return Nothing
-            }
+            let Just(item) = this.iter.next() else { return Nothing }
+            let Just(mapped) = this.f(item) else { continue }
+            return Just(mapped)
         }
     }
 }

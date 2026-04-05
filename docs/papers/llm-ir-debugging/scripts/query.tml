@@ -43,38 +43,16 @@ func classify_tool(tool: Str) -> Str {
 // ---------------------------------------------------------------------------
 
 func is_error_event(json: Json) -> Bool {
-    let field = json.get("is_error")
-    when field {
-        Just(v) => {
-            let b = v.as_bool()
-            when b {
-                Just(val) => { return val },
-                Nothing => {}
-            }
-            let n = v.as_i64()
-            when n {
-                Just(num) => { return num == 1 },
-                Nothing => {}
-            }
-        },
-        Nothing => {}
-    }
+    let Just(v) = json.get("is_error") else { return false }
+    when v.as_bool() { Just(val) => return val, Nothing => {} }
+    when v.as_i64() { Just(num) => return num == 1, Nothing => {} }
     return false
 }
 
 func extract_test_target(json: Json) -> Str {
-    when json.get_path_string("params.suite") {
-        Just(s) => { return s },
-        Nothing => {}
-    }
-    when json.get_path_string("params.path") {
-        Just(p) => { return p },
-        Nothing => {}
-    }
-    when json.get_path_string("params.filter") {
-        Just(f) => { return f },
-        Nothing => {}
-    }
+    when json.get_path_string("params.suite") { Just(s) => return s, Nothing => {} }
+    when json.get_path_string("params.path") { Just(p) => return p, Nothing => {} }
+    when json.get_path_string("params.filter") { Just(f) => return f, Nothing => {} }
     return "(default)"
 }
 

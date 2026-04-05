@@ -38,22 +38,9 @@ func classify_tool(tool: Str) -> Str {
 
 /// Check if a JSON tool_call event has is_error == true.
 func is_error_event(json: Json) -> Bool {
-    let field = json.get("is_error")
-    when field {
-        Just(v) => {
-            let maybe_bool = v.as_bool()
-            when maybe_bool {
-                Just(b) => { return b },
-                Nothing => {}
-            }
-            let maybe_int = v.as_i64()
-            when maybe_int {
-                Just(n) => { return n == 1 },
-                Nothing => {}
-            }
-        },
-        Nothing => {}
-    }
+    let Just(v) = json.get("is_error") else { return false }
+    when v.as_bool() { Just(b) => return b, Nothing => {} }
+    when v.as_i64() { Just(n) => return n == 1, Nothing => {} }
     return false
 }
 
@@ -79,63 +66,47 @@ func main() {
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "session_start" {
-                            let c = counters.get_or_set("sessions", 0)
-                            counters.set("sessions", c + 1)
-                        }
-                        if ev == "tool_call" {
-                            let c = counters.get_or_set("total", 0)
-                            counters.set("total", c + 1)
+        let Just(json) = parse(line) else { line = reader.read_line(); continue }
+        let Just(ev) = json.get_string("event") else { line = reader.read_line(); continue }
+        if ev == "session_start" {
+            let c = counters.get_or_set("sessions", 0)
+            counters.set("sessions", c + 1)
+        }
+        if ev == "tool_call" {
+            let c = counters.get_or_set("total", 0)
+            counters.set("total", c + 1)
 
-                            let maybe_tool = json.get_string("tool")
-                            when maybe_tool {
-                                Just(tool) => {
-                                    let tc = tool_counts.get_or_set(tool, 0)
-                                    tool_counts.set(tool, tc + 1)
+            let Just(tool) = json.get_string("tool") else { line = reader.read_line(); continue }
+            let tc = tool_counts.get_or_set(tool, 0)
+            tool_counts.set(tool, tc + 1)
 
-                                    let cat = classify_tool(tool)
-                                    let cc = category_counts.get_or_set(cat, 0)
-                                    category_counts.set(cat, cc + 1)
+            let cat = classify_tool(tool)
+            let cc = category_counts.get_or_set(cat, 0)
+            category_counts.set(cat, cc + 1)
 
-                                    if is_error_event(json) {
-                                        let ec = counters.get_or_set("errors", 0)
-                                        counters.set("errors", ec + 1)
-                                        let te = tool_errors.get_or_set(tool, 0)
-                                        tool_errors.set(tool, te + 1)
-                                    }
+            if is_error_event(json) {
+                let ec = counters.get_or_set("errors", 0)
+                counters.set("errors", ec + 1)
+                let te = tool_errors.get_or_set(tool, 0)
+                tool_errors.set(tool, te + 1)
+            }
 
-                                    if tool == "check" {
-                                        let ck = counters.get_or_set("check_calls", 0)
-                                        counters.set("check_calls", ck + 1)
-                                    }
-                                    if tool == "test" {
-                                        let tk = counters.get_or_set("test_calls", 0)
-                                        counters.set("test_calls", tk + 1)
+            if tool == "check" {
+                let ck = counters.get_or_set("check_calls", 0)
+                counters.set("check_calls", ck + 1)
+            }
+            if tool == "test" {
+                let tk = counters.get_or_set("test_calls", 0)
+                counters.set("test_calls", tk + 1)
 
-                                        let maybe_suite = json.get_path_string("params.suite")
-                                        when maybe_suite {
-                                            Just(s) => {
-                                                let tt = test_targets.get_or_set(s, 0)
-                                                test_targets.set(s, tt + 1)
-                                            },
-                                            Nothing => {}
-                                        }
-                                    }
-                                },
-                                Nothing => {}
-                            }
-                        }
+                when json.get_path_string("params.suite") {
+                    Just(s) => {
+                        let tt = test_targets.get_or_set(s, 0)
+                        test_targets.set(s, tt + 1)
                     },
                     Nothing => {}
                 }
-            },
-            Nothing => {}
+            }
         }
         line = reader.read_line()
     }

@@ -45,18 +45,9 @@ func safe_i64(json: Json, key: Str) -> I64 {
 
 /// Check if a JSON event has is_error == true.
 func is_error_event(json: Json) -> Bool {
-    let field = json.get("is_error")
-    when field {
-        Just(v) => {
-            let maybe_bool = v.as_bool()
-            when maybe_bool {
-                Just(b) => { return b },
-                Nothing => {}
-            }
-        },
-        Nothing => {}
-    }
-    return false
+    let Just(v) = json.get("is_error") else { return false }
+    let Just(b) = v.as_bool() else { return false }
+    return b
 }
 
 // ---------------------------------------------------------------------------
@@ -114,38 +105,17 @@ func build_call_row(json: Json) -> Str {
 
 /// Extract test target from params.suite, params.path, or params.filter.
 func extract_test_target(json: Json) -> Str {
-    let maybe_suite = json.get_path_string("params.suite")
-    when maybe_suite {
-        Just(s) => { return s },
-        Nothing => {}
-    }
-    let maybe_path = json.get_path_string("params.path")
-    when maybe_path {
-        Just(p) => { return p },
-        Nothing => {}
-    }
-    let maybe_filter = json.get_path_string("params.filter")
-    when maybe_filter {
-        Just(f) => { return f },
-        Nothing => {}
-    }
+    when json.get_path_string("params.suite") { Just(s) => return s, Nothing => {} }
+    when json.get_path_string("params.path") { Just(p) => return p, Nothing => {} }
+    when json.get_path_string("params.filter") { Just(f) => return f, Nothing => {} }
     return ""
 }
 
 /// Extract debug_layers flag from params.
 func extract_debug_layers(json: Json) -> Bool {
-    let maybe_dl = json.get_path("params.debug_layers")
-    when maybe_dl {
-        Just(dl_val) => {
-            let mb = dl_val.as_bool()
-            when mb {
-                Just(b) => { return b },
-                Nothing => {}
-            }
-        },
-        Nothing => {}
-    }
-    return false
+    let Just(dl_val) = json.get_path("params.debug_layers") else { return false }
+    let Just(b) = dl_val.as_bool() else { return false }
+    return b
 }
 
 // ---------------------------------------------------------------------------
@@ -183,27 +153,17 @@ func main() {
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "session_start" {
-                            session_count = session_count + 1
-                            let row = build_session_row(json)
-                            sessions_writer.write_line(row)
-                        }
-                        if ev == "tool_call" {
-                            call_count = call_count + 1
-                            let row = build_call_row(json)
-                            calls_writer.write_line(row)
-                        }
-                    },
-                    Nothing => {}
-                }
-            },
-            Nothing => {}
+        let Just(json) = parse(line) else { line = reader.read_line(); continue }
+        let Just(ev) = json.get_string("event") else { line = reader.read_line(); continue }
+        if ev == "session_start" {
+            session_count = session_count + 1
+            let row = build_session_row(json)
+            sessions_writer.write_line(row)
+        }
+        if ev == "tool_call" {
+            call_count = call_count + 1
+            let row = build_call_row(json)
+            calls_writer.write_line(row)
         }
         line = reader.read_line()
     }

@@ -155,10 +155,8 @@ impl[T, const N: I64] Array[T, N] {
     ///
     /// ```tml
     /// let mut x = [0, 1, 2]
-    /// when x.get_mut(1) {
-    ///     Just(elem) => *elem = 42,
-    ///     Nothing => {}
-    /// }
+    /// let Just(elem) = x.get_mut(1) else { return }
+    /// *elem = 42
     /// assert_eq(x, [0, 42, 2])
     /// ```
     pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
@@ -191,10 +189,8 @@ impl[T, const N: I64] Array[T, N] {
     ///
     /// ```tml
     /// let mut x = [0, 1, 2]
-    /// when x.first_mut() {
-    ///     Just(first) => *first = 5,
-    ///     Nothing => {}
-    /// }
+    /// let Just(first) = x.first_mut() else { return }
+    /// *first = 5
     /// assert_eq(x, [5, 1, 2])
     /// ```
     pub func first_mut(mut this) -> Maybe[mut ref T] {
@@ -227,10 +223,8 @@ impl[T, const N: I64] Array[T, N] {
     ///
     /// ```tml
     /// let mut x = [0, 1, 2]
-    /// when x.last_mut() {
-    ///     Just(last) => *last = 10,
-    ///     Nothing => {}
-    /// }
+    /// let Just(last) = x.last_mut() else { return }
+    /// *last = 10
     /// assert_eq(x, [0, 1, 10])
     /// ```
     pub func last_mut(mut this) -> Maybe[mut ref T] {

@@ -205,10 +205,8 @@ impl[T] Slice[T] {
     ///
     /// ```tml
     /// let mut v = [10, 40, 30]
-    /// when v.as_slice().get_mut(1) {
-    ///     Just(elem) => *elem = 42,
-    ///     Nothing => {}
-    /// }
+    /// let Just(elem) = v.as_slice().get_mut(1) else { return }
+    /// *elem = 42
     /// assert_eq(v, [10, 42, 30])
     /// ```
     pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
@@ -757,10 +755,8 @@ impl[T] MutSlice[T] {
     ///
     /// ```tml
     /// let mut x = [0, 1, 2]
-    /// when x.as_mut_slice().get_mut(1) {
-    ///     Just(elem) => *elem = 42,
-    ///     Nothing => {}
-    /// }
+    /// let Just(elem) = x.as_mut_slice().get_mut(1) else { return }
+    /// *elem = 42
     /// assert_eq(x, [0, 42, 2])
     /// ```
     pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {

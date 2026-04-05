@@ -183,15 +183,9 @@ pub behavior Iterator {
     /// Applies function to elements and returns first Some result.
     pub func find_map[B](mut this, f: func(This::Item) -> Maybe[B]) -> Maybe[B] {
         loop (true) {
-            when this.next() {
-                Just(x) => {
-                    when f(x) {
-                        Just(result) => return Just(result),
-                        Nothing => {}
-                    }
-                },
-                Nothing => return Nothing
-            }
+            let Just(x) = this.next() else { return Nothing }
+            let Just(result) = f(x) else { continue }
+            return Just(result)
         }
     }
 

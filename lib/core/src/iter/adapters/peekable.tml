@@ -107,10 +107,8 @@ impl[I: Iterator] Peekable[I] {
     ///
     /// ```tml
     /// var pk: Peekable[OnceI32] = peekable(once_i32(5))
-    /// when pk.peek_mut() {
-    ///     Just(x) => *x = 10,  // Modify the peeked value
-    ///     Nothing => {}
-    /// }
+    /// let Just(x) = pk.peek_mut() else { return }
+    /// *x = 10  // Modify the peeked value
     /// // pk.next() now returns Just(10)
     /// ```
     pub func peek_mut(mut this) -> Maybe[mut ref I::Item] {
@@ -194,12 +192,8 @@ impl[I: Iterator] Peekable[I] {
 /// var pk: Peekable[RepeatNI32] = peekable(iter)
 ///
 /// // Look at the next element without consuming
-/// when pk.peek() {
-///     Just(x) => {
-///         // *x is the next value
-///     },
-///     Nothing => {}
-/// }
+/// let Just(x) = pk.peek() else { return }
+/// // *x is the next value
 /// ```
 pub func peekable[I: Iterator](iter: I) -> Peekable[I] {
     return Peekable { iter: iter, peeked: Nothing }

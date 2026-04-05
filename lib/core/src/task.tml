@@ -420,10 +420,8 @@ impl RawWakerVTable {
 ///
 ///     // Called when resource becomes ready
 ///     func notify(mut this) {
-///         when this.waker.take() {
-///             Just(w) => w.wake(),
-///             Nothing => {}
-///         }
+///         let Just(w) = this.waker.take() else { return }
+///         w.wake()
 ///     }
 /// }
 /// ```
@@ -453,10 +451,8 @@ impl Waker {
     ///
     /// ```tml
     /// // Take the stored waker and wake the task
-    /// when stored_waker.take() {
-    ///     Just(w) => w.wake(),
-    ///     Nothing => {}
-    /// }
+    /// let Just(w) = stored_waker.take() else { return }
+    /// w.wake()
     /// ```
     pub func wake(this) {
         // TODO: Requires codegen fix for RawPtr[Unit] type in function pointer calls.

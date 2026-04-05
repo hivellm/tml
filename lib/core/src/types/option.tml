@@ -577,10 +577,8 @@ impl[T] Maybe[T] {
     ///
     /// ```tml
     /// let mut x: Maybe[Str] = Just("hello")
-    /// when x.as_mut() {
-    ///     Just(s) => *s = "world",
-    ///     Nothing => {}
-    /// }
+    /// let Just(s) = x.as_mut() else { return }
+    /// *s = "world"
     /// ```
     pub func as_mut(mut this) -> Maybe[mut ref T] {
         when this {

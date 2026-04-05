@@ -254,10 +254,8 @@ use core::ops::Drop
 /// let any_val = AnyValue::from(point)
 ///
 /// if any_val.is[Point]() {
-///     when any_val.downcast[Point]() {
-///         Just(p) => print("Point: ({p.x}, {p.y})\n"),
-///         Nothing => {}
-///     }
+///     let Just(p) = any_val.downcast[Point]() else { return }
+///     print("Point: ({p.x}, {p.y})\n")
 /// }
 /// ```
 pub type AnyValue {
@@ -340,10 +338,8 @@ impl AnyValue {
     ///
     /// ```tml
     /// var any = AnyValue::from(42)
-    /// when any.downcast_mut[I32]() {
-    ///     Just(n) => { *n = 100 },
-    ///     Nothing => {}
-    /// }
+    /// let Just(n) = any.downcast_mut[I32]() else { return }
+    /// *n = 100
     /// ```
     pub func downcast_mut[T](mut this) -> Maybe[mut ref T] {
         let tid: U64 = type_id[T]()
