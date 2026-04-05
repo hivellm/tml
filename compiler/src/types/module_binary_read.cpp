@@ -18,6 +18,7 @@ TML_MODULE("compiler")
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <set>
 #include <sstream>
 
 namespace tml::types {
@@ -1247,44 +1248,84 @@ static int generate_all_meta_from_source() {
         TML_LOG_INFO("meta", "    - " << mp);
     }
 
-    // Create a TypeEnv to load all modules (this parses source and saves .tml.meta)
+    // Sort: load submodules (with ::) before root modules (without ::).
+    // This ensures dependencies are available when root modules are loaded.
+    // Within each group, sort alphabetically for determinism.
+    std::sort(module_paths.begin(), module_paths.end(),
+              [](const std::string& a, const std::string& b) {
+                  bool a_is_sub = a.find("::") != std::string::npos;
+                  bool b_is_sub = b.find("::") != std::string::npos;
+                  if (a_is_sub != b_is_sub)
+                      return a_is_sub; // submodules first
+                  return a < b;
+              });
+
+    // Multi-pass loading to resolve circular dependencies.
+    // Pass 1: try all modules. Some will fail due to unresolved deps.
+    // Pass 2+: retry failed modules — deps loaded in previous pass may now be available.
+    // Stop when no progress (no new modules loaded in a pass).
     auto registry = std::make_shared<ModuleRegistry>();
     TypeEnv env;
     env.set_module_registry(registry);
-    env.set_abort_on_module_error(false); // Don't crash on parse errors
+    env.set_abort_on_module_error(false);
 
-    int generated = 0;
-    int skipped = 0;
-    int failed = 0;
-    for (const auto& mod_path : module_paths) {
-        // Skip if already in GlobalModuleCache (might have been loaded transitively)
-        if (GlobalModuleCache::instance().get(mod_path)) {
-            ++generated;
-            ++skipped;
-            TML_LOG_INFO("meta", "  [CACHED] " << mod_path << " (already in GlobalModuleCache)");
-            continue;
+    std::set<std::string> loaded_set;
+    std::vector<std::string> remaining = module_paths;
+    int total_generated = 0;
+    int total_skipped = 0;
+    int pass = 0;
+
+    while (!remaining.empty() && pass < 5) {
+        pass++;
+        std::vector<std::string> still_failed;
+        int pass_generated = 0;
+
+        for (const auto& mod_path : remaining) {
+            if (GlobalModuleCache::instance().get(mod_path)) {
+                loaded_set.insert(mod_path);
+                total_generated++;
+                total_skipped++;
+                continue;
+            }
+
+            auto start = std::chrono::steady_clock::now();
+            bool ok = env.load_native_module(mod_path, /*silent=*/true);
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - start)
+                               .count();
+
+            if (ok) {
+                loaded_set.insert(mod_path);
+                total_generated++;
+                pass_generated++;
+                TML_LOG_INFO("meta", "  [GENERATED] " << mod_path << " (" << elapsed << "ms)");
+            } else {
+                still_failed.push_back(mod_path);
+                if (pass == 1) {
+                    TML_LOG_DEBUG("meta", "  [RETRY] " << mod_path << " (will retry in pass 2+)");
+                }
+            }
         }
 
-        auto start = std::chrono::steady_clock::now();
-        bool ok = env.load_native_module(mod_path, /*silent=*/true);
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::steady_clock::now() - start)
-                           .count();
+        TML_LOG_INFO("meta", "  Pass " << pass << ": " << pass_generated << " generated, "
+                                       << still_failed.size() << " remaining");
 
-        if (ok) {
-            ++generated;
-            TML_LOG_INFO("meta", "  [GENERATED] " << mod_path << " (" << elapsed << "ms)");
-        } else {
-            ++failed;
-            TML_LOG_WARN("meta", "  [FAILED] " << mod_path << " (" << elapsed << "ms)");
+        if (pass_generated == 0) {
+            // No progress — remaining modules have unresolvable deps
+            for (const auto& mod : still_failed) {
+                TML_LOG_WARN("meta", "  [FAILED] " << mod);
+            }
+            break;
         }
+        remaining = std::move(still_failed);
     }
 
-    TML_LOG_INFO("meta", "  Summary: " << generated << " generated, " << skipped
-                                       << " already cached, " << failed << " failed"
+    int failed = static_cast<int>(module_paths.size()) - total_generated;
+    TML_LOG_INFO("meta", "  Summary: " << total_generated << " generated (" << pass << " passes), "
+                                       << total_skipped << " cached, " << failed << " failed"
                                        << " (total: " << module_paths.size() << ")");
 
-    return generated;
+    return total_generated;
 }
 
 int preload_all_meta_caches() {
