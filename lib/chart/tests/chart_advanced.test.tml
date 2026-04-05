@@ -1,0 +1,45 @@
+/// Advanced chart tests: SVG output, custom size, multiple series
+use test
+use chart::Chart
+
+@test
+@slow_test
+func test_svg_output() -> I32 {
+    let c = Chart::bar()
+    c.add_bar("X", 100.0)
+    let ok = c.save(".sandbox/test_output.svg")
+    assert(ok, "SVG output should work")
+    c.destroy()
+    return 0
+}
+
+@test
+@slow_test
+func test_set_size() -> I32 {
+    let c = Chart::bar()
+    c.set_size(1200, 800)
+    c.add_bar("Wide", 50.0)
+    let ok = c.save(".sandbox/test_wide.png")
+    assert(ok, "custom size should work")
+    c.destroy()
+    return 0
+}
+
+@test
+@slow_test
+func test_multiple_series() -> I32 {
+    let c = Chart::line()
+    c.set_title("Multi Series")
+    c.add_series("series1")
+    c.add_point(0.0, 0.0)
+    c.add_point(1.0, 1.0)
+    c.add_point(2.0, 4.0)
+    c.add_series("series2")
+    c.add_point(0.0, 4.0)
+    c.add_point(1.0, 2.0)
+    c.add_point(2.0, 0.0)
+    let ok = c.save(".sandbox/test_multi.png")
+    assert(ok, "multiple series should work")
+    c.destroy()
+    return 0
+}

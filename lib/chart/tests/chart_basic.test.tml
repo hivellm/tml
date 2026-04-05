@@ -1,0 +1,52 @@
+/// Basic chart creation and save tests
+use test
+use chart::Chart
+
+@test
+@slow_test
+func test_bar_chart_create() -> I32 {
+    let c = Chart::bar()
+    c.set_title("Test Bar")
+    c.add_bar("A", 10.0)
+    c.add_bar("B", 20.0)
+    c.add_bar("C", 30.0)
+    let ok = c.save(".sandbox/test_bar.png")
+    assert(ok, "bar chart should save successfully")
+    c.destroy()
+    return 0
+}
+
+@test
+@slow_test
+func test_line_chart() -> I32 {
+    let c = Chart::line()
+    c.set_title("Test Line")
+    c.set_xlabel("X")
+    c.set_ylabel("Y")
+    c.add_series("quadratic")
+    let mut i: I64 = 0
+    loop (i < 20) {
+        let x = (i as F64) * 0.5
+        c.add_point(x, x * x)
+        i = i + 1
+    }
+    let ok = c.save(".sandbox/test_line.png")
+    assert(ok, "line chart should save successfully")
+    c.destroy()
+    return 0
+}
+
+@test
+@slow_test
+func test_scatter_chart() -> I32 {
+    let c = Chart::scatter()
+    c.set_title("Test Scatter")
+    c.add_series("data")
+    c.add_point(1.0, 2.0)
+    c.add_point(3.0, 4.0)
+    c.add_point(5.0, 1.0)
+    let ok = c.save(".sandbox/test_scatter.png")
+    assert(ok, "scatter chart should save successfully")
+    c.destroy()
+    return 0
+}

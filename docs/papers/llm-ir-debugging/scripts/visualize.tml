@@ -1,0 +1,217 @@
+/// Generate charts from MCP call log data using the chart library.
+///
+/// Reads mcp-call-log.jsonl and generates:
+///   - tool_distribution.png: bar chart of tool call counts
+///   - duration_by_tool.png: bar chart of average duration per tool
+///
+/// Usage:
+///     tml run visualize.tml
+///     tml run visualize.tml <output_dir>
+
+use std::file::bufio::BufReader
+use std::json::{Json, parse}
+use std::collections::hashmap::HashMap
+use std::collections::list::List
+use std::os::{args_count, args_get}
+use chart::Chart
+
+/// Safe extraction: get string field from Json, return "" on Nothing.
+func safe_str(json: Json, key: Str) -> Str {
+    let maybe_val = json.get_string(key)
+    when maybe_val {
+        Just(v) => { return v },
+        Nothing => { return "" }
+    }
+}
+
+/// Safe extraction: get I64 field from Json, return 0 on Nothing.
+func safe_i64(json: Json, key: Str) -> I64 {
+    let maybe_val = json.get_i64(key)
+    when maybe_val {
+        Just(v) => { return v },
+        Nothing => { return 0 }
+    }
+}
+
+func main() {
+    let log_path = "mcp-call-log.jsonl"
+
+    var output_dir = "docs/papers/llm-ir-debugging/charts"
+    let argc = args_count()
+    if argc >= 2 {
+        output_dir = args_get(1)
+    }
+
+    // Open log file
+    var reader = BufReader::open(log_path)
+    if not reader.is_open() {
+        println("ERROR: Cannot open log file: " + log_path)
+        return
+    }
+
+    // Count tool calls and accumulate durations
+    let tool_counts = HashMap::new[Str, I64](64)
+    let tool_durations = HashMap::new[Str, I64](64)
+    var total_calls: I64 = 0
+    var total_sessions: I64 = 0
+
+    var line = reader.read_line()
+    loop (line.len() > 0) {
+        let Just(json) = parse(line) else { line = reader.read_line(); continue }
+        let Just(ev) = json.get_string("event") else { line = reader.read_line(); continue }
+
+        if ev == "session_start" {
+            total_sessions = total_sessions + 1
+        }
+
+        if ev == "tool_call" {
+            let tool = safe_str(json, "tool")
+            let dur = safe_i64(json, "duration_ms")
+
+            if tool.len() > 0 {
+                total_calls = total_calls + 1
+
+                // Increment count
+                if tool_counts.has(tool) {
+                    let prev: I64 = tool_counts.get(tool)
+                    tool_counts.set(tool, prev + 1)
+                } else {
+                    tool_counts.set(tool, 1)
+                }
+
+                // Accumulate duration
+                if tool_durations.has(tool) {
+                    let prev_dur: I64 = tool_durations.get(tool)
+                    tool_durations.set(tool, prev_dur + dur)
+                } else {
+                    tool_durations.set(tool, dur)
+                }
+            }
+        }
+
+        line = reader.read_line()
+    }
+    reader.close()
+
+    println("Parsed " + total_calls.to_string() + " tool calls across " + total_sessions.to_string() + " sessions")
+    println("Unique tools: " + tool_counts.len().to_string())
+
+    // ── Chart 1: Tool Distribution (bar chart) ───────────────────────
+    let keys: List[Str] = tool_counts.keys()
+    let vals: List[I64] = tool_counts.values()
+
+    let dist_chart = Chart::bar()
+    dist_chart.set_title("MCP Tool Distribution")
+    dist_chart.set_xlabel("Tool")
+    dist_chart.set_ylabel("Calls")
+
+    var i: I64 = 0
+    loop (i < keys.len()) {
+        let name: Str = keys.get(i)
+        let count: I64 = vals.get(i)
+        dist_chart.add_bar(name, count as F64)
+        i = i + 1
+    }
+
+    let dist_path = output_dir + "/tool_distribution.png"
+    let dist_ok = dist_chart.save(dist_path)
+    if dist_ok {
+        println("Saved: " + dist_path)
+    } else {
+        println("ERROR: Failed to save " + dist_path)
+    }
+    dist_chart.destroy()
+
+    // ── Chart 2: Average Duration by Tool (bar chart) ────────────────
+    let dur_chart = Chart::bar()
+    dur_chart.set_title("Average Duration by Tool (ms)")
+    dur_chart.set_xlabel("Tool")
+    dur_chart.set_ylabel("Avg Duration (ms)")
+
+    i = 0
+    loop (i < keys.len()) {
+        let name: Str = keys.get(i)
+        let count: I64 = vals.get(i)
+        let total_dur: I64 = tool_durations.get(name)
+        let avg_dur: F64 = if count > 0 {
+            (total_dur as F64) / (count as F64)
+        } else {
+            0.0
+        }
+        dur_chart.add_bar(name, avg_dur)
+        i = i + 1
+    }
+
+    let dur_path = output_dir + "/duration_by_tool.png"
+    let dur_ok = dur_chart.save(dur_path)
+    if dur_ok {
+        println("Saved: " + dur_path)
+    } else {
+        println("ERROR: Failed to save " + dur_path)
+    }
+    dur_chart.destroy()
+
+    // ── Chart 3: Calls Over Time (line chart) ────────────────────────
+    // Re-read log to build a per-session call count series
+    var reader2 = BufReader::open(log_path)
+    if not reader2.is_open() {
+        println("WARN: Cannot reopen log for timeline chart")
+        keys.destroy()
+        vals.destroy()
+        tool_counts.destroy()
+        tool_durations.destroy()
+        return
+    }
+
+    let timeline_chart = Chart::line()
+    timeline_chart.set_title("Tool Calls Per Session")
+    timeline_chart.set_xlabel("Session #")
+    timeline_chart.set_ylabel("Calls")
+    timeline_chart.add_series("calls")
+
+    var session_idx: F64 = 0.0
+    var session_calls: F64 = 0.0
+
+    var line2 = reader2.read_line()
+    loop (line2.len() > 0) {
+        let Just(json2) = parse(line2) else { line2 = reader2.read_line(); continue }
+        let Just(ev2) = json2.get_string("event") else { line2 = reader2.read_line(); continue }
+
+        if ev2 == "session_start" {
+            // Emit previous session's point (if any)
+            if session_idx > 0.0 {
+                timeline_chart.add_point(session_idx, session_calls)
+            }
+            session_idx = session_idx + 1.0
+            session_calls = 0.0
+        }
+
+        if ev2 == "tool_call" {
+            session_calls = session_calls + 1.0
+        }
+
+        line2 = reader2.read_line()
+    }
+    // Emit last session
+    if session_idx > 0.0 {
+        timeline_chart.add_point(session_idx, session_calls)
+    }
+    reader2.close()
+
+    let timeline_path = output_dir + "/calls_per_session.png"
+    let timeline_ok = timeline_chart.save(timeline_path)
+    if timeline_ok {
+        println("Saved: " + timeline_path)
+    } else {
+        println("ERROR: Failed to save " + timeline_path)
+    }
+    timeline_chart.destroy()
+
+    // Cleanup
+    keys.destroy()
+    vals.destroy()
+    tool_counts.destroy()
+    tool_durations.destroy()
+
+    println("Done! Charts saved to " + output_dir)
+}
