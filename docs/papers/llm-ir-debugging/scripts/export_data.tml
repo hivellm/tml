@@ -1,0 +1,217 @@
+/// Export MCP log data to CSV files.
+///
+/// Reads mcp-call-log.jsonl and exports:
+///   - sessions.csv: one row per session_start event
+///   - tool_calls.csv: one row per tool_call event
+///
+/// Usage:
+///     tml run export_data.tml                # Export to default location
+///     tml run export_data.tml <output_dir>   # Export to custom directory
+
+use std::file::bufio::{BufReader, BufWriter}
+use std::json::{Json, parse}
+use std::os::{args_count, args_get}
+
+// ---------------------------------------------------------------------------
+// CSV helpers
+// ---------------------------------------------------------------------------
+
+/// Escape a string value for CSV output.
+func csv_escape(value: Str) -> Str {
+    if value.contains(",") or value.contains("\"") or value.contains("\n") {
+        return "\"" + value + "\""
+    }
+    return value
+}
+
+/// Safe extraction: get string field from Json, return "" on Nothing.
+/// Uses the high-level Json API (avoids handle-level segfaults on missing fields).
+func safe_str(json: Json, key: Str) -> Str {
+    let maybe_val = json.get_string(key)
+    when maybe_val {
+        Just(v) => { return v },
+        Nothing => { return "" }
+    }
+}
+
+/// Safe extraction: get I64 field from Json, return 0 on Nothing.
+func safe_i64(json: Json, key: Str) -> I64 {
+    let maybe_val = json.get_i64(key)
+    when maybe_val {
+        Just(v) => { return v },
+        Nothing => { return 0 }
+    }
+}
+
+/// Check if a JSON event has is_error == true.
+func is_error_event(json: Json) -> Bool {
+    let field = json.get("is_error")
+    when field {
+        Just(v) => {
+            let maybe_bool = v.as_bool()
+            when maybe_bool {
+                Just(b) => { return b },
+                Nothing => {}
+            }
+        },
+        Nothing => {}
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// Row building — build CSV row string from Json
+// ---------------------------------------------------------------------------
+
+/// Build a CSV row for a session_start event.
+func build_session_row(json: Json) -> Str {
+    let sid = safe_str(json, "session")
+    let server = safe_str(json, "server")
+    let version = safe_str(json, "version")
+    let condition = safe_str(json, "condition")
+    let task = safe_str(json, "task")
+    let model = safe_str(json, "model")
+    let hash = safe_str(json, "claude_md_hash")
+
+    var s = csv_escape(sid)
+    s = s + "," + csv_escape(server)
+    s = s + "," + csv_escape(version)
+    s = s + "," + csv_escape(condition)
+    s = s + "," + csv_escape(task)
+    s = s + "," + csv_escape(model)
+    s = s + "," + csv_escape(hash)
+    return s
+}
+
+/// Build a CSV row for a tool_call event.
+func build_call_row(json: Json) -> Str {
+    let sid = safe_str(json, "session")
+    let seq = safe_i64(json, "seq")
+    let ts = safe_i64(json, "ts")
+    let tool = safe_str(json, "tool")
+    let dur = safe_i64(json, "duration_ms")
+    let is_err = is_error_event(json)
+    let err_type = safe_str(json, "error_type")
+
+    // Extract test target from params.suite or params.path
+    let test_target = extract_test_target(json)
+    let dl = extract_debug_layers(json)
+
+    let is_err_str = if is_err { "true" } else { "false" }
+    let dl_str = if dl { "true" } else { "false" }
+
+    var s = csv_escape(sid)
+    s = s + "," + seq.to_string()
+    s = s + "," + ts.to_string()
+    s = s + "," + csv_escape(tool)
+    s = s + "," + dur.to_string()
+    s = s + "," + is_err_str
+    s = s + "," + csv_escape(err_type)
+    s = s + "," + csv_escape(test_target)
+    s = s + "," + dl_str
+    return s
+}
+
+/// Extract test target from params.suite, params.path, or params.filter.
+func extract_test_target(json: Json) -> Str {
+    let maybe_suite = json.get_path_string("params.suite")
+    when maybe_suite {
+        Just(s) => { return s },
+        Nothing => {}
+    }
+    let maybe_path = json.get_path_string("params.path")
+    when maybe_path {
+        Just(p) => { return p },
+        Nothing => {}
+    }
+    let maybe_filter = json.get_path_string("params.filter")
+    when maybe_filter {
+        Just(f) => { return f },
+        Nothing => {}
+    }
+    return ""
+}
+
+/// Extract debug_layers flag from params.
+func extract_debug_layers(json: Json) -> Bool {
+    let maybe_dl = json.get_path("params.debug_layers")
+    when maybe_dl {
+        Just(dl_val) => {
+            let mb = dl_val.as_bool()
+            when mb {
+                Just(b) => { return b },
+                Nothing => {}
+            }
+        },
+        Nothing => {}
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+func main() {
+    let log_path = "mcp-call-log.jsonl"
+
+    var output_dir = "docs/papers/llm-ir-debugging/data"
+    let argc = args_count()
+    if argc >= 2 {
+        output_dir = args_get(1)
+    }
+
+    var reader = BufReader::open(log_path)
+    if not reader.is_open() {
+        println("ERROR: Cannot open log file: " + log_path)
+        return
+    }
+
+    // Open output CSV files
+    let sessions_path = output_dir + "/sessions.csv"
+    let calls_path = output_dir + "/tool_calls.csv"
+
+    var sessions_writer = BufWriter::open(sessions_path)
+    var calls_writer = BufWriter::open(calls_path)
+
+    // Write CSV headers
+    sessions_writer.write_line("session_id,server,version,condition,task,model,claude_md_hash")
+    calls_writer.write_line("session_id,seq,ts,tool,duration_ms,is_error,error_type,test_target,debug_layers")
+
+    var session_count: I64 = 0
+    var call_count: I64 = 0
+
+    var line = reader.read_line()
+    loop (line.len() > 0) {
+        let maybe_json = parse(line)
+        when maybe_json {
+            Just(json) => {
+                let maybe_event = json.get_string("event")
+                when maybe_event {
+                    Just(ev) => {
+                        if ev == "session_start" {
+                            session_count = session_count + 1
+                            let row = build_session_row(json)
+                            sessions_writer.write_line(row)
+                        }
+                        if ev == "tool_call" {
+                            call_count = call_count + 1
+                            let row = build_call_row(json)
+                            calls_writer.write_line(row)
+                        }
+                    },
+                    Nothing => {}
+                }
+            },
+            Nothing => {}
+        }
+        line = reader.read_line()
+    }
+
+    reader.close()
+    calls_writer.close()
+    sessions_writer.close()
+
+    println("Exported " + session_count.to_string() + " sessions to " + sessions_path)
+    println("Exported " + call_count.to_string() + " tool calls to " + calls_path)
+}

@@ -80,7 +80,7 @@
 
 | Status | Task | Progress | Description |
 |--------|------|----------|-------------|
-| ⬚ | llm-ir-debugging-research | 41/46 | llm ir debugging research |
+| ⬚ | llm-ir-debugging-research | 43/46 | llm ir debugging research |
 | ⬚ | phase10-05-http-performance | 7/23 | phase10 05 http performance |
 | ⬚ | phase10-06-http-benchmark | 0/26 | phase10 06 http benchmark |
 | ⬚ | phase10-07-db-http-integration | 1/10 | phase10 07 db http integration |

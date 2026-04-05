@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [let-else-nullable-maybe-fix.md](let-else-nullable-maybe-fix.md) - let-else GEP on nullable Maybe[Str]: gen_let_else_stmt missing nullable ptr optimization (2026-04-04, FIXED)
 - [route-thunk-abi-fix.md](route-thunk-abi-fix.md) - Route handler ABI trampoline wrappers: fn ptr call-site passes by-value, function def expects ptr (2026-04-03, FIXED)
 - [deep-module-private-imports-fix.md](deep-module-private-imports-fix.md) - load_module_from_file missing private_imports loading: deep module paths (4+ segments) undeclared in IR (2026-04-03, FIXED)
 - [struct-param-byptr-fix.md](struct-param-byptr-fix.md) - MIR codegen free function struct params: by-value definition vs by-pointer call site ABI mismatch (2026-04-03, FIXED)

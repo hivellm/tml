@@ -1,0 +1,251 @@
+/// Weekly MCP Research Digest
+///
+/// Reads mcp-call-log.jsonl, computes tool distribution and error rate,
+/// and prints a markdown summary report to stdout.
+///
+/// Usage:
+///     tml run weekly_report.tml
+
+use std::file::bufio::{BufReader}
+use std::json::{Json, parse}
+use std::collections::{HashMap}
+
+// ---------------------------------------------------------------------------
+// Tool classification (mirrors analyze_logs.py taxonomy)
+// ---------------------------------------------------------------------------
+
+func classify_tool(tool: Str) -> Str {
+    if tool == "emit-ir" or tool == "emit-mir" or tool == "check" or tool == "explain" {
+        return "diagnosis"
+    }
+    if tool == "test" or tool == "run" or tool == "build" or tool == "compile" {
+        return "execution"
+    }
+    if tool == "docs/search" or tool == "docs/get" or tool == "docs/list" or tool == "docs/resolve" {
+        return "documentation"
+    }
+    if tool == "format" or tool == "lint" or tool == "cache/invalidate" {
+        return "maintenance"
+    }
+    if tool == "project/build" or tool == "project/coverage" or tool == "project/structure" {
+        return "project"
+    }
+    if tool == "project/affected-tests" or tool == "project/artifacts" or tool == "project/slow-tests" {
+        return "project"
+    }
+    return "other"
+}
+
+/// Check if a JSON tool_call event has is_error == true.
+func is_error_event(json: Json) -> Bool {
+    let field = json.get("is_error")
+    when field {
+        Just(v) => {
+            let maybe_bool = v.as_bool()
+            when maybe_bool {
+                Just(b) => { return b },
+                Nothing => {}
+            }
+            let maybe_int = v.as_i64()
+            when maybe_int {
+                Just(n) => { return n == 1 },
+                Nothing => {}
+            }
+        },
+        Nothing => {}
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+func main() {
+    let log_path = "mcp-call-log.jsonl"
+
+    var reader = BufReader::open(log_path)
+    if not reader.is_open() {
+        println("ERROR: Cannot open log file: " + log_path)
+        return
+    }
+
+    // Collect metrics in a single pass
+    let tool_counts = HashMap[Str, I64]::new()
+    let category_counts = HashMap[Str, I64]::new()
+    let tool_errors = HashMap[Str, I64]::new()
+    let test_targets = HashMap[Str, I64]::new()
+    let counters = HashMap[Str, I64]::new()
+
+    var line = reader.read_line()
+    loop (line.len() > 0) {
+        let maybe_json = parse(line)
+        when maybe_json {
+            Just(json) => {
+                let maybe_event = json.get_string("event")
+                when maybe_event {
+                    Just(ev) => {
+                        if ev == "session_start" {
+                            let c = counters.get_or_set("sessions", 0)
+                            counters.set("sessions", c + 1)
+                        }
+                        if ev == "tool_call" {
+                            let c = counters.get_or_set("total", 0)
+                            counters.set("total", c + 1)
+
+                            let maybe_tool = json.get_string("tool")
+                            when maybe_tool {
+                                Just(tool) => {
+                                    let tc = tool_counts.get_or_set(tool, 0)
+                                    tool_counts.set(tool, tc + 1)
+
+                                    let cat = classify_tool(tool)
+                                    let cc = category_counts.get_or_set(cat, 0)
+                                    category_counts.set(cat, cc + 1)
+
+                                    if is_error_event(json) {
+                                        let ec = counters.get_or_set("errors", 0)
+                                        counters.set("errors", ec + 1)
+                                        let te = tool_errors.get_or_set(tool, 0)
+                                        tool_errors.set(tool, te + 1)
+                                    }
+
+                                    if tool == "check" {
+                                        let ck = counters.get_or_set("check_calls", 0)
+                                        counters.set("check_calls", ck + 1)
+                                    }
+                                    if tool == "test" {
+                                        let tk = counters.get_or_set("test_calls", 0)
+                                        counters.set("test_calls", tk + 1)
+
+                                        let maybe_suite = json.get_path_string("params.suite")
+                                        when maybe_suite {
+                                            Just(s) => {
+                                                let tt = test_targets.get_or_set(s, 0)
+                                                test_targets.set(s, tt + 1)
+                                            },
+                                            Nothing => {}
+                                        }
+                                    }
+                                },
+                                Nothing => {}
+                            }
+                        }
+                    },
+                    Nothing => {}
+                }
+            },
+            Nothing => {}
+        }
+        line = reader.read_line()
+    }
+    reader.close()
+
+    // Extract counters
+    let total = counters.get_or_set("total", 0)
+    let sessions = counters.get_or_set("sessions", 0)
+    let errors = counters.get_or_set("errors", 0)
+    let check_calls = counters.get_or_set("check_calls", 0)
+    let test_calls = counters.get_or_set("test_calls", 0)
+
+    // Print markdown report
+    println("# Weekly MCP Research Digest")
+    println("")
+    println("## Summary")
+    println("")
+    println("| Metric | Value |")
+    println("|--------|-------|")
+    println("| Sessions | " + sessions.to_string() + " |")
+    println("| Total calls | " + total.to_string() + " |")
+
+    if total > 0 {
+        let error_pct = (errors * 100) / total
+        println("| Error rate | " + error_pct.to_string() + "% |")
+
+        let diag = category_counts.get_or_set("diagnosis", 0)
+        let diag_pct = (diag * 100) / total
+        println("| Diagnosis ratio | " + diag_pct.to_string() + "% |")
+    }
+
+    let check_plus_test = check_calls + test_calls
+    if check_plus_test > 0 {
+        let adoption = (check_calls * 100) / check_plus_test
+        println("| Check adoption | " + adoption.to_string() + "% |")
+    }
+    println("")
+
+    // Tool distribution table
+    println("## Tool Distribution")
+    println("")
+    println("| Tool | Calls | % |")
+    println("|------|-------|---|")
+
+    let tool_keys = tool_counts.keys()
+    var i: I64 = 0
+    loop (i < tool_keys.len()) {
+        let tool = tool_keys.get(i)
+        let count = tool_counts.get(tool)
+        if total > 0 {
+            let pct = (count * 100) / total
+            println("| " + tool + " | " + count.to_string() + " | " + pct.to_string() + "% |")
+        }
+        i = i + 1
+    }
+    println("")
+
+    // Category breakdown
+    println("## Category Breakdown")
+    println("")
+    println("| Category | Calls | % |")
+    println("|----------|-------|---|")
+
+    let cat_keys = category_counts.keys()
+    var j: I64 = 0
+    loop (j < cat_keys.len()) {
+        let cat = cat_keys.get(j)
+        let count = category_counts.get(cat)
+        if total > 0 {
+            let pct = (count * 100) / total
+            println("| " + cat + " | " + count.to_string() + " | " + pct.to_string() + "% |")
+        }
+        j = j + 1
+    }
+    println("")
+
+    // Error rate by tool
+    println("## Error Rate by Tool")
+    println("")
+    println("| Tool | Errors | Total | Rate |")
+    println("|------|--------|-------|------|")
+
+    var k: I64 = 0
+    loop (k < tool_keys.len()) {
+        let tool = tool_keys.get(k)
+        let t = tool_counts.get(tool)
+        let e = tool_errors.get_or_set(tool, 0)
+        if t > 0 {
+            let pct = (e * 100) / t
+            println("| " + tool + " | " + e.to_string() + " | " + t.to_string() + " | " + pct.to_string() + "% |")
+        }
+        k = k + 1
+    }
+    println("")
+
+    // Top test targets
+    if test_targets.len() > 0 {
+        println("## Top Test Targets")
+        println("")
+        println("| Target | Calls |")
+        println("|--------|-------|")
+
+        let target_keys = test_targets.keys()
+        var m: I64 = 0
+        loop (m < target_keys.len()) {
+            let target = target_keys.get(m)
+            let count = test_targets.get(target)
+            println("| " + target + " | " + count.to_string() + " |")
+            m = m + 1
+        }
+        println("")
+    }
+}

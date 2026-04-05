@@ -9,10 +9,8 @@
       ]
     },
     "tml": {
-      "type": "stdio",
-      "command": "f:\\Node\\hivellm\\tml\\build\\debug\\bin\\tml_daemon.exe",
-      "args": [],
-      "env": {}
+      "command": "./build/debug/bin/tml_daemon.exe",
+      "args": []
     }
   }
 }

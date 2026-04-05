@@ -1,5 +1,14 @@
 # TML Library Engineer Memory
 
+## SIMD Codegen Pattern (CRITICAL — 2026-04-04)
+- NEVER pass `lowlevel { ... }` blocks as method arguments: `.bor(lowlevel { sse2_cmpeq_epi8(...) })` → "Unknown method: bor" at codegen even if type-check passes
+- ALWAYS bind every `lowlevel {}` result to a named `let` variable first, then call methods on the variable
+- The linter (S014) falsely reports these named variables as "unused" when they appear as args to lowlevel{} intrinsics — this is a linter bug; the code is correct and the variables ARE used
+- `sse2_cmpgt_epi8[V](a,b) -> V` and `sse2_and_si128[V](a,b) -> V` return I8x16 directly (not Mask16) — use these for SIMD range detection instead of high-level `.gt()` which returns Mask16
+- `Mask16.band()` returns `()` (codegen bug) — always work with I8x16 via sse2_* intrinsics
+- `sse2_storeu_si128[V](ptr: Ptr[V], v: V)` — unaligned 128-bit store, safe for mem_alloc'd buffers
+- For case conversion: `is_lower.band(I8x16::splat(32))` gives 32 where lowercase, 0 elsewhere; `chunk.sub(delta)` does selective subtract without branching
+
 ## TML Struct Syntax (CRITICAL)
 - `pub struct Foo { ... }` does NOT exist — use `pub type Foo { ... }` for record/struct types
 - `pub struct` causes P001 parse cascade on EVERYTHING after it in the file
