@@ -686,10 +686,18 @@ void LLVMIRGen::gen_let_else_stmt(const parser::LetElseStmt& let_else) {
                         emit_line("  " + payload_raw + " = load i64, ptr " + payload_ptr);
 
                         std::string payload_val = payload_raw;
-                        // Truncate if needed (i64 -> i32)
-                        if (bound_type == "i32") {
+                        // Convert from i64 storage to actual type
+                        if (bound_type == "double" || bound_type == "float") {
+                            // Float types: bitcast from i64
+                            std::string cast = fresh_reg();
+                            emit_line("  " + cast + " = bitcast i64 " + payload_raw + " to " +
+                                      bound_type);
+                            payload_val = cast;
+                        } else if (bound_type != "i64" && bound_type != "ptr") {
+                            // Integer types smaller than i64: truncate
                             std::string trunc = fresh_reg();
-                            emit_line("  " + trunc + " = trunc i64 " + payload_raw + " to i32");
+                            emit_line("  " + trunc + " = trunc i64 " + payload_raw + " to " +
+                                      bound_type);
                             payload_val = trunc;
                         }
 
