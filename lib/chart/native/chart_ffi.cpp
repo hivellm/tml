@@ -9,9 +9,8 @@
 ///   chart_save_svg(handle, path)
 ///   chart_destroy(handle)
 
-// sciplot is header-only (MIT license). Clone to compile:
-//   git clone --depth 1 https://github.com/sciplot/sciplot.git
-//   zig-cxx -std=c++17 -c -I sciplot chart_ffi.cpp -o chart_ffi.obj
+// sciplot headers bundled in native/sciplot/ (MIT license, see SCIPLOT-LICENSE)
+// Compile: zig-cxx -std=c++17 -c -I native chart_ffi.cpp -o chart_ffi.obj
 #include "sciplot/sciplot.hpp"
 
 #include <cstring>
