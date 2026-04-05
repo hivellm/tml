@@ -150,6 +150,205 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         }
     }
 
+    // =========================================================================
+    // Optional chaining: expr?.field
+    //   Desugars to: when expr { Just(v) => Just(v.field), Nothing => Nothing }
+    //   The receiver must be Maybe[T]. We generate the Maybe check, branch on
+    //   Just/Nothing, and for the Just branch, access the field on the unwrapped value.
+    // =========================================================================
+    if (field.optional_chain) {
+        // Infer the receiver's semantic type — must be Maybe[T]
+        auto receiver_sem_type = infer_expr_type(*field.object);
+        types::TypePtr inner_type;
+        if (receiver_sem_type && receiver_sem_type->is<types::NamedType>()) {
+            auto& named = receiver_sem_type->as<types::NamedType>();
+            if (named.name == "Maybe" && !named.type_args.empty()) {
+                inner_type = named.type_args[0];
+            }
+        }
+        if (!inner_type) {
+            report_error("Optional chaining `?.` requires Maybe[T] receiver", field.span, "C100");
+            return "0";
+        }
+
+        // Generate the receiver expression (produces the Maybe value)
+        std::string maybe_val = gen_expr(*field.object);
+        std::string maybe_llvm_type = llvm_type_from_semantic(receiver_sem_type, true);
+        std::string inner_llvm_type = llvm_type_from_semantic(inner_type, true);
+
+        // Create labels for the branches
+        std::string just_label = fresh_label("optfield_just");
+        std::string nothing_label = fresh_label("optfield_nothing");
+        std::string end_label = fresh_label("optfield_end");
+
+        bool is_nullable = (maybe_llvm_type == "ptr");
+
+        if (is_nullable) {
+            // Nullable pointer optimization: null = Nothing, non-null = Just
+            std::string is_null = fresh_reg();
+            emit_line("  " + is_null + " = icmp eq ptr " + maybe_val + ", null");
+            emit_line("  br i1 " + is_null + ", label %" + nothing_label + ", label %" +
+                      just_label);
+        } else {
+            // Struct-based Maybe: extract tag from field 0
+            std::string loaded_maybe = maybe_val;
+            if (last_expr_type_ == "ptr") {
+                loaded_maybe = fresh_reg();
+                emit_line("  " + loaded_maybe + " = load " + maybe_llvm_type + ", ptr " +
+                          maybe_val);
+                maybe_val = loaded_maybe;
+            }
+            std::string tag = fresh_reg();
+            emit_line("  " + tag + " = extractvalue " + maybe_llvm_type + " " + maybe_val + ", 0");
+            std::string is_nothing = fresh_reg();
+            emit_line("  " + is_nothing + " = icmp ne i32 " + tag + ", 0");
+            emit_line("  br i1 " + is_nothing + ", label %" + nothing_label + ", label %" +
+                      just_label);
+        }
+
+        // === Just branch: unwrap value and access the field ===
+        emit_line(just_label + ":");
+        current_block_ = just_label;
+
+        std::string unwrapped_val;
+        if (is_nullable) {
+            unwrapped_val = maybe_val;
+        } else {
+            // Extract payload via alloca + GEP (works for both struct and scalar payloads)
+            std::string maybe_alloca = fresh_reg();
+            emit_line("  " + maybe_alloca + " = alloca " + maybe_llvm_type);
+            emit_line("  store " + maybe_llvm_type + " " + maybe_val + ", ptr " + maybe_alloca);
+            std::string payload_ptr = fresh_reg();
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + maybe_llvm_type +
+                      ", ptr " + maybe_alloca + ", i32 0, i32 1");
+            unwrapped_val = fresh_reg();
+            emit_line("  " + unwrapped_val + " = load " + inner_llvm_type + ", ptr " + payload_ptr);
+        }
+
+        // Store the unwrapped value to a temp alloca so we can GEP into it for the field
+        std::string temp_inner_alloca = fresh_reg();
+        emit_line("  " + temp_inner_alloca + " = alloca " + inner_llvm_type);
+        emit_line("  store " + inner_llvm_type + " " + unwrapped_val + ", ptr " +
+                  temp_inner_alloca);
+
+        // Generate field access on the unwrapped value by constructing a synthetic
+        // FieldExpr with optional_chain=false pointing to a temp local.
+        std::string temp_name = "__opt_field_" + std::to_string(label_counter_++);
+        VarInfo temp_local;
+        temp_local.reg = temp_inner_alloca;
+        temp_local.type = inner_llvm_type;
+        temp_local.semantic_type = inner_type;
+        temp_local.is_ptr_to_value = true;
+        locals_[temp_name] = temp_local;
+
+        // Create a synthetic FieldExpr with the unwrapped receiver
+        auto& mutable_field = const_cast<parser::FieldExpr&>(field);
+        auto orig_object = std::move(mutable_field.object);
+        bool orig_optional_chain = mutable_field.optional_chain;
+
+        auto temp_ident = std::make_unique<parser::Expr>();
+        temp_ident->kind = parser::IdentExpr{temp_name, field.span};
+        temp_ident->span = field.span;
+        mutable_field.object = std::move(temp_ident);
+        mutable_field.optional_chain = false;
+
+        std::string field_result = gen_field(mutable_field);
+        std::string result_type = last_expr_type_;
+
+        // Restore original object and flag
+        mutable_field.object = std::move(orig_object);
+        mutable_field.optional_chain = orig_optional_chain;
+
+        // Remove temporary local
+        locals_.erase(temp_name);
+
+        std::string just_result_val = field_result;
+        std::string just_result_block = current_block_;
+
+        // Check if the field type is already Maybe (avoid Maybe[Maybe[V]])
+        bool result_is_already_maybe = result_type.find("Maybe") != std::string::npos ||
+                                       result_type.find("maybe") != std::string::npos;
+
+        std::string final_result_type;
+        std::string just_wrapped;
+
+        if (result_is_already_maybe) {
+            // Field already Maybe — flatten (no extra wrapping)
+            final_result_type = result_type;
+            just_wrapped = just_result_val;
+        } else if (result_type == "ptr") {
+            // Nullable Maybe (result is a pointer type like Str)
+            final_result_type = "ptr";
+            just_wrapped = just_result_val;
+        } else {
+            // Wrap in Maybe: construct { i32 0 (Just tag), <result> }
+            // Build the Maybe semantic type for the field result
+            types::TypePtr field_sem_type = get_field_semantic_type(
+                inner_type->is<types::NamedType>() ? inner_type->as<types::NamedType>().name : "",
+                field.field);
+            if (!field_sem_type) {
+                // Fallback: create a dummy type from the LLVM type
+                field_sem_type =
+                    std::make_shared<types::Type>(types::Type{types::NamedType{result_type, ""}});
+            }
+            auto result_maybe_sem = std::make_shared<types::Type>(
+                types::Type{types::NamedType{"Maybe", "", {field_sem_type}}});
+            final_result_type = llvm_type_from_semantic(result_maybe_sem, true);
+
+            // Build the Maybe struct via alloca + store
+            std::string temp_maybe_alloca = fresh_reg();
+            emit_line("  " + temp_maybe_alloca + " = alloca " + final_result_type);
+            // Zero-initialize first, then set tag=0 (Just)
+            emit_line("  store " + final_result_type + " zeroinitializer, ptr " +
+                      temp_maybe_alloca);
+            // Store tag = 0 (Just)
+            std::string tag_ptr = fresh_reg();
+            emit_line("  " + tag_ptr + " = getelementptr inbounds " + final_result_type + ", ptr " +
+                      temp_maybe_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + tag_ptr);
+            // Store payload
+            std::string payload_ptr = fresh_reg();
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + final_result_type +
+                      ", ptr " + temp_maybe_alloca + ", i32 0, i32 1");
+            emit_line("  store " + result_type + " " + just_result_val + ", ptr " + payload_ptr);
+            just_wrapped = fresh_reg();
+            emit_line("  " + just_wrapped + " = load " + final_result_type + ", ptr " +
+                      temp_maybe_alloca);
+        }
+
+        emit_line("  br label %" + end_label);
+        just_result_block = current_block_;
+
+        // === Nothing branch: produce Nothing value ===
+        emit_line(nothing_label + ":");
+        current_block_ = nothing_label;
+
+        std::string nothing_val;
+        if (final_result_type == "ptr") {
+            nothing_val = "null";
+        } else {
+            // Nothing = tag 1, zeroed payload
+            std::string nothing_with_tag = fresh_reg();
+            emit_line("  " + nothing_with_tag + " = insertvalue " + final_result_type +
+                      " zeroinitializer, i32 1, 0");
+            nothing_val = nothing_with_tag;
+        }
+
+        emit_line("  br label %" + end_label);
+        std::string nothing_block = current_block_;
+
+        // === End: phi to merge the result ===
+        emit_line(end_label + ":");
+        current_block_ = end_label;
+
+        std::string phi_result = fresh_reg();
+        emit_line("  " + phi_result + " = phi " + final_result_type + " [ " + just_wrapped + ", %" +
+                  just_result_block + " ], [ " + nothing_val + ", %" + nothing_block + " ]");
+
+        last_expr_type_ = final_result_type;
+        return phi_result;
+    }
+
     // Handle field access on struct
     std::string struct_type;
     std::string struct_ptr;
