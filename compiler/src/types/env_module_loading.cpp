@@ -181,8 +181,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     }
 
     // Check global module cache for library modules (core::*, std::*, test)
-    // This avoids re-parsing library modules that have already been loaded
-    // by other compilation units (e.g., other test files)
     if (GlobalModuleCache::should_cache(module_path)) {
         auto& cache = GlobalModuleCache::instance();
         if (auto cached_module = cache.get(module_path)) {

@@ -1235,10 +1235,21 @@ static int generate_all_meta_from_source() {
         // Add the root module itself
         module_paths.push_back(lib.prefix);
 
-        // Add submodules from mod.tml
+        // Recursively discover submodules from mod.tml files
         auto submodules = extract_pub_mod_names(lib.mod_file);
         for (const auto& submod : submodules) {
-            module_paths.push_back(lib.prefix + "::" + submod);
+            std::string full_path = lib.prefix + "::" + submod;
+            module_paths.push_back(full_path);
+
+            // Check for nested submodules (e.g., std::file::bufio)
+            fs::path submod_dir = lib.mod_file.parent_path() / submod;
+            fs::path submod_mod = submod_dir / "mod.tml";
+            if (fs::exists(submod_mod)) {
+                auto sub_submodules = extract_pub_mod_names(submod_mod);
+                for (const auto& sub2 : sub_submodules) {
+                    module_paths.push_back(full_path + "::" + sub2);
+                }
+            }
         }
     }
 
@@ -1298,6 +1309,13 @@ static int generate_all_meta_from_source() {
                 loaded_set.insert(mod_path);
                 total_generated++;
                 pass_generated++;
+                // Copy to GlobalModuleCache so other TypeEnvs can find it
+                if (registry->has_module(mod_path)) {
+                    auto mod_info = registry->get_module(mod_path);
+                    if (mod_info) {
+                        GlobalModuleCache::instance().put(mod_path, *mod_info);
+                    }
+                }
                 TML_LOG_INFO("meta", "  [GENERATED] " << mod_path << " (" << elapsed << "ms)");
             } else {
                 still_failed.push_back(mod_path);

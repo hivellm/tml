@@ -23,7 +23,7 @@ func main() {
         window_days = n
     }
 
-    let reader = BufReader::from_path("mcp-call-log.jsonl")
+    let reader = BufReader::open("mcp-call-log.jsonl")
     if not reader.is_open() {
         println("ERROR: mcp-call-log.jsonl not found")
         return
@@ -51,8 +51,17 @@ func main() {
         if event == "tool_call" {
             total_calls = total_calls + 1
 
-            let error_type = json.get_string("error_type").unwrap_or("none")
-            let is_error = json.get_bool("is_error").unwrap_or(false)
+            var error_type = "none"
+            when json.get_string("error_type") {
+                Just(et) => { error_type = et },
+                Nothing => {}
+            }
+
+            var is_error = false
+            when json.get_string("is_error") {
+                Just(val) => { is_error = val == "true" },
+                Nothing => {}
+            }
 
             if is_error or error_type != "none" {
                 error_calls = error_calls + 1

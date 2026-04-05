@@ -247,16 +247,41 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
     // Last resort: search GlobalModuleCache for impl methods on primitive types.
     // This handles cases like s.char_at() where s: Str and the impl Str block
     // is in core::str, which may not be explicitly imported via 'use core::str'.
-    // The GlobalModuleCache is populated by meta preload and contains all library modules.
-    // We iterate ALL cached modules generically, so new impl blocks in .tml files
-    // are automatically discovered without needing hardcoded mappings in C++.
     auto method_pos = name.find("::");
     if (method_pos != std::string::npos) {
         auto& global_cache = GlobalModuleCache::instance();
-        for (const auto& [mod_path, mod] : global_cache.get_all()) {
+        auto all_cached = global_cache.get_all();
+        for (const auto& [mod_path, mod] : all_cached) {
             auto func_it = mod.functions.find(name);
             if (func_it != mod.functions.end()) {
                 return func_it->second;
+            }
+        }
+        // Also try type-qualified name variations
+        // e.g., for "Str::len", also search for "str::Str::len" or just with the module
+        std::string type_prefix = name.substr(0, method_pos);
+        // Try lowercase type name as module name (Str -> str, I64 -> i64)
+        std::string lower_type;
+        for (char c : type_prefix) {
+            lower_type += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        // Search in core::<lower_type> module
+        std::string core_qualified = "core::" + lower_type;
+        auto core_mod = global_cache.get(core_qualified);
+        if (core_mod) {
+            // Try exact name first (Str::len)
+            auto func_it = core_mod->functions.find(name);
+            if (func_it != core_mod->functions.end()) {
+                return func_it->second;
+            }
+            // Debug: log what functions exist in this module
+            if (core_mod->functions.size() < 200) {
+                for (const auto& [fn_name, fn_sig] : core_mod->functions) {
+                    if (fn_name.find("len") != std::string::npos) {
+                        TML_LOG_DEBUG("meta",
+                                      "[lookup] core::" << lower_type << " has: " << fn_name);
+                    }
+                }
             }
         }
     }
