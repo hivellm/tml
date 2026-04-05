@@ -80,15 +80,17 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         // continue across newlines to avoid ambiguity
         bool is_postfix =
             next_kind == lexer::TokenKind::LParen || next_kind == lexer::TokenKind::LBracket ||
-            next_kind == lexer::TokenKind::Dot || next_kind == lexer::TokenKind::Bang ||
-            next_kind == lexer::TokenKind::PlusPlus || next_kind == lexer::TokenKind::MinusMinus;
+            next_kind == lexer::TokenKind::Dot || next_kind == lexer::TokenKind::QuestionDot ||
+            next_kind == lexer::TokenKind::Bang || next_kind == lexer::TokenKind::PlusPlus ||
+            next_kind == lexer::TokenKind::MinusMinus;
 
         // Allow `.` to continue across newlines for method chaining:
         //   object()
         //       .method1()
         //       .method2()
         // But block other postfix operators like `(`, `[`, etc. after newlines
-        bool is_method_chain_continuation = (next_kind == lexer::TokenKind::Dot);
+        bool is_method_chain_continuation =
+            (next_kind == lexer::TokenKind::Dot || next_kind == lexer::TokenKind::QuestionDot);
 
         // If we skipped newlines and hit a postfix operator (except `.`), don't continue
         if (saved_pos != pos_ && is_postfix && !is_method_chain_continuation) {
@@ -499,6 +501,42 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
         return make_box<Expr>(Expr{
             .kind = FieldExpr{.object = std::move(left), .field = std::move(name), .span = span},
             .span = span});
+    }
+
+    // Optional chaining (?.)
+    if (match(lexer::TokenKind::QuestionDot)) {
+        auto name_result =
+            expect(lexer::TokenKind::Identifier, "Expected field or method name after '?.'");
+        if (is_err(name_result))
+            return unwrap_err(name_result);
+        std::string name = std::string(unwrap(name_result).lexeme);
+
+        // Check if method call
+        if (check(lexer::TokenKind::LParen)) {
+            advance();
+            auto args = parse_call_args();
+            if (is_err(args))
+                return unwrap_err(args);
+            auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after arguments");
+            if (is_err(rparen))
+                return unwrap_err(rparen);
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_box<Expr>(Expr{.kind = MethodCallExpr{.receiver = std::move(left),
+                                                              .method = std::move(name),
+                                                              .type_args = {},
+                                                              .args = std::move(unwrap(args)),
+                                                              .span = span,
+                                                              .optional_chain = true},
+                                       .span = span});
+        }
+
+        // Field access
+        auto span = SourceSpan::merge(start_span, previous().span);
+        return make_box<Expr>(Expr{.kind = FieldExpr{.object = std::move(left),
+                                                     .field = std::move(name),
+                                                     .span = span,
+                                                     .optional_chain = true},
+                                   .span = span});
     }
 
     // Try operator (?)

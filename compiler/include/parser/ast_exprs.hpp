@@ -205,6 +205,7 @@ struct MethodCallExpr {
     std::vector<TypePtr> type_args; ///< Generic type arguments (turbofish).
     std::vector<ExprPtr> args;      ///< Call arguments.
     SourceSpan span;                ///< Source location.
+    bool optional_chain = false;    ///< `?.` optional chaining (unwrap Maybe before call).
 };
 
 /// Field access: `obj.field`.
@@ -219,9 +220,10 @@ struct MethodCallExpr {
 /// let first = tuple.0         // Tuple field access
 /// ```
 struct FieldExpr {
-    ExprPtr object;    ///< The object being accessed.
-    std::string field; ///< Field name (or index for tuples).
-    SourceSpan span;   ///< Source location.
+    ExprPtr object;              ///< The object being accessed.
+    std::string field;           ///< Field name (or index for tuples).
+    SourceSpan span;             ///< Source location.
+    bool optional_chain = false; ///< `?.` optional chaining (unwrap Maybe before access).
 };
 
 /// Index expression: `arr[i]`.
