@@ -226,6 +226,10 @@ auto Lexer::lex_operator() -> Token {
         return make_token(TokenKind::Colon);
 
     case '?':
+        if (peek() == '.') {
+            advance();
+            return make_token(TokenKind::QuestionDot);
+        }
         return make_token(TokenKind::Question);
 
     default:

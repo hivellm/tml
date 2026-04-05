@@ -307,6 +307,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "::";
     case TokenKind::Question:
         return "?";
+    case TokenKind::QuestionDot:
+        return "?.";
     case TokenKind::Bang:
         return "!";
     case TokenKind::At:

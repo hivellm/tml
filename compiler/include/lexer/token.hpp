@@ -248,6 +248,7 @@ enum class TokenKind : uint8_t {
     Colon,       ///< `:` type annotation
     ColonColon,  ///< `::` path separator
     Question,    ///< `?` error propagation / ternary
+    QuestionDot, ///< `?.` optional chaining
     Bang,        ///< `!` logical NOT / unwrap
     At,          ///< `@` attributes/decorators
     Pipe,        ///< `|` pattern alternation
