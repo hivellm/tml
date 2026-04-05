@@ -1,0 +1,100 @@
+/// TML Chart Library — data visualization powered by sciplot/gnuplot
+///
+/// # Quick Start
+///
+/// ```tml
+/// use chart::Chart
+///
+/// let c = Chart::bar()
+/// c.set_title("Tool Distribution")
+/// c.add_bar("test", 52.0)
+/// c.add_bar("check", 17.0)
+/// c.add_bar("docs", 8.0)
+/// c.save("chart.png")
+/// c.destroy()
+/// ```
+///
+/// Supports: bar charts, line charts, scatter plots
+/// Output: PNG, SVG, PDF (via gnuplot)
+
+// FFI bindings to chart_ffi.cpp
+@extern("c") func chart_create(chart_type: Str) -> I64
+@extern("c") func chart_set_title(handle: I64, title: Str)
+@extern("c") func chart_set_xlabel(handle: I64, label: Str)
+@extern("c") func chart_set_ylabel(handle: I64, label: Str)
+@extern("c") func chart_set_size(handle: I64, width: I32, height: I32)
+@extern("c") func chart_add_bar(handle: I64, label: Str, value: F64)
+@extern("c") func chart_add_series(handle: I64, name: Str)
+@extern("c") func chart_add_point(handle: I64, x: F64, y: F64)
+@extern("c") func chart_save(handle: I64, path: Str) -> I32
+@extern("c") func chart_destroy(handle: I64)
+
+/// A chart for data visualization.
+///
+/// Create with `Chart::bar()`, `Chart::line()`, or `Chart::scatter()`.
+/// Add data, configure appearance, save to file.
+pub type Chart {
+    handle: I64,
+}
+
+impl Chart {
+    /// Create a bar chart.
+    pub func bar() -> Chart {
+        return Chart { handle: chart_create("bar") }
+    }
+
+    /// Create a line chart.
+    pub func line() -> Chart {
+        return Chart { handle: chart_create("line") }
+    }
+
+    /// Create a scatter plot.
+    pub func scatter() -> Chart {
+        return Chart { handle: chart_create("scatter") }
+    }
+
+    /// Set the chart title.
+    pub func set_title(this, title: Str) {
+        chart_set_title(this.handle, title)
+    }
+
+    /// Set the X axis label.
+    pub func set_xlabel(this, label: Str) {
+        chart_set_xlabel(this.handle, label)
+    }
+
+    /// Set the Y axis label.
+    pub func set_ylabel(this, label: Str) {
+        chart_set_ylabel(this.handle, label)
+    }
+
+    /// Set chart dimensions in pixels.
+    pub func set_size(this, width: I32, height: I32) {
+        chart_set_size(this.handle, width, height)
+    }
+
+    /// Add a bar to a bar chart.
+    pub func add_bar(this, label: Str, value: F64) {
+        chart_add_bar(this.handle, label, value)
+    }
+
+    /// Start a new data series (for line/scatter charts).
+    pub func add_series(this, name: Str) {
+        chart_add_series(this.handle, name)
+    }
+
+    /// Add a data point to the current series.
+    pub func add_point(this, x: F64, y: F64) {
+        chart_add_point(this.handle, x, y)
+    }
+
+    /// Save the chart to a file. Format from extension (.png, .svg, .pdf).
+    pub func save(this, path: Str) -> Bool {
+        return chart_save(this.handle, path) == 0
+    }
+
+    /// Free chart resources.
+    pub func destroy(this) {
+        chart_destroy(this.handle)
+    }
+}

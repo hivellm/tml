@@ -1,0 +1,18 @@
+/// Build script for chart library — links chart_ffi.obj with sciplot
+
+func main() {
+    println("tml:warning=Chart library: configuring sciplot FFI")
+    println("tml:rerun-if-changed=native/")
+
+    // Link the pre-compiled chart_ffi.obj
+    #if WINDOWS
+    println("tml:link-search=native")
+    println("tml:link-lib=chart_ffi.obj")
+    #elif LINUX
+    println("tml:link-search=native")
+    println("tml:link-lib=chart_ffi.o")
+    #elif MACOS
+    println("tml:link-search=native")
+    println("tml:link-lib=chart_ffi.o")
+    #endif
+}
