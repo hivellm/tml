@@ -10,67 +10,80 @@
 ///     tml run query.tml hotspots
 ///     tml run query.tml all
 
-use std::file::bufio::{BufReader}
-use std::json::{parse}
-use std::collections::{HashMap, List}
+use std::file::bufio::BufReader
+use std::json::parse
+use std::collections::HashMap
 use std::os::{args_count, args_get}
 
 // ---------------------------------------------------------------------------
-// Tool classification (mirrors analyze_logs.py taxonomy)
+// Tool classification
 // ---------------------------------------------------------------------------
 
 func classify_tool(tool: Str) -> Str {
-    // Diagnosis tools
     if tool == "emit-ir" or tool == "emit-mir" or tool == "check" or tool == "explain" {
         return "diagnosis"
     }
-    // Execution tools
     if tool == "test" or tool == "run" or tool == "build" or tool == "compile" {
         return "execution"
     }
-    // Documentation tools
     if tool == "docs/search" or tool == "docs/get" or tool == "docs/list" or tool == "docs/resolve" {
         return "documentation"
     }
-    // Maintenance tools
     if tool == "format" or tool == "lint" or tool == "cache/invalidate" {
         return "maintenance"
     }
-    // Project tools
-    if tool == "project/build" or tool == "project/coverage" or tool == "project/structure" {
-        return "project"
-    }
-    if tool == "project/affected-tests" or tool == "project/artifacts" or tool == "project/slow-tests" {
+    if tool.starts_with("project/") {
         return "project"
     }
     return "other"
 }
 
 // ---------------------------------------------------------------------------
-// JSON field helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
-/// Check if a JSON tool_call event has is_error == true.
-/// Handles both boolean and integer representations.
 func is_error_event(json: Json) -> Bool {
     let field = json.get("is_error")
     when field {
         Just(v) => {
-            let maybe_bool = v.as_bool()
-            when maybe_bool {
-                Just(b) => { return b },
+            let b = v.as_bool()
+            when b {
+                Just(val) => { return val },
                 Nothing => {}
             }
-            // Fall back to integer check (1 = error)
-            let maybe_int = v.as_i64()
-            when maybe_int {
-                Just(n) => { return n == 1 },
+            let n = v.as_i64()
+            when n {
+                Just(num) => { return num == 1 },
                 Nothing => {}
             }
         },
         Nothing => {}
     }
     return false
+}
+
+func extract_test_target(json: Json) -> Str {
+    when json.get_path_string("params.suite") {
+        Just(s) => { return s },
+        Nothing => {}
+    }
+    when json.get_path_string("params.path") {
+        Just(p) => { return p },
+        Nothing => {}
+    }
+    when json.get_path_string("params.filter") {
+        Just(f) => { return f },
+        Nothing => {}
+    }
+    return "(default)"
+}
+
+func open_log(log_path: Str) -> BufReader {
+    var reader = BufReader::open(log_path)
+    if not reader.is_open() {
+        println("ERROR: Cannot open " + log_path)
+    }
+    return reader
 }
 
 // ---------------------------------------------------------------------------
@@ -81,11 +94,8 @@ func metric_tool_distribution(log_path: Str) {
     println("=== Tool Distribution ===")
     println("")
 
-    var reader = BufReader::open(log_path)
-    if not reader.is_open() {
-        println("ERROR: Cannot open log file: " + log_path)
-        return
-    }
+    var reader = open_log(log_path)
+    if not reader.is_open() { return }
 
     let tool_counts = HashMap[Str, I64]::new()
     let category_counts = HashMap[Str, I64]::new()
@@ -93,32 +103,26 @@ func metric_tool_distribution(log_path: Str) {
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "tool_call" {
-                            total = total + 1
-                            let maybe_tool = json.get_string("tool")
-                            when maybe_tool {
-                                Just(tool) => {
-                                    let cur = tool_counts.get_or_set(tool, 0)
-                                    tool_counts.set(tool, cur + 1)
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(ev) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+        if ev == "tool_call" {
+            total = total + 1
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
+            let cur = tool_counts.get_or_set(tool, 0)
+            tool_counts.set(tool, cur + 1)
 
-                                    let cat = classify_tool(tool)
-                                    let cur_cat = category_counts.get_or_set(cat, 0)
-                                    category_counts.set(cat, cur_cat + 1)
-                                },
-                                Nothing => {}
-                            }
-                        }
-                    },
-                    Nothing => {}
-                }
-            },
-            Nothing => {}
+            let cat = classify_tool(tool)
+            let cur_cat = category_counts.get_or_set(cat, 0)
+            category_counts.set(cat, cur_cat + 1)
         }
         line = reader.read_line()
     }
@@ -127,7 +131,6 @@ func metric_tool_distribution(log_path: Str) {
     println("Total calls: " + total.to_string())
     println("")
 
-    // Print tool counts
     println("--- By Tool ---")
     let keys = tool_counts.keys()
     var i: I64 = 0
@@ -160,11 +163,8 @@ func metric_error_rate(log_path: Str) {
     println("=== Error Rate by Tool ===")
     println("")
 
-    var reader = BufReader::open(log_path)
-    if not reader.is_open() {
-        println("ERROR: Cannot open log file: " + log_path)
-        return
-    }
+    var reader = open_log(log_path)
+    if not reader.is_open() { return }
 
     let tool_total = HashMap[Str, I64]::new()
     let tool_errors = HashMap[Str, I64]::new()
@@ -173,34 +173,28 @@ func metric_error_rate(log_path: Str) {
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "tool_call" {
-                            total = total + 1
-                            let maybe_tool = json.get_string("tool")
-                            when maybe_tool {
-                                Just(tool) => {
-                                    let cur = tool_total.get_or_set(tool, 0)
-                                    tool_total.set(tool, cur + 1)
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(ev) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+        if ev == "tool_call" {
+            total = total + 1
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
+            let cur = tool_total.get_or_set(tool, 0)
+            tool_total.set(tool, cur + 1)
 
-                                    if is_error_event(json) {
-                                        total_errors = total_errors + 1
-                                        let cur_err = tool_errors.get_or_set(tool, 0)
-                                        tool_errors.set(tool, cur_err + 1)
-                                    }
-                                },
-                                Nothing => {}
-                            }
-                        }
-                    },
-                    Nothing => {}
-                }
-            },
-            Nothing => {}
+            if is_error_event(json) {
+                total_errors = total_errors + 1
+                let cur_err = tool_errors.get_or_set(tool, 0)
+                tool_errors.set(tool, cur_err + 1)
+            }
         }
         line = reader.read_line()
     }
@@ -236,62 +230,49 @@ func metric_check_adoption(log_path: Str) {
     println("=== Check Adoption (check before test) ===")
     println("")
 
-    var reader = BufReader::open(log_path)
-    if not reader.is_open() {
-        println("ERROR: Cannot open log file: " + log_path)
-        return
-    }
+    var reader = open_log(log_path)
+    if not reader.is_open() { return }
 
-    // Use HashMaps for all counters (var mutation in nested when blocks has codegen issues)
     let counters = HashMap[Str, I64]::new()
     let session_last_tool = HashMap[Str, Str]::new()
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "tool_call" {
-                            let maybe_tool = json.get_string("tool")
-                            when maybe_tool {
-                                Just(tool) => {
-                                    // Count check and test calls
-                                    if tool == "check" {
-                                        let c = counters.get_or_set("check", 0)
-                                        counters.set("check", c + 1)
-                                    }
-                                    if tool == "test" {
-                                        let c = counters.get_or_set("test", 0)
-                                        counters.set("test", c + 1)
-                                    }
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(ev) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+        if ev == "tool_call" {
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
 
-                                    // Track preceded-by-check using session_last_tool
-                                    let maybe_sid = json.get_string("session")
-                                    when maybe_sid {
-                                        Just(sid) => {
-                                            if tool == "test" and session_last_tool.has(sid) {
-                                                let last = session_last_tool.get(sid)
-                                                if last == "check" {
-                                                    let p = counters.get_or_set("preceded", 0)
-                                                    counters.set("preceded", p + 1)
-                                                }
-                                            }
-                                            session_last_tool.set(sid, tool)
-                                        },
-                                        Nothing => {}
-                                    }
-                                },
-                                Nothing => {}
-                            }
-                        }
-                    },
-                    Nothing => {}
+            if tool == "check" {
+                let c = counters.get_or_set("check", 0)
+                counters.set("check", c + 1)
+            }
+            if tool == "test" {
+                let c = counters.get_or_set("test", 0)
+                counters.set("test", c + 1)
+            }
+
+            let Just(sid) = json.get_string("session") else {
+                line = reader.read_line()
+                continue
+            }
+            if tool == "test" and session_last_tool.has(sid) {
+                let last = session_last_tool.get(sid)
+                if last == "check" {
+                    let p = counters.get_or_set("preceded", 0)
+                    counters.set("preceded", p + 1)
                 }
-            },
-            Nothing => {}
+            }
+            session_last_tool.set(sid, tool)
         }
         line = reader.read_line()
     }
@@ -309,7 +290,6 @@ func metric_check_adoption(log_path: Str) {
         let adoption = (total_check * 100) / check_plus_test
         println("Check adoption rate: " + adoption.to_string() + "% (check / (check + test))")
     }
-
     if total_test > 0 {
         let preceded_pct = (preceded_count * 100) / total_test
         println("Tests preceded by check: " + preceded_count.to_string() + "/" + total_test.to_string() + " (" + preceded_pct.to_string() + "%)")
@@ -324,11 +304,8 @@ func metric_session_summary(log_path: Str) {
     println("=== Session Summary ===")
     println("")
 
-    var reader = BufReader::open(log_path)
-    if not reader.is_open() {
-        println("ERROR: Cannot open log file: " + log_path)
-        return
-    }
+    var reader = open_log(log_path)
+    if not reader.is_open() { return }
 
     let session_calls = HashMap[Str, I64]::new()
     let session_errors = HashMap[Str, I64]::new()
@@ -336,35 +313,29 @@ func metric_session_summary(log_path: Str) {
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "session_start" {
-                            total_sessions = total_sessions + 1
-                        }
-                        if ev == "tool_call" {
-                            let maybe_session = json.get_string("session")
-                            when maybe_session {
-                                Just(sid) => {
-                                    let cur = session_calls.get_or_set(sid, 0)
-                                    session_calls.set(sid, cur + 1)
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(ev) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+        if ev == "session_start" {
+            total_sessions = total_sessions + 1
+        }
+        if ev == "tool_call" {
+            let Just(sid) = json.get_string("session") else {
+                line = reader.read_line()
+                continue
+            }
+            let cur = session_calls.get_or_set(sid, 0)
+            session_calls.set(sid, cur + 1)
 
-                                    if is_error_event(json) {
-                                        let cur_err = session_errors.get_or_set(sid, 0)
-                                        session_errors.set(sid, cur_err + 1)
-                                    }
-                                },
-                                Nothing => {}
-                            }
-                        }
-                    },
-                    Nothing => {}
-                }
-            },
-            Nothing => {}
+            if is_error_event(json) {
+                let cur_err = session_errors.get_or_set(sid, 0)
+                session_errors.set(sid, cur_err + 1)
+            }
         }
         line = reader.read_line()
     }
@@ -385,74 +356,44 @@ func metric_session_summary(log_path: Str) {
 }
 
 // ---------------------------------------------------------------------------
-// Metric: hotspots (test failures per module)
+// Metric: hotspots
 // ---------------------------------------------------------------------------
-
-/// Extract the test target from a JSON tool_call event.
-/// Checks params.suite, then params.path, then params.filter.
-func extract_test_target(json: Json) -> Str {
-    let maybe_suite = json.get_path_string("params.suite")
-    when maybe_suite {
-        Just(s) => { return s },
-        Nothing => {}
-    }
-    let maybe_path = json.get_path_string("params.path")
-    when maybe_path {
-        Just(p) => { return p },
-        Nothing => {}
-    }
-    let maybe_filter = json.get_path_string("params.filter")
-    when maybe_filter {
-        Just(f) => { return f },
-        Nothing => {}
-    }
-    return "(default)"
-}
 
 func metric_hotspots(log_path: Str) {
     println("=== Test Target Hotspots ===")
     println("")
 
-    var reader = BufReader::open(log_path)
-    if not reader.is_open() {
-        println("ERROR: Cannot open log file: " + log_path)
-        return
-    }
+    var reader = open_log(log_path)
+    if not reader.is_open() { return }
 
     let target_counts = HashMap[Str, I64]::new()
     let target_errors = HashMap[Str, I64]::new()
 
     var line = reader.read_line()
     loop (line.len() > 0) {
-        let maybe_json = parse(line)
-        when maybe_json {
-            Just(json) => {
-                let maybe_event = json.get_string("event")
-                when maybe_event {
-                    Just(ev) => {
-                        if ev == "tool_call" {
-                            let maybe_tool = json.get_string("tool")
-                            when maybe_tool {
-                                Just(tool) => {
-                                    if tool == "test" {
-                                        let target = extract_test_target(json)
-                                        let cur = target_counts.get_or_set(target, 0)
-                                        target_counts.set(target, cur + 1)
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(ev) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+        if ev == "tool_call" {
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
+            if tool == "test" {
+                let target = extract_test_target(json)
+                let cur = target_counts.get_or_set(target, 0)
+                target_counts.set(target, cur + 1)
 
-                                        if is_error_event(json) {
-                                            let cur_err = target_errors.get_or_set(target, 0)
-                                            target_errors.set(target, cur_err + 1)
-                                        }
-                                    }
-                                },
-                                Nothing => {}
-                            }
-                        }
-                    },
-                    Nothing => {}
+                if is_error_event(json) {
+                    let cur_err = target_errors.get_or_set(target, 0)
+                    target_errors.set(target, cur_err + 1)
                 }
-            },
-            Nothing => {}
+            }
         }
         line = reader.read_line()
     }
@@ -474,9 +415,7 @@ func metric_hotspots(log_path: Str) {
 // ---------------------------------------------------------------------------
 
 func main() {
-    let argc = args_count()
-
-    if argc < 2 {
+    if args_count() < 2 {
         println("Usage: query.tml <metric>")
         println("")
         println("Metrics:")
@@ -504,24 +443,15 @@ func main() {
         metric_hotspots(log_path)
     } else if metric == "all" {
         metric_tool_distribution(log_path)
-        println("")
-        println("========================================")
-        println("")
+        println("\n========================================\n")
         metric_error_rate(log_path)
-        println("")
-        println("========================================")
-        println("")
+        println("\n========================================\n")
         metric_check_adoption(log_path)
-        println("")
-        println("========================================")
-        println("")
+        println("\n========================================\n")
         metric_session_summary(log_path)
-        println("")
-        println("========================================")
-        println("")
+        println("\n========================================\n")
         metric_hotspots(log_path)
     } else {
         println("Unknown metric: " + metric)
-        println("Valid metrics: tool-distribution, error-rate, check-adoption, session-summary, hotspots, all")
     }
 }
