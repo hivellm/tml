@@ -1,0 +1,134 @@
+/// Prompt Engineering Meta-Analysis
+///
+/// Analyzes CLAUDE.md rule effectiveness from MCP call logs.
+///
+/// Metrics:
+///   - Check-before-test adoption by CLAUDE.md hash version
+///   - Cross-model comparison (opus vs sonnet vs haiku)
+///   - Tool diversity per session
+///
+/// Usage:
+///     tml run prompt_analysis.tml
+
+use std::file::bufio::BufReader
+use std::json::parse
+use std::collections::HashMap
+
+func main() {
+    let reader = BufReader::from_path("mcp-call-log.jsonl")
+    if not reader.is_open() {
+        println("ERROR: mcp-call-log.jsonl not found")
+        return
+    }
+
+    // Track per-hash and per-model metrics
+    let hash_tests = HashMap[Str, I64]::new()
+    let hash_checks = HashMap[Str, I64]::new()
+    let model_calls = HashMap[Str, I64]::new()
+    let model_errors = HashMap[Str, I64]::new()
+    let session_hashes = HashMap[Str, Str]::new()
+    let session_models = HashMap[Str, Str]::new()
+
+    var total_sessions: I64 = 0
+    var total_calls: I64 = 0
+
+    var line = reader.read_line()
+    loop (line != "") {
+        let Just(json) = parse(line) else {
+            line = reader.read_line()
+            continue
+        }
+        let Just(event) = json.get_string("event") else {
+            line = reader.read_line()
+            continue
+        }
+
+        if event == "session_start" {
+            total_sessions = total_sessions + 1
+            let Just(sid) = json.get_string("session") else {
+                line = reader.read_line()
+                continue
+            }
+            let hash = json.get_string("claude_md_hash").unwrap_or("unknown")
+            let model = json.get_string("model").unwrap_or("unknown")
+            session_hashes.insert(sid, hash)
+            session_models.insert(sid, model)
+        }
+
+        if event == "tool_call" {
+            total_calls = total_calls + 1
+            let Just(sid) = json.get_string("session") else {
+                line = reader.read_line()
+                continue
+            }
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
+
+            // Track per-hash check adoption
+            let hash = session_hashes.get(sid).unwrap_or("unknown")
+            if tool == "test" {
+                let c = hash_tests.get(hash).unwrap_or(0)
+                hash_tests.insert(hash, c + 1)
+
+                let preceded = json.get_string("preceded_by").unwrap_or("")
+                if preceded == "check" {
+                    let ck = hash_checks.get(hash).unwrap_or(0)
+                    hash_checks.insert(hash, ck + 1)
+                }
+            }
+
+            // Track per-model stats
+            let model = session_models.get(sid).unwrap_or("unknown")
+            let mc = model_calls.get(model).unwrap_or(0)
+            model_calls.insert(model, mc + 1)
+
+            let error_type = json.get_string("error_type").unwrap_or("none")
+            if error_type != "none" {
+                let me = model_errors.get(model).unwrap_or(0)
+                model_errors.insert(model, me + 1)
+            }
+        }
+
+        line = reader.read_line()
+    }
+
+    println("# Prompt Engineering Analysis")
+    println("")
+    println("Sessions: " + total_sessions.to_string() + "  Calls: " + total_calls.to_string())
+
+    // Wording effect: check adoption by CLAUDE.md hash
+    println("")
+    println("## Check Adoption by CLAUDE.md Version")
+    println("")
+    var hi: I64 = 0
+    loop (hi < hash_tests.len()) {
+        let Just(hash) = hash_tests.key_at(hi) else {
+            hi = hi + 1
+            continue
+        }
+        let tests = hash_tests.get(hash).unwrap_or(0)
+        let checks = hash_checks.get(hash).unwrap_or(0)
+        let rate = if tests > 0 { (checks * 100) / tests } else { 0 }
+        println("  " + hash + ": " + checks.to_string() + "/" + tests.to_string() + " = " + rate.to_string() + "%")
+        hi = hi + 1
+    }
+
+    // Cross-model comparison
+    println("")
+    println("## Cross-Model Comparison")
+    println("")
+    var mi: I64 = 0
+    loop (mi < model_calls.len()) {
+        let Just(model) = model_calls.key_at(mi) else {
+            mi = mi + 1
+            continue
+        }
+        let calls = model_calls.get(model).unwrap_or(0)
+        let errors = model_errors.get(model).unwrap_or(0)
+        let rate = if calls > 0 { (errors * 100) / calls } else { 0 }
+        println("  " + model + ": " + calls.to_string() + " calls, " + errors.to_string() + " errors (" + rate.to_string() + "%)")
+        mi = mi + 1
+    }
+}
