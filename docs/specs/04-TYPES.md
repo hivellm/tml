@@ -263,6 +263,30 @@ let opt: Maybe[I32] = Just(42)
 let msg: Message = Text { content: "hi", sender: "alice" }
 ```
 
+### 3.2.0a Maybe Handling — `let-else` and `?.`
+
+TML provides two syntactic features to avoid deeply nested `when` cascades when working with `Maybe[T]`:
+
+**`let-else` guard clause** — unwrap or diverge:
+```tml
+let Just(value) = some_maybe_expr else { return }
+// value is T, available in the rest of the block
+```
+
+**`?.` optional chaining** — propagate Nothing through method calls:
+```tml
+let name = parse(json_str)?.get_string("name")
+// name is Maybe[Str] — Nothing if parse fails OR get_string fails
+// Auto-flattens: if method returns Maybe[V], result is Maybe[V] (not Maybe[Maybe[V]])
+```
+
+**Combinators** — functional-style Maybe operations (34 methods):
+```tml
+let result = parse(input)
+    .map(do(json) json.get_string("name"))
+    .unwrap_or(Just("anonymous"))
+```
+
 ### 3.2.1 Bitflag Enums (`@flags`)
 
 The `@flags` decorator transforms an enum into a type-safe bitflag set. Variants are automatically assigned power-of-2 values (1, 2, 4, 8, ...).

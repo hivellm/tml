@@ -50,6 +50,8 @@ Only read source files when you need to **modify** the implementation, not when 
 | `Start(name: I64)` | `Start(I64)` | `docs_search("enum variant")` |
 | `type Alias = I32` | May not work cross-module | `docs_search("type alias")` |
 | `lowlevel { str_from_raw }` | Has codegen bug, use FFI | `docs_search("str_from_raw")` |
+| Nested `when Maybe` cascade | `let Just(x) = expr else { continue }` | Use `let-else` for flat unwrapping |
+| `maybe.method()` on Maybe | `maybe?.method()` | Use `?.` optional chaining |
 
 ## Rules
 

@@ -409,8 +409,9 @@ Statement = LetStmt
           | BreakStmt
           | ContinueStmt
 
-LetStmt = 'let' Pattern ':' Type '=' Expr
-VarStmt = 'var' Ident ':' Type '=' Expr
+LetStmt     = 'let' Pattern (':' Type)? '=' Expr
+LetElseStmt = 'let' Pattern (':' Type)? '=' Expr 'else' Block
+VarStmt     = 'var' Ident ':' Type '=' Expr
 
 ExprStmt = Expr
 
@@ -923,8 +924,10 @@ numbers.clear()
 ### 5.11 Method Call Expression
 
 ```ebnf
-MethodCall = Expr '.' Ident '(' Args? ')'
-Args       = Expr (',' Expr)*
+MethodCall     = Expr '.' Ident '(' Args? ')'
+OptionalCall   = Expr '?.' Ident '(' Args? ')'   // optional chaining
+OptionalField  = Expr '?.' Ident                  // optional field access
+Args           = Expr (',' Expr)*
 ```
 
 **Examples:**

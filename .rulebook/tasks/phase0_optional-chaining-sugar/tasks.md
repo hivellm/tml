@@ -1,6 +1,6 @@
 # Optional Chaining & Guard Clauses — Tasks
 
-**Status:** 26/38 — Phase 1+2 DONE, Phase 3 lexer+parser+type checker+codegen DONE
+**Status:** 32/38 — Phase 1+2+3 DONE, Phase 4 partial (rules + CLAUDE.md done)
 **Priority:** HIGH — blocks readable TML code for JSON/DB/HTTP
 **Depends on:** nothing (core language feature)
 
@@ -90,12 +90,11 @@ println(name)  // "hello"
 
 ## Phase 4: AI/LLM awareness — documentation, rules, and prompts
 
-### 4.1 CLAUDE.md updates
-- [ ] Add `let-else` to the Key Design Decisions table (TML vs Rust comparison)
-- [ ] Add `?.` to the Key Design Decisions table
-- [ ] Add rule: "ALWAYS use `let-else` instead of nested `when` for Maybe unwrapping"
-- [ ] Add rule: "Use `?.` for chained Maybe method calls (JSON, DB, HTTP)"
-- [ ] Add anti-pattern example: nested `when` cascade (before) vs `let-else` (after)
+### 4.1 CLAUDE.md updates — DONE (commit bc1666c6)
+- [x] Add `let-else` to the Key Design Decisions table
+- [x] Add `?.` to the Key Design Decisions table
+- [x] Rule: `.claude/rules/use-let-else.md` with anti-pattern + correct pattern
+- [x] Rule: `.claude/rules/optional-chaining.md` with usage patterns
 - [ ] Update "Consult Language Reference" section with `let-else` and `?.` syntax
 
 ### 4.2 Language spec updates
@@ -109,10 +108,10 @@ println(name)  // "hello"
 - [ ] Add `?.` to docs index so `mcp__tml__docs_search(query="optional chaining")` finds it
 - [ ] Add Maybe combinators (`and_then`, `map`, `filter`) to docs index
 
-### 4.4 Claude rules
-- [ ] Create `.claude/rules/use-let-else.md` — rule enforcing `let-else` over nested `when`
-- [ ] Create `.claude/rules/optional-chaining.md` — rule for `?.` usage patterns
-- [ ] Update `.claude/rules/consult-language-reference.md` — add `let-else` and `?.` to syntax pitfalls table
+### 4.4 Claude rules — DONE (commit bc1666c6)
+- [x] Create `.claude/rules/use-let-else.md` — anti-pattern + correct pattern
+- [x] Create `.claude/rules/optional-chaining.md` — semantics + usage examples
+- [ ] Update `.claude/rules/consult-language-reference.md` — add `let-else` and `?.` to syntax pitfalls
 
 ### 4.5 User guides and tutorials
 - [ ] `docs/user/chNN-00-optional-chaining.md` — tutorial: Maybe handling patterns

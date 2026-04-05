@@ -63,6 +63,8 @@ Complete index of everything available in the TML language, standard library, an
 - `Maybe[T]` — `Just(value)` / `Nothing`
 - `Outcome[T, E]` — `Ok(value)` / `Err(error)`
 - `!` operator — propagate errors
+- `let-else` guard: `let Just(x) = expr else { return }` — flat unwrapping
+- `?.` optional chaining: `expr?.method()` — propagate Nothing through calls
 - `else` recovery: `risky()! else default_value`
 - `catch { ... } else do(err) { ... }` — catch blocks
 - **Reference**: [user/ch07-00-error-handling.md](user/ch07-00-error-handling.md) | [user/ch07-01-maybe-and-outcome.md](user/ch07-01-maybe-and-outcome.md) | [user/ch07-02-propagation-and-recovery.md](user/ch07-02-propagation-and-recovery.md) | [specs/15-ERROR-HANDLING.md](specs/15-ERROR-HANDLING.md)
