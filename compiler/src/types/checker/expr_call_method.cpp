@@ -192,6 +192,148 @@ static void extract_type_params(const TypePtr& param_type, const TypePtr& arg_ty
 }
 
 auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypePtr {
+    // =========================================================================
+    // Handle optional chaining: expr?.method(args)
+    // The receiver must be Maybe[T]. We resolve the method on T (the inner type),
+    // then wrap the result in Maybe[ReturnType].
+    // If the method already returns Maybe[V], we flatten to Maybe[V] to avoid
+    // Maybe[Maybe[V]].
+    // =========================================================================
+    if (call.optional_chain) {
+        auto receiver_type = check_expr(*call.receiver);
+        TypePtr check_type = receiver_type;
+        if (check_type && check_type->is<RefType>())
+            check_type = check_type->as<RefType>().inner;
+        if (!check_type || !check_type->is<NamedType>() ||
+            check_type->as<NamedType>().name != "Maybe" ||
+            check_type->as<NamedType>().type_args.empty()) {
+            error("Optional chaining `?.` requires receiver of type Maybe[T], got " +
+                      type_to_string(receiver_type),
+                  call.span, "T090");
+            return make_unit();
+        }
+        TypePtr inner_type = check_type->as<NamedType>().type_args[0];
+
+        // Resolve the method on the inner type T by temporarily clearing optional_chain
+        // and re-invoking check_method_call. The receiver expression will be type-checked
+        // again (returning Maybe[T]), but we override receiver_type to T below via the
+        // override mechanism. To avoid that complexity, we use const_cast to temporarily
+        // clear the flag and rely on the existing method resolution to pick up the method
+        // on Maybe[T]'s inner type through check_method_call_builtin_types and the
+        // named-type method lookup paths which already handle unwrapping.
+        //
+        // Instead, we directly resolve the method on inner_type by delegating to
+        // check_method_call_builtin_types with the inner type.
+        if (auto result = check_method_call_builtin_types(call, inner_type, call.method)) {
+            TypePtr method_ret = *result;
+            // Flatten: if method already returns Maybe[V], return Maybe[V] (not Maybe[Maybe[V]])
+            if (method_ret && method_ret->is<NamedType>() &&
+                method_ret->as<NamedType>().name == "Maybe") {
+                return method_ret;
+            }
+            return std::make_shared<Type>(Type{NamedType{"Maybe", "", {method_ret}}});
+        }
+
+        // Try named type method lookup on the inner type
+        if (inner_type->is<NamedType>()) {
+            auto& named = inner_type->as<NamedType>();
+            std::string qualified = named.name + "::" + call.method;
+
+            auto func = env_.lookup_func(qualified);
+            if (func) {
+                TypePtr method_ret = func->return_type;
+                // Substitute type params from inner type's type_args
+                if (!func->type_params.empty()) {
+                    std::unordered_map<std::string, TypePtr> subs;
+                    for (size_t i = 0; i < func->type_params.size() && i < named.type_args.size();
+                         ++i) {
+                        subs[func->type_params[i]] = named.type_args[i];
+                    }
+                    // Also infer from arguments
+                    for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                        TypePtr param_type = func->params[i + 1];
+                        TypePtr expected_param = substitute_type(param_type, subs);
+                        TypePtr arg_type = check_expr(*call.args[i], expected_param);
+                        extract_type_params(param_type, arg_type, func->type_params, subs);
+                    }
+                    method_ret = substitute_type(method_ret, subs);
+                }
+                // Flatten Maybe[Maybe[V]] -> Maybe[V]
+                if (method_ret && method_ret->is<NamedType>() &&
+                    method_ret->as<NamedType>().name == "Maybe") {
+                    return method_ret;
+                }
+                return std::make_shared<Type>(Type{NamedType{"Maybe", "", {method_ret}}});
+            }
+
+            // Search all loaded modules for the method
+            for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+                auto func_it = mod.functions.find(qualified);
+                if (func_it != mod.functions.end()) {
+                    TypePtr method_ret = func_it->second.return_type;
+                    if (!func_it->second.type_params.empty() && !named.type_args.empty()) {
+                        std::unordered_map<std::string, TypePtr> subs;
+                        for (size_t i = 0;
+                             i < func_it->second.type_params.size() && i < named.type_args.size();
+                             ++i) {
+                            subs[func_it->second.type_params[i]] = named.type_args[i];
+                        }
+                        method_ret = substitute_type(method_ret, subs);
+                    }
+                    if (method_ret && method_ret->is<NamedType>() &&
+                        method_ret->as<NamedType>().name == "Maybe") {
+                        return method_ret;
+                    }
+                    return std::make_shared<Type>(Type{NamedType{"Maybe", "", {method_ret}}});
+                }
+            }
+
+            // Search GlobalModuleCache
+            for (const auto& [mod_path, mod] : GlobalModuleCache::instance().get_all()) {
+                auto func_it = mod.functions.find(qualified);
+                if (func_it != mod.functions.end()) {
+                    TypePtr method_ret = func_it->second.return_type;
+                    if (!func_it->second.type_params.empty() && !named.type_args.empty()) {
+                        std::unordered_map<std::string, TypePtr> subs;
+                        for (size_t i = 0;
+                             i < func_it->second.type_params.size() && i < named.type_args.size();
+                             ++i) {
+                            subs[func_it->second.type_params[i]] = named.type_args[i];
+                        }
+                        method_ret = substitute_type(method_ret, subs);
+                    }
+                    if (method_ret && method_ret->is<NamedType>() &&
+                        method_ret->as<NamedType>().name == "Maybe") {
+                        return method_ret;
+                    }
+                    return std::make_shared<Type>(Type{NamedType{"Maybe", "", {method_ret}}});
+                }
+            }
+        }
+
+        // Try primitive type method lookup on the inner type
+        if (inner_type->is<PrimitiveType>()) {
+            auto& prim = inner_type->as<PrimitiveType>();
+            std::string type_name = primitive_to_string(prim.kind);
+            std::string qualified = type_name + "::" + call.method;
+            auto func = env_.lookup_func(qualified);
+            if (func) {
+                TypePtr method_ret = func->return_type;
+                if (method_ret && method_ret->is<NamedType>() &&
+                    method_ret->as<NamedType>().name == "Maybe") {
+                    return method_ret;
+                }
+                return std::make_shared<Type>(Type{NamedType{"Maybe", "", {method_ret}}});
+            }
+        }
+
+        // Method not found on inner type
+        error("No method '" + call.method + "' found on type " + type_to_string(inner_type) +
+                  " (from optional chaining on " + type_to_string(receiver_type) + ")",
+              call.span, "T079");
+        return make_unit();
+    }
+
     // Check for static method calls on primitive type names (e.g., I32::default())
     if (call.receiver->is<parser::IdentExpr>()) {
         const auto& type_name = call.receiver->as<parser::IdentExpr>().name;

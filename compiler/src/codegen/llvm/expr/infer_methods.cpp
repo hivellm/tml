@@ -287,6 +287,77 @@ auto LLVMIRGen::infer_expr_type_continued(const parser::Expr& expr) -> types::Ty
             receiver_type = receiver_type->as<types::RefType>().inner;
         }
 
+        // Handle optional chaining: expr?.method(args)
+        // The receiver is Maybe[T]. We look up the method on T and wrap the
+        // result in Maybe[ReturnType]. If the method already returns Maybe[V],
+        // we flatten to Maybe[V].
+        if (call.optional_chain && receiver_type && receiver_type->is<types::NamedType>()) {
+            const auto& named = receiver_type->as<types::NamedType>();
+            if (named.name == "Maybe" && !named.type_args.empty()) {
+                types::TypePtr inner_type = named.type_args[0];
+
+                // Look up the method on the inner type
+                types::TypePtr method_ret;
+                if (inner_type->is<types::NamedType>()) {
+                    const auto& inner_named = inner_type->as<types::NamedType>();
+                    std::string qualified = inner_named.name + "::" + call.method;
+                    auto func_sig = env_.lookup_func(qualified);
+                    if (!func_sig && env_.module_registry()) {
+                        for (const auto& [mod_name, mod] :
+                             env_.module_registry()->get_all_modules()) {
+                            auto func_it = mod.functions.find(qualified);
+                            if (func_it != mod.functions.end()) {
+                                func_sig = func_it->second;
+                                break;
+                            }
+                        }
+                    }
+                    if (func_sig && func_sig->return_type) {
+                        method_ret = func_sig->return_type;
+                        // Substitute type params from inner type's type_args
+                        if (!func_sig->type_params.empty() && !inner_named.type_args.empty()) {
+                            std::unordered_map<std::string, types::TypePtr> subs;
+                            for (size_t i = 0; i < func_sig->type_params.size() &&
+                                               i < inner_named.type_args.size();
+                                 ++i) {
+                                subs[func_sig->type_params[i]] = inner_named.type_args[i];
+                            }
+                            method_ret = types::substitute_type(method_ret, subs);
+                        }
+                    }
+                } else if (inner_type->is<types::PrimitiveType>()) {
+                    // Look up primitive type methods
+                    std::string type_name;
+                    auto kind = inner_type->as<types::PrimitiveType>().kind;
+                    if (kind == types::PrimitiveKind::Str)
+                        type_name = "Str";
+                    else if (kind == types::PrimitiveKind::I32)
+                        type_name = "I32";
+                    else if (kind == types::PrimitiveKind::I64)
+                        type_name = "I64";
+                    if (!type_name.empty()) {
+                        std::string qualified = type_name + "::" + call.method;
+                        auto func_sig = env_.lookup_func(qualified);
+                        if (func_sig && func_sig->return_type) {
+                            method_ret = func_sig->return_type;
+                        }
+                    }
+                }
+
+                if (method_ret) {
+                    // Flatten: if method already returns Maybe[V], return Maybe[V]
+                    if (method_ret->is<types::NamedType>() &&
+                        method_ret->as<types::NamedType>().name == "Maybe") {
+                        return method_ret;
+                    }
+                    // Wrap in Maybe[ReturnType]
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{"Maybe", "", {method_ret}};
+                    return result;
+                }
+            }
+        }
+
         // Check for Ordering methods
         if (receiver_type && receiver_type->is<types::NamedType>()) {
             const auto& named = receiver_type->as<types::NamedType>();

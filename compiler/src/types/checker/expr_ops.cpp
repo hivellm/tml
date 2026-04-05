@@ -294,6 +294,65 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
         obj_type = obj_type->as<RefType>().inner;
     }
 
+    // Handle optional chaining on field access: expr?.field
+    // The object type must be Maybe[T]. We look up the field on T and wrap in Maybe.
+    if (field.optional_chain) {
+        TypePtr inner_type;
+        if (obj_type->is<NamedType>()) {
+            auto& named = obj_type->as<NamedType>();
+            if (named.name == "Maybe" && !named.type_args.empty()) {
+                inner_type = named.type_args[0];
+            }
+        }
+        if (!inner_type) {
+            error("Optional chaining `?.` requires receiver of type Maybe[T], got " +
+                      type_to_string(obj_type),
+                  field.span, "T090");
+            return make_unit();
+        }
+
+        // Look up the field on the inner type
+        TypePtr field_type;
+        TypePtr check_inner = inner_type;
+        if (check_inner->is<RefType>()) {
+            check_inner = check_inner->as<RefType>().inner;
+        }
+        if (check_inner->is<NamedType>()) {
+            auto& inner_named = check_inner->as<NamedType>();
+            auto struct_def = env_.lookup_struct(inner_named.name);
+            if (struct_def) {
+                std::unordered_map<std::string, TypePtr> subs;
+                if (!struct_def->type_params.empty() && !inner_named.type_args.empty()) {
+                    for (size_t i = 0;
+                         i < struct_def->type_params.size() && i < inner_named.type_args.size();
+                         ++i) {
+                        subs[struct_def->type_params[i]] = inner_named.type_args[i];
+                    }
+                }
+                for (const auto& fld : struct_def->fields) {
+                    if (fld.name == field.field) {
+                        field_type = subs.empty() ? fld.type : substitute_type(fld.type, subs);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!field_type) {
+            error("No field '" + field.field + "' found on type " + type_to_string(inner_type) +
+                      " (from optional chaining on " + type_to_string(obj_type) + ")",
+                  field.span, "T074");
+            return make_unit();
+        }
+
+        // Flatten: if the field is already Maybe[V], return Maybe[V]
+        if (field_type->is<NamedType>() && field_type->as<NamedType>().name == "Maybe") {
+            return field_type;
+        }
+        // Wrap in Maybe[FieldType]
+        return std::make_shared<Type>(Type{NamedType{"Maybe", "", {field_type}}});
+    }
+
     // Handle class type field access with visibility checking
     if (obj_type->is<ClassType>()) {
         auto& class_type = obj_type->as<ClassType>();
