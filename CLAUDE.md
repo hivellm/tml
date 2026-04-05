@@ -667,6 +667,8 @@ TML syntax optimized for LLM comprehension — keywords over symbols:
 | `Some`/`None` | `Just`/`Nothing` | Self-documenting |
 | `unsafe` | `lowlevel` | Less scary, accurate |
 | Lifetimes `'a` | Always inferred | No syntax noise |
+| `let Some(x) = e else {}` | `let Just(x) = e else {}` | Same syntax, TML names |
+| No `?.` | `expr?.method()` | Optional chaining (JS-style) |
 
 ## Project Structure
 
