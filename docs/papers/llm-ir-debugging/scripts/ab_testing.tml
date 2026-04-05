@@ -20,7 +20,7 @@ func main() {
         cond_b = args_get(2)
     }
 
-    let reader = BufReader::from_path("mcp-call-log.jsonl")
+    var reader = BufReader::open("mcp-call-log.jsonl")
     if not reader.is_open() {
         println("ERROR: mcp-call-log.jsonl not found")
         return
@@ -58,8 +58,9 @@ func main() {
                 line = reader.read_line()
                 continue
             }
-            let cond = json.get_string("condition").unwrap_or("unknown")
-            session_cond.insert(sid, cond)
+            var cond = "unknown"
+            when json.get_string("condition") { Just(c) => { cond = c }, Nothing => {} }
+            session_cond.set(sid, cond)
         }
 
         if event == "tool_call" {
@@ -67,12 +68,21 @@ func main() {
                 line = reader.read_line()
                 continue
             }
-            let cond = session_cond.get(sid).unwrap_or("unknown")
-            let tool = json.get_string("tool").unwrap_or("")
-            let error_type = json.get_string("error_type").unwrap_or("none")
+            let Just(tool) = json.get_string("tool") else {
+                line = reader.read_line()
+                continue
+            }
+            let cond = session_cond.get_or_set(sid, "unknown")
+
+            var error_type = "none"
+            when json.get_string("error_type") { Just(e) => { error_type = e }, Nothing => {} }
             let is_error = error_type != "none"
-            let duration = json.get_i64("duration_ms").unwrap_or(0)
-            let preceded = json.get_string("preceded_by").unwrap_or("")
+
+            var duration: I64 = 0
+            when json.get_i64("duration_ms") { Just(d) => { duration = d }, Nothing => {} }
+
+            var preceded = "none"
+            when json.get_string("preceded_by") { Just(p) => { preceded = p }, Nothing => {} }
 
             if cond == cond_a {
                 a_calls = a_calls + 1
@@ -97,6 +107,7 @@ func main() {
 
         line = reader.read_line()
     }
+    reader.close()
 
     println("# A/B Comparison: " + cond_a + " vs " + cond_b)
     println("")

@@ -15,7 +15,7 @@ use std::json::parse
 use std::collections::HashMap
 
 func main() {
-    let reader = BufReader::from_path("mcp-call-log.jsonl")
+    var reader = BufReader::open("mcp-call-log.jsonl")
     if not reader.is_open() {
         println("ERROR: mcp-call-log.jsonl not found")
         return
@@ -49,10 +49,12 @@ func main() {
                 line = reader.read_line()
                 continue
             }
-            let hash = json.get_string("claude_md_hash").unwrap_or("unknown")
-            let model = json.get_string("model").unwrap_or("unknown")
-            session_hashes.insert(sid, hash)
-            session_models.insert(sid, model)
+            var hash = "unknown"
+            when json.get_string("claude_md_hash") { Just(h) => { hash = h }, Nothing => {} }
+            var model = "unknown"
+            when json.get_string("model") { Just(m) => { model = m }, Nothing => {} }
+            session_hashes.set(sid, hash)
+            session_models.set(sid, model)
         }
 
         if event == "tool_call" {
@@ -67,32 +69,35 @@ func main() {
             }
 
             // Track per-hash check adoption
-            let hash = session_hashes.get(sid).unwrap_or("unknown")
+            let hash = session_hashes.get_or_set(sid, "unknown")
             if tool == "test" {
-                let c = hash_tests.get(hash).unwrap_or(0)
-                hash_tests.insert(hash, c + 1)
+                let c = hash_tests.get_or_set(hash, 0)
+                hash_tests.set(hash, c + 1)
 
-                let preceded = json.get_string("preceded_by").unwrap_or("")
+                var preceded = "none"
+                when json.get_string("preceded_by") { Just(p) => { preceded = p }, Nothing => {} }
                 if preceded == "check" {
-                    let ck = hash_checks.get(hash).unwrap_or(0)
-                    hash_checks.insert(hash, ck + 1)
+                    let ck = hash_checks.get_or_set(hash, 0)
+                    hash_checks.set(hash, ck + 1)
                 }
             }
 
             // Track per-model stats
-            let model = session_models.get(sid).unwrap_or("unknown")
-            let mc = model_calls.get(model).unwrap_or(0)
-            model_calls.insert(model, mc + 1)
+            let model = session_models.get_or_set(sid, "unknown")
+            let mc = model_calls.get_or_set(model, 0)
+            model_calls.set(model, mc + 1)
 
-            let error_type = json.get_string("error_type").unwrap_or("none")
+            var error_type = "none"
+            when json.get_string("error_type") { Just(e) => { error_type = e }, Nothing => {} }
             if error_type != "none" {
-                let me = model_errors.get(model).unwrap_or(0)
-                model_errors.insert(model, me + 1)
+                let me = model_errors.get_or_set(model, 0)
+                model_errors.set(model, me + 1)
             }
         }
 
         line = reader.read_line()
     }
+    reader.close()
 
     println("# Prompt Engineering Analysis")
     println("")
@@ -102,14 +107,12 @@ func main() {
     println("")
     println("## Check Adoption by CLAUDE.md Version")
     println("")
+    let hash_keys = hash_tests.keys()
     var hi: I64 = 0
-    loop (hi < hash_tests.len()) {
-        let Just(hash) = hash_tests.key_at(hi) else {
-            hi = hi + 1
-            continue
-        }
-        let tests = hash_tests.get(hash).unwrap_or(0)
-        let checks = hash_checks.get(hash).unwrap_or(0)
+    loop (hi < hash_keys.len()) {
+        let hash = hash_keys.get(hi)
+        let tests = hash_tests.get_or_set(hash, 0)
+        let checks = hash_checks.get_or_set(hash, 0)
         let rate = if tests > 0 { (checks * 100) / tests } else { 0 }
         println("  " + hash + ": " + checks.to_string() + "/" + tests.to_string() + " = " + rate.to_string() + "%")
         hi = hi + 1
@@ -119,14 +122,12 @@ func main() {
     println("")
     println("## Cross-Model Comparison")
     println("")
+    let model_keys = model_calls.keys()
     var mi: I64 = 0
-    loop (mi < model_calls.len()) {
-        let Just(model) = model_calls.key_at(mi) else {
-            mi = mi + 1
-            continue
-        }
-        let calls = model_calls.get(model).unwrap_or(0)
-        let errors = model_errors.get(model).unwrap_or(0)
+    loop (mi < model_keys.len()) {
+        let model = model_keys.get(mi)
+        let calls = model_calls.get_or_set(model, 0)
+        let errors = model_errors.get_or_set(model, 0)
         let rate = if calls > 0 { (errors * 100) / calls } else { 0 }
         println("  " + model + ": " + calls.to_string() + " calls, " + errors.to_string() + " errors (" + rate.to_string() + "%)")
         mi = mi + 1
