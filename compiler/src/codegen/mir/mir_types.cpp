@@ -12,6 +12,32 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// RC7 workaround: when a generic type's type variable wasn't substituted,
+// the mangled name ends with __T, __U, __K, __V, __E, __B (single uppercase
+// letter). Replace those suffixes with __I64 for layout consistency.
+// Example: List__LinkedListNode__T -> List__LinkedListNode__I64
+static std::string replace_typevar_suffixes(const std::string& name) {
+    std::string result = name;
+    // Find all "__X" patterns where X is single uppercase letter
+    size_t pos = 0;
+    while ((pos = result.find("__", pos)) != std::string::npos) {
+        size_t letter_pos = pos + 2;
+        if (letter_pos < result.size() && std::isupper(result[letter_pos])) {
+            // Check if next char is end-of-string, "_", or another "__"
+            bool is_end = (letter_pos + 1 == result.size());
+            bool is_separator = (letter_pos + 1 < result.size() && (result[letter_pos + 1] == '_'));
+            if (is_end || is_separator) {
+                // Replace single letter with I64
+                result.replace(letter_pos, 1, "I64");
+                pos = letter_pos + 3;
+                continue;
+            }
+        }
+        pos += 2;
+    }
+    return result;
+}
+
 auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
     if (!type) {
         return "void";
@@ -61,6 +87,9 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                         mangled += mangle_mir_type_arg(t.type_args[i]);
                     }
                 }
+                // RC7 workaround: replace unresolved typevar suffixes (__T, __U, __K)
+                // with __I64 for layout consistency
+                mangled = tml::codegen::replace_typevar_suffixes(mangled);
                 return "%struct." + mangled;
 
             } else if constexpr (std::is_same_v<T, mir::MirEnumType>) {
@@ -75,6 +104,8 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                         mangled += mangle_mir_type_arg(t.type_args[i]);
                     }
                 }
+                // RC7 workaround: replace unresolved typevar suffixes
+                mangled = tml::codegen::replace_typevar_suffixes(mangled);
                 // Use %struct. prefix for consistency with legacy codegen
                 return "%struct." + mangled;
 
