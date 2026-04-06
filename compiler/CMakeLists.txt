@@ -668,13 +668,7 @@ add_library(tml_mir STATIC
     src/mir/builder/pattern.cpp
     src/mir/builder/control.cpp
     src/mir/builder/builder_helpers.cpp
-    # HIR to MIR builder (uses HIR instead of AST)
-    src/mir/hir_mir_builder.cpp
-    src/mir/builder/hir_expr.cpp
-    src/mir/builder/hir_expr_control.cpp
-    src/mir/builder/hir_stmt.cpp
-    src/mir/builder/hir_pattern.cpp
-    # THIR to MIR builder (uses THIR with explicit coercions)
+    # THIR to MIR builder (uses THIR with explicit coercions) — only path since phase12a consolidation
     src/mir/thir_mir_builder.cpp
     src/mir/thir_mir_builder_expr.cpp
     src/mir/thir_mir_builder_control.cpp

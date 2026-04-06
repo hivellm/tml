@@ -144,11 +144,8 @@ struct CompilerOptions {
     /// are conditionally taken across branches.
     static inline bool polonius = false;
 
-    /// Use THIR (Typed High-level IR) pipeline instead of direct HIR→MIR.
-    /// THIR materializes coercions, resolves method dispatch, desugars
-    /// operator overloading, and checks pattern exhaustiveness.
-    /// Enabled by default. Use --no-thir to fall back to direct HIR→MIR.
-    static inline bool use_thir = true;
+    // THIR pipeline is now the only path (HIR→MIR path removed).
+    // use_thir field removed — always true.
 
     /// Emit overflow-checking intrinsics for integer +, -, * operators.
     /// When enabled, arithmetic overflow panics instead of being UB.

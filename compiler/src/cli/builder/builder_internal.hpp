@@ -43,15 +43,17 @@
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "log/log.hpp"
-#include "mir/hir_mir_builder.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_builder.hpp"
 #include "mir/mir_pass.hpp"
 #include "mir/passes/infinite_loop_check.hpp"
 #include "mir/passes/memory_leak_check.hpp"
 #include "mir/passes/pgo.hpp"
+#include "mir/thir_mir_builder.hpp"
 #include "parser/parser.hpp"
 #include "preprocessor/preprocessor.hpp"
+#include "thir/thir_lower.hpp"
+#include "traits/solver.hpp"
 #include "types/checker.hpp"
 
 #include <chrono>

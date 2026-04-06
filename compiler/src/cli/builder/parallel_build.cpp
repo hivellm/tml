@@ -52,8 +52,10 @@ TML_MODULE("compiler")
 #include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
-#include "mir/hir_mir_builder.hpp"
+#include "mir/thir_mir_builder.hpp"
 #include "parser/parser.hpp"
+#include "thir/thir_lower.hpp"
+#include "traits/solver.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
 
@@ -651,8 +653,13 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
                 return false;
             }
 
-            mir::HirMirBuilder hir_mir_builder(env);
-            auto mir_module = hir_mir_builder.build(hir_module);
+            // THIR → MIR pipeline (consolidated)
+            traits::TraitSolver solver(env);
+            thir::ThirLower thir_lower(env, solver);
+            auto thir_module = thir_lower.lower_module(hir_module);
+
+            mir::ThirMirBuilder thir_mir_builder(env);
+            auto mir_module = thir_mir_builder.build(thir_module);
 
             // Use MIR codegen for LLVM IR generation
             codegen::MirCodegenOptions mir_options;

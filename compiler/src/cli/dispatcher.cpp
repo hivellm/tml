@@ -389,8 +389,6 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--emit-pipeline=")) {
                 emit_pipeline = true;
                 pipeline_output_dir = arg.substr(16);
-            } else if (arg == "--no-thir") {
-                tml::CompilerOptions::use_thir = false;
             } else if (arg == "--checked-math") {
                 tml::CompilerOptions::checked_math = true;
             } else if (arg == "--no-checked-math") {

@@ -17,7 +17,6 @@ TML_MODULE("compiler")
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "log/log.hpp"
-#include "mir/hir_mir_builder.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_pass.hpp"
 #include "mir/mir_validate.hpp"
@@ -415,51 +414,33 @@ std::any provide_mir_build(QueryContext& ctx, const QueryKey& key) {
 
     const std::string& pipeline_dir = ctx.options().pipeline_output_dir;
 
-    // Route through THIR pipeline when --use-thir is enabled
-    if (CompilerOptions::use_thir) {
-        auto thir = ctx.thir_lower(mk.file_path, mk.module_name);
-        if (!thir.success) {
-            return result;
-        }
-
-        // Report THIR diagnostics (exhaustiveness warnings, etc.)
-        for (const auto& diag : thir.diagnostics) {
-            TML_LOG_WARN("thir", diag);
-        }
-
-        // Dump THIR summary
-        if (!pipeline_dir.empty() && thir.thir_module) {
-            std::string thir_dump = "THIR Module: " + mk.module_name + "\n";
-            thir_dump +=
-                "Functions (" + std::to_string(thir.thir_module->functions.size()) + "):\n";
-            for (size_t i = 0; i < thir.thir_module->functions.size(); ++i) {
-                thir_dump +=
-                    "  [" + std::to_string(i) + "] " + thir.thir_module->functions[i].name + "\n";
-            }
-            thir_dump += "Structs (" + std::to_string(thir.thir_module->structs.size()) + ")\n";
-            thir_dump += "Enums (" + std::to_string(thir.thir_module->enums.size()) + ")\n";
-            pipeline_write(pipeline_dir, mk.module_name + ".thir", thir_dump);
-        }
-
-        // Build MIR from THIR
-        mir::ThirMirBuilder thir_mir_builder(*tc.env);
-        mir_module = thir_mir_builder.build(*thir.thir_module);
-    } else {
-        // Default: HIR → MIR pipeline
-        auto hir = ctx.hir_lower(mk.file_path, mk.module_name);
-        if (!hir.success) {
-            return result;
-        }
-
-        // Dump HIR
-        if (!pipeline_dir.empty() && hir.hir_module) {
-            pipeline_write(pipeline_dir, mk.module_name + ".hir",
-                           hir::print_hir_module(*hir.hir_module));
-        }
-
-        mir::HirMirBuilder hir_mir_builder(*tc.env);
-        mir_module = hir_mir_builder.build(*hir.hir_module);
+    // THIR → MIR pipeline (consolidated — HIR path removed)
+    auto thir = ctx.thir_lower(mk.file_path, mk.module_name);
+    if (!thir.success) {
+        return result;
     }
+
+    // Report THIR diagnostics (exhaustiveness warnings, etc.)
+    for (const auto& diag : thir.diagnostics) {
+        TML_LOG_WARN("thir", diag);
+    }
+
+    // Dump THIR summary
+    if (!pipeline_dir.empty() && thir.thir_module) {
+        std::string thir_dump = "THIR Module: " + mk.module_name + "\n";
+        thir_dump += "Functions (" + std::to_string(thir.thir_module->functions.size()) + "):\n";
+        for (size_t i = 0; i < thir.thir_module->functions.size(); ++i) {
+            thir_dump +=
+                "  [" + std::to_string(i) + "] " + thir.thir_module->functions[i].name + "\n";
+        }
+        thir_dump += "Structs (" + std::to_string(thir.thir_module->structs.size()) + ")\n";
+        thir_dump += "Enums (" + std::to_string(thir.thir_module->enums.size()) + ")\n";
+        pipeline_write(pipeline_dir, mk.module_name + ".thir", thir_dump);
+    }
+
+    // Build MIR from THIR
+    mir::ThirMirBuilder thir_mir_builder(*tc.env);
+    mir_module = thir_mir_builder.build(*thir.thir_module);
 
     // Run infinite loop detection
     mir::InfiniteLoopCheckPass loop_check;

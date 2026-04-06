@@ -216,8 +216,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                                             << hir_module.structs.size() << " structs, "
                                             << hir_module.enums.size() << " enums");
 
-        mir::HirMirBuilder hir_mir_builder(env);
-        mir_module = hir_mir_builder.build(hir_module);
+        traits::TraitSolver solver(env);
+        thir::ThirLower thir_lower(env, solver);
+        auto thir_module = thir_lower.lower_module(hir_module);
+        mir::ThirMirBuilder thir_mir_builder(env);
+        mir_module = thir_mir_builder.build(thir_module);
 
         // Run infinite loop detection (early static analysis)
         // This is a compile-time error - infinite loops are not allowed
@@ -416,8 +419,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                                             << hir_module.structs.size() << " structs, "
                                             << hir_module.enums.size() << " enums");
 
-        mir::HirMirBuilder hir_mir_builder(env);
-        auto mir_module = hir_mir_builder.build(hir_module);
+        traits::TraitSolver solver2(env);
+        thir::ThirLower thir_lower2(env, solver2);
+        auto thir_module2 = thir_lower2.lower_module(hir_module);
+        mir::ThirMirBuilder thir_mir_builder2(env);
+        auto mir_module = thir_mir_builder2.build(thir_module2);
 
         // Run infinite loop detection (early static analysis)
         // This is a compile-time error - infinite loops are not allowed
