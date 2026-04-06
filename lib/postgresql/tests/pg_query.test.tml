@@ -36,18 +36,8 @@ func test_query_scalar_i64_count() -> I32 {
             let _ = conn.execute("INSERT INTO tml_test_scalar_count DEFAULT VALUES")
             let _ = conn.execute("INSERT INTO tml_test_scalar_count DEFAULT VALUES")
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_count")
-            when count_r {
-                Err(_) => {
-                    assert(false, "COUNT query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_count")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 3, "COUNT(*) should return 3")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_count")
+            assert_eq(count, 3, "COUNT(*) should return 3")
 
             let _ = conn.execute("DROP TABLE tml_test_scalar_count")
             conn.close()
@@ -70,18 +60,8 @@ func test_query_scalar_i64_sum() -> I32 {
             let _ = conn.execute("CREATE TABLE tml_test_scalar_sum (n BIGINT)")
             let _ = conn.execute("INSERT INTO tml_test_scalar_sum VALUES (10),(20),(30)")
 
-            let sum_r = conn.query_scalar_i64("SELECT SUM(n) FROM tml_test_scalar_sum")
-            when sum_r {
-                Err(_) => {
-                    assert(false, "SUM query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_sum")
-                    conn.close()
-                    return 1
-                },
-                Ok(sum) => {
-                    assert_eq(sum, 60, "SUM(10, 20, 30) should be 60")
-                }
-            }
+            let sum = conn.query_scalar_i64("SELECT SUM(n) FROM tml_test_scalar_sum")
+            assert_eq(sum, 60, "SUM(10, 20, 30) should be 60")
 
             let _ = conn.execute("DROP TABLE tml_test_scalar_sum")
             conn.close()
@@ -137,18 +117,8 @@ func test_query_scalar_empty_table() -> I32 {
             let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_empty")
             let _ = conn.execute("CREATE TABLE tml_test_scalar_empty (n BIGINT)")
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_empty")
-            when count_r {
-                Err(_) => {
-                    assert(false, "COUNT on empty table failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_scalar_empty")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 0, "empty table COUNT should be 0")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_scalar_empty")
+            assert_eq(count, 0, "empty table COUNT should be 0")
 
             let _ = conn.execute("DROP TABLE tml_test_scalar_empty")
             conn.close()
@@ -219,18 +189,8 @@ func test_exists_by_i64_found() -> I32 {
             let _ = conn.execute("CREATE TABLE tml_test_exists_i64 (id BIGINT PRIMARY KEY)")
             let _ = conn.execute("INSERT INTO tml_test_exists_i64 VALUES (10),(20),(30)")
 
-            let exists_r = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64 WHERE id = $1", 20)
-            when exists_r {
-                Err(_) => {
-                    assert(false, "exists_by_i64 query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64")
-                    conn.close()
-                    return 1
-                },
-                Ok(found) => {
-                    assert(found, "exists_by_i64 should return true for id=20")
-                }
-            }
+            let found = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64 WHERE id = $1", 20)
+            assert(found, "exists_by_i64 should return true for id=20")
 
             let _ = conn.execute("DROP TABLE tml_test_exists_i64")
             conn.close()
@@ -253,18 +213,8 @@ func test_exists_by_i64_not_found() -> I32 {
             let _ = conn.execute("CREATE TABLE tml_test_exists_i64_nf (id BIGINT PRIMARY KEY)")
             let _ = conn.execute("INSERT INTO tml_test_exists_i64_nf VALUES (1)")
 
-            let exists_r = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64_nf WHERE id = $1", 999)
-            when exists_r {
-                Err(_) => {
-                    assert(false, "exists_by_i64 query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_i64_nf")
-                    conn.close()
-                    return 1
-                },
-                Ok(found) => {
-                    assert(not found, "exists_by_i64 should return false for missing id=999")
-                }
-            }
+            let found = conn.exists_by_i64("SELECT 1 FROM tml_test_exists_i64_nf WHERE id = $1", 999)
+            assert(not found, "exists_by_i64 should return false for missing id=999")
 
             let _ = conn.execute("DROP TABLE tml_test_exists_i64_nf")
             conn.close()
@@ -287,31 +237,11 @@ func test_exists_by_str() -> I32 {
             let _ = conn.execute("CREATE TABLE tml_test_exists_str (tag TEXT UNIQUE)")
             let _ = conn.execute("INSERT INTO tml_test_exists_str VALUES ('present')")
 
-            let found_r = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "present")
-            when found_r {
-                Err(_) => {
-                    assert(false, "exists_by_str query failed (present)")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_str")
-                    conn.close()
-                    return 1
-                },
-                Ok(found) => {
-                    assert(found, "exists_by_str should return true for 'present'")
-                }
-            }
+            let found = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "present")
+            assert(found, "exists_by_str should return true for 'present'")
 
-            let missing_r = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "absent")
-            when missing_r {
-                Err(_) => {
-                    assert(false, "exists_by_str query failed (absent)")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exists_str")
-                    conn.close()
-                    return 1
-                },
-                Ok(found) => {
-                    assert(not found, "exists_by_str should return false for 'absent'")
-                }
-            }
+            let missing = conn.exists_by_str("SELECT 1 FROM tml_test_exists_str WHERE tag = $1", "absent")
+            assert(not missing, "exists_by_str should return false for 'absent'")
 
             let _ = conn.execute("DROP TABLE tml_test_exists_str")
             conn.close()

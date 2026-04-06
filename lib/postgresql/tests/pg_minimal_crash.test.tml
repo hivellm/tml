@@ -1,0 +1,114 @@
+// Bisect: all 11 test function NAMES but only first 6 have real code
+
+use test::{assert, assert_eq}
+use std::os::env_get
+use postgresql::connection::PgConnection
+use postgresql::statement::PgStatement
+
+const DEFAULT_DATABASE_URL: Str = "postgresql://projectv:projectv_dev@localhost:5433/projectv"
+
+func database_url() -> Str {
+    let maybe_url = env_get("DATABASE_URL")
+    when maybe_url {
+        Just(url) => return url,
+        Nothing => return DEFAULT_DATABASE_URL
+    }
+}
+
+@test
+func test_stmt_prepare_and_run() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_s1")
+        let _ = conn.execute("CREATE TABLE tml_s1 (id BIGINT)")
+        let sr = PgStatement::prepare(conn.raw_handle(), "INSERT INTO tml_s1 (id) VALUES ($1)", 1)
+        when sr { Err(_) => {}, Ok(mut s) => { let _ = s.bind_i64(1, 1); let _ = s.run(); s.finalize() } }
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_s1")
+        conn.close(); return 0
+    }}
+}
+
+@test
+func test_stmt_select_step() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let sr = PgStatement::prepare(conn.raw_handle(), "SELECT 1::BIGINT AS n", 0)
+        when sr { Err(_) => {}, Ok(mut s) => {
+            let er = s.execute_query()
+            when er { Err(_) => {}, Ok(_) => { let _ = s.step(); let v = s.column_i64(0); assert_eq(v, 1, "should be 1") } }
+            s.finalize()
+        }}
+        conn.close(); return 0
+    }}
+}
+
+@test
+func test_stmt_bind_f64() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sf")
+        let _ = conn.execute("CREATE TABLE tml_sf (v DOUBLE PRECISION)")
+        let sr = PgStatement::prepare(conn.raw_handle(), "INSERT INTO tml_sf (v) VALUES ($1)", 1)
+        when sr { Err(_) => {}, Ok(mut s) => { let _ = s.bind_f64(1, 3.14); let _ = s.run(); s.finalize() } }
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sf")
+        conn.close(); return 0
+    }}
+}
+
+@test
+func test_stmt_bind_null() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sn")
+        let _ = conn.execute("CREATE TABLE tml_sn (v BIGINT)")
+        let sr = PgStatement::prepare(conn.raw_handle(), "INSERT INTO tml_sn (v) VALUES ($1)", 1)
+        when sr { Err(_) => {}, Ok(mut s) => { let _ = s.bind_null(1); let _ = s.run(); s.finalize() } }
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sn")
+        conn.close(); return 0
+    }}
+}
+
+@test
+func test_stmt_multiple_rows() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sm")
+        let _ = conn.execute("CREATE TABLE tml_sm (id BIGINT)")
+        let _ = conn.execute("INSERT INTO tml_sm VALUES (1),(2),(3)")
+        let sr = PgStatement::prepare(conn.raw_handle(), "SELECT id FROM tml_sm ORDER BY id", 0)
+        when sr { Err(_) => {}, Ok(mut s) => {
+            let er = s.execute_query()
+            when er { Err(_) => {}, Ok(_) => {
+                var count: I64 = 0
+                loop (s.step()) { count = count + 1 }
+                assert_eq(count, 3, "should have 3 rows")
+            }}
+            s.finalize()
+        }}
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sm")
+        conn.close(); return 0
+    }}
+}
+
+@test
+func test_stmt_reset_rebind() -> I32 {
+    let r = PgConnection::connect(database_url())
+    when r { Err(_) => { return 1 }, Ok(mut conn) => {
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sr")
+        let _ = conn.execute("CREATE TABLE tml_sr (id BIGINT)")
+        let sr = PgStatement::prepare(conn.raw_handle(), "INSERT INTO tml_sr (id) VALUES ($1)", 1)
+        when sr { Err(_) => {}, Ok(mut s) => {
+            let _ = s.bind_i64(1, 1)
+            let _ = s.run()
+            let rr = s.reset()
+            when rr { Err(_) => {}, Ok(_) => {} }
+            let _ = s.bind_i64(1, 2)
+            let _ = s.run()
+            s.finalize()
+        }}
+        let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_sr")
+        assert_eq(count, 2, "should have 2 rows")
+        let _ = conn.execute("DROP TABLE IF EXISTS tml_sr")
+        conn.close(); return 0
+    }}
+}

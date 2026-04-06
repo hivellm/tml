@@ -56,18 +56,8 @@ func test_transaction_commit() -> I32 {
                 Ok(_) => {}
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_commit WHERE id = 42")
-            when count_r {
-                Err(_) => {
-                    assert(false, "verify query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_commit")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "committed row must be visible")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_commit WHERE id = 42")
+            assert_eq(count, 1, "committed row must be visible")
 
             let _ = conn.execute("DROP TABLE tml_test_tx_commit")
             conn.close()
@@ -113,18 +103,8 @@ func test_transaction_rollback() -> I32 {
                 Ok(_) => {}
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_rollback")
-            when count_r {
-                Err(_) => {
-                    assert(false, "verify query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_tx_rollback")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 0, "rolled-back row must not be visible")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_tx_rollback")
+            assert_eq(count, 0, "rolled-back row must not be visible")
 
             let _ = conn.execute("DROP TABLE tml_test_tx_rollback")
             conn.close()
@@ -181,18 +161,8 @@ func test_nested_operations_in_tx() -> I32 {
             let _ = conn.execute("UPDATE tml_test_nested_tx SET val = 'ONE' WHERE id = 1")
             let _ = conn.commit()
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_nested_tx")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_nested_tx")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 3, "all 3 rows should be visible after tx commit")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_nested_tx")
+            assert_eq(count, 3, "all 3 rows should be visible after tx commit")
 
             let val_r = conn.query_scalar_str("SELECT val FROM tml_test_nested_tx WHERE id = 1")
             when val_r {

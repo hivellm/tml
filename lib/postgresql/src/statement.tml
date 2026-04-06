@@ -540,7 +540,10 @@ impl PreparedStatement for PgStatement {
     /// Executes the statement for DML operations (INSERT/UPDATE/DELETE).
     ///
     /// Returns the number of rows affected.
-    pub func run(this) -> Outcome[I64, DbError] {
+    /// Executes the prepared statement (DML). Returns affected row count, or -1 on error.
+    /// NOTE: Returns I64 directly instead of Outcome[I64, DbError] due to codegen bug
+    /// with Outcome[I64, _] pattern matching (HEAP_CORRUPTION on Ok(val) extraction).
+    pub func run(this) -> I64 {
         let conn = this.pg_conn
         let name = this.pg_name
         let nparams = this.pg_param_count
@@ -549,21 +552,19 @@ impl PreparedStatement for PgStatement {
         let result = PQexecPrepared(conn, name, nparams, params, pg_null(), pg_null(), 0)
 
         if result == pg_null() {
-            let msg = PQerrorMessage(conn)
-            return Err(DbError::new(DbErrorKind::Query, msg))
+            return -1
         }
 
         let status = PQresultStatus(result)
         if status == PG_FATAL_ERROR {
-            let msg = PQresultErrorMessage(result)
             PQclear(result)
-            return Err(DbError::new(DbErrorKind::Query, msg))
+            return -1
         }
 
         let count_str = PQcmdTuples(result)
         let count = pg_stmt_parse_i64(count_str)
         PQclear(result)
-        return Ok(count)
+        return count
     }
 
     /// Resets the statement for re-execution with new parameter bindings.

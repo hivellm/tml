@@ -45,18 +45,8 @@ func test_execute_i64_params() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_p WHERE id = 42")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_p")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "parameterized insert should have persisted row with id=42")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_p WHERE id = 42")
+            assert_eq(count, 1, "parameterized insert should have persisted row with id=42")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_i64_p")
             conn.close()
@@ -91,18 +81,8 @@ func test_execute_i64_2() -> I32 {
                 }
             }
 
-            let sum_r = conn.query_scalar_i64("SELECT a + b FROM tml_test_exec_i64_2 LIMIT 1")
-            when sum_r {
-                Err(_) => {
-                    assert(false, "sum query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_2")
-                    conn.close()
-                    return 1
-                },
-                Ok(sum) => {
-                    assert_eq(sum, 30, "a=10 + b=20 should equal 30")
-                }
-            }
+            let sum = conn.query_scalar_i64("SELECT a + b FROM tml_test_exec_i64_2 LIMIT 1")
+            assert_eq(sum, 30, "a=10 + b=20 should equal 30")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_i64_2")
             conn.close()
@@ -137,18 +117,8 @@ func test_execute_str() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str WHERE val = 'hello_world'")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "str param insert should persist")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str WHERE val = 'hello_world'")
+            assert_eq(count, 1, "str param insert should persist")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_str")
             conn.close()
@@ -183,18 +153,8 @@ func test_execute_str_i64() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str_i64 WHERE name = 'alice' AND score = 99")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_str_i64")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "row with name=alice and score=99 should exist")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_str_i64 WHERE name = 'alice' AND score = 99")
+            assert_eq(count, 1, "row with name=alice and score=99 should exist")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_str_i64")
             conn.close()
@@ -229,18 +189,8 @@ func test_execute_i64_str() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_str WHERE id = 7 AND label = 'lucky'")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_i64_str")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "row with id=7 and label=lucky should exist")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_i64_str WHERE id = 7 AND label = 'lucky'")
+            assert_eq(count, 1, "row with id=7 and label=lucky should exist")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_i64_str")
             conn.close()
@@ -275,18 +225,8 @@ func test_execute_3_i64() -> I32 {
                 }
             }
 
-            let sum_r = conn.query_scalar_i64("SELECT x + y + z FROM tml_test_exec_3i64 LIMIT 1")
-            when sum_r {
-                Err(_) => {
-                    assert(false, "sum query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_3i64")
-                    conn.close()
-                    return 1
-                },
-                Ok(sum) => {
-                    assert_eq(sum, 6, "x=1 + y=2 + z=3 should equal 6")
-                }
-            }
+            let sum = conn.query_scalar_i64("SELECT x + y + z FROM tml_test_exec_3i64 LIMIT 1")
+            assert_eq(sum, 6, "x=1 + y=2 + z=3 should equal 6")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_3i64")
             conn.close()
@@ -321,18 +261,8 @@ func test_execute_2str() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str WHERE first = 'John' AND last = 'Doe'")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "row with first=John and last=Doe should exist")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str WHERE first = 'John' AND last = 'Doe'")
+            assert_eq(count, 1, "row with first=John and last=Doe should exist")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_2str")
             conn.close()
@@ -367,18 +297,8 @@ func test_execute_2str_i64() -> I32 {
                 }
             }
 
-            let count_r = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str_i64 WHERE city = 'Lisbon' AND pop = 500000")
-            when count_r {
-                Err(_) => {
-                    assert(false, "count query failed")
-                    let _ = conn.execute("DROP TABLE IF EXISTS tml_test_exec_2str_i64")
-                    conn.close()
-                    return 1
-                },
-                Ok(count) => {
-                    assert_eq(count, 1, "row with city=Lisbon and pop=500000 should exist")
-                }
-            }
+            let count = conn.query_scalar_i64("SELECT COUNT(*) FROM tml_test_exec_2str_i64 WHERE city = 'Lisbon' AND pop = 500000")
+            assert_eq(count, 1, "row with city=Lisbon and pop=500000 should exist")
 
             let _ = conn.execute("DROP TABLE tml_test_exec_2str_i64")
             conn.close()

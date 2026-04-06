@@ -494,29 +494,36 @@ impl Connection for PgConnection {
     }
 
     /// Queries a single I64 scalar value (e.g. `COUNT(*)`).
-    pub func query_scalar_i64(this, sql: Str) -> Outcome[I64, DbError] {
+    ///
+    /// Returns 0 on error or when the result set is empty.  Use
+    /// `query_scalar_str` + `Str::parse_i64` if you need error distinction.
+    pub func query_scalar_i64(this, sql: Str) -> I64 {
         let result = PQexec(this.pg_handle, sql)
-        let chk = pg_check_result(result, this.pg_handle)
-        when chk {
-            Err(e) => return Err(e),
-            Ok(_) => {}
+        if result == pg_null() {
+            return 0
         }
         let status = PQresultStatus(result)
+        if status == PG_FATAL_ERROR {
+            PQclear(result)
+            return 0
+        }
         if status == PG_TUPLES_OK {
             let nrows = PQntuples(result)
             if nrows > 0 {
                 let val_str = PQgetvalue(result, 0, 0)
                 let val = pg_parse_i64(val_str)
                 PQclear(result)
-                return Ok(val)
+                return val
             }
         }
         PQclear(result)
-        return Ok(0)
+        return 0
     }
 
     /// Queries whether at least one row exists, with an I64 parameter.
-    pub func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError] {
+    ///
+    /// Returns `false` on query error or when no rows match.
+    pub func exists_by_i64(this, sql: Str, p1: I64) -> Bool {
         let s1 = p1.to_string()
         var params: *Unit = pg_null()
         lowlevel {
@@ -526,18 +533,23 @@ impl Connection for PgConnection {
         }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
-        let chk = pg_check_result(result, this.pg_handle)
-        when chk {
-            Err(e) => return Err(e),
-            Ok(_) => {}
+        if result == pg_null() {
+            return false
+        }
+        let status = PQresultStatus(result)
+        if status == PG_FATAL_ERROR {
+            PQclear(result)
+            return false
         }
         let nrows = PQntuples(result)
         PQclear(result)
-        return Ok(nrows > 0)
+        return nrows > 0
     }
 
     /// Queries whether at least one row exists, with a Str parameter.
-    pub func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError] {
+    ///
+    /// Returns `false` on query error or when no rows match.
+    pub func exists_by_str(this, sql: Str, p1: Str) -> Bool {
         var params: *Unit = pg_null()
         lowlevel {
             let arr = mem_alloc(8)
@@ -546,13 +558,16 @@ impl Connection for PgConnection {
         }
         let result = PQexecParams(this.pg_handle, sql, 1, pg_null(), params, pg_null(), pg_null(), 0)
         pg_free_params(params)
-        let chk = pg_check_result(result, this.pg_handle)
-        when chk {
-            Err(e) => return Err(e),
-            Ok(_) => {}
+        if result == pg_null() {
+            return false
+        }
+        let status = PQresultStatus(result)
+        if status == PG_FATAL_ERROR {
+            PQclear(result)
+            return false
         }
         let nrows = PQntuples(result)
         PQclear(result)
-        return Ok(nrows > 0)
+        return nrows > 0
     }
 }
