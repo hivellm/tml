@@ -349,9 +349,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Copy compile_commands.json to root for IDE support
+:: Copy compile_commands.json to build/debug/ for IDE support (not root)
 if exist "compile_commands.json" (
-    copy /y "compile_commands.json" "%ROOT_DIR%\" >nul 2>&1
+    copy /y "compile_commands.json" "%ROOT_DIR%\build\debug\" >nul 2>&1
 )
 
 :: Plugins now build directly to bin/plugins/ via CMake (TML_BIN_DIR/plugins)
