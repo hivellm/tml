@@ -580,9 +580,39 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
     // (MIR codegen doesn't support generic enum construction yet)
     bool has_local_generics = false;
 
-    // Helper: check if a parser type references a generic enum (Maybe[T], Outcome[T,E])
-    // These are the built-in generic enums that MIR codegen cannot handle yet
-    static const std::unordered_set<std::string> generic_enum_names = {"Maybe", "Outcome", "Poll"};
+    // Helper: check if a parser type references a generic type whose monomorphization
+    // is only handled by the AST codegen path (`generate_pending_instantiations`).
+    // The MIR codegen path skips that worklist, so any reference to one of these
+    // generic types from imported modules would produce undefined symbols at link
+    // time (e.g. `Arc__I32::new`, `Maybe__I32::is_just`, etc.).
+    //
+    // This set covers built-in generic enums plus the std::sync / std::collections
+    // generic wrappers that are commonly used and depend on the legacy instantiator.
+    static const std::unordered_set<std::string> generic_ast_only_names = {
+        // Built-in generic enums
+        "Maybe",
+        "Outcome",
+        "Poll",
+        // std::sync wrappers
+        "Arc",
+        "Rc",
+        "Weak",
+        "Mutex",
+        "RwLock",
+        "Shared",
+        "Sync",
+        // smart pointers / cells
+        "Box",
+        "Pin",
+        "Cell",
+        "RefCell",
+        "Heap",
+        // Generic collections that monomorphize through the legacy path
+        "Vec",
+        "BTreeMap",
+        "BTreeSet",
+        "HashSet",
+    };
     std::function<bool(const parser::TypePtr&)> uses_generic_enum;
     uses_generic_enum = [&](const parser::TypePtr& type) -> bool {
         if (!type)
@@ -591,8 +621,47 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
             const auto& named = type->as<parser::NamedType>();
             if (named.generics.has_value() && !named.generics->args.empty()) {
                 if (!named.path.segments.empty() &&
-                    generic_enum_names.count(named.path.segments.back()))
+                    generic_ast_only_names.count(named.path.segments.back()))
                     return true;
+                // Recurse into generic arguments — nested generic types like
+                // `Outcome[I32, Arc[I32]]` or `List[Maybe[Str]]` must also force fallback.
+                for (const auto& arg : named.generics->args) {
+                    if (arg.is_type() && uses_generic_enum(arg.as_type()))
+                        return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    // Helper: check if a struct/enum decorator list contains a `@derive(...)` whose
+    // emitter lives only in the AST codegen path (gen_derive_*). The MIR codegen
+    // path doesn't run these derive emitters, so the resulting symbols (e.g.
+    // `Point::runtime_type_info`, `Point_from_json`, `DefaultPoint_default`) would
+    // never be defined and would fail at link time.
+    static const std::unordered_set<std::string> ast_only_derive_names = {
+        "Reflect",
+        "Default",
+        "FromJson",
+        "ToJson",
+    };
+    auto has_ast_only_derive = [](const std::vector<parser::Decorator>& decorators) -> bool {
+        for (const auto& dec : decorators) {
+            if (dec.name != "derive")
+                continue;
+            for (const auto& arg : dec.args) {
+                if (!arg)
+                    continue;
+                // Derive args are typically IdentExpr or PathExpr nodes naming the trait.
+                if (arg->is<parser::IdentExpr>()) {
+                    if (ast_only_derive_names.count(arg->as<parser::IdentExpr>().name))
+                        return true;
+                } else if (arg->is<parser::PathExpr>()) {
+                    const auto& pe = arg->as<parser::PathExpr>();
+                    if (!pe.path.segments.empty() &&
+                        ast_only_derive_names.count(pe.path.segments.back()))
+                        return true;
+                }
             }
         }
         return false;
@@ -605,12 +674,33 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
             has_local_generics = true;
             break;
         } else if (decl->is<parser::StructDecl>()) {
-            if (!decl->as<parser::StructDecl>().generics.empty()) {
+            const auto& sd = decl->as<parser::StructDecl>();
+            if (!sd.generics.empty()) {
                 has_local_generics = true;
                 break;
             }
+            // @derive(Reflect/Default/FromJson/ToJson) requires the AST derive
+            // emitters — MIR codegen does not run them.
+            if (has_ast_only_derive(sd.decorators)) {
+                has_local_generics = true;
+                break;
+            }
+            // Field types may reference imported generic wrappers (e.g. Arc[T]).
+            for (const auto& field : sd.fields) {
+                if (uses_generic_enum(field.type)) {
+                    has_local_generics = true;
+                    break;
+                }
+            }
+            if (has_local_generics)
+                break;
         } else if (decl->is<parser::EnumDecl>()) {
-            if (!decl->as<parser::EnumDecl>().generics.empty()) {
+            const auto& ed = decl->as<parser::EnumDecl>();
+            if (!ed.generics.empty()) {
+                has_local_generics = true;
+                break;
+            }
+            if (has_ast_only_derive(ed.decorators)) {
                 has_local_generics = true;
                 break;
             }

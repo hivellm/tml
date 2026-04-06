@@ -475,7 +475,20 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                         generated_impl_methods_.insert(mangled_key);
                     }
                 } else {
-                    mangled = "@tml_" + prefix + sanitized_name;
+                    // Non-primitive Type::method call (e.g., Vec3::type_info() on a
+                    // local user-defined struct/enum). Use mangle_impl_method so the
+                    // call site mangling matches the definition emitted by
+                    // gen_func_decl / derive emitters / impl method codegen — those
+                    // all route through mangle_impl_method, which honors the
+                    // module-registry view of the type and produces Itanium-style
+                    // names for module-registered types and flat names with the
+                    // suite prefix for purely local types.
+                    if (!std::isupper(static_cast<unsigned char>(first_seg[0]))) {
+                        mangled = "@tml_" + prefix + sanitized_name;
+                    } else {
+                        std::string method_name4 = fn_name.substr(sep_pos3 + 2);
+                        mangled = "@" + mangle_impl_method(first_seg, method_name4);
+                    }
                 }
             } else {
                 mangled = "@tml_" + prefix + sanitized_name;

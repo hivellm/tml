@@ -435,21 +435,34 @@ resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& w
         // Match the RHS pattern against the concrete type to extract type params
         match_pattern_type(*rhs, concrete, type_subs);
 
-        // Also handle func types specially for parameter/return matching
-        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
+        // Also handle func/closure types specially for parameter/return matching.
+        // Closures arise when callers pass `do() -> T { ... }` lambdas to a function
+        // with a `where F = func() -> T` clause — F is bound to ClosureType, not FuncType.
+        if (rhs->is<parser::FuncType>() &&
+            (concrete->is<types::FuncType>() || concrete->is<types::ClosureType>())) {
             const auto& pattern_func = rhs->as<parser::FuncType>();
-            const auto& concrete_func = concrete->as<types::FuncType>();
+            types::TypePtr concrete_ret;
+            const std::vector<types::TypePtr>* concrete_params = nullptr;
+            if (concrete->is<types::FuncType>()) {
+                const auto& concrete_func = concrete->as<types::FuncType>();
+                concrete_ret = concrete_func.return_type;
+                concrete_params = &concrete_func.params;
+            } else {
+                const auto& concrete_clos = concrete->as<types::ClosureType>();
+                concrete_ret = concrete_clos.return_type;
+                concrete_params = &concrete_clos.params;
+            }
 
             // Match return type pattern against concrete return type
-            if (pattern_func.return_type && concrete_func.return_type) {
-                match_pattern_type(*pattern_func.return_type, concrete_func.return_type, type_subs);
+            if (pattern_func.return_type && concrete_ret) {
+                match_pattern_type(*pattern_func.return_type, concrete_ret, type_subs);
             }
 
             // Match parameter type patterns
-            size_t min_params = std::min(pattern_func.params.size(), concrete_func.params.size());
+            size_t min_params = std::min(pattern_func.params.size(), concrete_params->size());
             for (size_t i = 0; i < min_params; ++i) {
-                if (pattern_func.params[i] && concrete_func.params[i]) {
-                    match_pattern_type(*pattern_func.params[i], concrete_func.params[i], type_subs);
+                if (pattern_func.params[i] && (*concrete_params)[i]) {
+                    match_pattern_type(*pattern_func.params[i], (*concrete_params)[i], type_subs);
                 }
             }
         }
@@ -676,16 +689,23 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
                                 // existing entries. This preserves entries from pim.type_subs
                                 // (like Self, This, associated types) that aren't derived
                                 // from the mangled name.
-                                // Exception: don't override a rich FuncType (with actual
-                                // params/return) with a degenerate NamedType("Fn") recovered
-                                // from mangling, which loses all signature information.
+                                // Exception: don't override a rich FuncType OR ClosureType
+                                // (with actual params/return) with a degenerate
+                                // NamedType("Fn") recovered from mangling, which loses all
+                                // signature information. Closures arise when callers pass
+                                // `do() -> T { ... }` lambdas to functions with `where F =
+                                // func() -> T` clauses (e.g., OnceWith, RepeatWith). Without
+                                // this guard, the where-clause T binding is lost and the
+                                // method body emits Maybe[T] instead of Maybe[I32].
                                 for (const auto& [k, v] : new_subs) {
                                     auto existing = effective_type_subs.find(k);
                                     if (existing != effective_type_subs.end() && existing->second &&
-                                        v && existing->second->is<types::FuncType>() &&
+                                        v &&
+                                        (existing->second->is<types::FuncType>() ||
+                                         existing->second->is<types::ClosureType>()) &&
                                         v->is<types::NamedType>() &&
                                         v->as<types::NamedType>().name == "Fn") {
-                                        continue; // Keep the richer FuncType entry
+                                        continue; // Keep the richer FuncType/ClosureType entry
                                     }
                                     effective_type_subs[k] = v;
                                 }
@@ -1041,15 +1061,18 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
                                 }
                                 if (!new_subs.empty()) {
                                     // Merge new_subs into effective_type_subs, preserving
-                                    // rich FuncType entries over degenerate NamedType("Fn").
+                                    // rich FuncType/ClosureType entries over degenerate
+                                    // NamedType("Fn"). Closures arise from `do() -> T { }`
+                                    // lambdas passed to where-F=func() generic constructors.
                                     for (const auto& [k, v] : new_subs) {
                                         auto existing = effective_type_subs.find(k);
                                         if (existing != effective_type_subs.end() &&
                                             existing->second && v &&
-                                            existing->second->is<types::FuncType>() &&
+                                            (existing->second->is<types::FuncType>() ||
+                                             existing->second->is<types::ClosureType>()) &&
                                             v->is<types::NamedType>() &&
                                             v->as<types::NamedType>().name == "Fn") {
-                                            continue; // Keep the richer FuncType entry
+                                            continue; // Keep the richer FuncType/ClosureType entry
                                         }
                                         effective_type_subs[k] = v;
                                     }

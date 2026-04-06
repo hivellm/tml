@@ -518,21 +518,34 @@ resolve_where_clause_type_equalities(const std::optional<parser::WhereClause>& w
         // Match the RHS pattern against the concrete type to extract type params
         match_pattern_type(*rhs, concrete, type_subs);
 
-        // Also handle func types specially for parameter/return matching
-        if (rhs->is<parser::FuncType>() && concrete->is<types::FuncType>()) {
+        // Also handle func/closure types specially for parameter/return matching.
+        // ClosureType arises when callers pass `do() -> T { ... }` lambdas to a
+        // function with `where F = func() -> T` clauses.
+        if (rhs->is<parser::FuncType>() &&
+            (concrete->is<types::FuncType>() || concrete->is<types::ClosureType>())) {
             const auto& pattern_func = rhs->as<parser::FuncType>();
-            const auto& concrete_func = concrete->as<types::FuncType>();
+            types::TypePtr concrete_ret;
+            const std::vector<types::TypePtr>* concrete_params = nullptr;
+            if (concrete->is<types::FuncType>()) {
+                const auto& concrete_func = concrete->as<types::FuncType>();
+                concrete_ret = concrete_func.return_type;
+                concrete_params = &concrete_func.params;
+            } else {
+                const auto& concrete_clos = concrete->as<types::ClosureType>();
+                concrete_ret = concrete_clos.return_type;
+                concrete_params = &concrete_clos.params;
+            }
 
             // Match return type pattern against concrete return type
-            if (pattern_func.return_type && concrete_func.return_type) {
-                match_pattern_type(*pattern_func.return_type, concrete_func.return_type, type_subs);
+            if (pattern_func.return_type && concrete_ret) {
+                match_pattern_type(*pattern_func.return_type, concrete_ret, type_subs);
             }
 
             // Match parameter type patterns
-            size_t min_params = std::min(pattern_func.params.size(), concrete_func.params.size());
+            size_t min_params = std::min(pattern_func.params.size(), concrete_params->size());
             for (size_t i = 0; i < min_params; ++i) {
-                if (pattern_func.params[i] && concrete_func.params[i]) {
-                    match_pattern_type(*pattern_func.params[i], concrete_func.params[i], type_subs);
+                if (pattern_func.params[i] && (*concrete_params)[i]) {
+                    match_pattern_type(*pattern_func.params[i], (*concrete_params)[i], type_subs);
                 }
             }
         }

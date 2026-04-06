@@ -212,17 +212,12 @@ void LLVMIRGen::gen_derive_reflect_enum(const parser::EnumDecl& e) {
 /// is defined before these functions reference it in GEP instructions.
 void LLVMIRGen::gen_derive_reflect_enum_methods(const parser::EnumDecl& e,
                                                 const std::string& type_name) {
-    // Add suite prefix for test-local types
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
     std::string llvm_type = "%struct." + type_name;
 
     // Generate: func EnumName::variant_name(this) -> Str
-    std::string variant_name_func = "@tml_" + suite_prefix + type_name + "_variant_name";
+    // Use the canonical mangler so the symbol matches the call-site mangling
+    // (Itanium nested for module-registered types, flat with suite prefix for purely local).
+    std::string variant_name_func = "@" + mangle_impl_method(type_name, "variant_name");
     if (generated_functions_.count(variant_name_func) == 0) {
         generated_functions_.insert(variant_name_func);
 
@@ -261,7 +256,7 @@ void LLVMIRGen::gen_derive_reflect_enum_methods(const parser::EnumDecl& e,
     }
 
     // Generate: func EnumName::variant_tag(this) -> I64
-    std::string variant_tag_func = "@tml_" + suite_prefix + type_name + "_variant_tag";
+    std::string variant_tag_func = "@" + mangle_impl_method(type_name, "variant_tag");
     if (generated_functions_.count(variant_tag_func) == 0) {
         generated_functions_.insert(variant_tag_func);
 
@@ -282,15 +277,12 @@ void LLVMIRGen::gen_derive_reflect_enum_methods(const parser::EnumDecl& e,
 /// Generate impl Reflect for T with type_info() and runtime_type_info() methods
 void LLVMIRGen::gen_derive_reflect_impl(const std::string& type_name,
                                         const std::string& typeinfo_name) {
-    // Add suite prefix for test-local types (same as gen_func_decl does)
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
     // Generate: func T::type_info() -> ref TypeInfo (static method)
-    std::string static_func_name = "@tml_" + suite_prefix + type_name + "_type_info";
+    // Use the canonical mangler — the call site uses mangle_impl_method which
+    // produces Itanium nested mangling for module-registered types and flat
+    // naming with suite prefix for purely local types. The derive emitter must
+    // match exactly or the symbol will be undefined at link time.
+    std::string static_func_name = "@" + mangle_impl_method(type_name, "type_info");
     if (generated_functions_.count(static_func_name) == 0) {
         generated_functions_.insert(static_func_name);
 
@@ -303,7 +295,7 @@ void LLVMIRGen::gen_derive_reflect_impl(const std::string& type_name,
     }
 
     // Generate: func T::runtime_type_info(ref this) -> ref TypeInfo (instance method)
-    std::string instance_func_name = "@tml_" + suite_prefix + type_name + "_runtime_type_info";
+    std::string instance_func_name = "@" + mangle_impl_method(type_name, "runtime_type_info");
     if (generated_functions_.count(instance_func_name) == 0) {
         generated_functions_.insert(instance_func_name);
 
@@ -323,16 +315,11 @@ void LLVMIRGen::gen_derive_reflect_impl(const std::string& type_name,
 /// These enable runtime field access/mutation for reflection.
 void LLVMIRGen::gen_derive_reflect_field_accessors(const parser::StructDecl& s,
                                                    const std::string& type_name) {
-    std::string suite_prefix = "";
-    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
-        current_module_prefix_.empty()) {
-        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-    }
-
     std::string llvm_type = "%struct." + type_name;
 
     // ─── get_field_ptr(ptr %this, i64 %index) -> ptr ───
-    std::string get_func = "@tml_" + suite_prefix + type_name + "_get_field_ptr";
+    // Use the canonical mangler so the symbol matches the call-site mangling.
+    std::string get_func = "@" + mangle_impl_method(type_name, "get_field_ptr");
     if (generated_functions_.count(get_func) == 0) {
         generated_functions_.insert(get_func);
 
@@ -359,7 +346,7 @@ void LLVMIRGen::gen_derive_reflect_field_accessors(const parser::StructDecl& s,
 
     // ─── get_field_name(i64 %index) -> ptr ───
     // Returns field name string for a given index
-    std::string name_func = "@tml_" + suite_prefix + type_name + "_get_field_name";
+    std::string name_func = "@" + mangle_impl_method(type_name, "get_field_name");
     if (generated_functions_.count(name_func) == 0) {
         generated_functions_.insert(name_func);
 
