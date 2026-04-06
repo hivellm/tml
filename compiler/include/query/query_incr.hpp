@@ -115,6 +115,11 @@ public:
     bool save_link_libs(const QueryKey& key, const std::set<std::string>& link_libs,
                         const std::filesystem::path& cache_dir);
 
+    /// Save link_search_paths for a CodegenUnit.
+    bool save_link_search_paths(const QueryKey& key,
+                                const std::vector<std::filesystem::path>& search_paths,
+                                const std::filesystem::path& cache_dir);
+
     /// Write all entries to the binary cache file.
     bool write(const std::filesystem::path& cache_file, uint32_t options_hash);
 
@@ -142,6 +147,10 @@ private:
 /// Load cached link_libs for a CodegenUnit query.
 [[nodiscard]] std::set<std::string> load_cached_link_libs(const QueryKey& key,
                                                           const std::filesystem::path& cache_dir);
+
+/// Load cached link_search_paths for a CodegenUnit query.
+[[nodiscard]] std::vector<std::filesystem::path>
+load_cached_link_search_paths(const QueryKey& key, const std::filesystem::path& cache_dir);
 
 /// Compute a hash of build options that affect code generation.
 /// If this changes between sessions, the entire cache is invalidated.

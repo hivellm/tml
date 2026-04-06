@@ -516,6 +516,28 @@ bool IncrCacheWriter::save_link_libs(const QueryKey& key, const std::set<std::st
     }
 }
 
+bool IncrCacheWriter::save_link_search_paths(const QueryKey& key,
+                                             const std::vector<fs::path>& search_paths,
+                                             const fs::path& cache_dir) {
+    try {
+        auto ir_dir = cache_dir / "ir";
+        fs::create_directories(ir_dir);
+
+        auto filename = get_ir_cache_filename(key);
+        auto paths_file = ir_dir / (filename + ".search_paths");
+
+        std::ofstream out(paths_file);
+        if (!out)
+            return false;
+        for (const auto& p : search_paths) {
+            out << p.string() << "\n";
+        }
+        return out.good();
+    } catch (...) {
+        return false;
+    }
+}
+
 // ============================================================================
 // Free Functions
 // ============================================================================
@@ -563,6 +585,31 @@ std::set<std::string> load_cached_link_libs(const QueryKey& key, const fs::path&
         }
     } catch (...) {}
     return libs;
+}
+
+std::vector<fs::path> load_cached_link_search_paths(const QueryKey& key,
+                                                    const fs::path& cache_dir) {
+    std::vector<fs::path> paths;
+    try {
+        auto filename = get_ir_cache_filename(key);
+        auto paths_file = cache_dir / "ir" / (filename + ".search_paths");
+
+        if (!fs::exists(paths_file))
+            return paths;
+
+        std::ifstream in(paths_file);
+        std::string line;
+        while (std::getline(in, line)) {
+            // Strip trailing \r if present (Windows line endings)
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            if (!line.empty()) {
+                paths.push_back(fs::path(line));
+            }
+        }
+    } catch (...) {}
+    return paths;
 }
 
 uint32_t compute_options_hash(int opt_level, bool debug_info, const std::string& target_triple,

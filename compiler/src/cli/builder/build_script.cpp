@@ -13,6 +13,7 @@ TML_MODULE("compiler")
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -290,6 +291,82 @@ static fs::path get_self_exe_path() {
     return {};
 }
 
+/// Serialize a BuildScriptResult to a cache file (same tml: directive format).
+static bool save_build_result_cache(const BuildScriptResult& result, const fs::path& cache_path) {
+    try {
+        fs::create_directories(cache_path.parent_path());
+        std::ofstream out(cache_path);
+        if (!out) {
+            return false;
+        }
+        for (const auto& lib : result.link_libs) {
+            out << "tml:link-lib=" << lib << "\n";
+        }
+        for (const auto& sp : result.link_search_paths) {
+            out << "tml:link-search=" << sp.string() << "\n";
+        }
+        for (const auto& art : result.copy_artifacts) {
+            out << "tml:copy-artifact=" << art.string() << "\n";
+        }
+        for (const auto& warn : result.warnings) {
+            out << "tml:warning=" << warn << "\n";
+        }
+        for (const auto& cfg : result.cfg_symbols) {
+            out << "tml:cfg=" << cfg << "\n";
+        }
+        for (const auto& rp : result.rerun_paths) {
+            out << "tml:rerun-if-changed=" << rp.string() << "\n";
+        }
+        return out.good();
+    } catch (...) {
+        return false;
+    }
+}
+
+/// Load a cached BuildScriptResult. Returns nullopt if cache doesn't exist.
+static std::optional<BuildScriptResult> load_build_result_cache(const fs::path& cache_path) {
+    if (!fs::exists(cache_path)) {
+        return std::nullopt;
+    }
+    try {
+        std::ifstream in(cache_path);
+        if (!in) {
+            return std::nullopt;
+        }
+        std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return parse_build_directives(content);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+/// Check if cached result is still valid by comparing rerun_paths mtimes against cache mtime.
+static bool is_cache_valid(const BuildScriptResult& cached, const fs::path& cache_path,
+                           const fs::path& build_script_path, const fs::path& package_dir) {
+    std::error_code ec;
+    auto cache_time = fs::last_write_time(cache_path, ec);
+    if (ec) {
+        return false;
+    }
+
+    // Build script itself changed → invalidate
+    auto script_time = fs::last_write_time(build_script_path, ec);
+    if (ec || script_time > cache_time) {
+        return false;
+    }
+
+    // Check all rerun-if-changed paths
+    for (const auto& rp : cached.rerun_paths) {
+        fs::path resolved = rp.is_absolute() ? rp : package_dir / rp;
+        auto file_time = fs::last_write_time(resolved, ec);
+        if (ec || file_time > cache_time) {
+            return false; // File changed or missing → re-run
+        }
+    }
+
+    return true;
+}
+
 auto detect_and_run_build_script(const std::string& source_path, bool verbose)
     -> BuildScriptResult {
     BuildScriptResult result;
@@ -313,6 +390,18 @@ auto detect_and_run_build_script(const std::string& source_path, bool verbose)
         return result; // Don't recurse into ourselves
     }
 
+    // Check build script cache — avoid re-running if nothing changed
+    fs::path cache_dir = package_dir / ".build-cache";
+    fs::path cache_path = cache_dir / "build_script.cache";
+    auto cached = load_build_result_cache(cache_path);
+    if (cached && is_cache_valid(*cached, cache_path, build_script, package_dir)) {
+        if (verbose) {
+            TML_LOG_INFO("build",
+                         "[build.tml] Using cached result (no rerun-if-changed paths modified)");
+        }
+        return *cached;
+    }
+
     TML_LOG_INFO("build", "[build.tml] Found build script: " << build_script.string());
 
     fs::path tml_exe = get_self_exe_path();
@@ -328,6 +417,9 @@ auto detect_and_run_build_script(const std::string& source_path, bool verbose)
         // Reset to no-op so the build can continue
         result = BuildScriptResult{};
         result.success = true;
+    } else {
+        // Cache the successful result for next time
+        save_build_result_cache(result, cache_path);
     }
 
     return result;

@@ -1,6 +1,6 @@
 # Tasks: Rust-style build.tml + Native Lib Resolution
 
-**Status**: Complete. 29/32 (91%). Phases 1-5 + 7 done. Phase 6 (cache) and Phase 2 (unit tests) deferred — not blocking PostgreSQL.
+**Status**: Complete. 32/32 (100%). All phases done.
 **Depends on**: None (purely additive to existing compiler)
 **Blocks**: phase8f_db-postgres (PostgreSQL driver needs this to link libpq)
 
@@ -14,9 +14,9 @@
 ## Phase 2: Build Script Parser (C++ compiler)
 
 - [x] 2.1 `compiler/src/cli/builder/build_script.cpp` — Full implementation of `parse_build_directives` with all 6 directive types
-- [ ] 2.2 Unit test: parse valid directives → correct BuildScriptResult fields
-- [ ] 2.3 Unit test: ignore non-`tml:` lines (normal program output)
-- [ ] 2.4 Unit test: handle empty stdout, missing `=`, unknown directives gracefully
+- [x] 2.2 Unit test: parse valid directives → correct BuildScriptResult fields
+- [x] 2.3 Unit test: ignore non-`tml:` lines (normal program output)
+- [x] 2.4 Unit test: handle empty stdout, missing `=`, unknown directives gracefully
 
 ## Phase 3: Build Script Detection & Execution (C++ compiler)
 
@@ -45,9 +45,9 @@
 
 ## Phase 6: Incremental Cache Integration
 
-- [ ] 6.1 `compiler/src/query/query_incr.cpp` — Save `link_search_paths` alongside `link_libs` in incremental cache
-- [ ] 6.2 `compiler/src/query/query_incr.cpp` — Load `link_search_paths` from incremental cache
-- [ ] 6.3 `compiler/src/cli/builder/build.cpp` — Cache build script output; re-run only if `tml:rerun-if-changed` paths have newer mtime
+- [x] 6.1 `compiler/src/query/query_incr.cpp` — Save `link_search_paths` alongside `link_libs` in incremental cache
+- [x] 6.2 `compiler/src/query/query_incr.cpp` — Load `link_search_paths` from incremental cache
+- [x] 6.3 `compiler/src/cli/builder/build_script.cpp` — Cache build script output; re-run only if `tml:rerun-if-changed` paths have newer mtime
 
 ## Phase 7: End-to-End Validation
 
