@@ -100,5 +100,5 @@ compiler/cranelift/target/
 
 # Backup
 /backup
-mcp-call-log.jsonllib/chart/native/sciplot/
+lib/chart/native/sciplot/
 .build-cache/

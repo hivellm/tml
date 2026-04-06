@@ -85,10 +85,10 @@ fs::path find_log() {
         if (fs::exists(p))
             return p;
     }
+    if (fs::exists("docs/papers/llm-ir-debugging/data/mcp-call-log.jsonl"))
+        return "docs/papers/llm-ir-debugging/data/mcp-call-log.jsonl";
     if (fs::exists("mcp-call-log.jsonl"))
         return "mcp-call-log.jsonl";
-    if (fs::exists("../mcp-call-log.jsonl"))
-        return "../mcp-call-log.jsonl";
     return {};
 }
 

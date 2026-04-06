@@ -79,7 +79,7 @@ void McpServer::init_call_logger() {
     session_id_ = std::to_string(epoch_ms);
 
     // Log path
-    std::string log_path = "mcp-call-log.jsonl";
+    std::string log_path = "docs/papers/llm-ir-debugging/data/mcp-call-log.jsonl";
     const char* env_dir = std::getenv("TML_MCP_LOG_DIR");
     if (env_dir != nullptr && env_dir[0] != '\0') {
         log_path = std::string(env_dir) + "/mcp-call-log.jsonl";
