@@ -1,0 +1,75 @@
+// String interning — basic functionality tests.
+
+use test::{assert, assert_eq}
+use std::intern::{Interner, InternedStr}
+
+/// intern + get round-trip, dedup, len, contains, empty/single-char.
+@test
+func test_intern_core() -> I32 {
+    let mut pool = Interner::new()
+
+    // Empty
+    assert(pool.is_empty(), "new interner should be empty")
+    assert_eq(pool.len(), 0, "len should be 0")
+
+    // Intern + get
+    let h1 = pool.intern("hello")
+    assert_eq(pool.get(h1), "hello", "get should return interned string")
+    assert_eq(pool.len(), 1, "len should be 1")
+    assert(not pool.is_empty(), "should not be empty")
+
+    // Deduplication
+    let h2 = pool.intern("hello")
+    assert_eq(h1.id(), h2.id(), "same string → same id")
+    assert_eq(pool.len(), 1, "duplicate should not increase len")
+
+    // Different strings
+    let h3 = pool.intern("world")
+    assert(h1.id() != h3.id(), "different strings → different ids")
+    assert_eq(pool.get(h3), "world", "get second string")
+    assert_eq(pool.len(), 2, "len should be 2")
+
+    // Contains
+    assert(pool.contains("hello"), "should contain 'hello'")
+    assert(pool.contains("world"), "should contain 'world'")
+    assert(not pool.contains("xxx"), "should not contain 'xxx'")
+
+    // Empty string
+    let h4 = pool.intern("")
+    assert_eq(pool.get(h4), "", "empty string round-trip")
+    assert_eq(pool.len(), 3, "empty string counts")
+
+    // Single char
+    let ha = pool.intern("a")
+    let hb = pool.intern("b")
+    let ha2 = pool.intern("a")
+    assert_eq(ha.id(), ha2.id(), "single char dedup")
+    assert(ha.id() != hb.id(), "different single chars differ")
+
+    return 0
+}
+
+/// Stress: intern many unique strings.
+@test
+func test_intern_stress() -> I32 {
+    let mut pool = Interner::new()
+    var i: I64 = 0
+    loop (i < 500) {
+        let s = "s" + i.to_string()
+        let h = pool.intern(s)
+        let got = pool.get(h)
+        assert_eq(got, s, "round-trip for " + s)
+        i = i + 1
+    }
+    assert_eq(pool.len(), 500, "should have 500 strings")
+
+    // Re-intern — should not grow
+    i = 0
+    loop (i < 500) {
+        let s = "s" + i.to_string()
+        let _ = pool.intern(s)
+        i = i + 1
+    }
+    assert_eq(pool.len(), 500, "re-intern should not grow")
+    return 0
+}

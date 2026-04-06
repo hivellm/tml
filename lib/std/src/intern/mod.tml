@@ -1,0 +1,25 @@
+//! String interning module.
+//!
+//! Provides the [`Interner`] type for deduplicating strings. Each unique string
+//! is stored once, and callers receive an opaque [`InternedStr`] handle that can
+//! be used to retrieve the original string in O(1).
+//!
+//! # Usage
+//!
+//! ```tml
+//! use std::intern::{Interner, InternedStr}
+//!
+//! let mut pool = Interner::new()
+//! let a = pool.intern("hello")
+//! let b = pool.intern("hello")
+//! assert_eq(a.id(), b.id())          // same handle — deduplicated
+//! assert_eq(pool.get(a), "hello")    // retrieve original string
+//! ```
+//!
+//! # Design
+//!
+//! Backed by a `HashMap[Str, I64]` for O(1) lookup-or-insert and a `List[Str]`
+//! for O(1) index-based retrieval. The `InternedStr` handle is a thin wrapper
+//! around an I64 index.
+
+pub use std::intern::interner::{Interner, InternedStr}

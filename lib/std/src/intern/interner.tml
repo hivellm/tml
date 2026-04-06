@@ -1,0 +1,129 @@
+//! Core string interning implementation.
+//!
+//! Uses lowlevel memory operations to store strings in a flat array.
+//! Linear scan for lookup — simple, correct, and avoids codegen bugs
+//! with HashMap struct construction. For compiler symbol tables (< 10K
+//! unique strings), linear scan with string comparison is fast enough.
+
+/// An opaque handle to an interned string.
+pub type InternedStr {
+    index: I64,
+}
+
+impl InternedStr {
+    /// Returns the numeric ID of this interned string.
+    pub func id(this) -> I64 {
+        return this.index
+    }
+}
+
+@extern("c") func strlen(s: Str) -> I64
+@extern("c") func strcmp(a: Str, b: Str) -> I32
+
+/// A string interner that deduplicates strings and provides fast lookup.
+///
+/// Backed by a flat array of string pointers. Uses linear scan for lookup
+/// which is O(n) but avoids HashMap codegen bugs. For typical compiler
+/// symbol tables (< 10K unique strings), this is fast enough.
+pub type Interner {
+    /// Pointer to array of Str pointers.
+    data: I64,
+    /// Number of interned strings.
+    count: I64,
+    /// Allocated capacity.
+    cap: I64,
+}
+
+impl Interner {
+    /// Creates a new empty interner with initial capacity 256.
+    pub func new() -> Interner {
+        let initial_cap: I64 = 256
+        var data_ptr: I64 = 0
+        lowlevel {
+            data_ptr = mem_alloc(initial_cap * 8) as I64
+            // Zero-fill
+            var j: I64 = 0
+            loop (j < initial_cap * 8) {
+                ptr_write[U8]((data_ptr + j) as *U8, 0 as U8)
+                j = j + 1
+            }
+        }
+        return Interner { data: data_ptr, count: 0, cap: initial_cap }
+    }
+
+    /// Interns a string. Returns existing handle if already interned.
+    pub func intern(this, s: Str) -> InternedStr {
+        // Linear scan for existing
+        var i: I64 = 0
+        loop (i < this.count) {
+            var existing: Str = ""
+            lowlevel {
+                existing = ptr_read[Str]((this.data + i * 8) as *Unit)
+            }
+            if strcmp(existing, s) == 0 {
+                return InternedStr { index: i }
+            }
+            i = i + 1
+        }
+
+        // Not found — insert
+        if this.count >= this.cap {
+            // Grow 2x
+            let new_cap = this.cap * 2
+            var new_data: I64 = 0
+            lowlevel {
+                new_data = mem_alloc(new_cap * 8) as I64
+                copy_nonoverlapping(this.data as *Unit, new_data as *Unit, this.count * 8)
+                mem_free(this.data as *Unit)
+            }
+            this.data = new_data
+            this.cap = new_cap
+        }
+
+        let idx = this.count
+        lowlevel {
+            ptr_write[Str]((this.data + idx * 8) as *Unit, s)
+        }
+        this.count = this.count + 1
+        return InternedStr { index: idx }
+    }
+
+    /// Retrieves the string for the given handle.
+    pub func get(this, handle: InternedStr) -> Str {
+        let idx = handle.index
+        if idx < 0 or idx >= this.count {
+            return ""
+        }
+        var result: Str = ""
+        lowlevel {
+            result = ptr_read[Str]((this.data + idx * 8) as *Unit)
+        }
+        return result
+    }
+
+    /// Returns the number of unique strings interned.
+    pub func len(this) -> I64 {
+        return this.count
+    }
+
+    /// Returns `true` if the interner contains no strings.
+    pub func is_empty(this) -> Bool {
+        return this.count == 0
+    }
+
+    /// Returns `true` if the given string has already been interned.
+    pub func contains(this, s: Str) -> Bool {
+        var i: I64 = 0
+        loop (i < this.count) {
+            var existing: Str = ""
+            lowlevel {
+                existing = ptr_read[Str]((this.data + i * 8) as *Unit)
+            }
+            if strcmp(existing, s) == 0 {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+}
