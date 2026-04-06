@@ -1,198 +1,179 @@
 # TML Project — Task Index
 
-**Last updated**: 2026-04-03
-**Total tasks**: 55 active (5 archived)
+**Last updated**: 2026-04-05
+**Active tasks**: 31 | **Archived**: 5+
+
+---
 
 ## Phase 0 — Codegen Architecture Fixes
 
-Structural fixes to MIR codegen based on Rust/Go/Clang comparison. See `docs/analyses/codegen/`.
+Structural fixes to MIR codegen based on Rust/Go/Clang comparison.
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 0a-cg | [Eliminate i32 Fallbacks](phase0a_codegen-eliminate-i32-fallbacks/) | **NEW** | **CRITICAL** | 0% (0/18) |
-| 0b-cg | [ABI Module](phase0b_codegen-abi-module/) | **NEW** | HIGH | 0% (0/20) |
-| 0c-cg | [CGValue Wrapper](phase0c_codegen-cgvalue-wrapper/) | **NEW** | HIGH | 0% (0/20) |
-| 0d-cg | [Table-Driven Intrinsics](phase0d_codegen-table-driven-intrinsics/) | **NEW** | MEDIUM | 0% (0/18) |
-| 0e-cg | [Unit Type Cleanup](phase0e_codegen-unit-type-cleanup/) | **NEW** | MEDIUM | 0% (0/12) |
-| 0f-cg | [Typed Emit Helpers](phase0f_codegen-typed-emit-helpers/) | **NEW** | MEDIUM | 0% (0/15) |
+| 0a | [Eliminate i32 Fallbacks](phase0a_codegen-eliminate-i32-fallbacks/) | Planned | CRITICAL | 0/18 |
+| 0b | [ABI Module](phase0b_codegen-abi-module/) | Planned | HIGH | 0/20 |
+| 0c | [CGValue Wrapper](phase0c_codegen-cgvalue-wrapper/) | Planned | HIGH | 0/20 |
+| 0d | [Table-Driven Intrinsics](phase0d_codegen-table-driven-intrinsics/) | Planned | MEDIUM | 0/18 |
+| 0e | [Unit Type Cleanup](phase0e_codegen-unit-type-cleanup/) | Planned | MEDIUM | 0/12 |
+| 0f | [Typed Emit Helpers](phase0f_codegen-typed-emit-helpers/) | Planned | MEDIUM | 0/15 |
 
 ## Phase 0 — JIT Execution Engine
 
-LLVM ORC JIT integration for scripting and fast iteration. See `docs/analyses/jit-execution-analysis.md`.
+LLVM ORC JIT integration for scripting and fast iteration.
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 0-a | [JIT CMake Integration](phase0a_jit-cmake-integration/) | **NEW** | **CRITICAL** | 0% (0/7) |
-| 0-b | [JIT Engine Core](phase0b_jit-engine-core/) | **NEW** | **CRITICAL** | 0% (0/12) |
-| 0-c | [JIT Runtime Symbols](phase0c_jit-runtime-symbols/) | **NEW** | HIGH | 0% (0/10) |
-| 0-d | [JIT CLI Integration](phase0d_jit-cli-integration/) | **NEW** | HIGH | 0% (0/14) |
+| 0a-jit | [JIT CMake Integration](phase0a_jit-cmake-integration/) | Planned | CRITICAL | 0/7 |
+| 0b-jit | [JIT Engine Core](phase0b_jit-engine-core/) | Planned | CRITICAL | 0/12 |
+| 0c-jit | [JIT Runtime Symbols](phase0c_jit-runtime-symbols/) | Planned | HIGH | 0/10 |
+| 0d-jit | [JIT CLI Integration](phase0d_jit-cli-integration/) | Planned | HIGH | 0/14 |
 
 ## Phase 1 — Foundation & Language
 
-Core language features, compiler infrastructure, and foundational gaps.
-
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 1-01 | [Language Completeness Roadmap](phase1-01-language-completeness/) | In Progress | HIGH | 79% (128/162) |
-| 1-02 | [Function Contracts](phase1-02-function-contracts/) | Planning | MEDIUM | 0% |
-| 1-03 | ~~Core FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% (20/20) |
-| 1-04 | ~~Std FFI Types~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 1-05 | ~~Panic Recovery~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 1-06 | ~~Compiler Hints~~ | **ARCHIVED** 2026-03-25 | MEDIUM | 100% |
-| 1-07 | ~~Compiler C++ Unit Tests~~ | **ARCHIVED** 2026-03-25 (82 files exist) | HIGHEST | 100% |
-| 1-08 | [Reflection System](phase1-08-reflection/) | In Progress — Phase 5 BLOCKED | MEDIUM | 53% (37/70) |
+| 1-01 | [Language Completeness](phase1-01-language-completeness/) | In Progress | HIGH | 128/162 |
+| 1-02 | [Function Contracts](phase1-02-function-contracts/) | Planned | MEDIUM | 0% |
+| 1-08 | [Reflection System](phase1-08-reflection/) | Blocked (Phase 5) | MEDIUM | 37/70 |
 
 ## Phase 2 — Stdlib Completeness
 
-Collections, sync primitives, math types, and library gaps.
-
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 2-01 | ~~BinaryHeap / PriorityQueue~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 2-02 | ~~Semaphore~~ | **ARCHIVED** 2026-03-25 | HIGH | 100% |
-| 2-03 | [WaitGroup](phase2-03-wait-group/) | **NEW** | MEDIUM | 0% |
-| 2-04 | [Seek Behavior](phase2-04-seek-behavior/) | **NEW** | MEDIUM | 0% |
-| 2-05 | [BigInt](phase2-05-bigint/) | **NEW** | MEDIUM | 0% |
-| 2-06 | [Complex Numbers](phase2-06-complex-numbers/) | **NEW** | LOW | 0% |
-| 2-07 | [Trie](phase2-07-trie/) | **NEW** | MEDIUM | 0% |
-| 2-08 | [IntervalTree](phase2-08-interval-tree/) | **NEW** | LOW | 0% |
-| 2-09 | [Core Net Types](phase2-09-core-net-types/) | **NEW** | LOW | 0% |
-| 2-10 | [Migrate Lowlevel to Typed](phase2-10-migrate-lowlevel/) | **COMPLETE** | MEDIUM | 100% |
+| 2-03 | [WaitGroup](phase2-03-wait-group/) | Planned | MEDIUM | 0% |
+| 2-04 | [Seek Behavior](phase2-04-seek-behavior/) | Planned | MEDIUM | 0% |
+| 2-05 | [BigInt](phase2-05-bigint/) | Planned | MEDIUM | 0% |
+| 2-06 | [Complex Numbers](phase2-06-complex-numbers/) | Planned | LOW | 0% |
+| 2-07 | [Trie](phase2-07-trie/) | Planned | MEDIUM | 0% |
+| 2-08 | [IntervalTree](phase2-08-interval-tree/) | Planned | LOW | 0% |
+| 2-09 | [Core Net Types](phase2-09-core-net-types/) | Planned | LOW | 0% |
 
 ## Phase 3 — Networking & HTTP
 
-HTTP server performance, benchmarks, and networking improvements.
-
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 3-01 | [HTTP Performance Optimization](phase3-01-http-performance/) | **BLOCKED** — 183K→8K regression | CRITICAL | 35% (8/23) |
-| 3-02 | [HTTP Production Benchmark](phase3-02-http-benchmark/) | Proposed | HIGH | 0% |
+| 3-01 | [HTTP Performance](phase3-01-http-performance/) | **BLOCKED** — 183K→8K regression | CRITICAL | 8/23 |
+| 3-02 | [HTTP Benchmark](phase3-02-http-benchmark/) | Planned | HIGH | 0% |
 
 ## Phase 4 — Tooling & Developer Experience
 
-LSP, debugger, package manager, test infrastructure, documentation.
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 4-00 | [MCP Docs Coverage](mcp-docs-complete-coverage/) | Planned | HIGHEST | 0% |
+| 4-01 | [Developer Tooling (LSP)](phase4-01-developer-tooling/) | In Progress | MEDIUM | ~65% |
+| 4-02 | [Inspector Diagnostics](phase4-02-inspector-diagnostics/) | Planned | MEDIUM | 0% |
+| 4-03 | [Package Manager](phase4-03-package-manager/) | Blocked | MEDIUM | 15% |
+| 4-04 | [Test Migration](phase4-04-test-migration/) | In Progress | MEDIUM | 12/17 |
+| 4-05 | [Fix Legacy Codegen ABI](fix-legacy-codegen-abi-bugs/) | Planned | HIGH | 0/14 |
+| 4-06 | [Split Large Files](refactor-split-large-files/) | Planned | MEDIUM | 0/23 |
+
+## Phase 5 — Performance & Optimization
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 4-00 | [MCP Docs Complete Coverage](mcp-docs-complete-coverage/) | **NEW** | **HIGHEST** | 0% |
-| 4-01 | [Developer Tooling (LSP + VSCode)](phase4-01-developer-tooling/) | In Progress — LSP 0% (no C++ impl) | MEDIUM | ~65% real |
-| 4-02 | [Inspector Diagnostics](phase4-02-inspector-diagnostics/) | Proposed | MEDIUM | 0% |
-| 4-03 | [Package Manager](phase4-03-package-manager/) | **BLOCKED** — no registry service | MEDIUM | 15% |
-| 4-04 | [Test Migration (Zig-inspired)](phase4-04-test-migration/) | In Progress — 2 blockers | MEDIUM | 71% (12/17) |
-| 4-05 | [Fix Legacy Codegen ABI Bugs](fix-legacy-codegen-abi-bugs/) | **NEW** — blocks audit_docs.tml | **HIGH** | 0% (0/14) |
-| 4-06 | [Split Large Files (1500+ lines)](refactor-split-large-files/) | **NEW** | MEDIUM | 0% (0/23) |
+| 5-01 | [SIMD Optimization](phase5-01-simd-optimization/) | Planned | HIGH | 0% |
+| 5-02 | [SIMD Generic ISA](phase5-02-simd-generic-isa/) | Planned | HIGH | 0% |
+| 5-03 | [Auto-Parallel](phase5-03-auto-parallel/) | Planned | HIGH | 0% |
+
+## Phase 8 — Database Drivers
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 8f | [PostgreSQL Driver](phase8f_db-postgres/) | In Progress | P1 | 12/14 |
+| 8g | [MongoDB Driver](phase8g_db-mongodb/) | Planned | P2 | 0/16 |
+| 8h | [Redis + MySQL Drivers](phase8h_db-redis-mysql/) | Planned | P2 | 0/18 |
+| 8x | [DB Perf Optimization](phase8x_db-perf-optimization/) | In Progress | P1 | 5/22 |
+| 8y | [DB TypeORM Parity](phase8y_db-typeorm-parity/) | **Complete** | P1 | 40/40 |
+
+## Phase 9 — AI / Machine Learning
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 9d | [CUDA FFI Bindings](phase9d_ia-cuda/) | Planned | HIGH | 0/22 |
+| 9e | [Model Loading](phase9e_ia-model-loading/) | Planned | HIGH | 0/13 |
+| 9f | [Inference Engine](phase9f_ia-inference/) | Planned | HIGH | 0/15 |
+| 9g | [LoRA/QLoRA Fine-Tuning](phase9g_ia-lora-finetune/) | Planned | MEDIUM | 0/8 |
+| 9h | [Multi-GPU Distributed](phase9h_ia-distributed/) | Planned | LOW | 0/8 |
+| 9i | [Benchmarks + HTTP Serving](phase9i_ia-bench-serve/) | Planned | LOW | 0/12 |
+
+## Phase 10 — HTTP & Build System
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 10 | [Build.tml Package System](phase10_build-tml-package-system/) | In Progress | HIGH | 31/37 |
+| 10-05 | [HTTP Performance](phase10-05-http-performance/) | **BLOCKED** | P0 | 7/23 |
+| 10-06 | [HTTP Benchmark](phase10-06-http-benchmark/) | In Progress | P1 | 0/26 |
+| 10-07 | [DB + HTTP Integration](phase10-07-db-http-integration/) | In Progress | P1 | 1/10 |
+
+## Phase 11 — Toolchain & Infrastructure
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 11-01 | [Package Manager](phase11-01-package-manager/) | Planned | P1 | — |
+| 11-02 | [Package Manager Alt](phase11-02-package-manager-alt/) | Planned | P1 | 0/37 |
+| 11-03 | [Auto-Parallel](phase11-03-auto-parallel/) | Planned | P2 | 0/41 |
+| 11-04 | [Cross-Compilation](phase11-04-cross-compilation/) | Planned | P2 | 0/118 |
+| 11-05 | [Self-Hosting (legacy)](phase11-05-self-hosting-compiler/) | Superseded by Phase 12/13 | P2 | 7/234 |
+| 11-06 | [Cranelift Backend](phase11-06-self-hosting-cranelift/) | Planned | P2 | 0/10 |
+
+## Phase 12 — Self-Hosting Foundation (ERA 1, Phase 0)
+
+Pre-work infrastructure before any compiler code can be ported to TML. See [independence plan](../../docs/analyses/independence-plan/).
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 12a | [MIR Consolidation](phase12a_mir-consolidation/) | Planned | P0 | 0/22 |
+| 12b | [String Interning](phase12b_string-interning/) | Planned | P1 | 0/14 |
+| 12c | [TypeChecker Invariants](phase12c_typechecker-invariants/) | Planned | P0 | 0/24 |
+| 12d | [IR-Diff Tool](phase12d_ir-diff-tool/) | Planned | P0 | 0/16 |
+| 12e | [AST Serializers](phase12e_ast-serializers/) | Planned | P0 | 0/22 |
+| 12f | [Hybrid Pipeline](phase12f_hybrid-pipeline/) | Planned | P0 | 0/18 |
+
+**Order**: 12a,12b,12c,12d parallel → 12e (after 12a) → 12f (after 12d+12e)
+
+## Phase 13 — TML Frontend (ERA 1, Phase 1)
+
+Port lexer and parser from C++ to TML — first compiler subsystems in TML.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 13a | [Token & AST Types](phase13a_tml-token-ast-types/) | Planned | P0 | 0/24 |
+| 13b | [TML Lexer](phase13b_tml-lexer/) | Planned | P0 | 0/24 |
+| 13c | [TML Parser](phase13c_tml-parser/) | Planned | P0 | 0/25 |
+| 13d | [Frontend Integration](phase13d_frontend-integration/) | Planned | P0 | 0/18 |
+
+**Order**: 13a → 13b → 13c → 13d (sequential)
 
 ## Research
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| R-01 | [LLM IR Debugging Research](llm-ir-debugging-research/) | Data Collection | MEDIUM | 70% (phases 1-7 done) |
-
-## Phase 5 — Performance & Optimization
-
-SIMD, auto-parallelization, and compiler optimizations.
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 5-01 | [SIMD Optimization](phase5-01-simd-optimization/) | Planning | HIGH | 0% |
-| 5-02 | [SIMD Generic ISA](phase5-02-simd-generic-isa/) | Planning | HIGH | 0% |
-| 5-03 | [Auto-Parallel](phase5-03-auto-parallel/) | Proposed | HIGH | 0% |
-
-## Phase 6 — Advanced Features & Self-Hosting
-
-Cross-compilation and compiler self-hosting.
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 6-01 | [Cross-Compilation](phase6-01-cross-compilation/) | Proposed | HIGH | 0% |
-| 6-02 | [Self-Hosting Compiler](phase6-02-self-hosting-compiler/) | Proposed | HIGH | 0% |
-| 6-03 | [Self-Hosting Cranelift](phase6-03-self-hosting-cranelift/) | Proposed | LOW | 0% |
-
-## Phase 8 — Database Library
-
-Native database abstraction with ORM, migrations, query builder, and benchmarks.
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 8-01 | [DB Foundation (Core + SQLite Adapter)](phase8-01-db-foundation/) | Planning | **CRITICAL** | 0% (0/20) |
-| 8-02 | [DB Query Builder + Connection Pool](phase8-02-db-query-pool/) | Planning | HIGH | 0% (0/22) |
-| 8-03 | [DB Schema + Migration Engine](phase8-03-db-schema-migration/) | Planning | HIGH | 0% (0/18) |
-| 8-04 | [DB ORM Layer](phase8-04-db-orm/) | Planning | MEDIUM | 0% (0/15) |
-| 8-05 | [DB Benchmark Infrastructure](phase8-05-db-benchmarks/) | Planning | MEDIUM | 0% (0/14) |
-| 8-06 | [Conditional Compilation + Feature Flags](phase8-06-db-conditional-compilation/) | Planning | MEDIUM | 0% (0/12) |
-| 8-07 | [PostgreSQL Driver (External Package)](phase8-07-db-postgres/) | Planning | MEDIUM | 0% (0/14) |
-| 8-08 | [MongoDB Driver (External Package)](phase8-08-db-mongodb/) | Planning | LOW | 0% (0/16) |
-| 8-09 | [Redis + MySQL Drivers](phase8-09-db-redis-mysql/) | Planning | LOW | 0% (0/18) |
-| 8-10 | [HTTP + DB Integration](phase8-10-db-http-integration/) | Planning | LOW | 0% (0/10) |
-
-## Phase 9 — AI/ML Library
-
-Separate `ia` library (`lib/ia/`) with tensors, autograd, CUDA, inference, and training.
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 9-01 | [IA Tensor Core (CPU)](phase9-01-ia-tensor-core/) | Planning | **CRITICAL** | 0% (0/25) |
-| 9-02 | [IA Autograd Engine](phase9-02-ia-autograd/) | Planning | HIGH | 0% (0/15) |
-| 9-03 | [IA Neural Network Layers](phase9-03-ia-nn-layers/) | Planning | HIGH | 0% (0/20) |
-| 9-04 | [IA Training Loop + Optimizers](phase9-04-ia-training/) | Planning | HIGH | 0% (0/15) |
-| 9-05 | [IA CUDA Backend](phase9-05-ia-cuda/) | Planning | HIGH | 0% (0/20) |
-| 9-06 | [IA Model Loading (safetensors + GGUF)](phase9-06-ia-model-loading/) | Planning | MEDIUM | 0% (0/12) |
-| 9-07 | [IA LLM Inference Engine](phase9-07-ia-inference/) | Planning | MEDIUM | 0% (0/15) |
-| 9-08 | [IA LoRA/QLoRA Fine-Tuning](phase9-08-ia-lora-finetune/) | Planning | MEDIUM | 0% (0/8) |
-| 9-09 | [IA Multi-GPU Distributed](phase9-09-ia-distributed/) | Planning | LOW | 0% (0/8) |
-| 9-10 | [IA Benchmarks + HTTP Serving](phase9-10-ia-bench-serve/) | Planning | LOW | 0% (0/12) |
+| R-01 | [LLM IR Debugging](llm-ir-debugging-research/) | Data Collection | MEDIUM | 70% |
 
 ---
 
-## Execution Order (Recommended)
+## Archived Tasks
 
-### Now (foundation blockers)
-1. **1-03** Core FFI Types — unlocks type-safe FFI across all libs
-2. **2-01** BinaryHeap — fundamental missing collection
-3. **2-02** Semaphore — essential sync primitive
-
-### Next (stdlib completeness)
-4. **1-05** Panic Recovery — unlocks robust server error handling
-5. **2-04** Seek Behavior — completes the Read/Write/Seek trio
-6. **2-03** WaitGroup — ergonomic concurrency
-7. **2-05** BigInt — crypto/finance foundation
-
-### Then (specialized collections + math)
-8. **2-07** Trie — routing/autocomplete/prefix search
-9. **1-04** Std FFI Types — CString, OsStr, OsString
-10. **2-06** Complex Numbers — math/science
-11. **2-08** IntervalTree — range queries
-12. **1-06** Compiler Hints — optimization intrinsics
-13. **2-09** Core Net Types — architectural cleanup
-
-### Ongoing (parallel tracks)
-- **3-01** HTTP Performance — continuous optimization
-- **4-01** Developer Tooling — finishing LSP
-- **1-01** Language Completeness — compiler bug fixes
-- **1-08** Reflection — completing Phase 3-6
+| Task | Archived | Result |
+|------|----------|--------|
+| Core FFI Types (1-03) | 2026-03-25 | 100% — 20/20 items |
+| Std FFI Types (1-04) | 2026-03-25 | 100% |
+| Panic Recovery (1-05) | 2026-03-25 | 100% |
+| Compiler Hints (1-06) | 2026-03-25 | 100% |
+| Compiler C++ Unit Tests (1-07) | 2026-03-25 | 100% — 82 test files |
+| BinaryHeap (2-01) | 2026-03-25 | 100% |
+| Semaphore (2-02) | 2026-03-25 | 100% |
+| Migrate Lowlevel (2-10) | 2026-03-25 | 100% |
 
 ---
 
-## Legacy Names (for reference)
+## Roadmap Summary
 
-Old directories that were renamed (some may still exist due to file locking):
-
-| Old Name | New Name |
-|----------|----------|
-| language-completeness-roadmap | phase1-01-language-completeness |
-| function-contracts | phase1-02-function-contracts |
-| add-compiler-cpp-unit-tests | phase1-07-compiler-unit-tests |
-| implement-reflection | phase1-08-reflection |
-| migrate-lowlevel-to-typed | phase2-10-migrate-lowlevel |
-| http-performance-optimization | phase3-01-http-performance |
-| http-production-benchmark | phase3-02-http-benchmark |
-| developer-tooling | phase4-01-developer-tooling |
-| inspector-diagnostics | phase4-02-inspector-diagnostics |
-| package-manager | phase4-03-package-manager |
-| zig-inspired-test-migration | phase4-04-test-migration |
-| simd-optimization | phase5-01-simd-optimization |
-| implement-simd-generic-isa | phase5-02-simd-generic-isa |
-| auto-parallel | phase5-03-auto-parallel |
-| cross-compilation | phase6-01-cross-compilation |
-| self-hosting-compiler | phase6-02-self-hosting-compiler |
-| self-hosting-cranelift | phase6-03-self-hosting-cranelift |
+```
+Active now:   Phase 1 (language), Phase 4 (tooling), Phase 8 (DB), Phase 10 (HTTP/build)
+Next:         Phase 12 (self-hosting foundation) — can start immediately
+Then:         Phase 13 (TML frontend) — after Phase 12 complete
+Future:       Phase 14+ (type checker, IR pipeline, codegen, bootstrap)
+Long-term:    Custom backend, custom linker, C/C++ frontend (see independence plan)
+```
