@@ -72,7 +72,7 @@ auto example(std::string param) -> int;
 ### Option A: Run the TML audit script (if it compiles)
 
 ```
-mcp__tml__run with file="scripts/audit_docs.tml"
+mcp__tml__run with file="scripts/infra/audit_docs.tml"
 ```
 
 ### Option B: Manual scan with Grep (reliable fallback)

@@ -6,7 +6,7 @@
 
 get_filename_component(_toolchain_dir "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
 get_filename_component(_root_dir "${_toolchain_dir}" DIRECTORY)
-set(_scripts_dir "${_root_dir}/scripts")
+set(_scripts_dir "${_root_dir}/scripts/toolchain")
 
 set(CMAKE_C_COMPILER "${_scripts_dir}/zig-cc.bat" CACHE FILEPATH "" FORCE)
 set(CMAKE_CXX_COMPILER "${_scripts_dir}/zig-cxx.bat" CACHE FILEPATH "" FORCE)

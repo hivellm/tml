@@ -146,9 +146,9 @@ std::string find_clang() {
 #ifdef _WIN32
     // 1. Check for zig cc wrapper scripts (fastest builds, Clang 20)
     std::vector<std::string> zig_cc_paths = {
-        "scripts/zig-cc.bat",
-        "../scripts/zig-cc.bat",
-        "F:/Node/hivellm/tml/scripts/zig-cc.bat",
+        "scripts/toolchain/zig-cc.bat",
+        "../scripts/toolchain/zig-cc.bat",
+        "F:/Node/hivellm/tml/scripts/toolchain/zig-cc.bat",
     };
     for (const auto& p : zig_cc_paths) {
         if (fs::exists(p)) {
