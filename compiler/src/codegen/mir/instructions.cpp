@@ -302,7 +302,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 if (result_type) {
                     enum_type = mir_type_to_llvm(result_type);
                 } else {
-                    enum_type = "%struct." + i.enum_name;
+                    // RC7 workaround: replace unresolved typevar suffixes
+                    enum_type = "%struct." + replace_typevar_suffixes(i.enum_name);
                 }
                 // Insert tag
                 std::string with_tag = "%tmp" + std::to_string(temp_counter_++);

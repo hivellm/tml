@@ -84,6 +84,10 @@ public:
     auto generate_cgu(const mir::Module& module, const std::vector<size_t>& function_indices)
         -> std::string;
 
+    /// RC7 workaround: replaces unresolved type variable suffixes (__T, __U, etc.)
+    /// in mangled names with __I64 for layout consistency.
+    static auto replace_typevar_suffixes(const std::string& name) -> std::string;
+
 private:
     MirCodegenOptions options_;
     std::stringstream output_;

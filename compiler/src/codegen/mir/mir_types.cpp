@@ -16,7 +16,7 @@ namespace tml::codegen {
 // the mangled name ends with __T, __U, __K, __V, __E, __B (single uppercase
 // letter). Replace those suffixes with __I64 for layout consistency.
 // Example: List__LinkedListNode__T -> List__LinkedListNode__I64
-static std::string replace_typevar_suffixes(const std::string& name) {
+auto MirCodegen::replace_typevar_suffixes(const std::string& name) -> std::string {
     std::string result = name;
     // Find all "__X" patterns where X is single uppercase letter
     size_t pos = 0;
@@ -89,7 +89,7 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                 }
                 // RC7 workaround: replace unresolved typevar suffixes (__T, __U, __K)
                 // with __I64 for layout consistency
-                mangled = tml::codegen::replace_typevar_suffixes(mangled);
+                mangled = MirCodegen::replace_typevar_suffixes(mangled);
                 return "%struct." + mangled;
 
             } else if constexpr (std::is_same_v<T, mir::MirEnumType>) {
@@ -105,7 +105,7 @@ auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
                     }
                 }
                 // RC7 workaround: replace unresolved typevar suffixes
-                mangled = tml::codegen::replace_typevar_suffixes(mangled);
+                mangled = MirCodegen::replace_typevar_suffixes(mangled);
                 // Use %struct. prefix for consistency with legacy codegen
                 return "%struct." + mangled;
 
