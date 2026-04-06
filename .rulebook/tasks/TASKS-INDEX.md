@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
-**Last updated**: 2026-04-05
-**Active tasks**: 60 | **Archived**: 5+
+**Last updated**: 2026-04-06
+**Active tasks**: 58 | **Archived**: 7+
 
 ---
 
@@ -76,50 +76,13 @@ LLVM ORC JIT integration for scripting and fast iteration.
 | 5-02 | [SIMD Generic ISA](phase5-02-simd-generic-isa/) | Planned | HIGH | 0% |
 | 5-03 | [Auto-Parallel](phase5-03-auto-parallel/) | Planned | HIGH | 0% |
 
-## Phase 8 — Database Drivers
+---
 
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 8f | [PostgreSQL Driver](phase8f_db-postgres/) | In Progress | P1 | 12/14 |
-| 8g | [MongoDB Driver](phase8g_db-mongodb/) | Planned | P2 | 0/16 |
-| 8h | [Redis + MySQL Drivers](phase8h_db-redis-mysql/) | Planned | P2 | 0/18 |
-| 8x | [DB Perf Optimization](phase8x_db-perf-optimization/) | In Progress | P1 | 5/22 |
-| 8y | [DB TypeORM Parity](phase8y_db-typeorm-parity/) | **Complete** | P1 | 40/40 |
+## ERA 1: Self-Hosted Compiler (Phases 12–17)
 
-## Phase 9 — AI / Machine Learning
+### Phase 12 — Foundation (ERA 1, Phase 0)
 
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 9d | [CUDA FFI Bindings](phase9d_ia-cuda/) | Planned | HIGH | 0/22 |
-| 9e | [Model Loading](phase9e_ia-model-loading/) | Planned | HIGH | 0/13 |
-| 9f | [Inference Engine](phase9f_ia-inference/) | Planned | HIGH | 0/15 |
-| 9g | [LoRA/QLoRA Fine-Tuning](phase9g_ia-lora-finetune/) | Planned | MEDIUM | 0/8 |
-| 9h | [Multi-GPU Distributed](phase9h_ia-distributed/) | Planned | LOW | 0/8 |
-| 9i | [Benchmarks + HTTP Serving](phase9i_ia-bench-serve/) | Planned | LOW | 0/12 |
-
-## Phase 10 — HTTP & Build System
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 10 | [Build.tml Package System](phase10_build-tml-package-system/) | In Progress | HIGH | 31/37 |
-| 10-05 | [HTTP Performance](phase10-05-http-performance/) | **BLOCKED** | P0 | 7/23 |
-| 10-06 | [HTTP Benchmark](phase10-06-http-benchmark/) | In Progress | P1 | 0/26 |
-| 10-07 | [DB + HTTP Integration](phase10-07-db-http-integration/) | In Progress | P1 | 1/10 |
-
-## Phase 11 — Toolchain & Infrastructure
-
-| ID | Task | Status | Priority | Progress |
-|----|------|--------|----------|----------|
-| 11-01 | [Package Manager](phase11-01-package-manager/) | Planned | P1 | — |
-| 11-02 | [Package Manager Alt](phase11-02-package-manager-alt/) | Planned | P1 | 0/37 |
-| 11-03 | [Auto-Parallel](phase11-03-auto-parallel/) | Planned | P2 | 0/41 |
-| 11-04 | [Cross-Compilation](phase11-04-cross-compilation/) | Planned | P2 | 0/118 |
-| 11-05 | [Self-Hosting (legacy)](phase11-05-self-hosting-compiler/) | Superseded by Phase 12/13 | P2 | 7/234 |
-| 11-06 | [Cranelift Backend](phase11-06-self-hosting-cranelift/) | Planned | P2 | 0/10 |
-
-## Phase 12 — Self-Hosting Foundation (ERA 1, Phase 0)
-
-Pre-work infrastructure before any compiler code can be ported to TML. See [independence plan](../../docs/analyses/independence-plan/).
+Pre-work infrastructure before any compiler code can be ported to TML.
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -132,9 +95,7 @@ Pre-work infrastructure before any compiler code can be ported to TML. See [inde
 
 **Order**: 12a,12b,12c,12d parallel → 12e (after 12a) → 12f (after 12d+12e)
 
-## Phase 13 — TML Frontend (ERA 1, Phase 1)
-
-Port lexer and parser from C++ to TML — first compiler subsystems in TML.
+### Phase 13 — TML Frontend (ERA 1, Phase 1)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -143,11 +104,9 @@ Port lexer and parser from C++ to TML — first compiler subsystems in TML.
 | 13c | [TML Parser](phase13c_tml-parser/) | Planned | P0 | 0/25 |
 | 13d | [Frontend Integration](phase13d_frontend-integration/) | Planned | P0 | 0/18 |
 
-**Order**: 13a → 13b → 13c → 13d (sequential)
+**Order**: 13a → 13b → 13c → 13d
 
-## Phase 14 — Type Checker in TML (ERA 1, Phase 2) ⚠️ CRITICAL PATH
-
-Port the type checker (~21K LOC C++) to TML. Highest-risk, longest phase (8 months). See [invariant doc](phase12c_typechecker-invariants/).
+### Phase 14 — Type Checker (ERA 1, Phase 2) ⚠️ CRITICAL PATH
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -156,24 +115,20 @@ Port the type checker (~21K LOC C++) to TML. Highest-risk, longest phase (8 mont
 | 14c | [Type Inference](phase14c_typechecker-inference/) | Planned | P0 | 0/26 |
 | 14d | [Behavior Dispatch](phase14d_typechecker-behavior-dispatch/) | Planned | P0 | 0/22 |
 
-**Order**: 14a → 14b → 14c → 14d (sequential, 14a/14b can partially overlap)
+**Order**: 14a → 14b → 14c → 14d
 
-## Phase 15 — IR Pipeline in TML (ERA 1, Phase 3)
-
-Port HIR, THIR, MIR builder, and 52 MIR optimization passes from C++ to TML.
+### Phase 15 — IR Pipeline (ERA 1, Phase 3)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
 | 15a | [HIR Lowering](phase15a_hir-lowering/) | Planned | P0 | 0/24 |
 | 15b | [THIR Lowering](phase15b_thir-lowering/) | Planned | P0 | 0/16 |
 | 15c | [MIR Builder](phase15c_mir-builder/) | Planned | P0 | 0/24 |
-| 15d | [MIR Passes (52 passes)](phase15d_mir-passes/) | Planned | P0 | 0/25 |
+| 15d | [MIR Passes (52)](phase15d_mir-passes/) | Planned | P0 | 0/25 |
 
-**Order**: 15a → 15b → 15c → 15d (sequential)
+**Order**: 15a → 15b → 15c → 15d
 
-## Phase 16 — Codegen in TML (ERA 1, Phase 4)
-
-Port MIR→LLVM IR text generation (~76K LOC C++) to TML. Largest subsystem — output is text, easy to verify.
+### Phase 16 — Codegen (ERA 1, Phase 4)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -182,11 +137,9 @@ Port MIR→LLVM IR text generation (~76K LOC C++) to TML. Largest subsystem — 
 | 16c | [Calls & ABI](phase16c_codegen-calls-abi/) | Planned | P0 | 0/25 |
 | 16d | [Legacy LLVM Codegen](phase16d_codegen-legacy-llvm/) | Planned | P0 | 0/25 |
 
-**Order**: 16a → 16b → 16c → 16d (sequential, 16a/16b can partially overlap)
+**Order**: 16a → 16b → 16c → 16d
 
-## Phase 17 — Bootstrap (ERA 1, Phase 5) 🎯 SELF-HOSTING
-
-Wire everything together, port tooling, execute three-stage bootstrap verification. **ERA 1 COMPLETE when phase17c passes.**
+### Phase 17 — Bootstrap (ERA 1, Phase 5) 🎯 SELF-HOSTING
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -194,11 +147,11 @@ Wire everything together, port tooling, execute three-stage bootstrap verificati
 | 17b | [CLI & Tooling](phase17b_cli-tooling/) | Planned | P0 | 0/24 |
 | 17c | [Bootstrap Verification](phase17c_bootstrap-verification/) | Planned | P0 | 0/16 |
 
-**Order**: 17a → 17b → 17c (sequential). 17c = **TML COMPILES ITSELF**
+**Order**: 17a → 17b → 17c. Completion = **TML COMPILES ITSELF**
 
-## Phase 18–21 — Custom Native Backend (ERA 2)
+---
 
-Replace LLVM with custom code generator. Binary drops from 140MB to ~15MB.
+## ERA 2: Custom Native Backend (Phases 18–21)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -206,28 +159,24 @@ Replace LLVM with custom code generator. Binary drops from 140MB to ~15MB.
 | 18b | [x86_64 Encoder](phase18b_x86-encoder/) | Planned | P1 | 0/22 |
 | 18c | [PE/COFF Object Emission](phase18c_pe-object-emission/) | Planned | P1 | 0/20 |
 | 19a | [Register Allocator](phase19a_register-allocator/) | Planned | P1 | 0/22 |
-| 20a | [Production x86_64 Backend](phase20a_production-backend-x86/) | Planned | P1 | 0/22 |
+| 20a | [Production x86_64](phase20a_production-backend-x86/) | Planned | P1 | 0/22 |
 | 20b | [AArch64 Backend](phase20b_aarch64-backend/) | Planned | P1 | 0/21 |
 | 21a | [Debug Info (PDB+DWARF)](phase21a_debug-info-pdb-dwarf/) | Planned | P1 | 0/24 |
 
 **Order**: 18a → 18b+18c → 19a → 20a+20b → 21a. Completion = **LLVM ELIMINATED**
 
-## Phase 22 — Custom Linker (ERA 3)
-
-Replace LLD with tml-link. Target: sub-10ms incremental linking.
+## ERA 3: Custom Linker (Phase 22)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
-| 22a | [PE/COFF Linker (Windows)](phase22a_pe-coff-linker/) | Planned | P2 | 0/22 |
-| 22b | [ELF Linker (Linux)](phase22b_elf-linker/) | Planned | P2 | 0/20 |
-| 22c | [Mach-O Linker (macOS)](phase22c_macho-linker/) | Planned | P2 | 0/18 |
+| 22a | [PE/COFF Linker](phase22a_pe-coff-linker/) | Planned | P2 | 0/22 |
+| 22b | [ELF Linker](phase22b_elf-linker/) | Planned | P2 | 0/20 |
+| 22c | [Mach-O Linker](phase22c_macho-linker/) | Planned | P2 | 0/18 |
 | 22d | [Incremental Linker](phase22d_incremental-linker/) | Planned | P2 | 0/18 |
 
 **Order**: 22a → 22b → 22c → 22d. Completion = **LLD ELIMINATED**
 
-## Phase 23 — C/C++ Frontend (ERA 4)
-
-TML compiles C and C++ code directly. Complete toolchain independence.
+## ERA 4: C/C++ Frontend (Phase 23)
 
 | ID | Task | Status | Priority | Progress |
 |----|------|--------|----------|----------|
@@ -236,6 +185,47 @@ TML compiles C and C++ code directly. Complete toolchain independence.
 | 23c | [C++ Subset Frontend](phase23c_cpp-subset-frontend/) | Planned | P2 | 0/22 |
 
 **Order**: 23a → 23b → 23c. Completion = **FULL TOOLCHAIN INDEPENDENCE**
+
+---
+
+## Phase 24 — Database Drivers
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 24a | [MongoDB Driver](phase24a_db-mongodb/) | Planned | P2 | 0/16 |
+| 24b | [Redis + MySQL Drivers](phase24b_db-redis-mysql/) | Planned | P2 | 0/18 |
+| 24c | [DB Perf Optimization](phase24c_db-perf-optimization/) | In Progress | P1 | 5/22 |
+| 24d | [DB TypeORM Parity](phase24d_db-typeorm-parity/) | **Complete** | P1 | 40/40 |
+
+## Phase 25 — AI / Machine Learning
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 25a | [CUDA FFI Bindings](phase25a_ia-cuda/) | Planned | HIGH | 0/22 |
+| 25b | [Model Loading](phase25b_ia-model-loading/) | Planned | HIGH | 0/13 |
+| 25c | [Inference Engine](phase25c_ia-inference/) | Planned | HIGH | 0/15 |
+| 25d | [LoRA/QLoRA Fine-Tuning](phase25d_ia-lora-finetune/) | Planned | MEDIUM | 0/8 |
+| 25e | [Multi-GPU Distributed](phase25e_ia-distributed/) | Planned | LOW | 0/8 |
+| 25f | [Benchmarks + HTTP Serving](phase25f_ia-bench-serve/) | Planned | LOW | 0/12 |
+
+## Phase 26 — HTTP & Integration
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 26a | [HTTP Performance](phase26a_http-performance/) | **BLOCKED** | P0 | 7/23 |
+| 26b | [HTTP Benchmark](phase26b_http-benchmark/) | In Progress | P1 | 0/26 |
+| 26c | [DB + HTTP Integration](phase26c_db-http-integration/) | In Progress | P1 | 1/10 |
+
+## Phase 27 — Toolchain & Infrastructure
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 27a | [Package Manager](phase27a_package-manager/) | Planned | P1 | — |
+| 27b | [Package Manager Alt](phase27b_package-manager-alt/) | Planned | P1 | 0/37 |
+| 27c | [Auto-Parallel](phase27c_auto-parallel/) | Planned | P2 | 0/41 |
+| 27d | [Cross-Compilation](phase27d_cross-compilation/) | Planned | P2 | 0/118 |
+| 27e | [Self-Hosting (legacy)](phase27e_self-hosting-legacy/) | Superseded by Phase 12-17 | P2 | 7/234 |
+| 27f | [Cranelift Backend](phase27f_cranelift-backend/) | Planned | P2 | 0/10 |
 
 ## Research
 
@@ -249,26 +239,28 @@ TML compiles C and C++ code directly. Complete toolchain independence.
 
 | Task | Archived | Result |
 |------|----------|--------|
-| Core FFI Types (1-03) | 2026-03-25 | 100% — 20/20 items |
+| Core FFI Types (1-03) | 2026-03-25 | 100% — 20/20 |
 | Std FFI Types (1-04) | 2026-03-25 | 100% |
 | Panic Recovery (1-05) | 2026-03-25 | 100% |
 | Compiler Hints (1-06) | 2026-03-25 | 100% |
-| Compiler C++ Unit Tests (1-07) | 2026-03-25 | 100% — 82 test files |
+| Compiler C++ Unit Tests (1-07) | 2026-03-25 | 100% — 82 files |
 | BinaryHeap (2-01) | 2026-03-25 | 100% |
 | Semaphore (2-02) | 2026-03-25 | 100% |
 | Migrate Lowlevel (2-10) | 2026-03-25 | 100% |
+| Build.tml Package System (10) | 2026-04-06 | 100% — 32/32 |
+| PostgreSQL Driver (8f) | 2026-04-06 | 100% — 8/8 tests |
 
 ---
 
 ## Roadmap Summary
 
 ```
-Active now:   Phase 1 (language), Phase 4 (tooling), Phase 8 (DB), Phase 10 (HTTP/build)
-Next:         Phase 12 (self-hosting foundation) — can start immediately
-Then:         Phase 13-17 (ERA 1: TML compiles itself) — 25 tasks, 544 items
-Then:         Phase 18-21 (ERA 2: custom backend, eliminate LLVM) — 7 tasks, 151 items
-Then:         Phase 22 (ERA 3: custom linker, eliminate LLD) — 4 tasks, 78 items
-Finally:      Phase 23 (ERA 4: C/C++ frontend, full independence) — 3 tasks, 66 items
+Active:       Phase 0-5 (compiler fixes, language, stdlib, HTTP, tooling, perf)
+ERA 1:        Phase 12-17 (self-hosting) — 25 tasks, 544 items
+ERA 2:        Phase 18-21 (custom backend) — 7 tasks, 151 items
+ERA 3:        Phase 22 (custom linker) — 4 tasks, 78 items
+ERA 4:        Phase 23 (C/C++ frontend) — 3 tasks, 66 items
+Features:     Phase 24-27 (DB, AI, HTTP, toolchain)
 
-TOTAL INDEPENDENCE PLAN: 39 tasks, 839 items across 4 eras
+TOTAL: 58 active tasks, ~1500 checklist items
 ```
