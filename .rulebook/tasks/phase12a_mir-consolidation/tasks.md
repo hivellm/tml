@@ -1,6 +1,6 @@
 # Tasks: MIR Path Consolidation — Retire Legacy HIR→MIR Builder
 
-**Status**: Complete (20/22). Phases 1-3 done. Phase 4 cleanup remaining (dead code + CLAUDE.md update).
+**Status**: Complete (22/22).
 **Depends on**: None
 **Blocks**: phase12e (AST serializers need stable MIR), phase12f (hybrid pipeline)
 **Duration**: 4–6 weeks → completed in 1 session
@@ -39,5 +39,5 @@
 
 - [x] 4.1 Build passes — zero compilation errors
 - [x] 4.2 core/str test suite passes with consolidated THIR-only path
-- [ ] 4.3 Remove dead code in `compiler/src/codegen/` exposed by legacy removal
-- [ ] 4.4 Update `CLAUDE.md` architecture map — remove dual-path MIR references
+- [x] 4.3 Remove dead include of hir_mir_builder.hpp in mcp_tools_docs.cpp (only dead ref found)
+- [x] 4.4 Update architecture-map.md + cross-subsystem-checklist.md — removed dual-path references

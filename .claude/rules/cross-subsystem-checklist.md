@@ -7,7 +7,7 @@ When implementing a change that touches 2+ subsystems, you MUST follow this chec
 1. **Identify all affected subsystems** — Use the Architecture Map to trace upstream and downstream
 2. **Read the boundary types** — What data format enters and exits each affected subsystem?
 3. **Write down the invariants** — What does each subsystem EXPECT from its input?
-4. **Check for dual paths** — MIR has TWO builders (HIR→MIR and THIR→MIR). Changes often need to go in BOTH.
+4. **Check THIR→MIR path** — MIR now has a SINGLE builder (THIR→MIR only, consolidated in phase12a).
 
 ## DURING Implementation
 
@@ -30,12 +30,10 @@ When implementing a change that touches 2+ subsystems, you MUST follow this chec
 **Cause**: One subsystem produces a value of type A, downstream expects type B
 **Fix**: Trace the type through each stage: TypeChecker → HIR → MIR → LLVM IR
 
-### Pattern 2: Dual-Path Divergence
-**Symptom**: Test passes with `--legacy` but fails without (or vice versa)
-**Cause**: Fix applied to HIR→MIR path but not THIR→MIR path (or vice versa)
-**Fix**: Apply equivalent change to BOTH paths:
-  - HIR→MIR: `compiler/src/mir/hir_mir_builder.cpp` + `builder/hir_expr.cpp`
-  - THIR→MIR: `compiler/src/mir/thir_mir_builder.cpp` + `thir_mir_builder_expr.cpp`
+### Pattern 2: THIR→MIR Path (Single Path)
+**Note**: As of phase12a, there is only ONE MIR builder path (THIR→MIR).
+The legacy HIR→MIR path has been removed. All MIR fixes go in:
+  - `compiler/src/mir/thir_mir_builder.cpp` + `thir_mir_builder_expr.cpp`
 
 ### Pattern 3: Monomorphization Cache Miss
 **Symptom**: Generic type works for some instantiations but not others

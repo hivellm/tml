@@ -68,18 +68,14 @@ THIR LOWERING ──────────────────────
   │
   ▼
 MIR BUILDING ──────────────────────────────────────────────────
-  TWO PATHS (both active):
+  SINGLE PATH (THIR→MIR, consolidated in phase12a):
 
-  Path A (HIR→MIR, legacy):
-    Files: compiler/src/mir/hir_mir_builder.cpp, builder/hir_expr.cpp,
-           builder/hir_expr_control.cpp, builder/builder_types.cpp
-    Types: HirModule + TypeEnv → mir::Module
-    Key:   HirMirBuilder::build()
-
-  Path B (THIR→MIR, new):
     Files: compiler/src/mir/thir_mir_builder.cpp, thir_mir_builder_expr.cpp
     Types: ThirModule → mir::Module
     Key:   ThirMirBuilder::build()
+
+  Note: Legacy HIR→MIR path (hir_mir_builder.cpp) removed from build.
+        All compilation paths now go through THIR lowering before MIR.
 
   Output: mir::Module (SSA form with basic blocks, instructions, terminators)
   │
@@ -199,8 +195,8 @@ scripts/build.bat → CMake → tml.exe (monolithic, ~100MB)
 | Changed | Check | Why |
 |---------|-------|-----|
 | Type checker (`types/`) | HIR builder, borrow checker | TypeEnv shape affects downstream |
-| HIR builder (`hir/`) | Both MIR builders (hir_mir + thir_mir) | HirExpr/HirModule consumed by both |
-| THIR lowerer (`thir/`) | thir_mir_builder only | ThirModule consumed by THIR→MIR path |
+| HIR builder (`hir/`) | THIR lowerer, then ThirMirBuilder | HirModule → ThirModule → MIR (single path) |
+| THIR lowerer (`thir/`) | ThirMirBuilder | ThirModule consumed by THIR→MIR (only path) |
 | MIR types (`mir/mir.hpp`) | mir_pass.cpp, mir_codegen.cpp, mir_printer.cpp | MIR instruction changes affect all consumers |
 | MIR codegen (`codegen/mir/`) | Run affected test suites | IR changes affect all compiled output |
 | Runtime C files | Rebuild compiler, run full test suite | ABI changes affect all TML code |
