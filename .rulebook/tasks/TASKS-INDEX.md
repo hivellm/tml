@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-04-05
-**Active tasks**: 35 | **Archived**: 5+
+**Active tasks**: 39 | **Archived**: 5+
 
 ---
 
@@ -157,6 +157,19 @@ Port the type checker (~21K LOC C++) to TML. Highest-risk, longest phase (8 mont
 | 14d | [Behavior Dispatch](phase14d_typechecker-behavior-dispatch/) | Planned | P0 | 0/22 |
 
 **Order**: 14a → 14b → 14c → 14d (sequential, 14a/14b can partially overlap)
+
+## Phase 15 — IR Pipeline in TML (ERA 1, Phase 3)
+
+Port HIR, THIR, MIR builder, and 52 MIR optimization passes from C++ to TML.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 15a | [HIR Lowering](phase15a_hir-lowering/) | Planned | P0 | 0/24 |
+| 15b | [THIR Lowering](phase15b_thir-lowering/) | Planned | P0 | 0/16 |
+| 15c | [MIR Builder](phase15c_mir-builder/) | Planned | P0 | 0/24 |
+| 15d | [MIR Passes (52 passes)](phase15d_mir-passes/) | Planned | P0 | 0/25 |
+
+**Order**: 15a → 15b → 15c → 15d (sequential)
 
 ## Research
 
