@@ -8,6 +8,8 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/mir_codegen.hpp"
 
+#include <cctype>
+
 namespace tml::codegen {
 
 auto MirCodegen::mir_type_to_llvm(const mir::MirTypePtr& type) -> std::string {
@@ -172,6 +174,18 @@ auto MirCodegen::mangle_mir_type_arg(const mir::MirTypePtr& type) -> std::string
             } else if constexpr (std::is_same_v<T, mir::MirPointerType>) {
                 return "ref_" + mangle_mir_type_arg(t.pointee);
             } else if constexpr (std::is_same_v<T, mir::MirStructType>) {
+                // Detect unresolved type variable: single uppercase letter name
+                // with no type_args is a generic param like T, U, K, V that
+                // didn't get substituted. Default to I64 for layout consistency.
+                if (t.type_args.empty() && t.name.size() <= 2 && !t.name.empty() &&
+                    std::isupper(t.name[0])) {
+                    // Check if it looks like a typevar (T, U, K, V, E, B, etc.)
+                    bool is_typevar =
+                        (t.name.size() == 1) || (t.name.size() == 2 && std::isdigit(t.name[1]));
+                    if (is_typevar) {
+                        return "I64"; // Default for unresolved typevars
+                    }
+                }
                 std::string result = t.name;
                 if (!t.type_args.empty()) {
                     result += "__";
@@ -183,6 +197,15 @@ auto MirCodegen::mangle_mir_type_arg(const mir::MirTypePtr& type) -> std::string
                 }
                 return result;
             } else if constexpr (std::is_same_v<T, mir::MirEnumType>) {
+                // Same typevar detection for enums
+                if (t.type_args.empty() && t.name.size() <= 2 && !t.name.empty() &&
+                    std::isupper(t.name[0])) {
+                    bool is_typevar =
+                        (t.name.size() == 1) || (t.name.size() == 2 && std::isdigit(t.name[1]));
+                    if (is_typevar) {
+                        return "I64";
+                    }
+                }
                 std::string result = t.name;
                 if (!t.type_args.empty()) {
                     result += "__";
