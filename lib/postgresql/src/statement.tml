@@ -74,21 +74,26 @@ func pg_null() -> *Unit {
 
 // ── Monotonic statement name counter ────────────────────────────────────
 
-/// Global counter stored in a heap cell for unique statement names.
-/// Each call returns a new unique name like "_pg_stmt_1", "_pg_stmt_2".
-func pg_next_stmt_name() -> Str {
-    // Allocate+free a cell each time — the "counter" value doesn't
-    // actually persist, but that's fine: PostgreSQL allows re-preparing
-    // a statement name within the same session after DEALLOCATE.
-    // We use a simple incrementing approach based on a heap cell.
-    var id: I64 = 0
-    lowlevel {
-        let cell = mem_alloc(8)
-        id = ptr_read[I64](cell)
-        ptr_write[I64](cell, id + 1)
-        mem_free(cell)
+/// Generates a unique statement name based on the SQL text hash.
+/// Uses FNV-1a hash to produce a deterministic but unique name per SQL string.
+func pg_stmt_name_for(sql: Str) -> Str {
+    let slen = strlen(sql)
+    var hash: I64 = 2166136261  // FNV offset basis (32-bit)
+    var i: I64 = 0
+    loop (i < slen) {
+        var byte_val: I64 = 0
+        lowlevel {
+            byte_val = ptr_read[U8](ptr_offset(sql, i)) as I64
+        }
+        hash = hash ^ byte_val
+        hash = hash * 16777619  // FNV prime
+        i = i + 1
     }
-    return "_pg_stmt_" + id.to_string()
+    // Make positive
+    if hash < 0 {
+        hash = 0 - hash
+    }
+    return "_pg_s" + hash.to_string()
 }
 
 /// Parses a decimal string to I64.  Returns 0 if empty or non-digit.
@@ -254,7 +259,7 @@ impl PgStatement {
     ///
     /// Returns `DbError` with kind `Query` if the server rejects the statement.
     pub func prepare(conn_handle: *Unit, sql: Str, param_count: I32) -> Outcome[PgStatement, DbError] {
-        let name = pg_next_stmt_name()
+        let name = pg_stmt_name_for(sql)
         let prep_result = PQprepare(conn_handle, name, sql, param_count, pg_null())
         if prep_result == pg_null() {
             let msg = PQerrorMessage(conn_handle)

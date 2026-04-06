@@ -152,6 +152,12 @@ impl PgConnection {
             PQfinish(conn)
             return Err(DbError::new(DbErrorKind::Connection, msg))
         }
+        // Suppress NOTICE messages (e.g., "table does not exist, skipping" from DROP IF EXISTS).
+        // These appear on stderr and interfere with test runners.
+        let notice_result = PQexec(conn, "SET client_min_messages = 'warning'")
+        if notice_result != pg_null() {
+            PQclear(notice_result)
+        }
         return Ok(PgConnection { pg_handle: conn, pg_is_open: true })
     }
 
