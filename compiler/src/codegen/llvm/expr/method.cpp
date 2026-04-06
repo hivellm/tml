@@ -1466,22 +1466,61 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             llvm_struct_name = current_impl_type_;
         }
 
-        // Look up the struct definition
+        // Look up the struct definition — try direct name first,
+        // then search all modules if not found locally
         auto struct_def = env_.lookup_struct(fn_field_type_name);
+        if (!struct_def && env_.module_registry()) {
+            for (const auto& [mod_path, mod] : env_.module_registry()->get_all_modules()) {
+                auto it = mod.structs.find(fn_field_type_name);
+                if (it != mod.structs.end()) {
+                    struct_def = it->second;
+                    break;
+                }
+            }
+        }
         if (struct_def) {
+            // Build substitution map from struct type params + receiver type args
+            // Use Self/This type from current_type_subs_ which has CONCRETE type args
+            // (e.g., Self -> Map[Counter, func(I32)->I32]), not the monomorphized
+            // aliases like "Fn" that appear in the receiver_type
+            std::unordered_map<std::string, types::TypePtr> field_subs = current_type_subs_;
+
+            // Extract concrete type args from Self/This substitution
+            // This gives us the actual FuncType instead of the alias "Fn"
+            types::TypePtr self_type;
+            auto self_it = current_type_subs_.find("Self");
+            if (self_it == current_type_subs_.end())
+                self_it = current_type_subs_.find("This");
+            if (self_it != current_type_subs_.end())
+                self_type = self_it->second;
+
+            if (self_type && self_type->is<types::NamedType>()) {
+                const auto& self_named = self_type->as<types::NamedType>();
+                for (size_t i = 0;
+                     i < struct_def->type_params.size() && i < self_named.type_args.size(); ++i) {
+                    // Override with concrete type from Self (has real FuncType, not alias)
+                    field_subs[struct_def->type_params[i]] = self_named.type_args[i];
+                }
+            } else if (receiver_type && receiver_type->is<types::NamedType>()) {
+                const auto& recv_named = receiver_type->as<types::NamedType>();
+                for (size_t i = 0;
+                     i < struct_def->type_params.size() && i < recv_named.type_args.size(); ++i) {
+                    field_subs[struct_def->type_params[i]] = recv_named.type_args[i];
+                }
+            }
+
             // Look for a field with the method name
             int field_idx = 0;
             for (const auto& fld : struct_def->fields) {
                 if (fld.name == method) {
                     // Resolve field type — may be a generic type parameter
                     types::TypePtr resolved_field_type = fld.type;
-                    if (resolved_field_type && resolved_field_type->is<types::NamedType>() &&
-                        !current_type_subs_.empty()) {
-                        const auto& named = resolved_field_type->as<types::NamedType>();
-                        auto sub_it = current_type_subs_.find(named.name);
-                        if (sub_it != current_type_subs_.end() && sub_it->second) {
-                            resolved_field_type = sub_it->second;
-                        }
+
+                    // Try to substitute type parameters from receiver type args
+                    // and current_type_subs_
+                    if (resolved_field_type && !field_subs.empty()) {
+                        resolved_field_type =
+                            types::substitute_type(resolved_field_type, field_subs);
                     }
 
                     // Check if the field is a function type

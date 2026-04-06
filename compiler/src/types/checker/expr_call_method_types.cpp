@@ -126,9 +126,20 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
 
             // ok_or_else(f) returns Outcome[T, E]
             if (method_name == "ok_or_else") {
-                // For now, return a generic Outcome type
-                // The actual error type comes from the closure
-                return obj_type; // Simplified - would need proper inference
+                // Infer E from the closure's return type
+                if (!call.args.empty()) {
+                    TypePtr closure_type = check_expr(*call.args[0]);
+                    TypePtr err_type;
+                    if (closure_type && closure_type->is<FuncType>()) {
+                        err_type = closure_type->as<FuncType>().return_type;
+                    }
+                    if (!err_type) {
+                        err_type = make_unit();
+                    }
+                    std::vector<TypePtr> type_args = {inner_type, err_type};
+                    return std::make_shared<Type>(NamedType{"Outcome", "", std::move(type_args)});
+                }
+                return obj_type;
             }
 
             // flatten() for Maybe[Maybe[T]] returns Maybe[T]
@@ -144,6 +155,147 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
 
             // duplicate() returns Maybe[T]
             if (method_name == "duplicate") {
+                return obj_type;
+            }
+
+            // as_ref() returns Maybe[ref T]
+            if (method_name == "as_ref") {
+                auto ref_inner = std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = inner_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_inner};
+                return std::make_shared<Type>(NamedType{"Maybe", "", std::move(type_args)});
+            }
+
+            // as_mut() returns Maybe[mut ref T]
+            if (method_name == "as_mut") {
+                auto ref_inner = std::make_shared<Type>(
+                    RefType{.is_mut = true, .inner = inner_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_inner};
+                return std::make_shared<Type>(NamedType{"Maybe", "", std::move(type_args)});
+            }
+
+            // inspect(f) returns Maybe[T] (passes ref to closure, returns self)
+            if (method_name == "inspect") {
+                // Type-check the closure argument
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0]);
+                }
+                return obj_type;
+            }
+
+            // take() returns Maybe[T] (takes value out, leaving Nothing)
+            if (method_name == "take") {
+                return obj_type;
+            }
+
+            // replace(value) returns Maybe[T] (old value)
+            if (method_name == "replace") {
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0], inner_type);
+                }
+                return obj_type;
+            }
+
+            // zip(other) returns Maybe[(T, U)]
+            if (method_name == "zip") {
+                if (!call.args.empty()) {
+                    TypePtr other_type = check_expr(*call.args[0]);
+                    // Extract U from Maybe[U]
+                    if (other_type && other_type->is<NamedType>()) {
+                        auto& other_named = other_type->as<NamedType>();
+                        if (other_named.name == "Maybe" && !other_named.type_args.empty()) {
+                            TypePtr u_type = other_named.type_args[0];
+                            auto tuple_type = std::make_shared<Type>(
+                                TupleType{std::vector<TypePtr>{inner_type, u_type}});
+                            std::vector<TypePtr> type_args = {tuple_type};
+                            return std::make_shared<Type>(
+                                NamedType{"Maybe", "", std::move(type_args)});
+                        }
+                    }
+                }
+                return obj_type;
+            }
+
+            // zip_with(other, f) returns Maybe[V]
+            if (method_name == "zip_with") {
+                if (call.args.size() >= 2) {
+                    TypePtr other_type = check_expr(*call.args[0]);
+                    TypePtr closure_type = check_expr(*call.args[1]);
+                    // Infer V from the closure's return type
+                    if (closure_type && closure_type->is<FuncType>()) {
+                        TypePtr v_type = closure_type->as<FuncType>().return_type;
+                        std::vector<TypePtr> type_args = {v_type};
+                        return std::make_shared<Type>(NamedType{"Maybe", "", std::move(type_args)});
+                    }
+                }
+                return obj_type;
+            }
+
+            // is_just_and(pred) returns Bool
+            if (method_name == "is_just_and") {
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0]);
+                }
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // get_or_insert(value), get_or_insert_with(f) return Unit (mutate in-place)
+            if (method_name == "get_or_insert" || method_name == "get_or_insert_with") {
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0]);
+                }
+                return make_unit();
+            }
+
+            // map_or_else(default_fn, f) returns U
+            if (method_name == "map_or_else") {
+                if (call.args.size() >= 1) {
+                    TypePtr default_fn_type = check_expr(*call.args[0]);
+                    // Infer U from default_fn's return type
+                    if (default_fn_type && default_fn_type->is<FuncType>()) {
+                        return default_fn_type->as<FuncType>().return_type;
+                    }
+                }
+                return inner_type;
+            }
+
+            // iter() returns MaybeIter[T]
+            if (method_name == "iter") {
+                std::vector<TypePtr> type_args = {inner_type};
+                return std::make_shared<Type>(NamedType{"MaybeIter", "", std::move(type_args)});
+            }
+
+            // transpose() returns Outcome[Maybe[T_inner], E] for Maybe[Outcome[T_inner, E]]
+            if (method_name == "transpose") {
+                if (inner_type->is<NamedType>()) {
+                    auto& inner_named = inner_type->as<NamedType>();
+                    if (inner_named.name == "Outcome" && inner_named.type_args.size() >= 2) {
+                        TypePtr t_inner = inner_named.type_args[0];
+                        TypePtr e_type = inner_named.type_args[1];
+                        std::vector<TypePtr> maybe_args = {t_inner};
+                        auto maybe_type =
+                            std::make_shared<Type>(NamedType{"Maybe", "", std::move(maybe_args)});
+                        std::vector<TypePtr> outcome_args = {maybe_type, e_type};
+                        return std::make_shared<Type>(
+                            NamedType{"Outcome", "", std::move(outcome_args)});
+                    }
+                }
+                return obj_type;
+            }
+
+            // unzip() returns (Maybe[A], Maybe[B]) for Maybe[(A, B)]
+            if (method_name == "unzip") {
+                if (inner_type->is<TupleType>()) {
+                    auto& tuple = inner_type->as<TupleType>();
+                    if (tuple.elements.size() >= 2) {
+                        auto maybe_a = std::make_shared<Type>(
+                            NamedType{"Maybe", "", std::vector<TypePtr>{tuple.elements[0]}});
+                        auto maybe_b = std::make_shared<Type>(
+                            NamedType{"Maybe", "", std::vector<TypePtr>{tuple.elements[1]}});
+                        return std::make_shared<Type>(
+                            TupleType{std::vector<TypePtr>{maybe_a, maybe_b}});
+                    }
+                }
                 return obj_type;
             }
 
@@ -252,9 +404,15 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
                 return ok_type;
             }
 
-            // map_or_else(default_f, map_f) returns U
+            // map_or_else(default_fn, f) returns U
             if (method_name == "map_or_else") {
-                return ok_type; // Simplified - returns same type as ok
+                if (call.args.size() >= 1) {
+                    TypePtr default_fn_type = check_expr(*call.args[0]);
+                    if (default_fn_type && default_fn_type->is<FuncType>()) {
+                        return default_fn_type->as<FuncType>().return_type;
+                    }
+                }
+                return ok_type;
             }
 
             // and_then(f) returns Outcome[U, E]
@@ -314,8 +472,62 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
                 return std::make_shared<Type>(NamedType{"OutcomeIter", "", type_args});
             }
 
-            // duplicate() returns Outcome[T, E]
-            if (method_name == "duplicate") {
+            // duplicate(), copied(), duplicated() return Outcome[T, E]
+            if (method_name == "duplicate" || method_name == "copied" ||
+                method_name == "duplicated") {
+                return obj_type;
+            }
+
+            // inspect(f) returns Outcome[T, E] (passes ref T to closure, returns self)
+            if (method_name == "inspect") {
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0]);
+                }
+                return obj_type;
+            }
+
+            // inspect_err(f) returns Outcome[T, E] (passes ref E to closure, returns self)
+            if (method_name == "inspect_err") {
+                if (!call.args.empty()) {
+                    check_expr(*call.args[0]);
+                }
+                return obj_type;
+            }
+
+            // as_ref() returns Outcome[ref T, ref E]
+            if (method_name == "as_ref") {
+                auto ref_ok = std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = ok_type, .lifetime = std::nullopt});
+                auto ref_err = std::make_shared<Type>(
+                    RefType{.is_mut = false, .inner = err_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_ok, ref_err};
+                return std::make_shared<Type>(NamedType{"Outcome", "", std::move(type_args)});
+            }
+
+            // as_mut() returns Outcome[mut ref T, mut ref E]
+            if (method_name == "as_mut") {
+                auto ref_ok = std::make_shared<Type>(
+                    RefType{.is_mut = true, .inner = ok_type, .lifetime = std::nullopt});
+                auto ref_err = std::make_shared<Type>(
+                    RefType{.is_mut = true, .inner = err_type, .lifetime = std::nullopt});
+                std::vector<TypePtr> type_args = {ref_ok, ref_err};
+                return std::make_shared<Type>(NamedType{"Outcome", "", std::move(type_args)});
+            }
+
+            // transpose() returns Maybe[Outcome[T_inner, E]] for Outcome[Maybe[T_inner], E]
+            if (method_name == "transpose") {
+                if (ok_type->is<NamedType>()) {
+                    auto& ok_named = ok_type->as<NamedType>();
+                    if (ok_named.name == "Maybe" && !ok_named.type_args.empty()) {
+                        TypePtr t_inner = ok_named.type_args[0];
+                        std::vector<TypePtr> outcome_args = {t_inner, err_type};
+                        auto outcome_type = std::make_shared<Type>(
+                            NamedType{"Outcome", "", std::move(outcome_args)});
+                        std::vector<TypePtr> maybe_args = {outcome_type};
+                        return std::make_shared<Type>(
+                            NamedType{"Maybe", "", std::move(maybe_args)});
+                    }
+                }
                 return obj_type;
             }
 
