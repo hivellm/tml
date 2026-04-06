@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-04-05
-**Active tasks**: 46 | **Archived**: 5+
+**Active tasks**: 60 | **Archived**: 5+
 
 ---
 
@@ -196,6 +196,47 @@ Wire everything together, port tooling, execute three-stage bootstrap verificati
 
 **Order**: 17a → 17b → 17c (sequential). 17c = **TML COMPILES ITSELF**
 
+## Phase 18–21 — Custom Native Backend (ERA 2)
+
+Replace LLVM with custom code generator. Binary drops from 140MB to ~15MB.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 18a | [MachIR Lowering](phase18a_debug-backend-machir/) | Planned | P1 | 0/20 |
+| 18b | [x86_64 Encoder](phase18b_x86-encoder/) | Planned | P1 | 0/22 |
+| 18c | [PE/COFF Object Emission](phase18c_pe-object-emission/) | Planned | P1 | 0/20 |
+| 19a | [Register Allocator](phase19a_register-allocator/) | Planned | P1 | 0/22 |
+| 20a | [Production x86_64 Backend](phase20a_production-backend-x86/) | Planned | P1 | 0/22 |
+| 20b | [AArch64 Backend](phase20b_aarch64-backend/) | Planned | P1 | 0/21 |
+| 21a | [Debug Info (PDB+DWARF)](phase21a_debug-info-pdb-dwarf/) | Planned | P1 | 0/24 |
+
+**Order**: 18a → 18b+18c → 19a → 20a+20b → 21a. Completion = **LLVM ELIMINATED**
+
+## Phase 22 — Custom Linker (ERA 3)
+
+Replace LLD with tml-link. Target: sub-10ms incremental linking.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 22a | [PE/COFF Linker (Windows)](phase22a_pe-coff-linker/) | Planned | P2 | 0/22 |
+| 22b | [ELF Linker (Linux)](phase22b_elf-linker/) | Planned | P2 | 0/20 |
+| 22c | [Mach-O Linker (macOS)](phase22c_macho-linker/) | Planned | P2 | 0/18 |
+| 22d | [Incremental Linker](phase22d_incremental-linker/) | Planned | P2 | 0/18 |
+
+**Order**: 22a → 22b → 22c → 22d. Completion = **LLD ELIMINATED**
+
+## Phase 23 — C/C++ Frontend (ERA 4)
+
+TML compiles C and C++ code directly. Complete toolchain independence.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 23a | [C Preprocessor](phase23a_c-preprocessor/) | Planned | P2 | 0/20 |
+| 23b | [C17 Frontend](phase23b_c-frontend/) | Planned | P2 | 0/24 |
+| 23c | [C++ Subset Frontend](phase23c_cpp-subset-frontend/) | Planned | P2 | 0/22 |
+
+**Order**: 23a → 23b → 23c. Completion = **FULL TOOLCHAIN INDEPENDENCE**
+
 ## Research
 
 | ID | Task | Status | Priority | Progress |
@@ -224,7 +265,10 @@ Wire everything together, port tooling, execute three-stage bootstrap verificati
 ```
 Active now:   Phase 1 (language), Phase 4 (tooling), Phase 8 (DB), Phase 10 (HTTP/build)
 Next:         Phase 12 (self-hosting foundation) — can start immediately
-Then:         Phase 13 (TML frontend) — after Phase 12 complete
-Future:       Phase 14+ (type checker, IR pipeline, codegen, bootstrap)
-Long-term:    Custom backend, custom linker, C/C++ frontend (see independence plan)
+Then:         Phase 13-17 (ERA 1: TML compiles itself) — 25 tasks, 544 items
+Then:         Phase 18-21 (ERA 2: custom backend, eliminate LLVM) — 7 tasks, 151 items
+Then:         Phase 22 (ERA 3: custom linker, eliminate LLD) — 4 tasks, 78 items
+Finally:      Phase 23 (ERA 4: C/C++ frontend, full independence) — 3 tasks, 66 items
+
+TOTAL INDEPENDENCE PLAN: 39 tasks, 839 items across 4 eras
 ```
