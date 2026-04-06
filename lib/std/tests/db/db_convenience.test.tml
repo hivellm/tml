@@ -210,15 +210,8 @@ func test_exists_by_str_found() -> I32 {
         Ok(mut c) => {
             let _ = c.execute("CREATE TABLE tags (name TEXT)")
             let _ = c.execute_str("INSERT INTO tags VALUES (?1)", "rust")
-            when c.exists_by_str("SELECT 1 FROM tags WHERE name = ?1", "rust") {
-                Err(_) => {
-                    assert(false, "exists_by_str failed")
-                    return 1
-                },
-                Ok(found) => {
-                    assert(found, "row found")
-                }
-            }
+            let found = c.exists_by_str("SELECT 1 FROM tags WHERE name = ?1", "rust")
+            assert(found, "row found")
         }
     }
     return 0
@@ -233,15 +226,8 @@ func test_exists_by_str_not_found() -> I32 {
         },
         Ok(mut c) => {
             let _ = c.execute("CREATE TABLE tags (name TEXT)")
-            when c.exists_by_str("SELECT 1 FROM tags WHERE name = ?1", "missing") {
-                Err(_) => {
-                    assert(false, "exists_by_str failed")
-                    return 1
-                },
-                Ok(found) => {
-                    assert(not found, "row not found")
-                }
-            }
+            let found = c.exists_by_str("SELECT 1 FROM tags WHERE name = ?1", "missing")
+            assert(not found, "row not found")
         }
     }
     return 0

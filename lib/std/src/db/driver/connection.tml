@@ -72,16 +72,19 @@ pub behavior Connection {
 
     /// Queries a single I64 scalar value (e.g. `COUNT(*)`).
     ///
-    /// Returns the value from column 0 of the first row, or 0 if no rows.
-    func query_scalar_i64(this, sql: Str) -> Outcome[I64, DbError]
+    /// Returns the value from column 0 of the first row, or 0 on error or
+    /// when the result set is empty.
+    func query_scalar_i64(this, sql: Str) -> I64
 
     /// Queries whether at least one row exists, with an I64 parameter.
     ///
-    /// Binds `p1` at position 1, returns `true` if a row was found.
-    func exists_by_i64(this, sql: Str, p1: I64) -> Outcome[Bool, DbError]
+    /// Binds `p1` at position 1.  Returns `true` if a row was found,
+    /// `false` on error or when no rows match.
+    func exists_by_i64(this, sql: Str, p1: I64) -> Bool
 
     /// Queries whether at least one row exists, with a Str parameter.
     ///
-    /// Binds `p1` at position 1, returns `true` if a row was found.
-    func exists_by_str(this, sql: Str, p1: Str) -> Outcome[Bool, DbError]
+    /// Binds `p1` at position 1.  Returns `true` if a row was found,
+    /// `false` on error or when no rows match.
+    func exists_by_str(this, sql: Str, p1: Str) -> Bool
 }

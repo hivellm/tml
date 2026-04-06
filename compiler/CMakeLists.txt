@@ -2048,6 +2048,7 @@ if(TML_BUILD_TESTS)
         # CLI
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
+        tests/cli/builder_test.cpp
         # Integration
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp

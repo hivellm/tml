@@ -92,5 +92,5 @@ pub func rollback_migration[C](conn: ref C, m: ref Migration) -> Outcome[Unit, D
 /// Returns the current migration version (0 if no migrations have been applied).
 pub func current_version[C](conn: ref C) -> Outcome[I64, DbError] where C: Connection {
     let sql = history::latest_version_sql()
-    return conn.query_scalar_i64(sql)
+    return Ok(conn.query_scalar_i64(sql))
 }
