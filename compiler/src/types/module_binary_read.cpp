@@ -1231,26 +1231,30 @@ static int generate_all_meta_from_source() {
     // Add top-level modules
     module_paths.push_back("test");
 
+    // Recursive helper to discover submodules to arbitrary depth.
+    // Walks pub mod declarations in mod.tml files and follows directories.
+    std::function<void(const fs::path&, const std::string&)> discover_submodules =
+        [&](const fs::path& mod_file, const std::string& prefix) {
+            auto submodules = extract_pub_mod_names(mod_file);
+            for (const auto& submod : submodules) {
+                std::string full_path = prefix + "::" + submod;
+                module_paths.push_back(full_path);
+
+                // Check for nested submodules (directory with mod.tml)
+                fs::path submod_dir = mod_file.parent_path() / submod;
+                fs::path submod_mod = submod_dir / "mod.tml";
+                if (fs::exists(submod_mod)) {
+                    discover_submodules(submod_mod, full_path);
+                }
+            }
+        };
+
     for (const auto& lib : libs) {
         // Add the root module itself
         module_paths.push_back(lib.prefix);
 
-        // Recursively discover submodules from mod.tml files
-        auto submodules = extract_pub_mod_names(lib.mod_file);
-        for (const auto& submod : submodules) {
-            std::string full_path = lib.prefix + "::" + submod;
-            module_paths.push_back(full_path);
-
-            // Check for nested submodules (e.g., std::file::bufio)
-            fs::path submod_dir = lib.mod_file.parent_path() / submod;
-            fs::path submod_mod = submod_dir / "mod.tml";
-            if (fs::exists(submod_mod)) {
-                auto sub_submodules = extract_pub_mod_names(submod_mod);
-                for (const auto& sub2 : sub_submodules) {
-                    module_paths.push_back(full_path + "::" + sub2);
-                }
-            }
-        }
+        // Recursively discover submodules to arbitrary depth
+        discover_submodules(lib.mod_file, lib.prefix);
     }
 
     TML_LOG_INFO("meta", "  Discovered " << module_paths.size()

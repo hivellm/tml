@@ -77,8 +77,26 @@ pub use std::http::middleware::range::{ByteRange, parse_range, content_range, co
 pub use std::http::middleware::cache_control::{CacheOptions, cache_control_header}
 pub use std::http::middleware::rate_limit::{RateLimitOptions, RateLimitResult, RateLimiter}
 pub use std::http::middleware::static_server::{StaticOptions, resolve_path, get_extension, mime_for_extension, static_file_headers}
-// NOTE: compression re-exports omitted to avoid pulling in std::zlib (zstd/brotli/zlib DLLs).
-// Import directly: use std::http::middleware::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
+pub use std::http::middleware::compression::{CompressionOptions, select_encoding, should_compress, compress_response}
 
 // websocket/
 pub use std::http::websocket::websocket::{WsOpcode, WsCloseCode, WsError, WsFrame, WsMessage, ws_accept_key, ws_upgrade_response, ws_validate_upgrade, ws_encode_frame, ws_decode_frame, ws_assemble_message, ws_close_frame, ws_apply_mask, ws_mask, ws_unmask}
+
+// ── Internal module re-exports (for test access) ────────────────
+// app/
+pub use std::http::app::arena::Arena
+pub use std::http::app::bytes::Bytes
+
+// client/
+pub use std::http::client::conn_pool::{ConnectionPool, PoolEntry}
+
+// server/ internal
+pub use std::http::server::dispatch::{app_status_text, generate_request_id, app_log_request, app_build_response, app_http_date}
+pub use std::http::server::parse::{app_is_bodyless_method, app_find_header_end_in_str, app_extract_query, app_extract_path_from_url, app_zerocopy_method, app_zerocopy_path, app_is_http11, app_extract_method, app_extract_path, app_has_header_end, app_has_connection_close, app_count_requests, app_store_param, app_parse_headers, app_has_chunked_encoding, app_percent_decode, MAX_HEADERS, HEADER_ENTRY_SIZE}
+pub use std::http::server::shared_state::SharedConfig
+pub use std::http::server::simd_parse::{find_crlf, find_colon, find_space, find_header_end, count_headers}
+pub use std::http::server::vectored_io::{send_two, send_response_parts}
+pub use std::http::server::work_stealing::{LocalQueue, WorkStealingScheduler}
+
+// request/ internal
+pub use std::http::request::encoding::{compress, decompress, accepted_encodings}

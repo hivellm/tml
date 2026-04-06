@@ -485,11 +485,73 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         module_path += use_decl.path.segments[i];
     }
 
+    // Helper: when a module path like "std::http::chunked" is not found on disk,
+    // try resolving it through the parent module's re-exports.
+    // If "std::http" has `pub use std::http::protocol::chunked::{...}`, then
+    // "std::http::chunked" should resolve to "std::http::protocol::chunked".
+    auto try_resolve_via_parent_reexports =
+        [&](std::string& mod_path) -> std::optional<types::Module> {
+        // Need at least 3 segments (e.g., std::http::chunked) to have a meaningful parent
+        if (use_decl.path.segments.size() < 3) {
+            return std::nullopt;
+        }
+
+        // Build parent path (all segments except the last)
+        std::string parent_path;
+        for (size_t i = 0; i < use_decl.path.segments.size() - 1; ++i) {
+            if (i > 0)
+                parent_path += "::";
+            parent_path += use_decl.path.segments[i];
+        }
+        std::string leaf = use_decl.path.segments.back();
+        std::string suffix = "::" + leaf;
+
+        // Load and check parent module
+        env_.load_native_module(parent_path, /*silent=*/true);
+        auto parent_opt = env_.get_module(parent_path);
+        if (!parent_opt.has_value()) {
+            return std::nullopt;
+        }
+
+        // Search re-exports for a source_path ending with "::<leaf>"
+        for (const auto& re : parent_opt->re_exports) {
+            if (re.source_path.size() > suffix.size() &&
+                re.source_path.compare(re.source_path.size() - suffix.size(), suffix.size(),
+                                       suffix) == 0) {
+                // Found a re-export whose source matches. Load the real module.
+                env_.load_native_module(re.source_path, /*silent=*/true);
+                auto resolved = env_.get_module(re.source_path);
+                if (resolved.has_value()) {
+                    mod_path = re.source_path; // update caller's module_path
+                    return resolved;
+                }
+            }
+        }
+
+        // Also check submodules map of the parent
+        auto sub_it = parent_opt->submodules.find(leaf);
+        if (sub_it != parent_opt->submodules.end()) {
+            env_.load_native_module(sub_it->second, /*silent=*/true);
+            auto resolved = env_.get_module(sub_it->second);
+            if (resolved.has_value()) {
+                mod_path = sub_it->second;
+                return resolved;
+            }
+        }
+
+        return std::nullopt;
+    };
+
     // Handle glob imports: use std::math::*
     if (use_decl.is_glob) {
         // Load the module
         env_.load_native_module(module_path, /*silent=*/true);
         auto module_opt = env_.get_module(module_path);
+
+        // If not found, try resolving through parent re-exports
+        if (!module_opt.has_value()) {
+            module_opt = try_resolve_via_parent_reexports(module_path);
+        }
 
         if (!module_opt.has_value()) {
             errors_.push_back(
@@ -509,6 +571,11 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         // Load the module
         env_.load_native_module(module_path, /*silent=*/true);
         auto module_opt = env_.get_module(module_path);
+
+        // If not found, try resolving through parent re-exports
+        if (!module_opt.has_value()) {
+            module_opt = try_resolve_via_parent_reexports(module_path);
+        }
 
         if (!module_opt.has_value()) {
             errors_.push_back(
@@ -566,6 +633,55 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         env_.load_native_module(base_module_path, /*silent=*/true);
         module_opt = env_.get_module(base_module_path);
 
+        // If the base module is also not found, try re-export resolution on it.
+        // E.g., "std::http::server_response" -> resolve "server_response" through
+        // "std::http" re-exports -> find "std::http::server::server_response"
+        if (!module_opt.has_value() && use_decl.path.segments.size() > 2) {
+            // Build grandparent path and leaf name for the base module
+            std::string grandparent_path;
+            for (size_t i = 0; i < use_decl.path.segments.size() - 2; ++i) {
+                if (i > 0)
+                    grandparent_path += "::";
+                grandparent_path += use_decl.path.segments[i];
+            }
+            std::string base_leaf = use_decl.path.segments[use_decl.path.segments.size() - 2];
+            std::string suffix = "::" + base_leaf;
+
+            env_.load_native_module(grandparent_path, /*silent=*/true);
+            auto grandparent_opt = env_.get_module(grandparent_path);
+            if (grandparent_opt.has_value()) {
+                // Search re-exports for source_path ending with "::<base_leaf>"
+                for (const auto& re : grandparent_opt->re_exports) {
+                    if (re.source_path.size() > suffix.size() &&
+                        re.source_path.compare(re.source_path.size() - suffix.size(), suffix.size(),
+                                               suffix) == 0) {
+                        // Extract the module part of the re-export source path.
+                        // E.g., re.source_path = "std::http::server::server_response"
+                        // This is the resolved base module path.
+                        std::string resolved_base = re.source_path;
+                        env_.load_native_module(resolved_base, /*silent=*/true);
+                        module_opt = env_.get_module(resolved_base);
+                        if (module_opt.has_value()) {
+                            base_module_path = resolved_base;
+                            break;
+                        }
+                    }
+                }
+
+                // Also check submodules map
+                if (!module_opt.has_value()) {
+                    auto sub_it = grandparent_opt->submodules.find(base_leaf);
+                    if (sub_it != grandparent_opt->submodules.end()) {
+                        env_.load_native_module(sub_it->second, /*silent=*/true);
+                        module_opt = env_.get_module(sub_it->second);
+                        if (module_opt.has_value()) {
+                            base_module_path = sub_it->second;
+                        }
+                    }
+                }
+            }
+        }
+
         if (module_opt.has_value()) {
             // Last segment is a symbol name - import only that symbol
             std::string symbol_name = use_decl.path.segments.back();
@@ -591,6 +707,11 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
             env_.import_symbol(base_module_path, symbol_name, use_decl.alias);
             return;
         }
+    }
+
+    // If still not found, try resolving through parent re-exports
+    if (!module_opt.has_value()) {
+        module_opt = try_resolve_via_parent_reexports(module_path);
     }
 
     if (!module_opt.has_value()) {
