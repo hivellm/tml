@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-04-05
-**Active tasks**: 31 | **Archived**: 5+
+**Active tasks**: 35 | **Archived**: 5+
 
 ---
 
@@ -144,6 +144,19 @@ Port lexer and parser from C++ to TML — first compiler subsystems in TML.
 | 13d | [Frontend Integration](phase13d_frontend-integration/) | Planned | P0 | 0/18 |
 
 **Order**: 13a → 13b → 13c → 13d (sequential)
+
+## Phase 14 — Type Checker in TML (ERA 1, Phase 2) ⚠️ CRITICAL PATH
+
+Port the type checker (~21K LOC C++) to TML. Highest-risk, longest phase (8 months). See [invariant doc](phase12c_typechecker-invariants/).
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 14a | [Type Registration](phase14a_typechecker-registration/) | Planned | P0 | 0/22 |
+| 14b | [Module Resolution](phase14b_typechecker-module-resolution/) | Planned | P0 | 0/20 |
+| 14c | [Type Inference](phase14c_typechecker-inference/) | Planned | P0 | 0/26 |
+| 14d | [Behavior Dispatch](phase14d_typechecker-behavior-dispatch/) | Planned | P0 | 0/22 |
+
+**Order**: 14a → 14b → 14c → 14d (sequential, 14a/14b can partially overlap)
 
 ## Research
 
