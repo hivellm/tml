@@ -1,7 +1,7 @@
 # TML Project — Task Index
 
 **Last updated**: 2026-04-05
-**Active tasks**: 39 | **Archived**: 5+
+**Active tasks**: 46 | **Archived**: 5+
 
 ---
 
@@ -170,6 +170,31 @@ Port HIR, THIR, MIR builder, and 52 MIR optimization passes from C++ to TML.
 | 15d | [MIR Passes (52 passes)](phase15d_mir-passes/) | Planned | P0 | 0/25 |
 
 **Order**: 15a → 15b → 15c → 15d (sequential)
+
+## Phase 16 — Codegen in TML (ERA 1, Phase 4)
+
+Port MIR→LLVM IR text generation (~76K LOC C++) to TML. Largest subsystem — output is text, easy to verify.
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 16a | [Types & Declarations](phase16a_codegen-types-decls/) | Planned | P0 | 0/25 |
+| 16b | [Instructions](phase16b_codegen-instructions/) | Planned | P0 | 0/25 |
+| 16c | [Calls & ABI](phase16c_codegen-calls-abi/) | Planned | P0 | 0/25 |
+| 16d | [Legacy LLVM Codegen](phase16d_codegen-legacy-llvm/) | Planned | P0 | 0/25 |
+
+**Order**: 16a → 16b → 16c → 16d (sequential, 16a/16b can partially overlap)
+
+## Phase 17 — Bootstrap (ERA 1, Phase 5) 🎯 SELF-HOSTING
+
+Wire everything together, port tooling, execute three-stage bootstrap verification. **ERA 1 COMPLETE when phase17c passes.**
+
+| ID | Task | Status | Priority | Progress |
+|----|------|--------|----------|----------|
+| 17a | [Query System](phase17a_query-system/) | Planned | P0 | 0/18 |
+| 17b | [CLI & Tooling](phase17b_cli-tooling/) | Planned | P0 | 0/24 |
+| 17c | [Bootstrap Verification](phase17c_bootstrap-verification/) | Planned | P0 | 0/16 |
+
+**Order**: 17a → 17b → 17c (sequential). 17c = **TML COMPILES ITSELF**
 
 ## Research
 
