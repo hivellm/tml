@@ -390,8 +390,20 @@ auto detect_and_run_build_script(const std::string& source_path, bool verbose)
         return result; // Don't recurse into ourselves
     }
 
-    // Check build script cache — avoid re-running if nothing changed
-    fs::path cache_dir = package_dir / ".build-cache";
+    // Check build script cache — stored alongside compiled build scripts in build/debug/
+    fs::path project_root = package_dir;
+    for (int i = 0; i < 10; ++i) {
+        if (fs::exists(project_root / "build")) {
+            break;
+        }
+        auto parent = project_root.parent_path();
+        if (parent == project_root) {
+            break;
+        }
+        project_root = parent;
+    }
+    fs::path cache_dir =
+        project_root / "build" / "debug" / "build-scripts" / package_dir.filename().string();
     fs::path cache_path = cache_dir / "build_script.cache";
     auto cached = load_build_result_cache(cache_path);
     if (cached && is_cache_valid(*cached, cache_path, build_script, package_dir)) {
