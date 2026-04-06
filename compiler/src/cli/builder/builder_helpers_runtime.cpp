@@ -321,6 +321,15 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 TML_LOG_DEBUG("build", "Including os runtime: " << os_obj);
             }
 
+            // os/os_process.c (subprocess spawn/wait/read)
+            fs::path os_process_c = runtime_dir / "os" / "os_process.c";
+            if (fs::exists(os_process_c)) {
+                std::string os_process_obj = ensure_c_compiled(
+                    to_forward_slashes(os_process_c.string()), deps_cache, clang, verbose);
+                objects.push_back(fs::path(os_process_obj));
+                TML_LOG_DEBUG("build", "Including os_process runtime: " << os_process_obj);
+            }
+
             // search/ - search.c (vector distance functions)
             fs::path search_c = runtime_dir / "search" / "search.c";
             if (fs::exists(search_c)) {

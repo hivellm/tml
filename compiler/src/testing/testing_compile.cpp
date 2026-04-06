@@ -220,6 +220,17 @@ std::string build_runtime_archive(const CompileConfig& config) {
     parser::Module empty_module;
     std::string deps_cache = to_fwd_slashes(deps_dir.string());
 
+    // Pre-register optional runtime modules so the test runtime archive contains
+    // ALL conditional C runtimes. The archive is shared across every test EXE,
+    // so we cannot know per-test which modules will be imported. Without this,
+    // tests using std::glob, std::os::subprocess, etc. fail to link with
+    // undefined symbols like glob_pattern_matches, tml_process_spawn.
+    {
+        registry->register_module("std::glob", types::Module{});
+        registry->register_module("std::os", types::Module{});
+        registry->register_module("std::os::subprocess", types::Module{});
+    }
+
     auto runtime_objs = cli::build::get_runtime_objects(registry, empty_module, deps_cache,
                                                         g_clang_path, config.verbose);
 

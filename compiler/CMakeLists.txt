@@ -317,6 +317,8 @@ set(TML_RUNTIME_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net/iocp.c
     # os/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/os/os_process.c
+    ${CMAKE_SOURCE_DIR}/../lib/std/runtime/glob.c
     # crypto/
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/hash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/crypto/crypto.c
