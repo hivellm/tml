@@ -474,7 +474,7 @@ auto handle_project_artifacts(const json::JsonValue& params) -> ToolResult {
                 fs::path path;
             };
             std::vector<CacheDir> cache_dirs = {
-                {".run-cache", build_dir / ".run-cache"},
+                {"cache/run", build_dir / "cache" / "run"},
                 {"cache", build_dir / "cache"},
                 {"cache/meta", build_dir / "cache" / "meta"},
                 {"cache/incr", build_dir / "cache" / "incr"},

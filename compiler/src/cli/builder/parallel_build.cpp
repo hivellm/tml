@@ -817,7 +817,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
 
     // Clean build directory if requested
     if (clean) {
-        fs::path build_dir = cwd / "build" / "debug" / ".cache";
+        fs::path build_dir = cwd / "build" / "debug" / "cache";
         if (fs::exists(build_dir)) {
             fs::remove_all(build_dir);
             TML_LOG_INFO("build", "Cleaned build cache");
@@ -839,7 +839,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     builder.set_options(opts);
 
     // Create output directory
-    fs::path build_dir = cwd / "build" / "debug" / ".cache";
+    fs::path build_dir = cwd / "build" / "debug" / "cache";
     fs::create_directories(build_dir);
 
     // Add all files to builder

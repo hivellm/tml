@@ -166,8 +166,8 @@ auto run_build_script(const fs::path& build_script_path, const fs::path& package
         }
         project_root = parent;
     }
-    fs::path temp_dir =
-        project_root / "build" / "debug" / "build-scripts" / package_dir.filename().string();
+    fs::path temp_dir = project_root / "build" / "debug" / "cache" / "build-scripts" /
+                        package_dir.filename().string();
     std::error_code ec;
     fs::create_directories(temp_dir, ec);
     if (ec) {
@@ -402,8 +402,8 @@ auto detect_and_run_build_script(const std::string& source_path, bool verbose)
         }
         project_root = parent;
     }
-    fs::path cache_dir =
-        project_root / "build" / "debug" / "build-scripts" / package_dir.filename().string();
+    fs::path cache_dir = project_root / "build" / "debug" / "cache" / "build-scripts" /
+                         package_dir.filename().string();
     fs::path cache_path = cache_dir / "build_script.cache";
     auto cached = load_build_result_cache(cache_path);
     if (cached && is_cache_valid(*cached, cache_path, build_script, package_dir)) {

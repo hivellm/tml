@@ -215,7 +215,7 @@ fs::path get_deps_cache_dir() {
 fs::path get_run_cache_dir() {
     // Always use project root for run cache
     fs::path project_root = find_project_root();
-    fs::path cache = project_root / "build" / "debug" / ".run-cache";
+    fs::path cache = project_root / "build" / "debug" / "cache" / "run";
     fs::create_directories(cache);
     return cache;
 }

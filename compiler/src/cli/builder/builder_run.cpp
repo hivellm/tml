@@ -21,7 +21,7 @@ TML_MODULE("compiler")
 //!
 //! Two layers of caching:
 //! 1. Query pipeline: incremental fingerprints skip unchanged stages
-//! 2. Object/exe cache: content-hash in `build/debug/.run-cache/`
+//! 2. Object/exe cache: content-hash in `build/debug/cache/run/`
 
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"

@@ -522,7 +522,7 @@ static cli::BuildScriptResult load_build_script_cache(const fs::path& pkg_dir) {
     result.success = false;
 
     auto cache_file =
-        fs::path("build/debug/build-scripts") / pkg_dir.filename() / "test_link_cache.txt";
+        fs::path("build/debug/cache/build-scripts") / pkg_dir.filename() / "test_link_cache.txt";
     auto build_script = pkg_dir / "build.tml";
 
     if (!fs::exists(cache_file) || !fs::exists(build_script))
@@ -555,7 +555,7 @@ static cli::BuildScriptResult load_build_script_cache(const fs::path& pkg_dir) {
 
 /// Saves build.tml results to a per-package cache file.
 static void save_build_script_cache(const fs::path& pkg_dir, const cli::BuildScriptResult& bsr) {
-    auto cache_dir = fs::path("build/debug/build-scripts") / pkg_dir.filename();
+    auto cache_dir = fs::path("build/debug/cache/build-scripts") / pkg_dir.filename();
     std::error_code ec;
     fs::create_directories(cache_dir, ec);
 

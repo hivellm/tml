@@ -46,10 +46,10 @@ namespace tml::cli {
 
 namespace {
 
-/// Returns the cache directory path (build/debug/.run-cache/).
+/// Returns the cache directory path (build/debug/cache/run/).
 fs::path get_cache_dir() {
     fs::path cwd = fs::current_path();
-    return cwd / "build" / "debug" / ".run-cache";
+    return cwd / "build" / "debug" / "cache" / "run";
 }
 
 /**
@@ -370,9 +370,9 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
     }
 
     fs::path cwd = fs::current_path();
-    fs::path run_cache_dir = cwd / "build" / "debug" / ".run-cache";
+    fs::path run_cache_dir = cwd / "build" / "debug" / "cache" / "run";
     fs::path test_cache_dir = cwd / "build" / "debug" / "cache";
-    fs::path mir_cache_dir = cwd / "build" / "debug" / ".cache";
+    fs::path mir_cache_dir = cwd / "build" / "debug" / "cache";
     fs::path test_cache_file = cwd / "build" / "debug" / "cache" / "tests.json";
 
     int invalidated_count = 0;

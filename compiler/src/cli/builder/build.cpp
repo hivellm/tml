@@ -599,8 +599,8 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
     fs::create_directories(deps_dir);
     std::string deps_cache = to_forward_slashes(deps_dir.string());
 
-    // Create .cache directory for object files
-    fs::path cache_dir = build_dir / ".cache";
+    // Create cache directory for object files
+    fs::path cache_dir = build_dir / "cache";
     fs::create_directories(cache_dir);
 
     // Step 1: Compile LLVM IR (.ll) to object file(s) (.o/.obj)
@@ -1298,7 +1298,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     fs::create_directories(deps_dir);
     std::string deps_cache = to_forward_slashes(deps_dir.string());
 
-    fs::path cache_dir = build_dir / ".cache";
+    fs::path cache_dir = build_dir / "cache";
     fs::create_directories(cache_dir);
 
     ObjectCompileOptions obj_options;
