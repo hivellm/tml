@@ -1,12 +1,34 @@
 # Tasks: Fix 214 Test Compile Failures — Root Cause Analysis
 
-**Status**: In Progress (15/25). RC1-RC4 done (174 tests fixed). RC5-RC7 remaining.
+**Status**: In Progress (18/25). RC1-RC4 + Maybe/Outcome AST + RC7 partial done (~180 tests fixed). RC5/RC6 + deep RC7 remaining.
 **Depends on**: None
 **Blocks**: Test coverage accuracy, Phase 12 confidence
 **Duration**: 2–4 weeks
 **Risk**: High — multiple compiler bugs across different subsystems
 **Baseline**: 1539/1753 pass (88%), 214 compile failures across 7 root causes
-**Current**: ~1690/1753 pass (96%), ~60 remaining compile failures
+**Current**: 1791/1874 pass (95.6%), 83 remaining compile failures (-131 from baseline, 61% reduction)
+
+---
+
+## Progress Summary
+
+| Root Cause | Original | Current | Reduction |
+|-----------|----------|---------|-----------|
+| RC1 MODULE_NOT_FOUND | 119 | 5 | -114 (96%) |
+| RC2 UNKNOWN_METHOD | 24 | 1 | -23 (96%) |
+| RC3 TYPE_RETURNS_UNIT | 18 | 2 | -16 (89%) |
+| RC4 LINK | 13 | 1 | -12 (92%) |
+| RC5 UNDEF_SYMBOL | 12 | 19 | +7 (newly exposed) |
+| RC6 GEP_UNSIZED | 10 | 10 | 0 |
+| RC7 TYPE_MISMATCH | 8 | 29 | +21 (newly exposed) |
+| LLVM_IR_OTHER | 0 | 7 | new |
+| TIMEOUT | 0 | 4 | new |
+| Misc (INT_CONST etc) | 10 | 5 | -5 |
+| **Total** | **214** | **83** | **-131 (61%)** |
+
+Note: RC5/RC7 counts increased because RC1 fix unblocked more tests that
+now reach codegen and hit deeper bugs that were previously masked by the
+upstream MODULE_NOT_FOUND failures.
 
 ---
 
