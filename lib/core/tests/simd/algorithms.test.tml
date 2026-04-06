@@ -8,8 +8,8 @@ func test_memchr_first_byte() -> I32 {
     let data: Slice[U8] = "hello world".as_bytes()
     let found = memchr_simd(data, 104 as U8)  // 'h' = 104
     when found {
-        Just(idx) -> { assert_eq(idx, 0) }
-        Nothing -> { assert_true(false) }
+        Just(idx) => { assert_eq(idx, 0) }
+        Nothing => { assert_true(false) }
     }
     0
 }
@@ -19,8 +19,8 @@ func test_memchr_middle() -> I32 {
     let data: Slice[U8] = "hello world".as_bytes()
     let found = memchr_simd(data, 111 as U8)  // 'o' = 111
     when found {
-        Just(idx) -> { assert_eq(idx, 4) }
-        Nothing -> { assert_true(false) }
+        Just(idx) => { assert_eq(idx, 4) }
+        Nothing => { assert_true(false) }
     }
     0
 }
@@ -30,8 +30,8 @@ func test_memchr_not_found() -> I32 {
     let data: Slice[U8] = "hello world".as_bytes()
     let found = memchr_simd(data, 122 as U8)  // 'z' = 122
     when found {
-        Just(idx) -> { assert_true(false) }
-        Nothing -> { }
+        Just(idx) => { assert_true(false) }
+        Nothing => { }
     }
     0
 }

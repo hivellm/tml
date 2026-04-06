@@ -5,7 +5,7 @@ use core::task::{Waker, RawWaker, RawWakerVTable}
 use core::ptr::RawPtr
 
 func noop_clone(p: RawPtr[Unit]) -> RawWaker {
-    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    var vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
     return RawWaker::new(p, ref vtable)
 }
 func noop_wake(p: RawPtr[Unit]) {}
@@ -13,7 +13,7 @@ func noop_drop(p: RawPtr[Unit]) {}
 
 @test
 func test_waker_from_raw() -> I32 {
-    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    var vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
     let data: RawPtr[Unit] = RawPtr::null_ptr()
     let raw: RawWaker = RawWaker::new(data, ref vtable)
     let w: Waker = Waker::from_raw(raw)
@@ -23,7 +23,7 @@ func test_waker_from_raw() -> I32 {
 
 @test
 func test_waker_will_wake_same() -> I32 {
-    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    var vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
     let data: RawPtr[Unit] = RawPtr::null_ptr()
     let raw1: RawWaker = RawWaker::new(data, ref vtable)
     let raw2: RawWaker = RawWaker::new(data, ref vtable)
@@ -35,7 +35,7 @@ func test_waker_will_wake_same() -> I32 {
 
 @test
 func test_waker_as_raw() -> I32 {
-    let vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
+    var vtable: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake, noop_drop)
     let data: RawPtr[Unit] = RawPtr::null_ptr()
     let raw: RawWaker = RawWaker::new(data, ref vtable)
     let w: Waker = Waker::from_raw(raw)

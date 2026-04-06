@@ -38,7 +38,7 @@ func test_copy_from_i32() -> I32 {
 func test_write_bytes_val_i32() -> I32 {
     let buf = mem_alloc(8)
     let p: RawMutPtr[I32] = RawMutPtr::from_addr(buf as I64)
-    p.write(0xFFFFFFFF)
+    p.write(-1 as I32)  // 0xFFFFFFFF as I32 (avoids T051 overflow)
     p.write_bytes_val(0, 1 as I64)
     assert_eq(p.read(), 0, "write_bytes_val zeroes i32")
     return 0

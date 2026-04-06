@@ -12,10 +12,10 @@ func test_simd_vector_i32x4_add() -> Outcome[Unit, Str] {
     let a = I32x4::new(1, 2, 3, 4)
     let b = I32x4::new(10, 20, 30, 40)
     let c: I32x4 = a.add(b)
-    assert_eq(c.x, 11)
-    assert_eq(c.y, 22)
-    assert_eq(c.z, 33)
-    assert_eq(c.w, 44)
+    assert_eq(c.e0, 11)
+    assert_eq(c.e1, 22)
+    assert_eq(c.e2, 33)
+    assert_eq(c.e3, 44)
     Ok(())
 }
 
@@ -24,10 +24,10 @@ func test_simd_vector_i32x4_sub() -> Outcome[Unit, Str] {
     let a = I32x4::new(10, 20, 30, 40)
     let b = I32x4::new(1, 2, 3, 4)
     let c: I32x4 = a.sub(b)
-    assert_eq(c.x, 9)
-    assert_eq(c.y, 18)
-    assert_eq(c.z, 27)
-    assert_eq(c.w, 36)
+    assert_eq(c.e0, 9)
+    assert_eq(c.e1, 18)
+    assert_eq(c.e2, 27)
+    assert_eq(c.e3, 36)
     Ok(())
 }
 
@@ -36,20 +36,20 @@ func test_simd_vector_i32x4_mul() -> Outcome[Unit, Str] {
     let a = I32x4::new(2, 3, 4, 5)
     let b = I32x4::new(10, 10, 10, 10)
     let c: I32x4 = a.mul(b)
-    assert_eq(c.x, 20)
-    assert_eq(c.y, 30)
-    assert_eq(c.z, 40)
-    assert_eq(c.w, 50)
+    assert_eq(c.e0, 20)
+    assert_eq(c.e1, 30)
+    assert_eq(c.e2, 40)
+    assert_eq(c.e3, 50)
     Ok(())
 }
 
 @test
 func test_simd_vector_i32x4_zero() -> Outcome[Unit, Str] {
     let z: I32x4 = I32x4::splat(0)
-    assert_eq(z.x, 0)
-    assert_eq(z.y, 0)
-    assert_eq(z.z, 0)
-    assert_eq(z.w, 0)
+    assert_eq(z.e0, 0)
+    assert_eq(z.e1, 0)
+    assert_eq(z.e2, 0)
+    assert_eq(z.e3, 0)
     Ok(())
 }
 
@@ -58,8 +58,8 @@ func test_simd_vector_i32x4_band() -> Outcome[Unit, Str] {
     let a = I32x4::splat(0xFF)
     let b = I32x4::splat(0x0F)
     let c: I32x4 = a.band(b)
-    assert_eq(c.x, 0x0F)
-    assert_eq(c.y, 0x0F)
+    assert_eq(c.e0, 0x0F)
+    assert_eq(c.e1, 0x0F)
     Ok(())
 }
 
@@ -68,8 +68,8 @@ func test_simd_vector_i32x4_bor() -> Outcome[Unit, Str] {
     let a = I32x4::splat(0xF0)
     let b = I32x4::splat(0x0F)
     let c: I32x4 = a.bor(b)
-    assert_eq(c.x, 0xFF)
-    assert_eq(c.y, 0xFF)
+    assert_eq(c.e0, 0xFF)
+    assert_eq(c.e1, 0xFF)
     Ok(())
 }
 
@@ -78,8 +78,8 @@ func test_simd_vector_i32x4_bxor() -> Outcome[Unit, Str] {
     let a = I32x4::splat(0xFF)
     let b = I32x4::splat(0xFF)
     let c: I32x4 = a.bxor(b)
-    assert_eq(c.x, 0)
-    assert_eq(c.y, 0)
+    assert_eq(c.e0, 0)
+    assert_eq(c.e1, 0)
     Ok(())
 }
 
@@ -88,10 +88,10 @@ func test_simd_vector_f32x4_add() -> Outcome[Unit, Str] {
     let a = F32x4::new(1.0 as F32, 2.0 as F32, 3.0 as F32, 4.0 as F32)
     let b = F32x4::new(0.5 as F32, 0.5 as F32, 0.5 as F32, 0.5 as F32)
     let c: F32x4 = a.add(b)
-    assert_eq(c.x, 1.5 as F32)
-    assert_eq(c.y, 2.5 as F32)
-    assert_eq(c.z, 3.5 as F32)
-    assert_eq(c.w, 4.5 as F32)
+    assert_eq(c.e0, 1.5 as F32)
+    assert_eq(c.e1, 2.5 as F32)
+    assert_eq(c.e2, 3.5 as F32)
+    assert_eq(c.e3, 4.5 as F32)
     Ok(())
 }
 
@@ -132,9 +132,9 @@ func test_simd_select_basic() -> Outcome[Unit, Str] {
     let a = I32x4::new(100, 200, 300, 400)
     let b = I32x4::new(10, 20, 30, 40)
     let result = simd_select(mask, a, b)
-    assert_eq(result.x, 100)
-    assert_eq(result.y, 20)
-    assert_eq(result.z, 300)
-    assert_eq(result.w, 40)
+    assert_eq(result.e0, 100)
+    assert_eq(result.e1, 20)
+    assert_eq(result.e2, 300)
+    assert_eq(result.e3, 40)
     Ok(())
 }
