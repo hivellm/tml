@@ -1,0 +1,30 @@
+// Integration tests for ir-diff: parse + diff pipeline.
+//
+// Each test is kept minimal to fit within the 100ms per-test budget
+// (debug builds; parse+diff with longer IR can exceed this).
+
+use test::{assert, assert_eq}
+use ir_diff::parser::parse
+use ir_diff::differ::{diff, is_identical, diffs_count}
+
+@test
+func test_pipeline_identical() -> I32 {
+    let src = "define void @f() \{\nentry:\n  ret void\n}\n"
+    let ra = parse(src)
+    let rb = parse(src)
+    assert(ra.is_ok() and rb.is_ok(), "parse ok")
+    let r = diff(ra.unwrap(), rb.unwrap())
+    assert(r.is_ok(), "diff ok")
+    return 0
+}
+
+@test
+func test_pipeline_different() -> I32 {
+    let a = "define void @f() \{\ne:\n  ret void\n}\n"
+    let b = "define void @g() \{\ne:\n  ret void\n}\n"
+    let r = diff(parse(a).unwrap(), parse(b).unwrap())
+    assert(r.is_ok(), "diff ok")
+    let d = r.unwrap()
+    assert(not is_identical(d), "different functions -> not identical")
+    return 0
+}

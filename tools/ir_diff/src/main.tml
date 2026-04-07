@@ -1,7 +1,7 @@
 //! IR Diff CLI entry point
 //!
 //! Usage:
-//!   tml run tools/ir_diff/src/main.tml -- <file_a.ll> <file_b.ll> [--summary] [--function <name>]
+//!   ir-diff <file_a.ll> <file_b.ll> [--summary] [--function <name>]
 //!
 //! Reads two LLVM IR files, parses them, diffs function-by-function, and
 //! prints results to stdout.
@@ -10,9 +10,11 @@
 //!   0 = files are semantically identical
 //!   1 = files differ
 //!   2 = usage error or file read failure
+//!
+//! NOTE: Uses @extern("c") for I/O and args to avoid pulling in std modules
+//! that transitively include NeverError (a struct with a Never field which
+//! generates `{ void }` — invalid LLVM IR, a known codegen bug).
 
-use std::os::{args_count, args_get, process_exit}
-use std::file::File
 use ir_diff::parser::parse
 use ir_diff::differ::{diff, is_identical,
     only_in_a_count, only_in_a_name,
@@ -20,14 +22,73 @@ use ir_diff::differ::{diff, is_identical,
     diffs_count, diff_func_name, diff_a_line, diff_b_line}
 use core::str::search::starts_with
 
+// --- C FFI declarations ---
+
 @extern("strlen")
-func main_str_len(s: Str) -> I64
+func c_strlen(s: Str) -> I64
 
 @extern("puts")
-func puts(s: Str) -> I32
+func c_puts(s: Str) -> I32
 
 @extern("printf")
 func c_printf(fmt: Str) -> I32
+
+// C runtime: argc/argv access (defined in compiler/runtime/os/os.c)
+@extern("c")
+func tml_os_args_count() -> I32
+
+@extern("c")
+func tml_os_args_get(index: I32) -> Str
+
+// C stdio: file reading
+@extern("c")
+func fopen(path: Str, mode: Str) -> I64
+
+@extern("c")
+func fclose(fp: I64) -> I32
+
+@extern("c")
+func fseek(fp: I64, offset: I64, whence: I32) -> I32
+
+@extern("c")
+func ftell(fp: I64) -> I64
+
+@extern("c")
+func fread(buf: I64, size: I64, count: I64, fp: I64) -> I64
+
+@extern("c")
+func malloc(size: I64) -> I64
+
+@extern("c")
+func memset(dest: I64, val: I32, count: I64) -> I64
+
+/// Read an entire file into a Str. Returns "" on failure.
+/// Uses raw I64 handles to avoid RawPtr codegen bug.
+func read_file(path: Str) -> Str {
+    let fp: I64 = fopen(path, "rb")
+    if fp == 0 {
+        return ""
+    }
+    fseek(fp, 0, 2)  // SEEK_END = 2
+    let size: I64 = ftell(fp)
+    fseek(fp, 0, 0)  // SEEK_SET = 0
+    if size <= 0 {
+        fclose(fp)
+        return ""
+    }
+    let buf: I64 = malloc(size + 1)
+    if buf == 0 {
+        fclose(fp)
+        return ""
+    }
+    let read_count: I64 = fread(buf, 1, size, fp)
+    fclose(fp)
+    // Null-terminate: write 0 byte at buf + read_count
+    memset(buf + read_count, 0, 1)
+    // buf is an I64 holding a pointer; Str is also i64 (ptr) at LLVM level.
+    // Cast via I64-to-Str identity (both are i64 in the calling convention).
+    return buf as Str
+}
 
 /// Print a string to stdout (no newline).
 func print_str(s: Str) {
@@ -36,11 +97,11 @@ func print_str(s: Str) {
 
 /// Print a string followed by newline.
 func println(s: Str) {
-    puts(s)
+    c_puts(s)
 }
 
 func print_usage() {
-    println("Usage: tml ir-diff <file_a.ll> <file_b.ll> [--summary] [--function <name>]")
+    println("Usage: ir-diff <file_a.ll> <file_b.ll> [--summary] [--function <name>]")
     println("")
     println("Compare two LLVM IR files and report semantic differences.")
     println("")
@@ -55,7 +116,7 @@ func print_usage() {
 }
 
 pub func main() -> I32 {
-    let argc: I32 = args_count()
+    let argc: I32 = tml_os_args_count()
 
     // Parse arguments. The first arg is the program name, the rest are
     // user-provided. We need at least 2 positional args (file paths).
@@ -65,10 +126,11 @@ pub func main() -> I32 {
     var filter_func: Str = ""
     var positional_count: I32 = 0
     var expect_func_name: Bool = false
+    var show_help: Bool = false
 
     var i: I32 = 1
     loop (i < argc) {
-        let arg: Str = args_get(i)
+        let arg: Str = tml_os_args_get(i)
         if expect_func_name {
             filter_func = arg
             expect_func_name = false
@@ -76,9 +138,8 @@ pub func main() -> I32 {
             continue
         }
         if starts_with(arg, "--") {
-            if main_str_len(arg) == 6 and starts_with(arg, "--help") {
-                print_usage()
-                process_exit(0)
+            if c_strlen(arg) == 6 and starts_with(arg, "--help") {
+                show_help = true
             }
             if starts_with(arg, "--summary") {
                 summary_only = true
@@ -98,21 +159,26 @@ pub func main() -> I32 {
         i = i + 1
     }
 
+    if show_help {
+        print_usage()
+        return 0
+    }
+
     if positional_count < 2 {
         print_usage()
         return 2
     }
 
     // Read files
-    let content_a: Str = File::read_all(file_a)
-    let content_b: Str = File::read_all(file_b)
+    let content_a: Str = read_file(file_a)
+    let content_b: Str = read_file(file_b)
 
-    if main_str_len(content_a) == 0 {
+    if c_strlen(content_a) == 0 {
         print_str("error: could not read file: ")
         println(file_a)
         return 2
     }
-    if main_str_len(content_b) == 0 {
+    if c_strlen(content_b) == 0 {
         print_str("error: could not read file: ")
         println(file_b)
         return 2
