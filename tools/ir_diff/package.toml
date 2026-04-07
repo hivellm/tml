@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2025"
 authors = ["TML Team"]
 description = "LLVM IR semantic diff tool for TML self-hosting verification"
-license = "MIT"
+license = "Apache-2.0"
+repository = "https://github.com/hivellm/tml"
+homepage = "https://tml-lang.org"
 keywords = ["ir", "diff", "compiler", "testing", "self-hosting"]
 categories = ["development-tools"]
 
