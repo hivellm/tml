@@ -161,6 +161,8 @@ std
 │   ├── base62     # Base62 encoding
 │   ├── base91     # Base91 encoding
 │   └── base64url  # URL-safe Base64 encoding
+├── intern         # String interning
+│   └── interner   # Interner, InternedStr — deduplication pool
 └── test           # Testing framework
     ├── assert     # Assertions
     └── runner     # Test runner

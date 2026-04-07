@@ -2,6 +2,8 @@
 
 The type checker validates types and effects. Borrow checking is a separate pass.
 
+> **See also**: [typechecker-invariants.md](typechecker-invariants.md) — formal invariant specification used as the reference for self-hosting the type checker in TML.
+
 ## 1. Checker Phases
 
 ```

@@ -103,7 +103,15 @@ Source (.tml)
     │
     ▼
 ┌──────────────────┐
+│   THIR Lowering  │  → Typed HIR (coercion insertion, method resolution,
+│                  │     operator desugaring, pattern exhaustiveness)
+│                  │     (Query: thir_lower)
+└──────────────────┘
+    │
+    ▼
+┌──────────────────┐
 │   MIR Builder    │  → Mid-level IR (SSA form, control flow)
+│   (THIR→MIR)     │     Single path via ThirMirBuilder.
 │   + Codegen      │     (Query: mir_build + codegen_unit)
 └──────────────────┘
     │
@@ -123,7 +131,7 @@ Source (.tml)
 
 #### Query System
 
-All 8 compilation stages are wrapped as queries in a `QueryContext`:
+All 9 compilation stages are wrapped as queries in a `QueryContext`:
 
 | Query | Input | Output |
 |-------|-------|--------|
@@ -133,7 +141,8 @@ All 8 compilation stages are wrapped as queries in a `QueryContext`:
 | `typecheck_module` | file path + module name | typed AST |
 | `borrowcheck_module` | file path + module name | verified AST |
 | `hir_lower` | file path + module name | HIR |
-| `mir_build` | file path + module name | MIR |
+| `thir_lower` | file path + module name | THIR (coerced, method-resolved) |
+| `mir_build` | file path + module name | MIR (via THIR→MIR, single path) |
 | `codegen_unit` | file path + module name + options | LLVM IR string |
 
 Each query is executed via `QueryContext::force<R>(key)`:
@@ -291,10 +300,26 @@ src/hir/                     # Implementation
 └── hir_builder_pattern.cpp  # Pattern lowering
 ```
 
+#### THIR Lowering
+```cpp
+// Input: HirModule + TypeEnv + TraitSolver
+// Output: ThirModule (Typed HIR with all coercions explicit)
+// File: compiler/src/thir/thir_lower.cpp
+
+// Transforms:
+// 1. Implicit coercion insertion (CoercionExpr nodes)
+// 2. Method resolution via trait solver
+// 3. Operator desugaring to method calls (a + b → a.add(b))
+// 4. Pattern exhaustiveness checking
+// 5. Associated type normalization
+```
+
 #### MIR Generation
 ```cpp
-// Input: HIR (High-level IR)
+// Input: THIR (Typed HIR, post-THIR lowering)
 // Output: MIR (control flow graph)
+// Builder: ThirMirBuilder (compiler/src/mir/thir_mir_builder.cpp)
+// Note: Single path only — legacy HIR→MIR builder removed in v0.2.13.
 
 // Structure:
 // - Basic blocks
@@ -1067,7 +1092,8 @@ Every query has an **input fingerprint** (what goes in) and an **output fingerpr
 | `typecheck_module` | combine(output_fp of ParseModule, lib_env_fingerprint) |
 | `borrowcheck_module` | combine(output_fp of TypecheckModule, output_fp of ParseModule) |
 | `hir_lower` | combine(output_fp of TypecheckModule, output_fp of ParseModule) |
-| `mir_build` | combine(output_fp of HirLower, output_fp of TypecheckModule) |
+| `thir_lower` | combine(output_fp of HirLower, output_fp of TypecheckModule) |
+| `mir_build` | combine(output_fp of ThirLower, output_fp of TypecheckModule) |
 | `codegen_unit` | combine(deps' output_fps, target_triple, opt_level, coverage) |
 
 **Output fingerprints:**

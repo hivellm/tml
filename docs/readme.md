@@ -2,6 +2,8 @@
 
 Complete index of everything available in the TML language, standard library, and documentation.
 
+**Version**: 0.2.14 | **Status**: Phase 0 stabilization complete — 1845/1874 tests passing (86% of compile failures resolved). Single THIR→MIR pipeline (legacy HIR→MIR path removed in v0.2.13). See [specs/typechecker-invariants.md](specs/typechecker-invariants.md) for self-hosting invariant specification.
+
 ---
 
 ## Language Syntax & Features
@@ -364,6 +366,7 @@ Source: `lib/std/src/`
 | `std::events` | Event emitter/listener | [packages/25-EVENTS.md](packages/25-EVENTS.md) |
 | `std::sqlite` | SQLite3 embedded database | [packages/24-SQLITE.md](packages/24-SQLITE.md) |
 | `std::profiler` | Performance profiling, flame graphs, MIR instrumentation | [packages/38-PROFILER.md](packages/38-PROFILER.md) |
+| `std::intern` | `Interner`, `InternedStr` — string deduplication pool: `intern`, `get`, O(1) lookup | — |
 | `std::console` | Structured console output: `log`, `warn`, `error`, `debug`, `trace`, `time`/`time_end`, `count`, `group`, `assert`, `table` | — |
 | `std::inspector` | Chrome DevTools Protocol inspector: `open`, `close`, `wait_for_debugger`, `url`, `is_active` | — |
 | `std::types` | Helpers for `Maybe[T]`, `Outcome[T, E]` | — |
@@ -427,6 +430,7 @@ Source: `lib/test/src/`
 | [30-MIR.md](specs/30-MIR.md) | Mid-level IR |
 | [31-HIR.md](specs/31-HIR.md) | High-level IR |
 | [32-CONCURRENCY.md](specs/32-CONCURRENCY.md) | Concurrency model |
+| [typechecker-invariants.md](specs/typechecker-invariants.md) | Type checker invariants for self-hosting |
 
 ### User Guide (`docs/user/`)
 | Chapter | Topic |
