@@ -33,3 +33,8 @@
 
 - [ ] D.1 Update `docs/specs/typechecker-invariants.md` Appendix B: remove B-09, B-10 after commit lands.
 - [ ] D.2 Commit with conventional message: `refactor(types): deduplicate ParsedModuleFile and resolve_imported_symbol call (phase0m)`.
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -23,3 +23,8 @@
 - [ ] 3.2 Equivalent PyTorch benchmarks
 - [ ] 3.3 Equivalent llama.cpp benchmarks
 - [ ] 3.4 Comparison report
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

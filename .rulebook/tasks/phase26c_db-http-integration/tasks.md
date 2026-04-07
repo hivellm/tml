@@ -21,3 +21,8 @@
 - [ ] 3.1 Cross-database benchmark (SQLite vs PostgreSQL vs MySQL vs MongoDB)
 - [ ] 3.2 Cross-language benchmark (TML vs Rust vs Go vs Node.js)
 - [ ] 3.3 Final benchmark report
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

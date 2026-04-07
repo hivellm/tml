@@ -40,3 +40,8 @@
 
 - [ ] 5.1 After all tests pass and performance validated: make `--stage=parser:tml` the default
 - [ ] 5.2 Keep C++ lexer/parser as fallback with `--stage=parser:cpp` flag — do NOT delete yet
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

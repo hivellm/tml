@@ -47,3 +47,8 @@
 - [ ] 6.1 Test: `tml-link hello.obj -o hello.exe` (single object, no imports) produces a valid PE32+ executable; verify with `dumpbin /headers` and by running the binary
 - [ ] 6.2 Test: `tml-link foo.obj bar.obj kernel32.lib -o foo.exe` (multiple objects, Windows API imports) links successfully; binary runs and calls `ExitProcess` correctly
 - [ ] 6.3 Integration: replace `LLDLinker::link_windows()` call in `compiler/src/backend/lld_linker.cpp` with a call to the TML `tml-link` binary; all existing Windows test binaries still pass
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

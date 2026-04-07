@@ -54,3 +54,8 @@
 
 - [ ] 7.1 Create `compiler-tml/tests/codegen/instructions.test.tml` — unit tests: for each MIR instruction variant, `emit(inst)` must produce the expected LLVM IR string; cover at least 2 test cases per instruction kind
 - [ ] 7.2 IR-diff: compile 10 stdlib functions through TML instruction emitter → compare instruction-by-instruction against C++ `instructions.cpp` output; zero differences required
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

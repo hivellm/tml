@@ -56,3 +56,8 @@
 
 - [ ] 8.1 Test each construct individually: parse a func, a struct, an enum, an impl, a when expr, a closure — verify AST shape
 - [ ] 8.2 Differential test: parse 20 stdlib files with C++ parser and TML parser — compare serialized AST output
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

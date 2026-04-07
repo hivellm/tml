@@ -36,3 +36,8 @@
 - [ ] 4.2 Update ROADMAP.md: ERA 1 complete, record actual timeline vs estimate
 - [ ] 4.3 Update docs/analyses/independence-plan/04-milestone-matrix.md: mark M-10 ACHIEVED
 - [ ] 4.4 Archive phase12-17 tasks as complete
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -36,3 +36,8 @@
 - [ ] 4.1 Lower 20 stdlib modules through HIR→THIR → compare with C++ THIR output
 - [ ] 4.2 Lower full test suite → verify zero diffs against C++ THIR lowerer
 - [ ] 4.3 Specifically test: operator desugaring, coercion insertion, exhaustiveness on 10 edge-case files
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

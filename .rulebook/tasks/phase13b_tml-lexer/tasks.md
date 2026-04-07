@@ -49,3 +49,8 @@
 - [ ] 6.2 Test: tokenize all keyword/operator combinations — 100% coverage of token kinds
 - [ ] 6.3 Test: tokenize string edge cases (empty, escaped, raw, multiline, template with nested braces)
 - [ ] 6.4 Differential test: tokenize 20 stdlib files with BOTH C++ lexer and TML lexer — compare token lists
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

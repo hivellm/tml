@@ -45,3 +45,8 @@
 
 - [ ] 6.1 Test: preprocess `compiler/runtime/core/essential.c` and `compiler/runtime/memory/mem.c` using TML's preprocessor with the same include paths and defines as the current build; compare the output token stream against `gcc -E` output on the same files; any difference in the token sequence (ignoring whitespace tokens) is a bug
 - [ ] 6.2 Test: preprocess the 20 most-used system headers (`stdio.h`, `stdlib.h`, `string.h`, `stdint.h`, `stddef.h`, `stdbool.h`, `limits.h`, `math.h`, `errno.h`, `assert.h`, etc.) from the platform SDK; verify the output is parseable by the phase 23b C parser; no infinite loops, no crashes, no incorrect token count
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

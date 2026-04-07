@@ -92,3 +92,8 @@
       collisions when two modules define the same trait name."
 - [ ] D.3 Commit with conventional message:
       `fix(types,codegen): key behaviors/traits/functions by FQN (phase0i)`
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

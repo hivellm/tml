@@ -48,3 +48,8 @@
 
 - [ ] 6.1 Benchmark: serialize/deserialize the full stdlib AST (`lib/core/` + `lib/std/`) — measure time and peak memory against parsing the source directly
 - [ ] 6.2 Verify total serialization/deserialization overhead is less than 5% of compilation time on the benchmark suite from `mcp__tml__project_slow-tests`
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -43,3 +43,8 @@
 
 - [ ] 6.1 Create `compiler-tml/src/link/macho/fat.tml` — implement fat Mach-O writer: `fat_header` (magic 0xCAFEBABE, `nfat_arch`), one `fat_arch` per slice (cputype, cpusubtype, offset in fat file, size, alignment as power of 2); write each Mach-O slice at its declared offset padded to alignment boundary
 - [ ] 6.2 Expose `tml-link --arch x86_64 --arch arm64 -o universal.out` mode: link once for each architecture (reusing the same `.o` files if they are universal, or requiring separate `.o` per arch), then combine the two Mach-O outputs into a fat binary; verify with `lipo -info universal.out`
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

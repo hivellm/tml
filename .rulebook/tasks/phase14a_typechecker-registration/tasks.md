@@ -45,3 +45,8 @@
 
 - [ ] 5.1 Register types from 20 stdlib modules → serialize TypeEnv → compare with C++ TypeEnv output
 - [ ] 5.2 Register types from full test suite → verify zero diffs against C++ registration phase
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

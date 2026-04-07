@@ -24,3 +24,8 @@
 - [ ] 2.7 MysqlDialect (backtick quoting, ? placeholders)
 - [ ] 2.8 mod.tml + tml.toml
 - [ ] 2.9 Integration tests
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -50,3 +50,8 @@
 
 - [ ] 6.1 Build MIR for 20 stdlib modules → MIR-diff against C++ output (instruction by instruction)
 - [ ] 6.2 Build MIR for full test suite → verify zero diffs against C++ MIR builder
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

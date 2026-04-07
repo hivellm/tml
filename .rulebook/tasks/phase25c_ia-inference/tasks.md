@@ -29,3 +29,8 @@
 - [ ] 4.1 Tests: KV-cache update + retrieval
 - [ ] 4.2 Tests: sampling strategies produce valid tokens
 - [ ] 4.3 Tests: generate text with small model (GPT-2 or Phi-mini)
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -53,3 +53,8 @@
 
 - [ ] 7.1 Test: `tml cc compiler/runtime/core/essential.c` compiles TML's own C runtime successfully — the compiled object must pass all runtime behavior tests (I/O, panic, assert, test harness entry point); this is the primary correctness gate for the C frontend
 - [ ] 7.2 Test: `tml cc compiler/runtime/memory/mem.c` compiles successfully; link with `essential.o`; run the TML test suite against binaries linked with the TML-compiled runtime objects instead of Clang-compiled objects — all tests must pass, proving the C frontend produces ABI-compatible code
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

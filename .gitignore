@@ -103,3 +103,9 @@ compiler/cranelift/target/
 lib/chart/native/sciplot/
 .build-cache/
 mcp-call-log.jsonl
+
+CLAUDE.local.md
+.rulebook/backup/
+.rulebook/handoff/_pending.md
+.rulebook/handoff/.urgent
+.rulebook/telemetry/

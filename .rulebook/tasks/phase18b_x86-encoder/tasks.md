@@ -33,3 +33,8 @@
 ## Phase 6: Testing
 - [ ] 6.1 Encode 20 known instruction sequences, compare output bytes byte-for-byte against nasm/objdump reference
 - [ ] 6.2 End-to-end: lower factorial MIR → MachIR (phase18a) → x86 bytes → write to executable memory page → call via FFI → verify return value
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

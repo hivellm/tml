@@ -47,3 +47,8 @@
 - [ ] D.1 Update `docs/specs/typechecker-invariants.md` Appendix B: move B-03 and B-04 to a "Fixed" subsection with commit hashes.
 - [ ] D.2 Update Section 6 contract items IN-03/IN-05 (or equivalent): add "must preserve type arguments on enum constructors" and "Maybe combinators must return the closure's result type".
 - [ ] D.3 Commit with conventional message: `fix(types): preserve type args on enum constructors and Maybe combinators (phase0j)`.
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

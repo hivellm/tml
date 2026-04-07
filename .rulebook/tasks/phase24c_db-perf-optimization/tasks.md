@@ -38,3 +38,8 @@
 - [x] 4.3 Memory tracking skipped — needs OS-specific APIs not available in TML
 - [x] 4.4 Added note in output: "Run 3 times and take the median for fair comparison"
 - [x] 4.5 Output now prints both human-readable table (Total ms, Avg ns/op, Min ns/op, Max ns/op) and CSV with extended fields (lang,op,iters,total_ns,ns_per_op,min_ns,max_ns)
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

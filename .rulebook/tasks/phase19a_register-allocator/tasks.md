@@ -33,3 +33,8 @@
 - [ ] 6.2 Verify register allocation: check that no two intervals with overlapping ranges receive the same physical register
 - [ ] 6.3 Benchmark stack-only (phase18) vs linear scan (phase19) on 5 programs — target 3-5x speedup for integer-heavy code
 - [ ] 6.4 Run full native backend test suite with linear scan enabled — verify all phase18 integration tests still pass
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

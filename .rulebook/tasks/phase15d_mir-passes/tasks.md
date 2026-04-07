@@ -59,3 +59,8 @@ Port remaining 34 passes in batches.
 
 - [ ] 6.1 Run all 52 passes on full test suite → MIR-diff optimized output against C++ pass output
 - [ ] 6.2 IR-diff: compile test files with TML MIR pipeline → identical LLVM IR to C++ pipeline
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

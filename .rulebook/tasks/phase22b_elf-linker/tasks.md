@@ -45,3 +45,8 @@
 
 - [ ] 6.1 Test: `tml-link hello.o /usr/lib/x86_64-linux-gnu/libc.so.6 -o hello` produces a valid ELF64 executable on Linux x86-64; verify structure with `readelf -a hello`; run binary and confirm correct exit code; check that `ldd hello` shows the correct shared library dependencies
 - [ ] 6.2 Integration: replace LLD invocation in `lld_linker.cpp` on Linux with `tml-link`; run the full TML test suite on Linux; all tests that passed before continue to pass; LLD is no longer invoked on Linux
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

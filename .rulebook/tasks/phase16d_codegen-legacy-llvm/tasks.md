@@ -57,3 +57,8 @@
 - [ ] 8.1 IR-diff: compile all 93 stdlib modules through the complete TML MIR codegen pipeline (16a + 16b + 16c + 16d) → zero differences against C++ codegen output
 - [ ] 8.2 Run full TML test suite (1,659 tests) using the TML codegen path exclusively — all tests must pass, no regressions vs C++ codegen path
 - [ ] 8.3 Retire C++ legacy LLVM codegen files confirmed covered by TML path — remove `compiler/src/codegen/llvm/` files one subdirectory at a time; rebuild and re-run tests after each removal
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

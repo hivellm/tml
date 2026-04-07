@@ -49,3 +49,8 @@
 
 - [ ] 6.1 Verify node count: TML AST has same number of variants as C++ AST for each category
 - [ ] 6.2 `mcp__tml__check` on all new files — zero type errors
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -50,3 +50,8 @@
 
 - [ ] 6.1 Lower 20 stdlib modules to HIR → compare with C++ HIR output (field by field)
 - [ ] 6.2 Lower full test suite → verify zero diffs against C++ HIR builder
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

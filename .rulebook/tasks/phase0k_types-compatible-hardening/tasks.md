@@ -51,3 +51,8 @@
 
 - [ ] DC.1 Update `docs/specs/typechecker-invariants.md`: remove B-05 and CC-16 from Appendix B / Section 5 "surprising findings", update Section 6 contract to require strict behavior verification.
 - [ ] DC.2 Commit with conventional message: `fix(types): verify behavior conformance in types_compatible (phase0k)`.
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

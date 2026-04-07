@@ -41,3 +41,8 @@
 - [ ] 5.2 Test: `tml build --stage=lexer:tml .sandbox/hello.tml` compiles successfully, executable produces correct output matching pure C++ build
 - [ ] 5.3 IR-diff (using phase12d tool): compare LLVM IR from pure C++ pipeline vs hybrid pipeline with TML lexer stage — output must be bitwise identical
 - [ ] 5.4 Performance: measure per-file overhead of stage subprocess launch + serialization round-trip — must be less than 5% of total compile time for files over 100 lines
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -58,3 +58,8 @@
 - [ ] 8.1 Document parallel annotations in specs
 - [ ] 8.2 Add examples to 14-EXAMPLES.md
 - [ ] 8.3 Update CLI documentation with --parallel flag
+
+## 9. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 9.1 Update or create documentation covering the implementation
+- [ ] 9.2 Write tests covering the new behavior
+- [ ] 9.3 Run tests and confirm they pass

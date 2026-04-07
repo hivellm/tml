@@ -454,3 +454,8 @@
 - [ ] 5.4.3 Ship pre-built `tml.exe` binaries for each platform
 - [ ] 5.4.4 Mark C++ compiler as "bootstrap only" — no new features added
 - [ ] 5.4.5 All future compiler development happens in TML
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

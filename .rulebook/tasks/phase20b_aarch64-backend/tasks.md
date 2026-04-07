@@ -32,3 +32,8 @@
 ## Phase 6: Testing
 - [ ] 6.1 Cross-compile test programs from x86_64 host: verify emitted AArch64 bytes decode correctly via binutils aarch64-linux-gnu-objdump
 - [ ] 6.2 Run native backend integration test suite on an AArch64 target (Apple Silicon Mac or ARM64 Linux): verify hello world, factorial, and struct-return programs produce correct output
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

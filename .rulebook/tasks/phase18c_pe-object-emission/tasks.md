@@ -31,3 +31,8 @@
 - [ ] 6.1 Compile `hello.tml` using `--backend=native`: MIR → MachIR → x86 bytes → COFF .obj → link via LLD → .exe
 - [ ] 6.2 Verify the resulting `hello.exe` runs and produces correct output (exit code 0, "Hello, world!" printed)
 - [ ] 6.3 Verify the .obj file is accepted by MSVC `link.exe` as well as LLD (cross-linker compatibility)
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

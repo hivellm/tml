@@ -29,3 +29,8 @@
 ## Phase 5: Testing
 - [ ] 5.1 Lower 5 MIR programs (factorial, fib, hello world, struct return, loop) — verify MachIR structure matches expected block/inst count
 - [ ] 5.2 Verify prologue/epilogue generated correctly for each test function — frame size divisible by 16, all VirtualRegs assigned slots
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

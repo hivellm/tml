@@ -38,3 +38,8 @@
 - [ ] 4.2 Test incremental: modify one file, recompile → verify only affected queries re-execute
 - [ ] 4.3 Test cache invalidation: modify dependency → verify dependent queries re-execute
 - [ ] 4.4 Full test suite with TML query system → zero IR-diff regressions
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -80,3 +80,8 @@ After completion:
 - Compile-time decorator → metadata reflection (needs codegen emit for decorator metadata)
 - Lazy loading via proxies (needs runtime code generation)
 - Auto column type inference from TML types (needs compile-time type introspection)
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

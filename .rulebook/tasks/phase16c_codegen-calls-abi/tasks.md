@@ -54,3 +54,8 @@
 - [ ] 7.1 Create `compiler-tml/tests/codegen/calls.test.tml` — unit tests: direct call with sret, byval struct arg, void call, generic instantiation — assert emitted IR string exactly
 - [ ] 7.2 Create `compiler-tml/tests/codegen/dispatch.test.tml` — method dispatch tests: inherent, behavior, auto-deref, vtable — assert mangled name and call instruction form
 - [ ] 7.3 IR-diff: compile 15 stdlib functions using various call patterns → compare call instructions against C++ `instructions_call.cpp` and `method.cpp` output; zero differences required
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

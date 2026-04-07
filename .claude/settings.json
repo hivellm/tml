@@ -44,9 +44,65 @@
             "command": "bash f:/Node/hivellm/tml/.claude/hooks/enforce_team_for_background_agents.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-deferred.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-shortcuts.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-mcp-for-tasks.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/on-compact-reinject.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/resume-from-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/check-context-and-handoff.sh"
+          }
+        ]
       }
     ]
   },
-  "enabledMcpjsonServers": ["tml", "rulebook"],
+  "enabledMcpjsonServers": [
+    "tml",
+    "rulebook"
+  ],
   "includeCoAuthoredBy": false
 }

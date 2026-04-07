@@ -35,3 +35,8 @@
 ## Phase 6: Debugger Verification
 - [ ] 6.1 Set a breakpoint on a TML source line using VS Code + Microsoft C++ extension (PDB) and lldb (DWARF) — verify breakpoint hits
 - [ ] 6.2 Step through a TML function line by line, inspect local variable values — verify values match TML source semantics
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

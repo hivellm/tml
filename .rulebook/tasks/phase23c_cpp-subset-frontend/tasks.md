@@ -48,3 +48,8 @@
 
 - [ ] 6.1 Test: `tml c++ compiler/src/backend/llvm_backend.cpp` compiles the LLVM shim (~550 LOC) successfully — this file uses `<llvm/...>` headers, `llvm::LLVMContext`, `llvm::Module`, `llvm::TargetMachine`, and LLVM PassManager; the LLVM headers themselves require the C++ preprocessor (phase23a) and the C++ standard library subset (phase 5 above); measure: compilation succeeds, object file produced, symbols match expected set
 - [ ] 6.2 Test: `tml c++ compiler/src/backend/lld_linker.cpp` compiles the LLD shim (~670 LOC) successfully — this file uses LLD headers and the `lld::elf::link()` / `lld::coff::link()` entry points; link `llvm_backend.o` + `lld_linker.o` + TML's own linker + the LLVM/LLD static libraries into `tml.exe`; run the full TML test suite against this binary — all tests pass; this is the FULL TOOLCHAIN INDEPENDENCE milestone: TML compiled by itself, linked by itself, running its own test suite
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

@@ -80,3 +80,8 @@
       collapsing to NamedType('Fn') loses params/return and breaks monomorphization."
 - [ ] D.3 Commit with conventional message:
       `fix(types): preserve ClosureType through generic struct instantiation (phase0h)`
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

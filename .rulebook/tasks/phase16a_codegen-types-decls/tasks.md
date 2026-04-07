@@ -51,3 +51,8 @@
 - [ ] 6.1 Create `compiler-tml/tests/codegen/types.test.tml` — unit tests: for each MirType variant, `emit_type(t)` must equal expected LLVM IR string
 - [ ] 6.2 Create `compiler-tml/tests/codegen/layout.test.tml` — struct layout tests: compute layout of 10 stdlib structs, assert field offsets match C++ `llvm_types.cpp` output
 - [ ] 6.3 IR-diff: compile 5 stdlib modules through TML type/decl emitter → compare struct definitions and function declarations against C++ codegen output line-by-line
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

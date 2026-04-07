@@ -40,3 +40,8 @@
 - [ ] 5.1 Benchmark: compile a 1,000-file TML project, link fully, change one `.tml` source file (producing one new `.obj`), re-link; measure re-link time; the target is < 10ms on a modern NVMe SSD for a single-file change; use `std::time::Instant` for measurement
 - [ ] 5.2 Correctness test: for a multi-file project, change each source file individually and verify the incrementally-linked binary is bit-for-bit identical to a fresh full link of the same inputs; test at least 20 distinct single-file changes covering additions, modifications, and deletions of functions
 - [ ] 5.3 Fallback test: trigger each full-link fallback condition (symbol added, symbol removed, section size change) and verify that (a) the fallback occurs, (b) the resulting binary is correct, (c) the next incremental link after the fallback succeeds and is fast
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass

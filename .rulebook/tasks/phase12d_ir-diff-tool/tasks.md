@@ -54,3 +54,8 @@
 - [x] 6.4 Remove empty `lib/std/src/ir_diff/` and `lib/std/tests/ir_diff/` directories.
 - [ ] 6.5 Update any `use std::ir_diff::*` imports in the migrated files to use the new module path (likely `tools::ir_diff` or relative imports within the package).
 - [ ] 6.6 Verify the relocated files still compile via `mcp__tml__check tools/ir-diff/src/mod.tml`.
+
+## 1. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 1.1 Update or create documentation covering the implementation
+- [ ] 1.2 Write tests covering the new behavior
+- [ ] 1.3 Run tests and confirm they pass
