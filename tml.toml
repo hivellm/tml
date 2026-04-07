@@ -91,3 +91,12 @@ max-errors = 50
 # [dependencies]
 # Path dependencies example:
 # mylib = { path = "../mylib" }
+
+# ============ Workspace Configuration ============
+# Workspace members are built after the compiler.
+# Built-in libs (core, std, test) are NOT listed here — they're part of the compiler.
+# Optional packages (postgresql, chart) are NOT listed here — they're installed by the package manager.
+[workspace]
+members = [
+    "tools/ir_diff",
+]

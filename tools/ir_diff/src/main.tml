@@ -1,0 +1,228 @@
+//! IR Diff CLI entry point
+//!
+//! Usage:
+//!   tml run tools/ir_diff/src/main.tml -- <file_a.ll> <file_b.ll> [--summary] [--function <name>]
+//!
+//! Reads two LLVM IR files, parses them, diffs function-by-function, and
+//! prints results to stdout.
+//!
+//! Exit codes:
+//!   0 = files are semantically identical
+//!   1 = files differ
+//!   2 = usage error or file read failure
+
+use std::os::{args_count, args_get, process_exit}
+use std::file::File
+use ir_diff::parser::parse
+use ir_diff::differ::{diff, is_identical,
+    only_in_a_count, only_in_a_name,
+    only_in_b_count, only_in_b_name,
+    diffs_count, diff_func_name, diff_a_line, diff_b_line}
+use core::str::search::starts_with
+
+@extern("strlen")
+func main_str_len(s: Str) -> I64
+
+@extern("puts")
+func puts(s: Str) -> I32
+
+@extern("printf")
+func c_printf(fmt: Str) -> I32
+
+/// Print a string to stdout (no newline).
+func print_str(s: Str) {
+    c_printf(s)
+}
+
+/// Print a string followed by newline.
+func println(s: Str) {
+    puts(s)
+}
+
+func print_usage() {
+    println("Usage: tml ir-diff <file_a.ll> <file_b.ll> [--summary] [--function <name>]")
+    println("")
+    println("Compare two LLVM IR files and report semantic differences.")
+    println("")
+    println("Options:")
+    println("  --summary        Print only summary (number of differences)")
+    println("  --function <n>   Compare only the named function")
+    println("")
+    println("Exit codes:")
+    println("  0  Files are semantically identical")
+    println("  1  Files differ")
+    println("  2  Usage error or file read failure")
+}
+
+pub func main() -> I32 {
+    let argc: I32 = args_count()
+
+    // Parse arguments. The first arg is the program name, the rest are
+    // user-provided. We need at least 2 positional args (file paths).
+    var file_a: Str = ""
+    var file_b: Str = ""
+    var summary_only: Bool = false
+    var filter_func: Str = ""
+    var positional_count: I32 = 0
+    var expect_func_name: Bool = false
+
+    var i: I32 = 1
+    loop (i < argc) {
+        let arg: Str = args_get(i)
+        if expect_func_name {
+            filter_func = arg
+            expect_func_name = false
+            i = i + 1
+            continue
+        }
+        if starts_with(arg, "--") {
+            if main_str_len(arg) == 6 and starts_with(arg, "--help") {
+                print_usage()
+                process_exit(0)
+            }
+            if starts_with(arg, "--summary") {
+                summary_only = true
+            }
+            if starts_with(arg, "--function") {
+                expect_func_name = true
+            }
+        } else {
+            if positional_count == 0 {
+                file_a = arg
+            }
+            if positional_count == 1 {
+                file_b = arg
+            }
+            positional_count = positional_count + 1
+        }
+        i = i + 1
+    }
+
+    if positional_count < 2 {
+        print_usage()
+        return 2
+    }
+
+    // Read files
+    let content_a: Str = File::read_all(file_a)
+    let content_b: Str = File::read_all(file_b)
+
+    if main_str_len(content_a) == 0 {
+        print_str("error: could not read file: ")
+        println(file_a)
+        return 2
+    }
+    if main_str_len(content_b) == 0 {
+        print_str("error: could not read file: ")
+        println(file_b)
+        return 2
+    }
+
+    // Parse
+    let res_a = parse(content_a)
+    if res_a.is_err() {
+        print_str("error: failed to parse ")
+        println(file_a)
+        return 2
+    }
+    let mod_a = res_a.unwrap()
+
+    let res_b = parse(content_b)
+    if res_b.is_err() {
+        print_str("error: failed to parse ")
+        println(file_b)
+        return 2
+    }
+    let mod_b = res_b.unwrap()
+
+    // NOTE: Normalization is skipped due to a codegen bug in the TML compiler
+    // (HashMap in tools/ packages causes "Unknown method: len" at link time,
+    // and Maybe[Str] field access causes ACCESS_VIOLATION).
+    // When the bug is fixed, add: let norm_a = normalize(mod_a) etc.
+
+    // Diff
+    let diff_result = diff(mod_a, mod_b)
+    if diff_result.is_err() {
+        println("error: diff failed")
+        return 2
+    }
+    let d = diff_result.unwrap()
+
+    if is_identical(d) {
+        if not summary_only {
+            println("IR files are semantically identical.")
+        }
+        return 0
+    }
+
+    // Print results using cross-module accessor functions
+    // (direct field access on DiffResult returns () cross-module)
+    let a_only: I64 = only_in_a_count(d)
+    let b_only: I64 = only_in_b_count(d)
+    let ndiffs: I64 = diffs_count(d)
+
+    if summary_only {
+        var j: I64 = 0
+        if a_only > 0 {
+            println("Functions only in A:")
+            loop (j < a_only) {
+                print_str("  ")
+                println(only_in_a_name(d, j))
+                j = j + 1
+            }
+        }
+        j = 0
+        if b_only > 0 {
+            println("Functions only in B:")
+            loop (j < b_only) {
+                print_str("  ")
+                println(only_in_b_name(d, j))
+                j = j + 1
+            }
+        }
+        j = 0
+        if ndiffs > 0 {
+            println("Functions with differences:")
+            loop (j < ndiffs) {
+                print_str("  ")
+                println(diff_func_name(d, j))
+                j = j + 1
+            }
+        }
+    } else {
+        // Detailed mode: unified diff style
+        var j: I64 = 0
+
+        // Functions only in A
+        loop (j < a_only) {
+            print_str("--- a: ")
+            println(only_in_a_name(d, j))
+            println("  (function exists only in first file)")
+            j = j + 1
+        }
+
+        // Functions only in B
+        j = 0
+        loop (j < b_only) {
+            print_str("+++ b: ")
+            println(only_in_b_name(d, j))
+            println("  (function exists only in second file)")
+            j = j + 1
+        }
+
+        // Function diffs
+        j = 0
+        loop (j < ndiffs) {
+            print_str("@@@ ")
+            print_str(diff_func_name(d, j))
+            println(" @@@")
+            print_str("- ")
+            println(diff_a_line(d, j))
+            print_str("+ ")
+            println(diff_b_line(d, j))
+            j = j + 1
+        }
+    }
+
+    return 1
+}

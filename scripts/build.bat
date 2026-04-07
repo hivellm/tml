@@ -398,6 +398,20 @@ if exist "%VCPKG_BIN%" (
     )
 )
 
+:: ============ Build Workspace Tools ============
+echo.
+echo Building workspace tools...
+cd /d "%ROOT_DIR%"
+if exist "tools\ir_diff\src\main.tml" (
+    echo   Building ir-diff...
+    "%OUTPUT_DIR%\bin\tml.exe" build tools\ir_diff\src\main.tml -o "%OUTPUT_DIR%\bin\ir-diff.exe" 2>nul
+    if exist "%OUTPUT_DIR%\bin\ir-diff.exe" (
+        echo   OK ir-diff.exe
+    ) else (
+        echo   SKIP ir-diff ^(build failed, non-fatal^)
+    )
+)
+
 :: Print result
 echo.
 echo ========================================
