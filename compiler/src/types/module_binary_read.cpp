@@ -1141,8 +1141,8 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
         Module module = reader.read_module();
 
         if (reader.has_error()) {
-            TML_LOG_WARN("meta", "  [D003] [LOAD FAILED] " << module_path << " - "
-                                                           << reader.error_message());
+            TML_LOG_DEBUG("meta", "  [D003] [LOAD FAILED] " << module_path << " - "
+                                                            << reader.error_message());
             continue;
         }
 
@@ -1191,7 +1191,7 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
                 ++loaded;
                 TML_LOG_INFO("meta", "  [REGENERATED] " << mod_path);
             } else {
-                TML_LOG_WARN("meta", "  [REGEN FAILED] " << mod_path);
+                TML_LOG_DEBUG("meta", "  [REGEN FAILED] " << mod_path);
             }
         }
     }
@@ -1335,7 +1335,7 @@ static int generate_all_meta_from_source() {
         if (pass_generated == 0) {
             // No progress — remaining modules have unresolvable deps
             for (const auto& mod : still_failed) {
-                TML_LOG_WARN("meta", "  [FAILED] " << mod);
+                TML_LOG_DEBUG("meta", "  [FAILED] " << mod);
             }
             break;
         }
