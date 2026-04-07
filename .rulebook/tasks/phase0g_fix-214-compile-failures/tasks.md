@@ -95,6 +95,16 @@ LLVM IR error on opaque struct types. Requires type collection pre-pass extensio
 - [ ] 7.2 Add defensive assertion in `mir_types.cpp::mangle_mir_type_arg` for unresolved type variables
 - [ ] 7.3 Unify dual enum-def emission paths in `mir_codegen.cpp` (emit_enum_def vs used_struct_types_ loops)
 
+## Root Cause 8: MODULE_NOT_FOUND residuals — core::hash + core::simd::algorithms (3 tests) ✅ FIXED
+
+Three tests failed with MODULE_NOT_FOUND after RC1. Root causes were unrelated to http: missing facade file and an inline `use` inside a function body.
+
+- [x] 8.1 `lib/core/src/hash.tml` — created facade `pub use core::traits::hash::*` so `use core::hash` resolves (was declared in `mod.tml` as `pub mod hash` but had no file; the trait module lives at `core::traits::hash`)
+- [x] 8.2 `lib/core/src/simd/algorithms.tml` — fixed parse error: hoisted `use core::simd::sse42::crc32c as sse42_crc32c` from inside `crc32c_simd` body to top of file (inline `use` inside func body is invalid)
+- [x] 8.3 Verified `compiler/tests/core/builtins.test.tml` compiles and passes (1/1)
+- [x] 8.4 Verified `compiler/tests/runtime/strings.test.tml` compiles and passes (1/1)
+- [x] 8.5 `lib/core/tests/simd/algorithms.test.tml` — module now resolves; remaining failure is TYPE_MISMATCH (`Array[F32, 4]` initialized with F64 literals at lines 42-43) — distinct category, not MODULE_NOT_FOUND
+
 ## Validation
 
 - [x] V.1 Full suite re-run after RC1-RC4 — **1690+/1753 tests pass (96%)**, ~60 remaining failures (RC5-RC7)

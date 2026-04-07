@@ -1,0 +1,6 @@
+//! Hashing support — convenience re-export of `core::traits::hash`.
+//!
+//! Provides the `Hash` and `Hasher` behaviors, `DefaultHasher`,
+//! `RandomState`, `BuildHasher`, and the `combine_hashes` helper.
+
+pub use core::traits::hash::*

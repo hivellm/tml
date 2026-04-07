@@ -11,6 +11,7 @@ use core::runtime::intrinsics::{
     sse2_cmpeq_epi8, sse2_movemask_epi8,
     llvm_add, llvm_sub
 }
+use core::simd::sse42::crc32c as sse42_crc32c
 
 #if X86_64
 
@@ -135,8 +136,7 @@ pub func case_lower_simd(data: Slice[U8]) -> Unit {
 
 /// Hardware CRC32C using SSE4.2. Re-export from sse42 module.
 pub func crc32c_simd(data: Slice[U8]) -> U32 {
-    use core::simd::sse42::crc32c
-    return crc32c(data)
+    return sse42_crc32c(data)
 }
 
 /// Dot product of two F32 slices using SIMD accumulation.
