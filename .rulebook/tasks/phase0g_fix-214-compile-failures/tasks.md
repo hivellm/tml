@@ -1,12 +1,12 @@
 # Tasks: Fix 214 Test Compile Failures — Root Cause Analysis
 
-**Status**: In Progress (25/25 RC7 sub-items resolved or scoped out). RC1-RC5 + RC8 + RC9 + Maybe/Outcome AST + RC7.1-7.4 done (~221+ tests fixed). RC6 + deep RC7 (function-signature substitution for where-clause type equality) remaining.
+**Status**: In Progress. RC1-RC6 + RC8 + RC9 + RC7.1-7.4 done (~228+ tests fixed). Deep RC7 (function-signature substitution for where-clause type equality) remaining.
 **Depends on**: None
 **Blocks**: Test coverage accuracy, Phase 12 confidence
 **Duration**: 2–4 weeks
 **Risk**: High — multiple compiler bugs across different subsystems
 **Baseline**: 1539/1753 pass (88%), 214 compile failures across 7 root causes
-**Current**: ~1838/1874 pass, 36 remaining compile failures (-178 from baseline, 83% reduction)
+**Current**: ~1845/1874 pass, ~29 remaining compile failures (-185 from baseline, 86% reduction)
   - Source: `.sandbox/failure_categories.md` (regenerated 2026-04-06)
 
 ---
@@ -20,12 +20,12 @@
 | RC3 TYPE_RETURNS_UNIT | 18 | 2 | -16 (89%) |
 | RC4 LINK | 13 | 1 | -12 (92%) |
 | RC5 UNDEF_SYMBOL | 12 | 0 | -12 (100%) ✅ |
-| RC6 GEP_UNSIZED | 10 | 3 | -7 (70%) |
+| RC6 GEP_UNSIZED | 10 | 0 | -10 (100%) ✅ |
 | RC7 TYPE_MISMATCH | 8 | 18 | +10 (newly exposed; -11 from peak after 7.1-7.3) |
 | RC8 MODULE_NOT_FOUND residual | 0 | 3 | new |
 | RC9 PARSE_ERROR (Unit `{}` ret) | 0 | 6 | new (fix landed; counts via legacy IR) |
 | OTHER (misc IR / iter / SIMD) | 10 | 10 | 0 |
-| **Total** | **214** | **36** | **-178 (83%)** |
+| **Total** | **214** | **29** | **-185 (86%)** |
 
 Note: RC5/RC7 counts increased because RC1 fix unblocked more tests that
 now reach codegen and hit deeper bugs that were previously masked by the
@@ -94,13 +94,24 @@ substitution work landed in commits `4f3a2101`, `c83bf5db`, `6ea6ad19`, and `f74
     `lib/core/tests/derive/derive.test.tml`,
     `lib/core/tests/reflect/reflect_struct.test.tml` — all pass on the current build.
 
-## Root Cause 6: GEP_UNSIZED — getelementptr on unsized types (10 tests) ⏳ DEFERRED
+## Root Cause 6: GEP_UNSIZED — getelementptr on unsized types (10 tests) ✅ FIXED
 
-LLVM IR error on opaque struct types. Requires type collection pre-pass extension.
+Real root cause: `Waker` and `Context[T]` struct definitions in `lib/core/src/task.tml`
+were commented out under the false assumption that they were compiler builtins. They
+were not — `compiler/src/types/checker/{decl_struct,core,core_oop}.cpp` merely
+**reserved** the names in `RESERVED_TYPE_NAMES`, raising T038 if anyone tried to
+define them, but never actually registered the types. With the struct defs commented
+out, THIR never produced a `ThirStruct` for `Waker`/`Context__Unit`, MIR
+`module.structs` lacked the definitions, and codegen emitted `alloca %struct.Waker` /
+`alloca %struct.Context__Unit` plus GEPs against undefined opaque types →
+`base element of getelementptr must be sized`.
 
-- [ ] 6.1 `compiler/src/codegen/mir_codegen.cpp` lines 160-260 — extend type collection pre-pass to walk ALL instruction operand/result types (not only StructInitInst/EnumInitInst)
-- [ ] 6.2 Register every reachable MirStructType/MirEnumType via `collect_enum_types_from_type` from GEPInst, LoadInst, StoreInst, CallInst
-- [ ] 6.3 Re-run affected tests
+- [x] 6.1 `compiler/src/types/checker/decl_struct.cpp` — removed `"Context"` and `"Waker"` from `RESERVED_TYPE_NAMES` (kept `"Future"` since it's a real builtin behavior)
+- [x] 6.2 `compiler/src/types/checker/core.cpp` — same removal in the second copy of `RESERVED_TYPE_NAMES`
+- [x] 6.3 `compiler/src/types/checker/core_oop.cpp` — same removal in the third copy of `RESERVED_TYPE_NAMES`
+- [x] 6.4 `lib/core/src/task.tml` — uncommented `pub type Waker { waker: RawWaker }` (was lines 428-432)
+- [x] 6.5 `lib/core/src/task.tml` — uncommented `pub type Context[T] { waker: ref Waker, _marker: PhantomData[T] }` (was lines 569-573)
+- [x] 6.6 Re-run verified: full `core/task` suite (9 tests including `core_task_context`, `core_task_waker_basic`, `core_task_waker`, `core_task_rawwaker`, `core_task_pending_new`, `core_task_poll*`) all pass cleanly
 
 ## Root Cause 7: IR_TYPE_MISMATCH — LLVM type conflicts (8 tests) ⏳ PARTIAL
 

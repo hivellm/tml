@@ -425,11 +425,9 @@ impl RawWakerVTable {
 ///     }
 /// }
 /// ```
-// Waker is a compiler builtin type — definition commented to avoid T038.
-// The compiler provides Waker with field: waker: RawWaker
-// pub type Waker {
-//     waker: RawWaker
-// }
+pub type Waker {
+    waker: RawWaker
+}
 
 impl Waker {
     /// Creates a new `Waker` from a `RawWaker`.
@@ -566,11 +564,10 @@ impl Sync for Waker {}
 /// var context: Context = Context::from_waker(ref waker)
 /// let poll_result: Poll[T] = future.poll(ref mut context)
 /// ```
-// Context is a compiler builtin type — definition commented to avoid T038.
-// pub type Context[T] {
-//     waker: ref Waker,
-//     _marker: PhantomData[T]
-// }
+pub type Context[T] {
+    waker: ref Waker,
+    _marker: PhantomData[T]
+}
 
 impl Context[Unit] {
     /// Creates a new `Context` from a `Waker` reference.

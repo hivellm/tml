@@ -46,8 +46,6 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "StringBuilder",
     // Async types
     "Future",
-    "Context",
-    "Waker",
 };
 
 // ============================================================================

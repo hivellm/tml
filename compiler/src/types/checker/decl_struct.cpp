@@ -52,8 +52,6 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "StringBuilder",
     // Async types
     "Future",
-    "Context",
-    "Waker",
 };
 
 void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
