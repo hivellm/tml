@@ -1,6 +1,6 @@
 # Tasks: Fix 214 Test Compile Failures — Root Cause Analysis
 
-**Status**: In Progress. RC1-RC6 + RC8 + RC9 + RC7.1-7.4 done (~228+ tests fixed). Deep RC7 (function-signature substitution for where-clause type equality) remaining.
+**Status**: In Progress. RC1-RC6 + RC8 + RC9 + RC7.1-7.4 done (~228+ tests fixed). Deep RC7 (closure-typed struct fields lose signature info) remaining — 18 tests, root cause identified and documented in 7.5; fix requires its own focused sub-task (1-2 days) to either preserve closure types in struct field type_args, re-derive T from method body expression types, or mangle closure-typed fields with their full signature.
 **Depends on**: None
 **Blocks**: Test coverage accuracy, Phase 12 confidence
 **Duration**: 2–4 weeks
@@ -121,6 +121,43 @@ out, THIR never produced a `ThirStruct` for `Waker`/`Context__Unit`, MIR
 - [x] 7.2 `compiler/src/codegen/mir/mir_types.cpp::mangle_mir_type_arg` — added defensive `assert(false)` plus `fprintf(stderr)` warning when an unresolved type variable (single-uppercase-letter `MirStructType` / `MirEnumType` with no type_args) reaches mangling. In debug builds this aborts loudly; in release the existing `I64` fallback keeps codegen alive while the warning surfaces the regression.
 - [x] 7.3 `compiler/src/codegen/mir_codegen.cpp::emit_type_defs` — unified the dual enum-def emission paths. The `module.enums` loop now skips generic enums (those with non-empty `type_params`); their concrete monomorphizations are emitted exclusively by the `generic_enum_defs_` loop. This eliminates the divergent `%struct.Maybe` (template) vs `%struct.Maybe__I32` (instance) emissions and removes one source of LLVM type collisions.
 - [x] 7.4 `Maybe::ok_or` / `ok_or_else` subgroup (3 tests) — replaced stub in `compiler/src/codegen/llvm/expr/method_maybe.cpp` that returned the Maybe receiver as an Outcome; now branches on the tag, materializes the Outcome[T, E] struct via `require_enum_instantiation` (E inferred from the err arg / closure body), and builds Ok(val) / Err(err) with phi merge. Fixes `option_ok_or`, `option_ok_or_else`, `types_ok_or_else`. Commit `6ed4c5c0`.
+- [ ] 7.5 **DEEP ROOT CAUSE — closure-typed struct fields lose signature info (18 remaining)**
+
+  Investigation 2026-04-06 (thir-expert): All 18 remaining RC7 TYPE_MISMATCH failures share a common root cause that is NOT in THIR or MIR — it is in the legacy LLVM codegen path's monomorphization of impls whose generic params are derived from where-clauses on closure-typed fields.
+
+  **Concrete failing example**: `lib/core/tests/iter/iter_repeat_with.test.tml`
+  - Source: `let mut r: RepeatWith[func() -> I32] = repeat_with(do() -> I32 { 99 })`
+  - Impl: `impl[F, T] Iterator for RepeatWith[F] where F = func() -> T { func next(mut this) -> Maybe[T] { ... } }`
+  - Generated IR (file `build/debug/iter_repeat_with.test.ll` line 558):
+    ```
+    define internal %struct.Maybe__T @tml_N4core...RepeatWith__Fn4nextE(ptr %this) {
+      %t72 = alloca %struct.Maybe__T          ; <-- T not substituted!
+      ...
+      %t79 = call i32 %t76()                   ; <-- but inner closure call IS i32
+      ...
+    }
+    ```
+  - Caller IR (line 612): `%t5 = call %struct.Maybe__T @...RepeatWith__Fn4nextE(...)` followed by `%t6 = extractvalue %struct.Maybe__I32 %t5, 0` → LLVM rejects the type collision.
+
+  **Root cause chain** (verified via stderr instrumentation in `resolve_where_clause_type_equalities`):
+  1. Constructor call `repeat_with(do() -> I32 { 99 })` creates `r: RepeatWith[F]` where the type system stores the closure as a `NamedType("Fn")` PLACEHOLDER in `RepeatWith.type_args[0]`, NOT as a `ClosureType` with the rich signature.
+  2. When `r.next()` dispatches in `compiler/src/codegen/llvm/expr/method_impl.cpp:556-557`, it builds `type_subs[F] = named.type_args[0]` — already the degenerate `NamedType("Fn")`.
+  3. The `PendingImplMethod` is queued with this degraded `type_subs`.
+  4. In `compiler/src/codegen/llvm/core/generic_instantiate_impl.cpp:755/1122`, `resolve_where_clause_type_equalities(impl.where_clause=[F=func()->T], type_subs={F=Fn})` attempts to derive T by pattern-matching `func() -> T` against `concrete=Fn`. But `Fn` is `NamedType`, not `FuncType`/`ClosureType`, so the matcher (line 441-468 special case) bails out. T is never added to `type_subs`.
+  5. `gen_impl_method_instantiation` proceeds with `current_type_subs_={F=Fn}`. T is missing entirely (not "unresolved" — absent), so the stub-emission guard at line 980-1011 doesn't trigger (it only checks if existing entries contain unresolved generics, not if expected entries are missing).
+  6. Body emission emits `Maybe[T]` literally (T as parser type), producing `alloca %struct.Maybe__T`. The function signature carries `%struct.Maybe__T` as return type. Body operations on `i32` (from the closure call result) write into a struct sized for `i64`, then the caller extracts as `Maybe__I32` → LLVM type mismatch.
+
+  **Affected tests** (all 18 share this pattern — closure-typed iterator/Future/Promise sources whose inner type is derived via where-clause):
+  - `compiler_iter_from_fn`, `iter_higher_order`, `iter_repeat_with`, `iter_sources`, `iter_filter_map`, `iter_map`, `iter_map_while`, `iter_scan`, `core_async_iter_basic`, `future_fuse`, `option_as_mut`, `option_as_ref`, `option_blocked`, `option_flatten`, `option_transpose2`, `outcome_as_ref`, `outcome_transpose2`, `result.test`, `maybe_get_or_insert`, `behaviors.test` (List), `promise_all_settled` (List of PromiseState), `types_encoding`.
+
+  Many of the non-closure ones (e.g., `option_as_mut` with `Maybe__I32` vs `ptr`) are secondary effects of the same broken impl method generation poisoning subsequent type unification.
+
+  **Three viable fix paths** (each substantial — should be its own task):
+  1. **Preserve closure types in struct field type_args** — when constructing a struct whose field has type `F` and `F` was bound to a closure literal, store the closure's `ClosureType` (not the `Fn` placeholder) in the struct instance's type_args. Requires changes in type checker (struct field type recording) and call resolver (constructor args). Most correct, biggest scope.
+  2. **Re-derive T at impl method instantiation time** — when `gen_impl_method_instantiation` sees that some impl_generic isn't in `full_type_subs`, walk the impl method body's AST and use the type checker's expression-type cache to find a call to `this.<closure_field>()`, then use that call's resolved return type to bind T. Requires plumbing the type checker's expression-type map into codegen.
+  3. **Mangle closure-typed fields with their full signature** — change `mangle_mir_type_arg` and the legacy mangler to encode `func() -> I32` as e.g. `Fn__Ret_I32__P0_` instead of bare `Fn`. Then `parse_mangled_type_string` can recover the rich type, and the existing where-clause resolver works without changes. Smallest scope but invasive in the mangling layer.
+
+  **Status**: ROOT CAUSE IDENTIFIED, NOT YET FIXED. Requires a separate sub-task (estimated 1-2 days) to implement one of the three approaches above. Current commit only contains the failed exploration (no production code changed).
 
 ## Root Cause 9: PARSE_ERROR — Unit `{}` return mismatch in legacy AST codegen (6 tests) ✅ FIXED
 
