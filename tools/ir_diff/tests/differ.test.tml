@@ -1,0 +1,135 @@
+// Tests for ir_diff::differ
+//
+// NOTE: FunctionDiff.first_diff_index (I64) and FunctionDiff.context (List[Str])
+// return () when accessed cross-module due to a codegen bug. We verify diff
+// detection via the Str fields (name, a_line, b_line) and list lengths.
+use test::{assert, assert_eq}
+use ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr, IrParam, IrGlobal}
+use ir_diff::differ::{diff, is_identical}
+use std::collections::list::List
+
+// ============================================================================
+// Test 1: Identical modules produce empty DiffResult
+// ============================================================================
+
+@test
+func test_diff_identical_modules() -> I32 {
+    var ia: List[IrInstr] = List[IrInstr]::new(2)
+    ia.push(IrInstr { opcode: "add", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = add i32 %a0, 1" })
+    ia.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r0" })
+    var ba: List[IrBlock] = List[IrBlock]::new(1)
+    ba.push(IrBlock { label: "entry", instructions: ia })
+    var fa: List[IrFunction] = List[IrFunction]::new(1)
+    fa.push(IrFunction { name: "@f", return_type: "i32", params: List[IrParam]::new(0), blocks: ba, attributes: "" })
+    let a = IrModule { functions: fa, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    var ib: List[IrInstr] = List[IrInstr]::new(2)
+    ib.push(IrInstr { opcode: "add", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = add i32 %a0, 1" })
+    ib.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r0" })
+    var bb: List[IrBlock] = List[IrBlock]::new(1)
+    bb.push(IrBlock { label: "entry", instructions: ib })
+    var fb: List[IrFunction] = List[IrFunction]::new(1)
+    fb.push(IrFunction { name: "@f", return_type: "i32", params: List[IrParam]::new(0), blocks: bb, attributes: "" })
+    let b = IrModule { functions: fb, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    let result = diff(a, b)
+    assert(result.is_ok(), "diff should succeed")
+    let d = result.unwrap()
+    assert(is_identical(d), "identical modules should produce empty diff")
+    return 0
+}
+
+// ============================================================================
+// Test 2: Different instruction count -> FunctionDiff detected
+// ============================================================================
+
+@test
+func test_diff_different_instruction_count() -> I32 {
+    var ia: List[IrInstr] = List[IrInstr]::new(3)
+    ia.push(IrInstr { opcode: "add", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = add i32 %a0, 1" })
+    ia.push(IrInstr { opcode: "mul", result: Nothing, operands: List[Str]::new(0), raw_line: "%r1 = mul i32 %r0, 2" })
+    ia.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r1" })
+    var ba: List[IrBlock] = List[IrBlock]::new(1)
+    ba.push(IrBlock { label: "entry", instructions: ia })
+    var fa: List[IrFunction] = List[IrFunction]::new(1)
+    fa.push(IrFunction { name: "@compute", return_type: "i32", params: List[IrParam]::new(0), blocks: ba, attributes: "" })
+    let a = IrModule { functions: fa, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    var ib: List[IrInstr] = List[IrInstr]::new(2)
+    ib.push(IrInstr { opcode: "add", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = add i32 %a0, 1" })
+    ib.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r0" })
+    var bb: List[IrBlock] = List[IrBlock]::new(1)
+    bb.push(IrBlock { label: "entry", instructions: ib })
+    var fb: List[IrFunction] = List[IrFunction]::new(1)
+    fb.push(IrFunction { name: "@compute", return_type: "i32", params: List[IrParam]::new(0), blocks: bb, attributes: "" })
+    let b = IrModule { functions: fb, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    let result = diff(a, b)
+    assert(result.is_ok(), "diff ok")
+    let d = result.unwrap()
+    assert(not is_identical(d), "different length should not be identical")
+    assert_eq(d.function_diffs.len(), 1, "one function diff")
+    assert_eq(d.function_diffs.get(0).name, "@compute", "function name")
+    return 0
+}
+
+// ============================================================================
+// Test 3: Same count but opcode differs -> FunctionDiff with correct lines
+// ============================================================================
+
+@test
+func test_diff_same_count_different_opcode() -> I32 {
+    var ia: List[IrInstr] = List[IrInstr]::new(2)
+    ia.push(IrInstr { opcode: "add", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = add i32 %a0, 1" })
+    ia.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r0" })
+    var ba: List[IrBlock] = List[IrBlock]::new(1)
+    ba.push(IrBlock { label: "entry", instructions: ia })
+    var fa: List[IrFunction] = List[IrFunction]::new(1)
+    fa.push(IrFunction { name: "@g", return_type: "i32", params: List[IrParam]::new(0), blocks: ba, attributes: "" })
+    let a = IrModule { functions: fa, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    var ib: List[IrInstr] = List[IrInstr]::new(2)
+    ib.push(IrInstr { opcode: "sub", result: Nothing, operands: List[Str]::new(0), raw_line: "%r0 = sub i32 %a0, 1" })
+    ib.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret i32 %r0" })
+    var bb: List[IrBlock] = List[IrBlock]::new(1)
+    bb.push(IrBlock { label: "entry", instructions: ib })
+    var fb: List[IrFunction] = List[IrFunction]::new(1)
+    fb.push(IrFunction { name: "@g", return_type: "i32", params: List[IrParam]::new(0), blocks: bb, attributes: "" })
+    let b = IrModule { functions: fb, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    let result = diff(a, b)
+    assert(result.is_ok(), "diff ok")
+    let d = result.unwrap()
+    assert(not is_identical(d), "different opcodes not identical")
+    assert_eq(d.function_diffs.len(), 1, "one function diff")
+    let fd = d.function_diffs.get(0)
+    assert_eq(fd.name, "@g", "function name")
+    assert_eq(fd.a_line, "%r0 = add i32 %a0, 1", "a side")
+    assert_eq(fd.b_line, "%r0 = sub i32 %a0, 1", "b side")
+    return 0
+}
+
+// ============================================================================
+// Test 4: Function only in one side
+// ============================================================================
+
+@test
+func test_diff_function_only_in_a() -> I32 {
+    var ia: List[IrInstr] = List[IrInstr]::new(1)
+    ia.push(IrInstr { opcode: "ret", result: Nothing, operands: List[Str]::new(0), raw_line: "ret void" })
+    var ba: List[IrBlock] = List[IrBlock]::new(1)
+    ba.push(IrBlock { label: "entry", instructions: ia })
+    var fa: List[IrFunction] = List[IrFunction]::new(1)
+    fa.push(IrFunction { name: "@missing", return_type: "void", params: List[IrParam]::new(0), blocks: ba, attributes: "" })
+    let a = IrModule { functions: fa, globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+    let b = IrModule { functions: List[IrFunction]::new(0), globals: List[IrGlobal]::new(0), metadata_ids: List[Str]::new(0) }
+
+    let result = diff(a, b)
+    assert(result.is_ok(), "diff ok")
+    let d = result.unwrap()
+    assert(not is_identical(d), "not identical")
+    assert_eq(d.functions_only_in_a.len(), 1, "one in a")
+    assert_eq(d.functions_only_in_a.get(0), "@missing", "name")
+    assert_eq(d.functions_only_in_b.len(), 0, "none in b")
+    return 0
+}

@@ -20,11 +20,15 @@ use ir_diff::types::IrFunction
 use ir_diff::types::IrBlock
 use ir_diff::types::IrInstr
 use std::collections::list::List
-use std::collections::hashmap::HashMap
-use core::str::basic::len as str_len
 use core::str::basic::char_at
 use core::str::basic::substring
 use core::str::convert::concat
+
+// `use core::str::basic::len as str_len` triggers a mangled-name bug where
+// codegen emits a call to `@tml_str_len` but the linker symbol is the
+// un-renamed `@tml_N4core3str5basic3lenE`. Use libc strlen directly instead.
+@extern("strlen")
+func str_len(s: Str) -> I64
 
 // ============================================================================
 // Result types
@@ -77,10 +81,10 @@ func is_type_arg_char(c: I32) -> Bool {
 /// no such suffix exists.
 ///
 /// Examples:
-///   `foo_I64` → `foo`
-///   `bar_U32` → `bar`
-///   `baz`     → `baz`
-///   `qux_abc` → `qux_abc` (lowercase is not a type-arg marker)
+///   `foo_I64` -> `foo`
+///   `bar_U32` -> `bar`
+///   `baz`     -> `baz`
+///   `qux_abc` -> `qux_abc` (lowercase is not a type-arg marker)
 func demangle_once(name: Str) -> Str {
     let n: I64 = str_len(name)
     var i: I64 = n - 1
@@ -101,7 +105,7 @@ func demangle_once(name: Str) -> Str {
     return name
 }
 
-/// Repeatedly strips type-arg suffixes. `foo_I64_Str` → `foo`.
+/// Repeatedly strips type-arg suffixes. `foo_I64_Str` -> `foo`.
 func demangle_name(name: Str) -> Str {
     var cur: Str = name
     loop (true) {
@@ -114,32 +118,67 @@ func demangle_name(name: Str) -> Str {
     return cur
 }
 
-/// Builds a map from function name → its index in the module's functions list.
-func build_name_index(m: ref IrModule) -> HashMap[Str, I64] {
-    var map: HashMap[Str, I64] = HashMap[Str, I64]::new(m.functions.len() * 2 + 8)
+/// Byte-compares two strings. `Str` in TML is a C-style null-terminated
+/// pointer, so we walk byte-by-byte up to len(a).
+func str_eq(a: Str, b: Str) -> Bool {
+    let la: I64 = str_len(a)
+    let lb: I64 = str_len(b)
+    if la != lb {
+        return false
+    }
     var i: I64 = 0
-    let n: I64 = m.functions.len()
-    loop (i < n) {
-        let f: IrFunction = m.functions.get(i)
-        map.set(f.name, i)
+    loop (i < la) {
+        if char_at(a, i) != char_at(b, i) {
+            return false
+        }
         i = i + 1
     }
-    return map
+    return true
 }
 
-/// Builds a demangled-name → index map. If multiple functions demangle to
-/// the same name, the later one overwrites earlier entries (good enough
-/// for the fallback lookup — the exact-match pass runs first).
-func build_demangled_index(m: ref IrModule) -> HashMap[Str, I64] {
-    var map: HashMap[Str, I64] = HashMap[Str, I64]::new(m.functions.len() * 2 + 8)
+// ============================================================================
+// Linear-scan index (avoids HashMap which has codegen issues in tools/ packages)
+// ============================================================================
+
+/// Finds the index of `name` in module b's function list by exact name match.
+/// Returns -1 if not found.
+func find_exact(b: ref IrModule, name: Str) -> I64 {
     var i: I64 = 0
-    let n: I64 = m.functions.len()
+    let n: I64 = b.functions.len()
     loop (i < n) {
-        let f: IrFunction = m.functions.get(i)
-        map.set(demangle_name(f.name), i)
+        if str_eq(b.functions.get(i).name, name) {
+            return i
+        }
         i = i + 1
     }
-    return map
+    return -1
+}
+
+/// Finds the index of a function in module b by demangled name match.
+/// Returns -1 if not found.
+func find_demangled(b: ref IrModule, demangled: Str) -> I64 {
+    var i: I64 = 0
+    let n: I64 = b.functions.len()
+    loop (i < n) {
+        if str_eq(demangle_name(b.functions.get(i).name), demangled) {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Checks if value `v` is present in the list.
+func list_contains_i64(lst: ref List[I64], v: I64) -> Bool {
+    var i: I64 = 0
+    let n: I64 = lst.len()
+    loop (i < n) {
+        if lst.get(i) == v {
+            return true
+        }
+        i = i + 1
+    }
+    return false
 }
 
 // ============================================================================
@@ -179,12 +218,12 @@ func build_context(lines: ref List[Str], idx: I64) -> List[Str] {
     if start < 0 {
         start = 0
     }
-    var end: I64 = idx + 4
-    if end > n {
-        end = n
+    var end_idx: I64 = idx + 4
+    if end_idx > n {
+        end_idx = n
     }
     var i: I64 = start
-    loop (i < end) {
+    loop (i < end_idx) {
         out.push(lines.get(i))
         i = i + 1
     }
@@ -193,24 +232,24 @@ func build_context(lines: ref List[Str], idx: I64) -> List[Str] {
 
 /// Compares two flattened instruction lists. Returns `Nothing` if they are
 /// identical, or `Just(FunctionDiff)` pointing at the first difference.
-func diff_instruction_lists(name: Str, a: ref List[Str], b: ref List[Str]) -> Maybe[FunctionDiff] {
-    let alen: I64 = a.len()
-    let blen: I64 = b.len()
+func diff_instruction_lists(name: Str, a_lines: ref List[Str], b_lines: ref List[Str]) -> Maybe[FunctionDiff] {
+    let alen: I64 = a_lines.len()
+    let blen: I64 = b_lines.len()
     var min_len: I64 = alen
     if blen < min_len {
         min_len = blen
     }
     var i: I64 = 0
     loop (i < min_len) {
-        let la: Str = a.get(i)
-        let lb: Str = b.get(i)
+        let la: Str = a_lines.get(i)
+        let lb: Str = b_lines.get(i)
         if not str_eq(la, lb) {
             return Just(FunctionDiff {
                 name: name,
                 first_diff_index: i,
                 a_line: la,
                 b_line: lb,
-                context: build_context(a, i),
+                context: build_context(a_lines, i),
             })
         }
         i = i + 1
@@ -220,37 +259,20 @@ func diff_instruction_lists(name: Str, a: ref List[Str], b: ref List[Str]) -> Ma
         var a_line_val: Str = ""
         var b_line_val: Str = ""
         if alen > blen {
-            a_line_val = a.get(blen)
-        } else {
-            b_line_val = b.get(alen)
+            a_line_val = a_lines.get(blen)
+        }
+        if blen > alen {
+            b_line_val = b_lines.get(alen)
         }
         return Just(FunctionDiff {
             name: name,
             first_diff_index: min_len,
             a_line: a_line_val,
             b_line: b_line_val,
-            context: build_context(a, min_len),
+            context: build_context(a_lines, min_len),
         })
     }
     return Nothing
-}
-
-/// Byte-compares two strings. `Str` in TML is a C-style null-terminated
-/// pointer, so we walk byte-by-byte up to len(a).
-func str_eq(a: Str, b: Str) -> Bool {
-    let la: I64 = str_len(a)
-    let lb: I64 = str_len(b)
-    if la != lb {
-        return false
-    }
-    var i: I64 = 0
-    loop (i < la) {
-        if char_at(a, i) != char_at(b, i) {
-            return false
-        }
-        i = i + 1
-    }
-    return true
 }
 
 // ============================================================================
@@ -273,36 +295,32 @@ pub func diff(a: ref IrModule, b: ref IrModule) -> Outcome[DiffResult, DiffError
     var only_in_b: List[Str] = List[Str]::new(4)
     var diffs: List[FunctionDiff] = List[FunctionDiff]::new(4)
 
-    let b_exact: HashMap[Str, I64] = build_name_index(b)
-    let b_demangled: HashMap[Str, I64] = build_demangled_index(b)
-
     // Track which `b` functions have been matched so we can report the rest
-    // as "only in b".
-    var matched_b: HashMap[I64, I64] = HashMap[I64, I64]::new(b.functions.len() * 2 + 8)
+    // as "only in b". Using List[I64] instead of HashMap to avoid codegen
+    // issues with HashMap in tools/ packages.
+    var matched_b: List[I64] = List[I64]::new(b.functions.len())
 
     var ai: I64 = 0
     let acount: I64 = a.functions.len()
     loop (ai < acount) {
         let fa: IrFunction = a.functions.get(ai)
-        var b_idx: I64 = -1
-        if b_exact.has(fa.name) {
-            b_idx = b_exact.get(fa.name)
-        } else {
+        // Try exact name match first.
+        var b_idx: I64 = find_exact(b, fa.name)
+        // Fallback: demangled name match.
+        if b_idx < 0 {
             let dm: Str = demangle_name(fa.name)
-            if b_demangled.has(dm) {
-                b_idx = b_demangled.get(dm)
-            }
+            b_idx = find_demangled(b, dm)
         }
         if b_idx < 0 {
             only_in_a.push(fa.name)
         } else {
-            matched_b.set(b_idx, 1)
+            matched_b.push(b_idx)
             let fb: IrFunction = b.functions.get(b_idx)
-            let a_lines: List[Str] = flatten_instructions(fa)
-            let b_lines: List[Str] = flatten_instructions(fb)
-            when diff_instruction_lists(fa.name, a_lines, b_lines) {
-                Just(fd) => { diffs.push(fd) },
-                Nothing => {}
+            let a_flat: List[Str] = flatten_instructions(fa)
+            let b_flat: List[Str] = flatten_instructions(fb)
+            let maybe_fd: Maybe[FunctionDiff] = diff_instruction_lists(fa.name, a_flat, b_flat)
+            if maybe_fd.is_just() {
+                diffs.push(maybe_fd.unwrap())
             }
         }
         ai = ai + 1
@@ -312,7 +330,7 @@ pub func diff(a: ref IrModule, b: ref IrModule) -> Outcome[DiffResult, DiffError
     var bi: I64 = 0
     let bcount: I64 = b.functions.len()
     loop (bi < bcount) {
-        if not matched_b.has(bi) {
+        if not list_contains_i64(matched_b, bi) {
             only_in_b.push(b.functions.get(bi).name)
         }
         bi = bi + 1
@@ -331,4 +349,52 @@ pub func is_identical(r: ref DiffResult) -> Bool {
     return r.functions_only_in_a.is_empty()
         and r.functions_only_in_b.is_empty()
         and r.function_diffs.is_empty()
+}
+
+// ============================================================================
+// Cross-module accessors
+//
+// Due to a codegen bug, List[T] and I64 fields of structs defined in one
+// module return () when accessed from another module. These accessor
+// functions run within the differ module where field access works correctly.
+// ============================================================================
+
+/// Number of functions only in module A.
+pub func only_in_a_count(r: ref DiffResult) -> I64 {
+    return r.functions_only_in_a.len()
+}
+
+/// Get the name of the i-th function only in module A.
+pub func only_in_a_name(r: ref DiffResult, i: I64) -> Str {
+    return r.functions_only_in_a.get(i)
+}
+
+/// Number of functions only in module B.
+pub func only_in_b_count(r: ref DiffResult) -> I64 {
+    return r.functions_only_in_b.len()
+}
+
+/// Get the name of the i-th function only in module B.
+pub func only_in_b_name(r: ref DiffResult, i: I64) -> Str {
+    return r.functions_only_in_b.get(i)
+}
+
+/// Number of function-level diffs.
+pub func diffs_count(r: ref DiffResult) -> I64 {
+    return r.function_diffs.len()
+}
+
+/// Get the function name of the i-th diff.
+pub func diff_func_name(r: ref DiffResult, i: I64) -> Str {
+    return r.function_diffs.get(i).name
+}
+
+/// Get the "a" side line of the i-th diff.
+pub func diff_a_line(r: ref DiffResult, i: I64) -> Str {
+    return r.function_diffs.get(i).a_line
+}
+
+/// Get the "b" side line of the i-th diff.
+pub func diff_b_line(r: ref DiffResult, i: I64) -> Str {
+    return r.function_diffs.get(i).b_line
 }

@@ -1,0 +1,59 @@
+use test::{assert, assert_eq}
+use ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr, IrParam, IrGlobal}
+use ir_diff::differ::{diff, is_identical}
+use std::collections::list::List
+
+@test
+func test_diff_identical() -> I32 {
+    var instrs_a: List[IrInstr] = List[IrInstr]::new(1)
+    instrs_a.push(IrInstr {
+        opcode: "ret",
+        result: Nothing,
+        operands: List[Str]::new(0),
+        raw_line: "ret void",
+    })
+    var blocks_a: List[IrBlock] = List[IrBlock]::new(1)
+    blocks_a.push(IrBlock { label: "entry", instructions: instrs_a })
+    var funcs_a: List[IrFunction] = List[IrFunction]::new(1)
+    funcs_a.push(IrFunction {
+        name: "@f",
+        return_type: "void",
+        params: List[IrParam]::new(0),
+        blocks: blocks_a,
+        attributes: "",
+    })
+    let a = IrModule {
+        functions: funcs_a,
+        globals: List[IrGlobal]::new(0),
+        metadata_ids: List[Str]::new(0),
+    }
+
+    var instrs_b: List[IrInstr] = List[IrInstr]::new(1)
+    instrs_b.push(IrInstr {
+        opcode: "ret",
+        result: Nothing,
+        operands: List[Str]::new(0),
+        raw_line: "ret void",
+    })
+    var blocks_b: List[IrBlock] = List[IrBlock]::new(1)
+    blocks_b.push(IrBlock { label: "entry", instructions: instrs_b })
+    var funcs_b: List[IrFunction] = List[IrFunction]::new(1)
+    funcs_b.push(IrFunction {
+        name: "@f",
+        return_type: "void",
+        params: List[IrParam]::new(0),
+        blocks: blocks_b,
+        attributes: "",
+    })
+    let b = IrModule {
+        functions: funcs_b,
+        globals: List[IrGlobal]::new(0),
+        metadata_ids: List[Str]::new(0),
+    }
+
+    let result = diff(a, b)
+    assert(result.is_ok(), "diff ok")
+    let d = result.unwrap()
+    assert(is_identical(d), "identical")
+    return 0
+}

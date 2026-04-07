@@ -1,0 +1,15 @@
+use test::{assert, assert_eq}
+use ir_diff::parser::parse
+use ir_diff::normalizer::normalize
+
+@test
+func test_normalize_returns() -> I32 {
+    let src = "define i32 @f(i32 %x) \{\nentry:\n  %tmp = add i32 %x, 1\n  ret i32 %tmp\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let parsed = res.unwrap()
+    let m = normalize(parsed)
+    // Just check we got something back without crashing
+    assert(true, "normalize returned without crash")
+    return 0
+}

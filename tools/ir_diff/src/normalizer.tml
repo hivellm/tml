@@ -26,12 +26,17 @@ use ir_diff::types::IrInstr
 use ir_diff::types::IrParam
 use std::collections::list::List
 use std::collections::hashmap::HashMap
-use core::str::basic::len as str_len
 use core::str::basic::char_at
 use core::str::basic::substring
 use core::str::convert::concat
 use core::str::convert::concat_all
 use core::fmt::helpers::i64_to_str
+
+// `use core::str::basic::len as str_len` triggers a mangled-name bug where
+// codegen emits a call to `@tml_str_len` but the linker symbol is the
+// un-renamed `@tml_N4core3str5basic3lenE`. Use libc strlen directly instead.
+@extern("strlen")
+func str_len(s: Str) -> I64
 
 // ============================================================================
 // Character predicates
@@ -255,21 +260,31 @@ func build_rename_map(f: ref IrFunction) -> HashMap[Str, Str] {
 /// Applies a rename map to an `IrInstr`, returning a new instance with
 /// `result`, `operands`, and `raw_line` rewritten. `opcode` is unchanged.
 func rewrite_instr(instr: ref IrInstr, map: ref HashMap[Str, Str]) -> IrInstr {
-    // Rewrite result. Start from the original `Maybe[Str]` so the type is
-    // unambiguous, then overwrite in the Just arm with the remapped value.
-    var new_result: Maybe[Str] = instr.result
+    // Rewrite result. We avoid `var new_result: Maybe[Str] = instr.result`
+    // because TML codegen has a Maybe[Str]/Maybe[I32] mismatch bug when
+    // assigning Maybe[Str] from a struct field into a local var.
+    // Workaround: track has_result + result_str separately, reassemble at use.
+    var has_result: Bool = false
+    var result_str: Str = ""
     when instr.result {
         Just(res) => {
+            has_result = true
             let rl: I64 = str_len(res)
             var bare: Str = res
             if rl > 0 and char_at(res, 0) == ('%' as I32) {
                 bare = substring(res, 1, rl)
             }
             if map.has(bare) {
-                new_result = Just(map.get(bare))
+                result_str = map.get(bare)
+            } else {
+                result_str = res
             }
         },
         Nothing => {}
+    }
+    var new_result: Maybe[Str] = Nothing
+    if has_result {
+        new_result = Just(result_str)
     }
 
     // Rewrite operands.

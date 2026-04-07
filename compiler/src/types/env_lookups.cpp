@@ -48,6 +48,24 @@ auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<Stru
                 return module_registry_->lookup_struct(module_path, symbol_name);
             }
         }
+        // Fallback: search all modules for the struct by name.
+        // This is necessary when library/user code is re-parsed during codegen
+        // and the struct is defined in a transitively-imported module that
+        // isn't directly in the import map (e.g., ir_diff::types::IrModule
+        // used by ir_diff::differ but not directly imported by the main file).
+        // Also search internal_structs so private types are accessible when
+        // generating the module's own impl methods.
+        const auto& all_modules = module_registry_->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto struct_it = mod.structs.find(name);
+            if (struct_it != mod.structs.end()) {
+                return struct_it->second;
+            }
+            auto internal_it = mod.internal_structs.find(name);
+            if (internal_it != mod.internal_structs.end()) {
+                return internal_it->second;
+            }
+        }
     }
     return std::nullopt;
 }
