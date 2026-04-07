@@ -95,6 +95,13 @@ LLVM IR error on opaque struct types. Requires type collection pre-pass extensio
 - [ ] 7.2 Add defensive assertion in `mir_types.cpp::mangle_mir_type_arg` for unresolved type variables
 - [ ] 7.3 Unify dual enum-def emission paths in `mir_codegen.cpp` (emit_enum_def vs used_struct_types_ loops)
 
+## Root Cause 9: PARSE_ERROR — Unit `{}` return mismatch in legacy AST codegen (6 tests) ✅ FIXED
+
+LLVM verifier rejected `ret void` in functions declared returning `{}` (data-context Unit). Affected `fmt_unit_display_debug`, `fmt_unit_type`, `fmt_unit_to_string`, `option_unit`, `outcome_unit`, `tuple/unit`. Root cause: `gen_return` in `compiler/src/codegen/llvm/control/return.cpp` collapsed `void` and `{}` into a single `ret void` branch and the no-value (bare `return`) path always emitted `ret void`.
+
+- [x] 9.1 `compiler/src/codegen/llvm/control/return.cpp` — split the `void`/`{}` branch so `{}` emits `ret {} zeroinitializer`, and apply the same to the no-value path
+- [x] 9.2 Verify all 6 tests compile cleanly with `--legacy`
+
 ## Root Cause 8: MODULE_NOT_FOUND residuals — core::hash + core::simd::algorithms (3 tests) ✅ FIXED
 
 Three tests failed with MODULE_NOT_FOUND after RC1. Root causes were unrelated to http: missing facade file and an inline `use` inside a function body.

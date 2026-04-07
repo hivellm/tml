@@ -363,10 +363,25 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                     final_val = trunc_reg;
                 }
             }
-            emit_line("  ret " + current_ret_type_ + " " + final_val);
+            // When the enclosing function's return type is void (e.g. closures
+            // whose result is Unit), discard the computed value and emit a
+            // bare `ret void`. Emitting `ret void %val` is invalid LLVM IR.
+            // For "{}" data-context Unit, emit `ret {} zeroinitializer`
+            // (the function was declared returning {}, not void).
+            if (current_ret_type_ == "void") {
+                emit_line("  ret void");
+            } else if (current_ret_type_ == "{}") {
+                emit_line("  ret {} zeroinitializer");
+            } else {
+                emit_line("  ret " + current_ret_type_ + " " + final_val);
+            }
         }
     } else {
-        emit_line("  ret void");
+        if (current_ret_type_ == "{}") {
+            emit_line("  ret {} zeroinitializer");
+        } else {
+            emit_line("  ret void");
+        }
     }
     block_terminated_ = true;
     return "void";
