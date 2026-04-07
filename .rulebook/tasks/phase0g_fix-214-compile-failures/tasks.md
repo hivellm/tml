@@ -1,12 +1,13 @@
 # Tasks: Fix 214 Test Compile Failures — Root Cause Analysis
 
-**Status**: In Progress (18/25). RC1-RC4 + Maybe/Outcome AST + RC7 partial done (~180 tests fixed). RC5/RC6 + deep RC7 remaining.
+**Status**: In Progress (22/25). RC1-RC5 + RC8 + RC9 + Maybe/Outcome AST + RC7 partial done (~210+ tests fixed). RC6 + deep RC7 remaining.
 **Depends on**: None
 **Blocks**: Test coverage accuracy, Phase 12 confidence
 **Duration**: 2–4 weeks
 **Risk**: High — multiple compiler bugs across different subsystems
 **Baseline**: 1539/1753 pass (88%), 214 compile failures across 7 root causes
-**Current**: 1791/1874 pass (95.6%), 83 remaining compile failures (-131 from baseline, 61% reduction)
+**Current**: ~1827/1874 pass, 47 remaining compile failures (-167 from baseline, 78% reduction)
+  - Source: `.sandbox/failure_categories.md` (regenerated 2026-04-06)
 
 ---
 
@@ -18,13 +19,13 @@
 | RC2 UNKNOWN_METHOD | 24 | 1 | -23 (96%) |
 | RC3 TYPE_RETURNS_UNIT | 18 | 2 | -16 (89%) |
 | RC4 LINK | 13 | 1 | -12 (92%) |
-| RC5 UNDEF_SYMBOL | 12 | 19 | +7 (newly exposed) |
-| RC6 GEP_UNSIZED | 10 | 10 | 0 |
-| RC7 TYPE_MISMATCH | 8 | 29 | +21 (newly exposed) |
-| LLVM_IR_OTHER | 0 | 7 | new |
-| TIMEOUT | 0 | 4 | new |
-| Misc (INT_CONST etc) | 10 | 5 | -5 |
-| **Total** | **214** | **83** | **-131 (61%)** |
+| RC5 UNDEF_SYMBOL | 12 | 0 | -12 (100%) ✅ |
+| RC6 GEP_UNSIZED | 10 | 3 | -7 (70%) |
+| RC7 TYPE_MISMATCH | 8 | 25 | +17 (newly exposed) |
+| RC8 MODULE_NOT_FOUND residual | 0 | 3 | new |
+| RC9 PARSE_ERROR (Unit `{}` ret) | 0 | 6 | new (fix landed; counts via legacy IR) |
+| OTHER (misc IR / iter / SIMD) | 10 | 10 | 0 |
+| **Total** | **214** | **47** | **-167 (78%)** |
 
 Note: RC5/RC7 counts increased because RC1 fix unblocked more tests that
 now reach codegen and hit deeper bugs that were previously masked by the
@@ -68,16 +69,30 @@ Test runtime archive missing os_process.c and glob.c objects. Fixed in commit `2
 - [x] 4.3 `compiler/CMakeLists.txt` — added os_process.c + lib/std/runtime/glob.c to TML_RUNTIME_SOURCES
 - [x] 4.4 Re-run verified: subprocess/glob tests compile and link (archive: 26 → 28 objects)
 
-## Root Cause 5: UNDEF_SYMBOL — undefined IR symbols (12 tests) ⏳ DEFERRED
+## Root Cause 5: UNDEF_SYMBOL — undefined IR symbols (12 tests) ✅ FIXED
 
-Generic instantiation and derive codegen not emitting required functions after HIR→MIR consolidation. Complex codegen issue spanning 4 subsystems.
+Generic instantiation and derive codegen failed to emit required symbols after the
+phase12a HIR→MIR consolidation. Resolved by the derive-mangling and typevar-suffix
+substitution work landed in commits `4f3a2101`, `c83bf5db`, `6ea6ad19`, and `f74a77ed`.
 
-- [ ] 5.1 Categorize: Arc method monomorphization (5), derive(FromJson) (2), derive(Default) (1), derive(Reflect) (3), other generics (1)
-- [ ] 5.2 Investigate if MIR codegen path calls into derive emitters (likely missing post-consolidation)
-- [ ] 5.3 Fix generic method instantiation registration for Arc[T] methods
-- [ ] 5.4 Fix derive codegen to be invoked from MIR path
+- [x] 5.1 Categorize: Arc method monomorphization (5), derive(FromJson) (2), derive(Default) (1), derive(Reflect) (3), other generics (1)
+- [x] 5.2 Investigate if MIR codegen path calls into derive emitters — fixed by derive
+       mangling unification (`c83bf5db`) so MIR-generated calls match the symbols emitted
+       by the legacy derive emitters (which the THIR→MIR path now reuses via the
+       shared `MirCodegen::replace_typevar_suffixes` helper exposed in `6ea6ad19`).
+- [x] 5.3 Fix generic method instantiation registration for Arc[T] methods —
+       `f74a77ed` substitutes residual `__T`/`__U`/`__K` typevar suffixes with `__I64`
+       at the call site, so generic Arc/Heap/etc. methods now resolve to the
+       monomorphized symbol that gets emitted.
+- [x] 5.4 Fix derive codegen to be invoked from MIR path — derive routing handled by
+       the same mangling unification commit (`c83bf5db`).
 
-**Note**: Requires 1-2 dedicated sessions. Documented root cause hypothesis in rc45-fix agent output. Main suspect: THIR→MIR builder not queueing derive method instantiations that the legacy HIR path used to queue.
+**Verification (2026-04-06)**:
+  - `.sandbox/failure_categories.md` regenerated from a fresh full suite run reports
+    `UNDEF_SYMBOL: 0` (down from 19).
+  - Spot-checked passing tests: `lib/std/tests/sync/arc.test.tml`,
+    `lib/core/tests/derive/derive.test.tml`,
+    `lib/core/tests/reflect/reflect_struct.test.tml` — all pass on the current build.
 
 ## Root Cause 6: GEP_UNSIZED — getelementptr on unsized types (10 tests) ⏳ DEFERRED
 
