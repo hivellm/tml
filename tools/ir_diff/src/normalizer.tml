@@ -19,11 +19,11 @@
 //! Globals (`@name`) are NEVER renamed — they are module-level and part of
 //! the program's observable semantics (linking, exports, calls).
 
-use std::ir_diff::types::IrModule
-use std::ir_diff::types::IrFunction
-use std::ir_diff::types::IrBlock
-use std::ir_diff::types::IrInstr
-use std::ir_diff::types::IrParam
+use ir_diff::types::IrModule
+use ir_diff::types::IrFunction
+use ir_diff::types::IrBlock
+use ir_diff::types::IrInstr
+use ir_diff::types::IrParam
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::str::basic::len as str_len

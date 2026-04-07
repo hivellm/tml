@@ -19,7 +19,7 @@
 //! them so that debug-info differences do not affect comparison.
 
 use std::collections::list::List
-use std::ir_diff::types::{IrParam, IrInstr, IrBlock, IrFunction, IrGlobal, IrModule, ParseError}
+use ir_diff::types::{IrParam, IrInstr, IrBlock, IrFunction, IrGlobal, IrModule, ParseError}
 use core::str::basic::{substring, substring_from, substring_to}
 use core::str::search::{find, starts_with, ends_with, contains}
 use core::str::split::{split, split_once, lines}

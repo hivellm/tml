@@ -77,7 +77,7 @@ static std::unordered_set<std::string> s_not_found_paths;             // module_
 
 // Cached library root directory (determined once, reused for all lookups)
 static std::mutex s_lib_root_mutex;
-static std::string s_lib_root; // e.g., "F:/Node/hivellm/tml/lib"
+static std::string s_lib_root; // canonical absolute path to the lib/ directory
 static bool s_lib_root_resolved = false;
 
 static std::string find_lib_root() {
@@ -91,11 +91,10 @@ static std::string find_lib_root() {
 
     // Try common locations in order of likelihood
     std::vector<std::filesystem::path> candidates = {
-        cwd / "lib",                                      // Running from project root
-        std::filesystem::path("lib"),                     // Relative to CWD
-        std::filesystem::path("F:/Node/hivellm/tml/lib"), // Hardcoded fallback
-        cwd.parent_path() / "lib",                        // Running from build/
-        cwd.parent_path().parent_path() / "lib",          // Running from build/debug/
+        cwd / "lib",                             // Running from project root
+        std::filesystem::path("lib"),            // Relative to CWD
+        cwd.parent_path() / "lib",               // Running from build/
+        cwd.parent_path().parent_path() / "lib", // Running from build/debug/
     };
 
     for (const auto& candidate : candidates) {
@@ -109,6 +108,39 @@ static std::string find_lib_root() {
 
     // Fallback: empty string means use old search behavior
     TML_DEBUG_LN("[MODULE] WARNING: Could not determine library root");
+    return "";
+}
+
+// Cached tools/ root — mirrors find_lib_root(). Used for developer tool
+// packages that live outside the stdlib (e.g. tools/ir_diff, tools/ast_dump).
+static std::string s_tools_root;
+static bool s_tools_root_resolved = false;
+static std::mutex s_tools_root_mutex;
+
+static std::string find_tools_root() {
+    std::lock_guard<std::mutex> lock(s_tools_root_mutex);
+    if (s_tools_root_resolved) {
+        return s_tools_root;
+    }
+    s_tools_root_resolved = true;
+
+    auto cwd = std::filesystem::current_path();
+    std::vector<std::filesystem::path> candidates = {
+        cwd / "tools",                             // Running from project root
+        std::filesystem::path("tools"),            // Relative to CWD
+        cwd.parent_path() / "tools",               // Running from build/
+        cwd.parent_path().parent_path() / "tools", // Running from build/debug/
+    };
+
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate) && std::filesystem::is_directory(candidate)) {
+            s_tools_root = std::filesystem::canonical(candidate).string();
+            TML_DEBUG_LN("[MODULE] Tools root resolved: " << s_tools_root);
+            return s_tools_root;
+        }
+    }
+
+    TML_DEBUG_LN("[MODULE] Tools root not found (optional)");
     return "";
 }
 
@@ -428,7 +460,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             std::filesystem::path("lib") / "test" / "src" / "mod.tml",
             std::filesystem::path("..") / ".." / "lib" / "test" / "src" / "assertions" / "mod.tml",
             std::filesystem::path("..") / "lib" / "test" / "src" / "assertions" / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/test/src/assertions/mod.tml"),
         };
 
         for (const auto& module_file : search_paths) {
@@ -528,7 +559,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             std::filesystem::path("..") / ".." / "lib" / "backtrace" / "src" / "mod.tml",
             std::filesystem::path("..") / "lib" / "backtrace" / "src" / "mod.tml",
             cwd / "lib" / "backtrace" / "src" / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src/mod.tml"),
         };
 
         for (const auto& module_file : search_paths) {
@@ -583,10 +613,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             std::filesystem::path("..") / "lib" / "backtrace" / "src" / fs_module_path / "mod.tml",
             cwd / "lib" / "backtrace" / "src" / (fs_module_path + ".tml"),
             cwd / "lib" / "backtrace" / "src" / fs_module_path / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src") /
-                (fs_module_path + ".tml"),
-            std::filesystem::path("F:/Node/hivellm/tml/lib/backtrace/src") / fs_module_path /
-                "mod.tml",
         };
 
         TML_DEBUG_LN("[MODULE] Looking for backtrace module: " << module_path << " (fs_path: "
@@ -653,8 +679,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             std::filesystem::path("core") / "src" / fs_module_path / "mod.tml",
             cwd / "lib" / "core" / "src" / (fs_module_path + ".tml"),
             cwd / "lib" / "core" / "src" / fs_module_path / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / (fs_module_path + ".tml"),
-            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / fs_module_path / "mod.tml",
         };
 
         TML_DEBUG_LN("[MODULE] Looking for core module: " << module_path << " (fs_path: "
@@ -720,8 +744,6 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
             std::filesystem::path("std") / "src" / fs_module_path / "mod.tml",
             cwd / "lib" / "std" / "src" / (fs_module_path + ".tml"),
             cwd / "lib" / "std" / "src" / fs_module_path / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / (fs_module_path + ".tml"),
-            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / fs_module_path / "mod.tml",
         };
 
         TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path
@@ -816,6 +838,60 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                     if (!silent) {
                         TML_LOG_ERROR("types", "Module '" << module_path
                                                           << "' not found in package lib/"
+                                                          << package_name << "/src/");
+                    }
+                    cache_not_found(module_path);
+                    return false;
+                }
+            }
+
+            // Fallback: try tools/<package>/src/ — for compiler developer tools
+            // that live outside lib/ (e.g. tools/ir_diff, tools/ast_dump).
+            const std::string& tools_root = find_tools_root();
+            if (!tools_root.empty()) {
+                namespace fs = std::filesystem;
+                fs::path package_src = fs::path(tools_root) / package_name / "src";
+
+                if (fs::exists(package_src) && fs::is_directory(package_src)) {
+                    std::string cached_path = get_cached_path(module_path);
+                    if (!cached_path.empty()) {
+                        TML_DEBUG_LN("[MODULE] Path cache hit: " << module_path);
+                        return load_module_from_file(module_path, cached_path);
+                    }
+                    if (is_known_not_found(module_path)) {
+                        if (!silent) {
+                            TML_LOG_ERROR("types", "Module not found: " << module_path);
+                        }
+                        return false;
+                    }
+
+                    std::string fs_rest;
+                    if (rest.empty()) {
+                        fs_rest = "mod";
+                    } else {
+                        fs_rest = rest;
+                        size_t p = 0;
+                        while ((p = fs_rest.find("::", p)) != std::string::npos) {
+                            fs_rest.replace(p, 2, "/");
+                            p += 1;
+                        }
+                    }
+
+                    fs::path candidate = package_src / (fs_rest + ".tml");
+                    if (!fs::exists(candidate)) {
+                        candidate = package_src / fs_rest / "mod.tml";
+                    }
+                    if (fs::exists(candidate)) {
+                        std::string res = candidate.string();
+                        cache_resolved_path(module_path, res);
+                        TML_DEBUG_LN("[MODULE] Resolved tools package: " << module_path << " -> "
+                                                                         << res);
+                        return load_module_from_file(module_path, res);
+                    }
+
+                    if (!silent) {
+                        TML_LOG_ERROR("types", "Module '" << module_path
+                                                          << "' not found in package tools/"
                                                           << package_name << "/src/");
                     }
                     cache_not_found(module_path);

@@ -1,7 +1,7 @@
-// Tests for std::ir_diff::parser
+// Tests for ir_diff::parser
 use test::{assert, assert_eq}
-use std::ir_diff::parser::parse
-use std::ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr, IrParam, IrGlobal, ParseError}
+use ir_diff::parser::parse
+use ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr, IrParam, IrGlobal, ParseError}
 
 @test
 func test_parse_simple_function() -> I32 {

@@ -1,8 +1,8 @@
-// Tests for std::ir_diff::normalizer
+// Tests for ir_diff::normalizer
 use test::{assert, assert_eq}
-use std::ir_diff::parser::parse
-use std::ir_diff::normalizer::normalize
-use std::ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr}
+use ir_diff::parser::parse
+use ir_diff::normalizer::normalize
+use ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr}
 
 @test
 func test_normalize_registers_renamed_sequentially() -> I32 {

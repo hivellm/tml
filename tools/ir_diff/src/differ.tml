@@ -15,10 +15,10 @@
 //! one file to `@foo_I64` in the other even if a third file calls it
 //! `@foo_U32` — the diff will report that as a function mismatch.
 
-use std::ir_diff::types::IrModule
-use std::ir_diff::types::IrFunction
-use std::ir_diff::types::IrBlock
-use std::ir_diff::types::IrInstr
+use ir_diff::types::IrModule
+use ir_diff::types::IrFunction
+use ir_diff::types::IrBlock
+use ir_diff::types::IrInstr
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::str::basic::len as str_len
