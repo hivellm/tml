@@ -197,6 +197,14 @@ struct StructDef {
     /// can be meaningfully accessed at a time. Field access is `lowlevel` (unsafe)
     /// as there's no runtime type checking.
     bool is_union = false;
+
+    /// Whether this struct has the `@simd` annotation.
+    ///
+    /// SIMD types compile to LLVM vector types (e.g. `<16 x i8>`) instead of
+    /// regular struct types. All fields must have the same element type.
+    /// This flag ensures library-imported SIMD structs get the correct LLVM
+    /// type definition even when loaded from the module registry cache.
+    bool is_simd = false;
 };
 
 /// Enum (algebraic data type) definition.

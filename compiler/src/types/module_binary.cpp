@@ -535,6 +535,7 @@ void ModuleBinaryWriter::write_struct_def(const StructDef& def) {
 
     write_bool(def.is_interior_mutable);
     write_bool(def.is_union);
+    write_bool(def.is_simd);
 }
 
 void ModuleBinaryWriter::write_enum_def(const EnumDef& def) {

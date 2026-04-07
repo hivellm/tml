@@ -303,6 +303,13 @@ struct CodegenLibraryState {
     std::vector<std::string> loop_metadata;
     int loop_metadata_counter = 1000;
 
+    // SIMD type info for @simd annotated structs (struct_name -> {elem_type, lane_count})
+    struct SimdTypeInfoData {
+        std::string element_llvm_type;
+        int lane_count;
+    };
+    std::unordered_map<std::string, SimdTypeInfoData> simd_types;
+
     // Module paths processed during the bootstrap codegen pass.
     // Used to detect when a test imports a module not covered by the cached state.
     std::unordered_set<std::string> processed_module_paths;

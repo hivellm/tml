@@ -176,7 +176,7 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // the user code doesn't explicitly import them.
     {
         static const std::vector<std::string> essential_library_modules = {
-            "std::collections::List",
+            "std::collections::list",
             "std::collections::buffer",
             // Behavior impls for collection types (PartialEq, Duplicate, etc.)
             // These are in a separate module from the type definitions.
@@ -414,7 +414,7 @@ void LLVMIRGen::emit_module_pure_tml_functions(
         if (!will_process) {
             static const std::unordered_set<std::string> core_essential = {
                 "core::ordering",         "core::alloc",      "core::option",       "core::types",
-                "std::collections::List", "core::fmt::impls", "core::fmt::helpers",
+                "std::collections::list", "core::fmt::impls", "core::fmt::helpers",
             };
             will_process = core_essential.count(module_name) > 0;
             // Conditionally add sync essential modules
@@ -571,6 +571,7 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                     "core::ops",
                     "core::ops::arith",
                     "core::str",
+                    "std::collections::list",
                     "std::collections::List",
                     "std::collections::buffer",
                     "std::text",
@@ -674,6 +675,107 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // Record which modules are being processed (for capture_library_state())
     for (const auto& info : eligible_modules) {
         processed_module_paths_.insert(info.module_name);
+    }
+
+    // ========================================================================
+    // PHASE 0: Register struct/enum types from ALL imported modules, including
+    // type-only modules (has_pure_tml_functions=false, source_code empty).
+    // These modules are excluded from eligible_modules but their types are
+    // needed by modules that ARE eligible (e.g., ir_diff::types defines
+    // IrModule used by ir_diff::differ). Without this, struct field access
+    // fails during Phase 2 codegen because struct_fields_ doesn't have the
+    // type's field layout.
+    //
+    // This uses the module registry's StructDef/EnumDef directly (no re-parsing).
+    // ========================================================================
+    TML_LOG_INFO("codegen", "Phase 0: all_modules.size=" << all_modules.size()
+                                                         << " imported_module_paths.size="
+                                                         << imported_module_paths.size());
+    for (const auto& ip : imported_module_paths) {
+        TML_LOG_INFO("codegen", "Phase 0: imported_path=" << ip);
+    }
+    for (const auto& [module_name, module] : all_modules) {
+        // Only process if this module is actually imported
+        bool is_needed = false;
+        for (const auto& imported_path : imported_module_paths) {
+            if (module_name == imported_path || imported_path.find(module_name + "::") == 0 ||
+                module_name.find(imported_path + "::") == 0) {
+                is_needed = true;
+                break;
+            }
+        }
+        if (!is_needed)
+            continue;
+
+        // Register structs from the module registry's StructDef
+        TML_LOG_INFO("codegen", "Phase 0: Processing module "
+                                    << module_name << " structs=" << module.structs.size()
+                                    << " has_pure_tml=" << module.has_pure_tml_functions
+                                    << " source_empty=" << module.source_code.empty());
+        for (const auto& [struct_name, struct_def] : module.structs) {
+            // Skip if already registered
+            if (struct_fields_.find(struct_name) != struct_fields_.end())
+                continue;
+            // Skip generic structs (will be instantiated on demand)
+            if (!struct_def.type_params.empty())
+                continue;
+
+            std::string type_name = "%struct." + struct_name;
+            if (struct_types_.find(struct_name) == struct_types_.end()) {
+                // Collect field types and field info
+                std::vector<FieldInfo> fields;
+                std::vector<std::string> field_types;
+                for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                    const auto& fld = struct_def.fields[i];
+                    std::string ft = llvm_type_from_semantic(fld.type, true);
+                    // Function pointer fields use fat pointer to support closures
+                    if (fld.type && fld.type->is<types::FuncType>()) {
+                        ft = "{ ptr, ptr }";
+                    }
+                    field_types.push_back(ft);
+                    fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
+                }
+
+                // @simd structs emit LLVM vector types instead of regular structs
+                if (struct_def.is_simd && !field_types.empty()) {
+                    std::string elem_type = field_types[0];
+                    int lane_count = static_cast<int>(field_types.size());
+                    std::string def = type_name + " = type <" + std::to_string(lane_count) + " x " +
+                                      elem_type + ">";
+                    type_defs_buffer_ << def << "\n";
+                    simd_types_[struct_name] = {elem_type, lane_count};
+                } else {
+                    std::string def = type_name + " = type { ";
+                    bool first = true;
+                    for (const auto& ft : field_types) {
+                        if (!first)
+                            def += ", ";
+                        first = false;
+                        def += ft;
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                }
+                struct_types_[struct_name] = type_name;
+                struct_fields_[struct_name] = std::move(fields);
+            }
+        }
+
+        // Register enums similarly
+        for (const auto& [enum_name, enum_def] : module.enums) {
+            if (enum_variants_.find(enum_name) != enum_variants_.end())
+                continue;
+            if (!enum_def.type_params.empty())
+                continue;
+            // Register enum variant info for pattern matching/construction
+            for (const auto& variant : enum_def.variants) {
+                std::string key = enum_name + "::" + variant.name;
+                if (enum_variants_.find(key) == enum_variants_.end()) {
+                    enum_variants_[key] = EnumVariantInfo{
+                        variant.name, static_cast<int>(&variant - &enum_def.variants[0])};
+                }
+            }
+        }
     }
 
     // ========================================================================
@@ -809,6 +911,48 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                 }
             }
         }
+
+        // Pre-register generic impl blocks into pending_generic_impls_ so that
+        // any module processed in Phase 2 can instantiate generic methods
+        // (e.g., core::str calling List[Str].len() needs impl[T] List[T] registered
+        // before core::str's function bodies are generated, regardless of iteration order).
+        for (const auto& decl : parsed_module.decls) {
+            if (!decl->is<parser::ImplDecl>())
+                continue;
+            const auto& impl = decl->as<parser::ImplDecl>();
+
+            // Get the type name
+            std::string type_name;
+            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                const auto& named = impl.self_type->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    type_name = named.path.segments.back();
+                }
+            } else if (impl.self_type && impl.self_type->is<parser::TupleType>()) {
+                const auto& tuple = impl.self_type->as<parser::TupleType>();
+                type_name = "Tuple" + std::to_string(tuple.elements.size());
+            }
+            if (type_name.empty())
+                continue;
+
+            bool has_impl_generics = !impl.generics.empty();
+            bool has_type_generics = false;
+            if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                const auto& named = impl.self_type->as<parser::NamedType>();
+                if (named.generics.has_value() && !named.generics->args.empty()) {
+                    has_type_generics = true;
+                }
+            }
+            if (has_impl_generics || has_type_generics) {
+                pending_generic_impls_[type_name] = &impl;
+                pending_generic_impls_all_[type_name].push_back(&impl);
+                TML_DEBUG_LN("[MODULE] Phase 1: Pre-registered generic impl for: "
+                             << type_name << " (generics=" << impl.generics.size() << ")");
+            }
+
+            // Also register the impl block for vtable generation (dyn dispatch)
+            register_impl(&impl);
+        }
     }
     current_module_prefix_.clear();
     current_module_name_.clear();
@@ -902,12 +1046,10 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                     }
                 }
                 if (has_impl_generics || has_type_generics) {
-                    if (!type_name.empty()) {
-                        pending_generic_impls_[type_name] = &impl;
-                        pending_generic_impls_all_[type_name].push_back(&impl);
-                    }
-                    TML_DEBUG_LN("[MODULE] Registered imported generic impl for: "
-                                 << type_name << " (generics=" << impl.generics.size() << ")");
+                    // Generic impls are already registered in Phase 1 (pre-registration).
+                    // Skip to avoid double-adding to pending_generic_impls_all_.
+                    TML_DEBUG_LN(
+                        "[MODULE] Phase 2: Skipping generic impl (pre-registered): " << type_name);
                     continue;
                 }
 

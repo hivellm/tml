@@ -656,6 +656,11 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     // Workers use this to detect when they need supplemental module processing.
     state->processed_module_paths = processed_module_paths_;
 
+    // Capture SIMD type info (for @simd annotated structs)
+    for (const auto& [name, info] : simd_types_) {
+        state->simd_types[name] = {info.element_llvm_type, info.lane_count};
+    }
+
     state->valid = true;
 
     TML_DEBUG_LN("[CODEGEN] Captured library state: "

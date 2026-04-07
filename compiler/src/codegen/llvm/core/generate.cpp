@@ -659,6 +659,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emitted_dyn_types_.insert(name);
         }
 
+        // Restore SIMD type info (for @simd annotated structs)
+        for (const auto& [name, info] : state.simd_types) {
+            if (simd_types_.find(name) == simd_types_.end()) {
+                simd_types_[name] = {info.element_llvm_type, info.lane_count};
+            }
+        }
+
         // Ensure trait-impl modules (core::default, core::cmp, core::clone, etc.) are
         // in the registry even in the fast path. These may not be loaded by the type
         // checker because they contain only trait impls for built-in types (Maybe, etc.)

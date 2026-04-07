@@ -93,6 +93,7 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
 
     // Check for decorators
     bool is_interior_mutable = false;
+    bool is_simd = false;
     bool has_derive_reflect = false;
     bool has_derive_partial_eq = false;
     bool has_derive_duplicate = false;
@@ -126,6 +127,8 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
             }
         } else if (decorator.name == "interior_mutable") {
             is_interior_mutable = true;
+        } else if (decorator.name == "simd") {
+            is_simd = true;
         } else if (decorator.name == "derive") {
             // Check for @derive arguments
             for (const auto& arg : decorator.args) {
@@ -166,7 +169,8 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
                                  .const_params = std::move(const_params),
                                  .fields = std::move(fields),
                                  .span = decl.span,
-                                 .is_interior_mutable = is_interior_mutable});
+                                 .is_interior_mutable = is_interior_mutable,
+                                 .is_simd = is_simd});
 
     // Handle @derive(Reflect) - register impl and type_info method
     // Skip generic types - they need instantiation first

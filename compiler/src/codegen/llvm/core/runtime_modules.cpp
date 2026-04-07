@@ -234,6 +234,7 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     const std::unordered_set<std::string>& skip_modules) {
     // Emit LLVM IR for pure TML functions from imported modules
     if (!env_.module_registry()) {
+        TML_LOG_INFO("codegen", "no module_registry, returning");
         return;
     }
 
@@ -724,6 +725,169 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // Record which modules are being processed (for capture_library_state())
     for (const auto& info : eligible_modules) {
         processed_module_paths_.insert(info.module_name);
+    }
+
+    // ========================================================================
+    // PRE-PHASE 0: Ensure transitive type-only dependencies are in the registry.
+    // When module A (e.g., ir_diff::differ) imports types from module B
+    // (e.g., ir_diff::types), B may not be in the registry if it was loaded
+    // during type checking but the module loader skipped registration (e.g.,
+    // because it's a tool module resolved through tools/ path and the
+    // negative-path cache interfered). Try GlobalModuleCache and disk cache
+    // as fallbacks.
+    // ========================================================================
+    if (env_.module_registry()) {
+        auto registry = env_.module_registry();
+        std::unordered_set<std::string> missing_tried;
+        for (const auto& [module_name, module] : all_modules) {
+            for (const auto& dep : module.private_imports) {
+                // Try both the full path and stripped path
+                for (int pass = 0; pass < 2; ++pass) {
+                    std::string mod_path = dep;
+                    if (pass == 1) {
+                        auto sep = mod_path.rfind("::");
+                        if (sep == std::string::npos)
+                            continue;
+                        mod_path = mod_path.substr(0, sep);
+                    }
+                    if (registry->has_module(mod_path))
+                        continue;
+                    if (missing_tried.count(mod_path))
+                        continue;
+                    missing_tried.insert(mod_path);
+
+                    // Try GlobalModuleCache
+                    auto cached = types::GlobalModuleCache::instance().get(mod_path);
+                    if (cached) {
+                        registry->register_module(mod_path, std::move(*cached));
+                        continue;
+                    }
+                    // Try disk cache
+                    auto from_disk = types::load_module_from_cache(mod_path);
+                    if (from_disk) {
+                        registry->register_module(mod_path, std::move(*from_disk));
+                    }
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // PHASE 0: Register struct/enum types from ALL imported modules, including
+    // type-only modules (has_pure_tml_functions=false, source_code empty).
+    // These modules are excluded from eligible_modules but their types are
+    // needed by modules that ARE eligible (e.g., ir_diff::types defines
+    // IrModule used by ir_diff::differ). Without this, struct field access
+    // in infer_expr_type fails because struct_fields_ is empty for the type.
+    //
+    // Uses the module registry's StructDef directly (no re-parsing needed).
+    // ========================================================================
+    for (const auto& [module_name, module] : all_modules) {
+        // Only process if this module is actually imported
+        bool is_needed = false;
+        for (const auto& imported_path : imported_module_paths) {
+            if (module_name == imported_path || imported_path.find(module_name + "::") == 0 ||
+                module_name.find(imported_path + "::") == 0) {
+                is_needed = true;
+                break;
+            }
+        }
+        if (!is_needed)
+            continue;
+
+        // Phase 0 processing this module
+
+        // Register non-generic structs from the module registry's StructDef
+        for (const auto& [struct_name, struct_def] : module.structs) {
+            if (struct_fields_.find(struct_name) != struct_fields_.end())
+                continue;
+            if (!struct_def.type_params.empty())
+                continue;
+
+            std::string type_name = "%struct." + struct_name;
+            if (struct_types_.find(struct_name) == struct_types_.end()) {
+                std::vector<FieldInfo> fields;
+                std::vector<std::string> field_types;
+                for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                    const auto& fld = struct_def.fields[i];
+                    std::string ft = llvm_type_from_semantic(fld.type, true);
+                    if (fld.type && fld.type->is<types::FuncType>()) {
+                        ft = "{ ptr, ptr }";
+                    }
+                    field_types.push_back(ft);
+                    fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
+                }
+
+                // @simd structs emit LLVM vector types instead of regular structs
+                if (struct_def.is_simd && !field_types.empty()) {
+                    std::string elem_type = field_types[0];
+                    int lane_count = static_cast<int>(field_types.size());
+                    std::string def = type_name + " = type <" + std::to_string(lane_count) + " x " +
+                                      elem_type + ">";
+                    type_defs_buffer_ << def << "\n";
+                    simd_types_[struct_name] = {elem_type, lane_count};
+                } else {
+                    std::string def = type_name + " = type { ";
+                    bool first = true;
+                    for (const auto& ft : field_types) {
+                        if (!first)
+                            def += ", ";
+                        first = false;
+                        def += ft;
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                }
+                struct_types_[struct_name] = type_name;
+                struct_fields_[struct_name] = std::move(fields);
+            }
+        }
+
+        // Also register internal structs (private types used by impl methods)
+        for (const auto& [struct_name, struct_def] : module.internal_structs) {
+            if (struct_fields_.find(struct_name) != struct_fields_.end())
+                continue;
+            if (!struct_def.type_params.empty())
+                continue;
+
+            std::string type_name = "%struct." + struct_name;
+            if (struct_types_.find(struct_name) == struct_types_.end()) {
+                std::vector<FieldInfo> fields;
+                std::vector<std::string> field_types;
+                for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                    const auto& fld = struct_def.fields[i];
+                    std::string ft = llvm_type_from_semantic(fld.type, true);
+                    if (fld.type && fld.type->is<types::FuncType>()) {
+                        ft = "{ ptr, ptr }";
+                    }
+                    field_types.push_back(ft);
+                    fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
+                }
+
+                // @simd structs emit LLVM vector types instead of regular structs
+                if (struct_def.is_simd && !field_types.empty()) {
+                    std::string elem_type = field_types[0];
+                    int lane_count = static_cast<int>(field_types.size());
+                    std::string def = type_name + " = type <" + std::to_string(lane_count) + " x " +
+                                      elem_type + ">";
+                    type_defs_buffer_ << def << "\n";
+                    simd_types_[struct_name] = {elem_type, lane_count};
+                } else {
+                    std::string def = type_name + " = type { ";
+                    bool first = true;
+                    for (const auto& ft : field_types) {
+                        if (!first)
+                            def += ", ";
+                        first = false;
+                        def += ft;
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                }
+                struct_types_[struct_name] = type_name;
+                struct_fields_[struct_name] = std::move(fields);
+            }
+        }
     }
 
     // ========================================================================

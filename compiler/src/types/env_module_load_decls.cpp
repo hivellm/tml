@@ -434,12 +434,24 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
                     type_params.push_back(param.name);
                 }
 
+                // Check for @simd and @interior_mutable decorators
+                bool is_simd = false;
+                bool is_interior_mutable = false;
+                for (const auto& deco : struct_decl.decorators) {
+                    if (deco.name == "simd")
+                        is_simd = true;
+                    if (deco.name == "interior_mutable")
+                        is_interior_mutable = true;
+                }
+
                 // Create struct definition
                 StructDef struct_def{.name = struct_decl.name,
                                      .type_params = std::move(type_params),
                                      .const_params = {},
                                      .fields = std::move(fields),
-                                     .span = struct_decl.span};
+                                     .span = struct_decl.span,
+                                     .is_interior_mutable = is_interior_mutable,
+                                     .is_simd = is_simd};
 
                 // Store in appropriate map based on visibility
                 if (struct_decl.vis == parser::Visibility::Public) {
@@ -906,11 +918,27 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
                 }
 
                 // Handle relative paths: if path doesn't start with known prefix,
-                // treat it as relative to current module
+                // treat it as relative to current module.
+                // But don't prepend when the use path already starts with the
+                // same root package as the current module (e.g., ir_diff::parser
+                // importing ir_diff::types — both share root "ir_diff").
                 if (!use_path.empty() && use_path.find("core::") != 0 &&
                     use_path.find("std::") != 0 && use_path.find("test") != 0) {
-                    // Relative path - prepend current module path
-                    use_path = module_path + "::" + use_path;
+                    // Check if use_path shares the same root package as module_path
+                    std::string root_package;
+                    auto root_sep = module_path.find("::");
+                    if (root_sep != std::string::npos) {
+                        root_package = module_path.substr(0, root_sep);
+                    } else {
+                        root_package = module_path;
+                    }
+                    bool shares_root =
+                        !root_package.empty() &&
+                        (use_path == root_package || use_path.find(root_package + "::") == 0);
+                    if (!shares_root) {
+                        // Relative path - prepend current module path
+                        use_path = module_path + "::" + use_path;
+                    }
                 }
 
                 // Load the dependency module (for all use declarations, not just public)

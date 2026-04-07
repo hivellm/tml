@@ -545,6 +545,7 @@ StructDef ModuleBinaryReader::read_struct_def() {
 
     def.is_interior_mutable = read_bool();
     def.is_union = read_bool();
+    def.is_simd = read_bool();
     return def;
 }
 

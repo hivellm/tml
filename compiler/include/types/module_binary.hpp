@@ -52,7 +52,8 @@ constexpr uint32_t MODULE_META_MAGIC = 0x544D4D54;
 /// v6: Support tuple constants in module metadata (e.g., UNICODE_VERSION: (U8, U8, U8))
 /// v7: Add internal_enums section for private enum codegen (e.g., BorrowState)
 /// v8: Fix has_pure_tml_functions to include non-pub behavior impl methods
-constexpr uint16_t MODULE_META_VERSION_MAJOR = 8;
+/// v9: Add is_simd flag to StructDef for @simd annotated LLVM vector types
+constexpr uint16_t MODULE_META_VERSION_MAJOR = 9;
 constexpr uint16_t MODULE_META_VERSION_MINOR = 0;
 
 // ============================================================================
