@@ -87,13 +87,14 @@ LLVM IR error on opaque struct types. Requires type collection pre-pass extensio
 - [ ] 6.2 Register every reachable MirStructType/MirEnumType via `collect_enum_types_from_type` from GEPInst, LoadInst, StoreInst, CallInst
 - [ ] 6.3 Re-run affected tests
 
-## Root Cause 7: IR_TYPE_MISMATCH — LLVM type conflicts (8 tests) ⏳ DEFERRED
+## Root Cause 7: IR_TYPE_MISMATCH — LLVM type conflicts (8 tests) ⏳ PARTIAL
 
 `Maybe__T` vs `Maybe__I32` layout mismatch. THIR lowerer produces unsubstituted type variables in generic contexts.
 
 - [ ] 7.1 `compiler/src/thir/thir_lower.cpp` — apply active type substitution to enum constructor expression types before emission
 - [ ] 7.2 Add defensive assertion in `mir_types.cpp::mangle_mir_type_arg` for unresolved type variables
 - [ ] 7.3 Unify dual enum-def emission paths in `mir_codegen.cpp` (emit_enum_def vs used_struct_types_ loops)
+- [x] 7.4 `Maybe::ok_or` / `ok_or_else` subgroup (3 tests) — replaced stub in `compiler/src/codegen/llvm/expr/method_maybe.cpp` that returned the Maybe receiver as an Outcome; now branches on the tag, materializes the Outcome[T, E] struct via `require_enum_instantiation` (E inferred from the err arg / closure body), and builds Ok(val) / Err(err) with phi merge. Fixes `option_ok_or`, `option_ok_or_else`, `types_ok_or_else`. Commit `6ed4c5c0`.
 
 ## Root Cause 9: PARSE_ERROR — Unit `{}` return mismatch in legacy AST codegen (6 tests) ✅ FIXED
 
