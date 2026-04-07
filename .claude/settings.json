@@ -1,8 +1,6 @@
 {
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(*)",
       "Read(*)",
@@ -17,7 +15,38 @@
       "Skill(*)",
       "mcp__tml__*",
       "mcp__rulebook__*"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Bolado\\.claude\\teams",
+      "f:\\Node\\hivellm\\tml-docs"
     ]
   },
-  "enabledMcpjsonServers": ["tml", "rulebook"]
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "BASH_MAX_TIMEOUT_MS": "1200000",
+    "BASH_MAX_OUTPUT_LENGTH": "200000",
+    "MCP_TIMEOUT": "60000",
+    "MCP_TOOL_TIMEOUT": "600000",
+    "MAX_THINKING_TOKENS": "32000",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000",
+    "MAX_MCP_OUTPUT_TOKENS": "50000",
+    "DISABLE_AUTOUPDATER": "1",
+    "DISABLE_TELEMETRY": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash f:/Node/hivellm/tml/.claude/hooks/enforce_team_for_background_agents.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledMcpjsonServers": ["tml", "rulebook"],
+  "includeCoAuthoredBy": false
 }

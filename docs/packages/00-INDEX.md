@@ -42,6 +42,7 @@ This directory contains specifications for TML's standard library packages. Thes
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
 | [std::sqlite](./24-SQLITE.md) | SQLite embedded database (Database, Statement, Row, Value) | `io::file` |
+| [std::db](./41-DATABASE.md) | Complete database abstraction layer with ORM, query builders, migrations | `io::file` |
 
 ### Data Packages
 
@@ -58,6 +59,12 @@ This directory contains specifications for TML's standard library packages. Thes
 |---------|-------------|----------------------|
 | [std::crypto](./05-CRYPTO.md) | Cryptographic primitives (hash, HMAC, cipher, sign, KDF, CSPRNG) | None |
 | [std::uuid](./17-UUID.md) | UUID generation | `io::random` |
+
+### Machine Learning and AI Packages
+
+| Package | Description | Capabilities Required |
+|---------|-------------|----------------------|
+| [std::ia](./44-IA.md) | Tensor operations, automatic differentiation, neural networks, optimizers, training | None |
 
 ### Math and Science Packages
 
@@ -85,6 +92,8 @@ This directory contains specifications for TML's standard library packages. Thes
 | [std::profiler](./38-PROFILER.md) | Runtime profiling (.cpuprofile output) | `io::time` |
 | [std::exception](./32-EXCEPTION.md) | C#-style exception hierarchy | None |
 | [std::oop](./40-OOP.md) | OOP interfaces and Object base class | None |
+| [std::di](./42-DI.md) | Zero-copy pointer-based dependency injection | None |
+| [std::intern](./43-INTERN.md) | String interning and deduplication | None |
 | core::encoding | Binary encoding (big/little endian, base64, hex, utf8) | None |
 
 ## Dependency Graph
@@ -200,6 +209,14 @@ use std::fmt::{format, Display}
 | `EventLoop` | std::aio | Single-threaded I/O event loop |
 | `Poller` | std::aio | Cross-platform I/O polling (epoll/WSAPoll) |
 | `TimerWheel` | std::aio | Efficient 2-level hashed timer wheel |
+| `Tensor` | std::ia | Multi-dimensional array for ML |
+| `Variable` | std::ia | Differentiable tensor for autograd |
+| `Linear` | std::ia | Fully connected neural network layer |
+| `SGD` | std::ia | Stochastic gradient descent optimizer |
+| `Repository[T]` | std::db | ORM for CRUD operations |
+| `SelectQuery` | std::db | SQL query builder |
+| `ServiceRegistry` | std::di | Dependency injection registry |
+| `Module` | std::di | DI module grouping |
 
 ### Most Used Functions
 

@@ -5,6 +5,32 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] — 2026-04-06
+
+### Added
+
+- **MIR consolidation (phase12a)** — Single THIR→MIR compilation path, removed legacy HIR→MIR builder for simplified, consistent code generation
+- **Type checker invariants documentation** — Formal specification of 176 invariants across 5 sections (~95 pages)
+- **Derive mangling unification (RC5)** — Unified `@derive` codegen with TypeInfo registration, stable mangle names across codegen units
+
+### Fixed
+
+- **RC1 (119 failures)** — MODULE_NOT_FOUND http: recursive private_imports tracking in env_module_load.cpp
+- **RC2-RC3 (42 failures)** — Method resolution + return type substitution for nested generics
+- **RC4 (13 failures)** — LINK failures: std::os glob exports + missing function declarations
+- **RC5 (8 failures)** — Derive mangling: lowercase module path (std::sync::arc not Arc), typevar suffix replacement
+- **RC6 (10 failures)** — Context/Waker unreservation: allow as type names in user code
+- **RC7.1-7.3 (11 failures)** — Enum type param substitution in pattern matching (ThirMirBuilder)
+- **RC7.4 (1 failure)** — Maybe::ok_or method added
+- **RC9 (1 failure)** — Unit return codegen: `call {}` instead of `call void`
+- **Nested generic type param collision** (method_impl.cpp) — Shared[PromiseState[I32]]::get
+- **Typevar naming collision** — __T/__U/__K → __I64 workaround for cross-module generics
+
+### Status
+
+- **Compile failures: 214 → ~29 (86% reduction)**
+- **Remaining:** phase0h (closure types) and phase0i (behavior FQN keying) track final ~29 failures
+
 ## [0.2.4] — 2026-03-28
 
 ### Added

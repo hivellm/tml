@@ -5,6 +5,24 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] — 2026-04-06
+
+### Added
+
+- **`std::intern` module** — String interning for efficient deduplication
+  - `InternPool[T]` — thread-safe intern pool with HashMap backing
+  - `intern(s: Str) -> Str` — returns interned copy, guaranteed unique pointer
+  - Methods: `len()`, `is_empty()`, `clear()`, `contains()`, `remove()`
+  - Thread-safe: Mutex-wrapped with weak reference tracking
+  - Use case: JSON keys, HTML attributes, compiler symbol tables (12 tests)
+
+- **27 Maybe/Outcome methods** — Comprehensive standard library methods
+  - Mapping: `map`, `map_or`, `map_or_else`
+  - Composition: `and_then`, `or_else`, `flatten`
+  - Extraction: `ok_or`, `ok_or_else`, `unwrap_or`, `unwrap_or_else`, `unwrap_or_default`
+  - Inspection: `is_ok`, `is_err`, `is_some`, `is_none`, `as_ref`, `as_mut`
+  - Error handling: `expect`, `expect_err`, `transpose`
+
 ## [0.2.4] — 2026-03-28
 
 ### Added

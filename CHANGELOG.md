@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.2.14](docs/patches/v0.2.14.md) | 2026-04-06 | MIR consolidation, string interning, 86% compile failure reduction (214→29), RC1-RC9 codegen fixes, 27 Maybe/Outcome methods |
 | [0.2.13](docs/patches/v0.2.13.md) | 2026-04-05 | `?.` optional chaining, `let-else` guard, MCP daemon, native lib management, research infra |
 | [0.2.12](docs/patches/v0.2.12.md) | 2026-04-04 | Test runner build.tml support, PostgreSQL test suite, RawPtr codegen fix, per-test timeout CLI |
 | [0.2.11](docs/patches/v0.2.11.md) | 2026-04-04 | AI library (`std::ia`): tensor, autograd, nn layers, optimizers, training — 34 files, 140 tests |

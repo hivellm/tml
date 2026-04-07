@@ -2,6 +2,83 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ MANDATORY: Multi-Agent Work MUST Use Teams ⛔
+
+**Any time 2 or more agents work in parallel, they MUST be part of a Team. Spawning standalone agents for parallel work is FORBIDDEN.**
+
+This is a HARD REQUIREMENT. Standalone agents cannot communicate with each other — they work in silos, duplicate research, step on each other's files, and produce inconsistent output. Teams provide:
+
+1. **`SendMessage` between named agents** — specialists can hand off context, ask questions, share findings
+2. **Shared team context** — coordinator (team-lead) sees all specialist progress
+3. **Named addressability** — `SendMessage({to: "rc6", ...})` instead of tracking opaque UUIDs
+4. **Conflict avoidance** — team coordinator prevents two agents editing the same file simultaneously
+
+**Rules:**
+
+1. **1 agent = direct spawn** — single agent doesn't need a team.
+2. **2+ parallel agents = MUST use Team** — create via `TeamCreate` or spawn a `team-lead` that creates the team.
+3. **Each agent in the team MUST have a `name`** (e.g. `name: "rc6"`, `name: "rc7"`) so others can `SendMessage` to it.
+4. **Team-lead actively coordinates** — dispatches specialists, forwards messages, aggregates results. Main must monitor team-lead per the "Active Monitoring" rule.
+5. **Main is NOT in the team** — main launches the team, then monitors it via Read of output files and SendMessage to team-lead.
+
+**WRONG (standalone parallel agents — silos):**
+```
+Main: Agent(specialist-A, background=true)  // no team
+      Agent(specialist-B, background=true)  // no team
+      Agent(specialist-C, background=true)  // no team
+      // A, B, C cannot talk to each other, may conflict, duplicate work
+```
+
+**CORRECT (team with named members):**
+```
+Main: TeamCreate({
+  members: [
+    {name: "rc6", subagent_type: "mir-expert", prompt: "..."},
+    {name: "rc7", subagent_type: "thir-expert", prompt: "..."},
+    {name: "rc5", subagent_type: "codegen-debugger", prompt: "..."}
+  ]
+})
+// rc6, rc7, rc5 can SendMessage each other; coordinator sees all progress
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Check Skills and MCP Tools BEFORE Spawning Agents ⛔
+
+**Before launching ANY agent, you MUST first check if a Skill, MCP tool, or built-in tool already does the job. Spawning an agent for a task that a single MCP call or Skill handles is WASTEFUL and FORBIDDEN.**
+
+This is a HARD REQUIREMENT. Past sessions wasted tokens and minutes spawning agents for trivial operations that had a direct tool:
+- Archiving a task → `mcp__rulebook__rulebook_task_archive` (NOT an agent)
+- Running tests → `mcp__tml__test` (NOT an agent)
+- Building compiler → `scripts\build.bat` via Bash (NOT an agent)
+- Emitting IR → `mcp__tml__emit-ir` (NOT an agent)
+- Formatting/linting → `mcp__tml__format` / `mcp__tml__lint` (NOT an agent)
+- Committing → `/commit` skill (NOT an agent)
+- Listing tasks → `mcp__rulebook__rulebook_task_list` (NOT an agent)
+
+**Decision order BEFORE spawning any agent:**
+
+1. **Is there a direct MCP tool?** (`mcp__tml__*`, `mcp__rulebook__*`) — use it.
+2. **Is there a Skill?** (`/commit`, `/test`, `/verify`, `/build-compiler`, `/task-archive`, etc.) — use it via the Skill tool.
+3. **Is there a built-in tool?** (Read, Edit, Grep, Glob, Bash) — use it directly.
+4. **Only if none of the above fits** — then spawn an agent.
+
+**Agents are for multi-step work requiring reasoning, investigation, or code changes across multiple files.** They are NOT for single-command operations.
+
+**WRONG:**
+```
+User: "archive phase12a"
+Main: *spawns general-purpose agent* → agent calls mcp__rulebook__rulebook_task_archive → reports back
+```
+
+**CORRECT:**
+```
+User: "archive phase12a"
+Main: *calls mcp__rulebook__rulebook_task_archive directly*
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
 ## ⛔ MANDATORY: Delegate ALL Implementation to Agent Teams ⛔
 
 **The main conversation MUST NEVER implement code directly. ALL implementation work MUST be delegated to specialized agent teams.**
@@ -33,6 +110,41 @@ User: "fix the bug"
 Main: *reads file to understand scope* → launches implementer agent with specific instructions
 Agent: *reads* *edits* *builds* *tests* → reports result
 Main: *verifies* *commits* *reports to user*
+```
+
+**VIOLATION OF THIS RULE IS UNACCEPTABLE.**
+
+## ⛔ MANDATORY: Main Must Actively Monitor Dispatched Agents ⛔
+
+**After launching ANY agent (specialist, team-lead, or team), the main conversation MUST actively monitor it. Going passive and waiting for a notification is FORBIDDEN.**
+
+This is a HARD REQUIREMENT. Past sessions have wasted hours because:
+1. Main launched a team-lead that silently stalled, did nothing, or hallucinated about lacking tools.
+2. Main launched specialists that crashed or hung with no output.
+3. Main sat idle waiting for "background completion" notifications that never arrived.
+4. Agents failed to send structured reports and main assumed they were still working.
+
+**Rules:**
+
+1. **Poll output files periodically** — every dispatched agent returns an `output_file` path. Read it or `tail` it to see real progress. Do not trust silence.
+2. **Detect stalled agents** — if the output file has not grown in a few minutes and no status update arrived, the agent is stuck. Either:
+   - Ping it via `SendMessage` with a direct status request and a clear next instruction, OR
+   - Treat it as dead, relaunch with a tighter scope.
+3. **Team-lead is NOT a pass-through** — if team-lead is launched and it did not dispatch specialists, did not produce output, or hallucinated about tools, intervene immediately. Do not wait for it to figure itself out.
+4. **Require structured final reports** — every agent must report: files changed, build result, test delta, commit hash, blockers. Missing any field = agent did not finish, follow up.
+5. **Teams are still valid** for multi-agent parallel work — the problem is passivity, not teams. Use them when coordination helps, but monitor them the same way.
+6. **Single agent = dispatch directly from main.** Multiple parallel agents = team OR direct parallel dispatch from main — either is fine if actively monitored.
+
+**WRONG (passive main):**
+```
+Main: *launches team-lead* → *waits silently* → 20 minutes pass → user asks "what happened?" → main has no idea
+```
+
+**CORRECT (active main):**
+```
+Main: *launches team-lead* → *reads output file every few minutes*
+     → detects team-lead hasn't dispatched anything → sends direct instruction
+     → verifies specialists launched → polls their outputs → collects reports
 ```
 
 **VIOLATION OF THIS RULE IS UNACCEPTABLE.**

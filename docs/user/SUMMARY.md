@@ -96,6 +96,8 @@
 - [Cryptography](ch22-00-crypto.md)
 - [Compression](ch23-00-compression.md)
 - [Networking and HTTP](ch24-00-networking.md)
+- [Working with Databases](ch25-00-database.md)
+- [Machine Learning with TML](ch26-00-ai-ml.md)
 
 ## Appendix
 
