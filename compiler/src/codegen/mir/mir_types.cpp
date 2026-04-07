@@ -8,7 +8,9 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/mir_codegen.hpp"
 
+#include <cassert>
 #include <cctype>
+#include <cstdio>
 
 namespace tml::codegen {
 
@@ -214,6 +216,17 @@ auto MirCodegen::mangle_mir_type_arg(const mir::MirTypePtr& type) -> std::string
                     bool is_typevar =
                         (t.name.size() == 1) || (t.name.size() == 2 && std::isdigit(t.name[1]));
                     if (is_typevar) {
+                        // RC7.2: Defensive assertion — by the time MIR codegen runs,
+                        // every type variable should have been substituted by either
+                        // HIR monomorphization or THIR lowering. If one slips through,
+                        // log it loudly so the regression is caught.
+                        std::fprintf(stderr,
+                                     "[mir_types] WARNING: unresolved type variable '%s' "
+                                     "reached mangling (struct) — defaulting to I64. "
+                                     "This indicates a missed substitution upstream.\n",
+                                     t.name.c_str());
+                        assert(false &&
+                               "RC7: unresolved type variable reached MIR mangling (struct)");
                         return "I64"; // Default for unresolved typevars
                     }
                 }
@@ -234,6 +247,14 @@ auto MirCodegen::mangle_mir_type_arg(const mir::MirTypePtr& type) -> std::string
                     bool is_typevar =
                         (t.name.size() == 1) || (t.name.size() == 2 && std::isdigit(t.name[1]));
                     if (is_typevar) {
+                        // RC7.2: Defensive assertion (enum variant of the same check).
+                        std::fprintf(stderr,
+                                     "[mir_types] WARNING: unresolved type variable '%s' "
+                                     "reached mangling (enum) — defaulting to I64. "
+                                     "This indicates a missed substitution upstream.\n",
+                                     t.name.c_str());
+                        assert(false &&
+                               "RC7: unresolved type variable reached MIR mangling (enum)");
                         return "I64";
                     }
                 }

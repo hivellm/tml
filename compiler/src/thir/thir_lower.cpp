@@ -8,6 +8,12 @@ TML_MODULE("compiler")
 #include "thir/thir_lower.hpp"
 
 #include "hir/hir_stmt.hpp"
+#include "types/env.hpp"
+#include "types/type.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <unordered_map>
 
 namespace tml::thir {
 
@@ -431,15 +437,128 @@ auto ThirLower::lower_struct_expr(const hir::HirStructExpr& s) -> ThirExprPtr {
     return result;
 }
 
+// Recursively walk param_type vs arg_type, recording substitutions for any
+// GenericType nodes encountered in param_type. Used to recover concrete type
+// arguments for an enum constructor when the enum's declared type carries
+// unsubstituted type variables (RC7 fix).
+static void collect_type_param_substs(const types::TypePtr& param_type,
+                                      const types::TypePtr& arg_type,
+                                      const std::vector<std::string>& type_params,
+                                      std::unordered_map<std::string, types::TypePtr>& subs) {
+    if (!param_type || !arg_type) {
+        return;
+    }
+    if (auto* gp = std::get_if<types::GenericType>(&param_type->kind)) {
+        for (const auto& tp : type_params) {
+            if (tp == gp->name) {
+                if (subs.find(tp) == subs.end()) {
+                    subs[tp] = arg_type;
+                }
+                return;
+            }
+        }
+    }
+    // Walk NamedType type_args in lockstep.
+    if (auto* pn = std::get_if<types::NamedType>(&param_type->kind)) {
+        if (auto* an = std::get_if<types::NamedType>(&arg_type->kind)) {
+            size_t n = std::min(pn->type_args.size(), an->type_args.size());
+            for (size_t i = 0; i < n; ++i) {
+                collect_type_param_substs(pn->type_args[i], an->type_args[i], type_params, subs);
+            }
+        }
+    }
+}
+
 auto ThirLower::lower_enum_expr(const hir::HirEnumExpr& e) -> ThirExprPtr {
     std::vector<ThirExprPtr> payload;
     for (const auto& p : e.payload) {
         payload.push_back(lower_expr(p));
     }
 
+    // RC7.1: Apply active type substitution to enum constructor expression
+    // types before emission. The HIR sometimes hands us an enum expression
+    // whose `type` and `type_args` still reference unsubstituted type
+    // variables (e.g., `Maybe[T]` instead of `Maybe[I32]`) inside generic
+    // monomorphizations. Reconstruct the substitution map from concrete
+    // payload types and the enum's declared variant signature, then
+    // substitute across both `type` and `type_args`.
+    types::TypePtr resolved_type = e.type;
+    std::vector<types::TypePtr> resolved_type_args = e.type_args;
+
+    auto contains_typevar = [](const types::TypePtr& t) {
+        if (!t) {
+            return false;
+        }
+        // Quick check: a top-level GenericType, OR a NamedType whose name
+        // looks like a single uppercase letter (T, U, K, V, E, B...).
+        if (std::holds_alternative<types::GenericType>(t->kind)) {
+            return true;
+        }
+        if (auto* n = std::get_if<types::NamedType>(&t->kind)) {
+            if (n->type_args.empty() && n->name.size() == 1 &&
+                std::isupper(static_cast<unsigned char>(n->name[0]))) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    bool needs_subst = contains_typevar(resolved_type);
+    if (!needs_subst) {
+        for (const auto& ta : resolved_type_args) {
+            if (contains_typevar(ta)) {
+                needs_subst = true;
+                break;
+            }
+        }
+    }
+
+    if (needs_subst && env_) {
+        if (auto enum_def = env_->lookup_enum(e.enum_name)) {
+            std::unordered_map<std::string, types::TypePtr> subs;
+
+            // 1. Seed from existing concrete e.type_args (only the ones that
+            //    are NOT typevars themselves).
+            for (size_t i = 0; i < enum_def->type_params.size() && i < resolved_type_args.size();
+                 ++i) {
+                if (resolved_type_args[i] && !contains_typevar(resolved_type_args[i])) {
+                    subs[enum_def->type_params[i]] = resolved_type_args[i];
+                }
+            }
+
+            // 2. Infer from concrete payload types via the variant signature.
+            for (const auto& [vname, vpayload] : enum_def->variants) {
+                if (vname != e.variant_name) {
+                    continue;
+                }
+                size_t n = std::min(vpayload.size(), payload.size());
+                for (size_t i = 0; i < n; ++i) {
+                    auto arg_t = payload[i] ? payload[i]->type() : nullptr;
+                    if (arg_t && !contains_typevar(arg_t)) {
+                        collect_type_param_substs(vpayload[i], arg_t, enum_def->type_params, subs);
+                    }
+                }
+                break;
+            }
+
+            if (!subs.empty()) {
+                resolved_type = types::substitute_type(resolved_type, subs);
+                for (auto& ta : resolved_type_args) {
+                    ta = types::substitute_type(ta, subs);
+                }
+            }
+        }
+    }
+
     auto result = std::make_unique<ThirExpr>();
-    result->kind = ThirEnumExpr{e.id,        e.enum_name,        e.variant_name, e.variant_index,
-                                e.type_args, std::move(payload), e.type,         e.span};
+    result->kind = ThirEnumExpr{e.id,
+                                e.enum_name,
+                                e.variant_name,
+                                e.variant_index,
+                                std::move(resolved_type_args),
+                                std::move(payload),
+                                std::move(resolved_type),
+                                e.span};
     return result;
 }
 

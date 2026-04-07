@@ -1237,8 +1237,20 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
         }
     }
 
-    // Emit enum definitions (local enums)
+    // Emit enum definitions (local enums).
+    //
+    // RC7.3: Unify the dual enum-def emission paths. Generic enums (those
+    // with type parameters, e.g. `Maybe[T]`, `Outcome[T,E]`) must NOT be
+    // emitted under their bare name `%struct.Maybe`, because every actual
+    // use site references the mangled monomorphization (`%struct.Maybe__I32`,
+    // `%struct.Maybe__Str`, etc.), and emitting both would risk LLVM type
+    // collisions and divergent layouts. Concrete instantiations are emitted
+    // exclusively by the `generic_enum_defs_` loop below. Only emit
+    // non-generic enum definitions here.
     for (const auto& e : module.enums) {
+        if (!e.type_params.empty()) {
+            continue; // monomorphizations handled by generic_enum_defs_ loop
+        }
         emit_enum_def(e);
     }
 

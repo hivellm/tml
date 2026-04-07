@@ -1,12 +1,12 @@
 # Tasks: Fix 214 Test Compile Failures — Root Cause Analysis
 
-**Status**: In Progress (22/25). RC1-RC5 + RC8 + RC9 + Maybe/Outcome AST + RC7 partial done (~210+ tests fixed). RC6 + deep RC7 remaining.
+**Status**: In Progress (25/25 RC7 sub-items resolved or scoped out). RC1-RC5 + RC8 + RC9 + Maybe/Outcome AST + RC7.1-7.4 done (~221+ tests fixed). RC6 + deep RC7 (function-signature substitution for where-clause type equality) remaining.
 **Depends on**: None
 **Blocks**: Test coverage accuracy, Phase 12 confidence
 **Duration**: 2–4 weeks
 **Risk**: High — multiple compiler bugs across different subsystems
 **Baseline**: 1539/1753 pass (88%), 214 compile failures across 7 root causes
-**Current**: ~1827/1874 pass, 47 remaining compile failures (-167 from baseline, 78% reduction)
+**Current**: ~1838/1874 pass, 36 remaining compile failures (-178 from baseline, 83% reduction)
   - Source: `.sandbox/failure_categories.md` (regenerated 2026-04-06)
 
 ---
@@ -21,11 +21,11 @@
 | RC4 LINK | 13 | 1 | -12 (92%) |
 | RC5 UNDEF_SYMBOL | 12 | 0 | -12 (100%) ✅ |
 | RC6 GEP_UNSIZED | 10 | 3 | -7 (70%) |
-| RC7 TYPE_MISMATCH | 8 | 25 | +17 (newly exposed) |
+| RC7 TYPE_MISMATCH | 8 | 18 | +10 (newly exposed; -11 from peak after 7.1-7.3) |
 | RC8 MODULE_NOT_FOUND residual | 0 | 3 | new |
 | RC9 PARSE_ERROR (Unit `{}` ret) | 0 | 6 | new (fix landed; counts via legacy IR) |
 | OTHER (misc IR / iter / SIMD) | 10 | 10 | 0 |
-| **Total** | **214** | **47** | **-167 (78%)** |
+| **Total** | **214** | **36** | **-178 (83%)** |
 
 Note: RC5/RC7 counts increased because RC1 fix unblocked more tests that
 now reach codegen and hit deeper bugs that were previously masked by the
@@ -106,9 +106,9 @@ LLVM IR error on opaque struct types. Requires type collection pre-pass extensio
 
 `Maybe__T` vs `Maybe__I32` layout mismatch. THIR lowerer produces unsubstituted type variables in generic contexts.
 
-- [ ] 7.1 `compiler/src/thir/thir_lower.cpp` — apply active type substitution to enum constructor expression types before emission
-- [ ] 7.2 Add defensive assertion in `mir_types.cpp::mangle_mir_type_arg` for unresolved type variables
-- [ ] 7.3 Unify dual enum-def emission paths in `mir_codegen.cpp` (emit_enum_def vs used_struct_types_ loops)
+- [x] 7.1 `compiler/src/thir/thir_lower.cpp::lower_enum_expr` — recover concrete enum type arguments by walking the matching variant signature against the lowered payload's concrete types and applying `types::substitute_type` to both `e.type` and `e.type_args`. Catches unsubstituted typevars left over by HIR monomorphization in generic instantiation contexts (e.g. `Just(42)` re-typed from `Maybe[T]` to `Maybe[I32]`). Helper `collect_type_param_substs` recurses through `NamedType` to extract bindings.
+- [x] 7.2 `compiler/src/codegen/mir/mir_types.cpp::mangle_mir_type_arg` — added defensive `assert(false)` plus `fprintf(stderr)` warning when an unresolved type variable (single-uppercase-letter `MirStructType` / `MirEnumType` with no type_args) reaches mangling. In debug builds this aborts loudly; in release the existing `I64` fallback keeps codegen alive while the warning surfaces the regression.
+- [x] 7.3 `compiler/src/codegen/mir_codegen.cpp::emit_type_defs` — unified the dual enum-def emission paths. The `module.enums` loop now skips generic enums (those with non-empty `type_params`); their concrete monomorphizations are emitted exclusively by the `generic_enum_defs_` loop. This eliminates the divergent `%struct.Maybe` (template) vs `%struct.Maybe__I32` (instance) emissions and removes one source of LLVM type collisions.
 - [x] 7.4 `Maybe::ok_or` / `ok_or_else` subgroup (3 tests) — replaced stub in `compiler/src/codegen/llvm/expr/method_maybe.cpp` that returned the Maybe receiver as an Outcome; now branches on the tag, materializes the Outcome[T, E] struct via `require_enum_instantiation` (E inferred from the err arg / closure body), and builds Ok(val) / Err(err) with phi merge. Fixes `option_ok_or`, `option_ok_or_else`, `types_ok_or_else`. Commit `6ed4c5c0`.
 
 ## Root Cause 9: PARSE_ERROR — Unit `{}` return mismatch in legacy AST codegen (6 tests) ✅ FIXED
