@@ -363,13 +363,12 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
 
-                // Include public functions, @extern functions, and lowlevel functions
-                // (even non-public). These need to be registered so codegen can emit
-                // proper 'declare' statements and use correct return/param types.
-                if (func.vis != parser::Visibility::Public && !func.extern_abi.has_value() &&
-                    !func.is_unsafe) {
-                    continue;
-                }
+                // Register ALL functions (including private ones) so that codegen can
+                // resolve parameter types for intra-module calls during lazy library
+                // generation. Without this, private helper functions called from public
+                // functions in the same module lose their type signatures, causing
+                // ref-param struct values to be passed by value instead of by pointer.
+                // The type checker already enforces visibility for user-facing imports.
 
                 // Convert parameter types
                 std::vector<types::TypePtr> param_types;
