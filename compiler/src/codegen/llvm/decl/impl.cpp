@@ -216,6 +216,37 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         }
     }
 
+    // Emit stub body when the impl type still contains unresolved generics
+    // after substitution. See the equivalent comment in
+    // gen_impl_method_instantiation.
+    {
+        auto parsed_type = parse_mangled_type_string(type_name);
+        bool emit_stub = false;
+        if (parsed_type && contains_unresolved_generic(parsed_type)) {
+            emit_stub = true;
+        }
+        if (!emit_stub) {
+            for (const auto& [name, ty] : current_type_subs_) {
+                if (ty && contains_unresolved_generic(ty)) {
+                    emit_stub = true;
+                    break;
+                }
+            }
+        }
+        if (emit_stub) {
+            std::string stub_llvm_name = "@" + func_llvm_name;
+            generated_functions_.insert(stub_llvm_name);
+            emit_line("define internal {} " + stub_llvm_name + "(ptr %this) #0 {");
+            emit_line("entry:");
+            emit_line("  ret {} zeroinitializer");
+            emit_line("}");
+            emit_line("");
+            current_type_subs_ = saved_type_subs;
+            current_const_generic_values_ = saved_const_generic_values_impl;
+            return;
+        }
+    }
+
     // Determine return type
     std::string ret_type = "void";
     if (method.return_type.has_value()) {
@@ -935,6 +966,49 @@ void LLVMIRGen::gen_impl_method_instantiation(
     }
 
     current_type_subs_ = full_type_subs; // Set type substitutions for the method body
+
+    // Emit a stub body (no-op) if any substitution still references an
+    // unresolved generic (e.g., T bound to LinkedListNode[T]). Such
+    // non-monomorphized bodies would otherwise produce GEPs on unsized struct
+    // types like %struct.List__LinkedListNode__T which LLVM rejects
+    // ("base element of getelementptr must be sized"). The real,
+    // fully-monomorphized instantiation is emitted through a separate call
+    // path when a concrete T is actually used. Emitting a stub (rather than
+    // skipping entirely) preserves any references from class-level
+    // drop/finalize wrappers that call this mangled symbol unconditionally.
+    {
+        bool emit_stub = false;
+        for (const auto& [name, ty] : full_type_subs) {
+            if (ty && contains_unresolved_generic(ty)) {
+                emit_stub = true;
+                break;
+            }
+        }
+        if (emit_stub) {
+            // Emit a no-op function matching the expected call signature.
+            // The signature only needs to be a valid LLVM function that
+            // accepts `ptr %this` and returns the mangled return type. Since
+            // the function is never actually invoked at runtime (no concrete
+            // type means no values of this type exist), the body just returns.
+            std::string stub_sig = "define internal {} " + llvm_name + "(ptr %this) #0 {";
+            emit_line(stub_sig);
+            emit_line("entry:");
+            emit_line("  ret {} zeroinitializer");
+            emit_line("}");
+            emit_line("");
+
+            current_func_ = saved_func;
+            current_ret_type_ = saved_ret_type;
+            func_ret_type_ = saved_func_ret;
+            current_impl_type_ = saved_impl_type;
+            block_terminated_ = saved_terminated;
+            locals_ = saved_locals;
+            current_type_subs_ = saved_type_subs;
+            current_where_constraints_ = saved_where_constraints;
+            temp_drops_ = saved_temp_drops;
+            return;
+        }
+    }
 
     // Extract const generic values from type substitutions
     // e.g., N -> ConstGenericType{resolved_value=3} means current_const_generic_values_["N"] = 3

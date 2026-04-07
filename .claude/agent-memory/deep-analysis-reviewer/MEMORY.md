@@ -2,6 +2,20 @@
 
 ## Key Debugging Insights
 
+### Type Checker: Hardcoded Builtin Types Method List (2026-04-06) - PARTIALLY FIXED
+- `expr_call_method_types.cpp`: Hardcoded method lists for Maybe[T], Outcome[T,E], etc.
+- Methods NOT in the list silently return `make_unit()` (line 1360 of expr_call_method.cpp)
+- Fixed: Added 15+ missing Maybe methods (as_ref, as_mut, inspect, take, zip, etc.)
+- Fixed: Added 6+ missing Outcome methods (inspect, inspect_err, as_ref, as_mut, etc.)
+- REMAINING: `MaybeIter::next()` needs behavior impl lookup for custom types
+
+### AST Codegen: Function Pointer Field Calls in Generic Impls (2026-04-06) - FIXED
+- Section 17 of method.cpp: `this.f(args)` where `f` is struct field with func type
+- Bug: `current_type_subs_["F"]` mapped to `Fn` (NamedType alias), NOT actual FuncType
+- Fix: Extract concrete types from `Self/This` substitution's type_args
+- Also added module registry fallback for struct lookup
+- Recovered: ALL iterator adapters (Map, Filter, Inspect, Scan, etc.)
+
 ### Register Prefix Mapping (MIR vs AST Codegen)
 - `%v` prefix -> MIR codegen (`compiler/src/codegen/mir/codegen_helpers.cpp:44`)
 - `%t` prefix -> AST/LLVMIRGen codegen (`compiler/src/codegen/llvm/core/llvm_utils.cpp:39`)
