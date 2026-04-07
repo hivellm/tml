@@ -1,0 +1,89 @@
+//! Shared data types for the IR-diff tool.
+//!
+//! These types are used by the parser, normalizer, and differ. They form the
+//! in-memory representation of a parsed LLVM IR module.
+//!
+//! Strings use `Str` (TML's primitive string type). The proposal text refers
+//! to this as "Text" in the data-model sense — there is no `Text` wrapper.
+
+use std::collections::list::List
+
+/// A single parameter in a function signature: `<ty> <name>`.
+///
+/// Example: in `define i32 @f(i32 %x, ptr %y)`, the params are
+/// `IrParam { ty: "i32", name: "%x" }` and `IrParam { ty: "ptr", name: "%y" }`.
+pub type IrParam {
+    ty: Str,
+    name: Str,
+}
+
+/// A single LLVM IR instruction inside a basic block.
+///
+/// - `opcode` is the instruction mnemonic (`add`, `call`, `br`, `ret`, ...).
+/// - `result` is the SSA register assigned, or `Nothing` for instructions
+///   that produce no value (`store`, `br`, `ret void`, ...).
+/// - `operands` is the unparsed operand list after the opcode, split on
+///   commas. It retains type annotations and surrounding whitespace is
+///   trimmed per operand.
+/// - `raw_line` is the original source line (with debug metadata stripped)
+///   so that diff output can show the user the text they wrote.
+pub type IrInstr {
+    opcode: Str,
+    result: Maybe[Str],
+    operands: List[Str],
+    raw_line: Str,
+}
+
+/// A basic block: a label followed by a sequence of instructions.
+///
+/// The label does NOT include the trailing `:` from the source.
+pub type IrBlock {
+    label: Str,
+    instructions: List[IrInstr],
+}
+
+/// A function definition parsed from `define <rettype> @<name>(<params>) { ... }`.
+///
+/// `attributes` captures the raw attribute list between the parameter list
+/// and the opening `{` (e.g. `nounwind uwtable`, function attribute groups
+/// like `#0`). This is informational and is not used for semantic compare.
+pub type IrFunction {
+    name: Str,
+    return_type: Str,
+    params: List[IrParam],
+    blocks: List[IrBlock],
+    attributes: List[Str],
+}
+
+/// A module-level global variable declaration or definition.
+///
+/// Example: `@.str = private unnamed_addr constant [6 x i8] c"hello\00"`.
+/// The parser splits this into `name = "@.str"`, `ty = "[6 x i8]"`, and
+/// `initializer = the rest of the line after the type`.
+pub type IrGlobal {
+    name: Str,
+    ty: Str,
+    initializer: Str,
+}
+
+/// A fully parsed LLVM IR module.
+///
+/// `metadata_ids` is the list of metadata IDs (e.g. `!0`, `!llvm.dbg.cu`)
+/// seen at module level. The parser does not parse metadata contents — only
+/// the IDs are retained so that tools can report which metadata sections
+/// were present.
+pub type IrModule {
+    functions: List[IrFunction],
+    globals: List[IrGlobal],
+    metadata_ids: List[Str],
+}
+
+/// A structured parse error.
+///
+/// `line` and `col` are 1-based line and column numbers into the original
+/// source text. `col` is 0 if the error is whole-line.
+pub type ParseError {
+    line: I64,
+    col: I64,
+    message: Str,
+}

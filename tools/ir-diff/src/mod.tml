@@ -1,0 +1,23 @@
+//! IR-Diff — semantic comparison of LLVM IR text files.
+//!
+//! This module powers the `tml ir-diff` CLI command. It parses LLVM IR text
+//! into a structured representation, normalizes register and label names so
+//! that two semantically equivalent IR files compare equal, and produces a
+//! structured diff result for any remaining differences.
+//!
+//! Used by the self-hosting effort (phase12d) to verify parity between the
+//! C++ frontend and TML-implemented stages.
+//!
+//! # Submodules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`types`] | Shared data types (IrModule, IrFunction, IrBlock, IrInstr, ParseError) |
+//! | [`parser`] | LLVM IR text parser |
+//! | [`normalizer`] | Canonical register and label renaming pass |
+//! | [`differ`] | Semantic comparison of two normalized IR modules |
+
+pub mod types
+pub mod parser
+pub mod normalizer
+pub mod differ

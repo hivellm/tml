@@ -1,0 +1,59 @@
+// Tests for std::ir_diff::normalizer
+use test::{assert, assert_eq}
+use std::ir_diff::parser::parse
+use std::ir_diff::normalizer::normalize
+use std::ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr}
+
+@test
+func test_normalize_registers_renamed_sequentially() -> I32 {
+    let src = "define i32 @f(i32 %x, i32 %y) \{\nentry:\n  %tmp1 = add i32 %x, %y\n  %tmp2 = mul i32 %tmp1, %x\n  ret i32 %tmp2\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let parsed = res.unwrap()
+    let m = normalize(parsed)
+    let f = m.functions.get(0)
+    assert_eq(f.params.get(0).name, "%a0", "param 0 renamed")
+    assert_eq(f.params.get(1).name, "%a1", "param 1 renamed")
+    let b = f.blocks.get(0)
+    let i0 = b.instructions.get(0)
+    let i1 = b.instructions.get(1)
+    assert_eq(i0.result.unwrap(), "%r0", "first result is %r0")
+    assert_eq(i1.result.unwrap(), "%r1", "second result is %r1")
+    return 0
+}
+
+@test
+func test_normalize_labels_renamed_sequentially() -> I32 {
+    let src = "define void @f() \{\nentry:\n  br label %then\nthen:\n  br label %end\nend:\n  ret void\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let parsed = res.unwrap()
+    let m = normalize(parsed)
+    let f = m.functions.get(0)
+    assert_eq(f.blocks.len(), 3, "three blocks")
+    assert_eq(f.blocks.get(0).label, "b0", "first label")
+    assert_eq(f.blocks.get(1).label, "b1", "second label")
+    assert_eq(f.blocks.get(2).label, "b2", "third label")
+    return 0
+}
+
+@test
+func test_normalize_cosmetic_difference_becomes_equal() -> I32 {
+    let a_src = "define i32 @f(i32 %x) \{\nentry:\n  %tmp = add i32 %x, 1\n  ret i32 %tmp\n}\n"
+    let b_src = "define i32 @f(i32 %input) \{\nstart:\n  %result = add i32 %input, 1\n  ret i32 %result\n}\n"
+    let ra = parse(a_src)
+    let rb = parse(b_src)
+    assert(ra.is_ok() and rb.is_ok(), "parse both ok")
+    let pa = ra.unwrap()
+    let pb = rb.unwrap()
+    let ma = normalize(pa)
+    let mb = normalize(pb)
+    let fa = ma.functions.get(0)
+    let fb = mb.functions.get(0)
+    assert_eq(fa.params.get(0).name, fb.params.get(0).name, "params same after normalize")
+    assert_eq(fa.blocks.get(0).label, fb.blocks.get(0).label, "labels same after normalize")
+    assert_eq(fa.blocks.get(0).instructions.get(0).result.unwrap(),
+              fb.blocks.get(0).instructions.get(0).result.unwrap(),
+              "result names same after normalize")
+    return 0
+}

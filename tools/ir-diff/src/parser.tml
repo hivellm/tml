@@ -1,0 +1,549 @@
+//! LLVM IR text parser.
+//!
+//! Parses LLVM IR text into an `IrModule` of structured data. The parser is
+//! line-based: it tokenizes the input into lines, classifies each line by
+//! its first significant character, and dispatches to a handler that builds
+//! the appropriate data structure.
+//!
+//! This is NOT a full LLVM IR parser. It parses enough to support semantic
+//! comparison of frontend output:
+//!
+//! - Function definitions and their basic blocks
+//! - Instructions (opcode + operand list, with result register)
+//! - Global variable definitions (name, type, initializer)
+//! - Metadata IDs (names only; contents are ignored)
+//!
+//! It skips: attributes groups (`attributes #0 = { ... }`), module flags,
+//! source filename declarations, target triples, comdat, DWARF debug info.
+//! It strips trailing `, !dbg !N` metadata from instructions before parsing
+//! them so that debug-info differences do not affect comparison.
+
+use std::collections::list::List
+use std::ir_diff::types::{IrParam, IrInstr, IrBlock, IrFunction, IrGlobal, IrModule, ParseError}
+use core::str::basic::{substring, substring_from, substring_to}
+use core::str::search::{find, starts_with, ends_with, contains}
+use core::str::split::{split, split_once, lines}
+use core::str::transform::{trim, trim_start, trim_end}
+use core::str::convert::{bytes, concat}
+
+// `use core::str::basic::len as str_len` triggers a mangled-name bug where
+// codegen emits a call to `@tml_str_len` but the linker symbol is the
+// un-renamed `@tml_N4core3str5basic3lenE`. Use libc strlen directly instead.
+@extern("strlen")
+func ird_str_len(s: Str) -> I64
+
+// ---- Low-level line classification helpers --------------------------------
+
+/// Returns the line with leading whitespace removed.
+func lstrip(s: Str) -> Str {
+    return trim_start(s)
+}
+
+/// Strips a trailing `, !dbg !N` (and similar bare-metadata suffixes) from
+/// an instruction line. We look for the last comma that starts an all-`!`
+/// metadata segment and cut from there. This also strips `, !tbaa !5`,
+/// `, !range !7`, etc.
+func strip_trailing_metadata(line: Str) -> Str {
+    // Walk backwards looking for a comma followed by optional whitespace
+    // and a `!`. We do this with a simple rfind on ", !".
+    let marker: Str = ", !"
+    let pos: Maybe[I64] = find(line, marker)
+    if pos.is_nothing() {
+        return line
+    }
+    // `find` returns the first occurrence; we want the LAST so we keep
+    // scanning forward from that point.
+    var best: I64 = pos.unwrap()
+    var scan_from: I64 = best + 1
+    let total: I64 = ird_str_len(line)
+    loop (scan_from < total) {
+        let tail: Str = substring(line, scan_from, total)
+        let next: Maybe[I64] = find(tail, marker)
+        if next.is_nothing() {
+            break
+        }
+        let rel: I64 = next.unwrap()
+        best = scan_from + rel
+        scan_from = best + 1
+    }
+    return substring(line, 0, best)
+}
+
+/// Returns true if this line should be skipped entirely (blank, comment,
+/// module-level declaration we do not parse).
+func is_skippable_preamble(line: Str) -> Bool {
+    if ird_str_len(line) == 0 {
+        return true
+    }
+    if starts_with(line, ";") {
+        return true
+    }
+    if starts_with(line, "source_filename") {
+        return true
+    }
+    if starts_with(line, "target ") {
+        return true
+    }
+    if starts_with(line, "attributes #") {
+        return true
+    }
+    if starts_with(line, "!llvm") {
+        return true
+    }
+    return false
+}
+
+// ---- Operand splitting ----------------------------------------------------
+
+/// Splits an instruction operand string on top-level commas. Does not
+/// descend into brackets, parens, or angle brackets — operands that contain
+/// vector or struct literals are returned as single operands. This is
+/// adequate for diff purposes where we compare raw operand text.
+func split_operands(s: Str) -> List[Str] {
+    let out: List[Str] = List[Str]::new(4)
+    let total: I64 = ird_str_len(s)
+    if total == 0 {
+        return out
+    }
+    var start: I64 = 0
+    var i: I64 = 0
+    var depth: I64 = 0
+    let bytes_list: List[U8] = bytes(s)
+    loop (i < total) {
+        let b: U8 = bytes_list.get(i)
+        let bi: I64 = b as I64
+        if bi == 40 or bi == 91 or bi == 60 or bi == 123 {
+            depth = depth + 1
+        } else if bi == 41 or bi == 93 or bi == 62 or bi == 125 {
+            depth = depth - 1
+        } else if bi == 44 and depth == 0 {
+            // Top-level comma: emit [start..i) trimmed
+            let part: Str = trim(substring(s, start, i))
+            out.push(part)
+            start = i + 1
+        }
+        i = i + 1
+    }
+    // Push the last segment
+    if start <= total {
+        let last: Str = trim(substring(s, start, total))
+        if ird_str_len(last) > 0 {
+            out.push(last)
+        }
+    }
+    return out
+}
+
+// ---- Instruction parsing --------------------------------------------------
+
+/// Parses a single instruction line that has already been trimmed and had
+/// trailing metadata stripped. Returns the parsed `IrInstr`.
+///
+/// Forms handled:
+///   `%r = opcode op1, op2, ...`
+///   `opcode op1, op2, ...`
+///   `<label>:` — handled separately; not passed here.
+func parse_instruction(raw: Str) -> IrInstr {
+    let line: Str = trim(raw)
+    // Split on ` = ` only if the LHS is a register (starts with `%`).
+    var result: Maybe[Str] = Nothing
+    var body: Str = line
+    if starts_with(line, "%") {
+        let eq: Maybe[(Str, Str)] = split_once(line, " = ")
+        if eq.is_just() {
+            let (lhs, rhs) = eq.unwrap()
+            result = Just(trim(lhs))
+            body = trim(rhs)
+        }
+    }
+    // Split opcode from operands on the first space.
+    var opcode: Str = body
+    var operand_str: Str = ""
+    let sp: Maybe[(Str, Str)] = split_once(body, " ")
+    if sp.is_just() {
+        let (op, rest) = sp.unwrap()
+        opcode = op
+        operand_str = trim(rest)
+    }
+    let operands: List[Str] = split_operands(operand_str)
+    return IrInstr {
+        opcode: opcode,
+        result: result,
+        operands: operands,
+        raw_line: raw,
+    }
+}
+
+// ---- Function header parsing ----------------------------------------------
+
+/// Parses the parameter list out of a function header, given the text
+/// between `(` and `)`.
+func parse_params(inside: Str) -> List[IrParam] {
+    let out: List[IrParam] = List[IrParam]::new(2)
+    let parts: List[Str] = split_operands(inside)
+    var i: I64 = 0
+    loop (i < parts.len()) {
+        let p: Str = trim(parts.get(i))
+        if ird_str_len(p) == 0 {
+            i = i + 1
+            continue
+        }
+        // A parameter is `<ty> [attrs...] %name` or just `<ty>` for decls.
+        // We split on the last ` %` to find the name; everything before is
+        // the type (with attrs folded in).
+        let name_pos: Maybe[I64] = find(p, " %")
+        if name_pos.is_just() {
+            let pos: I64 = name_pos.unwrap()
+            let ty: Str = trim(substring(p, 0, pos))
+            let name: Str = trim(substring_from(p, pos + 1))
+            out.push(IrParam { ty: ty, name: name })
+        } else {
+            out.push(IrParam { ty: p, name: "" })
+        }
+        i = i + 1
+    }
+    return out
+}
+
+/// Result of parsing a function header.
+type FnHeader {
+    name: Str,
+    return_type: Str,
+    params: List[IrParam],
+    attributes: List[Str],
+}
+
+/// Tries to parse a function header line of the form
+///   `define [linkage...] <rettype> @<name>(<params>) <attrs> {`
+/// Returns Just(FnHeader) or Nothing if the line does not look like a
+/// function definition.
+func parse_function_header(line: Str) -> Maybe[FnHeader] {
+    if not starts_with(line, "define ") {
+        return Nothing
+    }
+    // Find the first `@` — that's the function name marker.
+    let at_pos: Maybe[I64] = find(line, " @")
+    if at_pos.is_nothing() {
+        return Nothing
+    }
+    let at: I64 = at_pos.unwrap()
+    // Everything between "define " and " @" is linkage + return type. We
+    // take the LAST whitespace-separated token before `@` as the return
+    // type; anything before that is linkage/attribute keywords we discard.
+    let prefix: Str = substring(line, 7, at) // after "define "
+    let prefix_parts: List[Str] = split(trim(prefix), " ")
+    var return_type: Str = ""
+    if prefix_parts.len() > 0 {
+        return_type = prefix_parts.get(prefix_parts.len() - 1)
+    }
+    // Find `(` after `@`.
+    let after_at: Str = substring_from(line, at + 2) // skip ` @`
+    let paren_open: Maybe[I64] = find(after_at, "(")
+    if paren_open.is_nothing() {
+        return Nothing
+    }
+    let po: I64 = paren_open.unwrap()
+    let fname: Str = substring(after_at, 0, po)
+    // Find matching `)` by depth walk (params may contain nested parens in
+    // types like `void (i8*)*`).
+    let rest: Str = substring_from(after_at, po + 1)
+    let rest_bytes: List[U8] = bytes(rest)
+    let rest_len: I64 = ird_str_len(rest)
+    var depth: I64 = 1
+    var j: I64 = 0
+    var close_at: I64 = -1
+    loop (j < rest_len) {
+        let b: U8 = rest_bytes.get(j)
+        let bi: I64 = b as I64
+        if bi == 40 {
+            depth = depth + 1
+        } else if bi == 41 {
+            depth = depth - 1
+            if depth == 0 {
+                close_at = j
+                break
+            }
+        }
+        j = j + 1
+    }
+    if close_at < 0 {
+        return Nothing
+    }
+    let inside: Str = substring(rest, 0, close_at)
+    let tail: Str = trim(substring_from(rest, close_at + 1))
+    let params: List[IrParam] = parse_params(inside)
+    // Tail is everything between `)` and `{`. Attributes are space-separated
+    // words; we strip a trailing `{` if present.
+    var attr_text: Str = tail
+    if ends_with(attr_text, "{") {
+        attr_text = trim(substring(attr_text, 0, ird_str_len(attr_text) - 1))
+    }
+    var attrs: List[Str] = List[Str]::new(0)
+    if ird_str_len(attr_text) > 0 {
+        attrs = split(attr_text, " ")
+    }
+    return Just(FnHeader {
+        name: fname,
+        return_type: return_type,
+        params: params,
+        attributes: attrs,
+    })
+}
+
+// ---- Global parsing -------------------------------------------------------
+
+/// Parses a line of the form `@name = <linkage...> <ty> <initializer>`.
+func parse_global(line: Str) -> Maybe[IrGlobal] {
+    if not starts_with(line, "@") {
+        return Nothing
+    }
+    // Split on ` = ` to get name and rhs.
+    let eq: Maybe[(Str, Str)] = split_once(line, " = ")
+    if eq.is_nothing() {
+        return Nothing
+    }
+    let (name, rhs) = eq.unwrap()
+    // Walk rhs to find the type. Linkage keywords are whitespace-separated
+    // words that do NOT start with a type sigil. The first token that
+    // contains `[`, `*`, `i`, `<`, `%`, or is a known type keyword is the
+    // type. For diff purposes we take the first token that looks like a
+    // type: any token containing `[`, `{`, `<`, `*`, `%`, or matching
+    // `i<digits>` / `float` / `double` / `void` / `ptr`. Simpler
+    // heuristic: skip known linkage/visibility keywords and take the next
+    // token as the type; treat the rest as the initializer.
+    let tokens: List[Str] = split(trim(rhs), " ")
+    var idx: I64 = 0
+    loop (idx < tokens.len()) {
+        let t: Str = tokens.get(idx)
+        if is_linkage_keyword(t) {
+            idx = idx + 1
+            continue
+        }
+        break
+    }
+    if idx >= tokens.len() {
+        return Just(IrGlobal { name: trim(name), ty: "", initializer: "" })
+    }
+    let ty: Str = tokens.get(idx)
+    // Rebuild the initializer as the remaining tokens joined by space.
+    var init_str: Str = ""
+    var k: I64 = idx + 1
+    loop (k < tokens.len()) {
+        if ird_str_len(init_str) > 0 {
+            init_str = concat(init_str, " ")
+        }
+        init_str = concat(init_str, tokens.get(k))
+        k = k + 1
+    }
+    return Just(IrGlobal {
+        name: trim(name),
+        ty: ty,
+        initializer: init_str,
+    })
+}
+
+/// Returns true if the token is an LLVM linkage / visibility / DLL storage
+/// keyword that precedes the type of a global variable.
+func is_linkage_keyword(t: Str) -> Bool {
+    if t == "private" { return true }
+    if t == "internal" { return true }
+    if t == "available_externally" { return true }
+    if t == "linkonce" { return true }
+    if t == "weak" { return true }
+    if t == "common" { return true }
+    if t == "appending" { return true }
+    if t == "extern_weak" { return true }
+    if t == "linkonce_odr" { return true }
+    if t == "weak_odr" { return true }
+    if t == "external" { return true }
+    if t == "hidden" { return true }
+    if t == "protected" { return true }
+    if t == "default" { return true }
+    if t == "dllimport" { return true }
+    if t == "dllexport" { return true }
+    if t == "unnamed_addr" { return true }
+    if t == "local_unnamed_addr" { return true }
+    if t == "thread_local" { return true }
+    if t == "constant" { return true }
+    if t == "global" { return true }
+    if t == "addrspace(0)" { return true }
+    return false
+}
+
+// ---- Main parse entry point -----------------------------------------------
+
+/// Parses an entire LLVM IR module from text.
+///
+/// Returns `Ok(IrModule)` on success, `Err(ParseError)` on the first
+/// structural failure. Preamble lines (comments, target info, attribute
+/// groups, module flags) are silently skipped.
+pub func parse(input: Str) -> Outcome[IrModule, ParseError] {
+    let src_lines: List[Str] = lines(input)
+    let functions: List[IrFunction] = List[IrFunction]::new(8)
+    let globals: List[IrGlobal] = List[IrGlobal]::new(4)
+    let metadata_ids: List[Str] = List[Str]::new(4)
+
+    let total: I64 = src_lines.len()
+    var i: I64 = 0
+    loop (i < total) {
+        let raw: Str = src_lines.get(i)
+        let line: Str = trim(raw)
+        let line_no: I64 = i + 1
+
+        if is_skippable_preamble(line) {
+            i = i + 1
+            continue
+        }
+
+        // Module-level metadata: `!N = ...` or `!name = ...`. Record the ID
+        // (everything up to ` = `) and skip.
+        if starts_with(line, "!") {
+            let eq: Maybe[(Str, Str)] = split_once(line, " = ")
+            if eq.is_just() {
+                let (id, _rest) = eq.unwrap()
+                metadata_ids.push(trim(id))
+            } else {
+                metadata_ids.push(line)
+            }
+            i = i + 1
+            continue
+        }
+
+        // Global variable definition.
+        if starts_with(line, "@") {
+            let g: Maybe[IrGlobal] = parse_global(line)
+            if g.is_just() {
+                globals.push(g.unwrap())
+            }
+            i = i + 1
+            continue
+        }
+
+        // Function declaration (no body) — skip.
+        if starts_with(line, "declare ") {
+            i = i + 1
+            continue
+        }
+
+        // Function definition.
+        if starts_with(line, "define ") {
+            let header: Maybe[FnHeader] = parse_function_header(line)
+            if header.is_nothing() {
+                return Err(ParseError {
+                    line: line_no,
+                    col: 0,
+                    message: "malformed function header",
+                })
+            }
+            let hdr: FnHeader = header.unwrap()
+            let fname: Str = hdr.name
+            let rtype: Str = hdr.return_type
+            let params: List[IrParam] = hdr.params
+            let attrs: List[Str] = hdr.attributes
+            // Parse basic blocks until we hit a closing `}` at depth 0.
+            let blocks: List[IrBlock] = List[IrBlock]::new(4)
+            // The first block is implicit-labeled "entry" if the first
+            // non-blank line inside the body is not a label.
+            var cur_label: Str = ""
+            var cur_instrs: List[IrInstr] = List[IrInstr]::new(8)
+            var have_cur: Bool = false
+            i = i + 1
+            var closed: Bool = false
+            loop (i < total) {
+                let body_raw: Str = src_lines.get(i)
+                let body_line: Str = trim(body_raw)
+                if body_line == "}" {
+                    closed = true
+                    i = i + 1
+                    break
+                }
+                if ird_str_len(body_line) == 0 {
+                    i = i + 1
+                    continue
+                }
+                if starts_with(body_line, ";") {
+                    i = i + 1
+                    continue
+                }
+                // Label line: ends with `:` and has no spaces before the `:`.
+                if is_label_line(body_line) {
+                    // Finish current block if it has content.
+                    if have_cur {
+                        blocks.push(IrBlock {
+                            label: cur_label,
+                            instructions: cur_instrs,
+                        })
+                    }
+                    cur_label = substring(body_line, 0, ird_str_len(body_line) - 1)
+                    cur_instrs = List[IrInstr]::new(8)
+                    have_cur = true
+                    i = i + 1
+                    continue
+                }
+                // Instruction line.
+                if not have_cur {
+                    // Implicit entry block — instructions before any label.
+                    cur_label = "entry"
+                    cur_instrs = List[IrInstr]::new(8)
+                    have_cur = true
+                }
+                let stripped: Str = strip_trailing_metadata(body_line)
+                cur_instrs.push(parse_instruction(stripped))
+                i = i + 1
+            }
+            if not closed {
+                return Err(ParseError {
+                    line: line_no,
+                    col: 0,
+                    message: "function body not closed before end of input",
+                })
+            }
+            if have_cur {
+                blocks.push(IrBlock {
+                    label: cur_label,
+                    instructions: cur_instrs,
+                })
+            }
+            functions.push(IrFunction {
+                name: fname,
+                return_type: rtype,
+                params: params,
+                blocks: blocks,
+                attributes: attrs,
+            })
+            continue
+        }
+
+        // Unknown top-level content. Skip silently — a stricter mode could
+        // return an error here, but the proposal explicitly lists many
+        // legal LLVM constructs we do not parse, so skipping is correct.
+        i = i + 1
+    }
+
+    return Ok(IrModule {
+        functions: functions,
+        globals: globals,
+        metadata_ids: metadata_ids,
+    })
+}
+
+/// Returns true if `line` is a basic-block label of the form `<name>:`
+/// where `<name>` contains no whitespace.
+func is_label_line(line: Str) -> Bool {
+    let n: I64 = ird_str_len(line)
+    if n < 2 {
+        return false
+    }
+    if not ends_with(line, ":") {
+        return false
+    }
+    // Reject things like `ret void :` (has a space).
+    let body: Str = substring(line, 0, n - 1)
+    if contains(body, " ") {
+        return false
+    }
+    if contains(body, "\t") {
+        return false
+    }
+    return true
+}

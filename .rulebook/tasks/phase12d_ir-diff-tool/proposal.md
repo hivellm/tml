@@ -30,10 +30,10 @@ phase12f (hybrid pipeline correctness gate), and all Era 1 phase tests.
 
 ## Proposed Solution
 
-A TML-implemented `tml ir-diff` CLI command backed by a `lib/std/src/ir_diff/` module with
+A TML-implemented `tml ir-diff` CLI command backed by a `tools/ir-diff/src/` module with
 three components:
 
-**Parser (`ir_diff/parser.tml`)**: Reads LLVM IR text using `Text` and `List` and produces a
+**Parser (`tools/ir-diff/src/parser.tml`)**: Reads LLVM IR text using `Text` and `List` and produces a
 structured in-memory representation. Parses:
 - Function definitions: `define <rettype> @<name>(<params>) { <blocks> }`
 - Basic blocks: label + sequence of instructions
@@ -43,7 +43,7 @@ structured in-memory representation. Parses:
 Does not parse: module-level metadata (`!N = ...`), debug info declarations, attributes, comdat.
 These are stripped before parsing begins.
 
-**Normalizer (`ir_diff/normalizer.tml`)**: Rewrites a parsed IR module to use canonical names:
+**Normalizer (`tools/ir-diff/src/normalizer.tml`)**: Rewrites a parsed IR module to use canonical names:
 - All local registers (`%0`, `%_tmp`, `%retval.0`) renamed to `%r0`, `%r1`, ... in definition order
 - All basic block labels renamed to `%b0`, `%b1`, ... in definition order
 - All metadata references stripped (`!dbg !N` suffixes removed from instructions)
@@ -54,7 +54,7 @@ Normalization uses a `HashMap[Str, Str]` rename map built in a first pass over e
 The second pass applies renames to all instruction operands. Renaming is per-function: two
 functions may independently have a `%r0` without conflict.
 
-**Differ (`ir_diff/differ.tml`)**: Compares two normalized IR modules and returns a structured
+**Differ (`tools/ir-diff/src/differ.tml`)**: Compares two normalized IR modules and returns a structured
 `Outcome[DiffResult, DiffError]`:
 - Match functions by demangled name; report functions present in one file but absent in the other
 - Within matched functions, compare instruction sequences line-by-line
@@ -95,10 +95,10 @@ printing noise from the thousands of runtime library functions that are identica
 ## Files to Create/Modify
 
 **Created**:
-- `lib/std/src/ir_diff/mod.tml` — module declaration with `pub use` of public types
-- `lib/std/src/ir_diff/parser.tml` — LLVM IR text parser
-- `lib/std/src/ir_diff/normalizer.tml` — register and label renaming pass
-- `lib/std/src/ir_diff/differ.tml` — semantic comparison and diff result types
+- `tools/ir-diff/src/mod.tml` — module declaration with `pub use` of public types
+- `tools/ir-diff/src/parser.tml` — LLVM IR text parser
+- `tools/ir-diff/src/normalizer.tml` — register and label renaming pass
+- `tools/ir-diff/src/differ.tml` — semantic comparison and diff result types
 - `lib/std/tests/ir_diff/basic.test.tml` — test pairs: identical, cosmetically different, instruction count mismatch, instruction type mismatch
 - `compiler/src/cli/commands/ir_diff_command.cpp` — CLI subcommand wiring
 

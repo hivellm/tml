@@ -1,0 +1,104 @@
+// Tests for std::ir_diff::parser
+use test::{assert, assert_eq}
+use std::ir_diff::parser::parse
+use std::ir_diff::types::{IrModule, IrFunction, IrBlock, IrInstr, IrParam, IrGlobal, ParseError}
+
+@test
+func test_parse_simple_function() -> I32 {
+    let src = "define i32 @add(i32 %a, i32 %b) \{\nentry:\n  %r = add i32 %a, %b\n  ret i32 %r\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse simple function ok")
+    let m = res.unwrap()
+    assert_eq(m.functions.len(), 1, "one function")
+    let f = m.functions.get(0)
+    assert_eq(f.name, "add", "function name")
+    assert_eq(f.return_type, "i32", "return type")
+    assert_eq(f.params.len(), 2, "two params")
+    assert_eq(f.params.get(0).name, "%a", "param 0 name")
+    assert_eq(f.params.get(0).ty, "i32", "param 0 ty")
+    assert_eq(f.params.get(1).name, "%b", "param 1 name")
+    assert_eq(f.blocks.len(), 1, "one block")
+    let b = f.blocks.get(0)
+    assert_eq(b.label, "entry", "label entry")
+    assert_eq(b.instructions.len(), 2, "two instructions")
+    let i0 = b.instructions.get(0)
+    assert_eq(i0.opcode, "add", "i0 opcode")
+    assert(i0.result.is_just(), "i0 has result")
+    assert_eq(i0.result.unwrap(), "%r", "i0 result")
+    let i1 = b.instructions.get(1)
+    assert_eq(i1.opcode, "ret", "i1 opcode")
+    assert(i1.result.is_nothing(), "ret has no result")
+    return 0
+}
+
+@test
+func test_parse_multiple_blocks_and_branches() -> I32 {
+    let src = "define void @f() \{\nentry:\n  br label %then\nthen:\n  br label %end\nend:\n  ret void\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let m = res.unwrap()
+    let f = m.functions.get(0)
+    assert_eq(f.blocks.len(), 3, "three blocks")
+    assert_eq(f.blocks.get(0).label, "entry", "b0 label")
+    assert_eq(f.blocks.get(1).label, "then", "b1 label")
+    assert_eq(f.blocks.get(2).label, "end", "b2 label")
+    let b0_i0 = f.blocks.get(0).instructions.get(0)
+    assert_eq(b0_i0.opcode, "br", "entry is br")
+    return 0
+}
+
+@test
+func test_parse_calls_and_phi() -> I32 {
+    let src = "define i32 @g(i32 %x) \{\nentry:\n  %c = call i32 @h(i32 %x)\n  br label %m\nm:\n  %p = phi i32 [ %c, %entry ]\n  ret i32 %p\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let m = res.unwrap()
+    let f = m.functions.get(0)
+    assert_eq(f.blocks.len(), 2, "two blocks")
+    let call_i = f.blocks.get(0).instructions.get(0)
+    assert_eq(call_i.opcode, "call", "call opcode")
+    assert_eq(call_i.result.unwrap(), "%c", "call result")
+    let phi_i = f.blocks.get(1).instructions.get(0)
+    assert_eq(phi_i.opcode, "phi", "phi opcode")
+    assert_eq(phi_i.result.unwrap(), "%p", "phi result")
+    return 0
+}
+
+@test
+func test_parse_globals() -> I32 {
+    let src = "@g1 = global i32 0\n@g2 = private constant [4 x i8] zeroinitializer\ndefine void @f() \{\nentry:\n  ret void\n}\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let m = res.unwrap()
+    assert_eq(m.globals.len(), 2, "two globals")
+    assert_eq(m.globals.get(0).name, "@g1", "g1 name")
+    assert_eq(m.globals.get(0).ty, "i32", "g1 ty")
+    assert_eq(m.globals.get(1).name, "@g2", "g2 name")
+    assert_eq(m.functions.len(), 1, "one function")
+    return 0
+}
+
+@test
+func test_parse_handles_trailing_metadata() -> I32 {
+    let src = "define i32 @f(i32 %x) \{\nentry:\n  %r = add i32 %x, 1, !dbg !5\n  ret i32 %r, !dbg !6\n}\n!0 = !foo\n!5 = !DILocation(line: 1)\n"
+    let res = parse(src)
+    assert(res.is_ok(), "parse ok")
+    let m = res.unwrap()
+    let f = m.functions.get(0)
+    let instrs = f.blocks.get(0).instructions
+    assert_eq(instrs.len(), 2, "two instructions")
+    let add_i = instrs.get(0)
+    assert_eq(add_i.opcode, "add", "add opcode")
+    // After metadata stripping, operands should be "i32 %x" and "1" (no !dbg).
+    assert_eq(add_i.operands.len(), 2, "add has 2 operands (metadata stripped)")
+    assert(m.metadata_ids.len() >= 2, "metadata ids captured")
+    return 0
+}
+
+@test
+func test_parse_rejects_unclosed_function() -> I32 {
+    let src = "define void @f() \{\nentry:\n  ret void\n"
+    let res = parse(src)
+    assert(res.is_err(), "parse should error")
+    return 0
+}

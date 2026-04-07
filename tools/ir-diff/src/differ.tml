@@ -1,0 +1,334 @@
+//! IR Differ — semantic comparison of two normalized LLVM IR modules.
+//!
+//! Given two `IrModule`s that have already been processed by the
+//! normalizer, this module produces a structured `DiffResult` describing:
+//!   * functions present in one module but absent in the other
+//!   * for each matched function pair, the index of the first differing
+//!     instruction and a small context window around it
+//!
+//! An empty `DiffResult` means the two modules are semantically identical.
+//!
+//! Function matching is done by **exact name** first (the common case:
+//! two IR files compiled from the same source). As a fallback, mangled
+//! type-arg suffixes like `_I64`, `_U32`, `_T` are stripped and the
+//! demangled names are compared. This lets the tool match `@foo_I64` in
+//! one file to `@foo_I64` in the other even if a third file calls it
+//! `@foo_U32` — the diff will report that as a function mismatch.
+
+use std::ir_diff::types::IrModule
+use std::ir_diff::types::IrFunction
+use std::ir_diff::types::IrBlock
+use std::ir_diff::types::IrInstr
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::str::basic::len as str_len
+use core::str::basic::char_at
+use core::str::basic::substring
+use core::str::convert::concat
+
+// ============================================================================
+// Result types
+// ============================================================================
+
+/// A single function-level diff: the name of the function, the instruction
+/// index at which the first difference was found, the text of both lines,
+/// and a list of surrounding context lines (up to 3 before + the diff line
+/// + up to 3 after, taken from the "a" side).
+///
+/// `first_diff_index` is -1 if the diff is a length mismatch with no
+/// common prefix (e.g. one side has 0 instructions, the other has 5).
+pub type FunctionDiff {
+    name: Str,
+    first_diff_index: I64,
+    a_line: Str,
+    b_line: Str,
+    context: List[Str],
+}
+
+/// The result of diffing two IR modules. An empty `DiffResult` (all three
+/// lists empty) means the modules are semantically equivalent.
+pub type DiffResult {
+    functions_only_in_a: List[Str],
+    functions_only_in_b: List[Str],
+    function_diffs: List[FunctionDiff],
+}
+
+/// An error from the differ itself (not a "diff found" — those go in
+/// `DiffResult`). Used for programmer errors like attempting to diff
+/// an unparseable structure.
+pub type DiffError {
+    message: Str,
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Returns `true` if `c` is an uppercase ASCII letter or a digit.
+func is_type_arg_char(c: I32) -> Bool {
+    if c >= ('A' as I32) and c <= ('Z' as I32) { return true }
+    if c >= ('0' as I32) and c <= ('9' as I32) { return true }
+    return false
+}
+
+/// Strips a single trailing `_<TYPE_ARG>` suffix from a mangled name.
+/// A type-arg segment is `_` followed by one or more uppercase letters or
+/// digits ending at the end of the string. Returns the original name if
+/// no such suffix exists.
+///
+/// Examples:
+///   `foo_I64` → `foo`
+///   `bar_U32` → `bar`
+///   `baz`     → `baz`
+///   `qux_abc` → `qux_abc` (lowercase is not a type-arg marker)
+func demangle_once(name: Str) -> Str {
+    let n: I64 = str_len(name)
+    var i: I64 = n - 1
+    // Scan backward for trailing uppercase/digit run.
+    loop (i >= 0) {
+        let c: I32 = char_at(name, i)
+        if is_type_arg_char(c) {
+            i = i - 1
+        } else {
+            break
+        }
+    }
+    // `i` now points to the last non-type-arg-char, or -1.
+    // A valid suffix is `_<one or more type arg chars>` ending at the end.
+    if i >= 0 and i < n - 1 and char_at(name, i) == ('_' as I32) {
+        return substring(name, 0, i)
+    }
+    return name
+}
+
+/// Repeatedly strips type-arg suffixes. `foo_I64_Str` → `foo`.
+func demangle_name(name: Str) -> Str {
+    var cur: Str = name
+    loop (true) {
+        let next: Str = demangle_once(cur)
+        if str_len(next) == str_len(cur) {
+            return cur
+        }
+        cur = next
+    }
+    return cur
+}
+
+/// Builds a map from function name → its index in the module's functions list.
+func build_name_index(m: ref IrModule) -> HashMap[Str, I64] {
+    var map: HashMap[Str, I64] = HashMap[Str, I64]::new(m.functions.len() * 2 + 8)
+    var i: I64 = 0
+    let n: I64 = m.functions.len()
+    loop (i < n) {
+        let f: IrFunction = m.functions.get(i)
+        map.set(f.name, i)
+        i = i + 1
+    }
+    return map
+}
+
+/// Builds a demangled-name → index map. If multiple functions demangle to
+/// the same name, the later one overwrites earlier entries (good enough
+/// for the fallback lookup — the exact-match pass runs first).
+func build_demangled_index(m: ref IrModule) -> HashMap[Str, I64] {
+    var map: HashMap[Str, I64] = HashMap[Str, I64]::new(m.functions.len() * 2 + 8)
+    var i: I64 = 0
+    let n: I64 = m.functions.len()
+    loop (i < n) {
+        let f: IrFunction = m.functions.get(i)
+        map.set(demangle_name(f.name), i)
+        i = i + 1
+    }
+    return map
+}
+
+// ============================================================================
+// Per-function diff
+// ============================================================================
+
+/// Flattens all instruction `raw_line` strings of a function in block order
+/// into a single list. This is what the line-by-line differ compares.
+func flatten_instructions(f: ref IrFunction) -> List[Str] {
+    var out: List[Str] = List[Str]::new(16)
+    var bi: I64 = 0
+    let bcount: I64 = f.blocks.len()
+    loop (bi < bcount) {
+        let b: IrBlock = f.blocks.get(bi)
+        // Include the label as a pseudo-line so block count/label diffs
+        // show up in the diff output.
+        if str_len(b.label) > 0 {
+            out.push(concat(b.label, ":"))
+        }
+        var ii: I64 = 0
+        let icount: I64 = b.instructions.len()
+        loop (ii < icount) {
+            out.push(b.instructions.get(ii).raw_line)
+            ii = ii + 1
+        }
+        bi = bi + 1
+    }
+    return out
+}
+
+/// Builds a small context window around `idx` from `lines`, up to 3 lines
+/// before and 3 after (clipped to the list bounds).
+func build_context(lines: ref List[Str], idx: I64) -> List[Str] {
+    var out: List[Str] = List[Str]::new(8)
+    let n: I64 = lines.len()
+    var start: I64 = idx - 3
+    if start < 0 {
+        start = 0
+    }
+    var end: I64 = idx + 4
+    if end > n {
+        end = n
+    }
+    var i: I64 = start
+    loop (i < end) {
+        out.push(lines.get(i))
+        i = i + 1
+    }
+    return out
+}
+
+/// Compares two flattened instruction lists. Returns `Nothing` if they are
+/// identical, or `Just(FunctionDiff)` pointing at the first difference.
+func diff_instruction_lists(name: Str, a: ref List[Str], b: ref List[Str]) -> Maybe[FunctionDiff] {
+    let alen: I64 = a.len()
+    let blen: I64 = b.len()
+    var min_len: I64 = alen
+    if blen < min_len {
+        min_len = blen
+    }
+    var i: I64 = 0
+    loop (i < min_len) {
+        let la: Str = a.get(i)
+        let lb: Str = b.get(i)
+        if not str_eq(la, lb) {
+            return Just(FunctionDiff {
+                name: name,
+                first_diff_index: i,
+                a_line: la,
+                b_line: lb,
+                context: build_context(a, i),
+            })
+        }
+        i = i + 1
+    }
+    if alen != blen {
+        // One side has extra trailing instructions.
+        var a_line_val: Str = ""
+        var b_line_val: Str = ""
+        if alen > blen {
+            a_line_val = a.get(blen)
+        } else {
+            b_line_val = b.get(alen)
+        }
+        return Just(FunctionDiff {
+            name: name,
+            first_diff_index: min_len,
+            a_line: a_line_val,
+            b_line: b_line_val,
+            context: build_context(a, min_len),
+        })
+    }
+    return Nothing
+}
+
+/// Byte-compares two strings. `Str` in TML is a C-style null-terminated
+/// pointer, so we walk byte-by-byte up to len(a).
+func str_eq(a: Str, b: Str) -> Bool {
+    let la: I64 = str_len(a)
+    let lb: I64 = str_len(b)
+    if la != lb {
+        return false
+    }
+    var i: I64 = 0
+    loop (i < la) {
+        if char_at(a, i) != char_at(b, i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// ============================================================================
+// Public entry point
+// ============================================================================
+
+/// Diffs two normalized IR modules. The caller is responsible for calling
+/// `normalize()` on both inputs before passing them here — this function
+/// does NOT normalize, it only compares.
+///
+/// Matching strategy (per function in module `a`):
+///   1. Look for an exact name match in `b`. If found, compare.
+///   2. Otherwise, look for a demangled-name match in `b`. If found,
+///      compare.
+///   3. Otherwise, report the function as "only in a".
+///
+/// Functions in `b` that were never matched are reported as "only in b".
+pub func diff(a: ref IrModule, b: ref IrModule) -> Outcome[DiffResult, DiffError] {
+    var only_in_a: List[Str] = List[Str]::new(4)
+    var only_in_b: List[Str] = List[Str]::new(4)
+    var diffs: List[FunctionDiff] = List[FunctionDiff]::new(4)
+
+    let b_exact: HashMap[Str, I64] = build_name_index(b)
+    let b_demangled: HashMap[Str, I64] = build_demangled_index(b)
+
+    // Track which `b` functions have been matched so we can report the rest
+    // as "only in b".
+    var matched_b: HashMap[I64, I64] = HashMap[I64, I64]::new(b.functions.len() * 2 + 8)
+
+    var ai: I64 = 0
+    let acount: I64 = a.functions.len()
+    loop (ai < acount) {
+        let fa: IrFunction = a.functions.get(ai)
+        var b_idx: I64 = -1
+        if b_exact.has(fa.name) {
+            b_idx = b_exact.get(fa.name)
+        } else {
+            let dm: Str = demangle_name(fa.name)
+            if b_demangled.has(dm) {
+                b_idx = b_demangled.get(dm)
+            }
+        }
+        if b_idx < 0 {
+            only_in_a.push(fa.name)
+        } else {
+            matched_b.set(b_idx, 1)
+            let fb: IrFunction = b.functions.get(b_idx)
+            let a_lines: List[Str] = flatten_instructions(fa)
+            let b_lines: List[Str] = flatten_instructions(fb)
+            when diff_instruction_lists(fa.name, a_lines, b_lines) {
+                Just(fd) => { diffs.push(fd) },
+                Nothing => {}
+            }
+        }
+        ai = ai + 1
+    }
+
+    // Any `b` function not in `matched_b` is "only in b".
+    var bi: I64 = 0
+    let bcount: I64 = b.functions.len()
+    loop (bi < bcount) {
+        if not matched_b.has(bi) {
+            only_in_b.push(b.functions.get(bi).name)
+        }
+        bi = bi + 1
+    }
+
+    return Ok(DiffResult {
+        functions_only_in_a: only_in_a,
+        functions_only_in_b: only_in_b,
+        function_diffs: diffs,
+    })
+}
+
+/// Returns `true` if the `DiffResult` describes two semantically identical
+/// modules (no functions missing on either side, no per-function diffs).
+pub func is_identical(r: ref DiffResult) -> Bool {
+    return r.functions_only_in_a.is_empty()
+        and r.functions_only_in_b.is_empty()
+        and r.function_diffs.is_empty()
+}

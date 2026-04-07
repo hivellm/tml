@@ -1,0 +1,388 @@
+//! IR Normalizer — canonicalize register and label names for semantic comparison.
+//!
+//! LLVM IR uses emitter-chosen names for SSA registers (`%0`, `%_tmp`,
+//! `%retval.0`) and basic block labels (`entry`, `bb1`, `loop.body`). Two
+//! compilation runs that are semantically identical can produce byte-for-byte
+//! different IR purely because of naming. The normalizer rewrites a parsed
+//! `IrModule` to use canonical sequential names so that a plain line-by-line
+//! diff reflects only real semantic differences.
+//!
+//! The transformation, applied per function:
+//!   * Local registers (`%orig`) → `%r0`, `%r1`, ... in definition order
+//!   * Basic block labels (`orig`) → `%b0`, `%b1`, ... in textual order
+//!   * Debug metadata suffixes (`, !dbg !N`) stripped from raw lines
+//!   * Trailing line comments (`; ...`) stripped from raw lines
+//!
+//! Function parameter names are normalized to `%a0`, `%a1`, ... since they
+//! also appear as registers in the function body and must rename consistently.
+//!
+//! Globals (`@name`) are NEVER renamed — they are module-level and part of
+//! the program's observable semantics (linking, exports, calls).
+
+use std::ir_diff::types::IrModule
+use std::ir_diff::types::IrFunction
+use std::ir_diff::types::IrBlock
+use std::ir_diff::types::IrInstr
+use std::ir_diff::types::IrParam
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::str::basic::len as str_len
+use core::str::basic::char_at
+use core::str::basic::substring
+use core::str::convert::concat
+use core::str::convert::concat_all
+use core::fmt::helpers::i64_to_str
+
+// ============================================================================
+// Character predicates
+// ============================================================================
+
+/// Returns `true` if `c` is a valid LLVM identifier character after the
+/// leading `%` or `@` sigil: letters, digits, `_`, `.`, `$`, `-`.
+///
+/// LLVM quoted identifiers (`%"foo bar"`) are not supported by this pass.
+/// The parser does not emit them and the TML compiler does not generate them.
+func is_ident_char(c: I32) -> Bool {
+    if c >= ('a' as I32) and c <= ('z' as I32) { return true }
+    if c >= ('A' as I32) and c <= ('Z' as I32) { return true }
+    if c >= ('0' as I32) and c <= ('9' as I32) { return true }
+    if c == ('_' as I32) { return true }
+    if c == ('.' as I32) { return true }
+    if c == ('$' as I32) { return true }
+    if c == ('-' as I32) { return true }
+    return false
+}
+
+// ============================================================================
+// Line-level stripping
+// ============================================================================
+
+/// Strips `, !dbg !N` metadata suffixes and trailing line comments (`; ...`)
+/// from a raw IR line. Returns the cleaned line with trailing whitespace
+/// removed. Does not touch leading whitespace (indentation is preserved).
+///
+/// LLVM instructions can have any number of metadata attachments at the end,
+/// each introduced by `, !name !N`. This strips every `, !...` tail from the
+/// first occurrence onward, then removes any trailing `;` comment.
+func strip_metadata_and_comment(line: Str) -> Str {
+    let n: I64 = str_len(line)
+    var cut: I64 = n
+
+    // Find first `, !` (metadata) or ` ;` / start-of-comment `;` that lies
+    // outside a string literal. IR string literals use `"..."` — scan while
+    // tracking quote state.
+    var in_str: Bool = false
+    var i: I64 = 0
+    loop (i < n) {
+        let c: I32 = char_at(line, i)
+        if c == ('"' as I32) {
+            in_str = not in_str
+        } else {
+            if not in_str {
+                if c == (';' as I32) {
+                    cut = i
+                    break
+                }
+                // `, !` metadata suffix
+                if c == (',' as I32) and i + 2 < n {
+                    var j: I64 = i + 1
+                    // skip spaces
+                    loop (j < n and char_at(line, j) == (' ' as I32)) {
+                        j = j + 1
+                    }
+                    if j < n and char_at(line, j) == ('!' as I32) {
+                        cut = i
+                        break
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+
+    // Trim trailing whitespace from the kept prefix.
+    var end: I64 = cut
+    loop (end > 0) {
+        let c2: I32 = char_at(line, end - 1)
+        if c2 == (' ' as I32) or c2 == ('\t' as I32) {
+            end = end - 1
+        } else {
+            break
+        }
+    }
+    return substring(line, 0, end)
+}
+
+// ============================================================================
+// Identifier substitution
+// ============================================================================
+
+/// Rewrites every `%name` token in `line` whose `name` has a mapping in
+/// `map` to the mapped replacement. Tokens are whole `%<ident>` sequences
+/// matched using `is_ident_char`. Text inside `"..."` string literals is
+/// left untouched.
+///
+/// `@name` global references are NEVER substituted — only `%` locals.
+func substitute_locals(line: Str, map: ref HashMap[Str, Str]) -> Str {
+    let n: I64 = str_len(line)
+    var parts: List[Str] = List[Str]::new(16)
+    var i: I64 = 0
+    var seg_start: I64 = 0
+    var in_str: Bool = false
+
+    loop (i < n) {
+        let c: I32 = char_at(line, i)
+        if c == ('"' as I32) {
+            in_str = not in_str
+            i = i + 1
+            continue
+        }
+        if in_str {
+            i = i + 1
+            continue
+        }
+        if c == ('%' as I32) {
+            // Scan the identifier after `%`.
+            var j: I64 = i + 1
+            loop (j < n) {
+                let ch: I32 = char_at(line, j)
+                if is_ident_char(ch) {
+                    j = j + 1
+                } else {
+                    break
+                }
+            }
+            if j > i + 1 {
+                let name: Str = substring(line, i + 1, j)
+                if map.has(name) {
+                    // Flush pre-segment.
+                    if i > seg_start {
+                        parts.push(substring(line, seg_start, i))
+                    }
+                    parts.push(map.get(name))
+                    seg_start = j
+                }
+                i = j
+                continue
+            }
+        }
+        i = i + 1
+    }
+
+    if seg_start < n {
+        parts.push(substring(line, seg_start, n))
+    }
+    return concat_all(parts)
+}
+
+// ============================================================================
+// Function-level normalization
+// ============================================================================
+
+/// Collects the rename maps for a single function.
+///
+/// Registers are assigned in definition order:
+///   1. Parameter names, in declaration order → `%a0`, `%a1`, ...
+///   2. Instruction results, walked block by block in textual order → `%r0`, ...
+///
+/// Block labels are assigned in textual order → `%b0`, `%b1`, ...
+///
+/// The returned map merges locals and labels — both sit in the `%` namespace
+/// and LLVM disallows collisions between them.
+func build_rename_map(f: ref IrFunction) -> HashMap[Str, Str] {
+    var map: HashMap[Str, Str] = HashMap[Str, Str]::new(32)
+
+    // Parameters — strip leading `%` if present, store bare name.
+    var ai: I64 = 0
+    var pi: I64 = 0
+    let pcount: I64 = f.params.len()
+    loop (pi < pcount) {
+        let p: IrParam = f.params.get(pi)
+        let raw: Str = p.name
+        let rlen: I64 = str_len(raw)
+        var bare: Str = raw
+        if rlen > 0 and char_at(raw, 0) == ('%' as I32) {
+            bare = substring(raw, 1, rlen)
+        }
+        if str_len(bare) > 0 and not map.has(bare) {
+            let replacement: Str = concat("%a", i64_to_str(ai))
+            map.set(bare, replacement)
+            ai = ai + 1
+        }
+        pi = pi + 1
+    }
+
+    // Blocks: assign `%b<N>` to labels, then walk instructions to assign `%r<N>`.
+    var bi: I64 = 0
+    var ri: I64 = 0
+    var bidx: I64 = 0
+    let bcount: I64 = f.blocks.len()
+    loop (bidx < bcount) {
+        let b: IrBlock = f.blocks.get(bidx)
+        if str_len(b.label) > 0 and not map.has(b.label) {
+            let lrepl: Str = concat("%b", i64_to_str(bi))
+            map.set(b.label, lrepl)
+            bi = bi + 1
+        }
+        // Instruction results.
+        var ii: I64 = 0
+        let icount: I64 = b.instructions.len()
+        loop (ii < icount) {
+            let instr: IrInstr = b.instructions.get(ii)
+            when instr.result {
+                Just(res) => {
+                    let reslen: I64 = str_len(res)
+                    var bare2: Str = res
+                    if reslen > 0 and char_at(res, 0) == ('%' as I32) {
+                        bare2 = substring(res, 1, reslen)
+                    }
+                    if str_len(bare2) > 0 and not map.has(bare2) {
+                        let rrepl: Str = concat("%r", i64_to_str(ri))
+                        map.set(bare2, rrepl)
+                        ri = ri + 1
+                    }
+                },
+                Nothing => {}
+            }
+            ii = ii + 1
+        }
+        bidx = bidx + 1
+    }
+
+    return map
+}
+
+/// Applies a rename map to an `IrInstr`, returning a new instance with
+/// `result`, `operands`, and `raw_line` rewritten. `opcode` is unchanged.
+func rewrite_instr(instr: ref IrInstr, map: ref HashMap[Str, Str]) -> IrInstr {
+    // Rewrite result. Start from the original `Maybe[Str]` so the type is
+    // unambiguous, then overwrite in the Just arm with the remapped value.
+    var new_result: Maybe[Str] = instr.result
+    when instr.result {
+        Just(res) => {
+            let rl: I64 = str_len(res)
+            var bare: Str = res
+            if rl > 0 and char_at(res, 0) == ('%' as I32) {
+                bare = substring(res, 1, rl)
+            }
+            if map.has(bare) {
+                new_result = Just(map.get(bare))
+            }
+        },
+        Nothing => {}
+    }
+
+    // Rewrite operands.
+    var new_ops: List[Str] = List[Str]::new(instr.operands.len())
+    var oi: I64 = 0
+    let ocount: I64 = instr.operands.len()
+    loop (oi < ocount) {
+        let op: Str = instr.operands.get(oi)
+        new_ops.push(substitute_locals(op, map))
+        oi = oi + 1
+    }
+
+    // Rewrite raw_line — first strip metadata/comment, then substitute.
+    let cleaned: Str = strip_metadata_and_comment(instr.raw_line)
+    let new_raw: Str = substitute_locals(cleaned, map)
+
+    return IrInstr {
+        opcode: instr.opcode,
+        result: new_result,
+        operands: new_ops,
+        raw_line: new_raw,
+    }
+}
+
+/// Normalizes a single function: builds the rename map, then rewrites all
+/// blocks and instructions with canonical names.
+func normalize_function(f: ref IrFunction) -> IrFunction {
+    let map: HashMap[Str, Str] = build_rename_map(f)
+
+    // Rewrite parameters.
+    var new_params: List[IrParam] = List[IrParam]::new(f.params.len())
+    var pi: I64 = 0
+    let pcount: I64 = f.params.len()
+    loop (pi < pcount) {
+        let p: IrParam = f.params.get(pi)
+        let raw: Str = p.name
+        let rlen: I64 = str_len(raw)
+        var bare: Str = raw
+        if rlen > 0 and char_at(raw, 0) == ('%' as I32) {
+            bare = substring(raw, 1, rlen)
+        }
+        var new_name: Str = raw
+        if map.has(bare) {
+            new_name = map.get(bare)
+        }
+        new_params.push(IrParam { ty: p.ty, name: new_name })
+        pi = pi + 1
+    }
+
+    // Rewrite blocks.
+    var new_blocks: List[IrBlock] = List[IrBlock]::new(f.blocks.len())
+    var bidx: I64 = 0
+    let bcount: I64 = f.blocks.len()
+    loop (bidx < bcount) {
+        let b: IrBlock = f.blocks.get(bidx)
+        var new_label: Str = b.label
+        if map.has(b.label) {
+            let mapped: Str = map.get(b.label)
+            // Strip the leading `%` from the mapped name — block labels
+            // don't carry the sigil in IrBlock.label.
+            let ml: I64 = str_len(mapped)
+            if ml > 0 and char_at(mapped, 0) == ('%' as I32) {
+                new_label = substring(mapped, 1, ml)
+            } else {
+                new_label = mapped
+            }
+        }
+
+        var new_instrs: List[IrInstr] = List[IrInstr]::new(b.instructions.len())
+        var ii: I64 = 0
+        let icount: I64 = b.instructions.len()
+        loop (ii < icount) {
+            let instr: IrInstr = b.instructions.get(ii)
+            new_instrs.push(rewrite_instr(instr, map))
+            ii = ii + 1
+        }
+        new_blocks.push(IrBlock { label: new_label, instructions: new_instrs })
+        bidx = bidx + 1
+    }
+
+    return IrFunction {
+        name: f.name,
+        return_type: f.return_type,
+        params: new_params,
+        blocks: new_blocks,
+        attributes: f.attributes,
+    }
+}
+
+// ============================================================================
+// Public entry point
+// ============================================================================
+
+/// Normalizes an `IrModule` for semantic comparison.
+///
+/// - Every function has its registers and block labels renamed to canonical
+///   sequential names.
+/// - Every instruction's `raw_line` has debug metadata and trailing comments
+///   stripped, then local identifiers substituted.
+/// - Globals and function order are preserved.
+/// - The result is idempotent: `normalize(normalize(m))` equals `normalize(m)`.
+pub func normalize(m: ref IrModule) -> IrModule {
+    var new_functions: List[IrFunction] = List[IrFunction]::new(m.functions.len())
+    var fi: I64 = 0
+    let fcount: I64 = m.functions.len()
+    loop (fi < fcount) {
+        let f: IrFunction = m.functions.get(fi)
+        new_functions.push(normalize_function(f))
+        fi = fi + 1
+    }
+    return IrModule {
+        functions: new_functions,
+        globals: m.globals,
+        metadata_ids: m.metadata_ids,
+    }
+}
