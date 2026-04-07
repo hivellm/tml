@@ -28,10 +28,12 @@ The section files in `.rulebook/tasks/phase12c_typechecker-invariants/specs/` co
 4. [Body Checking and Inference Invariants](#section-4-body-checking-and-inference-invariants) (34 invariants)
 5. [Cross-Cutting Invariants](#section-5-cross-cutting-invariants) (61 invariants)
 6. [Self-Hosting Contract](#section-6-self-hosting-contract)
-7. [Appendix A — Unified Invariant Index](#appendix-a--unified-invariant-index)
-8. [Appendix B — Latent Bugs and Surprising Findings](#appendix-b--latent-bugs-and-surprising-findings)
-9. [Appendix C — Known Gaps](#appendix-c--known-gaps)
-10. [Appendix D — Terminology Glossary](#appendix-d--terminology-glossary)
+7. [Section 7 — Consumer Contracts](#section-7--consumer-contracts) (HIR, THIR, Borrow, Codegen)
+8. [Appendix A — Unified Invariant Index](#appendix-a--unified-invariant-index)
+9. [Appendix B — Latent Bugs and Surprising Findings](#appendix-b--latent-bugs-and-surprising-findings)
+10. [Appendix C — Closed Gaps](#appendix-c--closed-gaps)
+11. [Appendix D — Terminology Glossary](#appendix-d--terminology-glossary)
+12. [Appendix E — @derive Method Signatures](#appendix-e---derive-method-signatures)
 
 ---
 
@@ -2957,6 +2959,8 @@ expectations.
   `result_type` stays as the first non-`Never` arm type.
 This means the result type of a `when` expression is the type of its *first non-diverging arm*.
 
+**Verified (Gap 5, phase12e)**: Running `.sandbox/when_arm_mismatch.tml` confirms: `when x { 1 => 42, _ => true }` (x: I64) emits `error[T015]: When arm type mismatch: expected I64, found Bool` but the type checker continues (non-fatal). The result type assigned to the `when` expression is `I64`. The error reports T015 with the span pointing at the mismatching arm body (`true`), not the whole expression. The checker does NOT abort on the first mismatch — all arms are evaluated and each non-Never / non-matching arm fires its own T015.
+
 **Invariant CC-16** (`helpers.cpp:91-228`): `types_compatible` accepts:
 - `TypeVar` on either side (unresolved inference variable matches everything)
 - Any integer vs any integer (no width check — `I8` is compatible with `I64`)
@@ -3800,6 +3804,40 @@ Inside `lowlevel`, `&` returns `Ptr[T]`, `&mut` returns `*mut T`. `in_lowlevel_`
 
 ---
 
+### 6.8 Consumer-Side Contract (derived from Section 7 gap audit)
+
+The following items are requirements on the TypeEnv **output** that downstream consumers depend on. They are derived from the Section 7 audits of the HIR builder, THIR lowerer, borrow checker, and legacy codegen.
+
+**GS-08 — HIR builder requires `structs_` to contain all monomorphized instantiations before HIR lowering begins**
+`HirBuilder::lower_struct_expr` and `get_field_index` call `type_env_.lookup_struct(name)` with bare short names at HIR time. If a monomorphized struct (e.g., `Vec_I32`) is not yet in `structs_`, `get_field_index` returns `-1` and field access emits wrong code. The type checker MUST ensure `structs_` contains all concrete instantiations that user code accesses before the HIR lowering pass begins.
+*Source*: `hir/hir_builder_expr.cpp:738`, `hir/hir_builder.cpp:1213-1266`; Section 7.1 HC-04, HC-05
+
+**GS-09 — HIR builder reads `current_scope()` for every identifier resolution**
+`lower_ident`, `lower_path`, and `get_expr_type` call `type_env_.current_scope()->lookup(name)` to determine identifier types. Scope must be in a push-pop balanced state when HIR lowering begins: one scope per function body, parameters pre-defined. The type checker must leave scopes in a clean state after `check_module` returns.
+*Source*: `hir/hir_builder_expr.cpp:331-334`, `hir/hir_builder.cpp:359-391`; Section 7.1 HC-01, HC-02
+
+**GS-10 — HIR builder re-invokes `lookup_func` independently at call sites**
+The HIR builder does NOT use the type checker's pre-resolved call types stored in the AST. It independently calls `type_env_.lookup_func(func_name)` at every call site. The `functions_` map MUST be complete and stable before HIR lowering begins — no entries may be added during HIR lowering.
+*Source*: `hir/hir_builder_expr.cpp:508-539`; Section 7.1 HC-06
+
+**GS-11 — HIR builder default integer literal type is `I32`, not `I64`**
+`lower_literal` in the HIR builder assigns `I32` as the default for unsuffixed integer literals (line 259 of `hir_builder_expr.cpp`), differing from the type checker's `I64` default (IN-01). HIR types for literal expressions therefore use `I32` unless an explicit suffix is present. Downstream THIR and MIR passes must tolerate `I32` literals where the type checker sees `I64`.
+*Source*: `hir/hir_builder_expr.cpp:259,1075-1076`; Section 7.1 HC-09
+
+**GS-12 — THIR lowerer consumes `behaviors_` via `get_behavior_list()` for operator desugaring**
+`ThirLower::resolve_method_call` iterates all behavior definitions to find which behavior owns a given method name, then consults the trait solver for the dispatch target. `behaviors_` MUST be fully populated before THIR lowering begins. Any behavior added lazily (e.g., by on-demand module loading during codegen) that is not present at THIR time silently falls through to direct dispatch.
+*Source*: `thir/thir_lower.cpp:1088-1115`; Section 7.2 TC-04
+
+**GS-13 — Borrow checker requires `behavior_impls_` for Copy/Move semantics**
+`BorrowChecker::is_copy_type` calls `type_env_.type_implements(name, "Copy")` for `NamedType` and `ClassType` values. If `behavior_impls_["Copy"]` is incomplete (missing entries), types that implement `Copy` will be treated as `Move` types — causing spurious borrow errors. The type checker MUST register all `Copy` impls into `behavior_impls_` before borrow checking begins.
+*Source*: `borrow/checker_core.cpp:198-204`; Section 7.3 BC-02
+
+**GS-14 — Legacy codegen re-runs module loading via `module_registry()` during generic instantiation**
+The legacy LLVM codegen (used for generic structs and associated types) calls `env_.module_registry()->get_all_modules()` directly to find struct definitions and re-parses module source code. The `module_registry_` in the TypeEnv passed to codegen MUST contain all loaded modules with valid `source_code` fields. A TypeEnv produced by a TML self-hosted type checker must preserve the `module_registry_` and `source_code` fields with the same completeness as the C++ implementation.
+*Source*: `codegen/llvm/core/types_resolve.cpp:189-198, 793-847`; Section 7.4 CG-07, CG-08
+
+---
+
 ### 6.7 Compatibility Test Plan
 
 | Test ID | Contract | Assertion |
@@ -3831,6 +3869,190 @@ Inside `lowlevel`, `&` returns `Ptr[T]`, `&mut` returns `*mut T`. `in_lowlevel_`
 
 
 ---
+
+
+---
+
+## Section 7 — Consumer Contracts
+
+This section documents how the four downstream stages (HIR builder, THIR lowerer, borrow checker, legacy codegen) consume the `TypeEnv` produced by the type checker. Each subsection lists invariants the consumer assumes, cited to source files. These close the six gaps in the original `phase12c` Appendix C.
+
+Each invariant ID uses the prefix `HC-` (HIR Consumer), `TC-` (THIR Consumer), `BC-` (Borrow Consumer), `CG-` (Codegen Consumer).
+
+---
+
+### 7.1 HIR-Consumer Contract
+
+**Source files audited**: `compiler/src/hir/hir_builder.cpp`, `hir_builder_expr.cpp`, `hir_builder_stmt.cpp`
+
+The HIR builder runs after `check_module` completes. It receives a `types::TypeEnv&` (not `const`) and uses it for both read queries and live scope management (push/pop during HIR lowering). This means the TypeEnv passed to the HIR builder must be in a stable, post-check-module state while also being usable as a runtime scope stack for HIR lowering.
+
+#### 7.1.1 Scope Management Assumptions
+
+**HC-01** (`hir_builder.cpp:173`): `HirBuilder::HirBuilder(types::TypeEnv& type_env)` stores a mutable reference. The HIR builder calls `push_scope()` and `pop_scope()` on the TypeEnv directly during lowering. The TypeEnv MUST expose a mutable scope interface after `check_module` returns — the same `current_scope_` root that was active at the end of type checking is re-used.
+
+**HC-02** (`hir_builder.cpp:359-391`): For every function body lowered, the HIR builder calls `type_env_.push_scope()`, then `type_env_.current_scope()->define(param.name, param.type, ...)` for each parameter, lowers the body, then `type_env_.pop_scope()`. This scope is used to make parameter types available for `get_expr_type` calls inside the body. After `pop_scope()`, the type environment scope stack is exactly as it was before the function was entered. The self-hosting type checker MUST preserve an accessible mutable scope stack even after `check_module` returns.
+
+**HC-03** (`hir_builder.cpp:363`): When the HIR builder defines a parameter in the TypeEnv scope, it passes the parameter's resolved `HirType` (a `types::TypePtr`), not the original AST type. The type MUST already be resolved to a concrete type (no TypeVar substitution needed) because `resolve_type` in the HIR builder does NOT call `type_env_.resolve()` on the result — it only calls `resolve()` when reading back from the scope at expression sites.
+
+**HC-04** (`hir_builder_expr.cpp:618`): `lower_method_call` → `substitute_method_generics` calls `type_env_.lookup_struct(recv_named.name)` to obtain the receiver type's `type_params` vector. The HIR builder uses this to build the receiver-side substitution map for generic return type resolution. The `structs_` map MUST contain all user-defined and library structs that appear as method receivers in the program being compiled.
+
+**HC-05** (`hir_builder.cpp:1139-1145`): `get_expr_type` → `FieldExpr` branch calls `type_env_.lookup_struct(named.name)` and iterates `struct_def->fields` to determine the type of a field access. If the struct is not in `structs_`, the field type defaults to `Unit`. This is a silent fallback — no error is emitted. A self-hosted type checker producing an incomplete `structs_` map will cause the HIR builder to assign wrong types to field expressions.
+
+**HC-06** (`hir_builder_expr.cpp:508-509`): `lower_call` calls `type_env_.lookup_func(func_name)` independently. The HIR builder does NOT trust the type that the type checker inferred for the call expression (that information is not carried in the HIR). `lookup_func` MUST succeed for all functions called by user code. The first-registered overload is used (see R-07).
+
+**HC-07** (`hir_builder_expr.cpp:650`): `lower_method_call` calls `type_env_.lookup_func(type_name + "::" + method_name)` using the short receiver type name. If the receiver is `List[I32]`, `type_name` is `"List"` and the key is `"List::push"`. The `functions_` map MUST use short type names as keys — FQN keys (e.g., `"std::collections::List::push"`) would not be found.
+
+**HC-08** (`hir_builder_expr.cpp:673`): For `dyn Behavior` method calls, the HIR builder calls `type_env_.lookup_behavior(dyn.behavior_name)` and iterates `behavior_def->methods` to find the return type. `behaviors_` MUST contain the behavior definition for any `dyn Behavior` type that appears in the program.
+
+**HC-09** (`hir_builder_expr.cpp:259, 1075-1076`): The HIR builder's `lower_literal` assigns `I32` (not `I64`) as the default for unsuffixed integer literals. This differs from the type checker's `I64` default (I-4.02). Both `lower_literal` and `get_expr_type` independently assign `I32` for the default case. The HIR node type for an unsuffixed literal is therefore `I32` even though the type checker infers `I64`. This discrepancy must be preserved — changing `lower_literal` to use `I64` would alter LLVM IR for all integer constants.
+
+**HC-10** (`hir_builder.cpp:633-648`): `lower_class_to_struct` calls `type_env_.lookup_class(base_class_name)` to walk the inheritance chain and collect ancestor fields. `ClassDef.base_class` is a string holding the short parent class name. `classes_` MUST contain all ancestor classes before HIR lowering begins.
+
+**HC-11** (`hir_builder.cpp:1227-1265`): `get_field_index` for class types calls `type_env_.lookup_class(name)` iteratively up the inheritance chain to reconstruct the full ordered field list. The field index returned is the position in the flattened ancestor+self field list (oldest ancestor first). Classes MUST be registered in `classes_` with correct `base_class` links and `fields` lists.
+
+**HC-12** (`hir_builder.cpp:1282-1289`): `get_variant_index` calls `type_env_.lookup_enum(enum_name)` and iterates `enum_def->variants` (a `vector<pair<string, vector<TypePtr>>>`). The variant index in the TypeEnv's `EnumDef` corresponds to insertion order. The HIR builder assigns `HirVariant.index` from the enum's declaration order, so both orderings must agree.
+
+**HC-13** (`hir_builder_stmt.cpp:143-144`): `lower_var` calls `type_env_.current_scope()->define(var_name, type, true, span)` after inserting the name into the lexical scope set. This makes the `var` binding's type available to `get_expr_type` for subsequent expressions in the same block. `current_scope()` MUST return a non-null scope pointer during HIR lowering of function bodies.
+
+**HC-14** (`hir_builder_stmt.cpp:302-303`): Inside `lower_nested_decl` for `ConstDecl`, `type_env_.current_scope()->define(name, type, false, span)` is called. Inline `const` declarations inside blocks are visible to the TypeEnv scope during HIR lowering, not just to the lexical scope set.
+
+**HC-15** (`hir_builder_expr.cpp:1061-1079`): `lower_when` calls `type_env_.push_scope()` at the start of each arm and `type_env_.pop_scope()` at the end. Inside the arm scope, `when_pattern_bindings` are injected via `type_env_.current_scope()->define(...)`. This mirrors what the type checker does in `check_when`, meaning the TypeEnv scope stack is re-used as a runtime binding environment by the HIR builder, not just as a type-checking artifact.
+
+**HC-16** (`hir_builder_expr.cpp:1115, 1129`): `lower_closure` calls `type_env_.push_scope()` / `pop_scope()` for the closure body and defines closure parameters in the new scope. The closure's inferred parameter types are read from the `parser::ClosureExpr` via `shared_ptr<void>` erasure (the same storage the type checker writes to via I-4.12). If the type checker did not write inferred types back to the AST node, the HIR builder uses `nullptr` for the parameter type, defaulting to `Unit`.
+
+#### 7.1.2 Summary Table
+
+| ID | Field / Method Used | Assumed State | Source |
+|---|---|---|---|
+| HC-01 | `TypeEnv&` (mutable ref) | Mutable post-check-module | `hir_builder.cpp:173` |
+| HC-02 | `push_scope()` / `pop_scope()` | Re-used as runtime scope stack | `hir_builder.cpp:359-391` |
+| HC-03 | `current_scope()->define(name, type, ...)` | Parameters pre-resolved, no TypeVar | `hir_builder.cpp:363` |
+| HC-04 | `lookup_struct(recv_type_name)` → `.type_params` | All receiver structs present | `hir_builder_expr.cpp:618` |
+| HC-05 | `lookup_struct(name)` → `.fields` | All structs with fields present | `hir_builder_expr.cpp:1139` |
+| HC-06 | `lookup_func(func_name)` → `.return_type` | All called functions present | `hir_builder_expr.cpp:508` |
+| HC-07 | `lookup_func("TypeName::method")` | Short-name key, not FQN | `hir_builder_expr.cpp:650` |
+| HC-08 | `lookup_behavior(name)` → `.methods` | Behavior defs present for dyn dispatch | `hir_builder_expr.cpp:673` |
+| HC-09 | Integer literal default type | `I32` in HIR (vs `I64` in typechecker) | `hir_builder_expr.cpp:259` |
+| HC-10 | `lookup_class(name)` → `.fields`, `.base_class` | All classes with inheritance present | `hir_builder.cpp:633` |
+| HC-11 | `lookup_class(name)` iteration up chain | Ancestry chain complete | `hir_builder.cpp:1227` |
+| HC-12 | `lookup_enum(name)` → `.variants` | Variant order = declaration order | `hir_builder.cpp:1282` |
+| HC-13 | `current_scope()->define(var, ...)` | Non-null scope during body lowering | `hir_builder_stmt.cpp:143` |
+| HC-14 | `current_scope()->define(const, ...)` | Inline consts added to TypeEnv scope | `hir_builder_stmt.cpp:302` |
+| HC-15 | `push_scope()` per when arm | When arms use TypeEnv scope | `hir_builder_expr.cpp:1061` |
+| HC-16 | ClosureExpr AST `shared_ptr<void>` inferred types | Written by type checker via I-4.12 | `hir_builder_expr.cpp:1115` |
+
+---
+
+### 7.2 THIR-Consumer Contract
+
+**Source files audited**: `compiler/src/thir/thir_lower.cpp`
+
+The THIR lowerer takes a `const types::TypeEnv&` (read-only) and a `traits::TraitSolver&`. It runs after HIR lowering and performs operator desugaring, method resolution, and coercion insertion. It consults TypeEnv for two purposes: (1) enum type argument inference during enum literal lowering, and (2) behavior-driven method dispatch resolution.
+
+#### 7.2.1 Enum Type Argument Inference
+
+**TC-01** (`thir_lower.cpp:517`): When lowering a `HirEnumExpr` whose resolved type or type_args still contain TypeVars, the THIR lowerer calls `env_->lookup_enum(e.enum_name)` to retrieve the `EnumDef` and then uses the variant's payload type signature to infer concrete type arguments. This lookup happens only when `contains_typevar(resolved_type)` is true. `enums_` MUST contain the enum definition with correct `type_params` and `variants` (including payload type vectors).
+
+**TC-02** (`thir_lower.cpp:530`): After finding the enum variant, the THIR lowerer iterates `enum_def->variants` (a `vector<pair<string, vector<TypePtr>>>`) to find the matching variant by name. It then calls `collect_type_param_substs` on each payload type. The payload types in `EnumDef.variants` must be the *template* types (with `GenericType{"T"}` entries, not concrete substitutions) so that substitution can extract concrete bindings.
+
+**TC-03** (`thir_lower.cpp:516`): The `env_` pointer check (`if (env_)`) guards the enum inference path. If TypeEnv is null (possible in tests), the path is skipped and TypeVars survive into the THIR output. A self-hosted checker should always provide a non-null TypeEnv to the THIR lowerer.
+
+#### 7.2.2 Behavior-Driven Method Dispatch
+
+**TC-04** (`thir_lower.cpp:1088`): `resolve_method_call` calls `env_->get_behavior_list()` which returns `const std::unordered_map<std::string, BehaviorDef>*`. The THIR lowerer iterates ALL registered behaviors to find any behavior that declares a method with the target name, then queries the trait solver. If `get_behavior_list()` returns null or an incomplete map, behaviors with matching methods will not be found and dispatch falls back to direct name lookup.
+
+**TC-05** (`thir_lower.cpp:1089-1093`): The behavior iteration for method resolution uses O(B×M) linear scan over all behaviors and their method lists (B = behavior count, M = method count per behavior). `behaviors_` MUST be fully populated before THIR lowering begins — no lazy loading occurs during this scan.
+
+**TC-06** (`thir_lower.cpp:1100-1112`): When a behavior is found with the target method name, the THIR lowerer creates a `traits::TraitGoal{call.receiver_type, bname, {}, call.span}` and calls `solver_->solve(goal)`. The trait solver's resolution depends on `behavior_impls_`. If `behavior_impls_` is incomplete (e.g., a type that `impl Add` was not registered), the trait solver returns no candidate and the behavior is skipped. Method resolution falls through to direct dispatch in that case.
+
+**TC-07** (`thir_lower.cpp:24-25`): The THIR lowerer is constructed as `ThirLower(const types::TypeEnv& env, traits::TraitSolver& solver)`. The TypeEnv is stored as a raw pointer (`env_(&env)`). The TypeEnv object MUST remain alive for the entire duration of THIR lowering — no temporary TypeEnv should be passed.
+
+#### 7.2.3 Summary Table
+
+| ID | Field / Method Used | Assumed State | Source |
+|---|---|---|---|
+| TC-01 | `lookup_enum(name)` → `.type_params`, `.variants` | Template variant payload types | `thir_lower.cpp:517` |
+| TC-02 | `enum_def->variants` (vector<pair<str, vec<TypePtr>>>) | Payload types are template (generic) | `thir_lower.cpp:530` |
+| TC-03 | `env_` non-null guard | TypeEnv always provided | `thir_lower.cpp:516` |
+| TC-04 | `get_behavior_list()` → `unordered_map<string, BehaviorDef>*` | Full behaviors map, non-null | `thir_lower.cpp:1088` |
+| TC-05 | `behaviors_` linear scan | All behaviors pre-populated | `thir_lower.cpp:1089` |
+| TC-06 | `behavior_impls_` (via trait solver) | All `impl B for T` registered | `thir_lower.cpp:1101` |
+| TC-07 | TypeEnv lifetime | Outlives THIR lowering pass | `thir_lower.cpp:24` |
+
+---
+
+### 7.3 Borrow-Checker-Consumer Contract
+
+**Source files audited**: `compiler/src/borrow/checker_core.cpp`, `checker_expr.cpp`, `checker_stmt.cpp`, `checker_nll.cpp`, `checker_ops.cpp`, `checker_env.cpp`, `polonius_checker.cpp`, `polonius_facts.cpp`
+
+The borrow checker runs on the original AST (not HIR or THIR). It takes a `const types::TypeEnv&` and uses it for two purposes: (1) determining whether named types implement `Copy`, and (2) querying interior mutability for Cell/Mutex-like types.
+
+#### 7.3.1 Copy/Move Semantics
+
+**BC-01** (`borrow/checker_core.cpp:75`): `BorrowChecker::BorrowChecker(const types::TypeEnv& type_env)` stores a const pointer `type_env_(&type_env)`. The borrow checker has read-only access to TypeEnv.
+
+**BC-02** (`borrow/checker_core.cpp:198-204`): `is_copy_type(NamedType{name,...})` calls `type_env_->type_implements(name, "Copy")`. This reads `behavior_impls_[name]` and checks for "Copy" in the vector. If a user type registers `@derive(Duplicate)` (which is the TML equivalent of Copy per `decl_struct.cpp:138-139`), it is stored under "Duplicate" in `behavior_impls_`, not "Copy". The borrow checker checks "Copy" specifically. Only types that explicitly `impl Copy for T` or are registered by `@derive(Copy)` (same code path) will be seen as Copy by the borrow checker.
+
+**BC-03** (`borrow/checker_core.cpp:172-213`): `is_copy_type` is called recursively for composite types. For `TupleType`, each element is checked. For `ArrayType`, the element is checked. For `NamedType` and `ClassType`, `type_implements` is consulted. For `PrimitiveType` and `RefType`, Copy is unconditionally true without TypeEnv access. The borrow checker does NOT call any TypeEnv method for primitives or references.
+
+**BC-04** (`borrow/checker_core.cpp:83-86`): `is_interior_mutable(type)` delegates entirely to `type_env_->is_interior_mutable(type)`. This checks whether the type's name (or a NamedType in its fields chain) is in the `interior_mutable_types_` set. Types decorated with `@interior_mutable` in TML source are registered in this set during `register_struct_decl`. The borrow checker relies on this for correctly handling `Mutex[T]`, `Cell[T]`, `Shared[T]`, `Sync[T]`.
+
+**BC-05** (`borrow/polonius_facts.cpp:126-128`): The Polonius-based borrow checker (`PoloniusChecker`) uses the same `type_env_->type_implements(t.name, "Copy")` pattern in `PoloniusFacts::is_copy_type` for NLL borrow checking. This is a second call site for the same TypeEnv query — both the classic borrow checker and the Polonius borrow checker require `behavior_impls_["Copy"]` to be correct.
+
+**BC-06** (`borrow/checker_core.cpp:117`): The borrow checker calls `check_module(const parser::Module&)` — it operates on the AST directly, not on HIR or THIR. TypeEnv is only used for the two queries above (Copy and interior mutability). The borrow checker does NOT use `lookup_struct`, `lookup_func`, `lookup_enum`, or `module_registry`.
+
+#### 7.3.2 Summary Table
+
+| ID | Field / Method Used | Assumed State | Source |
+|---|---|---|---|
+| BC-01 | `const TypeEnv&` (read-only) | Post-check-module, immutable | `checker_core.cpp:75` |
+| BC-02 | `type_implements(name, "Copy")` | behavior_impls_ has "Copy" entries | `checker_core.cpp:198` |
+| BC-03 | Recursive `is_copy_type` | Composite type elements checked | `checker_core.cpp:172` |
+| BC-04 | `is_interior_mutable(type)` | interior_mutable_types_ populated | `checker_core.cpp:83` |
+| BC-05 | `type_implements(name, "Copy")` (Polonius) | Same as BC-02; two consumers | `polonius_facts.cpp:126` |
+| BC-06 | No `lookup_struct`, `lookup_func` etc. | Borrow checker is type-env-light | `checker_core.cpp:115-138` |
+
+---
+
+### 7.4 Codegen-Consumer Contract
+
+**Source files audited**: `compiler/src/codegen/llvm/core/types_resolve.cpp`, `codegen/llvm/llvm_codegen_backend.cpp`, grepping `compiler/src/codegen/` for `lookup_struct`, `lookup_enum`, `lookup_behavior`, `lookup_func`, `module_registry`.
+
+The legacy LLVM codegen (`LLVMIRGen`) receives a `types::TypeEnv&` which it uses for three distinct purposes: (1) type resolution during generic instantiation, (2) field/variant/method lookup at IR emit time, and (3) module source re-parsing for associated type resolution. These are the most extensive TypeEnv reads in the entire downstream pipeline.
+
+#### 7.4.1 Type Resolution During Generic Instantiation
+
+**CG-01** (`codegen/llvm/core/types_resolve.cpp:189-198`): `resolve_parser_type_with_subs` for a `NamedType` calls `env_.module_registry()->get_all_modules()` to find the module_path of a named type. This is used to populate the `module_path` field of `NamedType` in the resolved semantic type, which influences method mangling. The `module_registry_` MUST be populated with all modules that contain structs or enums referenced in user code.
+
+**CG-02** (`codegen/llvm/core/types_resolve.cpp:493-502`): `contains_unresolved_generic` for a `NamedType` with no type_args calls `env_.module_registry()->get_all_modules()` to check if the struct is a generic struct being used without explicit type arguments. If `module_registry_` is incomplete, generic structs from missing modules will not be detected as unresolved, potentially emitting wrong LLVM IR.
+
+**CG-03** (`codegen/llvm/core/types_resolve.cpp:895-896`): `resolve_assoc_type_for_concrete` calls `env_.lookup_struct(named.name)` to find the struct's `type_params` vector. This is used to build the substitution map for resolving associated types (e.g., `Iterator::Item`). `structs_` MUST contain all structs that appear as iterator adapters or that have associated type bindings.
+
+**CG-04** (`codegen/llvm/core/types_resolve.cpp:793-847`): `lookup_associated_type` — when the type is not found in local generic impl state — calls `env_.module_registry()->get_all_modules()` to find the module containing the struct and then re-parses `mod.source_code` (a full module source file) with the lexer and parser to extract impl blocks and their type bindings. This means the `Module.source_code` field MUST be non-empty for all library modules. Modules loaded from binary meta cache still provide `source_code` via the binary format (see INV-18).
+
+**CG-05** (`codegen/llvm/core/types_resolve.cpp:915-926`): After `lookup_struct` fails to find the struct in the TypeEnv, the associated type lookup falls back to `env_.module_registry()->get_all_modules()` to search for struct definitions in imported modules. This fallback is required for associated type resolution on types defined in library modules (not user code). `module_registry_` serves as the secondary struct lookup when `structs_` is insufficient.
+
+#### 7.4.2 Field, Variant, and Method Lookup During IR Emission
+
+**CG-06**: The legacy LLVM codegen calls `env_.lookup_struct`, `env_.lookup_enum`, `env_.lookup_func`, and `env_.lookup_behavior` at many call sites across `codegen/llvm/`. The complete set of call sites spans 44 files (identified by grep). These calls use the same conventions as the type checker: short names (not FQN), first-registered overload wins, `lookup_enum` searches `internal_enums`.
+
+**CG-07**: Codegen distinguishes the MIR path from the legacy path. The MIR codegen path (`compiler/src/codegen/mir/`) does NOT call TypeEnv methods directly — all type information was resolved during HIR/THIR/MIR lowering. Only the legacy LLVM codegen (which re-parses generic impls from AST) uses TypeEnv at codegen time. A TML self-hosted type checker that targets the MIR path has a lighter TypeEnv obligation.
+
+**CG-08**: The legacy codegen re-parses module source via `lexer::Source::from_string(mod.source_code, mod.file_path)` and `parser::Parser`. This re-parsing is NOT gated on a TypeEnv field — it reads from the `Module` struct's `source_code` field. However, `source_code` is populated via the TypeEnv's module loading code (INV-18). A self-hosted type checker must preserve the `Module.source_code` field with the preprocessed (post-`#if`) source text.
+
+#### 7.4.3 Summary Table
+
+| ID | Field / Method Used | Assumed State | Source |
+|---|---|---|---|
+| CG-01 | `module_registry()->get_all_modules()` for module_path | All modules with struct/enum present | `types_resolve.cpp:189` |
+| CG-02 | `module_registry()->get_all_modules()` for generic detection | Module registry complete | `types_resolve.cpp:493` |
+| CG-03 | `lookup_struct(name)` → `.type_params` | All structs with type_params | `types_resolve.cpp:895` |
+| CG-04 | `module_registry()` + `mod.source_code` re-parse | source_code non-empty for library mods | `types_resolve.cpp:793` |
+| CG-05 | `module_registry()` fallback for assoc type | Fallback after lookup_struct fails | `types_resolve.cpp:915` |
+| CG-06 | `lookup_struct`, `lookup_enum`, `lookup_func`, `lookup_behavior` | Short-name keys, same as type checker | 44 codegen files |
+| CG-07 | MIR codegen path (no TypeEnv calls) | MIR path is TypeEnv-independent | `codegen/mir/` |
+| CG-08 | `Module.source_code` field | Preprocessed source, non-empty | `types_resolve.cpp:806` |
 
 ## Appendix A — Unified Invariant Index
 
@@ -4050,27 +4272,18 @@ The `else` block of `let X = e else { block }` is not verified to have type `Nev
 
 ---
 
-## Appendix C — Known Gaps
+## Appendix C — Closed Gaps
 
-The following areas were not covered by this audit and represent gaps in the invariant documentation:
+All six gaps documented in the original `phase12c` audit have been closed by the `phase12e` consumer-contract audit. See Section 7 for the full documentation.
 
-**Gap 1 — HIR builder assumptions about TypeEnv**
-The HIR builder (`hir_builder.cpp`, `hir_builder_expr.cpp`) makes specific assumptions about what TypeEnv guarantees. These assumptions are not documented here. A complete self-hosting contract requires auditing the HIR builder's TypeEnv consumption patterns.
-
-**Gap 2 — THIR lowerer type-checker interactions**
-The THIR lowerer (`thir_lower.cpp`) resolves operator desugaring and method calls using TypeEnv. The exact TypeEnv fields it reads (beyond what body checking produces) are not audited here.
-
-**Gap 3 — Borrow checker TypeEnv usage**
-The borrow checker (`borrow/checker.cpp`) reads TypeEnv fields to determine type ownership and reference validity. Its exact requirements from TypeEnv are not covered by this audit.
-
-**Gap 4 — Codegen TypeEnv re-use**
-The legacy LLVM codegen (`codegen/llvm/`) re-runs parts of the type checking (notably module loading and type resolution) during codegen. The exact requirements from TypeEnv for the MIR codegen path are documented in part in Section 3 (method key conventions) but not exhaustively.
-
-**Gap 5 — when arm type mismatch exact behavior**
-I-4.30 notes that the exact behavior of `check_when` with mismatched arm types is based on reading Section 5 (CC-15) rather than direct verification against `control.cpp`. The claim should be verified with a targeted test.
-
-**Gap 6 — @derive for specific behaviors (Eq, Ord, Hash, etc.)**
-The derived method signatures (parameter types, return types) for each supported `@derive` target are documented in `decl_struct.cpp` but are not fully enumerated in this invariant doc. A self-hosted `@derive` must produce the exact same method signatures.
+| Gap | Status | Where Closed |
+|-----|--------|--------------|
+| Gap 1 — HIR builder TypeEnv consumption | **CLOSED** | Section 7.1 (HIR-Consumer Contract) |
+| Gap 2 — THIR lowerer TypeEnv interactions | **CLOSED** | Section 7.2 (THIR-Consumer Contract) |
+| Gap 3 — Borrow checker TypeEnv usage | **CLOSED** | Section 7.3 (Borrow-Checker-Consumer Contract) |
+| Gap 4 — Codegen TypeEnv re-use | **CLOSED** | Section 7.4 (Codegen-Consumer Contract) |
+| Gap 5 — `when` arm type mismatch exact behavior | **CLOSED** | CC-15 updated above; verified with `.sandbox/when_arm_mismatch.tml` |
+| Gap 6 — @derive method signatures | **CLOSED** | Appendix E (@derive Method Signatures) |
 
 ---
 
@@ -4110,7 +4323,56 @@ The derived method signatures (parameter types, return types) for each supported
 
 ---
 
+## Appendix E — @derive Method Signatures
+
+This appendix enumerates the exact method signatures generated by each supported `@derive` target. A self-hosted `@derive` implementation MUST generate identical signatures for parity with the C++ type checker.
+
+**Source**: `compiler/src/types/checker/decl_struct.cpp:171-485`
+
+All derived methods are registered via `env_.define_func(FuncSig{...})` and `env_.register_impl(type_name, behavior_name)`. All derived impls are skipped for generic types (`decl.generics.empty()` guard at every branch).
+
+The notation `TypeName` in method names and parameters refers to the fully-qualified struct name (using `qualified_name()` with `.` separator for namespace-qualified types). `ref TypeName` means `RefType{is_mut=false, inner=NamedType{TypeName}}`.
+
+### Derived Method Table
+
+| @derive target | Behavior registered | Method key | Parameters | Return type | Notes |
+|---|---|---|---|---|---|
+| `Reflect` | `Reflect` | `TypeName::type_info` | `[]` (static) | `ref TypeInfo` | Also registers `TypeName::runtime_type_info` |
+| `Reflect` | `Reflect` | `TypeName::runtime_type_info` | `[ref TypeName]` (self) | `ref TypeInfo` | Instance method alongside static |
+| `PartialEq` or `Eq` | `PartialEq` | `TypeName::eq` | `[ref TypeName, ref TypeName]` | `Bool` | Both `Eq` and `PartialEq` names map to same code path (`decl_struct.cpp:136`) |
+| `Duplicate` or `Copy` | `Duplicate` | `TypeName::duplicate` | `[ref TypeName]` (self) | `TypeName` (owned) | Both `Duplicate` and `Copy` decorator names map to same code path (`decl_struct.cpp:138`) |
+| `Hash` | `Hash` | `TypeName::hash` | `[ref TypeName]` (self) | `I64` | |
+| `Default` | `Default` | `TypeName::default` | `[]` (static) | `TypeName` (owned) | Static factory method, no parameters |
+| `PartialOrd` | `PartialOrd` | `TypeName::partial_cmp` | `[ref TypeName, ref TypeName]` | `Maybe[Ordering]` | `Ordering` = `NamedType{"Ordering","",{}}` |
+| `Ord` | `Ord` | `TypeName::cmp` | `[ref TypeName, ref TypeName]` | `Ordering` | Direct `Ordering`, not wrapped in `Maybe` |
+| `Debug` | `Debug` | `TypeName::debug_string` | `[ref TypeName]` (self) | `Str` | |
+| `Display` | `Display` | `TypeName::to_string` | `[ref TypeName]` (self) | `Str` | |
+| `Serialize` | `Serialize` | `TypeName::to_json` | `[ref TypeName]` (self) | `Str` | |
+| `Deserialize` | `Deserialize` | `TypeName::from_json` | `[Str]` (static) | `Outcome[TypeName, Str]` | Static deserialization method |
+| `FromStr` | `FromStr` | `TypeName::from_str` | `[Str]` (static) | `Outcome[TypeName, Str]` | Static parsing method |
+
+### Key Observations
+
+**E-01** (`decl_struct.cpp:136`): `Eq` is treated identically to `PartialEq`. Both set `has_derive_partial_eq = true`. There is no separate `Eq` behavior registration — a self-hosted `@derive(Eq)` MUST register `PartialEq` behavior and the `::eq` method, not an `Eq` behavior.
+
+**E-02** (`decl_struct.cpp:138`): `Copy` is treated identically to `Duplicate`. Both set `has_derive_duplicate = true`. The registered behavior is `"Duplicate"` and the method is `::duplicate`. A self-hosted `@derive(Copy)` MUST register `"Duplicate"` (not `"Copy"`) to match the borrow checker's `type_implements(name, "Copy")` check (see BC-02). *Note: the borrow checker checks for "Copy", but the @derive registers "Duplicate" — this is a latent inconsistency. Currently, Copy semantics for named types depend on explicit `impl Copy for T` blocks, not on `@derive(Copy)`.*
+
+**E-03** (`decl_struct.cpp:282-300`): `Default` generates a static method (no `self` parameter). The return type is a `NamedType{TypeName,"",{}}` — an owned value, not a reference.
+
+**E-04** (`decl_struct.cpp:304-330`): `PartialOrd::partial_cmp` returns `Maybe[Ordering]` where `Maybe` = `NamedType{"Maybe","",{ordering_type}}` and `ordering_type` = `NamedType{"Ordering","",{}}`. The `Ordering` type is referenced by short name with empty module_path and empty type_args.
+
+**E-05** (`decl_struct.cpp:332-356`): `Ord::cmp` returns `Ordering` directly (not wrapped in `Maybe`). The parameter list is `[ref TypeName, ref TypeName]` — two reference parameters, both pointing to the same struct type. The first is the self receiver.
+
+**E-06** (`decl_struct.cpp:433-485`): Both `Deserialize::from_json` and `FromStr::from_str` use identical signature patterns: `(Str) -> Outcome[TypeName, Str]`. The parameter is a bare `Str` (not `ref Str`). `Outcome` = `NamedType{"Outcome","",{self_type, str_type}}`.
+
+**E-07** (`decl_struct.cpp:173`): All `@derive` branches share the same generic-type guard: `if (has_derive_X && decl.generics.empty())`. A generic type with any `@derive` decorator gets no methods registered and no error or warning. The behavior registration is silently skipped.
+
+---
+
 *End of TML Type Checker Invariants — Consolidated Reference*
 
-*Audit date: 2026-04-06. Source files: 38 type checker C++ files analyzed.*
-*Total invariants: 176 (25 + 23 + 33 + 34 + 61). Section 6 contract items: 37 (R-01..07, M-01..07, IM-01..07, IN-01..08, ER-01..05, GS-01..07).*
+*Audit date: 2026-04-06. Source files: 38 type checker C++ files analyzed (phase12c) + 12 consumer C++ files analyzed (phase12e).*
+*Total invariants: 176 type checker (25+23+33+34+61) + 16 HC + 7 TC + 6 BC + 8 CG + 7 @derive observations = 220 documented items.*
+*Section 6 contract items: 44 (R-01..07, M-01..07, IM-01..07, IN-01..08, ER-01..05, GS-01..14).*
+*Phase12e gap closure: all 6 gaps closed. See Appendix C.*
+
