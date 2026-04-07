@@ -1073,13 +1073,179 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
         return receiver;
     }
 
-    // ok_or(e) / ok_or_else(f) — convert Maybe[T] to Outcome[T,E]
-    // Both Maybe and Outcome have the same { i32 tag, T value } layout in many cases
+    // ok_or(e) / ok_or_else(f) — convert Maybe[T] to Outcome[T, E]
+    //
+    // Proper implementation: branch on the Maybe tag. In the Just branch,
+    // construct an Ok(val) Outcome; in the Nothing branch, compute the error
+    // (eagerly for ok_or, via closure body for ok_or_else) and construct
+    // an Err(err) Outcome. Merge with a phi.
     if (method == "ok_or" || method == "ok_or_else") {
         emit_coverage("Maybe::" + method);
-        // Return self — Maybe[T] and Outcome[T,E] share layout for primitives
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        bool is_else = (method == "ok_or_else");
+        if (call.args.empty()) {
+            report_error(method + " requires an argument", call.span, "C015");
+            return receiver;
+        }
+
+        // Determine the error type E by generating the err expression in a
+        // scratch block OR by peeking at the closure body. To keep control
+        // flow correct (ok_or_else must only run the closure on Nothing),
+        // we generate the error value INSIDE the nothing branch.
+        //
+        // We construct the Outcome struct via require_enum_instantiation once
+        // we know E's semantic type. For ok_or, we generate the err arg first
+        // (eager evaluation is acceptable — it's a plain expression, not a
+        // closure, matching Rust's `ok_or` semantics).
+
+        std::string is_just_label = fresh_label("maybe_ok_or_just");
+        std::string is_nothing_label = fresh_label("maybe_ok_or_nothing");
+        std::string end_label = fresh_label("maybe_ok_or_end");
+
+        std::string is_just = fresh_reg();
+        emit_line("  " + is_just + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + is_just + ", label %" + is_just_label + ", label %" +
+                  is_nothing_label);
+
+        // --- is_just block: build Ok(val) ---
+        emit_line(is_just_label + ":");
+        current_block_ = is_just_label;
+        std::string just_val = extract_just_value();
+        // We do NOT yet know the result Outcome type; defer struct creation
+        // until we've processed the nothing branch and know E.
+        std::string just_end_block = current_block_;
+        // Stash the just value; we'll build the Ok struct after computing
+        // the result type, in a dedicated block appended after is_nothing.
+        // Simpler: jump to a "just_build" block we emit AFTER we know E.
+        std::string just_build_label = fresh_label("maybe_ok_or_just_build");
+        emit_line("  br label %" + just_build_label);
+
+        // --- is_nothing block: compute error value and its type ---
+        emit_line(is_nothing_label + ":");
+        current_block_ = is_nothing_label;
+
+        std::string err_val;
+        std::string err_llvm_type;
+        types::TypePtr err_semantic_type;
+
+        if (is_else) {
+            if (!call.args[0]->is<parser::ClosureExpr>()) {
+                report_error("ok_or_else requires a closure argument", call.span, "C016");
+                return receiver;
+            }
+            auto& closure = call.args[0]->as<parser::ClosureExpr>();
+
+            // Set up closure return redirect so a bare `return X` inside the
+            // closure body lowers into a store+branch, not a function ret.
+            std::string oe_merge = fresh_label("ok_or_else_merge");
+            // We don't yet know E's LLVM type — allocate an i64 slot which
+            // is large enough for any primitive or pointer payload.
+            std::string oe_alloca = fresh_reg();
+            emit_line("  " + oe_alloca + " = alloca i64");
+            std::string saved_ca = closure_return_alloca_;
+            std::string saved_ct = closure_return_type_;
+            std::string saved_cl = closure_return_label_;
+            closure_return_alloca_ = oe_alloca;
+            // closure_return_type_ will be set once we see the body's type;
+            // leave as "i64" placeholder — unused for normal-flow returns.
+            closure_return_type_ = "i64";
+            closure_return_label_ = oe_merge;
+
+            const auto& value_expr = get_closure_value_expr(*closure.body);
+            err_val = gen_expr(value_expr);
+            err_llvm_type = last_expr_type_;
+            err_semantic_type = last_semantic_type_;
+
+            closure_return_alloca_ = saved_ca;
+            closure_return_type_ = saved_ct;
+            closure_return_label_ = saved_cl;
+
+            if (!block_terminated_) {
+                // Normal fall-through from the closure body
+                // (we intentionally do not branch to oe_merge here; we just
+                // continue building the Err Outcome in the current block).
+            } else {
+                // Body used `return` — control jumped to oe_merge.
+                emit_line(oe_merge + ":");
+                current_block_ = oe_merge;
+                block_terminated_ = false;
+                std::string reloaded = fresh_reg();
+                emit_line("  " + reloaded + " = load " + err_llvm_type + ", ptr " + oe_alloca);
+                err_val = reloaded;
+            }
+        } else {
+            // ok_or(err): eager expression
+            err_val = gen_expr(*call.args[0]);
+            err_llvm_type = last_expr_type_;
+            err_semantic_type = last_semantic_type_;
+        }
+
+        // Fallback for err_semantic_type: if gen_expr didn't populate it
+        // (shouldn't happen, but defensively), derive from the LLVM type.
+        if (!err_semantic_type) {
+            err_semantic_type = semantic_type_from_llvm(err_llvm_type);
+        }
+
+        // Now we know T (from named) and E (from err_semantic_type).
+        // Materialize the Outcome[T, E] struct type.
+        types::TypePtr t_type = inner_type;
+        if (!t_type) {
+            // Fallback: I32 (matches inner_llvm_type default above)
+            t_type = semantic_type_from_llvm("i32");
+        }
+        std::vector<types::TypePtr> outcome_args = {t_type, err_semantic_type};
+        std::string outcome_mangled = require_enum_instantiation("Outcome", outcome_args);
+        std::string outcome_type = "%struct." + outcome_mangled;
+
+        // Build Err(err_val) Outcome in the current (nothing) block.
+        std::string err_alloca = fresh_reg();
+        emit_line("  " + err_alloca + " = alloca " + outcome_type);
+        std::string err_tag_ptr = fresh_reg();
+        emit_line("  " + err_tag_ptr + " = getelementptr inbounds " + outcome_type + ", ptr " +
+                  err_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + err_tag_ptr);
+        std::string err_data_ptr = fresh_reg();
+        emit_line("  " + err_data_ptr + " = getelementptr inbounds " + outcome_type + ", ptr " +
+                  err_alloca + ", i32 0, i32 1");
+        emit_line("  store " + err_llvm_type + " " + err_val + ", ptr " + err_data_ptr);
+        std::string err_outcome = fresh_reg();
+        emit_line("  " + err_outcome + " = load " + outcome_type + ", ptr " + err_alloca);
+        std::string nothing_end_block = current_block_;
+        emit_line("  br label %" + end_label);
+
+        // --- just_build block: build Ok(just_val) now that we know outcome_type ---
+        emit_line(just_build_label + ":");
+        current_block_ = just_build_label;
+        std::string ok_alloca = fresh_reg();
+        emit_line("  " + ok_alloca + " = alloca " + outcome_type);
+        std::string ok_tag_ptr = fresh_reg();
+        emit_line("  " + ok_tag_ptr + " = getelementptr inbounds " + outcome_type + ", ptr " +
+                  ok_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + ok_tag_ptr);
+        std::string ok_data_ptr = fresh_reg();
+        emit_line("  " + ok_data_ptr + " = getelementptr inbounds " + outcome_type + ", ptr " +
+                  ok_alloca + ", i32 0, i32 1");
+        emit_line("  store " + inner_llvm_type + " " + just_val + ", ptr " + ok_data_ptr);
+        std::string ok_outcome = fresh_reg();
+        emit_line("  " + ok_outcome + " = load " + outcome_type + ", ptr " + ok_alloca);
+        std::string just_build_end_block = current_block_;
+        emit_line("  br label %" + end_label);
+
+        // --- merge ---
+        emit_line(end_label + ":");
+        current_block_ = end_label;
+        block_terminated_ = false;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + outcome_type + " [ " + ok_outcome + ", %" +
+                  just_build_end_block + " ], [ " + err_outcome + ", %" + nothing_end_block + " ]");
+        last_expr_type_ = outcome_type;
+        // Set semantic type too so callers like .is_ok()/.unwrap() downstream
+        // see an Outcome[T, E] type.
+        {
+            auto nt = std::make_shared<types::Type>(
+                types::NamedType{"Outcome", "", {t_type, err_semantic_type}});
+            last_semantic_type_ = nt;
+        }
+        return result;
     }
 
     // map_or_else(default_fn, f) — return f(value) if Just, else default_fn()
