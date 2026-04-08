@@ -1,0 +1,417 @@
+//! Phase12f bootstrap lexer stage.
+//!
+//! Reads a UTF-8 source file path from argv[1], tokenizes the source,
+//! and writes the binary token blob to stdout in the format that
+//! `compiler/src/serial/token_reader.cpp` consumes.
+//!
+//! Scope: enough of the TML grammar to lex `func main() { println("hello") }`.
+//! It is intentionally minimal — Phase 5.1/5.2 only require a round-trip on a
+//! hello-world program. Phase 5.3 will expand coverage.
+
+use std::env
+use std::collections::buffer::buf_set_len
+use core::str::basic
+
+// Read source file via CRT directly, sidestepping `std::file::File` (which
+// transitively pulls `std::stream::ReadableStream` -> `EventEmitter` and
+// triggers a pre-existing forward-decl codegen bug).
+
+@extern("fopen")
+func c_fopen(path: Str, mode: Str) -> I64
+
+@extern("fclose")
+func c_fclose(stream: I64) -> I32
+
+@extern("fread")
+func c_fread(ptr: I64, size: I64, count: I64, stream: I64) -> I64
+
+@extern("fseek")
+func c_fseek(stream: I64, offset: I64, whence: I32) -> I32
+
+@extern("ftell")
+func c_ftell(stream: I64) -> I64
+
+// ============================================================================
+// CRT FFI: stdout binary mode + raw write
+// ============================================================================
+//
+// We need raw binary stdout. The TML stdlib's `print`/`println` and the
+// `file_write_bytes` runtime helpers either NUL-terminate, line-buffer, or do
+// CRLF translation on Windows — none of which is acceptable for a binary
+// token blob. So we go straight to MSVCRT.
+
+@extern("fwrite")
+func c_fwrite(ptr: I64, size: I64, count: I64, stream: I64) -> I64
+
+@extern("fflush")
+func c_fflush(stream: I64) -> I32
+
+@extern("__acrt_iob_func")
+func c_acrt_iob(idx: I32) -> I64
+
+@extern("_setmode")
+func c_setmode(fd: I32, mode: I32) -> I32
+
+@extern("_fileno")
+func c_fileno(stream: I64) -> I32
+
+func stdout_handle() -> I64 {
+    return c_acrt_iob(1)  // 0=stdin, 1=stdout, 2=stderr
+}
+
+func set_stdout_binary() {
+    let h: I64 = stdout_handle()
+    let fd: I32 = c_fileno(h)
+    // _O_BINARY = 0x8000
+    c_setmode(fd, 0x8000)
+}
+
+func write_stdout_bytes(buf: Buffer) {
+    let ptr: I64 = buf.data_ptr()
+    let count: I64 = buf.len()
+    let h: I64 = stdout_handle()
+    c_fwrite(ptr, 1, count, h)
+    c_fflush(h)
+}
+
+// ============================================================================
+// Binary writer helpers (all little-endian)
+// ============================================================================
+
+func emit_u8(out: Buffer, v: I64) {
+    out.write_byte((v & 0xFF) as I32)
+}
+
+func emit_u32(out: Buffer, v: I64) {
+    out.write_byte((v & 0xFF) as I32)
+    out.write_byte(((v >> 8) & 0xFF) as I32)
+    out.write_byte(((v >> 16) & 0xFF) as I32)
+    out.write_byte(((v >> 24) & 0xFF) as I32)
+}
+
+/// LEB128 unsigned varint.
+func emit_varint(out: Buffer, value: I64) {
+    var v: I64 = value
+    loop (true) {
+        let byte: I64 = v & 0x7F
+        v = v >> 7
+        if v == 0 {
+            out.write_byte(byte as I32)
+            break
+        } else {
+            out.write_byte((byte | 0x80) as I32)
+        }
+    }
+}
+
+func emit_str(out: Buffer, s: Str) {
+    let n: I64 = basic::len(s)
+    emit_varint(out, n)
+    var i: I64 = 0
+    loop (i < n) {
+        out.write_byte(basic::char_at(s, i))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// Token model
+// ============================================================================
+
+// Discriminants must match `compiler/include/lexer/token.hpp` (TokenKind enum).
+type LexToken {
+    kind: I64,        // u8 in the wire format
+    start: I64,       // byte offset into the source
+    length: I64,
+    line: I64,
+    col: I64,
+    str_value: Str    // populated for StringLiteral; empty otherwise
+}
+
+// ============================================================================
+// Lexer
+// ============================================================================
+
+func is_alpha(c: I32) -> Bool {
+    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
+}
+
+func is_alnum(c: I32) -> Bool {
+    return is_alpha(c) or (c >= 48 and c <= 57)
+}
+
+func keyword_kind(lex: Str) -> I64 {
+    // Return the TokenKind discriminant if `lex` is a reserved keyword,
+    // otherwise -1 (which means "Identifier").
+    //
+    // Only the keywords we actually need for the bootstrap source live here.
+    // The full set will be filled in during Phase 5.3.
+    if lex == "func" { return 14 }
+    if lex == "type" { return 15 }
+    if lex == "let"  { return 25 }
+    if lex == "var"  { return 26 }
+    if lex == "if"   { return 28 }
+    if lex == "else" { return 30 }
+    if lex == "when" { return 31 }
+    if lex == "loop" { return 32 }
+    if lex == "for"  { return 34 }
+    if lex == "in"   { return 35 }
+    if lex == "return" { return 40 }
+    if lex == "and"  { return 41 }
+    if lex == "or"   { return 42 }
+    if lex == "not"  { return 43 }
+    if lex == "this" { return 47 }
+    if lex == "as"   { return 49 }
+    if lex == "mut"  { return 51 }
+    if lex == "ref"  { return 52 }
+    if lex == "use"  { return 20 }
+    if lex == "pub"  { return 21 }
+    if lex == "true" { return 5 }   // BoolLiteral
+    if lex == "false" { return 5 }
+    if lex == "null" { return 6 }   // NullLiteral
+    return -1
+}
+
+func tokenize(src: Str) -> List[LexToken] {
+    let n: I64 = basic::len(src)
+    var tokens: List[LexToken] = List::new(64)
+    var i: I64 = 0
+    var line: I64 = 1
+    var col: I64 = 1
+
+    loop (i < n) {
+        let c: I32 = basic::char_at(src, i)
+
+        // --- whitespace (spaces / tabs / CR) ----------------------------------
+        if c == 32 or c == 9 or c == 13 {
+            i = i + 1
+            col = col + 1
+            continue
+        }
+
+        // --- newline ----------------------------------------------------------
+        if c == 10 {
+            tokens.push(LexToken {
+                kind: 135,  // Newline
+                start: i,
+                length: 1,
+                line: line,
+                col: col,
+                str_value: ""
+            })
+            i = i + 1
+            line = line + 1
+            col = 1
+            continue
+        }
+
+        // --- line comments ----------------------------------------------------
+        if c == 47 and i + 1 < n and basic::char_at(src, i + 1) == 47 {
+            // Skip until newline (don't emit a token).
+            loop (i < n and basic::char_at(src, i) != 10) {
+                i = i + 1
+                col = col + 1
+            }
+            continue
+        }
+
+        // --- identifiers / keywords ------------------------------------------
+        if is_alpha(c) {
+            let start: I64 = i
+            let start_col: I64 = col
+            loop (i < n and is_alnum(basic::char_at(src, i))) {
+                i = i + 1
+                col = col + 1
+            }
+            let lex: Str = basic::substring(src, start, i)
+            let kw: I64 = keyword_kind(lex)
+            let kind: I64 = if kw >= 0 { kw } else { 13 }  // 13 = Identifier
+            tokens.push(LexToken {
+                kind: kind,
+                start: start,
+                length: i - start,
+                line: line,
+                col: start_col,
+                str_value: ""
+            })
+            continue
+        }
+
+        // --- string literals --------------------------------------------------
+        if c == 34 {  // double quote
+            let start: I64 = i
+            let start_col: I64 = col
+            i = i + 1
+            col = col + 1
+            loop (i < n and basic::char_at(src, i) != 34) {
+                if basic::char_at(src, i) == 92 and i + 1 < n {
+                    // escape: skip the backslash and the escaped char
+                    i = i + 2
+                    col = col + 2
+                } else {
+                    i = i + 1
+                    col = col + 1
+                }
+            }
+            if i < n {
+                i = i + 1  // consume closing quote
+                col = col + 1
+            }
+            // Inner content (without surrounding quotes). No escape processing
+            // for the bootstrap — hello-world style sources only.
+            let inner: Str = basic::substring(src, start + 1, i - 1)
+            tokens.push(LexToken {
+                kind: 3,  // StringLiteral
+                start: start,
+                length: i - start,
+                line: line,
+                col: start_col,
+                str_value: inner
+            })
+            continue
+        }
+
+        // --- single-char punctuation -----------------------------------------
+        var kind: I64 = -1
+        if c == 40 { kind = 127 }  // (
+        if c == 41 { kind = 128 }  // )
+        if c == 91 { kind = 129 }  // [
+        if c == 93 { kind = 130 }  // ]
+        if c == 123 { kind = 131 } // {
+        if c == 125 { kind = 132 } // }
+        if c == 44 { kind = 133 }  // ,
+        if c == 59 { kind = 134 }  // ;
+        if c == 46 { kind = 115 }  // .
+        if c == 58 { kind = 117 }  // :
+        if c == 64 { kind = 122 }  // @
+        if c == 43 { kind = 80 }   // +
+        if c == 45 { kind = 81 }   // -
+        if c == 42 { kind = 82 }   // *
+        if c == 47 { kind = 83 }   // /  (already handled // above)
+        if c == 37 { kind = 84 }   // %
+        if c == 61 { kind = 102 }  // =
+        if c == 60 { kind = 90 }   // <
+        if c == 62 { kind = 91 }   // >
+        if c == 33 { kind = 121 }  // !
+        if c == 63 { kind = 119 }  // ?
+        if c == 38 { kind = 94 }   // &
+        if c == 124 { kind = 123 } // |
+        if c == 94 { kind = 96 }   // ^
+        if c == 126 { kind = 97 }  // ~
+
+        if kind >= 0 {
+            tokens.push(LexToken {
+                kind: kind,
+                start: i,
+                length: 1,
+                line: line,
+                col: col,
+                str_value: ""
+            })
+            i = i + 1
+            col = col + 1
+            continue
+        }
+
+        // --- unknown: emit Error ---------------------------------------------
+        tokens.push(LexToken {
+            kind: 136,  // Error
+            start: i,
+            length: 1,
+            line: line,
+            col: col,
+            str_value: ""
+        })
+        i = i + 1
+        col = col + 1
+    }
+
+    // EOF token
+    tokens.push(LexToken {
+        kind: 0,
+        start: n,
+        length: 0,
+        line: line,
+        col: col,
+        str_value: ""
+    })
+
+    return tokens
+}
+
+// ============================================================================
+// Wire format encoder
+// ============================================================================
+
+func encode_blob(source_path: Str, source_text: Str, tokens: List[LexToken]) -> Buffer {
+    var out: Buffer = Buffer::new(1024)
+
+    // Header: u32 magic + u8 major + u8 minor
+    emit_u32(out, 0x544D4C4C)  // "TMLL"
+    emit_u8(out, 1)            // major
+    emit_u8(out, 0)            // minor
+
+    // source_path, source_text
+    emit_str(out, source_path)
+    emit_str(out, source_text)
+
+    // success flag + empty error list
+    emit_u8(out, 1)
+    emit_varint(out, 0)
+
+    // tokens
+    let count: I64 = tokens.len()
+    emit_varint(out, count)
+    var i: I64 = 0
+    loop (i < count) {
+        let t: LexToken = tokens.get(i)
+        emit_u8(out, t.kind)
+        emit_u32(out, t.start)
+        emit_u32(out, t.length)
+        emit_u32(out, t.line)
+        emit_u32(out, t.col)
+        // Value tag: 3 (StringValue) for StringLiteral, 0 (none) otherwise.
+        if t.kind == 3 {
+            emit_u8(out, 3)
+            emit_str(out, t.str_value)
+        } else {
+            emit_u8(out, 0)
+        }
+        i = i + 1
+    }
+
+    return out
+}
+
+// ============================================================================
+// Entry point
+// ============================================================================
+
+func main() {
+    set_stdout_binary()
+
+    var argv: env::Args = env::args()
+    // argv[0] = exe path; argv[1] = source file path written by TmlStage::run.
+    if argv.len() < 2 {
+        return
+    }
+    let _exe: Str = argv.next()
+    let path: Str = argv.next()
+
+    // Read full file via CRT into a Buffer, then convert to Str.
+    let f: I64 = c_fopen(path, "rb")
+    if f == 0 {
+        return
+    }
+    c_fseek(f, 0, 2)  // SEEK_END
+    let size: I64 = c_ftell(f)
+    c_fseek(f, 0, 0)  // SEEK_SET
+    let src_buf: Buffer = Buffer::new(size + 1)
+    c_fread(src_buf.data_ptr(), 1, size, f)
+    c_fclose(f)
+    buf_set_len(src_buf.handle as I64, size)
+    let source: Str = src_buf.to_string()
+    let tokens: List[LexToken] = tokenize(source)
+    let blob: Buffer = encode_blob(path, source, tokens)
+    write_stdout_bytes(blob)
+}

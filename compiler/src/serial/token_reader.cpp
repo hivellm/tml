@@ -80,36 +80,42 @@ private:
     size_t pos_ = 0;
 };
 
-void skip_value(Cursor& c, uint8_t tag) {
+void read_value(Cursor& c, uint8_t tag, lexer::Token& t) {
     switch (tag) {
     case 0:
         return; // monostate
     case 1: {   // IntValue: u8 width + u8 signed + u64 magnitude
         c.u8();
         c.u8();
-        c.u64();
+        uint64_t v = c.u64();
+        t.value = lexer::IntValue{v, 10};
         return;
     }
     case 2: { // FloatValue: u8 width + f64
         c.u8();
-        c.u64();
+        uint64_t bits = c.u64();
+        double d;
+        std::memcpy(&d, &bits, 8);
+        t.value = lexer::FloatValue{d};
         return;
     }
     case 3: { // StringValue: string
-        c.str();
+        t.value = lexer::StringValue{c.str()};
         return;
     }
     case 4: { // CharValue: u32 codepoint
-        c.u32();
+        t.value = lexer::CharValue{static_cast<char32_t>(c.u32())};
         return;
     }
     case 5: { // bool
-        c.u8();
+        t.value = (c.u8() != 0);
         return;
     }
     case 6: { // DocValue: string + bool
-        c.str();
-        c.u8();
+        std::string text = c.str();
+        bool inner = c.u8() != 0;
+        (void)inner;
+        t.value = lexer::DocValue{std::move(text)};
         return;
     }
     default:
@@ -178,9 +184,7 @@ query::TokenizeResult read_tokens(const std::vector<uint8_t>& bytes) {
             }
 
             uint8_t value_tag = c.u8();
-            skip_value(c, value_tag); // Phase12f bootstrap: literal payloads
-                                      // currently discarded; the parser stage
-                                      // will reconstruct them from lexeme text.
+            read_value(c, value_tag, t);
 
             tokens->push_back(std::move(t));
         }

@@ -68,7 +68,7 @@ TmlStage::TmlStage(std::string stage_name) : stage_name_(std::move(stage_name)) 
     auto root = find_workspace_root();
     source_path_ = root / "tools" / "stages" / (stage_name_ + "_stage.tml");
 
-    auto cache_dir = root / ".incr-cache" / "stages";
+    auto cache_dir = root / "build" / "debug" / "cache" / "stages";
     std::error_code ec;
     fs::create_directories(cache_dir, ec);
 
@@ -140,7 +140,7 @@ bool TmlStage::ensure_compiled() {
     auto build_dir = cached_exe_path_.parent_path();
     tml::testing::ProcessOptions opts;
     opts.exe_path = self.string();
-    opts.args = {"build", source_path_.string(), "--output-dir", build_dir.string()};
+    opts.args = {"build", source_path_.string(), "--out-dir=" + build_dir.string()};
     opts.timeout = std::chrono::milliseconds(300'000);
 
     auto proc = tml::testing::Process::launch(opts);

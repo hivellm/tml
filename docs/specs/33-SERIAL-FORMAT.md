@@ -129,11 +129,18 @@ existing C++ lexer convention).
 
 ## Stage I/O Conventions (phase12f)
 
-Each TML stage launched by the hybrid pipeline reads its input on **stdin** as a
-single binary blob in one of the formats above and writes its output on
-**stdout** in the format consumed by the next stage. **stderr** is reserved for
+Each TML stage launched by the hybrid pipeline reads its input from the
+**file path passed as `argv[1]`** (the launcher writes the previous stage's
+output to a temp file) and writes its output on **stdout** as a single binary
+blob in the format consumed by the next stage. **stderr** is reserved for
 diagnostics; the C++ launcher captures it and surfaces lines as compiler
 diagnostics.
+
+The C++ deserializer (`compiler/src/serial/token_reader.cpp`) decodes the value
+payload into the corresponding `lexer::Token::value` variant alternative
+(`IntValue`, `StringValue`, etc.). Stages that emit literal tokens **must**
+populate the value tag — the parser asserts on the variant type and silently
+mistreats `monostate` literals as zero/empty.
 
 | Stage | stdin format | stdout format |
 |-------|--------------|---------------|

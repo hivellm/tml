@@ -6,6 +6,10 @@
 **Estimated effort**: 2–3 weeks
 **Risk**: Medium
 
+## Why
+
+Incremental self-hosting requires a safe way to swap individual compiler stages from C++ to TML without breaking the full pipeline — this task adds that mechanism (`--stage=<name>:tml`) and validates it end-to-end with a TML lexer stage producing bitwise-identical IR to the C++ baseline.
+
 ## Problem
 
 Self-hosting requires replacing C++ compiler stages with TML implementations incrementally.

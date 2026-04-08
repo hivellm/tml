@@ -1,0 +1,6 @@
+//! Statement AST nodes. Canonical definitions live in `ast/nodes.tml`.
+
+use compiler::ast::nodes::LetStmt
+use compiler::ast::nodes::VarStmt
+use compiler::ast::nodes::LetElseStmt
+use compiler::ast::nodes::Stmt

@@ -127,10 +127,11 @@ struct RunCompileResult {
 ///
 /// This replaces the manual preprocess->lex->parse->typecheck->borrow->codegen pipeline
 /// with the memoized 8-stage query system that supports incremental compilation.
-RunCompileResult compile_via_queries(const std::string& path, bool coverage, bool no_cache,
-                                     const std::string& backend = "llvm",
-                                     const std::string& pipeline_dir = "",
-                                     const std::vector<std::string>& defines = {}) {
+RunCompileResult
+compile_via_queries(const std::string& path, bool coverage, bool no_cache,
+                    const std::string& backend = "llvm", const std::string& pipeline_dir = "",
+                    const std::vector<std::string>& defines = {},
+                    const std::map<std::string, std::string>& stage_overrides = {}) {
     RunCompileResult result;
 
     // Pre-load all library modules from .tml.meta binary cache
@@ -149,6 +150,7 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
     qopts.incremental = !no_cache;
     qopts.backend = backend;
     qopts.defines = defines;
+    qopts.stage_overrides = stage_overrides;
     if (!pipeline_dir.empty()) {
         qopts.emit_pipeline = true;
         qopts.pipeline_output_dir = pipeline_dir;
@@ -258,9 +260,11 @@ RunCompileResult compile_via_queries(const std::string& path, bool coverage, boo
 /// Returns the exit code of the executed program.
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage, bool no_cache, const std::string& backend,
-            const std::string& pipeline_dir, const std::vector<std::string>& defines) {
+            const std::string& pipeline_dir, const std::vector<std::string>& defines,
+            const std::map<std::string, std::string>& stage_overrides) {
     // Compile via query pipeline (incremental + memoized)
-    auto compile = compile_via_queries(path, coverage, no_cache, backend, pipeline_dir, defines);
+    auto compile = compile_via_queries(path, coverage, no_cache, backend, pipeline_dir, defines,
+                                       stage_overrides);
     if (!compile.success) {
         TML_LOG_ERROR("build", compile.error_message);
         return 1;
@@ -961,7 +965,7 @@ int run_run_ex(const std::string& path, const RunOptions& opts) {
     }
 
     return run_run(path, opts.args, opts.verbose, opts.coverage, opts.no_cache, opts.backend,
-                   pipeline_dir, opts.defines);
+                   pipeline_dir, opts.defines, opts.stage_overrides);
 }
 
 } // namespace tml::cli

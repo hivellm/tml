@@ -1,0 +1,7 @@
+//! OOP AST nodes (class/interface/namespace). Canonical definitions live
+//! in `ast/nodes.tml`.
+
+use compiler::ast::nodes::ClassField
+use compiler::ast::nodes::ClassDecl
+use compiler::ast::nodes::InterfaceDecl
+use compiler::ast::nodes::NamespaceDecl

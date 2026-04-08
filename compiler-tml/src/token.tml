@@ -468,3 +468,14 @@ func token_kind_is_operator(kind: TokenKind) -> Bool {
         _ => return false
     }
 }
+
+/// Convert a `TokenKind` to its stable numeric tag. The tag is the
+/// variant's position in the enum declaration and matches the C++
+/// `TokenKind` order in `compiler/include/lexer/token.hpp`. Used by the
+/// binary token serializer (ast/serial.tml) and by the hybrid pipeline
+/// bridge (phase12f).
+pub func token_kind_to_tag(kind: TokenKind) -> I64 {
+    let t: I32 = kind as I32
+    return t as I64
+}
+

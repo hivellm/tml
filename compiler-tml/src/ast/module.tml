@@ -1,0 +1,4 @@
+//! Top-level `Module` AST node. Canonical definition lives in
+//! `ast/nodes.tml`.
+
+use compiler::ast::nodes::Module

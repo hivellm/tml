@@ -1,0 +1,42 @@
+// Phase 5 — Token tag stability + varint encoding.
+//
+// Note: importing `compiler::ast::serial` (which transitively pulls in
+// the 760-line `ast::nodes` mutual-recursive type graph) currently
+// causes the test binary codegen to exceed the 30s budget. The forward
+// `write_token` / empty-`Module` paths are still exercised by
+// `mcp__tml__check` on `ast/serial.tml`. Execution tests here use the
+// direct `BinaryWriter` / `BinaryReader` primitives that `write_token`
+// would delegate to.
+
+use test
+use compiler::serial::writer::BinaryWriter
+use compiler::serial::reader::BinaryReader
+use compiler::token::TokenKind
+use compiler::token::token_kind_to_tag
+
+@test
+func test_token_kind_tag_stable() -> I32 {
+    assert_eq(token_kind_to_tag(TokenKind::Eof), 0)
+    assert_eq(token_kind_to_tag(TokenKind::IntLiteral), 1)
+    assert_eq(token_kind_to_tag(TokenKind::Identifier), 13)
+    assert_eq(token_kind_to_tag(TokenKind::KwFunc), 14)
+    assert_eq(token_kind_to_tag(TokenKind::ModuleDocComment), 138)
+    return 0
+}
+
+@test
+func test_token_tag_varint_roundtrip() -> I32 {
+    let w = BinaryWriter::new(32)
+    w.write_varint(token_kind_to_tag(TokenKind::KwFunc))
+    w.write_varint(token_kind_to_tag(TokenKind::Identifier))
+    w.write_varint(token_kind_to_tag(TokenKind::ModuleDocComment))
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_varint()!, 14)
+    assert_eq(r.read_varint()!, 13)
+    assert_eq(r.read_varint()!, 138)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}

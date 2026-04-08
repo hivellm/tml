@@ -1,0 +1,31 @@
+//! AST module root for the TML self-hosting compiler frontend.
+//!
+//! The AST is logically split into sections mirroring the C++ header
+//! layout in `compiler/include/parser/ast_*.hpp`:
+//!
+//! - `common`   — Visibility, Mutability, AstId, LiteralKind
+//! - `nodes`    — ALL recursive AST types (Type/Pattern/Expr/Stmt/Decl/OOP/Module)
+//! - `types`    — type-expression re-exports
+//! - `patterns` — pattern re-exports
+//! - `exprs`    — expression re-exports
+//! - `stmts`    — statement re-exports
+//! - `decls`    — declaration re-exports
+//! - `oop`      — class/interface/namespace re-exports
+//! - `module`   — top-level `Module` re-export
+//!
+//! All mutually-recursive AST node types live in `nodes.tml` because the
+//! TML module system does not yet support cross-module cyclic imports.
+//! The other files are thin re-export shims that preserve the logical
+//! split documented in the phase13a task.
+
+use compiler::ast::common::Visibility
+use compiler::ast::common::Mutability
+use compiler::ast::common::AstId
+use compiler::ast::common::LiteralKind
+
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::Expr
+use compiler::ast::nodes::Stmt
+use compiler::ast::nodes::Decl
+use compiler::ast::nodes::Module

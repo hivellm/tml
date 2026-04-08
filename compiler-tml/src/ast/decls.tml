@@ -1,0 +1,18 @@
+//! Declaration AST nodes. Canonical definitions live in `ast/nodes.tml`.
+
+use compiler::ast::nodes::GenericParam
+use compiler::ast::nodes::FuncParam
+use compiler::ast::nodes::FuncDecl
+use compiler::ast::nodes::StructField
+use compiler::ast::nodes::StructDecl
+use compiler::ast::nodes::UnionDecl
+use compiler::ast::nodes::EnumVariant
+use compiler::ast::nodes::EnumDecl
+use compiler::ast::nodes::TraitDecl
+use compiler::ast::nodes::ImplDecl
+use compiler::ast::nodes::TypeAliasDecl
+use compiler::ast::nodes::ConstDecl
+use compiler::ast::nodes::UsePath
+use compiler::ast::nodes::UseDecl
+use compiler::ast::nodes::ModDecl
+use compiler::ast::nodes::Decl

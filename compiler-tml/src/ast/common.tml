@@ -1,0 +1,41 @@
+//! AST common types — Visibility, Mutability, AstId, LiteralKind.
+//!
+//! Mirrors `compiler/include/parser/ast_common.hpp` + shared enums from
+//! `ast_decls.hpp` and `ast_exprs.hpp`. These are the primitive building
+//! blocks referenced by every other ast/*.tml module.
+
+/// Declaration visibility. Mirrors `Visibility` in `ast_decls.hpp`.
+enum Visibility {
+    Private,
+    Public,
+    PubCrate
+}
+
+/// Binding mutability. Used by patterns and let statements.
+enum Mutability {
+    Immutable,
+    Mutable
+}
+
+/// Stable numeric identifier for AST nodes. Assigned sequentially by the
+/// parser; used downstream by HIR/THIR/MIR lookups and by the hybrid
+/// pipeline bridge to correlate TML-side and C++-side nodes.
+type AstId {
+    value: I64
+}
+
+/// Construct a fresh `AstId`.
+func ast_id_new(value: I64) -> AstId {
+    return AstId { value: value }
+}
+
+/// Literal value carried by `LiteralExpr` and `LiteralPattern`. Mirrors
+/// the payload variants of `LiteralExpr` in `ast_exprs.hpp`.
+enum LiteralKind {
+    LitInt(I64),
+    LitFloat(I64),     // raw F64 bit pattern
+    LitStr(Str),
+    LitBool(Bool),
+    LitChar(I32),
+    LitNull
+}

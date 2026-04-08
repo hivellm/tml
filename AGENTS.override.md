@@ -44,11 +44,27 @@ These rules override `AGENTS.md` and generic rulebook guidance. Only TML-specifi
 
 ---
 
-## T3. TML Language Reference (mandatory before coding)
+## T3. TML Language Reference (mandatory before coding — BLOCKING)
 
-Before writing any `.tml` code:
-- Use `mcp__tml__docs_search/list/get/resolve` — never read `lib/core/src/*.tml` or `lib/std/src/*.tml` to "understand" APIs (source wastes tokens on impl details).
-- Source files only when you need to **modify** them, not to **use** them.
+**BEFORE writing any `.tml` code that uses a type, function, or module you did not author in this session, you MUST consult the documentation first.** This is not a suggestion — guessing at API shapes is the #1 source of wasted iterations (wrong argument count, wrong return type, wrong method name, wrong module path, inventing non-existent variants). Every minute spent in docs saves 10 minutes of failed edits.
+
+### Lookup order (fastest → slowest)
+
+1. **`mcp__tml__docs_search/list/get/resolve`** — primary interface. Covers `core`, `std`, `test`, and `compiler-tml`. 565 modules / 5132 items indexed.
+2. **`tml doc <symbol>`** — CLI fallback when MCP is unavailable (`./build/debug/bin/tml.exe doc List`, `tml doc HashMap::get`, `tml doc core::str::split`).
+3. **`docs/docs.json`** — raw JSON index (8.4 MB) regenerated via `tml doc --all --format=json --output=docs`. Grep it directly when you need to enumerate (e.g. "what methods does `BinaryWriter` have", "which variants does `SerialError` actually have"). Regenerate if stale.
+4. **Source files (`lib/core/src/*.tml`, `lib/std/src/*.tml`, `compiler-tml/src/*.tml`)** — **last resort**, and only when you need to **modify** them, not to **use** them. Reading source to understand an API wastes tokens on impl details and often yields a misleading picture (private helpers, deprecated paths).
+
+### Forbidden patterns
+
+- ❌ Writing `use compiler::token::SomeName` without verifying `SomeName` exists in docs first.
+- ❌ Pattern-matching on enum variants you have not looked up (e.g. writing `SerialError::BadMagic` when the real variant is `InvalidMagic` — this happened in phase13a and cost ~30min).
+- ❌ Calling `x.method(a, b)` without verifying the arity and parameter types in docs.
+- ❌ Assuming a C++ subsystem's API shape carries over to its TML counterpart. They drift.
+
+### When in doubt
+
+If `docs_search` does not return the symbol you expect, the symbol probably does not exist — STOP and re-search with variations before inventing code. Do NOT fall back to "reading a similar file and hoping". Either the API exists (find it in docs) or it needs to be created (open a task).
 
 ### Rust → TML quick reference
 

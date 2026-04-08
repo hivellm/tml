@@ -130,7 +130,8 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false, const std::string& backend = "llvm",
-            const std::string& pipeline_dir = "", const std::vector<std::string>& defines = {});
+            const std::string& pipeline_dir = "", const std::vector<std::string>& defines = {},
+            const std::map<std::string, std::string>& stage_overrides = {});
 
 // Run with extended options
 int run_run_ex(const std::string& path, const RunOptions& options);
