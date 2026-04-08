@@ -4248,17 +4248,17 @@ The type checker correctly preserves `ClosureType`. When codegen re-parses mangl
 Any `NamedType` now recorded in a side table (`g_impl_behavior_verification_points`) when accepted against an `ImplBehaviorType`. A deferred conformance pass after Phase 4 (body checking) calls `type_implements()` for each point and emits **T099** if the concrete type has no impl for the behavior. The permissive `return true` branch is retained so body checking can proceed; errors are surfaced at function granularity rather than per-statement.
 *Fix*: `checker/helpers.cpp` (recording), `checker/core.cpp` (deferred pass), `checker/core.cpp` (T099 emission)
 
-**B-06 — Fallback type for unresolved types is I32, not an error (Section 2, Finding 7)**
-`resolve_simple_type` in module loading returns `make_primitive(PrimitiveKind::I32)` for any type expression it cannot resolve. The debug message is unreachable (dead code). Any type that maps to nothing in `resolve_simple_type` silently becomes `I32` in method signatures stored in `Module::functions`.
-*Source*: `env_module_load_decls.cpp:344-349`
+**B-06 — Fallback type for unresolved types is I32, not an error (Section 2, Finding 7)** ✅ FIXED (phase0l)
+`resolve_simple_type` now emits `TML_LOG_ERROR` with code `T081-UNRESOLVED-TYPE-IN-METHOD-SIG` and returns `make_never()`. Downstream callers propagate a proper type error instead of silently producing I32-typed method signatures.
+*Fix*: `env_module_load_decls.cpp:367-374`
 
 **B-07 — Base key collision for multiple specialized impls (Section 2, Finding 2)**
 Multiple `impl[T] Pin[ref T]` and `impl[T] Pin[Heap[T]]` both write to `mod.functions["Pin::method"]`. The last write wins. Only the discriminated keys (`Pin[ref]::method`, `Pin[Heap]::method`) preserve both impls. Callers using the base key may silently dispatch to the wrong specialization.
 *Source*: `env_module_load_decls.cpp:643-650`
 
-**B-08 — @derive silently skips all generic types (I-3.7)**
-A generic struct with `@derive(Display, Hash, Eq)` gets no derived methods registered and no error. This is the current design — generic types wait for monomorphization. But there is no error or warning to help developers catch the case where they wrote `@derive` on a generic type expecting it to work.
-*Source*: `checker/decl_struct.cpp:173`
+**B-08 — @derive silently ignored on generic types (I-3.7)** ✅ FIXED (phase0l)
+The type checker now emits warning `W-DERIVE-ON-GENERIC` when `@derive` is present on a struct with type parameters. The struct is still registered and usable; only the derive is a no-op. Authors are directed to write explicit `impl` blocks. Regression test: `compiler/tests/compiler/structs/derive_on_generic_warn.test.tml`.
+*Fix*: `checker/decl_struct.cpp` (warning block before `env_.define_struct`)
 
 **B-09 — Duplicate ParsedModuleFile definition in two translation units (Section 2, Finding 1)**
 `ParsedModuleFile` and several helper functions are defined as static in both `env_module_load.cpp` and `env_module_load_decls.cpp`. A change to one copy that is not mirrored in the other introduces silent divergence. This is fragile but not currently a bug.
@@ -4268,9 +4268,9 @@ A generic struct with `@derive(Display, Hash, Eq)` gets no derived methods regis
 `check_ident` calls `resolve_imported_symbol` at line 457 (for struct/enum lookup) and again at line 506 (for constant lookup). If the first call succeeds but the result is a struct, the second call hits the constants path. No functional bug, but each call records side effects and both fire.
 *Source*: `checker/expr.cpp:457, 506`
 
-**B-11 — let-else else block not verified to diverge (CC-37)**
-The `else` block of `let X = e else { block }` is not verified to have type `Never`. The checker accepts `let Just(x) = e else { println("ok") }` with no error. HIR lowering is expected to enforce this.
-*Source*: `checker/stmt.cpp:137-177`
+**B-11 — let-else else block not verified to diverge (CC-37)** ✅ FIXED (phase0l)
+`check_let_else` now calls `env_.resolve(else_type)` and enforces `is_never()`. A non-diverging else block emits `T-LET-ELSE-NOT-DIVERGING` (error-level). Regression tests: `let_else_diverge.test.tml` (positive) and `let_else_nondiverg.test.tml` (documents expected error form).
+*Fix*: `checker/stmt.cpp:162-175`
 
 ---
 

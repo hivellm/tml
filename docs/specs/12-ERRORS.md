@@ -179,6 +179,31 @@ error[T007]: cannot use Maybe[I32] as I32
    = help: use `x.unwrap()` or handle Nothing case with `when`
 ```
 
+### T081: Unresolved type in method/function signature
+```
+error[T081-UNRESOLVED-TYPE-IN-METHOD-SIG]: unresolved type in method signature
+```
+Emitted by `resolve_simple_type` when a parser type AST node does not map to any
+known semantic type. Returns `Never` so downstream callers propagate a type error
+rather than silently producing incorrect types. Fix: ensure the type name is imported
+or defined before the method declaration.
+
+### T-LET-ELSE-NOT-DIVERGING: let-else else block must diverge
+```
+error[T-LET-ELSE-NOT-DIVERGING]: let-else else block must diverge (type Never),
+  but its type is 'Unit'. The else block must end with return, panic, break, continue,
+  or exit.
+  --> src/main.tml:6:5
+   |
+ 5 |     let Just(x): Maybe[I32] = get() else {
+ 6 |         println("got Nothing")
+   |         ^^^^^^^^^^^^^^^^^^^^^^ type is Unit — does not diverge
+   |
+   = help: add `return`, `panic(...)`, `break`, `continue`, or `exit(...)` to the else block
+```
+The variable bound by the pattern (`x`) would be uninitialized on the fall-through path,
+which is unsound. The else block must always diverge.
+
 ## 4. Semantic Errors (S)
 
 ### S001: Use of moved value
@@ -290,6 +315,22 @@ error[S009]: private field
 10 |     print(user.password)
    |               ^^^^^^^^ cannot access private field
 ```
+
+### W-DERIVE-ON-GENERIC: @derive on generic type has no effect
+```
+warning[W-DERIVE-ON-GENERIC]: @derive on generic type 'Foo' has no effect —
+  derives are not supported for generic types. Write explicit impl blocks instead.
+  --> src/main.tml:3:1
+   |
+ 3 | @derive(Hash, Display)
+   | ^^^^^^^^^^^^^^^^^^^^^^ derive decorator ignored
+ 4 | type Foo[T] { x: T }
+   |
+   = help: remove @derive and implement the behavior manually with `impl Hash for Foo[T]`
+```
+`@derive` auto-generates `impl` blocks only for non-generic (concrete) types.
+On a generic type the decorator is silently ignored. This warning makes the
+no-op visible so authors know to write explicit `impl` blocks instead.
 
 ## 5. Codegen Errors (C)
 

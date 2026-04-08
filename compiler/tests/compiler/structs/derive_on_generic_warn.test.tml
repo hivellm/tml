@@ -1,0 +1,20 @@
+// Regression test for B-08: @derive on a generic struct emits W-DERIVE-ON-GENERIC warning
+// but does NOT fail to compile.  The struct simply gets no auto-generated impls.
+use test
+
+// This declaration should emit a W-DERIVE-ON-GENERIC warning during type-checking.
+// The warning is non-fatal — the struct is still registered and usable.
+@derive(Hash, Display)
+type GenericPair[T] {
+    first: T,
+    second: T
+}
+
+@test
+func test_derive_on_generic_compiles() -> I32 {
+    // The struct is usable even though @derive had no effect.
+    let p: GenericPair[I32] = GenericPair[I32] { first: 1, second: 2 }
+    assert_eq(p.first, 1, "first field should be 1")
+    assert_eq(p.second, 2, "second field should be 2")
+    return 0
+}

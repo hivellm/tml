@@ -1,0 +1,38 @@
+// Regression test for B-11: let-else else block must diverge (negative cases).
+// The type checker MUST reject any let-else whose else block does not have type Never.
+//
+// This file documents expected compile errors.  The incorrect forms are commented
+// out so the file itself compiles (same convention as try_operator_error.test.tml).
+use test
+
+// --- Non-diverging else block (compile error expected) ---
+//
+// The following would emit:
+//   error[T-LET-ELSE-NOT-DIVERGING]: let-else else block must diverge (type Never),
+//   but its type is 'Unit'. The else block must end with return, panic, break,
+//   continue, or exit.
+//
+// func bad_let_else(m: Maybe[I32]) -> I32 {
+//     let Just(x): Maybe[I32] = m else {
+//         println("got Nothing")   // type Unit — does NOT diverge
+//     }
+//     return x
+// }
+
+// --- Positive control: a properly diverging else block ---
+// This compiles without error and verifies the rule is enforced only when needed.
+func good_let_else(m: Maybe[I32]) -> I32 {
+    let Just(x): Maybe[I32] = m else {
+        return -1
+    }
+    return x
+}
+
+@test
+func test_let_else_nondiverg_positive_control() -> I32 {
+    let a: I32 = good_let_else(Just(42))
+    assert_eq(a, 42, "Just branch should yield 42")
+    let b: I32 = good_let_else(Nothing)
+    assert_eq(b, -1, "Nothing branch should yield -1")
+    return 0
+}

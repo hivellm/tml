@@ -159,15 +159,23 @@ auto TypeChecker::check_let_else(const parser::LetElseStmt& let_else) -> TypePtr
               let_else.span, "T056");
     }
 
-    // Check the else block - it should diverge (have type Never)
-    // Push a scope for the else block
+    // Check the else block - it must diverge (have type Never).
+    // Push a scope for the else block.
     env_.push_scope();
     TypePtr else_type = check_expr(*let_else.else_block);
     env_.pop_scope();
 
-    // The else block should have Never type (diverges)
-    // We allow any type since we can't easily enforce divergence at type-check time
-    // The HIR lowering will create the proper control flow
+    // T-LET-ELSE-NOT-DIVERGING: verify that the else block's type is Never.
+    // If the else block can fall through (e.g. `else { println("ok") }`), the
+    // variables bound by the pattern would be uninitialized on the fall-through path,
+    // which is unsound. Require an explicit return/panic/break/continue/exit.
+    TypePtr resolved_else = env_.resolve(else_type);
+    if (!is_never(resolved_else)) {
+        error("let-else else block must diverge (type Never), but its type is '" +
+                  type_to_string(resolved_else) +
+                  "'. The else block must end with return, panic, break, continue, or exit.",
+              let_else.span, "T-LET-ELSE-NOT-DIVERGING");
+    }
 
     // Bind the pattern variables in the current scope
     // This makes them available after the let-else statement

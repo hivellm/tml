@@ -164,6 +164,22 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
         }
     }
 
+    // B-08: Warn when @derive is used on a generic struct — it is a silent no-op because
+    // derives only work on fully-concrete (non-generic) types. Developers should write
+    // explicit impl blocks for generic types instead.
+    if (!decl.generics.empty()) {
+        bool has_any_derive = has_derive_reflect || has_derive_partial_eq || has_derive_duplicate ||
+                              has_derive_hash || has_derive_default || has_derive_partial_ord ||
+                              has_derive_ord || has_derive_debug || has_derive_display ||
+                              has_derive_serialize || has_derive_deserialize || has_derive_fromstr;
+        if (has_any_derive) {
+            warning("@derive on generic type '" + full_name +
+                        "' has no effect — derives are not supported for generic types. "
+                        "Write explicit impl blocks instead.",
+                    decl.span, "W-DERIVE-ON-GENERIC");
+        }
+    }
+
     env_.define_struct(StructDef{.name = full_name,
                                  .type_params = std::move(type_params),
                                  .const_params = std::move(const_params),

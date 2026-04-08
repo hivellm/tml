@@ -366,12 +366,14 @@ static types::TypePtr resolve_simple_type(const parser::Type& type) {
 
     // All known parser Type variants are handled above. Reaching here means a new
     // variant was added to the parser AST without updating this function.
-    // Emit a diagnostic so the gap is visible immediately rather than silently
-    // producing wrong I32 types in method signatures.
-    TML_LOG_WARN("types", "resolve_simple_type: unhandled parser type variant (index "
-                              << type.kind.index()
-                              << ") — falling back to Unit. Update env_module_load_decls.cpp.");
-    return make_unit();
+    // T081-UNRESOLVED-TYPE-IN-METHOD-SIG: emit an error-level diagnostic so the gap
+    // is visible immediately, and return Never so downstream callers propagate a type
+    // error rather than silently producing wrong types in method signatures.
+    TML_LOG_ERROR("types", "resolve_simple_type: unhandled parser type variant (index "
+                               << type.kind.index()
+                               << ") [T081-UNRESOLVED-TYPE-IN-METHOD-SIG] — update "
+                                  "env_module_load_decls.cpp to handle this variant.");
+    return make_never();
 }
 
 void TypeEnv::extract_module_declarations(const std::string& module_path,

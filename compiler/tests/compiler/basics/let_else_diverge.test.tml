@@ -1,0 +1,40 @@
+// Regression test for B-11: let-else else block must have Never type.
+// The type checker should accept all cases where the else block diverges.
+use test
+
+func get_value(flag: Bool) -> Maybe[I32] {
+    if flag { return Just(42) }
+    return Nothing
+}
+
+// B11.5: Diverging via `return` compiles correctly.
+func unwrap_or_default(flag: Bool) -> I32 {
+    let Just(x): Maybe[I32] = get_value(flag) else {
+        return 99
+    }
+    return x
+}
+
+@test
+func test_let_else_diverge_return() -> I32 {
+    let a: I32 = unwrap_or_default(true)
+    assert_eq(a, 42, "Just branch should yield 42")
+    let b: I32 = unwrap_or_default(false)
+    assert_eq(b, 99, "Nothing branch should yield 99")
+    return 0
+}
+
+// B11.5 variant: Diverging via `panic` compiles correctly.
+func unwrap_or_panic(m: Maybe[I32]) -> I32 {
+    let Just(x): Maybe[I32] = m else {
+        panic("unwrap_or_panic: got Nothing")
+    }
+    return x
+}
+
+@test
+func test_let_else_diverge_panic() -> I32 {
+    let val: I32 = unwrap_or_panic(Just(7))
+    assert_eq(val, 7, "should unwrap to 7")
+    return 0
+}
