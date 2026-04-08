@@ -545,6 +545,7 @@ add_library(tml_types STATIC
     src/types/env_module_support.cpp
     src/types/env_module_load.cpp
     src/types/env_module_load_decls.cpp
+    src/types/parsed_module_file.cpp
     src/types/env_module_loading.cpp
     # Checker modules (split from checker.cpp)
     src/types/checker/helpers.cpp

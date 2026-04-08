@@ -455,7 +455,7 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             return type;
         }
 
-        // Check imported types
+        // Check imported types (result cached below for reuse in constant lookup)
         auto imported_path = env_.resolve_imported_symbol(ident.name);
         if (imported_path.has_value()) {
             std::string module_path;
@@ -504,13 +504,12 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             }
         }
 
-        // Check if it's an imported constant
-        auto const_imported_path = env_.resolve_imported_symbol(ident.name);
-        if (const_imported_path.has_value()) {
+        // Check if it's an imported constant (reuse cached imported_path from type lookup above)
+        if (imported_path.has_value()) {
             std::string const_module_path;
-            size_t const_pos = const_imported_path->rfind("::");
+            size_t const_pos = imported_path->rfind("::");
             if (const_pos != std::string::npos) {
-                const_module_path = const_imported_path->substr(0, const_pos);
+                const_module_path = imported_path->substr(0, const_pos);
             }
 
             auto const_module = env_.get_module(const_module_path);

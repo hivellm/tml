@@ -4260,13 +4260,13 @@ Multiple `impl[T] Pin[ref T]` and `impl[T] Pin[Heap[T]]` both write to `mod.func
 The type checker now emits warning `W-DERIVE-ON-GENERIC` when `@derive` is present on a struct with type parameters. The struct is still registered and usable; only the derive is a no-op. Authors are directed to write explicit `impl` blocks. Regression test: `compiler/tests/compiler/structs/derive_on_generic_warn.test.tml`.
 *Fix*: `checker/decl_struct.cpp` (warning block before `env_.define_struct`)
 
-**B-09 — Duplicate ParsedModuleFile definition in two translation units (Section 2, Finding 1)**
-`ParsedModuleFile` and several helper functions are defined as static in both `env_module_load.cpp` and `env_module_load_decls.cpp`. A change to one copy that is not mirrored in the other introduces silent divergence. This is fragile but not currently a bug.
-*Source*: `env_module_load.cpp:46-235`, `env_module_load_decls.cpp:13-204`
+**B-09 — Duplicate ParsedModuleFile definition in two translation units (Section 2, Finding 1)** ✅ FIXED (phase0m)
+`ParsedModuleFile`, `ParseResult`, and four helper functions are now defined exactly once in `compiler/include/types/parsed_module_file.hpp` / `compiler/src/types/parsed_module_file.cpp`. Both `env_module_load.cpp` and `env_module_load_decls.cpp` include the shared header; the former static definitions have been removed.
+*Fix*: `types/parsed_module_file.hpp` + `types/parsed_module_file.cpp` (new files)
 
-**B-10 — Duplicate resolve_imported_symbol call for constants (I-4.07)**
-`check_ident` calls `resolve_imported_symbol` at line 457 (for struct/enum lookup) and again at line 506 (for constant lookup). If the first call succeeds but the result is a struct, the second call hits the constants path. No functional bug, but each call records side effects and both fire.
-*Source*: `checker/expr.cpp:457, 506`
+**B-10 — Duplicate resolve_imported_symbol call for constants (I-4.07)** ✅ FIXED (phase0m)
+`check_ident` now calls `resolve_imported_symbol` exactly once (at the first call site for imported type lookup) and reuses the cached result for the subsequent constant lookup, eliminating the redundant second call and its associated side-effect double-firing.
+*Fix*: `checker/expr.cpp` — second call replaced with cached `imported_path`
 
 **B-11 — let-else else block not verified to diverge (CC-37)** ✅ FIXED (phase0l)
 `check_let_else` now calls `env_.resolve(else_type)` and enforces `is_never()`. A non-diverging else block emits `T-LET-ELSE-NOT-DIVERGING` (error-level). Regression tests: `let_else_diverge.test.tml` (positive) and `let_else_nondiverg.test.tml` (documents expected error form).
