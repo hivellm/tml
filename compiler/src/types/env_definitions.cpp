@@ -33,11 +33,26 @@ void TypeEnv::define_enum(EnumDef def) {
 }
 
 void TypeEnv::define_behavior(BehaviorDef def) {
-    behaviors_[def.name] = std::move(def);
+    const std::string& short_name = def.name;
+    if (!current_module_path_.empty()) {
+        // Store by FQN (module::Name) to avoid short-name collisions.
+        std::string fqn = current_module_path_ + "::" + short_name;
+        behaviors_[fqn] = def;
+        // Also register short name (first-write-wins) so legacy callers still work.
+        behaviors_.emplace(short_name, def);
+    } else {
+        // Builtins have no module path — store by short name as before.
+        behaviors_[short_name] = std::move(def);
+    }
 }
 
 void TypeEnv::define_func(FuncSig sig) {
-    // Function overloading: add to vector of overloads instead of replacing
+    // Function overloading: add to vector of overloads instead of replacing.
+    // Register by FQN when module path is known to avoid short-name collisions.
+    if (!current_module_path_.empty()) {
+        std::string fqn = current_module_path_ + "::" + sig.name;
+        functions_[fqn].push_back(sig);
+    }
     functions_[sig.name].push_back(sig);
 
     // If this is an FFI function with a module namespace, register it in module registry

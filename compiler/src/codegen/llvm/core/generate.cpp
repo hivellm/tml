@@ -773,6 +773,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         register_impl(&impl);
                     } else if (decl->is<parser::TraitDecl>()) {
                         const auto& trait = decl->as<parser::TraitDecl>();
+                        // Register by FQN to avoid short-name collisions (e.g. core::io::Write
+                        // vs core::fmt::Write). Also register short name first-write-wins for
+                        // legacy callers that look up by unqualified name.
+                        std::string fqn = mod_name + "::" + trait.name;
+                        trait_decls_[fqn] = &trait;
                         if (trait_decls_.find(trait.name) == trait_decls_.end()) {
                             trait_decls_[trait.name] = &trait;
                         }

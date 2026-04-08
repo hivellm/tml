@@ -1,0 +1,9 @@
+{
+  "id": "short-name-keying-in-multi-module-symbol-tables",
+  "type": "anti-pattern",
+  "category": "code",
+  "title": "Short-Name Keying in Multi-Module Symbol Tables",
+  "tags": ["compiler", "type-checker", "codegen", "fqn", "symbol-table", "collision"],
+  "createdAt": "2026-04-08",
+  "task": "phase0i_behavior-fqn-keying"
+}

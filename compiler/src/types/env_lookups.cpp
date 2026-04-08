@@ -105,30 +105,42 @@ auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDe
 }
 
 auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef> {
-    auto it = behaviors_.find(name);
-    if (it != behaviors_.end())
-        return it->second;
+    // Try FQN resolution FIRST to correctly distinguish same-named behaviors in different
+    // modules (e.g. core::io::Write vs core::fmt::Write). The behaviors_ map stores both
+    // FQN keys and short-name keys (first-write-wins), so a direct find() on a short name
+    // would return whichever module happened to register first — wrong.
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
+            // Check the FQN key in behaviors_ map first (set by define_behavior).
+            auto fqn_it = behaviors_.find(*import_path);
+            if (fqn_it != behaviors_.end()) {
+                return fqn_it->second;
+            }
             auto pos = import_path->rfind("::");
             if (pos != std::string::npos) {
                 std::string module_path = import_path->substr(0, pos);
                 std::string symbol_name = import_path->substr(pos + 2);
-                return module_registry_->lookup_behavior(module_path, symbol_name);
+                auto result = module_registry_->lookup_behavior(module_path, symbol_name);
+                if (result) {
+                    return result;
+                }
             }
         }
+    }
+
+    // Direct map lookup (handles FQN passed by caller, or builtins with no module path).
+    auto it = behaviors_.find(name);
+    if (it != behaviors_.end()) {
+        return it->second;
+    }
+
+    if (module_registry_) {
         // Fallback: search all modules for the behavior by name.
         // This handles well-known behaviors like Iterator that may not
         // be explicitly imported but are used in impl blocks.
         const auto& all_modules = module_registry_->get_all_modules();
-        size_t total_mods = 0;
-        size_t mods_with_behaviors = 0;
         for (const auto& [mod_name, mod] : all_modules) {
-            total_mods++;
-            if (!mod.behaviors.empty()) {
-                mods_with_behaviors++;
-            }
             auto bit = mod.behaviors.find(name);
             if (bit != mod.behaviors.end()) {
                 return bit->second;
@@ -150,6 +162,38 @@ auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<Be
         }
     }
 
+    return std::nullopt;
+}
+
+auto TypeEnv::lookup_behavior_by_short_name(const std::string& short_name) const
+    -> std::optional<BehaviorDef> {
+    // Search behaviors_ by short name suffix.
+    for (const auto& [key, def] : behaviors_) {
+        if (def.name == short_name) {
+            return def;
+        }
+        // Also match when key IS the short name (builtins registered without module prefix).
+        if (key == short_name) {
+            return def;
+        }
+    }
+    // Fall through to module registry search.
+    if (module_registry_) {
+        const auto& all_modules = module_registry_->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto bit = mod.behaviors.find(short_name);
+            if (bit != mod.behaviors.end()) {
+                return bit->second;
+            }
+        }
+    }
+    auto& global_cache = GlobalModuleCache::instance();
+    for (const auto& [mod_path, mod] : global_cache.get_all()) {
+        auto bit = mod.behaviors.find(short_name);
+        if (bit != mod.behaviors.end()) {
+            return bit->second;
+        }
+    }
     return std::nullopt;
 }
 

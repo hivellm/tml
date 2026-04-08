@@ -1183,7 +1183,10 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
                                         if (d->is<parser::TraitDecl>() &&
                                             d->as<parser::TraitDecl>().name == dflt_trait_name) {
                                             dflt_trait = &d->as<parser::TraitDecl>();
-                                            trait_decls_[dflt_trait_name] = dflt_trait;
+                                            // Register by FQN + first-write-wins short name.
+                                            std::string fqn = mod_name + "::" + dflt_trait_name;
+                                            trait_decls_[fqn] = dflt_trait;
+                                            trait_decls_.emplace(dflt_trait_name, dflt_trait);
                                             break;
                                         }
                                     }
@@ -1268,7 +1271,13 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
                                                     d->as<parser::TraitDecl>().name ==
                                                         dflt_trait_name) {
                                                     dflt_trait = &d->as<parser::TraitDecl>();
-                                                    trait_decls_[dflt_trait_name] = dflt_trait;
+                                                    // Register by FQN + first-write-wins short
+                                                    // name.
+                                                    std::string fqn =
+                                                        clean_key + "::" + dflt_trait_name;
+                                                    trait_decls_[fqn] = dflt_trait;
+                                                    trait_decls_.emplace(dflt_trait_name,
+                                                                         dflt_trait);
                                                     break;
                                                 }
                                             }
@@ -1518,7 +1527,10 @@ bool LLVMIRGen::generate_pending_impl_method_instantiations() {
                                             if (d->is<parser::TraitDecl>() &&
                                                 d->as<parser::TraitDecl>().name == gc_trait) {
                                                 gc_td = &d->as<parser::TraitDecl>();
-                                                trait_decls_[gc_trait] = gc_td;
+                                                // Register by FQN + first-write-wins short name.
+                                                std::string fqn = cached_name + "::" + gc_trait;
+                                                trait_decls_[fqn] = gc_td;
+                                                trait_decls_.emplace(gc_trait, gc_td);
                                                 break;
                                             }
                                         }

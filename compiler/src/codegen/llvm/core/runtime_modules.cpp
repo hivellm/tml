@@ -1005,10 +1005,12 @@ void LLVMIRGen::emit_module_pure_tml_functions(
             } else if (decl->is<parser::TraitDecl>()) {
                 // Register behavior/trait declarations so that default method
                 // bodies can be generated for impl blocks in Phase 2.
+                // Register by FQN + first-write-wins short name to avoid collisions
+                // between same-named behaviors in different modules.
                 const auto& trait = decl->as<parser::TraitDecl>();
-                if (trait_decls_.find(trait.name) == trait_decls_.end()) {
-                    trait_decls_[trait.name] = &trait;
-                }
+                std::string fqn = info.module_name + "::" + trait.name;
+                trait_decls_[fqn] = &trait;
+                trait_decls_.emplace(trait.name, &trait);
             }
         }
 

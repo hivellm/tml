@@ -476,8 +476,14 @@ public:
     /// Looks up an enum by name.
     [[nodiscard]] auto lookup_enum(const std::string& name) const -> std::optional<EnumDef>;
 
-    /// Looks up a behavior by name.
+    /// Looks up a behavior by name (FQN preferred, falls back to short name).
     [[nodiscard]] auto lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef>;
+
+    /// Looks up a behavior by short (unqualified) name.
+    /// Returns the first match found. Ambiguous when multiple modules define
+    /// behaviors with the same short name — prefer lookup_behavior(fqn) when possible.
+    [[nodiscard]] auto lookup_behavior_by_short_name(const std::string& short_name) const
+        -> std::optional<BehaviorDef>;
 
     /// Returns a read-only reference to all registered behaviors.
     [[nodiscard]] auto get_behavior_list() const
@@ -775,9 +781,11 @@ private:
                                                                        ///< type_needs_drop.
 
     // Type definition tables
-    std::unordered_map<std::string, StructDef> structs_;     ///< Registered structs.
-    std::unordered_map<std::string, EnumDef> enums_;         ///< Registered enums.
-    std::unordered_map<std::string, BehaviorDef> behaviors_; ///< Registered behaviors.
+    std::unordered_map<std::string, StructDef> structs_; ///< Registered structs.
+    std::unordered_map<std::string, EnumDef> enums_;     ///< Registered enums.
+    std::unordered_map<std::string, BehaviorDef>
+        behaviors_; ///< Registered behaviors, keyed by FQN (module::Name) or short name for
+                    ///< builtins.
     std::unordered_map<std::string, std::vector<FuncSig>>
         functions_; ///< Functions (with overloads).
     std::unordered_map<std::string, std::vector<std::string>>
