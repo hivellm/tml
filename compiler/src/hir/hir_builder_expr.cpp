@@ -47,115 +47,6 @@ TML_MODULE("compiler")
 namespace tml::hir {
 
 // ============================================================================
-// Generic Type Parameter Inference Helper
-// ============================================================================
-
-/// Extract type parameter substitutions by matching param types against arg types.
-/// For example, matching param `B` against arg `I64` yields {B -> I64}.
-/// This mirrors the logic in TypeChecker::extract_type_params.
-static void
-extract_type_params_from_args(const types::TypePtr& param_type, const types::TypePtr& arg_type,
-                              const std::vector<std::string>& type_params,
-                              std::unordered_map<std::string, types::TypePtr>& substitutions) {
-    if (!param_type || !arg_type)
-        return;
-
-    // NamedType: check if it's a type parameter
-    if (param_type->is<types::NamedType>()) {
-        const auto& named = param_type->as<types::NamedType>();
-        if (named.type_args.empty() && named.module_path.empty()) {
-            for (const auto& tp : type_params) {
-                if (named.name == tp) {
-                    substitutions[tp] = arg_type;
-                    return;
-                }
-            }
-        }
-        // Recursively match type_args if both are NamedType with same name
-        if (arg_type->is<types::NamedType>()) {
-            const auto& arg_named = arg_type->as<types::NamedType>();
-            if (named.name == arg_named.name &&
-                named.type_args.size() == arg_named.type_args.size()) {
-                for (size_t i = 0; i < named.type_args.size(); ++i) {
-                    extract_type_params_from_args(named.type_args[i], arg_named.type_args[i],
-                                                  type_params, substitutions);
-                }
-            }
-        }
-        return;
-    }
-
-    // GenericType: direct match against type param name
-    if (param_type->is<types::GenericType>()) {
-        const auto& gen = param_type->as<types::GenericType>();
-        for (const auto& tp : type_params) {
-            if (gen.name == tp) {
-                substitutions[tp] = arg_type;
-                return;
-            }
-        }
-        return;
-    }
-
-    // RefType: match inner types
-    if (param_type->is<types::RefType>() && arg_type->is<types::RefType>()) {
-        extract_type_params_from_args(param_type->as<types::RefType>().inner,
-                                      arg_type->as<types::RefType>().inner, type_params,
-                                      substitutions);
-        return;
-    }
-
-    // TupleType: match element types
-    if (param_type->is<types::TupleType>() && arg_type->is<types::TupleType>()) {
-        const auto& pt = param_type->as<types::TupleType>();
-        const auto& at = arg_type->as<types::TupleType>();
-        if (pt.elements.size() == at.elements.size()) {
-            for (size_t i = 0; i < pt.elements.size(); ++i) {
-                extract_type_params_from_args(pt.elements[i], at.elements[i], type_params,
-                                              substitutions);
-            }
-        }
-        return;
-    }
-
-    // ArrayType: match element types
-    if (param_type->is<types::ArrayType>() && arg_type->is<types::ArrayType>()) {
-        extract_type_params_from_args(param_type->as<types::ArrayType>().element,
-                                      arg_type->as<types::ArrayType>().element, type_params,
-                                      substitutions);
-        return;
-    }
-
-    // FuncType: match parameter and return types
-    if (param_type->is<types::FuncType>() && arg_type->is<types::FuncType>()) {
-        const auto& pf = param_type->as<types::FuncType>();
-        const auto& af = arg_type->as<types::FuncType>();
-        if (pf.params.size() == af.params.size()) {
-            for (size_t i = 0; i < pf.params.size(); ++i) {
-                extract_type_params_from_args(pf.params[i], af.params[i], type_params,
-                                              substitutions);
-            }
-        }
-        extract_type_params_from_args(pf.return_type, af.return_type, type_params, substitutions);
-        return;
-    }
-
-    // FuncType param vs ClosureType arg
-    if (param_type->is<types::FuncType>() && arg_type->is<types::ClosureType>()) {
-        const auto& pf = param_type->as<types::FuncType>();
-        const auto& ac = arg_type->as<types::ClosureType>();
-        if (pf.params.size() == ac.params.size()) {
-            for (size_t i = 0; i < pf.params.size(); ++i) {
-                extract_type_params_from_args(pf.params[i], ac.params[i], type_params,
-                                              substitutions);
-            }
-        }
-        extract_type_params_from_args(pf.return_type, ac.return_type, type_params, substitutions);
-        return;
-    }
-}
-
-// ============================================================================
 // Expression Lowering Dispatch
 // ============================================================================
 //
@@ -585,87 +476,89 @@ auto HirBuilder::lower_method_call(const parser::MethodCallExpr& call) -> HirExp
         args.push_back(lower_expr(*arg));
     }
 
-    // Look up method return type from type environment
+    // Look up method return type from type environment.
+    // Priority: type checker's per-expression map > lookup_func substitution.
     HirType return_type = types::make_unit();
-    // Get type name from receiver to look up method
-    std::string type_name;
-    if (receiver_type && receiver_type->is<types::NamedType>()) {
-        type_name = receiver_type->as<types::NamedType>().name;
-    } else if (receiver_type && receiver_type->is<types::ClassType>()) {
-        type_name = receiver_type->as<types::ClassType>().name;
+
+    // Check the type checker's per-expression map first. The type checker correctly
+    // resolves return types for generic combinators (map, and_then, flatten, etc.)
+    // including closure-return-type inference added in phase0j. If available and
+    // concrete, use it directly — no need for argument-based substitution.
+    if (auto tc_type = type_env_.get_expr_type(&call)) {
+        bool is_unit = tc_type->is<types::PrimitiveType>() &&
+                       tc_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit;
+        if (!is_unit) {
+            return_type = tc_type;
+            // tc_type is already concrete from the type checker — skip lookup_func path
+            // and proceed directly to dyn-dispatch fallback and HIR node construction.
+            goto after_return_type_lookup;
+        }
     }
 
-    if (!type_name.empty()) {
-        std::string method_name = type_name + "::" + call.method;
+    // Get type name from receiver to look up method
+    {
+        std::string type_name;
+        if (receiver_type && receiver_type->is<types::NamedType>()) {
+            type_name = receiver_type->as<types::NamedType>().name;
+        } else if (receiver_type && receiver_type->is<types::ClassType>()) {
+            type_name = receiver_type->as<types::ClassType>().name;
+        }
 
-        // Helper to substitute generic type parameters in a method's return type.
-        // Infers type args from:
-        //   1. Receiver's type args (for impl-level generics like T in List[T])
-        //   2. Explicit turbofish type args (fold[I64](...))
-        //   3. Argument types (fold(0, closure) infers B = I64 from init: B matched with 0: I64)
-        auto substitute_method_generics = [&](const types::FuncSig& sig) -> types::TypePtr {
-            auto resolved_ret = type_env_.resolve(sig.return_type);
-            if (sig.type_params.empty()) {
-                return resolved_ret;
-            }
+        if (!type_name.empty()) {
+            std::string method_name = type_name + "::" + call.method;
 
-            std::unordered_map<std::string, types::TypePtr> subs;
+            // Helper to substitute generic type parameters in a method's return type.
+            // Infers type args from:
+            //   1. Receiver's type args (for impl-level generics like T in List[T])
+            //   2. Explicit turbofish type args (fold[I64](...))
+            auto substitute_method_generics = [&](const types::FuncSig& sig) -> types::TypePtr {
+                auto resolved_ret = type_env_.resolve(sig.return_type);
+                if (sig.type_params.empty()) {
+                    return resolved_ret;
+                }
 
-            // 1. Substitute from receiver's type_args (e.g., T -> I64 from ListIter[I64])
-            if (receiver_type && receiver_type->is<types::NamedType>()) {
-                const auto& recv_named = receiver_type->as<types::NamedType>();
-                // Look up the struct/class definition to get its type param names
-                if (auto struct_def = type_env_.lookup_struct(recv_named.name)) {
-                    for (size_t i = 0;
-                         i < struct_def->type_params.size() && i < recv_named.type_args.size();
-                         ++i) {
-                        subs[struct_def->type_params[i]] = recv_named.type_args[i];
+                std::unordered_map<std::string, types::TypePtr> subs;
+
+                // 1. Substitute from receiver's type_args (e.g., T -> I64 from ListIter[I64])
+                if (receiver_type && receiver_type->is<types::NamedType>()) {
+                    const auto& recv_named = receiver_type->as<types::NamedType>();
+                    if (auto struct_def = type_env_.lookup_struct(recv_named.name)) {
+                        for (size_t i = 0;
+                             i < struct_def->type_params.size() && i < recv_named.type_args.size();
+                             ++i) {
+                            subs[struct_def->type_params[i]] = recv_named.type_args[i];
+                        }
                     }
                 }
-            }
 
-            // 2. Explicit type args (turbofish): fold[I64](...) -> B = I64
-            if (!type_args.empty()) {
-                for (size_t i = 0; i < sig.type_params.size() && i < type_args.size(); ++i) {
-                    subs[sig.type_params[i]] = type_args[i];
+                // 2. Explicit type args (turbofish): fold[I64](...) -> B = I64
+                if (!type_args.empty()) {
+                    for (size_t i = 0; i < sig.type_params.size() && i < type_args.size(); ++i) {
+                        subs[sig.type_params[i]] = type_args[i];
+                    }
                 }
-            }
 
-            // 3. Infer from argument types: fold(0, closure) where sig params=[this, B,
-            // func(B,Item)->B]. sig.params[0] is 'this', so actual args start at index 1.
-            // NOTE(phase0j-hir-cleanup): Removing this step causes regressions in
-            // option_flatten/transpose2/iter2/also etc. because the HIR builder uses
-            // lookup_func() + substitution rather than the type checker's expr_types_ map.
-            // The type checker correctly computes these types after phase0j, but the HIR
-            // builder does not yet consume get_expr_type() for method call return types.
-            // This step must remain until the HIR builder is updated to read method-call
-            // return types directly from the type checker's per-expression map.
-            for (size_t i = 0; i < args.size() && i + 1 < sig.params.size(); ++i) {
-                auto arg_type = args[i]->type();
-                if (arg_type) {
-                    extract_type_params_from_args(sig.params[i + 1], arg_type, sig.type_params,
-                                                  subs);
+                if (subs.empty()) {
+                    return resolved_ret;
                 }
-            }
+                return types::substitute_type(resolved_ret, subs);
+            };
 
-            if (subs.empty()) {
-                return resolved_ret;
-            }
-            return types::substitute_type(resolved_ret, subs);
-        };
-
-        if (auto sig = type_env_.lookup_func(method_name)) {
-            return_type = substitute_method_generics(*sig);
-        } else if (auto class_def = type_env_.lookup_class(type_name)) {
-            // Try to find instance method in class definition
-            for (const auto& method : class_def->methods) {
-                if (method.sig.name == call.method && !method.is_static) {
-                    return_type = substitute_method_generics(method.sig);
-                    break;
+            if (auto sig = type_env_.lookup_func(method_name)) {
+                return_type = substitute_method_generics(*sig);
+            } else if (auto class_def = type_env_.lookup_class(type_name)) {
+                // Try to find instance method in class definition
+                for (const auto& method : class_def->methods) {
+                    if (method.sig.name == call.method && !method.is_static) {
+                        return_type = substitute_method_generics(method.sig);
+                        break;
+                    }
                 }
             }
         }
     }
+
+after_return_type_lookup:
 
     // Handle dyn behavior method calls: ref dyn Behavior or dyn Behavior
     if (return_type && return_type->is<types::PrimitiveType>() &&

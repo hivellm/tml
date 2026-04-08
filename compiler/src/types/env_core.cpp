@@ -96,6 +96,25 @@ auto TypeEnv::builtin_types() const -> const std::unordered_map<std::string, Typ
 }
 
 // ============================================================================
+// Per-Expression Type Map
+// ============================================================================
+
+void TypeEnv::set_expr_type(const void* node_ptr, TypePtr type) {
+    if (node_ptr && type) {
+        expr_types_[node_ptr] = std::move(type);
+    }
+}
+
+auto TypeEnv::get_expr_type(const void* node_ptr) const -> TypePtr {
+    if (!node_ptr)
+        return nullptr;
+    auto it = expr_types_.find(node_ptr);
+    if (it != expr_types_.end())
+        return it->second;
+    return nullptr;
+}
+
+// ============================================================================
 // Snapshot Support
 // ============================================================================
 

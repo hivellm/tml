@@ -1185,6 +1185,12 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
                     }
                 }
                 return types::make_unit();
+            } else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
+                // Consult the type checker's per-expression map first.
+                if (auto tc_type = type_env_.get_expr_type(&e)) {
+                    return tc_type;
+                }
+                return types::make_unit();
             } else {
                 return types::make_unit();
             }

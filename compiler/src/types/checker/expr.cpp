@@ -150,7 +150,9 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
             } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
                 return check_call(e);
             } else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
-                return check_method_call(e);
+                auto result = check_method_call(e);
+                env_.set_expr_type(&e, result);
+                return result;
             } else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
                 return check_field_access(e);
             } else if constexpr (std::is_same_v<T, parser::IndexExpr>) {

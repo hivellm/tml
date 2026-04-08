@@ -636,6 +636,18 @@ public:
     [[nodiscard]] auto current_scope() -> std::shared_ptr<Scope>;
 
     // ========================================================================
+    // Per-Expression Type Map
+    // ========================================================================
+
+    /// Records the resolved type for an AST expression node.
+    /// Keyed on the raw pointer to the AST node (e.g., parser::MethodCallExpr*).
+    /// Called by the type checker; consumed by the HIR builder.
+    void set_expr_type(const void* node_ptr, TypePtr type);
+
+    /// Returns the resolved type for an AST expression node, or nullptr if not recorded.
+    [[nodiscard]] auto get_expr_type(const void* node_ptr) const -> TypePtr;
+
+    // ========================================================================
     // Type Inference
     // ========================================================================
 
@@ -780,6 +792,9 @@ private:
     std::unordered_map<std::string, InterfaceDef> interfaces_; ///< Registered interfaces.
     std::unordered_map<std::string, std::vector<std::string>>
         class_interfaces_; ///< Class -> implemented interfaces.
+
+    // Per-expression type map (populated by type checker, consumed by HIR builder)
+    std::unordered_map<const void*, TypePtr> expr_types_; ///< AST node ptr -> resolved type.
 
     // Scope and inference state
     std::shared_ptr<Scope> current_scope_;                ///< Current lexical scope.
