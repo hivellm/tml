@@ -602,7 +602,7 @@ auto HirBuilder::lower_method_call(const parser::MethodCallExpr& call) -> HirExp
         // Infers type args from:
         //   1. Receiver's type args (for impl-level generics like T in List[T])
         //   2. Explicit turbofish type args (fold[I64](...))
-        //   3. Argument types (fold(0, ...) infers B = I64 from init: B matched with 0: I64)
+        //   3. Argument types (fold(0, closure) infers B = I64 from init: B matched with 0: I64)
         auto substitute_method_generics = [&](const types::FuncSig& sig) -> types::TypePtr {
             auto resolved_ret = type_env_.resolve(sig.return_type);
             if (sig.type_params.empty()) {
@@ -632,7 +632,14 @@ auto HirBuilder::lower_method_call(const parser::MethodCallExpr& call) -> HirExp
             }
 
             // 3. Infer from argument types: fold(0, closure) where sig params=[this, B,
-            // func(B,Item)->B] sig.params[0] is 'this', so actual args start at index 1
+            // func(B,Item)->B]. sig.params[0] is 'this', so actual args start at index 1.
+            // NOTE(phase0j-hir-cleanup): Removing this step causes regressions in
+            // option_flatten/transpose2/iter2/also etc. because the HIR builder uses
+            // lookup_func() + substitution rather than the type checker's expr_types_ map.
+            // The type checker correctly computes these types after phase0j, but the HIR
+            // builder does not yet consume get_expr_type() for method call return types.
+            // This step must remain until the HIR builder is updated to read method-call
+            // return types directly from the type checker's per-expression map.
             for (size_t i = 0; i < args.size() && i + 1 < sig.params.size(); ++i) {
                 auto arg_type = args[i]->type();
                 if (arg_type) {

@@ -10,12 +10,6 @@
 |--------|------|----------|-------------|
 | ⬚ | phase0i_behavior-fqn-keying | 9/34 | behavior fqn keying |
 
-## phase0j
-
-| Status | Task | Progress | Description |
-|--------|------|----------|-------------|
-| ⬚ | phase0j_enum-maybe-generic-inference | 0/24 | enum maybe generic inference |
-
 ## phase0k
 
 | Status | Task | Progress | Description |
@@ -33,6 +27,12 @@
 | Status | Task | Progress | Description |
 |--------|------|----------|-------------|
 | ⬚ | phase0m_typechecker-refactor-dupes | 0/16 | typechecker refactor dupes |
+
+## phase0n
+
+| Status | Task | Progress | Description |
+|--------|------|----------|-------------|
+| ⬚ | phase0n_hir-method-return-expr-types | 0/5 | hir method return expr types |
 
 ## phase12e
 
