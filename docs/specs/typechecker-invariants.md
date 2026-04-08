@@ -2737,9 +2737,9 @@ Method resolution in steps 7e, 14, and 15 iterates three data stores in order:
 
 1. **Double type-checking of arguments in generic function calls** (I-4.16): The overload resolution pre-pass at line 270 checks all arguments to collect types, then the generic substitution loop at line 286 checks them again with expected types. This is observable: if an argument has a side effect visible to the type checker (e.g., tracking in `read_vars_`), it will be tracked twice.
 
-2. **Enum constructors lose generic type arguments** (I-4.15): `Just(42)` returns `NamedType{"Maybe", "", {}}` — the `[I32]` argument is simply absent. The HIR builder cannot rely on the TypeEnv for the type argument of enum constructor results; it must infer them separately.
+2. **Enum constructors preserve generic type arguments** ✅ FIXED (phase0j) (I-4.15): `Just(42)` now returns `NamedType{"Maybe", "", {I32}}` — `type_args` is populated via `extract_type_params` in `checker/expr_call.cpp`. Zero-arg variants (e.g., `Nothing`) fall back to `expected_type`'s type args. HIR builder no longer needs to re-infer enum constructor type arguments.
 
-3. **`Maybe[T].map(f)` loses type argument** (I-4.26): This is the most consequential type loss for chained operations. Code like `items.iter().map(do(x) x + 1)` where the iterator produces `Maybe[I32]` elements: each `.map()` call in a chain preserves the original `Maybe[I32]` type regardless of the closure's declared return type. The HIR builder sees `Maybe[I32]` throughout and must infer the transformation from the closure's own signature.
+3. **`Maybe[T].map(f)` preserves closure return type** ✅ FIXED (phase0j) (I-4.26): `Maybe[T].map(f: T->U)` now returns `Maybe[U]` by extracting the closure's return type in `checker/expr_call_method_types.cpp`. `and_then`, `or_else`, `filter`, and Outcome combinators similarly propagate the closure return type.
 
 4. **Unification is essentially a one-shot substitution** (I-4.09–I-4.11): The system created by `fresh_type_var()` + `unify()` is NOT the HM algorithm. There is no constraint propagation, no generalization step, and no principal type computation. It is used only in two specific cases: (a) inferring closure parameter types from the function signature they are passed to, and (b) `check_expr` with expected type for closures. Outside these cases, type inference is purely bottom-up with no type variables.
 
@@ -3855,8 +3855,8 @@ The legacy LLVM codegen (used for generic structs and associated types) calls `e
 | TP-11 | IM-03 | `@derive(Display)` on generic struct does not register derived methods |
 | TP-12 | IN-01 | `let x = 42` infers I64 |
 | TP-13 | IN-02 | `unify(List[I32], List[I32])` is no-op |
-| TP-14 | IN-05 | `check_call("Just", [42])` returns NamedType{"Maybe","",[]} |
-| TP-15 | IN-06 | `Just(42).map(do(x) x.to_string())` has type `Maybe[I32]` |
+| TP-14 | IN-05 | `check_call("Just", [42])` returns NamedType{"Maybe","",[I32]} ✅ FIXED (phase0j) |
+| TP-15 | IN-06 | `Just(42).map(do(x) x.to_string())` has type `Maybe[Str]` ✅ FIXED (phase0j) |
 | TP-16 | IN-07 | `.nonexistent_method()` on any type returns Unit, no error |
 | TP-17 | ER-02 | `true + 42` records error; expression type is Bool |
 | TP-18 | ER-03 | `if cond { 42 } else { "str" }` records error; type is I64 |

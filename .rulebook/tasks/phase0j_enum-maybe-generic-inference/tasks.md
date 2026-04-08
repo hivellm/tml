@@ -39,13 +39,13 @@
 
 - [x] V.1 Build via `scripts\build.bat` — clean build.
 - [x] V.2 Regression tests pass (1 suite, 7 tests in option_type_inference.test.tml).
-- [ ] V.3 Run full test suite — confirm no regressions vs baseline.
+- [x] V.3 Run full test suite — confirm no regressions vs baseline. (3 pre-existing compile errors: option_as_ref/as_mut/blocked — unchanged)
 - [x] V.4 core/iter 56/56, core/fmt 46/46, core/option same pre-existing failures as before.
 
 ## Documentation
 
 - [x] D.1 Updated `docs/specs/typechecker-invariants.md` Appendix B: B-03 and B-04 marked FIXED with source refs.
-- [ ] D.2 Update Section 6 contract items for enum constructor and combinator contracts.
+- [x] D.2 Update Section 6 contract items for enum constructor and combinator contracts. (TP-14/TP-15 fixed, I-4.15/I-4.26 marked FIXED)
 - [ ] D.3 Commit with conventional message: `fix(types): preserve type args on enum constructors and Maybe combinators (phase0j)`.
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
