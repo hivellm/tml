@@ -1,0 +1,68 @@
+// Regression tests for phase0j: enum constructor and Maybe combinator type inference
+// Verifies that the type checker correctly infers type args without explicit annotations.
+use test::{assert, assert_eq}
+
+// === E.4: Enum constructor type arg inference ===
+
+@test
+func test_just_infers_i32() -> I32 {
+    // Just(42) should have type Maybe[I32], not Maybe[{}]
+    let x = Just(42)
+    assert(x.is_just(), "Just(42) should be Just")
+    assert_eq(x.unwrap(), 42, "Just(42) unwrap should return 42")
+    return 0
+}
+
+@test
+func test_just_infers_i64() -> I32 {
+    let x = Just(100 as I64)
+    assert(x.is_just(), "Just(100 as I64) should be Just")
+    assert_eq(x.unwrap(), 100 as I64, "unwrap should return 100")
+    return 0
+}
+
+@test
+func test_just_infers_bool() -> I32 {
+    let x = Just(true)
+    assert(x.is_just(), "Just(true) should be Just")
+    assert(x.unwrap(), "Just(true) unwrap should return true")
+    return 0
+}
+
+// === M.4: Maybe combinator return type inference ===
+
+@test
+func test_map_infers_return_type() -> I32 {
+    // map(T -> U) should return Maybe[U], not Maybe[T]
+    let x: Maybe[I32] = Just(5)
+    let doubled = x.map(do(n: I32) -> I32 { n * 2 })
+    assert(doubled.is_just(), "map on Just should return Just")
+    assert_eq(doubled.unwrap(), 10, "map result should be doubled")
+    return 0
+}
+
+@test
+func test_map_nothing_infers() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let doubled = x.map(do(n: I32) -> I32 { n * 2 })
+    assert(doubled.is_nothing(), "map on Nothing should return Nothing")
+    return 0
+}
+
+@test
+func test_and_then_infers_return_type() -> I32 {
+    // and_then(T -> Maybe[U]) should return Maybe[U]
+    let x: Maybe[I32] = Just(4)
+    let squared = x.and_then(do(n: I32) -> Maybe[I32] { Just(n * n) })
+    assert(squared.is_just(), "and_then on Just should return Just")
+    assert_eq(squared.unwrap(), 16, "and_then result should be squared")
+    return 0
+}
+
+@test
+func test_and_then_nothing_infers() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let result = x.and_then(do(n: I32) -> Maybe[I32] { Just(n * n) })
+    assert(result.is_nothing(), "and_then on Nothing should return Nothing")
+    return 0
+}

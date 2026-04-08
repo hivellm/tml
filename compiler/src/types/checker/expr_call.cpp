@@ -382,14 +382,39 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
                         return make_unit();
                     }
 
+                    // Check args and collect inferred types to reconstruct type_args.
+                    std::unordered_map<std::string, TypePtr> substitutions;
                     for (size_t i = 0; i < call.args.size(); ++i) {
                         // Pass expected payload type for numeric literal coercion
                         auto arg_type = check_expr(*call.args[i], payload_types[i]);
-                        (void)arg_type;
+                        // Extract type param bindings (e.g., T=I32 from Just(42))
+                        extract_type_params(payload_types[i], arg_type, enum_def.type_params,
+                                            substitutions);
+                    }
+
+                    // Build concrete type_args in type_param declaration order.
+                    std::vector<TypePtr> type_args;
+                    type_args.reserve(enum_def.type_params.size());
+                    for (size_t pi = 0; pi < enum_def.type_params.size(); ++pi) {
+                        const auto& tp = enum_def.type_params[pi];
+                        auto it = substitutions.find(tp);
+                        if (it != substitutions.end()) {
+                            type_args.push_back(it->second);
+                        } else if (expected_type && expected_type->is<NamedType>()) {
+                            // Fall back to expected type args (e.g., from let annotation)
+                            const auto& exp_named = expected_type->as<NamedType>();
+                            if (pi < exp_named.type_args.size()) {
+                                type_args.push_back(exp_named.type_args[pi]);
+                            } else {
+                                type_args.push_back(nullptr);
+                            }
+                        } else {
+                            type_args.push_back(nullptr);
+                        }
                     }
 
                     auto enum_type = std::make_shared<Type>();
-                    enum_type->kind = NamedType{enum_name, "", {}};
+                    enum_type->kind = NamedType{enum_name, "", type_args};
                     return enum_type;
                 }
             }

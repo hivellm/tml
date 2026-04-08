@@ -2330,7 +2330,7 @@ When the callee is an `IdentExpr`:
 **Step 5 — Enum constructor via IdentExpr** (`expr_call.cpp:374`):
 Iterates all enums in `env_.all_enums()`, looking for a variant whose name matches the callee ident. Checks arity with error `T034`. Returns `NamedType{enum_name, "", {}}`.
 
-**Invariant I-4.15**: Enum constructors returned by `check_call` always produce a bare `NamedType{enum_name, "", {}}` — no generic type arguments are propagated. This is correct for non-generic enums. For generic enum variants (e.g., `Just(42)` for `Maybe[I64]`), the type arguments of the result are **empty**. The HIR builder and downstream must handle this; the type checker does not fill in generic type arguments for enum constructors called as functions.
+**Invariant I-4.15** ✅ FIXED (phase0j): Enum constructors returned by `check_call` now produce `NamedType{enum_name, "", {type_args}}` with concrete type arguments inferred via `extract_type_params`. For generic enum variants (e.g., `Just(42)` for `Maybe[I32]`), the type arguments are populated from the call's actual argument types. Zero-arg variants fall back to the expected type's type_args.
 
 **Step 6 — Static methods on primitive types via PathExpr (2-segment)** (`expr_call.cpp:400`):
 When the callee is `Type::method` for a known primitive type. Only `default` and `from` are handled explicitly. `default` returns the named primitive. `from` type-checks the argument (discarding result) and returns the target type.
@@ -3730,13 +3730,13 @@ An unsuffixed integer literal with no expected-type context infers as `I64`. An 
 After type-checking a closure, inferred param types and return type MUST be written to ClosureExpr AST node fields via `shared_ptr<void>` type erasure. HIR builder reads them back by static_pointer_cast.
 *Source*: I-4.12, CC-61; `checker/types_checker.cpp:309-316`
 
-**IN-05 — Enum constructor call returns bare NamedType (latent simplification)**
-Calling `Just(42)` returns `NamedType{"Maybe", "", {}}` with empty type_args. The generic argument is NOT inferred. HIR builder must infer enum constructor type arguments independently.
-*Source*: I-4.15; `checker/expr_call.cpp:391-393`
+**IN-05 — Enum constructor call preserves type arguments** ✅ FIXED (phase0j)
+Calling `Just(42)` now returns `NamedType{"Maybe", "", {I32}}` with `type_args` populated via `extract_type_params`. Zero-arg variants (e.g., `Nothing`) fall back to `expected_type`'s type args. HIR builder no longer needs to re-infer enum constructor type arguments.
+*Source*: `checker/expr_call.cpp` (phase0j fix); previously I-4.15 `expr_call.cpp:391-393`
 
-**IN-06 — Maybe[T].map(f) returns Maybe[T], not Maybe[U] (latent simplification)**
-`Maybe[T].map(f)` returns the original `Maybe[T]`. The closure return type is not propagated. HIR builder and codegen must not assume the map return type reflects the closure return type.
-*Source*: I-4.26; `checker/expr_call_method_types.cpp:67-69`
+**IN-06 — Maybe[T].map(f) returns Maybe[U] (closure return type)** ✅ FIXED (phase0j)
+`Maybe[T].map(f: T->U)` now returns `Maybe[U]` by extracting the closure's return type. `and_then`, `or_else`, and Outcome combinators similarly propagate the closure return type.
+*Source*: `checker/expr_call_method_types.cpp` (phase0j fix); previously I-4.26 `expr_call_method_types.cpp:67-69`
 
 **IN-07 — Unknown method calls return Unit silently**
 All 15 dispatch steps failing MUST return `make_unit()` with no diagnostic. Adding an error here would break programs that currently compile.
@@ -4234,13 +4234,13 @@ These are behaviours discovered during the audit that are incorrect (bugs) or su
 The type checker correctly preserves `ClosureType`. When codegen re-parses mangled names (e.g., `RepeatWith__Fn`), it reconstructs `NamedType{"Fn","",{}}` instead of the original ClosureType. The bug is in `generic_instantiate.cpp:273-276`, not in the type checker. A self-hosted type checker is NOT responsible for this bug.
 *Source*: `compiler/src/codegen/llvm/core/generic_instantiate.cpp:273-276`
 
-**B-03 — Enum constructors lose type arguments (I-4.15)**
-`Just(42)` returns `NamedType{"Maybe","",{}}` with empty `type_args`. This is intentional simplification — the type checker does not infer the generic argument of enum constructors at call sites. The HIR builder works around this by inferring the type argument separately.
-*Source*: `checker/expr_call.cpp:391-393`
+**B-03 — Enum constructors lose type arguments (I-4.15)** ✅ FIXED (phase0j)
+`Just(42)` now returns `NamedType{"Maybe","",{I32}}` with correct `type_args` populated by `extract_type_params`. Zero-arg variants (e.g., `Nothing`) fall back to `expected_type`'s type args.
+*Fix*: `checker/expr_call.cpp` — enum constructor branch uses `extract_type_params` to infer concrete type args from payload arguments.
 
-**B-04 — Maybe[T].map(f) loses type argument (I-4.26)**
-`map`, `and_then`, `or_else`, `filter` on `Maybe[T]` all return `Maybe[T]` regardless of the closure's return type. Chained `.map()` operations silently discard the transformation's type. HIR builder must infer the actual type from the closure's signature.
-*Source*: `checker/expr_call_method_types.cpp:67-69`
+**B-04 — Maybe[T].map(f) loses type argument (I-4.26)** ✅ FIXED (phase0j)
+`map`, `and_then`, `or_else`, `filter` on `Maybe[T]` now extract the closure's return type and construct `Maybe[U]`. `Outcome::map`/`map_err`/`and_then`/`or_else` likewise infer from the closure.
+*Fix*: `checker/expr_call_method_types.cpp` — combinator methods inspect the closure/func argument's return type.
 
 **B-05 — types_compatible accepts ImplBehaviorType without verification (CC-16, Finding 3)**
 Any `NamedType` passes `types_compatible` against an `ImplBehaviorType` without verifying actual behavior registration. This is load-bearing for body checking — real conformance verification is Phase 3's job. A TML port that adds verification here will reject programs that currently compile.

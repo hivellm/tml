@@ -63,13 +63,37 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
                 return inner_type;
             }
 
-            // map(f) returns Maybe[U] (same structure)
+            // map(f: T -> U) returns Maybe[U]
             if (method_name == "map") {
+                if (!call.args.empty()) {
+                    auto f_type = check_expr(*call.args[0]);
+                    TypePtr u_type = nullptr;
+                    if (f_type && f_type->is<ClosureType>())
+                        u_type = f_type->as<ClosureType>().return_type;
+                    else if (f_type && f_type->is<FuncType>())
+                        u_type = f_type->as<FuncType>().return_type;
+                    if (u_type) {
+                        auto result = std::make_shared<Type>();
+                        result->kind = NamedType{"Maybe", "", {u_type}};
+                        return result;
+                    }
+                }
                 return obj_type;
             }
 
-            // and_then(f) returns Maybe[U]
+            // and_then(f: T -> Maybe[U]) returns Maybe[U]
             if (method_name == "and_then") {
+                if (!call.args.empty()) {
+                    auto f_type = check_expr(*call.args[0]);
+                    TypePtr ret = nullptr;
+                    if (f_type && f_type->is<ClosureType>())
+                        ret = f_type->as<ClosureType>().return_type;
+                    else if (f_type && f_type->is<FuncType>())
+                        ret = f_type->as<FuncType>().return_type;
+                    // ret is already Maybe[U] — return it directly
+                    if (ret)
+                        return ret;
+                }
                 return obj_type;
             }
 
@@ -386,13 +410,39 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
                 return ok_type;
             }
 
-            // map(f) returns Outcome[U, E] - same structure, potentially different T
+            // map(f: T -> U) returns Outcome[U, E]
             if (method_name == "map") {
-                return obj_type; // Same Outcome type structure
+                if (!call.args.empty()) {
+                    auto f_type = check_expr(*call.args[0]);
+                    TypePtr u_type = nullptr;
+                    if (f_type && f_type->is<ClosureType>())
+                        u_type = f_type->as<ClosureType>().return_type;
+                    else if (f_type && f_type->is<FuncType>())
+                        u_type = f_type->as<FuncType>().return_type;
+                    if (u_type) {
+                        auto result = std::make_shared<Type>();
+                        result->kind = NamedType{"Outcome", "", {u_type, err_type}};
+                        return result;
+                    }
+                }
+                return obj_type;
             }
 
-            // map_err(f) returns Outcome[T, F] - same structure, potentially different E
+            // map_err(f: E -> F) returns Outcome[T, F]
             if (method_name == "map_err") {
+                if (!call.args.empty()) {
+                    auto f_type = check_expr(*call.args[0]);
+                    TypePtr f_err = nullptr;
+                    if (f_type && f_type->is<ClosureType>())
+                        f_err = f_type->as<ClosureType>().return_type;
+                    else if (f_type && f_type->is<FuncType>())
+                        f_err = f_type->as<FuncType>().return_type;
+                    if (f_err) {
+                        auto result = std::make_shared<Type>();
+                        result->kind = NamedType{"Outcome", "", {ok_type, f_err}};
+                        return result;
+                    }
+                }
                 return obj_type;
             }
 
@@ -415,8 +465,19 @@ auto TypeChecker::check_method_call_builtin_types(const parser::MethodCallExpr& 
                 return ok_type;
             }
 
-            // and_then(f) returns Outcome[U, E]
+            // and_then(f: T -> Outcome[U, E]) returns Outcome[U, E]
             if (method_name == "and_then") {
+                if (!call.args.empty()) {
+                    auto f_type = check_expr(*call.args[0]);
+                    TypePtr ret = nullptr;
+                    if (f_type && f_type->is<ClosureType>())
+                        ret = f_type->as<ClosureType>().return_type;
+                    else if (f_type && f_type->is<FuncType>())
+                        ret = f_type->as<FuncType>().return_type;
+                    // ret is already Outcome[U, E] — return directly
+                    if (ret)
+                        return ret;
+                }
                 return obj_type;
             }
 
