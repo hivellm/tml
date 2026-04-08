@@ -254,6 +254,26 @@ auto TypeChecker::check_module(const parser::Module& module)
         }
     }
 
+    // Deferred behavior conformance verification pass (phase0k / B-05 / CC-16).
+    // Runs after Phase 4 (body checking). Walks all ImplBehaviorType bypass points
+    // recorded by types_compatible and verifies each concrete type has the claimed impl.
+    if (!g_impl_behavior_verification_points.empty()) {
+        // Deduplicate: avoid emitting the same error multiple times for the same (type, behavior)
+        std::unordered_set<std::string> seen;
+        for (const auto& point : g_impl_behavior_verification_points) {
+            const std::string key = point.concrete_type_name + "::" + point.behavior_name;
+            if (!seen.insert(key).second) {
+                continue;
+            }
+            if (!env_.type_implements(point.concrete_type_name, point.behavior_name)) {
+                error("type `" + point.concrete_type_name + "` does not implement behavior `" +
+                          point.behavior_name + "`",
+                      SourceSpan{}, "T099");
+            }
+        }
+        g_impl_behavior_verification_points.clear();
+    }
+
     if (has_errors()) {
         return errors_;
     }

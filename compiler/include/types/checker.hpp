@@ -45,6 +45,19 @@ struct TypeError {
     bool is_cascading = false;      ///< Suppressed when a root-cause error exists.
 };
 
+/// A recorded ImplBehaviorType compatibility bypass for deferred conformance verification.
+/// Populated by types_compatible; consumed and cleared by TypeChecker::check_module after body
+/// checking.
+struct ImplBehaviorVerificationPoint {
+    std::string concrete_type_name; ///< Name of the concrete NamedType.
+    std::string behavior_name;      ///< Name of the expected behavior.
+};
+
+/// Thread-local side table for deferred ImplBehaviorType conformance verification.
+/// Written by types_compatible; read and cleared by check_module after Phase 4.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+inline thread_local std::vector<ImplBehaviorVerificationPoint> g_impl_behavior_verification_points;
+
 /// Type checker for TML modules.
 ///
 /// Performs semantic analysis including type inference, behavior checking,

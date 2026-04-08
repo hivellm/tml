@@ -1,0 +1,73 @@
+// Tests for impl Behavior return type conformance (phase0k / B-05 / CC-16).
+//
+// These are the positive (valid) cases: a type that properly implements the
+// behavior may be returned as `impl Behavior`. The negative case (T099) is
+// validated at compile time via .sandbox/strict_check_bad_impl.tml.
+use test
+
+behavior Greet {
+    func greet(this: ref This) -> Str
+}
+
+behavior Counter {
+    func count(this: ref This) -> I32
+    func increment(this: mut ref This)
+}
+
+type Hello {
+    name: Str
+}
+
+impl Greet for Hello {
+    func greet(this: ref This) -> Str {
+        return this.name
+    }
+}
+
+type SimpleCounter {
+    value: I32
+}
+
+impl Counter for SimpleCounter {
+    func count(this: ref This) -> I32 {
+        return this.value
+    }
+    func increment(this: mut ref This) {
+        this.value = this.value + 1
+    }
+}
+
+// Valid: returns a type that implements Greet
+func make_greeter(name: Str) -> impl Greet {
+    return Hello { name: name }
+}
+
+// Valid: returns a type that implements Counter
+func make_counter(start: I32) -> impl Counter {
+    return SimpleCounter { value: start }
+}
+
+@test
+func test_impl_behavior_return_greet() -> I32 {
+    let g = make_greeter("world")
+    assert_eq(g.greet(), "world", "greeter should return name")
+    return 0
+}
+
+@test
+func test_impl_behavior_return_counter() -> I32 {
+    let mut c = make_counter(5)
+    assert_eq(c.count(), 5, "initial count should be 5")
+    c.increment()
+    assert_eq(c.count(), 6, "count after increment should be 6")
+    return 0
+}
+
+@test
+func test_impl_behavior_multiple_returns() -> I32 {
+    let g1 = make_greeter("alice")
+    let g2 = make_greeter("bob")
+    assert_eq(g1.greet(), "alice", "g1 should greet alice")
+    assert_eq(g2.greet(), "bob", "g2 should greet bob")
+    return 0
+}

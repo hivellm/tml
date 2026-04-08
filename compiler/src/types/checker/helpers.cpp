@@ -29,6 +29,7 @@ TML_MODULE("compiler")
 //! - `get_all_known_names()`: Collects all symbols in scope
 //! - `find_similar_names()`: Suggests corrections for unknown identifiers
 
+#include "log/log.hpp"
 #include "types/checker.hpp"
 
 #include <algorithm>
@@ -204,23 +205,26 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
         return types_equal(func.return_type, closure.return_type);
     }
 
-    // Allow any type that could implement a behavior to be assigned to impl Behavior
-    // This is a simplified check - full implementation would verify the type actually implements
-    // the behavior For now, accept any NamedType (struct/enum) as potentially implementing the
-    // behavior
+    // impl Behavior vs NamedType: accept any named type, but record the pairing
+    // for the deferred conformance verification pass (F.3 / phase0k).
+    // The deferred pass calls type_implements() after all bodies are checked and
+    // emits T099 if the concrete type has no impl for the behavior (B-05 / CC-16).
     if (expected->is<ImplBehaviorType>()) {
-        // Accept any named type (struct/enum) as a valid implementation
-        // The actual behavior implementation check happens elsewhere
         if (actual->is<NamedType>()) {
+            const auto& concrete = actual->as<NamedType>().name;
+            const auto& behavior = expected->as<ImplBehaviorType>().behavior_name;
+            g_impl_behavior_verification_points.push_back({concrete, behavior});
             return true;
         }
     }
 
-    // Allow impl Behavior to be assigned to a concrete type
-    // This enables: let x: ConcreteType = make_impl_behavior()
-    // The caller is essentially downcasting to the known concrete type
+    // Reverse: impl Behavior assigned to concrete type (downcast path).
+    // e.g. let x: ConcreteType = make_impl_behavior()
     if (actual->is<ImplBehaviorType>()) {
         if (expected->is<NamedType>()) {
+            const auto& concrete = expected->as<NamedType>().name;
+            const auto& behavior = actual->as<ImplBehaviorType>().behavior_name;
+            g_impl_behavior_verification_points.push_back({concrete, behavior});
             return true;
         }
     }

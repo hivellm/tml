@@ -2961,7 +2961,7 @@ This means the result type of a `when` expression is the type of its *first non-
 
 **Verified (Gap 5, phase12e)**: Running `.sandbox/when_arm_mismatch.tml` confirms: `when x { 1 => 42, _ => true }` (x: I64) emits `error[T015]: When arm type mismatch: expected I64, found Bool` but the type checker continues (non-fatal). The result type assigned to the `when` expression is `I64`. The error reports T015 with the span pointing at the mismatching arm body (`true`), not the whole expression. The checker does NOT abort on the first mismatch — all arms are evaluated and each non-Never / non-matching arm fires its own T015.
 
-**Invariant CC-16** (`helpers.cpp:91-228`): `types_compatible` accepts:
+**Invariant CC-16** (`helpers.cpp`): `types_compatible` accepts:
 - `TypeVar` on either side (unresolved inference variable matches everything)
 - Any integer vs any integer (no width check — `I8` is compatible with `I64`)
 - Any float vs any float
@@ -2970,12 +2970,14 @@ This means the result type of a `when` expression is the type of its *first non-
 - `[T1; N]` vs `[T2; N]` when element types are compatible (recursive check)
 - `[T; N]` vs `List[T]` when element types are compatible
 - `ClosureType` vs `FuncType` with matching signatures
-- `NamedType` vs `ImplBehaviorType` (bidirectional — no actual behavior check)
+- `NamedType` vs `ImplBehaviorType` (bidirectional — recorded for deferred verification)
 
-The last rule is a known approximation. A concrete type passes the `impl Behavior` check without
-verifying that the type actually implements the behavior. The real implementation check happens
-in the impl processing phase (Phase 3). Body checking trusts Phase 3 has already confirmed
-that all used types implement their declared behaviors.
+**Phase0k fix (B-05)**: The last rule now records each `(concrete_type, behavior)` pair in a deferred
+verification side table. After Phase 4 (body checking) completes, a conformance pass calls
+`type_implements(concrete, behavior)` for each recorded point and emits **T099** if the type has
+no registered impl for that behavior. The permissive `return true` is retained so body checking
+proceeds in the presence of errors; all conformance violations surface as T099 at function
+granularity rather than as T056 per-statement.
 
 ### 3.2 What a Partial `TypeEnv` Looks Like After Errors
 
@@ -3568,9 +3570,9 @@ bugs if not explicitly preserved:
    expected type** (CC-30). This is not true for comparison or logical operators. The asymmetry
    is intentional for integer literal inference.
 
-3. **`types_compatible` accepts any `NamedType` as a valid implementation of any `ImplBehaviorType`
-   without checking actual behavior registration** (CC-16, last rule). Behavior conformance is
-   verified in Phase 3, not in body checking.
+3. **`types_compatible` records `NamedType` vs `ImplBehaviorType` pairings for deferred verification**
+   (CC-16, phase0k). A post-Phase-4 pass calls `type_implements()` for each recorded pair and
+   emits T099 if the concrete type has no impl. B-05 is resolved.
 
 4. **The `let-else` else block is not verified to diverge** (CC-37). The divergence requirement
    is documented in the code but not enforced. HIR lowering performs this enforcement.
@@ -3790,9 +3792,9 @@ Diverging arms are ignored; result is first non-diverging arm type. Mismatched n
 Type checking of file A can resolve behavior impls from file B compiled earlier in the same process. `lookup_behavior` and method resolution fallbacks MUST include a GlobalModuleCache scan as the last step.
 *Source*: I-4.34; `checker/expr_call_method.cpp:767`, `env_lookups.cpp:121-133`
 
-**GS-05 — types_compatible accepts integer widening and ImplBehaviorType without verification**
-`types_compatible` MUST accept: any integer vs any integer (any width), any float vs any float, `Ptr[Unit]` vs any pointer, ClosureType vs compatible FuncType, and any NamedType as satisfying any ImplBehaviorType without checking actual behavior registration. The last rule is load-bearing.
-*Source*: CC-16; `checker/helpers.cpp:91-228`
+**GS-05 — types_compatible accepts integer widening and ImplBehaviorType with deferred verification**
+`types_compatible` MUST accept: any integer vs any integer (any width), any float vs any float, `Ptr[Unit]` vs any pointer, ClosureType vs compatible FuncType, and any NamedType as satisfying any ImplBehaviorType (recorded for deferred verification). The `return true` for `NamedType` vs `ImplBehaviorType` is load-bearing for body checking; conformance is verified by the deferred T099 pass after Phase 4.
+*Source*: CC-16; `checker/helpers.cpp` (recording), `checker/core.cpp` (deferred pass)
 
 **GS-06 — Operators do not dispatch to behavior methods**
 The type checker MUST NOT look up `impl Add`, `impl Sub`, etc. Arithmetic returns left operand type; comparisons return Bool; assignment returns Unit. Operator desugaring happens in the THIR lowerer.
@@ -4242,9 +4244,9 @@ The type checker correctly preserves `ClosureType`. When codegen re-parses mangl
 `map`, `and_then`, `or_else`, `filter` on `Maybe[T]` now extract the closure's return type and construct `Maybe[U]`. `Outcome::map`/`map_err`/`and_then`/`or_else` likewise infer from the closure.
 *Fix*: `checker/expr_call_method_types.cpp` — combinator methods inspect the closure/func argument's return type.
 
-**B-05 — types_compatible accepts ImplBehaviorType without verification (CC-16, Finding 3)**
-Any `NamedType` passes `types_compatible` against an `ImplBehaviorType` without verifying actual behavior registration. This is load-bearing for body checking — real conformance verification is Phase 3's job. A TML port that adds verification here will reject programs that currently compile.
-*Source*: `checker/helpers.cpp:91-228`
+**B-05 — types_compatible accepts ImplBehaviorType without verification (CC-16, Finding 3)** ✅ FIXED (phase0k)
+Any `NamedType` now recorded in a side table (`g_impl_behavior_verification_points`) when accepted against an `ImplBehaviorType`. A deferred conformance pass after Phase 4 (body checking) calls `type_implements()` for each point and emits **T099** if the concrete type has no impl for the behavior. The permissive `return true` branch is retained so body checking can proceed; errors are surfaced at function granularity rather than per-statement.
+*Fix*: `checker/helpers.cpp` (recording), `checker/core.cpp` (deferred pass), `checker/core.cpp` (T099 emission)
 
 **B-06 — Fallback type for unresolved types is I32, not an error (Section 2, Finding 7)**
 `resolve_simple_type` in module loading returns `make_primitive(PrimitiveKind::I32)` for any type expression it cannot resolve. The debug message is unreachable (dead code). Any type that maps to nothing in `resolve_simple_type` silently becomes `I32` in method signatures stored in `Module::functions`.
