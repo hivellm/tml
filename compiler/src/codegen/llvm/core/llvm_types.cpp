@@ -76,7 +76,7 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "Unit")
         return "{}"; // Unit as data type - empty struct (void only for function returns)
     if (name == "Never")
-        return "void"; // Never type (bottom type) - represents no value
+        return "{}"; // Never as data - empty struct (void only for return types)
     // Platform-sized types (64-bit on 64-bit platforms)
     if (name == "Usize")
         return "i64";
@@ -397,9 +397,9 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Unit: use "{}" (empty struct) when used as data, "void" for return types
         case types::PrimitiveKind::Unit:
             return for_data ? "{}" : "void";
-        // Never type (bottom type) - use void as it represents no value
+        // Never type (bottom type) - {} as data (struct field), void for return types
         case types::PrimitiveKind::Never:
-            return "void";
+            return for_data ? "{}" : "void";
         }
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
@@ -443,10 +443,10 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         if (named.name == "Isize")
             return "i64";
 
-        // Never type (bottom type) - use void as it represents no value
-        // Sometimes Never appears as NamedType instead of PrimitiveType
+        // Never type (bottom type) - use {} as data (struct field), void for return types
+        // LLVM disallows void in struct fields; {} (empty struct) is the correct representation
         if (named.name == "Never") {
-            return "void";
+            return for_data ? "{}" : "void";
         }
 
         // Handle unresolved associated types like "T::Owned" that were deferred from type checking

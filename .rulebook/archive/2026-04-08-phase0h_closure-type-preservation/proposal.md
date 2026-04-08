@@ -8,6 +8,10 @@
 **Depends on**: phase0g (RC7 enum part landed in commit `30026ce4`)
 **Blocks**: Test coverage accuracy, iterator/Promise generic pipelines
 
+## Why
+
+18 tests in phase0g RC7 were blocked because generic structs receiving closures emitted unsubstituted type variables (`Maybe__T` instead of `Maybe__I32`) due to `ClosureType` being collapsed to `NamedType("Fn")` at struct instantiation.
+
 ## Problem
 
 18 tests in `phase0g` RC7 remain blocked because generic functions/methods that

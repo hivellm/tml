@@ -1,6 +1,7 @@
 TML_MODULE("compiler")
 
 #include "lexer/lexer.hpp"
+#include "log/log.hpp"
 #include "parser/parser.hpp"
 #include "types/env.hpp"
 #include "types/module.hpp"
@@ -340,13 +341,37 @@ static types::TypePtr resolve_simple_type(const parser::Type& type) {
         }
         return std::make_shared<Type>(
             Type{DynBehaviorType{behavior_name, std::move(type_args), dyn.is_mut}});
+    } else if (type.is<parser::ImplBehaviorType>()) {
+        // impl Behavior[T] return types — convert to the equivalent semantic type.
+        const auto& impl = type.as<parser::ImplBehaviorType>();
+        std::string behavior_name;
+        if (!impl.behavior.segments.empty()) {
+            behavior_name = impl.behavior.segments.back();
+        }
+        std::vector<TypePtr> type_args;
+        if (impl.generics.has_value()) {
+            for (const auto& arg : impl.generics->args) {
+                if (arg.is_type()) {
+                    type_args.push_back(resolve_simple_type(*arg.as_type()));
+                }
+            }
+        }
+        return std::make_shared<Type>(Type{ImplBehaviorType{behavior_name, std::move(type_args)}});
+    } else if (type.is<parser::InferType>()) {
+        // _ infer marker in a declaration position: we are outside body-checking context
+        // and have no type-variable counter, so record a named sentinel "_" that the body
+        // checker will resolve to a type error when it encounters it in a call position.
+        return std::make_shared<Type>(Type{NamedType{"_", "", {}}});
     }
 
-    // Fallback: return I32 for unknown types
-    TML_DEBUG_LN("[MODULE] Warning: Could not resolve type, using I32 as fallback");
-    return make_primitive(PrimitiveKind::I32);
-    TML_DEBUG_LN("[MODULE] Warning: Could not resolve type, using I32 as fallback");
-    return make_primitive(PrimitiveKind::I32);
+    // All known parser Type variants are handled above. Reaching here means a new
+    // variant was added to the parser AST without updating this function.
+    // Emit a diagnostic so the gap is visible immediately rather than silently
+    // producing wrong I32 types in method signatures.
+    TML_LOG_WARN("types", "resolve_simple_type: unhandled parser type variant (index "
+                              << type.kind.index()
+                              << ") — falling back to Unit. Update env_module_load_decls.cpp.");
+    return make_unit();
 }
 
 void TypeEnv::extract_module_declarations(const std::string& module_path,
