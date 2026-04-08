@@ -692,6 +692,7 @@ add_library(tml_mir STATIC
     # Binary deserializers (phase12e)
     src/serial/ast_reader.cpp
     src/serial/typeenv_reader.cpp
+    src/serial/token_reader.cpp
     # Optimization passes
     src/mir/passes/constant_folding.cpp
     src/mir/passes/constant_propagation.cpp
@@ -932,6 +933,16 @@ add_library(tml_query STATIC
 )
 target_link_libraries(tml_query PUBLIC tml_codegen tml_thir tml_traits tml_common tml_log)
 target_include_directories(tml_query PUBLIC include src)
+
+# Pipeline library (phase12f hybrid pipeline stage launcher)
+# Note: testing_process symbols are provided by tml_cli (which bundles
+# src/testing/testing_process.cpp). tml_cli links tml_pipeline so the
+# combined archive resolves at the final exe/plugin link step.
+add_library(tml_pipeline STATIC
+    src/pipeline/tml_stage.cpp
+)
+target_link_libraries(tml_pipeline PUBLIC tml_common tml_log)
+target_include_directories(tml_pipeline PUBLIC include src)
 
 # Format library
 add_library(tml_format STATIC
@@ -1776,7 +1787,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_query tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log tml_runtime ${TML_BACKEND_LIB})
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_query tml_pipeline tml_format tml_doc tml_mcp_lib tml_lld tml_common tml_log tml_runtime ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # Apply PCH to tml_cli after target is defined

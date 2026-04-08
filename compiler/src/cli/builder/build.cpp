@@ -1197,6 +1197,7 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     qopts.incremental = !options.no_cache;
     qopts.backend = options.backend;
     qopts.emit_pipeline = options.emit_pipeline;
+    qopts.stage_overrides = options.stage_overrides;
     if (options.emit_pipeline) {
         // Default pipeline dir: .sandbox/pipeline/ relative to the source file's directory
         qopts.pipeline_output_dir =

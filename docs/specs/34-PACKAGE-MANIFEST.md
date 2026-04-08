@@ -105,13 +105,9 @@ without hardcoding prefixes in the compiler.
 
 ## 6. Artifact Roots
 
-When a workspace is active, TML build outputs go to
-`<workspace>/target/{debug,release}/` rather than the C++ build tree
-under `build/debug/`. See `get_tml_artifact_root()` in
-`compiler/src/cli/builder/builder_helpers.cpp`.
-
-This separates **TML compiler outputs** from **C++ compiler outputs**
-so a fresh `scripts\build.bat` doesn't blow away cached test EXEs.
+TML build outputs go to `<workspace>/build/{debug,release}/` (or
+`<project_root>/build/...` when no workspace is active). See
+`get_tml_artifact_root()` in `compiler/src/cli/builder/builder_helpers.cpp`.
 
 ## 7. Cycle Detection
 

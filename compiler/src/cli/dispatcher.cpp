@@ -64,6 +64,7 @@ TML_MODULE("compiler")
 #include "commands/cmd_test.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
+#include "query/query_context.hpp"
 #include "utils.hpp"
 
 #include <filesystem>
@@ -364,6 +365,9 @@ int tml_main(int argc, char* argv[]) {
         bool bundle = false;
         std::string bundle_dir;
 
+        // Hybrid pipeline (phase12f): --stage=<name>:tml stage overrides
+        std::map<std::string, std::string> stage_overrides;
+
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
@@ -496,6 +500,32 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--bundle=")) {
                 bundle = true;
                 bundle_dir = arg.substr(9);
+            } else if (arg.starts_with("--stage=")) {
+                // phase12f hybrid pipeline: --stage=<name>:<impl>
+                std::string spec = arg.substr(8);
+                auto colon = spec.find(':');
+                if (colon == std::string::npos) {
+                    TML_LOG_ERROR("build", "Invalid --stage flag '"
+                                               << arg << "'. Expected --stage=<name>:tml where "
+                                               << "<name> is one of: "
+                                               << tml::query::valid_stage_names_csv());
+                    return 1;
+                }
+                std::string stage_name = spec.substr(0, colon);
+                std::string impl = spec.substr(colon + 1);
+                if (!tml::query::is_valid_stage_name(stage_name)) {
+                    TML_LOG_ERROR("build", "Unknown stage '"
+                                               << stage_name << "'. Valid stages: "
+                                               << tml::query::valid_stage_names_csv());
+                    return 1;
+                }
+                if (impl != "tml") {
+                    TML_LOG_ERROR("build", "Unknown stage implementation '"
+                                               << impl << "' for stage '" << stage_name
+                                               << "'. Only 'tml' is supported.");
+                    return 1;
+                }
+                stage_overrides[stage_name] = impl;
             }
         }
 
@@ -556,6 +586,7 @@ int tml_main(int argc, char* argv[]) {
         opts.pipeline_output_dir = std::move(pipeline_output_dir);
         opts.bundle = bundle;
         opts.bundle_dir = std::move(bundle_dir);
+        opts.stage_overrides = std::move(stage_overrides);
 
         // Default: query-based build (demand-driven with incremental compilation)
         // Use --legacy to fall back to the traditional pipeline
@@ -678,6 +709,31 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--emit-pipeline=")) {
                 opts.emit_pipeline = true;
                 opts.pipeline_output_dir = arg.substr(16);
+            } else if (arg.starts_with("--stage=")) {
+                // phase12f hybrid pipeline: --stage=<name>:tml
+                std::string spec = arg.substr(8);
+                auto colon = spec.find(':');
+                if (colon == std::string::npos) {
+                    TML_LOG_ERROR("run", "Invalid --stage flag '"
+                                             << arg << "'. Expected --stage=<name>:tml where "
+                                             << "<name> is one of: "
+                                             << tml::query::valid_stage_names_csv());
+                    return 1;
+                }
+                std::string stage_name = spec.substr(0, colon);
+                std::string impl = spec.substr(colon + 1);
+                if (!tml::query::is_valid_stage_name(stage_name)) {
+                    TML_LOG_ERROR("run", "Unknown stage '" << stage_name << "'. Valid stages: "
+                                                           << tml::query::valid_stage_names_csv());
+                    return 1;
+                }
+                if (impl != "tml") {
+                    TML_LOG_ERROR("run", "Unknown stage implementation '"
+                                             << impl << "' for stage '" << stage_name
+                                             << "'. Only 'tml' is supported.");
+                    return 1;
+                }
+                opts.stage_overrides[stage_name] = impl;
             } else if (arg == "--inspect") {
                 opts.inspect = true;
             } else if (arg == "--inspect-brk") {

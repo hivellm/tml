@@ -25,7 +25,9 @@ TML_MODULE("compiler")
 #include "mir/passes/pgo.hpp"
 #include "mir/thir_mir_builder.hpp"
 #include "parser/parser.hpp"
+#include "pipeline/tml_stage.hpp"
 #include "preprocessor/preprocessor.hpp"
+#include "serial/token_reader.hpp"
 #include "thir/thir.hpp"
 #include "thir/thir_lower.hpp"
 #include "traits/solver.hpp"
@@ -140,6 +142,26 @@ std::any provide_tokenize(QueryContext& ctx, const QueryKey& key) {
     if (!src.success) {
         result.errors.push_back(src.error_message);
         return result;
+    }
+
+    // phase12f hybrid pipeline: if --stage=lexer:tml is active, delegate
+    // tokenization to a TML subprocess and deserialize its TMLL output.
+    {
+        const auto& overrides = ctx.options().stage_overrides;
+        auto it = overrides.find("lexer");
+        if (it != overrides.end() && it->second == "tml") {
+            tml::pipeline::TmlStage stage("lexer");
+            std::vector<uint8_t> input(src.preprocessed.begin(), src.preprocessed.end());
+            auto run = stage.run(input);
+            if (!run.success) {
+                result.errors.push_back("lexer stage: " + run.error);
+                if (!run.stderr_text.empty()) {
+                    result.errors.push_back(run.stderr_text);
+                }
+                return result;
+            }
+            return tml::serial::read_tokens(run.stdout_bytes);
+        }
     }
 
     // Tokenize — store Source in result so token string_views stay valid

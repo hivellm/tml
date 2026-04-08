@@ -83,14 +83,12 @@ fs::path find_build_root() {
     }
     s_build_root_resolved = true;
 
-    // Workspace-aware: TML artifacts live in <workspace>/target/debug
-    // (Rust convention). Keeps them separate from the C++ CMake output
-    // in <repo>/build/.
+    // Workspace-aware: TML artifacts live in <workspace>/build/debug.
     const auto& ws_root = tml::pkg::PackageRegistry::instance().workspace_root();
     if (!ws_root.empty()) {
-        fs::path target_debug = ws_root / "target" / "debug";
-        fs::create_directories(target_debug);
-        s_build_root = target_debug;
+        fs::path build_debug = ws_root / "build" / "debug";
+        fs::create_directories(build_debug);
+        s_build_root = build_debug;
         return s_build_root;
     }
 

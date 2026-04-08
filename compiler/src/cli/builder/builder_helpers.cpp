@@ -194,15 +194,13 @@ fs::path find_project_root() {
     return fs::current_path();
 }
 
-// Resolve the root used for TML build artifacts. Rust-style: when a workspace
-// is active, artifacts land in `<workspace_root>/target/` so they never mix
-// with the C++ compiler's CMake output in `<repo>/build/`. Without a workspace
-// we fall back to the legacy `<project_root>/build/` layout for back-compat
-// with standalone `.tml` files compiled from arbitrary directories.
+// Resolve the root used for TML build artifacts. Always `<root>/build/` —
+// when a workspace is active, that's `<workspace_root>/build/`; otherwise,
+// fall back to `<project_root>/build/`.
 static fs::path get_tml_artifact_root() {
     const auto& ws_root = tml::pkg::PackageRegistry::instance().workspace_root();
     if (!ws_root.empty()) {
-        return ws_root / "target";
+        return ws_root / "build";
     }
     return find_project_root() / "build";
 }

@@ -85,6 +85,11 @@ struct BuildOptions {
     // Bundle: copy all needed runtime DLLs alongside the output executable
     bool bundle = false;
     std::string bundle_dir; // Custom bundle dir (default: build/<config>/bundle/)
+
+    // Hybrid pipeline (phase12f): --stage=<name>:tml overrides for individual
+    // pipeline stages. Map key = canonical stage name (lexer/parser/...),
+    // value = implementation tag ("tml" today).
+    std::map<std::string, std::string> stage_overrides;
 };
 
 // Run options (for run command)
@@ -107,6 +112,9 @@ struct RunOptions {
     bool inspect = false;     // Enable inspector (--inspect)
     bool inspect_brk = false; // Break on start (--inspect-brk)
     int inspect_port = 9229;  // Inspector port (--inspect-port=PORT)
+
+    // Hybrid pipeline (phase12f): same semantics as BuildOptions::stage_overrides.
+    std::map<std::string, std::string> stage_overrides;
 };
 
 // Build commands

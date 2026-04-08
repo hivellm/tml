@@ -22,6 +22,7 @@
 #include "query/query_provider.hpp"
 
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -73,7 +74,21 @@ struct QueryOptions {
     /// When true AND cached_library_state is set, emit only `declare` stubs
     /// for library functions (definitions come from pre-compiled stdlib .obj).
     bool library_decls_only = false;
+
+    /// Hybrid pipeline (phase12f): map from canonical stage name to
+    /// implementation tag. Currently only "tml" is recognized — overrides
+    /// the named stage with a TML subprocess for the duration of the build.
+    /// Valid stage names: lexer, parser, typechecker, hir, mir, codegen.
+    /// Empty by default (pure C++ pipeline).
+    std::map<std::string, std::string> stage_overrides;
 };
+
+/// Phase12f: canonical stage names matching QueryContext query kinds.
+/// Returns true if `name` is a valid hybrid-pipeline stage identifier.
+bool is_valid_stage_name(const std::string& name);
+
+/// Returns the comma-separated list of valid stage names (for diagnostics).
+const char* valid_stage_names_csv();
 
 /// Central query context for the compilation session.
 ///

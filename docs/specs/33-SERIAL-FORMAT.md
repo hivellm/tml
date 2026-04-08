@@ -11,6 +11,7 @@ Two binary formats exist:
 |--------|-----------|---------|
 | AST | `0x41535420` | Serialized `Module` (parser AST) |
 | TypeEnv | `0x54454E56` | Serialized type environment |
+| Tokens | `0x544D4C4C` | Serialized `TokenizeResult` (lexer output) |
 
 Both share the same header structure and primitive encoding.
 
@@ -81,6 +82,74 @@ end_col:      u32
 end_offset:   u32
 end_length:   u32
 ```
+
+## Token List Format
+
+Used by the hybrid pipeline (phase12f) to ship `TokenizeResult` between the
+lexer stage and the parser stage. A token stream is fully self-contained: the
+source text is embedded so the parser does not need filesystem access.
+
+```
+Header                          (magic 0x544D4C4C "TMLL", version 1.0)
+string        source_path       UTF-8 path or "" if anonymous
+string        source_text       full source bytes (UTF-8)
+bool          success
+list<string>  errors            empty when success
+list<Token>   tokens
+```
+
+### Token
+
+```
+u8        kind                  TokenKind enum value (see lexer/token.hpp)
+u32       start_offset          byte offset into source_text
+u32       length                lexeme length in bytes
+u32       start_line            1-based
+u32       start_col             1-based
+u8        value_tag             literal-value discriminator
+...       value_payload         per-tag, see below
+```
+
+The lexeme is recoverable as `source_text[start_offset .. start_offset+length]`,
+so it is not stored explicitly. The end span is reconstructed from
+`start_offset+length` and a single newline-scan over `source_text` (matches the
+existing C++ lexer convention).
+
+### Token Value Tags
+
+| Tag | Variant | Payload |
+|-----|---------|---------|
+| 0 | monostate | none |
+| 1 | IntValue | u8 width + u8 signed + u64 magnitude |
+| 2 | FloatValue | u8 width + f64 value |
+| 3 | StringValue | string text |
+| 4 | CharValue | u32 codepoint |
+| 5 | bool | u8 (0/1) |
+| 6 | DocValue | string text + bool is_module_doc |
+
+## Stage I/O Conventions (phase12f)
+
+Each TML stage launched by the hybrid pipeline reads its input on **stdin** as a
+single binary blob in one of the formats above and writes its output on
+**stdout** in the format consumed by the next stage. **stderr** is reserved for
+diagnostics; the C++ launcher captures it and surfaces lines as compiler
+diagnostics.
+
+| Stage | stdin format | stdout format |
+|-------|--------------|---------------|
+| `lexer` | raw UTF-8 source bytes (no header) | Tokens (`0x544D4C4C`) |
+| `parser` | Tokens (`0x544D4C4C`) | AST (`0x41535420`) |
+| `typechecker` | AST (`0x41535420`) | TypeEnv (`0x54454E56`) |
+| `hir` | TypeEnv + AST (concatenated) | reserved (TBD) |
+| `mir` | reserved (TBD) | reserved (TBD) |
+| `codegen` | reserved (TBD) | LLVM IR text |
+
+The lexer stage takes raw source on stdin (no header) because the source has no
+prior binary representation. Every other stage's input is the previous stage's
+output, byte-for-byte.
+
+Exit code 0 means success; non-zero means the stage failed. On non-zero exit,
+the launcher treats stderr as a diagnostic stream and aborts the build.
 
 ## TypeEnv Format
 

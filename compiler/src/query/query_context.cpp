@@ -22,6 +22,19 @@ QueryKind query_kind(const QueryKey& key) {
     return static_cast<QueryKind>(key.index());
 }
 
+// ============================================================================
+// Phase12f: Hybrid pipeline stage names
+// ============================================================================
+
+bool is_valid_stage_name(const std::string& name) {
+    return name == "lexer" || name == "parser" || name == "typechecker" || name == "hir" ||
+           name == "mir" || name == "codegen";
+}
+
+const char* valid_stage_names_csv() {
+    return "lexer, parser, typechecker, hir, mir, codegen";
+}
+
 const char* query_kind_name(QueryKind kind) {
     switch (kind) {
     case QueryKind::ReadSource:
