@@ -830,7 +830,16 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // This handles types like MaybeIter[I32] where neither pending_generic_impls_ nor the
         // module registry had the struct's type params, but the struct was found via
         // GlobalASTCache.
-        if (mangled_type_name != named.name && type_subs.find("T") == type_subs.end()) {
+        // IMPORTANT: Skip this fallback when imported_type_params is non-empty — that means
+        // the module registry already resolved the struct's ACTUAL type param names (e.g., "F"
+        // for RepeatWith[F]). The fallback blindly maps the single mangled suffix to "T", which
+        // corrupts the type_subs for types whose sole type param is NOT named "T". For example,
+        // RepeatWith__Fn has suffix "Fn" (mangled func type for param "F"), not a value for "T";
+        // incorrectly setting type_subs["T"] = NamedType("Fn") then blocks
+        // resolve_impl_where_clause from later deriving the correct T = I32 from `where F = func()
+        // -> T`.
+        if (mangled_type_name != named.name && type_subs.find("T") == type_subs.end() &&
+            imported_type_params.empty() && impl_it == pending_generic_impls_.end()) {
             auto dunder_pos = mangled_type_name.find("__");
             if (dunder_pos != std::string::npos) {
                 std::string suffix = mangled_type_name.substr(dunder_pos + 2);

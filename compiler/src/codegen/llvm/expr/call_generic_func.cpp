@@ -387,7 +387,27 @@ auto LLVMIRGen::gen_call_generic_func(const parser::CallExpr& call, const std::s
             // and convert to a semantic type via semantic_type_from_llvm.
             types::TypePtr expected_ret = semantic_type_from_llvm(expected_enum_type_);
             if (expected_ret) {
+                // Snapshot FuncType/ClosureType bindings before return-type unification.
+                // unify_types can overwrite a precise FuncType/ClosureType binding with a
+                // less-specific NamedType("Fn") when the return type references the same
+                // generic param.  Example: repeat_with[F, T](gen: F) where F = func()->T —
+                // F is bound to FuncType from arg inference, but T is unbound (has_unbound).
+                // unify_types(RepeatWith[F], expected) then overwrites bindings["F"] with
+                // NamedType("Fn"), breaking the where-clause T extraction that follows.
+                std::unordered_map<std::string, types::TypePtr> callable_snapshot;
+                for (const auto& [k, v] : bindings) {
+                    if (v && (v->is<types::FuncType>() || v->is<types::ClosureType>())) {
+                        callable_snapshot[k] = v;
+                    }
+                }
                 unify_types(**gen_func.return_type, expected_ret, generic_names, bindings);
+                // Restore any callable binding overwritten with a bare NamedType.
+                for (const auto& [k, v] : callable_snapshot) {
+                    auto it = bindings.find(k);
+                    if (it != bindings.end() && it->second && it->second->is<types::NamedType>()) {
+                        bindings[k] = v;
+                    }
+                }
             }
         }
     }
