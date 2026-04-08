@@ -32,6 +32,7 @@ TML_MODULE("compiler")
 #include "cli/builder/native_lib_resolver.hpp"
 #include "codegen/codegen_backend.hpp"
 #include "codegen/codegen_partitioner.hpp"
+#include "package/package_registry.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
@@ -112,6 +113,11 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     parser::Parser parser(std::move(tokens));
     auto module_name = fs::path(path).stem().string();
+    // Output filename override: BuildOptions.output_name lets the caller
+    // (manifest-driven build of [[bin]]/[lib]) decide the artifact stem
+    // independently of the source file name.
+    const std::string effective_name =
+        options.output_name.empty() ? module_name : options.output_name;
     auto parse_result = parser.parse_module(module_name);
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
@@ -579,8 +585,8 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
     fs::create_directories(build_dir); // Ensure custom output directory exists
 
-    fs::path ll_output = build_dir / (module_name + ".ll");
-    fs::path exe_output = build_dir / module_name;
+    fs::path ll_output = build_dir / (effective_name + ".ll");
+    fs::path exe_output = build_dir / effective_name;
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
@@ -777,26 +783,26 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         break;
     case BuildOutputType::StaticLib:
 #ifdef _WIN32
-        final_output = build_dir / (module_name + ".lib");
+        final_output = build_dir / (effective_name + ".lib");
 #else
-        final_output = build_dir / ("lib" + module_name + ".a");
+        final_output = build_dir / ("lib" + effective_name + ".a");
 #endif
         link_output_type = LinkOptions::OutputType::StaticLib;
         break;
     case BuildOutputType::DynamicLib:
 #ifdef _WIN32
-        final_output = build_dir / (module_name + ".dll");
+        final_output = build_dir / (effective_name + ".dll");
 #else
 #ifdef __APPLE__
-        final_output = build_dir / ("lib" + module_name + ".dylib");
+        final_output = build_dir / ("lib" + effective_name + ".dylib");
 #else
-        final_output = build_dir / ("lib" + module_name + ".so");
+        final_output = build_dir / ("lib" + effective_name + ".so");
 #endif
 #endif
         link_output_type = LinkOptions::OutputType::DynamicLib;
         break;
     case BuildOutputType::RlibLib:
-        final_output = build_dir / (module_name + ".rlib");
+        final_output = build_dir / (effective_name + ".rlib");
         // RLIB doesn't use standard linking - we'll create it separately
         break;
     }
@@ -935,8 +941,9 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             std::string source_pkg_name =
                 source_pkg_dir.empty() ? "" : source_pkg_dir.filename().string();
             for (const auto& [mod_path, _] : registry->get_all_modules()) {
-                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
-                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                // Workspace-registered packages are built directly by the
+                // compiler driver — skip their build.tml here.
+                if (tml::pkg::PackageRegistry::instance().is_package_module(mod_path)) {
                     continue;
                 }
                 auto sep = mod_path.find("::");
@@ -1208,6 +1215,8 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
 
     query::QueryContext qctx(qopts);
     auto module_name = fs::path(path).stem().string();
+    const std::string effective_name =
+        options.output_name.empty() ? module_name : options.output_name;
 
     // Load incremental cache from previous session
     fs::path build_dir = options.output_dir.empty() ? get_build_dir(false /* debug */)
@@ -1280,13 +1289,13 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     // build_dir already computed above for incremental cache
     fs::create_directories(build_dir);
 
-    fs::path exe_output = build_dir / module_name;
+    fs::path exe_output = build_dir / effective_name;
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
 
     if (emit_ir_only) {
-        fs::path ll_output = build_dir / (module_name + ".ll");
+        fs::path ll_output = build_dir / (effective_name + ".ll");
         std::ofstream ll_file(ll_output);
         if (!ll_file) {
             TML_LOG_ERROR("build", "Cannot write to " << ll_output);

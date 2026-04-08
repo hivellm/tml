@@ -1,0 +1,15 @@
+# TML Core Library
+#
+# Zero-dependency foundation layer. Types, traits, and primitives that
+# every TML program gets implicitly. No dependencies — core cannot
+# depend on anything else in the workspace.
+
+[package]
+name = "core"
+version = "0.2.0"
+edition = "2025"
+description = "TML core library (Heap, Shared, Maybe, Outcome, Iterator, ops)"
+license = "Apache-2.0"
+
+[dependencies]
+# intentionally empty — core is the bottom of the stack

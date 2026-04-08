@@ -28,6 +28,7 @@ TML_MODULE("compiler")
 #include "types/module_metadata.hpp"
 
 #include "log/log.hpp"
+#include "package/package_registry.hpp"
 #include "types/env.hpp"
 
 #include <fstream>
@@ -692,43 +693,44 @@ bool ModuleMetadata::save_to_file(const Module& module, const std::filesystem::p
     return true;
 }
 
-auto ModuleMetadata::get_metadata_path(const std::string& module_path) -> std::filesystem::path {
-    // "core::mem" -> "lib/core/compiled/mem.tml.meta"
-    if (module_path.substr(0, 6) == "core::") {
-        std::string module_name = module_path.substr(6);
-        return std::filesystem::path("lib") / "core" / "compiled" / (module_name + ".tml.meta");
-    }
-    // "std::math" -> "lib/std/compiled/math.tml.meta"
-    else if (module_path.substr(0, 5) == "std::") {
-        std::string module_name = module_path.substr(5);
-        return std::filesystem::path("lib") / "std" / "compiled" / (module_name + ".tml.meta");
-    } else if (module_path == "test") {
-        return std::filesystem::path("lib") / "test" / "compiled" / "test.tml.meta";
-    }
+// Resolve <pkg>::<rest> -> { compiled_dir, rest_path } using PackageRegistry.
+// Returns nullopt for non-package modules (user modules).
+namespace {
+struct ResolvedCompiledLocation {
+    std::filesystem::path compiled_dir;
+    std::string rest;
+};
 
+std::optional<ResolvedCompiledLocation> resolve_compiled_location(const std::string& module_path) {
+    auto lookup = tml::pkg::PackageRegistry::instance().lookup_for_module(module_path);
+    if (!lookup) {
+        return std::nullopt;
+    }
+    ResolvedCompiledLocation out;
+    out.compiled_dir = lookup->package->root_dir / "compiled";
+    out.rest = lookup->rest.empty() ? lookup->package->name : lookup->rest;
+    return out;
+}
+} // namespace
+
+auto ModuleMetadata::get_metadata_path(const std::string& module_path) -> std::filesystem::path {
+    if (auto loc = resolve_compiled_location(module_path)) {
+        return loc->compiled_dir / (loc->rest + ".tml.meta");
+    }
     // User modules
     return std::filesystem::path("tml_modules") / "compiled" / (module_path + ".tml.meta");
 }
 
 auto ModuleMetadata::get_object_path(const std::string& module_path) -> std::filesystem::path {
-    // "core::mem" -> "lib/core/compiled/mem.o" (or .obj on Windows)
-    std::string obj_ext;
 #ifdef _WIN32
-    obj_ext = ".obj";
+    const std::string obj_ext = ".obj";
 #else
-    obj_ext = ".o";
+    const std::string obj_ext = ".o";
 #endif
 
-    if (module_path.substr(0, 6) == "core::") {
-        std::string module_name = module_path.substr(6);
-        return std::filesystem::path("lib") / "core" / "compiled" / (module_name + obj_ext);
-    } else if (module_path.substr(0, 5) == "std::") {
-        std::string module_name = module_path.substr(5);
-        return std::filesystem::path("lib") / "std" / "compiled" / (module_name + obj_ext);
-    } else if (module_path == "test") {
-        return std::filesystem::path("lib") / "test" / "compiled" / ("test" + obj_ext);
+    if (auto loc = resolve_compiled_location(module_path)) {
+        return loc->compiled_dir / (loc->rest + obj_ext);
     }
-
     return std::filesystem::path("tml_modules") / "compiled" / (module_path + obj_ext);
 }
 

@@ -1,0 +1,132 @@
+//! `BinaryWriter` — a `Buffer`-backed binary serializer.
+//!
+//! Wraps a `Buffer` and exposes write primitives as methods.
+//! Primitives are implemented inline to avoid naming conflicts with the
+//! free-standing functions in `serial::mod`.
+//!
+//! # Usage
+//!
+//! ```tml
+//! let w = BinaryWriter::new(256)
+//! w.write_u32(0x4D495220)   // magic
+//! w.write_u8(1)              // major version
+//! w.write_u8(0)              // minor version
+//! w.write_varint(count)
+//! w.write_str(name)
+//! let buf = w.finish()
+//! ```
+
+use std::collections::buffer::Buffer
+use core::str
+
+/// A binary serializer wrapping a growable `Buffer`.
+pub type BinaryWriter {
+    buf: Buffer,
+}
+
+impl BinaryWriter {
+    /// Create a new writer with the given initial capacity in bytes.
+    pub func new(capacity: I64) -> BinaryWriter {
+        return BinaryWriter { buf: Buffer::new(capacity) }
+    }
+
+    // ------------------------------------------------------------------
+    // Fixed-width write methods
+    // ------------------------------------------------------------------
+
+    /// Write a single byte (low 8 bits of `value`).
+    pub func write_u8(this, value: I32) {
+        this.buf.write_byte(value & 0xFF)
+    }
+
+    /// Write a 16-bit little-endian integer.
+    pub func write_u16(this, value: I32) {
+        this.buf.write_byte(value & 0xFF)
+        this.buf.write_byte((value >> 8) & 0xFF)
+    }
+
+    /// Write a 32-bit little-endian integer.
+    pub func write_u32(this, value: I64) {
+        this.buf.write_byte((value & 0xFF) as I32)
+        this.buf.write_byte(((value >> 8) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 16) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 24) & 0xFF) as I32)
+    }
+
+    /// Write a 64-bit little-endian integer.
+    pub func write_u64(this, value: I64) {
+        this.buf.write_byte((value & 0xFF) as I32)
+        this.buf.write_byte(((value >> 8) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 16) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 24) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 32) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 40) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 48) & 0xFF) as I32)
+        this.buf.write_byte(((value >> 56) & 0xFF) as I32)
+    }
+
+    /// Write a boolean as a single byte (0 = false, 1 = true).
+    pub func write_bool(this, value: Bool) {
+        if value {
+            this.buf.write_byte(1)
+        } else {
+            this.buf.write_byte(0)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Variable-length write methods
+    // ------------------------------------------------------------------
+
+    /// Write an unsigned LEB-128 varint.
+    pub func write_varint(this, value: I64) {
+        var v: I64 = value
+        loop (true) {
+            let byte: I32 = (v & 0x7F) as I32
+            v = v >> 7
+            if v == 0 {
+                this.buf.write_byte(byte)
+                return
+            }
+            this.buf.write_byte(byte | 0x80)
+        }
+    }
+
+    /// Write a length-prefixed string (varint length + raw UTF-8 bytes).
+    pub func write_str(this, s: Str) {
+        let n: I64 = str::len(s)
+        this.write_varint(n)
+        if n > 0 {
+            this.buf.write_from_ptr(s as I64, n)
+        }
+    }
+
+    /// Write an optional string (`Nothing` encodes as zero-length).
+    pub func write_opt_str(this, s: Maybe[Str]) {
+        when s {
+            Just(inner) => this.write_str(inner),
+            Nothing => this.write_varint(0),
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Buffer access
+    // ------------------------------------------------------------------
+
+    /// Return how many bytes have been written so far.
+    pub func len(this) -> I64 {
+        return this.buf.len()
+    }
+
+    /// Consume the writer and return the underlying `Buffer`.
+    ///
+    /// The caller is responsible for destroying the buffer when done.
+    pub func finish(this) -> Buffer {
+        return this.buf
+    }
+
+    /// Destroy this writer and free the underlying buffer.
+    pub func destroy(mut this) {
+        this.buf.destroy()
+    }
+}

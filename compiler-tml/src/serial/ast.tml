@@ -1,0 +1,1764 @@
+//! AST binary serialization — TML mirror types and write functions.
+//!
+//! This module defines TML types that mirror the C++ parser AST
+//! (`compiler/include/parser/`), along with serialization functions that
+//! write them to a `BinaryWriter`.
+//!
+//! # File Layout
+//!
+//! ```
+//! u32  magic         = 0x41535420  ("AST ")
+//! u8   version_major = 1
+//! u8   version_minor = 0
+//! str  module_name
+//! varint doc_count
+//! str[doc_count]
+//! SourceSpan module_span
+//! varint decl_count
+//! Decl[decl_count]
+//! ```
+//!
+//! # Tag Tables
+//!
+//! **DeclTag**:  0=Func 1=Struct 2=Union 3=Enum 4=Trait 5=Impl
+//!               6=TypeAlias 7=Const 8=Use 9=Mod 10=Class 11=Interface 12=Namespace
+//!
+//! **ExprTag**:  0=Literal 1=Ident 2=Unary 3=Binary 4=Call 5=MethodCall 6=Field
+//!               7=Index 8=Tuple 9=Array 10=Struct 11=If 12=Ternary 13=IfLet
+//!               14=When 15=Loop 16=While 17=For 18=Block 19=Return 20=Break
+//!               21=Continue 22=Closure 23=Range 24=Cast 25=Is 26=Try 27=Await
+//!               28=Throw 29=Path 30=Lowlevel 31=InterpolatedString
+//!               32=TemplateLiteral 33=Base 34=New
+//!
+//! **StmtTag**:  0=Let 1=Var 2=LetElse 3=Expr 4=Decl
+//!
+//! **PatternTag**: 0=Wildcard 1=Ident 2=Literal 3=Tuple 4=Struct 5=Enum
+//!                 6=Or 7=Range 8=Array
+//!
+//! **TypeTag**:  0=Named 1=Ref 2=Ptr 3=Array 4=Slice 5=Tuple 6=Func
+//!               7=Infer 8=Dyn 9=ImplBehavior
+
+use compiler::serial::writer::BinaryWriter
+use std::collections::list::List
+use core::alloc::heap::Heap
+use core::str
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Magic bytes for the AST binary format: "AST " (0x41535420 LE).
+pub const AST_MAGIC: I64 = 0x41535420
+/// Current format major version.
+pub const AST_VERSION_MAJOR: I32 = 1
+/// Current format minor version.
+pub const AST_VERSION_MINOR: I32 = 0
+
+// ============================================================================
+// Source Location
+// ============================================================================
+
+/// Mirrors `SourceLocation` in `compiler/include/common.hpp`.
+pub type TmlSourceLocation {
+    line: I64,
+    column: I64,
+    offset: I64,
+    length: I64,
+}
+
+/// Mirrors `SourceSpan` in `compiler/include/common.hpp`.
+pub type TmlSourceSpan {
+    start: TmlSourceLocation,
+    end: TmlSourceLocation,
+}
+
+// ============================================================================
+// Visibility
+// ============================================================================
+
+/// Mirrors `Visibility` in `compiler/include/parser/ast_decls.hpp`.
+pub type TmlVisibility {
+    Private,
+    Public,
+    PubCrate,
+}
+
+// ============================================================================
+// Literal kind
+// ============================================================================
+
+/// Represents the value carried by a `LiteralExpr`.
+pub type TmlLiteralKind {
+    LitInt(I64),
+    LitFloat(I64),    // raw bit pattern of F64, reinterpreted as I64
+    LitStr(Str),
+    LitBool(Bool),
+    LitChar(I32),
+    LitNull,
+}
+
+// ============================================================================
+// Type AST — mirrors ast_types.hpp
+// ============================================================================
+
+/// Mirrors `TypePath` in `compiler/include/parser/ast_types.hpp`.
+pub type TmlTypePath {
+    segments: List[Str],
+    span: TmlSourceSpan,
+}
+
+pub type TmlNamedType {
+    path: TmlTypePath,
+    args: List[Heap[TmlType]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlRefType {
+    inner: Heap[TmlType],
+    is_mut: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlPtrType {
+    inner: Heap[TmlType],
+    is_mut: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlArrayType {
+    inner: Heap[TmlType],
+    size: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlSliceType {
+    inner: Heap[TmlType],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTupleType {
+    types: List[Heap[TmlType]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlFuncType {
+    params: List[Heap[TmlType]],
+    return_type: Maybe[Heap[TmlType]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlDynType {
+    bounds: List[TmlTypePath],
+    span: TmlSourceSpan,
+}
+
+pub type TmlImplBehaviorType {
+    bounds: List[TmlTypePath],
+    span: TmlSourceSpan,
+}
+
+/// Mirrors `Type` variant in `compiler/include/parser/ast_types.hpp`.
+pub type TmlType {
+    Named(TmlNamedType),
+    Ref(TmlRefType),
+    Ptr(TmlPtrType),
+    Array(TmlArrayType),
+    Slice(TmlSliceType),
+    Tuple(TmlTupleType),
+    Func(TmlFuncType),
+    Infer(TmlSourceSpan),
+    Dyn(TmlDynType),
+    ImplBehavior(TmlImplBehaviorType),
+}
+
+// ============================================================================
+// Pattern AST — mirrors ast_patterns.hpp
+// ============================================================================
+
+pub type TmlIdentPattern {
+    name: Str,
+    subpat: Maybe[Heap[TmlPattern]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlLiteralPattern {
+    value: TmlLiteralKind,
+    span: TmlSourceSpan,
+}
+
+pub type TmlTuplePattern {
+    patterns: List[Heap[TmlPattern]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlFieldPattern {
+    name: Str,
+    pat: Heap[TmlPattern],
+    span: TmlSourceSpan,
+}
+
+pub type TmlStructPattern {
+    path: TmlTypePath,
+    fields: List[TmlFieldPattern],
+    span: TmlSourceSpan,
+}
+
+pub type TmlEnumPattern {
+    path: TmlTypePath,
+    args: List[Heap[TmlPattern]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlOrPattern {
+    alternatives: List[Heap[TmlPattern]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlRangePattern {
+    start: TmlLiteralKind,
+    end: TmlLiteralKind,
+    inclusive: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlArrayPattern {
+    patterns: List[Heap[TmlPattern]],
+    span: TmlSourceSpan,
+}
+
+/// Mirrors `Pattern` variant in `compiler/include/parser/ast_patterns.hpp`.
+pub type TmlPattern {
+    Wildcard(TmlSourceSpan),
+    Ident(TmlIdentPattern),
+    Literal(TmlLiteralPattern),
+    Tuple(TmlTuplePattern),
+    Struct(TmlStructPattern),
+    Enum(TmlEnumPattern),
+    Or(TmlOrPattern),
+    Range(TmlRangePattern),
+    Array(TmlArrayPattern),
+}
+
+// ============================================================================
+// Expression AST — mirrors ast_exprs.hpp
+// ============================================================================
+
+/// Mirrors `UnaryOp` in `compiler/include/parser/ast_exprs.hpp`.
+pub type TmlUnaryOp {
+    OpNeg,
+    OpNot,
+    OpBitNot,
+    OpRef,
+    OpRefMut,
+    OpDeref,
+    OpInc,
+    OpDec,
+}
+
+/// Mirrors `BinaryOp` in `compiler/include/parser/ast_exprs.hpp`.
+pub type TmlBinaryOp {
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpMod,
+    OpEq,
+    OpNe,
+    OpLt,
+    OpGt,
+    OpLe,
+    OpGe,
+    OpAnd,
+    OpOr,
+    OpBitAnd,
+    OpBitOr,
+    OpBitXor,
+    OpShl,
+    OpShr,
+    OpAssign,
+    OpAddAssign,
+    OpSubAssign,
+    OpMulAssign,
+    OpDivAssign,
+    OpModAssign,
+    OpBitAndAssign,
+    OpBitOrAssign,
+    OpBitXorAssign,
+    OpShlAssign,
+    OpShrAssign,
+}
+
+pub type TmlLiteralExpr {
+    value: TmlLiteralKind,
+    span: TmlSourceSpan,
+}
+
+pub type TmlIdentExpr {
+    name: Str,
+    span: TmlSourceSpan,
+}
+
+pub type TmlUnaryExpr {
+    op: TmlUnaryOp,
+    operand: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlBinaryExpr {
+    op: TmlBinaryOp,
+    left: Heap[TmlExpr],
+    right: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlCallExpr {
+    callee: Heap[TmlExpr],
+    args: List[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlMethodCallExpr {
+    receiver: Heap[TmlExpr],
+    method: Str,
+    type_args: List[Heap[TmlType]],
+    args: List[Heap[TmlExpr]],
+    optional_chain: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlFieldExpr {
+    object: Heap[TmlExpr],
+    field: Str,
+    optional_chain: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlIndexExpr {
+    object: Heap[TmlExpr],
+    index: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTupleExpr {
+    elements: List[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+/// Array initializer kind: element list or repeat (`[val; count]`).
+pub type TmlArrayKind {
+    Elements(List[Heap[TmlExpr]]),
+    Repeat(Heap[TmlExpr], Heap[TmlExpr]),
+}
+
+pub type TmlArrayExpr {
+    kind: TmlArrayKind,
+    span: TmlSourceSpan,
+}
+
+pub type TmlStructExprField {
+    name: Str,
+    value: Heap[TmlExpr],
+}
+
+pub type TmlStructExpr {
+    path: TmlTypePath,
+    type_args: Maybe[List[Heap[TmlType]]],
+    fields: List[TmlStructExprField],
+    base_expr: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlIfExpr {
+    condition: Heap[TmlExpr],
+    then_branch: Heap[TmlExpr],
+    else_branch: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTernaryExpr {
+    condition: Heap[TmlExpr],
+    true_value: Heap[TmlExpr],
+    false_value: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlIfLetExpr {
+    pattern: Heap[TmlPattern],
+    scrutinee: Heap[TmlExpr],
+    then_branch: Heap[TmlExpr],
+    else_branch: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlWhenArm {
+    pattern: Heap[TmlPattern],
+    guard: Maybe[Heap[TmlExpr]],
+    body: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlWhenExpr {
+    scrutinee: Heap[TmlExpr],
+    arms: List[TmlWhenArm],
+    span: TmlSourceSpan,
+}
+
+pub type TmlLoopVarDecl {
+    name: Str,
+    ty: Heap[TmlType],
+    span: TmlSourceSpan,
+}
+
+pub type TmlLoopExpr {
+    label: Maybe[Str],
+    loop_var: Maybe[TmlLoopVarDecl],
+    condition: Heap[TmlExpr],
+    body: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlWhileExpr {
+    label: Maybe[Str],
+    condition: Heap[TmlExpr],
+    body: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlForExpr {
+    label: Maybe[Str],
+    pattern: Heap[TmlPattern],
+    iter: Heap[TmlExpr],
+    body: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlBlockExpr {
+    stmts: List[Heap[TmlStmt]],
+    expr: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlReturnExpr {
+    value: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlBreakExpr {
+    label: Maybe[Str],
+    value: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlContinueExpr {
+    label: Maybe[Str],
+    span: TmlSourceSpan,
+}
+
+pub type TmlClosureParam {
+    pattern: Heap[TmlPattern],
+    ty: Maybe[Heap[TmlType]],
+}
+
+pub type TmlClosureExpr {
+    params: List[TmlClosureParam],
+    return_type: Maybe[Heap[TmlType]],
+    body: Heap[TmlExpr],
+    is_move: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlRangeExpr {
+    start: Maybe[Heap[TmlExpr]],
+    end: Maybe[Heap[TmlExpr]],
+    inclusive: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlCastExpr {
+    expr: Heap[TmlExpr],
+    target: Heap[TmlType],
+    span: TmlSourceSpan,
+}
+
+pub type TmlIsExpr {
+    expr: Heap[TmlExpr],
+    target: Heap[TmlType],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTryExpr {
+    expr: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlAwaitExpr {
+    expr: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlThrowExpr {
+    expr: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlPathExpr {
+    path: TmlTypePath,
+    type_args: Maybe[List[Heap[TmlType]]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlLowlevelExpr {
+    stmts: List[Heap[TmlStmt]],
+    expr: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlInterpolatedSegmentKind {
+    SegText(Str),
+    SegExpr(Heap[TmlExpr]),
+}
+
+pub type TmlInterpolatedSegment {
+    kind: TmlInterpolatedSegmentKind,
+    span: TmlSourceSpan,
+}
+
+pub type TmlInterpolatedStringExpr {
+    segments: List[TmlInterpolatedSegment],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTemplateLiteralExpr {
+    segments: List[TmlInterpolatedSegment],
+    span: TmlSourceSpan,
+}
+
+pub type TmlBaseExpr {
+    member: Str,
+    type_args: List[Heap[TmlType]],
+    args: List[Heap[TmlExpr]],
+    is_method_call: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlNewExpr {
+    class_type: TmlTypePath,
+    type_args: Maybe[List[Heap[TmlType]]],
+    args: List[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+/// Mirrors `Expr` variant in `compiler/include/parser/ast_exprs.hpp`.
+///
+/// Recursive references use `Heap[TmlExpr]` to break the recursion cycle.
+pub type TmlExpr {
+    Literal(TmlLiteralExpr),
+    Ident(TmlIdentExpr),
+    Unary(TmlUnaryExpr),
+    Binary(TmlBinaryExpr),
+    Call(TmlCallExpr),
+    MethodCall(TmlMethodCallExpr),
+    Field(TmlFieldExpr),
+    Index(TmlIndexExpr),
+    Tuple(TmlTupleExpr),
+    Array(TmlArrayExpr),
+    Struct(TmlStructExpr),
+    If(TmlIfExpr),
+    Ternary(TmlTernaryExpr),
+    IfLet(TmlIfLetExpr),
+    When(TmlWhenExpr),
+    Loop(TmlLoopExpr),
+    While(TmlWhileExpr),
+    For(TmlForExpr),
+    Block(TmlBlockExpr),
+    Return(TmlReturnExpr),
+    Break(TmlBreakExpr),
+    Continue(TmlContinueExpr),
+    Closure(TmlClosureExpr),
+    Range(TmlRangeExpr),
+    Cast(TmlCastExpr),
+    Is(TmlIsExpr),
+    Try(TmlTryExpr),
+    Await(TmlAwaitExpr),
+    Throw(TmlThrowExpr),
+    Path(TmlPathExpr),
+    Lowlevel(TmlLowlevelExpr),
+    InterpolatedString(TmlInterpolatedStringExpr),
+    TemplateLiteral(TmlTemplateLiteralExpr),
+    Base(TmlBaseExpr),
+    New(TmlNewExpr),
+}
+
+// ============================================================================
+// Statement AST — mirrors ast_stmts.hpp
+// ============================================================================
+
+pub type TmlLetStmt {
+    pattern: Heap[TmlPattern],
+    ty: Maybe[Heap[TmlType]],
+    init: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlVarStmt {
+    name: Str,
+    ty: Maybe[Heap[TmlType]],
+    init: Maybe[Heap[TmlExpr]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlLetElseStmt {
+    pattern: Heap[TmlPattern],
+    init: Heap[TmlExpr],
+    else_body: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+/// Mirrors `Stmt` variant in `compiler/include/parser/ast_stmts.hpp`.
+pub type TmlStmt {
+    Let(TmlLetStmt),
+    Var(TmlVarStmt),
+    LetElse(TmlLetElseStmt),
+    Expr(Heap[TmlExpr]),
+    Decl(Heap[TmlDecl]),
+}
+
+// ============================================================================
+// Declaration AST — mirrors ast_decls.hpp
+// ============================================================================
+
+pub type TmlGenericParam {
+    name: Str,
+    bounds: List[TmlTypePath],
+    span: TmlSourceSpan,
+}
+
+pub type TmlFuncParam {
+    name: Str,
+    ty: Heap[TmlType],
+    is_this: Bool,
+    is_mut: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlFuncDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    params: List[TmlFuncParam],
+    return_type: Maybe[Heap[TmlType]],
+    body: Maybe[Heap[TmlExpr]],
+    is_async: Bool,
+    is_override: Bool,
+    span: TmlSourceSpan,
+}
+
+pub type TmlStructField {
+    name: Str,
+    ty: Heap[TmlType],
+    visibility: TmlVisibility,
+    span: TmlSourceSpan,
+}
+
+pub type TmlStructDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    fields: List[TmlStructField],
+    span: TmlSourceSpan,
+}
+
+pub type TmlUnionDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    fields: List[TmlStructField],
+    span: TmlSourceSpan,
+}
+
+pub type TmlEnumVariant {
+    name: Str,
+    fields: List[Heap[TmlType]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlEnumDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    variants: List[TmlEnumVariant],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTraitDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    supertraits: List[TmlTypePath],
+    methods: List[TmlFuncDecl],
+    span: TmlSourceSpan,
+}
+
+pub type TmlImplDecl {
+    ty: Heap[TmlType],
+    behavior_path: Maybe[TmlTypePath],
+    generics: List[TmlGenericParam],
+    methods: List[TmlFuncDecl],
+    span: TmlSourceSpan,
+}
+
+pub type TmlTypeAliasDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    ty: Heap[TmlType],
+    span: TmlSourceSpan,
+}
+
+pub type TmlConstDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    ty: Heap[TmlType],
+    value: Heap[TmlExpr],
+    span: TmlSourceSpan,
+}
+
+pub type TmlUsePath {
+    segments: List[Str],
+    alias: Maybe[Str],
+}
+
+pub type TmlUseDecl {
+    path: TmlUsePath,
+    visibility: TmlVisibility,
+    span: TmlSourceSpan,
+}
+
+pub type TmlModDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    items: List[Heap[TmlDecl]],
+    span: TmlSourceSpan,
+}
+
+pub type TmlClassField {
+    name: Str,
+    ty: Heap[TmlType],
+    visibility: TmlVisibility,
+    span: TmlSourceSpan,
+}
+
+pub type TmlClassDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    parent: Maybe[TmlTypePath],
+    interfaces: List[TmlTypePath],
+    fields: List[TmlClassField],
+    methods: List[TmlFuncDecl],
+    span: TmlSourceSpan,
+}
+
+pub type TmlInterfaceDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    generics: List[TmlGenericParam],
+    methods: List[TmlFuncDecl],
+    span: TmlSourceSpan,
+}
+
+pub type TmlNamespaceDecl {
+    name: Str,
+    visibility: TmlVisibility,
+    items: List[Heap[TmlDecl]],
+    span: TmlSourceSpan,
+}
+
+/// Mirrors `Decl` variant in `compiler/include/parser/ast.hpp`.
+pub type TmlDecl {
+    Func(TmlFuncDecl),
+    Struct(TmlStructDecl),
+    Union(TmlUnionDecl),
+    Enum(TmlEnumDecl),
+    Trait(TmlTraitDecl),
+    Impl(TmlImplDecl),
+    TypeAlias(TmlTypeAliasDecl),
+    Const(TmlConstDecl),
+    Use(TmlUseDecl),
+    Mod(TmlModDecl),
+    Class(TmlClassDecl),
+    Interface(TmlInterfaceDecl),
+    Namespace(TmlNamespaceDecl),
+}
+
+// ============================================================================
+// Module
+// ============================================================================
+
+/// Mirrors `Module` in `compiler/include/parser/ast.hpp`.
+pub type TmlModule {
+    name: Str,
+    docs: List[Str],
+    decls: List[Heap[TmlDecl]],
+    span: TmlSourceSpan,
+}
+
+// ============================================================================
+// Serialization helpers
+// ============================================================================
+
+/// Write the file header: magic u32 + version major u8 + version minor u8.
+pub func write_ast_header(w: BinaryWriter) {
+    w.write_u32(AST_MAGIC)
+    w.write_u8(AST_VERSION_MAJOR)
+    w.write_u8(AST_VERSION_MINOR)
+}
+
+/// Write a SourceLocation: line, column, offset, length as u32 LE values.
+pub func write_source_location(w: BinaryWriter, loc: TmlSourceLocation) {
+    w.write_u32(loc.line)
+    w.write_u32(loc.column)
+    w.write_u32(loc.offset)
+    w.write_u32(loc.length)
+}
+
+/// Write a SourceSpan: start location, then end location.
+pub func write_source_span(w: BinaryWriter, span: TmlSourceSpan) {
+    write_source_location(w, span.start)
+    write_source_location(w, span.end)
+}
+
+/// Write a Visibility: u8 (0=Private, 1=Public, 2=PubCrate).
+pub func write_visibility(w: BinaryWriter, vis: TmlVisibility) {
+    when vis {
+        Private => w.write_u8(0),
+        Public  => w.write_u8(1),
+        PubCrate => w.write_u8(2),
+    }
+}
+
+/// Write a TypePath: varint segment count + each segment string + span.
+pub func write_type_path(w: BinaryWriter, path: TmlTypePath) {
+    w.write_varint(path.segments.len())
+    var i: I64 = 0
+    loop (i < path.segments.len()) {
+        w.write_str(path.segments.get(i))
+        i = i + 1
+    }
+    write_source_span(w, path.span)
+}
+
+/// Write a literal kind: u8 tag + payload.
+pub func write_literal_kind(w: BinaryWriter, lit: TmlLiteralKind) {
+    when lit {
+        LitInt(v)    => { w.write_u8(0); w.write_u64(v) },
+        LitFloat(b)  => { w.write_u8(1); w.write_u64(b) },
+        LitStr(s)    => { w.write_u8(2); w.write_str(s) },
+        LitBool(b)   => { w.write_u8(3); w.write_bool(b) },
+        LitChar(c)   => { w.write_u8(4); w.write_u32(c as I64) },
+        LitNull      => w.write_u8(5),
+    }
+}
+
+func write_unary_op(w: BinaryWriter, op: TmlUnaryOp) {
+    when op {
+        OpNeg    => w.write_u8(0),
+        OpNot    => w.write_u8(1),
+        OpBitNot => w.write_u8(2),
+        OpRef    => w.write_u8(3),
+        OpRefMut => w.write_u8(4),
+        OpDeref  => w.write_u8(5),
+        OpInc    => w.write_u8(6),
+        OpDec    => w.write_u8(7),
+    }
+}
+
+func write_binary_op(w: BinaryWriter, op: TmlBinaryOp) {
+    when op {
+        OpAdd          => w.write_u8(0),
+        OpSub          => w.write_u8(1),
+        OpMul          => w.write_u8(2),
+        OpDiv          => w.write_u8(3),
+        OpMod          => w.write_u8(4),
+        OpEq           => w.write_u8(5),
+        OpNe           => w.write_u8(6),
+        OpLt           => w.write_u8(7),
+        OpGt           => w.write_u8(8),
+        OpLe           => w.write_u8(9),
+        OpGe           => w.write_u8(10),
+        OpAnd          => w.write_u8(11),
+        OpOr           => w.write_u8(12),
+        OpBitAnd       => w.write_u8(13),
+        OpBitOr        => w.write_u8(14),
+        OpBitXor       => w.write_u8(15),
+        OpShl          => w.write_u8(16),
+        OpShr          => w.write_u8(17),
+        OpAssign       => w.write_u8(18),
+        OpAddAssign    => w.write_u8(19),
+        OpSubAssign    => w.write_u8(20),
+        OpMulAssign    => w.write_u8(21),
+        OpDivAssign    => w.write_u8(22),
+        OpModAssign    => w.write_u8(23),
+        OpBitAndAssign => w.write_u8(24),
+        OpBitOrAssign  => w.write_u8(25),
+        OpBitXorAssign => w.write_u8(26),
+        OpShlAssign    => w.write_u8(27),
+        OpShrAssign    => w.write_u8(28),
+    }
+}
+
+func write_opt_heap_type(w: BinaryWriter, mt: Maybe[Heap[TmlType]]) {
+    when mt {
+        Just(t) => { w.write_u8(1); write_type(w, t.get()) },
+        Nothing => w.write_u8(0),
+    }
+}
+
+func write_opt_heap_expr(w: BinaryWriter, me: Maybe[Heap[TmlExpr]], depth: I64) {
+    when me {
+        Just(e) => { w.write_u8(1); write_expr(w, e.get(), depth) },
+        Nothing => w.write_u8(0),
+    }
+}
+
+func write_heap_type_list(w: BinaryWriter, types: List[Heap[TmlType]]) {
+    w.write_varint(types.len())
+    var i: I64 = 0
+    loop (i < types.len()) {
+        write_type(w, types.get(i).get())
+        i = i + 1
+    }
+}
+
+func write_interpolated_segment(w: BinaryWriter, seg: TmlInterpolatedSegment, depth: I64) {
+    when seg.kind {
+        SegText(s) => { w.write_u8(0); w.write_str(s) },
+        SegExpr(e) => { w.write_u8(1); write_expr(w, e.get(), depth + 1) },
+    }
+    write_source_span(w, seg.span)
+}
+
+// ============================================================================
+// Type serialization
+// ============================================================================
+
+/// Write a TmlType. Tag u8 + variant fields + span.
+pub func write_type(w: BinaryWriter, ty: TmlType) {
+    when ty {
+        Named(n) => {
+            w.write_u8(0)
+            write_type_path(w, n.path)
+            write_heap_type_list(w, n.args)
+            write_source_span(w, n.span)
+        },
+        Ref(r) => {
+            w.write_u8(1)
+            write_type(w, r.inner.get())
+            w.write_bool(r.is_mut)
+            write_source_span(w, r.span)
+        },
+        Ptr(p) => {
+            w.write_u8(2)
+            write_type(w, p.inner.get())
+            w.write_bool(p.is_mut)
+            write_source_span(w, p.span)
+        },
+        Array(a) => {
+            w.write_u8(3)
+            write_type(w, a.inner.get())
+            write_expr(w, a.size.get(), 0)
+            write_source_span(w, a.span)
+        },
+        Slice(s) => {
+            w.write_u8(4)
+            write_type(w, s.inner.get())
+            write_source_span(w, s.span)
+        },
+        Tuple(t) => {
+            w.write_u8(5)
+            write_heap_type_list(w, t.types)
+            write_source_span(w, t.span)
+        },
+        Func(f) => {
+            w.write_u8(6)
+            write_heap_type_list(w, f.params)
+            write_opt_heap_type(w, f.return_type)
+            write_source_span(w, f.span)
+        },
+        Infer(span) => {
+            w.write_u8(7)
+            write_source_span(w, span)
+        },
+        Dyn(d) => {
+            w.write_u8(8)
+            w.write_varint(d.bounds.len())
+            var i: I64 = 0
+            loop (i < d.bounds.len()) {
+                write_type_path(w, d.bounds.get(i))
+                i = i + 1
+            }
+            write_source_span(w, d.span)
+        },
+        ImplBehavior(ib) => {
+            w.write_u8(9)
+            w.write_varint(ib.bounds.len())
+            var i: I64 = 0
+            loop (i < ib.bounds.len()) {
+                write_type_path(w, ib.bounds.get(i))
+                i = i + 1
+            }
+            write_source_span(w, ib.span)
+        },
+    }
+}
+
+// ============================================================================
+// Pattern serialization
+// ============================================================================
+
+/// Write a TmlPattern. Tag u8 + variant fields.
+pub func write_pattern(w: BinaryWriter, pat: TmlPattern) {
+    when pat {
+        Wildcard(span) => {
+            w.write_u8(0)
+            write_source_span(w, span)
+        },
+        Ident(ip) => {
+            w.write_u8(1)
+            w.write_str(ip.name)
+            when ip.subpat {
+                Just(sp) => { w.write_u8(1); write_pattern(w, sp.get()) },
+                Nothing  => w.write_u8(0),
+            }
+            write_source_span(w, ip.span)
+        },
+        Literal(lp) => {
+            w.write_u8(2)
+            write_literal_kind(w, lp.value)
+            write_source_span(w, lp.span)
+        },
+        Tuple(tp) => {
+            w.write_u8(3)
+            w.write_varint(tp.patterns.len())
+            var i: I64 = 0
+            loop (i < tp.patterns.len()) {
+                write_pattern(w, tp.patterns.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, tp.span)
+        },
+        Struct(sp) => {
+            w.write_u8(4)
+            write_type_path(w, sp.path)
+            w.write_varint(sp.fields.len())
+            var i: I64 = 0
+            loop (i < sp.fields.len()) {
+                let f = sp.fields.get(i)
+                w.write_str(f.name)
+                write_pattern(w, f.pat.get())
+                write_source_span(w, f.span)
+                i = i + 1
+            }
+            write_source_span(w, sp.span)
+        },
+        Enum(ep) => {
+            w.write_u8(5)
+            write_type_path(w, ep.path)
+            w.write_varint(ep.args.len())
+            var i: I64 = 0
+            loop (i < ep.args.len()) {
+                write_pattern(w, ep.args.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, ep.span)
+        },
+        Or(op) => {
+            w.write_u8(6)
+            w.write_varint(op.alternatives.len())
+            var i: I64 = 0
+            loop (i < op.alternatives.len()) {
+                write_pattern(w, op.alternatives.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, op.span)
+        },
+        Range(rp) => {
+            w.write_u8(7)
+            write_literal_kind(w, rp.start)
+            write_literal_kind(w, rp.end)
+            w.write_bool(rp.inclusive)
+            write_source_span(w, rp.span)
+        },
+        Array(ap) => {
+            w.write_u8(8)
+            w.write_varint(ap.patterns.len())
+            var i: I64 = 0
+            loop (i < ap.patterns.len()) {
+                write_pattern(w, ap.patterns.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, ap.span)
+        },
+    }
+}
+
+// ============================================================================
+// Expression serialization (task 2.5 — recursive tree walk with depth)
+// ============================================================================
+
+/// Write a TmlExpr. Tag u8 + variant fields.
+///
+/// `depth` tracks nesting level; incremented at each recursive call so
+/// callers can detect unexpectedly deep trees during debugging.
+pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
+    when expr {
+        Literal(le) => {
+            w.write_u8(0)
+            write_literal_kind(w, le.value)
+            write_source_span(w, le.span)
+        },
+        Ident(ie) => {
+            w.write_u8(1)
+            w.write_str(ie.name)
+            write_source_span(w, ie.span)
+        },
+        Unary(ue) => {
+            w.write_u8(2)
+            write_unary_op(w, ue.op)
+            write_expr(w, ue.operand.get(), depth + 1)
+            write_source_span(w, ue.span)
+        },
+        Binary(be) => {
+            w.write_u8(3)
+            write_binary_op(w, be.op)
+            write_expr(w, be.left.get(), depth + 1)
+            write_expr(w, be.right.get(), depth + 1)
+            write_source_span(w, be.span)
+        },
+        Call(ce) => {
+            w.write_u8(4)
+            write_expr(w, ce.callee.get(), depth + 1)
+            w.write_varint(ce.args.len())
+            var i: I64 = 0
+            loop (i < ce.args.len()) {
+                write_expr(w, ce.args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_source_span(w, ce.span)
+        },
+        MethodCall(mc) => {
+            w.write_u8(5)
+            write_expr(w, mc.receiver.get(), depth + 1)
+            w.write_str(mc.method)
+            write_heap_type_list(w, mc.type_args)
+            w.write_varint(mc.args.len())
+            var i: I64 = 0
+            loop (i < mc.args.len()) {
+                write_expr(w, mc.args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            w.write_bool(mc.optional_chain)
+            write_source_span(w, mc.span)
+        },
+        Field(fe) => {
+            w.write_u8(6)
+            write_expr(w, fe.object.get(), depth + 1)
+            w.write_str(fe.field)
+            w.write_bool(fe.optional_chain)
+            write_source_span(w, fe.span)
+        },
+        Index(ie) => {
+            w.write_u8(7)
+            write_expr(w, ie.object.get(), depth + 1)
+            write_expr(w, ie.index.get(), depth + 1)
+            write_source_span(w, ie.span)
+        },
+        Tuple(te) => {
+            w.write_u8(8)
+            w.write_varint(te.elements.len())
+            var i: I64 = 0
+            loop (i < te.elements.len()) {
+                write_expr(w, te.elements.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_source_span(w, te.span)
+        },
+        Array(ae) => {
+            w.write_u8(9)
+            when ae.kind {
+                Elements(elems) => {
+                    w.write_u8(0)
+                    w.write_varint(elems.len())
+                    var i: I64 = 0
+                    loop (i < elems.len()) {
+                        write_expr(w, elems.get(i).get(), depth + 1)
+                        i = i + 1
+                    }
+                },
+                Repeat(val, cnt) => {
+                    w.write_u8(1)
+                    write_expr(w, val.get(), depth + 1)
+                    write_expr(w, cnt.get(), depth + 1)
+                },
+            }
+            write_source_span(w, ae.span)
+        },
+        Struct(se) => {
+            w.write_u8(10)
+            write_type_path(w, se.path)
+            when se.type_args {
+                Just(targs) => { w.write_u8(1); write_heap_type_list(w, targs) },
+                Nothing     => w.write_u8(0),
+            }
+            w.write_varint(se.fields.len())
+            var i: I64 = 0
+            loop (i < se.fields.len()) {
+                let f = se.fields.get(i)
+                w.write_str(f.name)
+                write_expr(w, f.value.get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_heap_expr(w, se.base_expr, depth + 1)
+            write_source_span(w, se.span)
+        },
+        If(ie) => {
+            w.write_u8(11)
+            write_expr(w, ie.condition.get(), depth + 1)
+            write_expr(w, ie.then_branch.get(), depth + 1)
+            write_opt_heap_expr(w, ie.else_branch, depth + 1)
+            write_source_span(w, ie.span)
+        },
+        Ternary(te) => {
+            w.write_u8(12)
+            write_expr(w, te.condition.get(), depth + 1)
+            write_expr(w, te.true_value.get(), depth + 1)
+            write_expr(w, te.false_value.get(), depth + 1)
+            write_source_span(w, te.span)
+        },
+        IfLet(ile) => {
+            w.write_u8(13)
+            write_pattern(w, ile.pattern.get())
+            write_expr(w, ile.scrutinee.get(), depth + 1)
+            write_expr(w, ile.then_branch.get(), depth + 1)
+            write_opt_heap_expr(w, ile.else_branch, depth + 1)
+            write_source_span(w, ile.span)
+        },
+        When(we) => {
+            w.write_u8(14)
+            write_expr(w, we.scrutinee.get(), depth + 1)
+            w.write_varint(we.arms.len())
+            var i: I64 = 0
+            loop (i < we.arms.len()) {
+                let arm = we.arms.get(i)
+                write_pattern(w, arm.pattern.get())
+                when arm.guard {
+                    Just(g) => { w.write_u8(1); write_expr(w, g.get(), depth + 1) },
+                    Nothing => w.write_u8(0),
+                }
+                write_expr(w, arm.body.get(), depth + 1)
+                write_source_span(w, arm.span)
+                i = i + 1
+            }
+            write_source_span(w, we.span)
+        },
+        Loop(le) => {
+            w.write_u8(15)
+            w.write_opt_str(le.label)
+            when le.loop_var {
+                Just(lv) => {
+                    w.write_u8(1)
+                    w.write_str(lv.name)
+                    write_type(w, lv.ty.get())
+                    write_source_span(w, lv.span)
+                },
+                Nothing => w.write_u8(0),
+            }
+            write_expr(w, le.condition.get(), depth + 1)
+            write_expr(w, le.body.get(), depth + 1)
+            write_source_span(w, le.span)
+        },
+        While(we) => {
+            w.write_u8(16)
+            w.write_opt_str(we.label)
+            write_expr(w, we.condition.get(), depth + 1)
+            write_expr(w, we.body.get(), depth + 1)
+            write_source_span(w, we.span)
+        },
+        For(fe) => {
+            w.write_u8(17)
+            w.write_opt_str(fe.label)
+            write_pattern(w, fe.pattern.get())
+            write_expr(w, fe.iter.get(), depth + 1)
+            write_expr(w, fe.body.get(), depth + 1)
+            write_source_span(w, fe.span)
+        },
+        Block(be) => {
+            w.write_u8(18)
+            w.write_varint(be.stmts.len())
+            var i: I64 = 0
+            loop (i < be.stmts.len()) {
+                write_stmt(w, be.stmts.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_heap_expr(w, be.expr, depth + 1)
+            write_source_span(w, be.span)
+        },
+        Return(re) => {
+            w.write_u8(19)
+            write_opt_heap_expr(w, re.value, depth + 1)
+            write_source_span(w, re.span)
+        },
+        Break(be) => {
+            w.write_u8(20)
+            w.write_opt_str(be.label)
+            write_opt_heap_expr(w, be.value, depth + 1)
+            write_source_span(w, be.span)
+        },
+        Continue(ce) => {
+            w.write_u8(21)
+            w.write_opt_str(ce.label)
+            write_source_span(w, ce.span)
+        },
+        Closure(cle) => {
+            w.write_u8(22)
+            w.write_varint(cle.params.len())
+            var i: I64 = 0
+            loop (i < cle.params.len()) {
+                let p = cle.params.get(i)
+                write_pattern(w, p.pattern.get())
+                write_opt_heap_type(w, p.ty)
+                i = i + 1
+            }
+            write_opt_heap_type(w, cle.return_type)
+            write_expr(w, cle.body.get(), depth + 1)
+            w.write_bool(cle.is_move)
+            write_source_span(w, cle.span)
+        },
+        Range(re) => {
+            w.write_u8(23)
+            write_opt_heap_expr(w, re.start, depth + 1)
+            write_opt_heap_expr(w, re.end, depth + 1)
+            w.write_bool(re.inclusive)
+            write_source_span(w, re.span)
+        },
+        Cast(ce) => {
+            w.write_u8(24)
+            write_expr(w, ce.expr.get(), depth + 1)
+            write_type(w, ce.target.get())
+            write_source_span(w, ce.span)
+        },
+        Is(ie) => {
+            w.write_u8(25)
+            write_expr(w, ie.expr.get(), depth + 1)
+            write_type(w, ie.target.get())
+            write_source_span(w, ie.span)
+        },
+        Try(te) => {
+            w.write_u8(26)
+            write_expr(w, te.expr.get(), depth + 1)
+            write_source_span(w, te.span)
+        },
+        Await(ae) => {
+            w.write_u8(27)
+            write_expr(w, ae.expr.get(), depth + 1)
+            write_source_span(w, ae.span)
+        },
+        Throw(te) => {
+            w.write_u8(28)
+            write_expr(w, te.expr.get(), depth + 1)
+            write_source_span(w, te.span)
+        },
+        Path(pe) => {
+            w.write_u8(29)
+            write_type_path(w, pe.path)
+            when pe.type_args {
+                Just(targs) => { w.write_u8(1); write_heap_type_list(w, targs) },
+                Nothing     => w.write_u8(0),
+            }
+            write_source_span(w, pe.span)
+        },
+        Lowlevel(lle) => {
+            w.write_u8(30)
+            w.write_varint(lle.stmts.len())
+            var i: I64 = 0
+            loop (i < lle.stmts.len()) {
+                write_stmt(w, lle.stmts.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_heap_expr(w, lle.expr, depth + 1)
+            write_source_span(w, lle.span)
+        },
+        InterpolatedString(ise) => {
+            w.write_u8(31)
+            w.write_varint(ise.segments.len())
+            var i: I64 = 0
+            loop (i < ise.segments.len()) {
+                write_interpolated_segment(w, ise.segments.get(i), depth)
+                i = i + 1
+            }
+            write_source_span(w, ise.span)
+        },
+        TemplateLiteral(tle) => {
+            w.write_u8(32)
+            w.write_varint(tle.segments.len())
+            var i: I64 = 0
+            loop (i < tle.segments.len()) {
+                write_interpolated_segment(w, tle.segments.get(i), depth)
+                i = i + 1
+            }
+            write_source_span(w, tle.span)
+        },
+        Base(be) => {
+            w.write_u8(33)
+            w.write_str(be.member)
+            write_heap_type_list(w, be.type_args)
+            w.write_varint(be.args.len())
+            var i: I64 = 0
+            loop (i < be.args.len()) {
+                write_expr(w, be.args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            w.write_bool(be.is_method_call)
+            write_source_span(w, be.span)
+        },
+        New(ne) => {
+            w.write_u8(34)
+            write_type_path(w, ne.class_type)
+            when ne.type_args {
+                Just(targs) => { w.write_u8(1); write_heap_type_list(w, targs) },
+                Nothing     => w.write_u8(0),
+            }
+            w.write_varint(ne.args.len())
+            var i: I64 = 0
+            loop (i < ne.args.len()) {
+                write_expr(w, ne.args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_source_span(w, ne.span)
+        },
+    }
+}
+
+// ============================================================================
+// Statement serialization
+// ============================================================================
+
+/// Write a TmlStmt. Tag u8 + variant fields.
+pub func write_stmt(w: BinaryWriter, stmt: TmlStmt, depth: I64) {
+    when stmt {
+        Let(ls) => {
+            w.write_u8(0)
+            write_pattern(w, ls.pattern.get())
+            write_opt_heap_type(w, ls.ty)
+            write_opt_heap_expr(w, ls.init, depth + 1)
+            write_source_span(w, ls.span)
+        },
+        Var(vs) => {
+            w.write_u8(1)
+            w.write_str(vs.name)
+            write_opt_heap_type(w, vs.ty)
+            write_opt_heap_expr(w, vs.init, depth + 1)
+            write_source_span(w, vs.span)
+        },
+        LetElse(les) => {
+            w.write_u8(2)
+            write_pattern(w, les.pattern.get())
+            write_expr(w, les.init.get(), depth + 1)
+            write_expr(w, les.else_body.get(), depth + 1)
+            write_source_span(w, les.span)
+        },
+        Expr(e) => {
+            w.write_u8(3)
+            write_expr(w, e.get(), depth + 1)
+        },
+        Decl(d) => {
+            w.write_u8(4)
+            write_decl(w, d.get())
+        },
+    }
+}
+
+// ============================================================================
+// Declaration serialization (task 2.4 — each decl with type tag)
+// ============================================================================
+
+func write_generic_param(w: BinaryWriter, gp: TmlGenericParam) {
+    w.write_str(gp.name)
+    w.write_varint(gp.bounds.len())
+    var i: I64 = 0
+    loop (i < gp.bounds.len()) {
+        write_type_path(w, gp.bounds.get(i))
+        i = i + 1
+    }
+    write_source_span(w, gp.span)
+}
+
+func write_generic_params(w: BinaryWriter, generics: List[TmlGenericParam]) {
+    w.write_varint(generics.len())
+    var i: I64 = 0
+    loop (i < generics.len()) {
+        write_generic_param(w, generics.get(i))
+        i = i + 1
+    }
+}
+
+func write_func_param(w: BinaryWriter, fp: TmlFuncParam) {
+    w.write_str(fp.name)
+    write_type(w, fp.ty.get())
+    w.write_bool(fp.is_this)
+    w.write_bool(fp.is_mut)
+    write_source_span(w, fp.span)
+}
+
+func write_struct_field(w: BinaryWriter, sf: TmlStructField) {
+    w.write_str(sf.name)
+    write_type(w, sf.ty.get())
+    write_visibility(w, sf.visibility)
+    write_source_span(w, sf.span)
+}
+
+/// Write a TmlFuncDecl's fields (shared by standalone funcs and methods).
+pub func write_func_decl(w: BinaryWriter, fd: TmlFuncDecl) {
+    w.write_str(fd.name)
+    write_visibility(w, fd.visibility)
+    write_generic_params(w, fd.generics)
+    w.write_varint(fd.params.len())
+    var i: I64 = 0
+    loop (i < fd.params.len()) {
+        write_func_param(w, fd.params.get(i))
+        i = i + 1
+    }
+    write_opt_heap_type(w, fd.return_type)
+    when fd.body {
+        Just(b) => { w.write_u8(1); write_expr(w, b.get(), 0) },
+        Nothing => w.write_u8(0),
+    }
+    w.write_bool(fd.is_async)
+    w.write_bool(fd.is_override)
+    write_source_span(w, fd.span)
+}
+
+/// Write a TmlDecl. Tag u8 + variant fields.
+///
+/// Tag mapping (matches `Decl` variant order in `compiler/include/parser/ast.hpp`):
+/// 0=Func 1=Struct 2=Union 3=Enum 4=Trait 5=Impl 6=TypeAlias
+/// 7=Const 8=Use 9=Mod 10=Class 11=Interface 12=Namespace
+pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
+    when decl {
+        Func(fd) => {
+            w.write_u8(0)
+            write_func_decl(w, fd)
+        },
+        Struct(sd) => {
+            w.write_u8(1)
+            w.write_str(sd.name)
+            write_visibility(w, sd.visibility)
+            write_generic_params(w, sd.generics)
+            w.write_varint(sd.fields.len())
+            var i: I64 = 0
+            loop (i < sd.fields.len()) {
+                write_struct_field(w, sd.fields.get(i))
+                i = i + 1
+            }
+            write_source_span(w, sd.span)
+        },
+        Union(ud) => {
+            w.write_u8(2)
+            w.write_str(ud.name)
+            write_visibility(w, ud.visibility)
+            write_generic_params(w, ud.generics)
+            w.write_varint(ud.fields.len())
+            var i: I64 = 0
+            loop (i < ud.fields.len()) {
+                write_struct_field(w, ud.fields.get(i))
+                i = i + 1
+            }
+            write_source_span(w, ud.span)
+        },
+        Enum(ed) => {
+            w.write_u8(3)
+            w.write_str(ed.name)
+            write_visibility(w, ed.visibility)
+            write_generic_params(w, ed.generics)
+            w.write_varint(ed.variants.len())
+            var i: I64 = 0
+            loop (i < ed.variants.len()) {
+                let v = ed.variants.get(i)
+                w.write_str(v.name)
+                write_heap_type_list(w, v.fields)
+                write_source_span(w, v.span)
+                i = i + 1
+            }
+            write_source_span(w, ed.span)
+        },
+        Trait(td) => {
+            w.write_u8(4)
+            w.write_str(td.name)
+            write_visibility(w, td.visibility)
+            write_generic_params(w, td.generics)
+            w.write_varint(td.supertraits.len())
+            var i: I64 = 0
+            loop (i < td.supertraits.len()) {
+                write_type_path(w, td.supertraits.get(i))
+                i = i + 1
+            }
+            w.write_varint(td.methods.len())
+            i = 0
+            loop (i < td.methods.len()) {
+                write_func_decl(w, td.methods.get(i))
+                i = i + 1
+            }
+            write_source_span(w, td.span)
+        },
+        Impl(id) => {
+            w.write_u8(5)
+            write_type(w, id.ty.get())
+            when id.behavior_path {
+                Just(b) => { w.write_u8(1); write_type_path(w, b) },
+                Nothing => w.write_u8(0),
+            }
+            write_generic_params(w, id.generics)
+            w.write_varint(id.methods.len())
+            var i: I64 = 0
+            loop (i < id.methods.len()) {
+                write_func_decl(w, id.methods.get(i))
+                i = i + 1
+            }
+            write_source_span(w, id.span)
+        },
+        TypeAlias(ta) => {
+            w.write_u8(6)
+            w.write_str(ta.name)
+            write_visibility(w, ta.visibility)
+            write_generic_params(w, ta.generics)
+            write_type(w, ta.ty.get())
+            write_source_span(w, ta.span)
+        },
+        Const(cd) => {
+            w.write_u8(7)
+            w.write_str(cd.name)
+            write_visibility(w, cd.visibility)
+            write_type(w, cd.ty.get())
+            write_expr(w, cd.value.get(), 0)
+            write_source_span(w, cd.span)
+        },
+        Use(ud) => {
+            w.write_u8(8)
+            w.write_varint(ud.path.segments.len())
+            var i: I64 = 0
+            loop (i < ud.path.segments.len()) {
+                w.write_str(ud.path.segments.get(i))
+                i = i + 1
+            }
+            w.write_opt_str(ud.path.alias)
+            write_visibility(w, ud.visibility)
+            write_source_span(w, ud.span)
+        },
+        Mod(md) => {
+            w.write_u8(9)
+            w.write_str(md.name)
+            write_visibility(w, md.visibility)
+            w.write_varint(md.items.len())
+            var i: I64 = 0
+            loop (i < md.items.len()) {
+                write_decl(w, md.items.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, md.span)
+        },
+        Class(cd) => {
+            w.write_u8(10)
+            w.write_str(cd.name)
+            write_visibility(w, cd.visibility)
+            write_generic_params(w, cd.generics)
+            when cd.parent {
+                Just(p) => { w.write_u8(1); write_type_path(w, p) },
+                Nothing => w.write_u8(0),
+            }
+            w.write_varint(cd.interfaces.len())
+            var i: I64 = 0
+            loop (i < cd.interfaces.len()) {
+                write_type_path(w, cd.interfaces.get(i))
+                i = i + 1
+            }
+            w.write_varint(cd.fields.len())
+            i = 0
+            loop (i < cd.fields.len()) {
+                let f = cd.fields.get(i)
+                w.write_str(f.name)
+                write_type(w, f.ty.get())
+                write_visibility(w, f.visibility)
+                write_source_span(w, f.span)
+                i = i + 1
+            }
+            w.write_varint(cd.methods.len())
+            i = 0
+            loop (i < cd.methods.len()) {
+                write_func_decl(w, cd.methods.get(i))
+                i = i + 1
+            }
+            write_source_span(w, cd.span)
+        },
+        Interface(ifd) => {
+            w.write_u8(11)
+            w.write_str(ifd.name)
+            write_visibility(w, ifd.visibility)
+            write_generic_params(w, ifd.generics)
+            w.write_varint(ifd.methods.len())
+            var i: I64 = 0
+            loop (i < ifd.methods.len()) {
+                write_func_decl(w, ifd.methods.get(i))
+                i = i + 1
+            }
+            write_source_span(w, ifd.span)
+        },
+        Namespace(nd) => {
+            w.write_u8(12)
+            w.write_str(nd.name)
+            write_visibility(w, nd.visibility)
+            w.write_varint(nd.items.len())
+            var i: I64 = 0
+            loop (i < nd.items.len()) {
+                write_decl(w, nd.items.get(i).get())
+                i = i + 1
+            }
+            write_source_span(w, nd.span)
+        },
+    }
+}
+
+// ============================================================================
+// Module serialization — top-level entry point
+// ============================================================================
+
+/// Serialize an entire TML module to binary.
+///
+/// Writes the AST header (magic + version), module name, doc comments,
+/// module span, and all top-level declarations.
+/// This is the top-level entry point for AST serialization.
+///
+/// # Example
+///
+/// ```tml
+/// let w = BinaryWriter::new(4096)
+/// write_module(w, my_module)
+/// let buf = w.finish()
+/// // buf now contains the full binary AST
+/// ```
+pub func write_module(w: BinaryWriter, module: TmlModule) {
+    write_ast_header(w)
+    w.write_str(module.name)
+    w.write_varint(module.docs.len())
+    var i: I64 = 0
+    loop (i < module.docs.len()) {
+        w.write_str(module.docs.get(i))
+        i = i + 1
+    }
+    write_source_span(w, module.span)
+    w.write_varint(module.decls.len())
+    i = 0
+    loop (i < module.decls.len()) {
+        write_decl(w, module.decls.get(i).get())
+        i = i + 1
+    }
+}

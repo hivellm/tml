@@ -1,0 +1,1050 @@
+//! TypeEnv binary serialization — TML mirror types and write functions.
+//!
+//! This module defines TML types that mirror the C++ `types::TypeEnv`
+//! structures (`compiler/include/types/env.hpp` and `type.hpp`), along with
+//! serialization functions that write them to a `BinaryWriter`.
+//!
+//! The C++ deserializer lives in `compiler/src/serial/typeenv_reader.cpp`.
+//!
+//! # Binary Format
+//!
+//! ```
+//! u32  magic         = 0x54454E56  ("TENV")
+//! u8   version_major = 1
+//! u8   version_minor = 0
+//!
+//! -- Structs section --
+//! varint struct_count
+//! StructDef[struct_count]
+//!
+//! -- Enums section --
+//! varint enum_count
+//! EnumDef[enum_count]
+//!
+//! -- Behaviors section --
+//! varint behavior_count
+//! BehaviorDef[behavior_count]
+//!
+//! -- Functions section (with overloads) --
+//! varint func_group_count
+//! FuncGroup[func_group_count]      // name + varint overload_count + FuncSig[]
+//!
+//! -- Behavior impls section --
+//! varint impl_count
+//! ImplEntry[impl_count]            // type_name + varint behavior_count + str[]
+//!
+//! -- Type aliases section --
+//! varint alias_count
+//! AliasEntry[alias_count]          // name + SemanticType + varint generic_count + str[]
+//!
+//! -- Classes section --
+//! varint class_count
+//! ClassDef[class_count]
+//!
+//! -- Interfaces section --
+//! varint interface_count
+//! InterfaceDef[interface_count]
+//!
+//! -- Class-interface impls section --
+//! varint class_iface_count
+//! ClassIfaceEntry[class_iface_count]  // class_name + varint iface_count + str[]
+//!
+//! -- Builtins section --
+//! varint builtin_count
+//! BuiltinEntry[builtin_count]      // name + SemanticType
+//! ```
+//!
+//! # Semantic Type Encoding (inline, no index table)
+//!
+//! Each `SemanticType` is encoded as:
+//!
+//! ```
+//! u8 tag:
+//!   0x00 = Primitive (u8 kind: 0=I8..16=Never)
+//!   0x01 = Named     (str name, str module_path, varint arg_count, SemanticType[])
+//!   0x02 = Ref       (bool is_mut, SemanticType inner, opt_str lifetime)
+//!   0x03 = Ptr       (bool is_mut, SemanticType inner)
+//!   0x04 = Array     (SemanticType element, u64 size, opt_str const_generic_param)
+//!   0x05 = Slice     (SemanticType element)
+//!   0x06 = Tuple     (varint count, SemanticType[])
+//!   0x07 = Func      (varint param_count, SemanticType[], SemanticType ret, bool is_async)
+//!   0x08 = Closure   (varint param_count, SemanticType[], SemanticType ret,
+//!                      varint capture_count, CapturedVar[])
+//!   0x09 = Generic   (str name, varint bound_count, SemanticType[])
+//!   0x0A = ConstGeneric (str name, SemanticType value_type, bool has_resolved, [i64 value])
+//!   0x0B = DynBehavior  (str behavior_name, varint arg_count, SemanticType[], bool is_mut)
+//!   0x0C = ImplBehavior (str behavior_name, varint arg_count, SemanticType[])
+//!   0x0D = Class     (str name, str module_path, varint arg_count, SemanticType[])
+//!   0x0E = Interface (str name, str module_path, varint arg_count, SemanticType[])
+//!   0x0F = TypeVar   (u32 id)
+//!   0x10 = Null      (missing/nullptr type)
+//! ```
+
+use compiler::serial::writer::BinaryWriter
+use std::collections::list::List
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Magic bytes for the TypeEnv binary format: "TENV" (0x54454E56 LE).
+pub const TYPEENV_MAGIC: I64 = 0x54454E56
+/// Current format major version.
+pub const TYPEENV_VERSION_MAJOR: I32 = 1
+/// Current format minor version.
+pub const TYPEENV_VERSION_MINOR: I32 = 0
+
+// -- Semantic type tags --
+const TAG_PRIMITIVE: I32     = 0x00
+const TAG_NAMED: I32         = 0x01
+const TAG_REF: I32           = 0x02
+const TAG_PTR: I32           = 0x03
+const TAG_ARRAY: I32         = 0x04
+const TAG_SLICE: I32         = 0x05
+const TAG_TUPLE: I32         = 0x06
+const TAG_FUNC: I32          = 0x07
+const TAG_CLOSURE: I32       = 0x08
+const TAG_GENERIC: I32       = 0x09
+const TAG_CONST_GENERIC: I32 = 0x0A
+const TAG_DYN_BEHAVIOR: I32  = 0x0B
+const TAG_IMPL_BEHAVIOR: I32 = 0x0C
+const TAG_CLASS: I32         = 0x0D
+const TAG_INTERFACE: I32     = 0x0E
+const TAG_TYPEVAR: I32       = 0x0F
+const TAG_NULL: I32          = 0x10
+
+// -- Primitive kind values (matches types::PrimitiveKind order) --
+const PRIM_I8: I32   = 0
+const PRIM_I16: I32  = 1
+const PRIM_I32: I32  = 2
+const PRIM_I64: I32  = 3
+const PRIM_I128: I32 = 4
+const PRIM_U8: I32   = 5
+const PRIM_U16: I32  = 6
+const PRIM_U32: I32  = 7
+const PRIM_U64: I32  = 8
+const PRIM_U128: I32 = 9
+const PRIM_F32: I32  = 10
+const PRIM_F64: I32  = 11
+const PRIM_BOOL: I32 = 12
+const PRIM_CHAR: I32 = 13
+const PRIM_STR: I32  = 14
+const PRIM_UNIT: I32 = 15
+const PRIM_NEVER: I32 = 16
+
+// -- StabilityLevel values --
+const STABILITY_UNSTABLE: I32   = 0
+const STABILITY_STABLE: I32     = 1
+const STABILITY_DEPRECATED: I32 = 2
+
+// -- MemberVisibility values --
+const VIS_PRIVATE: I32   = 0
+const VIS_PROTECTED: I32 = 1
+const VIS_PUBLIC: I32    = 2
+
+// ============================================================================
+// TML mirror types for semantic types (compiler/include/types/type.hpp)
+// ============================================================================
+
+/// Mirrors `types::PrimitiveKind` — a tag from 0..16.
+pub type SemPrimitive {
+    kind: I32,
+}
+
+/// Mirrors `types::NamedType`.
+pub type SemNamed {
+    name: Str,
+    module_path: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::RefType`.
+pub type SemRef {
+    is_mut: Bool,
+    inner: SemType,
+    lifetime: Maybe[Str],
+}
+
+/// Mirrors `types::PtrType`.
+pub type SemPtr {
+    is_mut: Bool,
+    inner: SemType,
+}
+
+/// Mirrors `types::ArrayType`.
+pub type SemArray {
+    element: SemType,
+    size: I64,
+    const_generic_param: Maybe[Str],
+}
+
+/// Mirrors `types::SliceType`.
+pub type SemSlice {
+    element: SemType,
+}
+
+/// Mirrors `types::TupleType`.
+pub type SemTuple {
+    elements: List[SemType],
+}
+
+/// Mirrors `types::FuncType`.
+pub type SemFunc {
+    params: List[SemType],
+    return_type: SemType,
+    is_async: Bool,
+}
+
+/// A captured variable in a closure environment.
+pub type SemCapturedVar {
+    name: Str,
+    captured_type: SemType,
+    is_mut: Bool,
+}
+
+/// Mirrors `types::ClosureType`.
+pub type SemClosure {
+    params: List[SemType],
+    return_type: SemType,
+    captures: List[SemCapturedVar],
+}
+
+/// Mirrors `types::GenericType`.
+pub type SemGeneric {
+    name: Str,
+    bounds: List[SemType],
+}
+
+/// Mirrors `types::ConstGenericType`.
+pub type SemConstGeneric {
+    name: Str,
+    value_type: SemType,
+    resolved_value: Maybe[I64],
+}
+
+/// Mirrors `types::DynBehaviorType`.
+pub type SemDynBehavior {
+    behavior_name: Str,
+    type_args: List[SemType],
+    is_mut: Bool,
+}
+
+/// Mirrors `types::ImplBehaviorType`.
+pub type SemImplBehavior {
+    behavior_name: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::ClassType`.
+pub type SemClassType {
+    name: Str,
+    module_path: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::InterfaceType`.
+pub type SemInterfaceType {
+    name: Str,
+    module_path: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::TypeVar`.
+pub type SemTypeVar {
+    id: I64,
+}
+
+/// The semantic type enum — mirrors `types::Type::kind` variant.
+pub type SemType {
+    Primitive(SemPrimitive),
+    Named(SemNamed),
+    Ref(SemRef),
+    Ptr(SemPtr),
+    Array(SemArray),
+    Slice(SemSlice),
+    Tuple(SemTuple),
+    Func(SemFunc),
+    Closure(SemClosure),
+    Generic(SemGeneric),
+    ConstGeneric(SemConstGeneric),
+    DynBehavior(SemDynBehavior),
+    ImplBehavior(SemImplBehavior),
+    ClassType(SemClassType),
+    InterfaceType(SemInterfaceType),
+    TypeVar(SemTypeVar),
+    Null,
+}
+
+// ============================================================================
+// TML mirror types for TypeEnv definitions (compiler/include/types/env.hpp)
+// ============================================================================
+
+/// Mirrors `types::ConstGenericParam`.
+pub type TmlConstGenericParam {
+    name: Str,
+    value_type: SemType,
+}
+
+/// Mirrors `types::BoundConstraint`.
+pub type TmlBoundConstraint {
+    behavior_name: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::HigherRankedBound`.
+pub type TmlHigherRankedBound {
+    bound_type_params: List[Str],
+    behavior_name: Str,
+    type_args: List[SemType],
+}
+
+/// Mirrors `types::WhereConstraint`.
+pub type TmlWhereConstraint {
+    type_param: Str,
+    required_behaviors: List[Str],
+    parameterized_bounds: List[TmlBoundConstraint],
+    higher_ranked_bounds: List[TmlHigherRankedBound],
+}
+
+/// Mirrors `types::FuncSig`.
+pub type TmlFuncSig {
+    name: Str,
+    params: List[SemType],
+    return_type: SemType,
+    type_params: List[Str],
+    is_async: Bool,
+    stability: I32,
+    deprecated_message: Str,
+    since_version: Str,
+    where_constraints: List[TmlWhereConstraint],
+    is_lowlevel: Bool,
+    is_intrinsic: Bool,
+    extern_abi: Maybe[Str],
+    extern_name: Maybe[Str],
+    link_libs: List[Str],
+    ffi_module: Maybe[Str],
+    const_params: List[TmlConstGenericParam],
+}
+
+/// Mirrors `types::StructFieldDef`.
+pub type TmlStructFieldDef {
+    name: Str,
+    field_type: SemType,
+    has_default: Bool,
+}
+
+/// Mirrors `types::StructDef`.
+pub type TmlStructDef {
+    name: Str,
+    type_params: List[Str],
+    const_params: List[TmlConstGenericParam],
+    fields: List[TmlStructFieldDef],
+    is_interior_mutable: Bool,
+    is_union: Bool,
+    is_simd: Bool,
+}
+
+/// Mirrors `types::EnumDef`.
+pub type TmlEnumVariant {
+    name: Str,
+    payload_types: List[SemType],
+}
+
+pub type TmlEnumDef {
+    name: Str,
+    type_params: List[Str],
+    const_params: List[TmlConstGenericParam],
+    variants: List[TmlEnumVariant],
+    is_flags: Bool,
+    flags_underlying_type: Str,
+    discriminant_values: List[I64],
+}
+
+/// Mirrors `types::AssociatedTypeDef`.
+pub type TmlAssociatedTypeDef {
+    name: Str,
+    type_params: List[Str],
+    bounds: List[Str],
+    default_type: Maybe[SemType],
+}
+
+/// Mirrors `types::BehaviorDef`.
+pub type TmlBehaviorDef {
+    name: Str,
+    type_params: List[Str],
+    const_params: List[TmlConstGenericParam],
+    associated_types: List[TmlAssociatedTypeDef],
+    methods: List[TmlFuncSig],
+    super_behaviors: List[Str],
+    methods_with_defaults: List[Str],
+}
+
+/// Mirrors `types::ClassFieldDef`.
+pub type TmlClassFieldDef {
+    name: Str,
+    field_type: SemType,
+    visibility: I32,
+    is_static: Bool,
+}
+
+/// Mirrors `types::ClassMethodDef`.
+pub type TmlClassMethodDef {
+    sig: TmlFuncSig,
+    visibility: I32,
+    is_static: Bool,
+    is_virtual: Bool,
+    is_override: Bool,
+    is_abstract: Bool,
+    is_final: Bool,
+    vtable_index: I64,
+}
+
+/// Mirrors `types::PropertyDef`.
+pub type TmlPropertyDef {
+    name: Str,
+    prop_type: SemType,
+    visibility: I32,
+    is_static: Bool,
+    has_getter: Bool,
+    has_setter: Bool,
+}
+
+/// Mirrors `types::ConstructorDef`.
+pub type TmlConstructorDef {
+    params: List[SemType],
+    visibility: I32,
+    calls_base: Bool,
+}
+
+/// Mirrors `types::ClassDef`.
+pub type TmlClassDef {
+    name: Str,
+    type_params: List[Str],
+    const_params: List[TmlConstGenericParam],
+    base_class: Maybe[Str],
+    interfaces: List[Str],
+    fields: List[TmlClassFieldDef],
+    methods: List[TmlClassMethodDef],
+    properties: List[TmlPropertyDef],
+    constructors: List[TmlConstructorDef],
+    is_abstract: Bool,
+    is_sealed: Bool,
+    is_value: Bool,
+    is_pooled: Bool,
+    stack_allocatable: Bool,
+    estimated_size: I64,
+    inheritance_depth: I64,
+}
+
+/// Mirrors `types::InterfaceMethodDef`.
+pub type TmlInterfaceMethodDef {
+    sig: TmlFuncSig,
+    is_static: Bool,
+    has_default: Bool,
+}
+
+/// Mirrors `types::InterfaceDef`.
+pub type TmlInterfaceDef {
+    name: Str,
+    type_params: List[Str],
+    const_params: List[TmlConstGenericParam],
+    extends_list: List[Str],
+    methods: List[TmlInterfaceMethodDef],
+}
+
+/// Top-level container for the TypeEnv data to be serialized.
+pub type TmlTypeEnv {
+    structs: List[TmlStructDef],
+    enums: List[TmlEnumDef],
+    behaviors: List[TmlBehaviorDef],
+    /// Function groups: each pair is (name, overloads).
+    func_names: List[Str],
+    func_overloads: List[List[TmlFuncSig]],
+    /// Behavior impls: each pair is (type_name, behavior_names).
+    impl_type_names: List[Str],
+    impl_behaviors: List[List[Str]],
+    /// Type aliases: each triple is (name, type, generic_params).
+    alias_names: List[Str],
+    alias_types: List[SemType],
+    alias_generics: List[List[Str]],
+    /// OOP types.
+    classes: List[TmlClassDef],
+    interfaces: List[TmlInterfaceDef],
+    /// Class→interface impls: each pair is (class_name, interface_names).
+    class_iface_names: List[Str],
+    class_iface_lists: List[List[Str]],
+    /// Builtin types: each pair is (name, type).
+    builtin_names: List[Str],
+    builtin_types: List[SemType],
+}
+
+// ============================================================================
+// Semantic Type Serialization
+// ============================================================================
+
+/// Write a `SemType` to the writer using inline binary encoding.
+pub func write_sem_type(w: BinaryWriter, t: SemType) {
+    when t {
+        Primitive(p) => {
+            w.write_u8(TAG_PRIMITIVE)
+            w.write_u8(p.kind)
+        },
+        Named(n) => {
+            w.write_u8(TAG_NAMED)
+            w.write_str(n.name)
+            w.write_str(n.module_path)
+            w.write_varint(n.type_args.len() as I64)
+            var i: I64 = 0
+            loop (i < n.type_args.len() as I64) {
+                write_sem_type(w, n.type_args.get(i as I32))
+                i = i + 1
+            }
+        },
+        Ref(r) => {
+            w.write_u8(TAG_REF)
+            w.write_bool(r.is_mut)
+            write_sem_type(w, r.inner)
+            w.write_opt_str(r.lifetime)
+        },
+        Ptr(p) => {
+            w.write_u8(TAG_PTR)
+            w.write_bool(p.is_mut)
+            write_sem_type(w, p.inner)
+        },
+        Array(a) => {
+            w.write_u8(TAG_ARRAY)
+            write_sem_type(w, a.element)
+            w.write_u64(a.size)
+            w.write_opt_str(a.const_generic_param)
+        },
+        Slice(s) => {
+            w.write_u8(TAG_SLICE)
+            write_sem_type(w, s.element)
+        },
+        Tuple(tup) => {
+            w.write_u8(TAG_TUPLE)
+            w.write_varint(tup.elements.len() as I64)
+            var i: I64 = 0
+            loop (i < tup.elements.len() as I64) {
+                write_sem_type(w, tup.elements.get(i as I32))
+                i = i + 1
+            }
+        },
+        Func(f) => {
+            w.write_u8(TAG_FUNC)
+            w.write_varint(f.params.len() as I64)
+            var i: I64 = 0
+            loop (i < f.params.len() as I64) {
+                write_sem_type(w, f.params.get(i as I32))
+                i = i + 1
+            }
+            write_sem_type(w, f.return_type)
+            w.write_bool(f.is_async)
+        },
+        Closure(c) => {
+            w.write_u8(TAG_CLOSURE)
+            w.write_varint(c.params.len() as I64)
+            var i: I64 = 0
+            loop (i < c.params.len() as I64) {
+                write_sem_type(w, c.params.get(i as I32))
+                i = i + 1
+            }
+            write_sem_type(w, c.return_type)
+            w.write_varint(c.captures.len() as I64)
+            var j: I64 = 0
+            loop (j < c.captures.len() as I64) {
+                let cap: SemCapturedVar = c.captures.get(j as I32)
+                w.write_str(cap.name)
+                write_sem_type(w, cap.captured_type)
+                w.write_bool(cap.is_mut)
+                j = j + 1
+            }
+        },
+        Generic(g) => {
+            w.write_u8(TAG_GENERIC)
+            w.write_str(g.name)
+            w.write_varint(g.bounds.len() as I64)
+            var i: I64 = 0
+            loop (i < g.bounds.len() as I64) {
+                write_sem_type(w, g.bounds.get(i as I32))
+                i = i + 1
+            }
+        },
+        ConstGeneric(cg) => {
+            w.write_u8(TAG_CONST_GENERIC)
+            w.write_str(cg.name)
+            write_sem_type(w, cg.value_type)
+            when cg.resolved_value {
+                Just(v) => {
+                    w.write_bool(true)
+                    w.write_u64(v)
+                },
+                Nothing => {
+                    w.write_bool(false)
+                },
+            }
+        },
+        DynBehavior(d) => {
+            w.write_u8(TAG_DYN_BEHAVIOR)
+            w.write_str(d.behavior_name)
+            w.write_varint(d.type_args.len() as I64)
+            var i: I64 = 0
+            loop (i < d.type_args.len() as I64) {
+                write_sem_type(w, d.type_args.get(i as I32))
+                i = i + 1
+            }
+            w.write_bool(d.is_mut)
+        },
+        ImplBehavior(ib) => {
+            w.write_u8(TAG_IMPL_BEHAVIOR)
+            w.write_str(ib.behavior_name)
+            w.write_varint(ib.type_args.len() as I64)
+            var i: I64 = 0
+            loop (i < ib.type_args.len() as I64) {
+                write_sem_type(w, ib.type_args.get(i as I32))
+                i = i + 1
+            }
+        },
+        ClassType(ct) => {
+            w.write_u8(TAG_CLASS)
+            w.write_str(ct.name)
+            w.write_str(ct.module_path)
+            w.write_varint(ct.type_args.len() as I64)
+            var i: I64 = 0
+            loop (i < ct.type_args.len() as I64) {
+                write_sem_type(w, ct.type_args.get(i as I32))
+                i = i + 1
+            }
+        },
+        InterfaceType(it) => {
+            w.write_u8(TAG_INTERFACE)
+            w.write_str(it.name)
+            w.write_str(it.module_path)
+            w.write_varint(it.type_args.len() as I64)
+            var i: I64 = 0
+            loop (i < it.type_args.len() as I64) {
+                write_sem_type(w, it.type_args.get(i as I32))
+                i = i + 1
+            }
+        },
+        TypeVar(tv) => {
+            w.write_u8(TAG_TYPEVAR)
+            w.write_u32(tv.id)
+        },
+        Null => {
+            w.write_u8(TAG_NULL)
+        },
+    }
+}
+
+// ============================================================================
+// Helper: write a string list
+// ============================================================================
+
+func write_str_list(w: BinaryWriter, items: List[Str]) {
+    w.write_varint(items.len() as I64)
+    var i: I64 = 0
+    loop (i < items.len() as I64) {
+        w.write_str(items.get(i as I32))
+        i = i + 1
+    }
+}
+
+func write_sem_type_list(w: BinaryWriter, items: List[SemType]) {
+    w.write_varint(items.len() as I64)
+    var i: I64 = 0
+    loop (i < items.len() as I64) {
+        write_sem_type(w, items.get(i as I32))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// ConstGenericParam serialization
+// ============================================================================
+
+func write_const_generic_param(w: BinaryWriter, p: TmlConstGenericParam) {
+    w.write_str(p.name)
+    write_sem_type(w, p.value_type)
+}
+
+func write_const_generic_param_list(w: BinaryWriter, items: List[TmlConstGenericParam]) {
+    w.write_varint(items.len() as I64)
+    var i: I64 = 0
+    loop (i < items.len() as I64) {
+        write_const_generic_param(w, items.get(i as I32))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// WhereConstraint serialization
+// ============================================================================
+
+func write_bound_constraint(w: BinaryWriter, bc: TmlBoundConstraint) {
+    w.write_str(bc.behavior_name)
+    write_sem_type_list(w, bc.type_args)
+}
+
+func write_higher_ranked_bound(w: BinaryWriter, hrb: TmlHigherRankedBound) {
+    write_str_list(w, hrb.bound_type_params)
+    w.write_str(hrb.behavior_name)
+    write_sem_type_list(w, hrb.type_args)
+}
+
+func write_where_constraint(w: BinaryWriter, wc: TmlWhereConstraint) {
+    w.write_str(wc.type_param)
+    write_str_list(w, wc.required_behaviors)
+    // Parameterized bounds
+    w.write_varint(wc.parameterized_bounds.len() as I64)
+    var i: I64 = 0
+    loop (i < wc.parameterized_bounds.len() as I64) {
+        write_bound_constraint(w, wc.parameterized_bounds.get(i as I32))
+        i = i + 1
+    }
+    // Higher-ranked bounds
+    w.write_varint(wc.higher_ranked_bounds.len() as I64)
+    var j: I64 = 0
+    loop (j < wc.higher_ranked_bounds.len() as I64) {
+        write_higher_ranked_bound(w, wc.higher_ranked_bounds.get(j as I32))
+        j = j + 1
+    }
+}
+
+// ============================================================================
+// FuncSig serialization
+// ============================================================================
+
+pub func write_func_sig(w: BinaryWriter, sig: TmlFuncSig) {
+    w.write_str(sig.name)
+    write_sem_type_list(w, sig.params)
+    write_sem_type(w, sig.return_type)
+    write_str_list(w, sig.type_params)
+    w.write_bool(sig.is_async)
+    w.write_u8(sig.stability)
+    w.write_str(sig.deprecated_message)
+    w.write_str(sig.since_version)
+    // Where constraints
+    w.write_varint(sig.where_constraints.len() as I64)
+    var i: I64 = 0
+    loop (i < sig.where_constraints.len() as I64) {
+        write_where_constraint(w, sig.where_constraints.get(i as I32))
+        i = i + 1
+    }
+    w.write_bool(sig.is_lowlevel)
+    w.write_bool(sig.is_intrinsic)
+    w.write_opt_str(sig.extern_abi)
+    w.write_opt_str(sig.extern_name)
+    write_str_list(w, sig.link_libs)
+    w.write_opt_str(sig.ffi_module)
+    write_const_generic_param_list(w, sig.const_params)
+}
+
+// ============================================================================
+// StructDef serialization
+// ============================================================================
+
+func write_struct_field(w: BinaryWriter, f: TmlStructFieldDef) {
+    w.write_str(f.name)
+    write_sem_type(w, f.field_type)
+    w.write_bool(f.has_default)
+}
+
+pub func write_struct_def(w: BinaryWriter, s: TmlStructDef) {
+    w.write_str(s.name)
+    write_str_list(w, s.type_params)
+    write_const_generic_param_list(w, s.const_params)
+    // Fields
+    w.write_varint(s.fields.len() as I64)
+    var i: I64 = 0
+    loop (i < s.fields.len() as I64) {
+        write_struct_field(w, s.fields.get(i as I32))
+        i = i + 1
+    }
+    w.write_bool(s.is_interior_mutable)
+    w.write_bool(s.is_union)
+    w.write_bool(s.is_simd)
+}
+
+// ============================================================================
+// EnumDef serialization
+// ============================================================================
+
+func write_enum_variant(w: BinaryWriter, v: TmlEnumVariant) {
+    w.write_str(v.name)
+    write_sem_type_list(w, v.payload_types)
+}
+
+pub func write_enum_def(w: BinaryWriter, e: TmlEnumDef) {
+    w.write_str(e.name)
+    write_str_list(w, e.type_params)
+    write_const_generic_param_list(w, e.const_params)
+    // Variants
+    w.write_varint(e.variants.len() as I64)
+    var i: I64 = 0
+    loop (i < e.variants.len() as I64) {
+        write_enum_variant(w, e.variants.get(i as I32))
+        i = i + 1
+    }
+    w.write_bool(e.is_flags)
+    w.write_str(e.flags_underlying_type)
+    // Discriminant values
+    w.write_varint(e.discriminant_values.len() as I64)
+    var j: I64 = 0
+    loop (j < e.discriminant_values.len() as I64) {
+        w.write_u64(e.discriminant_values.get(j as I32))
+        j = j + 1
+    }
+}
+
+// ============================================================================
+// BehaviorDef serialization
+// ============================================================================
+
+func write_associated_type(w: BinaryWriter, at: TmlAssociatedTypeDef) {
+    w.write_str(at.name)
+    write_str_list(w, at.type_params)
+    write_str_list(w, at.bounds)
+    when at.default_type {
+        Just(dt) => {
+            w.write_bool(true)
+            write_sem_type(w, dt)
+        },
+        Nothing => {
+            w.write_bool(false)
+        },
+    }
+}
+
+pub func write_behavior_def(w: BinaryWriter, b: TmlBehaviorDef) {
+    w.write_str(b.name)
+    write_str_list(w, b.type_params)
+    write_const_generic_param_list(w, b.const_params)
+    // Associated types
+    w.write_varint(b.associated_types.len() as I64)
+    var i: I64 = 0
+    loop (i < b.associated_types.len() as I64) {
+        write_associated_type(w, b.associated_types.get(i as I32))
+        i = i + 1
+    }
+    // Methods
+    w.write_varint(b.methods.len() as I64)
+    var j: I64 = 0
+    loop (j < b.methods.len() as I64) {
+        write_func_sig(w, b.methods.get(j as I32))
+        j = j + 1
+    }
+    write_str_list(w, b.super_behaviors)
+    write_str_list(w, b.methods_with_defaults)
+}
+
+// ============================================================================
+// ClassDef serialization
+// ============================================================================
+
+func write_class_field(w: BinaryWriter, f: TmlClassFieldDef) {
+    w.write_str(f.name)
+    write_sem_type(w, f.field_type)
+    w.write_u8(f.visibility)
+    w.write_bool(f.is_static)
+}
+
+func write_class_method(w: BinaryWriter, m: TmlClassMethodDef) {
+    write_func_sig(w, m.sig)
+    w.write_u8(m.visibility)
+    w.write_bool(m.is_static)
+    w.write_bool(m.is_virtual)
+    w.write_bool(m.is_override)
+    w.write_bool(m.is_abstract)
+    w.write_bool(m.is_final)
+    w.write_varint(m.vtable_index)
+}
+
+func write_property(w: BinaryWriter, p: TmlPropertyDef) {
+    w.write_str(p.name)
+    write_sem_type(w, p.prop_type)
+    w.write_u8(p.visibility)
+    w.write_bool(p.is_static)
+    w.write_bool(p.has_getter)
+    w.write_bool(p.has_setter)
+}
+
+func write_constructor(w: BinaryWriter, c: TmlConstructorDef) {
+    write_sem_type_list(w, c.params)
+    w.write_u8(c.visibility)
+    w.write_bool(c.calls_base)
+}
+
+pub func write_class_def(w: BinaryWriter, c: TmlClassDef) {
+    w.write_str(c.name)
+    write_str_list(w, c.type_params)
+    write_const_generic_param_list(w, c.const_params)
+    w.write_opt_str(c.base_class)
+    write_str_list(w, c.interfaces)
+    // Fields
+    w.write_varint(c.fields.len() as I64)
+    var i: I64 = 0
+    loop (i < c.fields.len() as I64) {
+        write_class_field(w, c.fields.get(i as I32))
+        i = i + 1
+    }
+    // Methods
+    w.write_varint(c.methods.len() as I64)
+    var j: I64 = 0
+    loop (j < c.methods.len() as I64) {
+        write_class_method(w, c.methods.get(j as I32))
+        j = j + 1
+    }
+    // Properties
+    w.write_varint(c.properties.len() as I64)
+    var k: I64 = 0
+    loop (k < c.properties.len() as I64) {
+        write_property(w, c.properties.get(k as I32))
+        k = k + 1
+    }
+    // Constructors
+    w.write_varint(c.constructors.len() as I64)
+    var m: I64 = 0
+    loop (m < c.constructors.len() as I64) {
+        write_constructor(w, c.constructors.get(m as I32))
+        m = m + 1
+    }
+    w.write_bool(c.is_abstract)
+    w.write_bool(c.is_sealed)
+    w.write_bool(c.is_value)
+    w.write_bool(c.is_pooled)
+    w.write_bool(c.stack_allocatable)
+    w.write_varint(c.estimated_size)
+    w.write_varint(c.inheritance_depth)
+}
+
+// ============================================================================
+// InterfaceDef serialization
+// ============================================================================
+
+func write_interface_method(w: BinaryWriter, m: TmlInterfaceMethodDef) {
+    write_func_sig(w, m.sig)
+    w.write_bool(m.is_static)
+    w.write_bool(m.has_default)
+}
+
+pub func write_interface_def(w: BinaryWriter, iface: TmlInterfaceDef) {
+    w.write_str(iface.name)
+    write_str_list(w, iface.type_params)
+    write_const_generic_param_list(w, iface.const_params)
+    write_str_list(w, iface.extends_list)
+    // Methods
+    w.write_varint(iface.methods.len() as I64)
+    var i: I64 = 0
+    loop (i < iface.methods.len() as I64) {
+        write_interface_method(w, iface.methods.get(i as I32))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// Top-level: write_typeenv
+// ============================================================================
+
+/// Serialize a complete `TmlTypeEnv` to a `BinaryWriter`.
+///
+/// Writes the header, then each section in order. The C++ reader in
+/// `compiler/src/serial/typeenv_reader.cpp` mirrors this layout exactly.
+pub func write_typeenv(w: BinaryWriter, env: TmlTypeEnv) {
+    // -- Header --
+    w.write_u32(TYPEENV_MAGIC)
+    w.write_u8(TYPEENV_VERSION_MAJOR)
+    w.write_u8(TYPEENV_VERSION_MINOR)
+
+    // -- Structs --
+    w.write_varint(env.structs.len() as I64)
+    var i: I64 = 0
+    loop (i < env.structs.len() as I64) {
+        write_struct_def(w, env.structs.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Enums --
+    w.write_varint(env.enums.len() as I64)
+    i = 0
+    loop (i < env.enums.len() as I64) {
+        write_enum_def(w, env.enums.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Behaviors --
+    w.write_varint(env.behaviors.len() as I64)
+    i = 0
+    loop (i < env.behaviors.len() as I64) {
+        write_behavior_def(w, env.behaviors.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Functions (grouped by name with overloads) --
+    w.write_varint(env.func_names.len() as I64)
+    i = 0
+    loop (i < env.func_names.len() as I64) {
+        w.write_str(env.func_names.get(i as I32))
+        let overloads: List[TmlFuncSig] = env.func_overloads.get(i as I32)
+        w.write_varint(overloads.len() as I64)
+        var j: I64 = 0
+        loop (j < overloads.len() as I64) {
+            write_func_sig(w, overloads.get(j as I32))
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    // -- Behavior impls --
+    w.write_varint(env.impl_type_names.len() as I64)
+    i = 0
+    loop (i < env.impl_type_names.len() as I64) {
+        w.write_str(env.impl_type_names.get(i as I32))
+        write_str_list(w, env.impl_behaviors.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Type aliases --
+    w.write_varint(env.alias_names.len() as I64)
+    i = 0
+    loop (i < env.alias_names.len() as I64) {
+        w.write_str(env.alias_names.get(i as I32))
+        write_sem_type(w, env.alias_types.get(i as I32))
+        write_str_list(w, env.alias_generics.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Classes --
+    w.write_varint(env.classes.len() as I64)
+    i = 0
+    loop (i < env.classes.len() as I64) {
+        write_class_def(w, env.classes.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Interfaces --
+    w.write_varint(env.interfaces.len() as I64)
+    i = 0
+    loop (i < env.interfaces.len() as I64) {
+        write_interface_def(w, env.interfaces.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Class-interface impls --
+    w.write_varint(env.class_iface_names.len() as I64)
+    i = 0
+    loop (i < env.class_iface_names.len() as I64) {
+        w.write_str(env.class_iface_names.get(i as I32))
+        write_str_list(w, env.class_iface_lists.get(i as I32))
+        i = i + 1
+    }
+
+    // -- Builtins --
+    w.write_varint(env.builtin_names.len() as I64)
+    i = 0
+    loop (i < env.builtin_names.len() as I64) {
+        w.write_str(env.builtin_names.get(i as I32))
+        write_sem_type(w, env.builtin_types.get(i as I32))
+        i = i + 1
+    }
+}

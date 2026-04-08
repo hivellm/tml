@@ -1,0 +1,163 @@
+// Round-trip tests for binary serialization primitives.
+// Uses BinaryWriter/BinaryReader to test encoding used by AST and TypeEnv.
+
+use test
+use compiler::serial::writer::BinaryWriter
+use compiler::serial::reader::BinaryReader
+
+@test
+func test_u8_roundtrip() -> I32 {
+    let w = BinaryWriter::new(16)
+    w.write_u8(42)
+    w.write_u8(0)
+    w.write_u8(255)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_u8()!, 42)
+    assert_eq(r.read_u8()!, 0)
+    assert_eq(r.read_u8()!, 255)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_u32_roundtrip() -> I32 {
+    let w = BinaryWriter::new(32)
+    w.write_u32(0x54454E56)
+    w.write_u32(0x41535420)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_u32()!, 0x54454E56)
+    assert_eq(r.read_u32()!, 0x41535420)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_varint_roundtrip() -> I32 {
+    let w = BinaryWriter::new(32)
+    w.write_varint(0)
+    w.write_varint(127)
+    w.write_varint(128)
+    w.write_varint(300)
+    w.write_varint(16384)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 127)
+    assert_eq(r.read_varint()!, 128)
+    assert_eq(r.read_varint()!, 300)
+    assert_eq(r.read_varint()!, 16384)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_str_roundtrip() -> I32 {
+    let w = BinaryWriter::new(128)
+    w.write_str("Point")
+    w.write_str("")
+    w.write_str("std::collections")
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_str()!, "Point")
+    assert_eq(r.read_str()!, "")
+    assert_eq(r.read_str()!, "std::collections")
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_bool_roundtrip() -> I32 {
+    let w = BinaryWriter::new(16)
+    w.write_bool(true)
+    w.write_bool(false)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    assert_eq(r.read_bool()!, true)
+    assert_eq(r.read_bool()!, false)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_typeenv_header() -> I32 {
+    // Manually encode a minimal TENV header + 1 struct + empty sections
+    let w = BinaryWriter::new(128)
+
+    // Header
+    w.write_u32(0x54454E56)  // TENV magic
+    w.write_u8(1)             // major
+    w.write_u8(0)             // minor
+
+    // 1 struct: Point { x: I32 }
+    w.write_varint(1)         // struct_count
+    w.write_str("Point")     // name
+    w.write_varint(0)         // type_params
+    w.write_varint(0)         // const_params
+    w.write_varint(1)         // 1 field
+    w.write_str("x")         // field name
+    w.write_u8(0x00)          // TAG_PRIMITIVE
+    w.write_u8(2)             // PRIM_I32
+    w.write_bool(false)       // no default
+    w.write_bool(false)       // interior_mutable
+    w.write_bool(false)       // is_union
+    w.write_bool(false)       // is_simd
+
+    // Empty sections: 9 zeros
+    w.write_varint(0)  // enums
+    w.write_varint(0)  // behaviors
+    w.write_varint(0)  // functions
+    w.write_varint(0)  // behavior_impls
+    w.write_varint(0)  // type_aliases
+    w.write_varint(0)  // classes
+    w.write_varint(0)  // interfaces
+    w.write_varint(0)  // class_interfaces
+    w.write_varint(0)  // builtins
+
+    // Read back and verify header + struct name
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+
+    assert_eq(r.read_u32()!, 0x54454E56)
+    assert_eq(r.read_u8()!, 1)
+    assert_eq(r.read_u8()!, 0)
+    assert_eq(r.read_varint()!, 1) // 1 struct
+    assert_eq(r.read_str()!, "Point")
+    assert_eq(r.read_varint()!, 0) // type_params
+    assert_eq(r.read_varint()!, 0) // const_params
+    assert_eq(r.read_varint()!, 1) // fields
+    assert_eq(r.read_str()!, "x")
+    assert_eq(r.read_u8()!, 0x00) // Primitive
+    assert_eq(r.read_u8()!, 2)    // I32
+    assert_eq(r.read_bool()!, false)
+    assert_eq(r.read_bool()!, false)
+    assert_eq(r.read_bool()!, false)
+    assert_eq(r.read_bool()!, false)
+
+    // All remaining sections zero
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+    assert_eq(r.read_varint()!, 0)
+
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}

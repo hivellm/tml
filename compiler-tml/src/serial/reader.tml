@@ -1,0 +1,193 @@
+//! `BinaryReader` — a `Buffer`-backed binary deserializer.
+//!
+//! Wraps a `Buffer` and exposes read primitives as methods, each returning
+//! `Outcome[T, SerialError]`. Use `!` to propagate errors up the call stack.
+//!
+//! # Usage
+//!
+//! ```tml
+//! let r = BinaryReader::from_buf(buf)
+//! let magic = r.read_u32()!
+//! let major = r.read_u8()!
+//! let minor = r.read_u8()!
+//! let count = r.read_varint()!
+//! let name  = r.read_str()!
+//! ```
+
+use std::collections::buffer::Buffer
+use compiler::serial::SerialError
+
+/// A binary deserializer wrapping a `Buffer`.
+///
+/// The buffer's internal read position advances with every read call.
+pub type BinaryReader {
+    buf: Buffer,
+}
+
+impl BinaryReader {
+    /// Create a reader from an existing buffer.
+    ///
+    /// Takes ownership of `buf`. The buffer's current read position is used
+    /// as the start, so a freshly constructed buffer begins at byte 0.
+    pub func from_buf(buf: Buffer) -> BinaryReader {
+        return BinaryReader { buf: buf }
+    }
+
+    // ------------------------------------------------------------------
+    // Fixed-width read methods
+    // ------------------------------------------------------------------
+
+    /// Read a single byte, returned as `I32` in [0, 255].
+    pub func read_u8(this) -> Outcome[I32, SerialError] {
+        if this.buf.remaining() < 1 {
+            return Err(UnexpectedEof)
+        }
+        return Ok(this.buf.read_byte() & 0xFF)
+    }
+
+    /// Read a 16-bit little-endian integer.
+    pub func read_u16(this) -> Outcome[I32, SerialError] {
+        if this.buf.remaining() < 2 {
+            return Err(UnexpectedEof)
+        }
+        let b0: I32 = this.buf.read_byte() & 0xFF
+        let b1: I32 = this.buf.read_byte() & 0xFF
+        return Ok(b0 | (b1 << 8))
+    }
+
+    /// Read a 32-bit little-endian integer.
+    pub func read_u32(this) -> Outcome[I64, SerialError] {
+        if this.buf.remaining() < 4 {
+            return Err(UnexpectedEof)
+        }
+        let b0: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b1: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b2: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b3: I64 = (this.buf.read_byte() & 0xFF) as I64
+        return Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+    }
+
+    /// Read a 64-bit little-endian integer.
+    pub func read_u64(this) -> Outcome[I64, SerialError] {
+        if this.buf.remaining() < 8 {
+            return Err(UnexpectedEof)
+        }
+        let b0: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b1: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b2: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b3: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b4: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b5: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b6: I64 = (this.buf.read_byte() & 0xFF) as I64
+        let b7: I64 = (this.buf.read_byte() & 0xFF) as I64
+        return Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) |
+                  (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56))
+    }
+
+    /// Read a boolean byte (0 = false, any other value = true).
+    pub func read_bool(this) -> Outcome[Bool, SerialError] {
+        if this.buf.remaining() < 1 {
+            return Err(UnexpectedEof)
+        }
+        return Ok(this.buf.read_byte() != 0)
+    }
+
+    // ------------------------------------------------------------------
+    // Variable-length read methods
+    // ------------------------------------------------------------------
+
+    /// Read an unsigned LEB-128 varint.
+    ///
+    /// Returns `Err(UnexpectedEof)` if the buffer is exhausted or the
+    /// encoded value would exceed 63 bits.
+    pub func read_varint(this) -> Outcome[I64, SerialError] {
+        var result: I64 = 0
+        var shift: I64 = 0
+        loop (true) {
+            if this.buf.remaining() < 1 {
+                return Err(UnexpectedEof)
+            }
+            let byte: I64 = (this.buf.read_byte() & 0xFF) as I64
+            result = result | ((byte & 0x7F) << shift)
+            if (byte & 0x80) == 0 {
+                return Ok(result)
+            }
+            shift = shift + 7
+            if shift >= 63 {
+                return Err(UnexpectedEof)
+            }
+        }
+    }
+
+    /// Read a length-prefixed string written by `BinaryWriter::write_str`.
+    ///
+    /// Allocates a null-terminated heap string and returns it as `Str`.
+    pub func read_str(this) -> Outcome[Str, SerialError] {
+        let n: I64 = this.read_varint()!
+        if n == 0 {
+            return Ok("")
+        }
+        if this.buf.remaining() < n {
+            return Err(UnexpectedEof)
+        }
+        let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
+        var i: I64 = 0
+        loop (i < n) {
+            let byte: I32 = this.buf.read_byte()
+            let dst: *I8 = (ptr as I64 + i) as *I8
+            lowlevel { ptr_write[I8](dst, byte as I8) }
+            i = i + 1
+        }
+        let null_p: *I8 = (ptr as I64 + n) as *I8
+        lowlevel { ptr_write[I8](null_p, 0 as I8) }
+        return Ok(ptr as Str)
+    }
+
+    /// Read an optional string written by `BinaryWriter::write_opt_str`.
+    ///
+    /// A zero-length string decodes as `Nothing`.
+    pub func read_opt_str(this) -> Outcome[Maybe[Str], SerialError] {
+        let n: I64 = this.read_varint()!
+        if n == 0 {
+            return Ok(Nothing)
+        }
+        if this.buf.remaining() < n {
+            return Err(UnexpectedEof)
+        }
+        let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
+        var i: I64 = 0
+        loop (i < n) {
+            let byte: I32 = this.buf.read_byte()
+            let dst: *I8 = (ptr as I64 + i) as *I8
+            lowlevel { ptr_write[I8](dst, byte as I8) }
+            i = i + 1
+        }
+        let null_p: *I8 = (ptr as I64 + n) as *I8
+        lowlevel { ptr_write[I8](null_p, 0 as I8) }
+        return Ok(Just(ptr as Str))
+    }
+
+    // ------------------------------------------------------------------
+    // State inspection
+    // ------------------------------------------------------------------
+
+    /// Return the number of bytes remaining (not yet read).
+    pub func remaining(this) -> I64 {
+        return this.buf.remaining()
+    }
+
+    /// Return `true` if all bytes have been consumed.
+    pub func is_exhausted(this) -> Bool {
+        return this.buf.remaining() == 0
+    }
+
+    /// Consume the reader and return the underlying buffer.
+    pub func into_buf(this) -> Buffer {
+        return this.buf
+    }
+
+    /// Destroy this reader and free the underlying buffer.
+    pub func destroy(mut this) {
+        this.buf.destroy()
+    }
+}

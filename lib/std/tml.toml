@@ -1,0 +1,14 @@
+# TML Standard Library
+#
+# Full standard library — collections, I/O, networking, HTTP, crypto, etc.
+# Depends on core. User-facing: application code imports from std.
+
+[package]
+name = "std"
+version = "0.2.0"
+edition = "2025"
+description = "TML standard library (collections, io, net, http, sync, json, crypto)"
+license = "Apache-2.0"
+
+[dependencies]
+core = { path = "../core" }

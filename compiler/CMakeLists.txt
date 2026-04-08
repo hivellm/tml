@@ -535,6 +535,14 @@ target_link_libraries(tml_parser PUBLIC tml_lexer tml_preprocessor)
 target_include_directories(tml_parser PUBLIC include src)
 
 # Type checker library
+# Package registry + manifest parsing — lightweight, stdlib-only.
+# Lives below tml_types so env_module_loading etc. can call PackageRegistry.
+add_library(tml_package STATIC
+    src/package/package_registry.cpp
+    src/cli/builder/build_config.cpp
+)
+target_include_directories(tml_package PUBLIC include src)
+
 add_library(tml_types STATIC
     src/types/type.cpp
     src/types/env_scope.cpp
@@ -579,7 +587,7 @@ add_library(tml_types STATIC
     src/types/module_binary.cpp
     src/types/module_binary_read.cpp
 )
-target_link_libraries(tml_types PUBLIC tml_parser)
+target_link_libraries(tml_types PUBLIC tml_parser tml_package)
 target_include_directories(tml_types PUBLIC include src)
 # Note: Unity builds disabled for tml_types due to symbol conflicts (duplicate static functions/variables)
 
@@ -681,6 +689,9 @@ add_library(tml_mir STATIC
     src/mir/serializer/text_writer.cpp
     src/mir/serializer/text_reader.cpp
     src/mir/serializer/serialize_utils.cpp
+    # Binary deserializers (phase12e)
+    src/serial/ast_reader.cpp
+    src/serial/typeenv_reader.cpp
     # Optimization passes
     src/mir/passes/constant_folding.cpp
     src/mir/passes/constant_propagation.cpp
@@ -1732,7 +1743,6 @@ add_library(tml_cli STATIC
     src/cli/builder/build.cpp
     src/cli/builder/build_cache.cpp
     src/cli/builder/build_script.cpp
-    src/cli/builder/build_config.cpp
     src/cli/builder/compiler_setup.cpp
     src/cli/builder/dependency_resolver.cpp
     src/cli/builder/builder_helpers.cpp
@@ -2074,6 +2084,14 @@ if(TML_BUILD_TESTS)
     include(GoogleTest)
     gtest_discover_tests(tml_tests)
 endif()
+
+# Standalone serial reader round-trip tests (no GTest — uses own main)
+add_executable(serial_reader_test
+    tests/serial/serial_reader_test.cpp
+)
+target_link_libraries(serial_reader_test PRIVATE
+    tml_cli
+)
 
 # =============================================================================
 # SIMD Benchmark Harness

@@ -1,0 +1,15 @@
+# TML Test Framework
+#
+# Assertions, benchmarks, property-based testing, mocking.
+# Depends on core + std.
+
+[package]
+name = "test"
+version = "0.2.0"
+edition = "2025"
+description = "TML test framework (assertions, benchmarks, property tests, mocks)"
+license = "Apache-2.0"
+
+[dependencies]
+core = { path = "../core" }
+std  = { path = "../std" }

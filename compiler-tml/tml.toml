@@ -1,0 +1,20 @@
+# TML Self-Hosted Compiler Support
+#
+# First real TML project — carries the TML-side code for the self-hosted
+# compiler (phase12). Provides the `compiler::*` namespace, starting with
+# `compiler::serial::*` for binary AST/TypeEnv serialization used by the
+# hybrid pipeline.
+#
+# NOT a user-facing library. Application code should not import from it.
+
+[package]
+name = "compiler"
+version = "0.1.0"
+edition = "2025"
+description = "TML self-hosted compiler support (serialization, hybrid pipeline stages)"
+license = "Apache-2.0"
+
+[dependencies]
+core = { path = "../lib/core" }
+std  = { path = "../lib/std" }
+test = { path = "../lib/test" }

@@ -1,0 +1,14 @@
+// Minimal test: just Buffer operations, no std::serial imports
+use test
+use std::collections::buffer::Buffer
+
+@test
+func test_buffer_roundtrip() -> I32 {
+    let buf = Buffer::new(16)
+    buf.write_byte(42)
+    buf.write_byte(255)
+    buf.reset_read()
+    assert_eq(buf.read_byte() & 0xFF, 42)
+    assert_eq(buf.read_byte() & 0xFF, 255)
+    return 0
+}

@@ -26,6 +26,7 @@ TML_MODULE("compiler")
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
+#include "package/package_registry.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
 
@@ -378,8 +379,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             std::string source_pkg_name =
                 source_pkg_dir.empty() ? "" : source_pkg_dir.filename().string();
             for (const auto& [mod_path, _] : compile.registry->get_all_modules()) {
-                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
-                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                if (tml::pkg::PackageRegistry::instance().is_package_module(mod_path)) {
                     continue;
                 }
                 auto sep = mod_path.find("::");
@@ -680,8 +680,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
             std::string source_pkg_name =
                 source_pkg_dir.empty() ? "" : source_pkg_dir.filename().string();
             for (const auto& [mod_path, _] : compile.registry->get_all_modules()) {
-                if (mod_path.find("core::") == 0 || mod_path.find("std::") == 0 ||
-                    mod_path.find("test::") == 0 || mod_path.find("compiler::") == 0) {
+                if (tml::pkg::PackageRegistry::instance().is_package_module(mod_path)) {
                     continue;
                 }
                 auto sep = mod_path.find("::");

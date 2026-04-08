@@ -1,0 +1,275 @@
+//! Binary serialization and deserialization primitives.
+//!
+//! This module provides low-level binary I/O on top of `Buffer`:
+//! fixed-width integers (u8, u16_le, u32_le, u64_le), booleans,
+//! unsigned LEB-128 varints, and length-prefixed strings.
+//!
+//! Higher-level types `BinaryWriter` and `BinaryReader` wrap a `Buffer`
+//! and expose the same primitives as methods.
+//!
+//! # Error Handling
+//!
+//! Read operations return `Outcome[T, SerialError]`. Use `!` to propagate.
+//!
+//! # Examples
+//!
+//! ```tml
+//! let buf = Buffer::new(64)
+//! write_u32_le(buf, 0x4D495220)
+//! write_varint(buf, 42)
+//! write_str(buf, "hello")
+//! ```
+
+pub mod writer
+pub mod reader
+// Heavy serializer modules (ast, typeenv) are NOT declared here to avoid
+// pulling ~3000 lines of codegen when only writer/reader are needed.
+// They are loaded explicitly by consumers via direct file import.
+
+use std::collections::buffer::Buffer
+use core::str
+
+// ============================================================================
+// Error type
+// ============================================================================
+
+/// Errors that can occur during binary deserialization.
+pub type SerialError {
+    UnexpectedEof,
+    InvalidMagic,
+    VersionMismatch,
+    InvalidTag,
+    InvalidUtf8,
+}
+
+impl Display for SerialError {
+    pub func to_string(this) -> Str {
+        when this {
+            UnexpectedEof => "unexpected end of buffer",
+            InvalidMagic => "invalid magic bytes",
+            VersionMismatch => "unsupported format version",
+            InvalidTag => "unrecognized node tag",
+            InvalidUtf8 => "invalid UTF-8 in string data",
+        }
+    }
+}
+
+// ============================================================================
+// Re-exports
+// ============================================================================
+
+pub use compiler::serial::writer::BinaryWriter
+pub use compiler::serial::reader::BinaryReader
+
+// ============================================================================
+// Write primitives
+// ============================================================================
+
+/// Write a single byte (low 8 bits of `value`).
+pub func write_u8(buf: Buffer, value: I32) {
+    buf.write_byte(value & 0xFF)
+}
+
+/// Write a 16-bit little-endian integer.
+pub func write_u16_le(buf: Buffer, value: I32) {
+    buf.write_byte(value & 0xFF)
+    buf.write_byte((value >> 8) & 0xFF)
+}
+
+/// Write a 32-bit little-endian integer.
+pub func write_u32_le(buf: Buffer, value: I64) {
+    buf.write_byte((value & 0xFF) as I32)
+    buf.write_byte(((value >> 8) & 0xFF) as I32)
+    buf.write_byte(((value >> 16) & 0xFF) as I32)
+    buf.write_byte(((value >> 24) & 0xFF) as I32)
+}
+
+/// Write a 64-bit little-endian integer.
+pub func write_u64_le(buf: Buffer, value: I64) {
+    buf.write_byte((value & 0xFF) as I32)
+    buf.write_byte(((value >> 8) & 0xFF) as I32)
+    buf.write_byte(((value >> 16) & 0xFF) as I32)
+    buf.write_byte(((value >> 24) & 0xFF) as I32)
+    buf.write_byte(((value >> 32) & 0xFF) as I32)
+    buf.write_byte(((value >> 40) & 0xFF) as I32)
+    buf.write_byte(((value >> 48) & 0xFF) as I32)
+    buf.write_byte(((value >> 56) & 0xFF) as I32)
+}
+
+/// Write a boolean as a single byte (0 = false, 1 = true).
+pub func write_bool(buf: Buffer, value: Bool) {
+    if value {
+        buf.write_byte(1)
+    } else {
+        buf.write_byte(0)
+    }
+}
+
+/// Write an unsigned LEB-128 varint.
+///
+/// Encodes 7 bits per byte, high bit set on all bytes except the last.
+/// Values up to 127 encode in 1 byte; up to 16383 in 2 bytes; etc.
+pub func write_varint(buf: Buffer, value: I64) {
+    var v: I64 = value
+    loop (true) {
+        let byte: I32 = (v & 0x7F) as I32
+        v = v >> 7
+        if v == 0 {
+            buf.write_byte(byte)
+            return
+        }
+        buf.write_byte(byte | 0x80)
+    }
+}
+
+/// Write a length-prefixed string.
+///
+/// Format: varint(byte_length) followed by raw UTF-8 bytes (no null terminator).
+pub func write_str(buf: Buffer, s: Str) {
+    let n: I64 = str::len(s)
+    write_varint(buf, n)
+    if n > 0 {
+        buf.write_from_ptr(s as I64, n)
+    }
+}
+
+/// Write an optional string.
+///
+/// `Nothing` encodes as a zero-length string (varint 0).
+/// `Just(s)` encodes as `write_str(s)`.
+pub func write_opt_str(buf: Buffer, s: Maybe[Str]) {
+    when s {
+        Just(inner) => write_str(buf, inner),
+        Nothing => write_varint(buf, 0),
+    }
+}
+
+// ============================================================================
+// Read primitives
+// ============================================================================
+
+/// Read a single byte, returning it as an `I32` in [0, 255].
+pub func read_u8(buf: Buffer) -> Outcome[I32, SerialError] {
+    if buf.remaining() < 1 {
+        return Err(UnexpectedEof)
+    }
+    return Ok(buf.read_byte() & 0xFF)
+}
+
+/// Read a 16-bit little-endian integer.
+pub func read_u16_le(buf: Buffer) -> Outcome[I32, SerialError] {
+    if buf.remaining() < 2 {
+        return Err(UnexpectedEof)
+    }
+    let b0: I32 = buf.read_byte() & 0xFF
+    let b1: I32 = buf.read_byte() & 0xFF
+    return Ok(b0 | (b1 << 8))
+}
+
+/// Read a 32-bit little-endian integer.
+pub func read_u32_le(buf: Buffer) -> Outcome[I64, SerialError] {
+    if buf.remaining() < 4 {
+        return Err(UnexpectedEof)
+    }
+    let b0: I64 = (buf.read_byte() & 0xFF) as I64
+    let b1: I64 = (buf.read_byte() & 0xFF) as I64
+    let b2: I64 = (buf.read_byte() & 0xFF) as I64
+    let b3: I64 = (buf.read_byte() & 0xFF) as I64
+    return Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+}
+
+/// Read a 64-bit little-endian integer.
+pub func read_u64_le(buf: Buffer) -> Outcome[I64, SerialError] {
+    if buf.remaining() < 8 {
+        return Err(UnexpectedEof)
+    }
+    let b0: I64 = (buf.read_byte() & 0xFF) as I64
+    let b1: I64 = (buf.read_byte() & 0xFF) as I64
+    let b2: I64 = (buf.read_byte() & 0xFF) as I64
+    let b3: I64 = (buf.read_byte() & 0xFF) as I64
+    let b4: I64 = (buf.read_byte() & 0xFF) as I64
+    let b5: I64 = (buf.read_byte() & 0xFF) as I64
+    let b6: I64 = (buf.read_byte() & 0xFF) as I64
+    let b7: I64 = (buf.read_byte() & 0xFF) as I64
+    return Ok(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) |
+              (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56))
+}
+
+/// Read a boolean byte (0 = false, any other value = true).
+pub func read_bool(buf: Buffer) -> Outcome[Bool, SerialError] {
+    if buf.remaining() < 1 {
+        return Err(UnexpectedEof)
+    }
+    return Ok(buf.read_byte() != 0)
+}
+
+/// Read an unsigned LEB-128 varint.
+///
+/// Returns `Err(UnexpectedEof)` if the buffer is exhausted before the
+/// encoding is complete, or if the value would exceed 63 bits (shift ≥ 63).
+pub func read_varint(buf: Buffer) -> Outcome[I64, SerialError] {
+    var result: I64 = 0
+    var shift: I64 = 0
+    loop (true) {
+        if buf.remaining() < 1 {
+            return Err(UnexpectedEof)
+        }
+        let byte: I64 = (buf.read_byte() & 0xFF) as I64
+        result = result | ((byte & 0x7F) << shift)
+        if (byte & 0x80) == 0 {
+            return Ok(result)
+        }
+        shift = shift + 7
+        if shift >= 63 {
+            return Err(UnexpectedEof)
+        }
+    }
+}
+
+/// Read a length-prefixed string written by `write_str`.
+///
+/// Allocates a null-terminated C string on the heap and returns it as `Str`.
+pub func read_str(buf: Buffer) -> Outcome[Str, SerialError] {
+    let n: I64 = read_varint(buf)!
+    if n == 0 {
+        return Ok("")
+    }
+    if buf.remaining() < n {
+        return Err(UnexpectedEof)
+    }
+    let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
+    var i: I64 = 0
+    loop (i < n) {
+        let byte: I32 = buf.read_byte()
+        let dst: *I8 = (ptr as I64 + i) as *I8
+        lowlevel { ptr_write[I8](dst, byte as I8) }
+        i = i + 1
+    }
+    let null_p: *I8 = (ptr as I64 + n) as *I8
+    lowlevel { ptr_write[I8](null_p, 0 as I8) }
+    return Ok(ptr as Str)
+}
+
+/// Read an optional string written by `write_opt_str`.
+///
+/// A zero-length string decodes as `Nothing`.
+pub func read_opt_str(buf: Buffer) -> Outcome[Maybe[Str], SerialError] {
+    let n: I64 = read_varint(buf)!
+    if n == 0 {
+        return Ok(Nothing)
+    }
+    if buf.remaining() < n {
+        return Err(UnexpectedEof)
+    }
+    let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
+    var i: I64 = 0
+    loop (i < n) {
+        let byte: I32 = buf.read_byte()
+        let dst: *I8 = (ptr as I64 + i) as *I8
+        lowlevel { ptr_write[I8](dst, byte as I8) }
+        i = i + 1
+    }
+    let null_p: *I8 = (ptr as I64 + n) as *I8
+    lowlevel { ptr_write[I8](null_p, 0 as I8) }
+    return Ok(Just(ptr as Str))
+}

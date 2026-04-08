@@ -9,6 +9,7 @@ TML_MODULE("compiler")
 
 #include "common/crc32c.hpp"
 #include "log/log.hpp"
+#include "package/package_registry.hpp"
 #include "types/env.hpp"
 #include "types/module_binary.hpp"
 #include "types/type.hpp"
@@ -1016,10 +1017,7 @@ static std::vector<std::string> extract_pub_mod_names(const fs::path& mod_file) 
 // Returns empty path if the source file cannot be found.
 static fs::path resolve_module_source_path(const std::string& module_path,
                                            const fs::path& lib_root) {
-    if (lib_root.empty())
-        return {};
-
-    // Split module_path on "::" — first segment is the library (core, std, test)
+    // Split module_path on "::" — first segment is the package name.
     std::string lib_name;
     std::string rest;
     auto sep = module_path.find("::");
@@ -1030,11 +1028,17 @@ static fs::path resolve_module_source_path(const std::string& module_path,
         rest = module_path.substr(sep + 2);
     }
 
-    // Determine source subdirectory
-    std::string src_subdir = "src";
-
-    // Build the base path: lib/<lib_name>/src/
-    fs::path base = lib_root / lib_name / src_subdir;
+    // PackageRegistry-aware: workspace members (including those outside lib/,
+    // e.g. compiler-tml/) declare their src_dir in their tml.toml. Prefer that
+    // over the hardcoded lib_root layout.
+    fs::path base;
+    if (const auto* pkg = tml::pkg::PackageRegistry::instance().get(lib_name)) {
+        base = pkg->src_dir;
+    } else {
+        if (lib_root.empty())
+            return {};
+        base = lib_root / lib_name / "src";
+    }
 
     if (rest.empty()) {
         // Top-level module (e.g. "core" -> lib/core/src/mod.tml)
