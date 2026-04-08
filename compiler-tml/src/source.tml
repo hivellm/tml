@@ -1,0 +1,132 @@
+//! Source file management for the TML self-hosted compiler frontend.
+//!
+//! Mirrors `compiler/include/lexer/source.hpp` + `common.hpp` (SourceLocation /
+//! SourceSpan). Used by the lexer (phase13b), parser (phase13c), and hybrid
+//! pipeline bridge (phase13d / phase12f) to carry location info on every AST
+//! and token node so the C++ side can produce precise diagnostics after
+//! deserialization.
+
+use std::collections::list::List
+use core::str::basic
+
+/// 1-based line/column location plus 0-based byte offset and byte length.
+///
+/// Field order and widths match the C++ `SourceLocation` struct in
+/// `compiler/include/common.hpp` so the wire format stays in lockstep.
+type SourceLocation {
+    file: Str,
+    line: I64,
+    column: I64,
+    offset: I64,
+    length: I64
+}
+
+/// Byte span between two `SourceLocation`s. Every AST node and token carries
+/// one of these for error reporting.
+type SourceSpan {
+    start: SourceLocation,
+    end: SourceLocation
+}
+
+/// Construct a `SourceLocation` with all fields.
+func loc_new(file: Str, line: I64, column: I64, offset: I64, length: I64) -> SourceLocation {
+    return SourceLocation {
+        file: file,
+        line: line,
+        column: column,
+        offset: offset,
+        length: length
+    }
+}
+
+/// Construct a `SourceSpan` from two locations.
+func span_new(start: SourceLocation, end: SourceLocation) -> SourceSpan {
+    return SourceSpan { start: start, end: end }
+}
+
+/// Merge two spans into one that covers both, preserving the start of `a` and
+/// the end of `b`. Matches `SourceSpan::merge` in `common.hpp`.
+func span_merge(a: SourceSpan, b: SourceSpan) -> SourceSpan {
+    return SourceSpan { start: a.start, end: b.end }
+}
+
+/// A loaded source file with an index of line-start byte offsets for
+/// O(log n) offset→line/column lookup.
+type Source {
+    filename: Str,
+    content: Str,
+    line_offsets: List[I64]
+}
+
+/// Build a `Source` from an in-memory string. Equivalent to
+/// `Source::from_string` in the C++ reference.
+func source_from_string(filename: Str, content: Str) -> Source {
+    var offsets: List[I64] = List::new(16)
+    offsets.push(0 as I64)
+    let n: I64 = basic::len(content)
+    var i: I64 = 0
+    loop (i < n) {
+        if basic::char_at(content, i) == 10 {
+            offsets.push(i + 1)
+        }
+        i = i + 1
+    }
+    return Source {
+        filename: filename,
+        content: content,
+        line_offsets: offsets
+    }
+}
+
+/// Total number of lines (always ≥ 1 — an empty file is one empty line).
+func source_line_count(src: Source) -> I64 {
+    return src.line_offsets.len() as I64
+}
+
+/// Return the byte (as I32) at `offset`, or 0 if out of bounds. Matches the
+/// C++ `Source::at` convention of returning NUL on out-of-range.
+func source_at(src: Source, offset: I64) -> I32 {
+    if offset < 0 or offset >= basic::len(src.content) {
+        return 0
+    }
+    return basic::char_at(src.content, offset)
+}
+
+/// Slice `[start, end)` from the source content, clamped to valid bounds.
+func source_slice(src: Source, start: I64, end: I64) -> Str {
+    let n: I64 = basic::len(src.content)
+    var s: I64 = start
+    var e: I64 = end
+    if s < 0 { s = 0 }
+    if e > n { e = n }
+    if s > e { s = e }
+    return basic::substring(src.content, s, e)
+}
+
+/// Convert a 0-based byte offset to a 1-based `SourceLocation` via binary
+/// search on `line_offsets`. Out-of-range offsets clamp to the last line.
+func source_location(src: Source, offset: I64) -> SourceLocation {
+    let count: I64 = src.line_offsets.len() as I64
+    // Binary search for the greatest line_offsets[i] <= offset.
+    var lo: I64 = 0
+    var hi: I64 = count - 1
+    var line_idx: I64 = 0
+    loop (lo <= hi) {
+        let mid: I64 = (lo + hi) / 2
+        let start: I64 = src.line_offsets.get(mid as I64)
+        if start <= offset {
+            line_idx = mid
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    let line_start: I64 = src.line_offsets.get(line_idx as I64)
+    return SourceLocation {
+        file: src.filename,
+        line: line_idx + 1,
+        column: (offset - line_start) + 1,
+        offset: offset,
+        length: 0
+    }
+}

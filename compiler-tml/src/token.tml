@@ -1,0 +1,470 @@
+//! Token definitions for the TML self-hosted compiler frontend.
+//!
+//! Mirrors `compiler/include/lexer/token.hpp`. The `TokenKind` discriminant
+//! ORDER is a wire-format contract with `compiler/src/serial/token_reader.cpp`
+//! and the phase12f bootstrap lexer in `tools/stages/lexer_stage.tml`. Do NOT
+//! reorder existing variants — append new variants at the end only.
+//!
+//! Reference discriminants used by the bootstrap lexer:
+//!     3   = StringLiteral
+//!     13  = Identifier
+//!     127 = LParen
+//!     135 = Newline
+//!     136 = Error
+//!
+//! Total: 139 variants (Eof = 0 .. ModuleDocComment = 138).
+
+use compiler::source::SourceSpan
+
+/// All lexical token kinds emitted by the TML lexer.
+///
+/// Field order is locked to `compiler/include/lexer/token.hpp` —
+/// the C++ side casts the discriminant byte directly when reading
+/// serialized token streams.
+enum TokenKind {
+    // ----- End of file -----
+    Eof,                    // 0
+
+    // ----- Literals -----
+    IntLiteral,             // 1
+    FloatLiteral,           // 2
+    StringLiteral,          // 3
+    CharLiteral,            // 4
+    BoolLiteral,            // 5
+    NullLiteral,            // 6
+
+    // ----- Interpolated strings -----
+    InterpStringStart,      // 7
+    InterpStringMiddle,     // 8
+    InterpStringEnd,        // 9
+
+    // ----- Template literals -----
+    TemplateLiteralStart,   // 10
+    TemplateLiteralMiddle,  // 11
+    TemplateLiteralEnd,     // 12
+
+    // ----- Identifiers -----
+    Identifier,             // 13
+
+    // ----- Keywords: declarations -----
+    KwFunc,                 // 14
+    KwType,                 // 15
+    KwUnion,                // 16
+    KwBehavior,             // 17
+    KwImpl,                 // 18
+    KwMod,                  // 19
+    KwUse,                  // 20
+    KwPub,                  // 21
+    KwDecorator,            // 22
+    KwCrate,                // 23
+    KwSuper,                // 24
+
+    // ----- Keywords: variables -----
+    KwLet,                  // 25
+    KwVar,                  // 26
+    KwConst,                // 27
+
+    // ----- Keywords: control flow -----
+    KwIf,                   // 28
+    KwThen,                 // 29
+    KwElse,                 // 30
+    KwWhen,                 // 31
+    KwLoop,                 // 32
+    KwWhile,                // 33
+    KwFor,                  // 34
+    KwIn,                   // 35
+    KwTo,                   // 36
+    KwThrough,              // 37
+    KwBreak,                // 38
+    KwContinue,             // 39
+    KwReturn,               // 40
+
+    // ----- Keywords: logical operators -----
+    KwAnd,                  // 41
+    KwOr,                   // 42
+    KwNot,                  // 43
+
+    // ----- Keywords: bitwise operators -----
+    KwXor,                  // 44
+    KwShl,                  // 45
+    KwShr,                  // 46
+
+    // ----- Keywords: types -----
+    KwThis,                 // 47
+    KwThisType,             // 48
+    KwAs,                   // 49
+    KwIs,                   // 50
+
+    // ----- Keywords: memory -----
+    KwMut,                  // 51
+    KwRef,                  // 52
+    KwLife,                 // 53
+    KwVolatile,             // 54
+
+    // ----- Keywords: closures -----
+    KwDo,                   // 55
+    KwMove,                 // 56
+
+    // ----- Keywords: other -----
+    KwAsync,                // 57
+    KwAwait,                // 58
+    KwWith,                 // 59
+    KwWhere,                // 60
+    KwDyn,                  // 61
+    KwLowlevel,             // 62
+    KwQuote,                // 63
+
+    // ----- Keywords: OOP -----
+    KwClass,                // 64
+    KwInterface,            // 65
+    KwExtends,              // 66
+    KwImplements,           // 67
+    KwOverride,             // 68
+    KwVirtual,              // 69
+    KwAbstract,             // 70
+    KwSealed,               // 71
+    KwNamespace,            // 72
+    KwBase,                 // 73
+    KwProtected,            // 74
+    KwPrivate,              // 75
+    KwStatic,               // 76
+    KwNew,                  // 77
+    KwProp,                 // 78
+    KwThrow,                // 79
+
+    // ----- Operators: arithmetic -----
+    Plus,                   // 80
+    Minus,                  // 81
+    Star,                   // 82
+    Slash,                  // 83
+    Percent,                // 84
+    StarStar,               // 85
+    PlusPlus,               // 86
+    MinusMinus,             // 87
+
+    // ----- Operators: comparison -----
+    Eq,                     // 88
+    Ne,                     // 89
+    Lt,                     // 90
+    Gt,                     // 91
+    Le,                     // 92
+    Ge,                     // 93
+
+    // ----- Operators: bitwise -----
+    BitAnd,                 // 94
+    BitOr,                  // 95
+    BitXor,                 // 96
+    BitNot,                 // 97
+    Shl,                    // 98
+    Shr,                    // 99
+
+    // ----- Operators: logical symbols -----
+    AndAnd,                 // 100
+    OrOr,                   // 101
+
+    // ----- Operators: assignment -----
+    Assign,                 // 102
+    PlusAssign,             // 103
+    MinusAssign,            // 104
+    StarAssign,             // 105
+    SlashAssign,            // 106
+    PercentAssign,          // 107
+    BitAndAssign,           // 108
+    BitOrAssign,            // 109
+    BitXorAssign,           // 110
+    ShlAssign,              // 111
+    ShrAssign,              // 112
+
+    // ----- Operators: other -----
+    Arrow,                  // 113
+    FatArrow,               // 114
+    Dot,                    // 115
+    DotDot,                 // 116
+    Colon,                  // 117
+    ColonColon,             // 118
+    Question,               // 119
+    QuestionDot,            // 120
+    Bang,                   // 121
+    At,                     // 122
+    Pipe,                   // 123
+    PipeRight,              // 124
+    Dollar,                 // 125
+    DollarBrace,            // 126
+
+    // ----- Delimiters -----
+    LParen,                 // 127
+    RParen,                 // 128
+    LBracket,               // 129
+    RBracket,               // 130
+    LBrace,                 // 131
+    RBrace,                 // 132
+    Comma,                  // 133
+    Semi,                   // 134
+
+    // ----- Special -----
+    Newline,                // 135
+    Error,                  // 136
+
+    // ----- Documentation comments -----
+    DocComment,             // 137
+    ModuleDocComment,       // 138
+}
+
+/// A lexical token: kind, raw lexeme, and source span.
+///
+/// Literal payloads (numeric base, escape-processed string content, etc.) are
+/// kept on the `value` field as raw text and re-parsed by later phases —
+/// this keeps the wire format simple and matches the phase12f token reader.
+type Token {
+    kind: TokenKind,
+    value: Str,
+    span: SourceSpan
+}
+
+/// Construct a token.
+func token_new(kind: TokenKind, value: Str, span: SourceSpan) -> Token {
+    return Token { kind: kind, value: value, span: span }
+}
+
+/// Look up a TML keyword by name. Returns `Nothing` for non-keyword
+/// identifiers. Mirrors the keyword table consulted by the C++ lexer.
+func keyword_lookup(name: Str) -> Maybe[TokenKind] {
+    // Declarations
+    if name == "func" { return Just(TokenKind::KwFunc) }
+    if name == "type" { return Just(TokenKind::KwType) }
+    if name == "union" { return Just(TokenKind::KwUnion) }
+    if name == "behavior" { return Just(TokenKind::KwBehavior) }
+    if name == "impl" { return Just(TokenKind::KwImpl) }
+    if name == "mod" { return Just(TokenKind::KwMod) }
+    if name == "use" { return Just(TokenKind::KwUse) }
+    if name == "pub" { return Just(TokenKind::KwPub) }
+    if name == "decorator" { return Just(TokenKind::KwDecorator) }
+    if name == "crate" { return Just(TokenKind::KwCrate) }
+    if name == "super" { return Just(TokenKind::KwSuper) }
+
+    // Variables
+    if name == "let" { return Just(TokenKind::KwLet) }
+    if name == "var" { return Just(TokenKind::KwVar) }
+    if name == "const" { return Just(TokenKind::KwConst) }
+
+    // Control flow
+    if name == "if" { return Just(TokenKind::KwIf) }
+    if name == "then" { return Just(TokenKind::KwThen) }
+    if name == "else" { return Just(TokenKind::KwElse) }
+    if name == "when" { return Just(TokenKind::KwWhen) }
+    if name == "loop" { return Just(TokenKind::KwLoop) }
+    if name == "while" { return Just(TokenKind::KwWhile) }
+    if name == "for" { return Just(TokenKind::KwFor) }
+    if name == "in" { return Just(TokenKind::KwIn) }
+    if name == "to" { return Just(TokenKind::KwTo) }
+    if name == "through" { return Just(TokenKind::KwThrough) }
+    if name == "break" { return Just(TokenKind::KwBreak) }
+    if name == "continue" { return Just(TokenKind::KwContinue) }
+    if name == "return" { return Just(TokenKind::KwReturn) }
+
+    // Logical / bitwise word operators
+    if name == "and" { return Just(TokenKind::KwAnd) }
+    if name == "or" { return Just(TokenKind::KwOr) }
+    if name == "not" { return Just(TokenKind::KwNot) }
+    if name == "xor" { return Just(TokenKind::KwXor) }
+    if name == "shl" { return Just(TokenKind::KwShl) }
+    if name == "shr" { return Just(TokenKind::KwShr) }
+
+    // Types
+    if name == "this" { return Just(TokenKind::KwThis) }
+    if name == "This" { return Just(TokenKind::KwThisType) }
+    if name == "as" { return Just(TokenKind::KwAs) }
+    if name == "is" { return Just(TokenKind::KwIs) }
+
+    // Memory
+    if name == "mut" { return Just(TokenKind::KwMut) }
+    if name == "ref" { return Just(TokenKind::KwRef) }
+    if name == "life" { return Just(TokenKind::KwLife) }
+    if name == "volatile" { return Just(TokenKind::KwVolatile) }
+
+    // Closures
+    if name == "do" { return Just(TokenKind::KwDo) }
+    if name == "move" { return Just(TokenKind::KwMove) }
+
+    // Other
+    if name == "async" { return Just(TokenKind::KwAsync) }
+    if name == "await" { return Just(TokenKind::KwAwait) }
+    if name == "with" { return Just(TokenKind::KwWith) }
+    if name == "where" { return Just(TokenKind::KwWhere) }
+    if name == "dyn" { return Just(TokenKind::KwDyn) }
+    if name == "lowlevel" { return Just(TokenKind::KwLowlevel) }
+    if name == "quote" { return Just(TokenKind::KwQuote) }
+
+    // OOP
+    if name == "class" { return Just(TokenKind::KwClass) }
+    if name == "interface" { return Just(TokenKind::KwInterface) }
+    if name == "extends" { return Just(TokenKind::KwExtends) }
+    if name == "implements" { return Just(TokenKind::KwImplements) }
+    if name == "override" { return Just(TokenKind::KwOverride) }
+    if name == "virtual" { return Just(TokenKind::KwVirtual) }
+    if name == "abstract" { return Just(TokenKind::KwAbstract) }
+    if name == "sealed" { return Just(TokenKind::KwSealed) }
+    if name == "namespace" { return Just(TokenKind::KwNamespace) }
+    if name == "base" { return Just(TokenKind::KwBase) }
+    if name == "protected" { return Just(TokenKind::KwProtected) }
+    if name == "private" { return Just(TokenKind::KwPrivate) }
+    if name == "static" { return Just(TokenKind::KwStatic) }
+    if name == "new" { return Just(TokenKind::KwNew) }
+    if name == "prop" { return Just(TokenKind::KwProp) }
+    if name == "throw" { return Just(TokenKind::KwThrow) }
+
+    // Boolean / null literals are also recognised at the keyword stage so
+    // the lexer can emit BoolLiteral / NullLiteral instead of Identifier.
+    if name == "true" { return Just(TokenKind::BoolLiteral) }
+    if name == "false" { return Just(TokenKind::BoolLiteral) }
+    if name == "null" { return Just(TokenKind::NullLiteral) }
+
+    return Nothing
+}
+
+/// True if `kind` is one of the literal token kinds.
+func token_kind_is_literal(kind: TokenKind) -> Bool {
+    when kind {
+        TokenKind::IntLiteral => return true,
+        TokenKind::FloatLiteral => return true,
+        TokenKind::StringLiteral => return true,
+        TokenKind::CharLiteral => return true,
+        TokenKind::BoolLiteral => return true,
+        TokenKind::NullLiteral => return true,
+        TokenKind::InterpStringStart => return true,
+        TokenKind::InterpStringMiddle => return true,
+        TokenKind::InterpStringEnd => return true,
+        TokenKind::TemplateLiteralStart => return true,
+        TokenKind::TemplateLiteralMiddle => return true,
+        TokenKind::TemplateLiteralEnd => return true,
+        _ => return false
+    }
+}
+
+/// True if `kind` is a reserved keyword (any `Kw*` variant).
+func token_kind_is_keyword(kind: TokenKind) -> Bool {
+    when kind {
+        TokenKind::KwFunc => return true,
+        TokenKind::KwType => return true,
+        TokenKind::KwUnion => return true,
+        TokenKind::KwBehavior => return true,
+        TokenKind::KwImpl => return true,
+        TokenKind::KwMod => return true,
+        TokenKind::KwUse => return true,
+        TokenKind::KwPub => return true,
+        TokenKind::KwDecorator => return true,
+        TokenKind::KwCrate => return true,
+        TokenKind::KwSuper => return true,
+        TokenKind::KwLet => return true,
+        TokenKind::KwVar => return true,
+        TokenKind::KwConst => return true,
+        TokenKind::KwIf => return true,
+        TokenKind::KwThen => return true,
+        TokenKind::KwElse => return true,
+        TokenKind::KwWhen => return true,
+        TokenKind::KwLoop => return true,
+        TokenKind::KwWhile => return true,
+        TokenKind::KwFor => return true,
+        TokenKind::KwIn => return true,
+        TokenKind::KwTo => return true,
+        TokenKind::KwThrough => return true,
+        TokenKind::KwBreak => return true,
+        TokenKind::KwContinue => return true,
+        TokenKind::KwReturn => return true,
+        TokenKind::KwAnd => return true,
+        TokenKind::KwOr => return true,
+        TokenKind::KwNot => return true,
+        TokenKind::KwXor => return true,
+        TokenKind::KwShl => return true,
+        TokenKind::KwShr => return true,
+        TokenKind::KwThis => return true,
+        TokenKind::KwThisType => return true,
+        TokenKind::KwAs => return true,
+        TokenKind::KwIs => return true,
+        TokenKind::KwMut => return true,
+        TokenKind::KwRef => return true,
+        TokenKind::KwLife => return true,
+        TokenKind::KwVolatile => return true,
+        TokenKind::KwDo => return true,
+        TokenKind::KwMove => return true,
+        TokenKind::KwAsync => return true,
+        TokenKind::KwAwait => return true,
+        TokenKind::KwWith => return true,
+        TokenKind::KwWhere => return true,
+        TokenKind::KwDyn => return true,
+        TokenKind::KwLowlevel => return true,
+        TokenKind::KwQuote => return true,
+        TokenKind::KwClass => return true,
+        TokenKind::KwInterface => return true,
+        TokenKind::KwExtends => return true,
+        TokenKind::KwImplements => return true,
+        TokenKind::KwOverride => return true,
+        TokenKind::KwVirtual => return true,
+        TokenKind::KwAbstract => return true,
+        TokenKind::KwSealed => return true,
+        TokenKind::KwNamespace => return true,
+        TokenKind::KwBase => return true,
+        TokenKind::KwProtected => return true,
+        TokenKind::KwPrivate => return true,
+        TokenKind::KwStatic => return true,
+        TokenKind::KwNew => return true,
+        TokenKind::KwProp => return true,
+        TokenKind::KwThrow => return true,
+        _ => return false
+    }
+}
+
+/// True if `kind` is a punctuation/symbol operator (excludes word operators
+/// like `and`/`or`/`not` — those are keywords; use `token_kind_is_keyword`).
+func token_kind_is_operator(kind: TokenKind) -> Bool {
+    when kind {
+        TokenKind::Plus => return true,
+        TokenKind::Minus => return true,
+        TokenKind::Star => return true,
+        TokenKind::Slash => return true,
+        TokenKind::Percent => return true,
+        TokenKind::StarStar => return true,
+        TokenKind::PlusPlus => return true,
+        TokenKind::MinusMinus => return true,
+        TokenKind::Eq => return true,
+        TokenKind::Ne => return true,
+        TokenKind::Lt => return true,
+        TokenKind::Gt => return true,
+        TokenKind::Le => return true,
+        TokenKind::Ge => return true,
+        TokenKind::BitAnd => return true,
+        TokenKind::BitOr => return true,
+        TokenKind::BitXor => return true,
+        TokenKind::BitNot => return true,
+        TokenKind::Shl => return true,
+        TokenKind::Shr => return true,
+        TokenKind::AndAnd => return true,
+        TokenKind::OrOr => return true,
+        TokenKind::Assign => return true,
+        TokenKind::PlusAssign => return true,
+        TokenKind::MinusAssign => return true,
+        TokenKind::StarAssign => return true,
+        TokenKind::SlashAssign => return true,
+        TokenKind::PercentAssign => return true,
+        TokenKind::BitAndAssign => return true,
+        TokenKind::BitOrAssign => return true,
+        TokenKind::BitXorAssign => return true,
+        TokenKind::ShlAssign => return true,
+        TokenKind::ShrAssign => return true,
+        TokenKind::Arrow => return true,
+        TokenKind::FatArrow => return true,
+        TokenKind::Dot => return true,
+        TokenKind::DotDot => return true,
+        TokenKind::Colon => return true,
+        TokenKind::ColonColon => return true,
+        TokenKind::Question => return true,
+        TokenKind::QuestionDot => return true,
+        TokenKind::Bang => return true,
+        TokenKind::At => return true,
+        TokenKind::Pipe => return true,
+        TokenKind::PipeRight => return true,
+        TokenKind::Dollar => return true,
+        TokenKind::DollarBrace => return true,
+        _ => return false
+    }
+}

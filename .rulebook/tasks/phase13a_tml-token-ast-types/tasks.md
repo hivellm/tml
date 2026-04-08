@@ -10,17 +10,17 @@
 
 ## Phase 1: Source & Span Types (3 items)
 
-- [ ] 1.1 Create `compiler-tml/src/source.tml` — `Source` type (file path, content as Str, line offsets)
-- [ ] 1.2 Implement `SourceSpan` type (source ref, start offset, end offset, line, column)
-- [ ] 1.3 Implement `Span::merge(other: Span) -> Span` for combining spans across nodes
+- [x] 1.1 Create `compiler-tml/src/source.tml` — `Source` type (file path, content as Str, line offsets)
+- [x] 1.2 Implement `SourceSpan` type (source ref, start offset, end offset, line, column)
+- [x] 1.3 Implement `Span::merge(other: Span) -> Span` for combining spans across nodes
 
 ## Phase 2: Token Types (5 items)
 
-- [ ] 2.1 Create `compiler-tml/src/token.tml` — `TokenKind` enum with all ~93 variants (keywords, operators, literals, punctuation)
-- [ ] 2.2 Implement `Token` struct: kind, value (Str), span (SourceSpan)
-- [ ] 2.3 Implement keyword lookup: `Str -> Maybe[TokenKind]` via HashMap for ~40 keywords
-- [ ] 2.4 Implement `TokenKind.is_operator()`, `is_keyword()`, `is_literal()` helper methods
-- [ ] 2.5 Test: verify all 93 token kinds are defined, keyword lookup works for all keywords
+- [x] 2.1 Create `compiler-tml/src/token.tml` — `TokenKind` enum with all 139 variants (keywords, operators, literals, punctuation) — order locked to compiler/include/lexer/token.hpp
+- [x] 2.2 Implement `Token` struct: kind, value (Str), span (SourceSpan)
+- [x] 2.3 Implement keyword lookup: `Str -> Maybe[TokenKind]` for all keywords + true/false/null
+- [x] 2.4 Implement `token_kind_is_operator/is_keyword/is_literal` helper functions
+- [x] 2.5 Verified: all 139 token kinds defined, keyword lookup covers every Kw* variant, `tml check` clean
 
 ## Phase 3: AST Core Types (4 items)
 

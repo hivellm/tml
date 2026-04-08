@@ -77,10 +77,11 @@ Before writing any `.tml` code:
 
 ## T4. Implementation Discipline
 
-- **Incremental**: 1–3 files per stage. Compile → test → fix → next stage. If 2–3 fix attempts fail on the same error, delete the broken code, re-analyze, pick a different approach.
+- **No baby-stepping. Execute the full task end-to-end.** When given a task, complete every phase and every item before stopping. Do NOT pause between phases to ask "continue?", "want me to proceed?", "should I do phase N+1?". The only valid stops are: (a) genuine design ambiguity that requires a user decision, (b) destructive-op authorization, (c) the fail-twice rule, (d) the task is 100% complete (all items `[x]`, mandatory tail done).
+- **Incremental quality, not incremental delivery**: still compile/check after each file and fix errors before moving on — but keep moving on. Incremental means small verified steps inside one continuous run, NOT stopping to confirm with the user between steps.
 - **Rust-as-Reference IR**: when fixing codegen bugs, write equivalent `.rs` + `.tml`, compile both to LLVM IR, compare function-by-function. TML should not exceed ~2× Rust instruction count.
 - **Analyze before executing**: check existing examples/conventions before restructuring.
-- **Don't ask "continue?"** — complete tasks 100%. Only stop for design decisions or destructive-op authorization.
+- **If 2–3 fix attempts fail on the same error**, delete the broken code, re-analyze, pick a different approach (fail-twice rule). This is the ONLY mid-task escalation trigger besides design decisions.
 
 ### Minimize C/C++ code
 1. **Pure TML** (preferred) — memory intrinsics in `.tml`.
