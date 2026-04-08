@@ -152,7 +152,18 @@ void LLVMIRGen::emit_vtables() {
         // Check both FuncSig.type_params AND the parser TraitDecl.generics as source of truth,
         // since cached modules may not have type_params populated for older cache files.
         std::set<std::string> generic_method_names;
-        auto trait_it_check = trait_decls_.find(behavior_name);
+        // FQN-first lookup to avoid short-name collisions (e.g. core::io::Write vs
+        // core::fmt::Write)
+        auto resolve_trait_it = [&](const std::string& bname) -> decltype(trait_decls_)::iterator {
+            auto fqn_opt = env_.resolve_imported_symbol(bname);
+            if (fqn_opt) {
+                auto it = trait_decls_.find(*fqn_opt);
+                if (it != trait_decls_.end())
+                    return it;
+            }
+            return trait_decls_.find(bname);
+        };
+        auto trait_it_check = resolve_trait_it(behavior_name);
         if (trait_it_check != trait_decls_.end()) {
             for (const auto& tm : trait_it_check->second->methods) {
                 if (!tm.generics.empty()) {
@@ -269,7 +280,7 @@ void LLVMIRGen::emit_vtables() {
         // Instead of just declaring them (which causes link errors), actually generate the
         // function bodies using the trait's default method implementation
         if (!missing_decls.empty()) {
-            auto trait_it = trait_decls_.find(behavior_name);
+            auto trait_it = resolve_trait_it(behavior_name);
             if (trait_it != trait_decls_.end()) {
                 const auto* trait_decl = trait_it->second;
 

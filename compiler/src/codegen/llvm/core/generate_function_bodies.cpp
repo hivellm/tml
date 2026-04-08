@@ -425,7 +425,25 @@ void LLVMIRGen::generate_function_bodies(const parser::Module& module) {
                     }
                 }
                 if (!trait_name.empty()) {
-                    auto trait_it = trait_decls_.find(trait_name);
+                    // Prefer FQN-keyed lookup to avoid short-name collisions between
+                    // same-named behaviors in different modules (e.g. core::io::Write vs
+                    // core::fmt::Write). Resolve FQN via the TypeEnv's imported symbol table,
+                    // which was populated when the type-checker processed the 'use' declarations
+                    // for the module being compiled.
+                    auto trait_it = trait_decls_.end();
+                    {
+                        auto fqn_opt = env_.resolve_imported_symbol(trait_name);
+                        if (fqn_opt) {
+                            auto fqn_it = trait_decls_.find(*fqn_opt);
+                            if (fqn_it != trait_decls_.end()) {
+                                trait_it = fqn_it;
+                            }
+                        }
+                    }
+                    // Fallback to short-name lookup if FQN resolution did not yield a match
+                    if (trait_it == trait_decls_.end()) {
+                        trait_it = trait_decls_.find(trait_name);
+                    }
                     // If not found in trait_decls_, load the behavior's source
                     // file from disk and parse it to get the TraitDecl AST.
                     // This handles behaviors like Iterator that are defined
@@ -544,6 +562,57 @@ void LLVMIRGen::generate_function_bodies(const parser::Module& module) {
                         std::set<std::string> impl_method_names;
                         for (const auto& m : impl.methods) {
                             impl_method_names.insert(m.name);
+                        }
+
+                        // Guard against short-name collision: verify the found TraitDecl actually
+                        // corresponds to the behavior this impl is for. If the impl provides at
+                        // least one explicit method but NONE of them appear in the TraitDecl's
+                        // method list, this is a wrong TraitDecl (e.g. core::fmt::Write found
+                        // instead of core::io::Write). Skip default generation in that case.
+                        if (!impl_method_names.empty()) {
+                            std::set<std::string> trait_method_names;
+                            for (const auto& tm : trait_decl->methods) {
+                                trait_method_names.insert(tm.name);
+                            }
+                            bool any_overlap = false;
+                            for (const auto& n : impl_method_names) {
+                                if (trait_method_names.count(n) > 0) {
+                                    any_overlap = true;
+                                    break;
+                                }
+                            }
+                            if (!any_overlap) {
+                                // Wrong TraitDecl: try all other registered FQN entries for this
+                                // short name. Scan trait_decls_ for entries ending in "::<name>".
+                                const std::string suffix = "::" + trait_name;
+                                bool found_better = false;
+                                for (const auto& [key, tdecl] : trait_decls_) {
+                                    if (key.size() > suffix.size() &&
+                                        key.compare(key.size() - suffix.size(), suffix.size(),
+                                                    suffix) == 0) {
+                                        std::set<std::string> candidate_methods;
+                                        for (const auto& tm : tdecl->methods) {
+                                            candidate_methods.insert(tm.name);
+                                        }
+                                        bool candidate_overlap = false;
+                                        for (const auto& n : impl_method_names) {
+                                            if (candidate_methods.count(n) > 0) {
+                                                candidate_overlap = true;
+                                                break;
+                                            }
+                                        }
+                                        if (candidate_overlap) {
+                                            trait_decl = tdecl;
+                                            found_better = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!found_better) {
+                                    // No TraitDecl matches — skip default generation entirely
+                                    continue;
+                                }
+                            }
                         }
 
                         // Generate default implementations for missing methods

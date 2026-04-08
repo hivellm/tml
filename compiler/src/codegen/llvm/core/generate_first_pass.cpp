@@ -213,7 +213,18 @@ void LLVMIRGen::generate_first_pass(const parser::Module& module) {
         } else if (decl->is<parser::TraitDecl>()) {
             // Register trait/behavior declaration for default implementations
             const auto& trait_decl = decl->as<parser::TraitDecl>();
-            trait_decls_[trait_decl.name] = &trait_decl;
+            // Register by FQN when module context is known (avoids short-name collisions
+            // between same-named traits in different modules, e.g. core::io::Write vs
+            // core::fmt::Write)
+            if (!current_module_name_.empty()) {
+                std::string fqn = current_module_name_ + "::" + trait_decl.name;
+                trait_decls_[fqn] = &trait_decl;
+            }
+            // Register by short name only if not already registered (first-write-wins
+            // for short name preserves backward compat with callers that use short name)
+            if (trait_decls_.find(trait_decl.name) == trait_decls_.end()) {
+                trait_decls_[trait_decl.name] = &trait_decl;
+            }
         }
     }
 
