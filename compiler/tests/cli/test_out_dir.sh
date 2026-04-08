@@ -27,7 +27,7 @@ rm -rf "$TEST_DIR"
 
 # Test 2: Build static library with custom output directory
 echo "Test 2: Build static library with --out-dir"
-$TML_BIN build "$TEST_FILE" --crate-type=lib --out-dir="$TEST_DIR"
+$TML_BIN build "$TEST_FILE" --lib-type=lib --out-dir="$TEST_DIR"
 if [ -f "$TEST_DIR/test_out_dir.lib" ] || [ -f "$TEST_DIR/libtest_out_dir.a" ]; then
     echo "✓ Static library created in custom directory"
 else
@@ -40,7 +40,7 @@ rm -rf "$TEST_DIR"
 
 # Test 3: Build library with header in custom directory
 echo "Test 3: Build library with header using --out-dir"
-$TML_BIN build "$TEST_FILE" --crate-type=lib --emit-header --out-dir="$TEST_DIR"
+$TML_BIN build "$TEST_FILE" --lib-type=lib --emit-header --out-dir="$TEST_DIR"
 if [ -f "$TEST_DIR/test_out_dir.h" ]; then
     echo "✓ Header file created in custom directory"
 else

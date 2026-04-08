@@ -173,6 +173,104 @@ int tml_main(int argc, char* argv[]) {
     }
 
     if (command == "build") {
+        // Manifest-driven form: `tml build` with no path loads tml.toml from
+        // CWD and builds every [[bin]] target (+ [lib] if present). Targets
+        // are named after [[bin]].name / [lib].name, not the source stem.
+        // Positional `--bin <name>` / `--lib` filters to a single target.
+        if (argc < 3 || std::string(argv[2]).starts_with("-")) {
+            auto manifest_opt = Manifest::load_from_current_dir();
+            if (!manifest_opt) {
+                std::cerr << "Usage: tml build <file.tml> [options]\n";
+                std::cerr << "       tml build                (builds all [[bin]] + [lib] from "
+                             "tml.toml in CWD)\n";
+                std::cerr << "       tml build --bin <name>   (builds only the named bin target)\n";
+                std::cerr << "       tml build --lib          (builds only the [lib] target)\n";
+                std::cerr << "\nNo path given and no tml.toml found in current directory.\n";
+                return 1;
+            }
+
+            // Parse filter flags
+            std::string only_bin;
+            bool only_lib = false;
+            for (int i = 2; i < argc; ++i) {
+                std::string arg = argv[i];
+                if (arg == "--bin" && i + 1 < argc) {
+                    only_bin = argv[++i];
+                } else if (arg == "--lib") {
+                    only_lib = true;
+                }
+            }
+
+            BuildOptions opts;
+            opts.verbose = verbose;
+
+            const auto& manifest = *manifest_opt;
+            int last_rc = 0;
+            int built = 0;
+
+            // Build [[bin]] targets
+            if (!only_lib) {
+                for (const auto& bin : manifest.bins) {
+                    if (!only_bin.empty() && bin.name != only_bin) {
+                        continue;
+                    }
+                    if (bin.path.empty()) {
+                        TML_LOG_ERROR("build",
+                                      "[[bin]] entry '" << bin.name << "' missing required 'path'");
+                        return 1;
+                    }
+                    BuildOptions per_opts = opts;
+                    per_opts.output_type = BuildOutputType::Executable;
+                    per_opts.output_name = bin.name;
+                    TML_LOG_INFO("build", "Building bin '" << bin.name << "' from " << bin.path);
+                    int rc = run_build_with_queries(bin.path, per_opts);
+                    if (rc != 0) {
+                        return rc;
+                    }
+                    last_rc = rc;
+                    ++built;
+                }
+            }
+
+            // Build [lib] target
+            if (!only_bin.empty() && built == 0) {
+                TML_LOG_ERROR("build", "No [[bin]] named '" << only_bin << "' in tml.toml");
+                return 1;
+            }
+            if (only_bin.empty() && manifest.lib) {
+                const auto& lib = *manifest.lib;
+                BuildOptions per_opts = opts;
+                // Default lib type: first entry from manifest (rlib/lib/dylib)
+                if (!lib.lib_types.empty()) {
+                    const auto& ct = lib.lib_types[0];
+                    if (ct == "rlib") {
+                        per_opts.output_type = BuildOutputType::RlibLib;
+                    } else if (ct == "dylib") {
+                        per_opts.output_type = BuildOutputType::DynamicLib;
+                    } else {
+                        per_opts.output_type = BuildOutputType::StaticLib;
+                    }
+                } else {
+                    per_opts.output_type = BuildOutputType::RlibLib;
+                }
+                per_opts.output_name = lib.name.empty() ? manifest.package.name : lib.name;
+                TML_LOG_INFO("build",
+                             "Building lib '" << per_opts.output_name << "' from " << lib.path);
+                int rc = run_build_with_queries(lib.path, per_opts);
+                if (rc != 0) {
+                    return rc;
+                }
+                last_rc = rc;
+                ++built;
+            }
+
+            if (built == 0) {
+                TML_LOG_ERROR("build", "tml.toml has no [[bin]] or [lib] targets to build");
+                return 1;
+            }
+            return last_rc;
+        }
+
         if (argc < 3) {
             std::cerr << "Usage: tml build <file.tml> [options]\n";
             std::cerr << "Options:\n";
@@ -191,7 +289,7 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --lto               Enable Link-Time Optimization\n";
             std::cerr << "  -O0...-O3           Set optimization level\n";
             std::cerr << "  -Os, -Oz            Optimize for size\n";
-            std::cerr << "  --crate-type=<type> Output type: bin, lib, dylib, rlib\n";
+            std::cerr << "  --lib-type=<type>   Output type: bin, lib, dylib, rlib\n";
             std::cerr << "  --backend=<name>    Codegen backend: llvm (default), cranelift\n";
             std::cerr << "  --polonius          Use Polonius borrow checker (more permissive)\n";
             std::cerr << "  --no-thir           Disable THIR pipeline (fall back to HIR→MIR)\n";
@@ -232,13 +330,13 @@ int tml_main(int argc, char* argv[]) {
         // Determine output type from manifest if available
         if (manifest_opt && manifest_opt->lib) {
             // If manifest has [lib] section, default to library output
-            if (!manifest_opt->lib->crate_types.empty()) {
-                const auto& crate_type = manifest_opt->lib->crate_types[0];
-                if (crate_type == "rlib") {
+            if (!manifest_opt->lib->lib_types.empty()) {
+                const auto& lib_type = manifest_opt->lib->lib_types[0];
+                if (lib_type == "rlib") {
                     output_type = BuildOutputType::RlibLib;
-                } else if (crate_type == "lib") {
+                } else if (lib_type == "lib") {
                     output_type = BuildOutputType::StaticLib;
-                } else if (crate_type == "dylib") {
+                } else if (lib_type == "dylib") {
                     output_type = BuildOutputType::DynamicLib;
                 }
             }
@@ -314,19 +412,19 @@ int tml_main(int argc, char* argv[]) {
                 opt_level = 4; // Optimize for size
             } else if (arg == "-Oz") {
                 opt_level = 5; // Optimize for size (aggressive)
-            } else if (arg.starts_with("--crate-type=")) {
-                std::string crate_type = arg.substr(13);
-                if (crate_type == "bin") {
+            } else if (arg.starts_with("--lib-type=")) {
+                std::string lib_type = arg.substr(11);
+                if (lib_type == "bin") {
                     output_type = BuildOutputType::Executable;
-                } else if (crate_type == "lib" || crate_type == "staticlib") {
+                } else if (lib_type == "lib" || lib_type == "staticlib") {
                     output_type = BuildOutputType::StaticLib;
-                } else if (crate_type == "dylib" || crate_type == "cdylib") {
+                } else if (lib_type == "dylib" || lib_type == "cdylib") {
                     output_type = BuildOutputType::DynamicLib;
-                } else if (crate_type == "rlib") {
+                } else if (lib_type == "rlib") {
                     output_type = BuildOutputType::RlibLib;
                 } else {
-                    TML_LOG_ERROR("build", "Unknown crate type '"
-                                               << crate_type
+                    TML_LOG_ERROR("build", "Unknown lib type '"
+                                               << lib_type
                                                << "'. Valid types: bin, lib, dylib, rlib");
                     return 1;
                 }

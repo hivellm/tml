@@ -124,7 +124,7 @@ TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
     }
 
     std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
-                      " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
+                      " --lib-type=lib --emit-header --out-dir=" + test_dir.string();
 
     int result = run_command(cmd);
     EXPECT_EQ(result, 0) << "Building static library should succeed";
@@ -150,7 +150,7 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 
     // Build TML library
     std::string build_cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
-                            " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
+                            " --lib-type=lib --emit-header --out-dir=" + test_dir.string();
     int build_result = run_command(build_cmd);
     ASSERT_EQ(build_result, 0) << "Building TML library should succeed";
 
@@ -186,7 +186,7 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 // Test: Build dynamic library with header
 TEST_F(FFIIntegrationTest, BuildDynamicLibraryWithHeader) {
     std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
-                      " --crate-type=dylib --emit-header --out-dir=" + test_dir.string();
+                      " --lib-type=dylib --emit-header --out-dir=" + test_dir.string();
 
     int result = run_command(cmd);
     EXPECT_EQ(result, 0) << "Building dynamic library should succeed";
@@ -213,7 +213,7 @@ TEST_F(FFIIntegrationTest, HeaderContainsCorrectDeclarations) {
 
     // Build library to generate header
     std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
-                      " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
+                      " --lib-type=lib --emit-header --out-dir=" + test_dir.string();
     int result = run_command(cmd);
     ASSERT_EQ(result, 0) << "Building library should succeed";
     ASSERT_TRUE(fs::exists(c_header_file)) << "Header should exist";

@@ -3,9 +3,12 @@ TML_MODULE("compiler")
 #include "query/query_context.hpp"
 
 #include "log/log.hpp"
+#include "parser/ast.hpp"
 #include "profiler.hpp"
+#include "serial/ast_reader.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
@@ -115,6 +118,45 @@ TokenizeResult QueryContext::tokenize(const std::string& file_path) {
 
 ParseModuleResult QueryContext::parse_module(const std::string& file_path,
                                              const std::string& module_name) {
+    // Phase 3.4: prefer a sibling `<source>.ast.bin` cache file when present.
+    // This bypasses lex+parse and feeds a deserialized parser::Module directly.
+    const std::string cache_path = file_path + ".ast.bin";
+    std::error_code ec;
+    if (fs::exists(cache_path, ec) && !ec) {
+        try {
+            std::ifstream in(cache_path, std::ios::binary);
+            if (in) {
+                in.seekg(0, std::ios::end);
+                const auto sz = static_cast<std::streamsize>(in.tellg());
+                in.seekg(0, std::ios::beg);
+                std::vector<uint8_t> bytes(static_cast<size_t>(sz));
+                if (sz > 0) {
+                    in.read(reinterpret_cast<char*>(bytes.data()), sz);
+                }
+                // The deserializer injects `file_path` into every SourceLocation::file
+                // (a string_view). The Module owns no copy of that string, so we must
+                // keep a stable backing storage alive for the lifetime of the result.
+                // We pin the file_path string in the Module's `name` is not enough;
+                // instead reuse the heap-allocated cache_path via a shared_ptr alias.
+                auto path_storage = std::make_shared<std::string>(file_path);
+                parser::Module mod = serial::read_ast(bytes, *path_storage);
+                auto module_ptr = std::shared_ptr<parser::Module>(
+                    new parser::Module(std::move(mod)), [path_storage](parser::Module* p) mutable {
+                        delete p;
+                        path_storage.reset();
+                    });
+                ParseModuleResult result;
+                result.module = module_ptr;
+                result.success = true;
+                return result;
+            }
+        } catch (const std::exception& e) {
+            ParseModuleResult result;
+            result.success = false;
+            result.errors.push_back(std::string("ast.bin deserialization failed: ") + e.what());
+            return result;
+        }
+    }
     return force<ParseModuleResult>(ParseModuleKey{file_path, module_name});
 }
 

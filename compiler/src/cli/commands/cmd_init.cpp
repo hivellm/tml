@@ -91,7 +91,7 @@ std::string generate_manifest(const std::string& name, bool is_lib, const std::s
         // [lib] section
         oss << "[lib]\n";
         oss << "path = \"src/lib.tml\"\n";
-        oss << "crate-type = [\"rlib\"]\n";
+        oss << "lib-type = [\"rlib\"]\n";
         oss << "\n";
     } else {
         // [[bin]] section

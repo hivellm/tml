@@ -21,6 +21,7 @@ TML_MODULE("compiler")
 
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "package/package_registry.hpp"
 #include "parser/parser.hpp"
 #include "preprocessor/preprocessor.hpp"
 #include "types/env.hpp"
@@ -178,12 +179,30 @@ static void cache_not_found(const std::string& module_path) {
 static std::string resolve_lib_module_path(const std::string& lib_subdir,
                                            const std::string& src_subdir,
                                            const std::string& fs_module_path) {
+    namespace fs = std::filesystem;
+
+    // Workspace-aware path: if lib_subdir matches a registered package name,
+    // use its declared src_dir (from its tml.toml). This lets packages live
+    // outside lib/ (e.g. compiler-tml/ at repo root).
+    if (const auto* pkg = tml::pkg::PackageRegistry::instance().get(lib_subdir)) {
+        fs::path base = pkg->src_dir;
+        fs::path candidate1 = base / (fs_module_path + ".tml");
+        if (exists_case_sensitive(candidate1)) {
+            return candidate1.string();
+        }
+        fs::path candidate2 = base / fs_module_path / "mod.tml";
+        if (exists_case_sensitive(candidate2)) {
+            return candidate2.string();
+        }
+        // Package is registered but file not found — fall through to legacy
+        // lib_root probing below as a safety net.
+    }
+
     const std::string& lib_root = find_lib_root();
     if (lib_root.empty()) {
         return ""; // Fallback to old behavior
     }
 
-    namespace fs = std::filesystem;
     fs::path base = fs::path(lib_root) / lib_subdir / src_subdir;
 
     // Try name.tml first, then name/mod.tml
@@ -786,6 +805,51 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
         if (!package_name.empty() && package_name != "self" && package_name != "super" &&
             package_name != "core" && package_name != "std" && package_name != "test" &&
             package_name != "backtrace") {
+
+            // Workspace member lookup: if the package is declared in the root
+            // tml.toml [workspace].members, resolve via its registered src_dir
+            // (which may live outside lib/, e.g. compiler-tml/ at repo root).
+            if (const auto* pkg = tml::pkg::PackageRegistry::instance().get(package_name)) {
+                (void)pkg;
+                std::string cached_path = get_cached_path(module_path);
+                if (!cached_path.empty()) {
+                    return load_module_from_file(module_path, cached_path);
+                }
+                if (is_known_not_found(module_path)) {
+                    if (!silent) {
+                        TML_LOG_ERROR("types", "Module not found: " << module_path);
+                    }
+                    return false;
+                }
+
+                std::string fs_rest;
+                if (rest.empty()) {
+                    fs_rest = "mod";
+                } else {
+                    fs_rest = rest;
+                    size_t p = 0;
+                    while ((p = fs_rest.find("::", p)) != std::string::npos) {
+                        fs_rest.replace(p, 2, "/");
+                        p += 1;
+                    }
+                }
+
+                std::string resolved = resolve_lib_module_path(package_name, "src", fs_rest);
+                if (!resolved.empty()) {
+                    cache_resolved_path(module_path, resolved);
+                    TML_DEBUG_LN("[MODULE] Resolved workspace package: " << module_path << " -> "
+                                                                         << resolved);
+                    return load_module_from_file(module_path, resolved);
+                }
+
+                if (!silent) {
+                    TML_LOG_ERROR("types", "Module '" << module_path
+                                                      << "' not found in workspace package "
+                                                      << package_name);
+                }
+                cache_not_found(module_path);
+                return false;
+            }
 
             const std::string& lib_root = find_lib_root();
             if (!lib_root.empty()) {

@@ -14,7 +14,7 @@ TML_MODULE("compiler")
 //!
 //! [lib]
 //! path = "src/lib.tml"
-//! crate-type = ["rlib"]
+//! lib-type = ["rlib"]
 //!
 //! [[bin]]
 //! name = "myapp"
@@ -100,8 +100,8 @@ bool LibConfig::validate() const {
     if (path.empty())
         return false;
 
-    // Validate crate types
-    for (const auto& type : crate_types) {
+    // Validate lib types
+    for (const auto& type : lib_types) {
         if (type != "rlib" && type != "lib" && type != "dylib") {
             return false;
         }
@@ -365,6 +365,51 @@ void SimpleTomlParser::set_error(const std::string& message) {
     error_message_ = "Line " + std::to_string(line_) + ": " + message;
 }
 
+std::optional<WorkspaceConfig> SimpleTomlParser::parse_workspace_section() {
+    WorkspaceConfig ws;
+
+    skip_whitespace();
+    skip_comment();
+
+    while (!is_eof() && peek() != '[') {
+        skip_whitespace();
+        skip_comment();
+
+        if (peek() == '[' || is_eof())
+            break;
+
+        std::string key = parse_identifier();
+        skip_whitespace();
+
+        if (peek() != '=') {
+            set_error("Expected '=' after key in [workspace]");
+            return std::nullopt;
+        }
+        advance();
+        skip_whitespace();
+
+        if (key == "members") {
+            ws.members = parse_string_array();
+        } else {
+            // Skip unknown key value
+            if (peek() == '"') {
+                parse_string();
+            } else if (peek() == '[') {
+                parse_string_array();
+            } else {
+                while (!is_eof() && peek() != '\n' && peek() != '\r') {
+                    advance();
+                }
+            }
+        }
+
+        skip_whitespace();
+        skip_comment();
+    }
+
+    return ws;
+}
+
 std::optional<PackageInfo> SimpleTomlParser::parse_package_section() {
     PackageInfo info;
 
@@ -449,8 +494,8 @@ std::optional<LibConfig> SimpleTomlParser::parse_lib_section() {
             config.path = parse_string();
         } else if (key == "name") {
             config.name = parse_string();
-        } else if (key == "crate-type") {
-            config.crate_types = parse_string_array();
+        } else if (key == "lib-type") {
+            config.lib_types = parse_string_array();
         } else if (key == "emit-header") {
             config.emit_header = parse_boolean();
         }
@@ -810,7 +855,12 @@ std::optional<Manifest> SimpleTomlParser::parse() {
             skip_comment();
 
             // Parse section content
-            if (section == "package") {
+            if (section == "workspace") {
+                auto ws = parse_workspace_section();
+                if (!ws)
+                    return std::nullopt;
+                manifest.workspace = *ws;
+            } else if (section == "package") {
                 auto pkg = parse_package_section();
                 if (!pkg)
                     return std::nullopt;

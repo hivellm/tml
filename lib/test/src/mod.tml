@@ -37,4 +37,5 @@ pub use report
 pub use coverage
 pub use mock
 pub use property
-pub use e2e
+// Note: `e2e` is NOT re-exported by default — it pulls in std::net::tls
+// which requires OpenSSL. Import explicitly: `use test::e2e::tls::*`.

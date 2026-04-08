@@ -39,9 +39,9 @@ TML_MODULE("compiler")
 //! | Type          | Extension (Win/Unix)  | Flag              |
 //! |---------------|-----------------------|-------------------|
 //! | Executable    | `.exe` / (none)       | (default)         |
-//! | Static Lib    | `.lib` / `.a`         | `--crate-type=lib`|
-//! | Dynamic Lib   | `.dll` / `.so`        | `--crate-type=dylib`|
-//! | TML Library   | `.rlib`               | `--crate-type=rlib`|
+//! | Static Lib    | `.lib` / `.a`         | `--lib-type=lib`|
+//! | Dynamic Lib   | `.dll` / `.so`        | `--lib-type=dylib`|
+//! | TML Library   | `.rlib`               | `--lib-type=rlib`|
 
 #include "cmd_build.hpp"
 

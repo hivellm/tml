@@ -50,8 +50,8 @@ struct PackageInfo {
  */
 struct LibConfig {
     std::string path = "src/lib.tml";
-    std::vector<std::string> crate_types = {"rlib"}; // rlib, lib, dylib
-    std::string name;                                // Optional override (defaults to package name)
+    std::vector<std::string> lib_types = {"rlib"}; // rlib, lib, dylib
+    std::string name;                              // Optional override (defaults to package name)
     bool emit_header = false;
 
     bool validate() const;
@@ -150,6 +150,21 @@ struct NativeDep {
 };
 
 /**
+ * Workspace configuration from [workspace] section.
+ *
+ * Rust/Cargo-style: lists sibling packages that share this repo. Each
+ * entry is a path (relative to the workspace manifest) pointing at a
+ * directory that contains its own `tml.toml` with a `[package]` section.
+ */
+struct WorkspaceConfig {
+    std::vector<std::string> members;
+
+    bool is_workspace() const {
+        return !members.empty();
+    }
+};
+
+/**
  * Complete manifest structure
  */
 struct Manifest {
@@ -160,6 +175,7 @@ struct Manifest {
     std::map<std::string, NativeDep> native_deps; ///< Native dependencies from [native-deps]
     BuildSettings build;
     std::map<std::string, ProfileConfig> profiles;
+    WorkspaceConfig workspace; ///< [workspace] members (empty if not a workspace root)
 
     /**
      * Load manifest from tml.toml file
@@ -237,6 +253,7 @@ private:
     bool parse_boolean();
     std::vector<std::string> parse_string_array();
 
+    std::optional<WorkspaceConfig> parse_workspace_section();
     std::optional<PackageInfo> parse_package_section();
     std::optional<LibConfig> parse_lib_section();
     std::optional<BinConfig> parse_bin_section();

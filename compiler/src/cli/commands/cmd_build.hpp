@@ -60,6 +60,7 @@ struct BuildOptions {
     int optimization_level = 0; // -O0 to -O3
     BuildOutputType output_type = BuildOutputType::Executable;
     std::string output_dir;
+    std::string output_name;          // Override output file stem (from [[bin]].name / [lib].name)
     std::string target;               // Target triple (e.g., x86_64-unknown-linux-gnu)
     std::vector<std::string> defines; // -D defines for preprocessor
 

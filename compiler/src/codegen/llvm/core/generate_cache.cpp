@@ -10,6 +10,7 @@ TML_MODULE("codegen_x86")
 #include "common.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "package/package_registry.hpp"
 #include "parser/parser.hpp"
 
 #include <filesystem>
@@ -77,10 +78,11 @@ GlobalASTCache::Stats GlobalASTCache::get_stats() const {
 }
 
 bool GlobalASTCache::should_cache(const std::string& module_path) {
-    // Cache library modules: core::*, std::*, test, backtrace::*
-    if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
-        module_path == "test" || module_path.starts_with("test::") || module_path == "backtrace" ||
-        module_path.starts_with("backtrace::")) {
+    // Cache any module whose root namespace is a registered workspace package.
+    if (tml::pkg::PackageRegistry::instance().is_package_module(module_path)) {
+        return true;
+    }
+    if (module_path == "backtrace" || module_path.starts_with("backtrace::")) {
         return true;
     }
     return false;

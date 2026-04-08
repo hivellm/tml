@@ -104,7 +104,7 @@ auto make_run_tool() -> Tool;
 /// - `output` (string, optional): Output file path
 /// - `optimize` (string, optional): Optimization level (O0, O1, O2, O3)
 /// - `release` (boolean, optional): Build in release mode
-/// - `crate_type` (string, optional): Output type (bin, lib, dylib, rlib)
+/// - `lib_type` (string, optional): Output type (bin, lib, dylib, rlib)
 auto make_build_tool() -> Tool;
 
 /// Returns the `emit-ir` tool definition.
@@ -239,7 +239,7 @@ auto handle_run(const json::JsonValue& params) -> ToolResult;
 ///
 /// # Arguments
 ///
-/// * `params` - Tool parameters (file, output, optimize, release, crate_type)
+/// * `params` - Tool parameters (file, output, optimize, release, lib_type)
 ///
 /// # Returns
 ///

@@ -6,6 +6,10 @@
 **Estimated effort**: 4–6 weeks
 **Risk**: Medium
 
+## Why
+
+The hybrid pipeline (phase12f) must pass structured AST and TypeEnv data between TML-written compiler stages and the C++ pipeline across a process boundary. No serialization mechanism exists; this task defines a stable binary format, writer (TML), and reader (C++) with round-trip verification.
+
 ## Problem
 
 The hybrid pipeline (phase12f) must pass structured data — ASTs and type environments — between

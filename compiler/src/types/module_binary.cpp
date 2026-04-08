@@ -10,6 +10,7 @@ TML_MODULE("compiler")
 
 #include "common/crc32c.hpp"
 #include "log/log.hpp"
+#include "package/package_registry.hpp"
 #include "types/env.hpp"
 #include "types/type.hpp"
 
@@ -82,9 +83,19 @@ fs::path find_build_root() {
     }
     s_build_root_resolved = true;
 
-    auto cwd = fs::current_path();
+    // Workspace-aware: TML artifacts live in <workspace>/target/debug
+    // (Rust convention). Keeps them separate from the C++ CMake output
+    // in <repo>/build/.
+    const auto& ws_root = tml::pkg::PackageRegistry::instance().workspace_root();
+    if (!ws_root.empty()) {
+        fs::path target_debug = ws_root / "target" / "debug";
+        fs::create_directories(target_debug);
+        s_build_root = target_debug;
+        return s_build_root;
+    }
 
-    // Look for build/ directory walking up from CWD
+    // Legacy fallback: walk up from CWD looking for build/{debug,release}
+    auto cwd = fs::current_path();
     for (auto dir = cwd; !dir.empty() && dir.has_parent_path(); dir = dir.parent_path()) {
         if (fs::exists(dir / "build" / "debug")) {
             s_build_root = dir / "build" / "debug";
@@ -94,7 +105,6 @@ fs::path find_build_root() {
             s_build_root = dir / "build" / "release";
             return s_build_root;
         }
-        // If we're inside build/debug or build/release
         if (dir.filename() == "debug" || dir.filename() == "release") {
             if (dir.parent_path().filename() == "build") {
                 s_build_root = dir;
@@ -103,7 +113,6 @@ fs::path find_build_root() {
         }
     }
 
-    // Fallback: use build/debug relative to CWD
     s_build_root = cwd / "build" / "debug";
     return s_build_root;
 }

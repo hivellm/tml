@@ -807,10 +807,24 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
                                 base_path += "::";
                             base_path += use_decl.path.segments[j];
                         }
-                        // Handle relative paths
+                        // Handle relative paths (mirror the shares_root logic above
+                        // so workspace package paths like compiler::serial don't get
+                        // re-prefixed with the current module path).
                         if (!base_path.empty() && base_path.find("core::") != 0 &&
                             base_path.find("std::") != 0 && base_path.find("test") != 0) {
-                            base_path = module_path + "::" + base_path;
+                            std::string root_package;
+                            auto root_sep = module_path.find("::");
+                            if (root_sep != std::string::npos) {
+                                root_package = module_path.substr(0, root_sep);
+                            } else {
+                                root_package = module_path;
+                            }
+                            bool shares_root =
+                                !root_package.empty() && (base_path == root_package ||
+                                                          base_path.find(root_package + "::") == 0);
+                            if (!shares_root) {
+                                base_path = module_path + "::" + base_path;
+                            }
                         }
                         load_native_module(base_path, /*silent=*/true);
                     }

@@ -26,6 +26,7 @@ TML_MODULE("compiler")
 
 #include "types/module.hpp"
 
+#include "package/package_registry.hpp"
 #include "types/env.hpp"
 
 #include <algorithm>
@@ -523,15 +524,17 @@ GlobalModuleCache::Stats GlobalModuleCache::get_stats() const {
 }
 
 bool GlobalModuleCache::should_cache(const std::string& module_path) {
-    // Cache library modules: core::*, std::*, test, backtrace::*
-    if (module_path.starts_with("core::") || module_path.starts_with("std::") ||
-        module_path == "test" || module_path.starts_with("test::") || module_path == "backtrace" ||
-        module_path.starts_with("backtrace::")) {
+    // Cache any module whose root namespace is a registered workspace package
+    // (core, std, test, compiler, ...). The backtrace package is not currently
+    // a workspace member but is still stable, so keep it as a legacy prefix.
+    if (tml::pkg::PackageRegistry::instance().is_package_module(module_path)) {
         return true;
     }
-    // External packages (e.g., postgresql::*) are cached via the path resolution cache
-    // in env_module_loading.cpp, not the GlobalModuleCache. This avoids filesystem I/O
-    // in should_cache() which doesn't have access to find_lib_root().
+    if (module_path == "backtrace" || module_path.starts_with("backtrace::")) {
+        return true;
+    }
+    // External packages are cached via the path resolution cache in
+    // env_module_loading.cpp, not the GlobalModuleCache.
     return false;
 }
 

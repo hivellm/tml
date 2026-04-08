@@ -250,7 +250,7 @@ auto make_build_tool() -> Tool {
                     {"output", "string", "Output file path", false},
                     {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
                     {"release", "boolean", "Build in release mode with optimizations", false},
-                    {"crate_type", "string", "Output type: bin, lib, dylib, rlib", false},
+                    {"lib_type", "string", "Output type: bin, lib, dylib, rlib", false},
                 }};
 }
 
@@ -801,10 +801,10 @@ auto handle_build(const json::JsonValue& params) -> ToolResult {
         cmd << " --release";
     }
 
-    // Add crate type if specified
-    auto* crate_type_param = params.get("crate_type");
-    if (crate_type_param != nullptr && crate_type_param->is_string()) {
-        cmd << " --crate-type=" << crate_type_param->as_string();
+    // Add lib type if specified
+    auto* lib_type_param = params.get("lib_type");
+    if (lib_type_param != nullptr && lib_type_param->is_string()) {
+        cmd << " --lib-type=" << lib_type_param->as_string();
     }
 
     // Execute

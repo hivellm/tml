@@ -17,6 +17,7 @@ TML_MODULE("compiler")
 #include "builder_internal.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
 #include "cli/builder/platform.hpp"
+#include "package/package_registry.hpp"
 
 namespace tml::cli::build {
 
@@ -193,29 +194,33 @@ fs::path find_project_root() {
     return fs::current_path();
 }
 
+// Resolve the root used for TML build artifacts. Rust-style: when a workspace
+// is active, artifacts land in `<workspace_root>/target/` so they never mix
+// with the C++ compiler's CMake output in `<repo>/build/`. Without a workspace
+// we fall back to the legacy `<project_root>/build/` layout for back-compat
+// with standalone `.tml` files compiled from arbitrary directories.
+static fs::path get_tml_artifact_root() {
+    const auto& ws_root = tml::pkg::PackageRegistry::instance().workspace_root();
+    if (!ws_root.empty()) {
+        return ws_root / "target";
+    }
+    return find_project_root() / "build";
+}
+
 fs::path get_build_dir(bool release) {
-    // Always use the project root, never create build dirs next to source files
-    fs::path project_root = find_project_root();
-
-    // Create build directory structure in project root
-    fs::path build_dir = project_root / "build" / (release ? "release" : "debug");
+    fs::path build_dir = get_tml_artifact_root() / (release ? "release" : "debug");
     fs::create_directories(build_dir);
-
     return build_dir;
 }
 
 fs::path get_deps_cache_dir() {
-    // Always use project root for deps cache
-    fs::path project_root = find_project_root();
-    fs::path deps = project_root / "build" / "debug" / "deps";
+    fs::path deps = get_tml_artifact_root() / "debug" / "deps";
     fs::create_directories(deps);
     return deps;
 }
 
 fs::path get_run_cache_dir() {
-    // Always use project root for run cache
-    fs::path project_root = find_project_root();
-    fs::path cache = project_root / "build" / "debug" / "cache" / "run";
+    fs::path cache = get_tml_artifact_root() / "debug" / "cache" / "run";
     fs::create_directories(cache);
     return cache;
 }
@@ -375,9 +380,11 @@ SQLite3Paths find_sqlite3() {
 bool has_crypto_modules(const std::shared_ptr<types::ModuleRegistry>& registry) {
     if (!registry)
         return false;
-    // Check modules that depend on crypto C runtime (crypto.c contains FNV/Murmur hash + OpenSSL)
-    if (registry->has_module("std::hash") || registry->has_module("std::net::tls") ||
-        registry->has_module("std::http::connection") || registry->has_module("std::http::client"))
+    // Check modules that depend on OpenSSL-backed C runtime (crypto.c + tls.c).
+    // Note: std::hash does NOT belong here — its externs resolve to hash.c which is
+    // compiled unconditionally and has zero OpenSSL dependencies.
+    if (registry->has_module("std::net::tls") || registry->has_module("std::http::connection") ||
+        registry->has_module("std::http::client"))
         return true;
     // Check any std::crypto submodule (covers constants, error, and future additions)
     for (const auto& [path, _] : registry->get_all_modules()) {
