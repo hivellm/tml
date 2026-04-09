@@ -6,6 +6,10 @@
 **Estimated effort**: 3-4 weeks
 **Risk**: Low
 
+## Why
+
+The TML self-hosting compiler requires a lexer written in TML to tokenize source code. This is the first executable component of the self-hosting frontend and unblocks the parser (phase13c). Without it, Phase 13 cannot proceed.
+
 ## Problem
 
 The C++ lexer (`compiler/src/lexer/lexer.cpp` and related files, ~2,830 LOC across
