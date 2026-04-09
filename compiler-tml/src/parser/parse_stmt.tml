@@ -1,0 +1,207 @@
+//! Statement parser for the TML self-hosting compiler frontend.
+//!
+//! Parses `let`, `var`, `let-else`, expression statements, and nested
+//! declarations. Entry point: `parse_stmt`.
+//!
+//! Statement grammar summary:
+//!   stmt ::= let_stmt | var_stmt | decl_stmt | expr_stmt
+//!   let_stmt  ::= 'let' pattern [':' type] ['=' expr] ['else' block]
+//!   var_stmt  ::= 'var' ident [':' type] ['=' expr]
+//!   decl_stmt ::= (pub | func | type | behavior | impl | const | use | ...) ...
+//!   expr_stmt ::= expr
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::exprs::Expr
+use compiler::ast::stmts::LetStmt
+use compiler::ast::stmts::VarStmt
+use compiler::ast::stmts::LetElseStmt
+use compiler::ast::stmts::Stmt
+use compiler::ast::decls::Decl
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedStmt
+use compiler::parser::common::ParsedDecl
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_check
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_expect
+use compiler::parser::common::p_expect_ident
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use compiler::parser::common::is_decl_start
+use compiler::parser::parse_type::parse_type
+use compiler::parser::parse_pattern::parse_pattern
+use compiler::parser::parse_expr::parse_expr
+use compiler::parser::parse_expr::parse_block_expr
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Entry point
+// ============================================================================
+
+/// Parse one statement. Dispatches to let/var/decl/expr branches.
+pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    let tok: Token = p_peek(tokens, p)
+
+    when tok.kind {
+        KwLet => return parse_let_stmt(tokens, p),
+        KwVar => return parse_var_stmt(tokens, p),
+        _ => {}
+    }
+
+    // Declaration statement (func, type, behavior, impl, const, use, pub, @, ...)
+    if is_decl_start(tok.kind) {
+        let decl_r: ParsedDecl = compiler::parser::parse_decl::parse_decl(tokens, p)!
+        let span: SourceSpan = p_peek(tokens, pos).span
+        let s: Stmt = Stmt::Decl(decl_r.decl)
+        return Ok(ParsedStmt { stmt: Heap::new(s), pos: decl_r.pos })
+    }
+
+    return parse_expr_stmt(tokens, p)
+}
+
+// ============================================================================
+// Let statement
+// ============================================================================
+
+/// Parse `let pattern [: type] [= expr] [else block]`.
+pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'let'
+
+    // Pattern (ident, tuple, enum, struct, wildcard, …)
+    let pat_r = parse_pattern(tokens, p)!
+    p = pat_r.pos
+
+    // Optional type annotation `: Type`
+    var ty: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Colon) {
+        p = p + 1
+        let type_r = parse_type(tokens, p)!
+        p = type_r.pos
+        ty = Just(type_r.te)
+    }
+
+    // Optional initializer `= expr`
+    var init: Maybe[Heap[Expr]] = Nothing
+    if p_check(tokens, p, TokenKind::Assign) {
+        p = p + 1
+        let expr_r = parse_expr(tokens, p)!
+        p = expr_r.pos
+        init = Just(expr_r.expr)
+    }
+
+    // Require at least one of type annotation or initializer
+    when ty {
+        Nothing => {
+            when init {
+                Nothing => return Err(parse_err("Type annotation or initializer required for 'let'", p_peek(tokens, p).span)),
+                _ => {}
+            }
+        },
+        _ => {}
+    }
+
+    // let-else: `let Pattern = expr else { block }`
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::KwElse) {
+        // Must have an initializer
+        let init_expr: Heap[Expr] = when init {
+            Just(e) => e,
+            Nothing => return Err(parse_err("let-else requires an initializer ('= expr')", p_peek(tokens, p).span))
+        }
+        p = p + 1  // consume 'else'
+        let else_r = parse_block_expr(tokens, p)!
+        p = else_r.pos
+        let end_span: SourceSpan = p_prev(tokens, p).span
+        let les: LetElseStmt = LetElseStmt {
+            pattern: pat_r.pat,
+            init: init_expr,
+            else_body: else_r.expr,
+            span: span_merge(start_span, end_span)
+        }
+        return Ok(ParsedStmt { stmt: Heap::new(Stmt::LetElse(les)), pos: p })
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ls: LetStmt = LetStmt {
+        pattern: pat_r.pat,
+        ty: ty,
+        init: init,
+        span: span_merge(start_span, end_span)
+    }
+    return Ok(ParsedStmt { stmt: Heap::new(Stmt::Let(ls)), pos: p })
+}
+
+// ============================================================================
+// Var statement
+// ============================================================================
+
+/// Parse `var name [: type] [= expr]`.
+/// `var` is syntactic sugar for a mutable binding — stored as `VarStmt`.
+pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'var'
+
+    // Variable name (identifier only — no complex patterns for var)
+    let name_r = p_expect_ident(tokens, p, "Expected variable name after 'var'")!
+    p = name_r.pos
+    let name: Str = name_r.value
+
+    // Optional type annotation `: Type`
+    var ty: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Colon) {
+        p = p + 1
+        let type_r = parse_type(tokens, p)!
+        p = type_r.pos
+        ty = Just(type_r.te)
+    }
+
+    // Optional initializer `= expr`
+    var init: Maybe[Heap[Expr]] = Nothing
+    if p_check(tokens, p, TokenKind::Assign) {
+        p = p + 1
+        let expr_r = parse_expr(tokens, p)!
+        p = expr_r.pos
+        init = Just(expr_r.expr)
+    }
+
+    // Require at least one of type annotation or initializer
+    when ty {
+        Nothing => {
+            when init {
+                Nothing => return Err(parse_err("Type annotation or initializer required for 'var'", p_peek(tokens, p).span)),
+                _ => {}
+            }
+        },
+        _ => {}
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let vs: VarStmt = VarStmt {
+        name: name,
+        ty: ty,
+        init: init,
+        span: span_merge(start_span, end_span)
+    }
+    return Ok(ParsedStmt { stmt: Heap::new(Stmt::Var(vs)), pos: p })
+}
+
+// ============================================================================
+// Expression statement
+// ============================================================================
+
+/// Parse an expression statement (expression used as a statement).
+pub func parse_expr_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+    let expr_r = parse_expr(tokens, pos)!
+    let p: I64 = expr_r.pos
+    return Ok(ParsedStmt { stmt: Heap::new(Stmt::Expr(expr_r.expr)), pos: p })
+}

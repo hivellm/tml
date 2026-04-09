@@ -1,0 +1,373 @@
+//! Parser infrastructure for the TML self-hosting compiler frontend.
+//!
+//! Provides ParseError, per-construct ParseResult types, and low-level token
+//! helpers used by all parse_*.tml modules. The parser threads position state
+//! explicitly: every parse function takes `(tokens: List[Token], pos: I64)` and
+//! returns `Outcome[ParsedX, ParseError]` where `ParsedX` carries both the
+//! parsed value and the updated position.
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::Pattern
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::BinaryOp
+use compiler::ast::exprs::UnaryOp
+use compiler::ast::stmts::Stmt
+use compiler::ast::decls::Decl
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// ParseError
+// ============================================================================
+
+pub type ParseError {
+    message: Str,
+    span: SourceSpan
+}
+
+pub func parse_err(message: Str, span: SourceSpan) -> ParseError {
+    return ParseError { message: message, span: span }
+}
+
+// ============================================================================
+// Per-construct result types (value + new position after consuming tokens)
+// ============================================================================
+
+pub type ParsedTypeExpr {
+    te: Heap[TypeExpr],
+    pos: I64
+}
+
+pub type ParsedTypeExprs {
+    tes: List[Heap[TypeExpr]],
+    pos: I64
+}
+
+pub type ParsedExpr {
+    expr: Heap[Expr],
+    pos: I64
+}
+
+pub type ParsedExprs {
+    exprs: List[Heap[Expr]],
+    pos: I64
+}
+
+pub type ParsedPattern {
+    pat: Heap[Pattern],
+    pos: I64
+}
+
+pub type ParsedStmt {
+    stmt: Heap[Stmt],
+    pos: I64
+}
+
+pub type ParsedDecl {
+    decl: Heap[Decl],
+    pos: I64
+}
+
+pub type ParsedDecls {
+    decls: List[Heap[Decl]],
+    pos: I64
+}
+
+pub type ParsedToken {
+    tok: Token,
+    pos: I64
+}
+
+pub type ParsedStr {
+    value: Str,
+    pos: I64
+}
+
+pub type ParsedTypePath {
+    path: TypePath,
+    pos: I64
+}
+
+pub type ParsedI64 {
+    value: I64,
+    pos: I64
+}
+
+pub type ParsedBool {
+    value: Bool,
+    pos: I64
+}
+
+// ============================================================================
+// Token navigation helpers
+// ============================================================================
+
+/// Return the token at position `pos` (clamped to last token = EOF).
+pub func p_peek(tokens: List[Token], pos: I64) -> Token {
+    let n: I64 = tokens.len() as I64
+    if pos >= n {
+        return tokens.get(n - 1)
+    }
+    return tokens.get(pos)
+}
+
+/// Return the token at position `pos + 1` (lookahead by one).
+pub func p_peek_next(tokens: List[Token], pos: I64) -> Token {
+    let n: I64 = tokens.len() as I64
+    if pos + 1 >= n {
+        return tokens.get(n - 1)
+    }
+    return tokens.get(pos + 1)
+}
+
+/// Return the token at `pos - 1` (previous, for span building after consuming).
+pub func p_prev(tokens: List[Token], pos: I64) -> Token {
+    if pos <= 0 {
+        return tokens.get(0)
+    }
+    let n: I64 = tokens.len() as I64
+    if pos > n {
+        return tokens.get(n - 1)
+    }
+    return tokens.get(pos - 1)
+}
+
+/// True if current token is EOF.
+pub func p_is_eof(tokens: List[Token], pos: I64) -> Bool {
+    let tok: Token = p_peek(tokens, pos)
+    when tok.kind {
+        Eof => return true,
+        _ => return false
+    }
+}
+
+/// True if current token kind matches `kind`.
+pub func p_check(tokens: List[Token], pos: I64, kind: TokenKind) -> Bool {
+    let tok: Token = p_peek(tokens, pos)
+    return tok_kind_eq(tok.kind, kind)
+}
+
+/// True if next token kind matches `kind`.
+pub func p_check_next(tokens: List[Token], pos: I64, kind: TokenKind) -> Bool {
+    let tok: Token = p_peek_next(tokens, pos)
+    return tok_kind_eq(tok.kind, kind)
+}
+
+/// Advance past newlines, returning new position.
+pub func p_skip_newlines(tokens: List[Token], pos: I64) -> I64 {
+    var p: I64 = pos
+    let n: I64 = tokens.len() as I64
+    loop (p < n) {
+        let tok: Token = tokens.get(p)
+        when tok.kind {
+            Newline => { p = p + 1 },
+            _ => break
+        }
+    }
+    return p
+}
+
+/// Consume current token if it matches `kind`, returning new position.
+/// Returns same `pos` if not matched (does NOT advance).
+pub func p_consume_if(tokens: List[Token], pos: I64, kind: TokenKind) -> I64 {
+    if p_check(tokens, pos, kind) {
+        return pos + 1
+    }
+    return pos
+}
+
+/// Expect token of `kind` and consume it, or return an error.
+pub func p_expect(tokens: List[Token], pos: I64, kind: TokenKind, msg: Str) -> Outcome[ParsedToken, ParseError] {
+    let tok: Token = p_peek(tokens, pos)
+    if not tok_kind_eq(tok.kind, kind) {
+        return Err(parse_err(msg, tok.span))
+    }
+    return Ok(ParsedToken { tok: tok, pos: pos + 1 })
+}
+
+/// Expect identifier and consume it, returning the lexeme.
+pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedStr, ParseError] {
+    let tok: Token = p_peek(tokens, pos)
+    when tok.kind {
+        Identifier => return Ok(ParsedStr { value: tok.value, pos: pos + 1 }),
+        _ => return Err(parse_err(msg, tok.span))
+    }
+}
+
+// ============================================================================
+// TokenKind equality helper
+// ============================================================================
+
+/// Compare two TokenKind values by their integer discriminants.
+/// Plain enums can be cast to I64, so this is a simple integer comparison.
+pub func tok_kind_eq(a: TokenKind, b: TokenKind) -> Bool {
+    return a as I64 == b as I64
+}
+
+// ============================================================================
+// Operator precedence (mirrors parser.hpp precedence namespace)
+// ============================================================================
+
+pub const PREC_NONE: I64 = 0
+pub const PREC_ASSIGN: I64 = 1
+pub const PREC_PIPE: I64 = 2
+pub const PREC_OR: I64 = 4
+pub const PREC_AND: I64 = 5
+pub const PREC_CMP: I64 = 6
+pub const PREC_BITOR: I64 = 7
+pub const PREC_BITXOR: I64 = 8
+pub const PREC_BITAND: I64 = 9
+pub const PREC_SHIFT: I64 = 10
+pub const PREC_TERM: I64 = 11
+pub const PREC_FACTOR: I64 = 12
+pub const PREC_CAST: I64 = 13
+pub const PREC_UNARY: I64 = 14
+pub const PREC_CALL: I64 = 15
+pub const PREC_RANGE: I64 = 16
+
+/// Returns the infix precedence of a token kind (0 = not an infix operator).
+pub func get_prec(kind: TokenKind) -> I64 {
+    when kind {
+        Assign => return PREC_ASSIGN,
+        PlusAssign => return PREC_ASSIGN,
+        MinusAssign => return PREC_ASSIGN,
+        StarAssign => return PREC_ASSIGN,
+        SlashAssign => return PREC_ASSIGN,
+        PercentAssign => return PREC_ASSIGN,
+        BitAndAssign => return PREC_ASSIGN,
+        BitOrAssign => return PREC_ASSIGN,
+        BitXorAssign => return PREC_ASSIGN,
+        ShlAssign => return PREC_ASSIGN,
+        ShrAssign => return PREC_ASSIGN,
+        PipeRight => return PREC_PIPE,
+        KwOr => return PREC_OR,
+        OrOr => return PREC_OR,
+        KwAnd => return PREC_AND,
+        AndAnd => return PREC_AND,
+        Eq => return PREC_CMP,
+        Ne => return PREC_CMP,
+        Lt => return PREC_CMP,
+        Gt => return PREC_CMP,
+        Le => return PREC_CMP,
+        Ge => return PREC_CMP,
+        Pipe => return PREC_BITOR,
+        BitOr => return PREC_BITOR,
+        BitXor => return PREC_BITXOR,
+        KwXor => return PREC_BITXOR,
+        BitAnd => return PREC_BITAND,
+        Shl => return PREC_SHIFT,
+        Shr => return PREC_SHIFT,
+        KwShl => return PREC_SHIFT,
+        KwShr => return PREC_SHIFT,
+        Plus => return PREC_TERM,
+        Minus => return PREC_TERM,
+        Star => return PREC_FACTOR,
+        Slash => return PREC_FACTOR,
+        Percent => return PREC_FACTOR,
+        KwAs => return PREC_CAST,
+        KwIs => return PREC_CAST,
+        DotDot => return PREC_RANGE,
+        KwTo => return PREC_RANGE,
+        KwThrough => return PREC_RANGE,
+        _ => return PREC_NONE
+    }
+}
+
+/// True for right-associative infix operators.
+pub func is_right_assoc(kind: TokenKind) -> Bool {
+    when kind {
+        Assign => return true,
+        PlusAssign => return true,
+        MinusAssign => return true,
+        StarAssign => return true,
+        SlashAssign => return true,
+        PercentAssign => return true,
+        BitAndAssign => return true,
+        BitOrAssign => return true,
+        BitXorAssign => return true,
+        ShlAssign => return true,
+        ShrAssign => return true,
+        _ => return false
+    }
+}
+
+/// Convert a token kind to a BinaryOp, or return false in the Bool field.
+pub func token_to_binop(kind: TokenKind) -> Maybe[BinaryOp] {
+    when kind {
+        Plus => return Just(BinaryOp::OpAdd),
+        Minus => return Just(BinaryOp::OpSub),
+        Star => return Just(BinaryOp::OpMul),
+        Slash => return Just(BinaryOp::OpDiv),
+        Percent => return Just(BinaryOp::OpMod),
+        Eq => return Just(BinaryOp::OpEq),
+        Ne => return Just(BinaryOp::OpNe),
+        Lt => return Just(BinaryOp::OpLt),
+        Gt => return Just(BinaryOp::OpGt),
+        Le => return Just(BinaryOp::OpLe),
+        Ge => return Just(BinaryOp::OpGe),
+        KwAnd => return Just(BinaryOp::OpAnd),
+        AndAnd => return Just(BinaryOp::OpAnd),
+        KwOr => return Just(BinaryOp::OpOr),
+        OrOr => return Just(BinaryOp::OpOr),
+        BitAnd => return Just(BinaryOp::OpBitAnd),
+        Pipe => return Just(BinaryOp::OpBitOr),
+        BitOr => return Just(BinaryOp::OpBitOr),
+        BitXor => return Just(BinaryOp::OpBitXor),
+        KwXor => return Just(BinaryOp::OpBitXor),
+        Shl => return Just(BinaryOp::OpShl),
+        Shr => return Just(BinaryOp::OpShr),
+        KwShl => return Just(BinaryOp::OpShl),
+        KwShr => return Just(BinaryOp::OpShr),
+        Assign => return Just(BinaryOp::OpAssign),
+        PlusAssign => return Just(BinaryOp::OpAddAssign),
+        MinusAssign => return Just(BinaryOp::OpSubAssign),
+        StarAssign => return Just(BinaryOp::OpMulAssign),
+        SlashAssign => return Just(BinaryOp::OpDivAssign),
+        PercentAssign => return Just(BinaryOp::OpModAssign),
+        BitAndAssign => return Just(BinaryOp::OpBitAndAssign),
+        BitOrAssign => return Just(BinaryOp::OpBitOrAssign),
+        BitXorAssign => return Just(BinaryOp::OpBitXorAssign),
+        ShlAssign => return Just(BinaryOp::OpShlAssign),
+        ShrAssign => return Just(BinaryOp::OpShrAssign),
+        _ => return Nothing
+    }
+}
+
+/// Convert a prefix token to UnaryOp.
+pub func token_to_unaryop(kind: TokenKind) -> Maybe[UnaryOp] {
+    when kind {
+        Minus => return Just(UnaryOp::OpNeg),
+        KwNot => return Just(UnaryOp::OpNot),
+        Bang => return Just(UnaryOp::OpNot),
+        BitNot => return Just(UnaryOp::OpBitNot),
+        BitAnd => return Just(UnaryOp::OpRef),
+        KwRef => return Just(UnaryOp::OpRef),
+        Star => return Just(UnaryOp::OpDeref),
+        _ => return Nothing
+    }
+}
+
+/// True if the token kind can start a declaration.
+pub func is_decl_start(kind: TokenKind) -> Bool {
+    when kind {
+        KwFunc => return true,
+        KwType => return true,
+        KwUnion => return true,
+        KwBehavior => return true,
+        KwImpl => return true,
+        KwConst => return true,
+        KwUse => return true,
+        KwMod => return true,
+        KwPub => return true,
+        At => return true,
+        KwAsync => return true,
+        KwLowlevel => return true,
+        KwClass => return true,
+        _ => return false
+    }
+}

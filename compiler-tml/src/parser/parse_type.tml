@@ -1,0 +1,286 @@
+//! Type expression parser for the TML self-hosting compiler frontend.
+//!
+//! Parses all `TypeExpr` variants: named types, generic applications, ref/ptr,
+//! tuple, function, and inference types. Entry point: `parse_type`.
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::NamedType
+use compiler::ast::nodes::RefType
+use compiler::ast::nodes::PtrType
+use compiler::ast::nodes::TupleType
+use compiler::ast::nodes::FuncType
+use compiler::ast::nodes::DynType
+use compiler::ast::nodes::SliceType
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedTypeExpr
+use compiler::parser::common::ParsedTypeExprs
+use compiler::parser::common::ParsedStr
+use compiler::parser::common::ParsedTypePath
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_peek_next
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_check
+use compiler::parser::common::p_check_next
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_consume_if
+use compiler::parser::common::p_expect
+use compiler::parser::common::p_expect_ident
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Type path
+// ============================================================================
+
+/// Parse a qualified type path: `Foo`, `std::io::File`, `HashMap`.
+/// Returns the segments list and advances pos past the last segment.
+pub func parse_type_path(tokens: List[Token], pos: I64) -> Outcome[ParsedStr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    when start_tok.kind {
+        Identifier => {},
+        _ => return Err(parse_err("Expected type name", start_tok.span))
+    }
+    // Collect the first segment
+    var result: Str = start_tok.value
+    var p: I64 = pos + 1
+    // Collect `::segment` continuations
+    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+        p = p + 1  // consume '::'
+        let seg_tok: Token = p_peek(tokens, p)
+        result = result  // path building: for now just take the last segment as name
+        // Note: TypePath.segments is List[Str] — we build it below
+        p = p + 1
+    }
+    return Ok(ParsedStr { value: result, pos: p })
+}
+
+/// Parse a qualified type path as a full `TypePath` struct.
+pub func parse_type_path_full(tokens: List[Token], pos: I64) -> Outcome[ParsedTypePath, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    when start_tok.kind {
+        Identifier => {},
+        _ => return Err(parse_err("Expected type name", start_tok.span))
+    }
+    var segs: List[Str] = List::new(4)
+    segs.push(start_tok.value)
+    var p: I64 = pos + 1
+    let start_span: SourceSpan = start_tok.span
+    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+        p = p + 1  // consume '::'
+        let seg_tok: Token = p_peek(tokens, p)
+        segs.push(seg_tok.value)
+        p = p + 1
+    }
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let path: TypePath = TypePath { segments: segs, span: span_merge(start_span, end_span) }
+    return Ok(ParsedTypePath { path: path, pos: p })
+}
+
+// ============================================================================
+// Generic arguments [T, U]
+// ============================================================================
+
+/// Parse optional generic arguments `[T, U]`. Returns empty list if no `[`.
+pub func parse_generic_args(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExprs, ParseError] {
+    if not p_check(tokens, pos, TokenKind::LBracket) {
+        let empty: List[Heap[TypeExpr]] = List::new(0)
+        return Ok(ParsedTypeExprs { tes: empty, pos: pos })
+    }
+    var p: I64 = pos + 1  // consume '['
+    p = p_skip_newlines(tokens, p)
+    var args: List[Heap[TypeExpr]] = List::new(4)
+    loop (not p_check(tokens, p, TokenKind::RBracket) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let r: ParsedTypeExpr = parse_type(tokens, p)!
+        p = r.pos
+        args.push(r.te)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+    p = p_skip_newlines(tokens, p)
+    if not p_check(tokens, p, TokenKind::RBracket) {
+        return Err(parse_err("Expected ']' after type arguments", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume ']'
+    return Ok(ParsedTypeExprs { tes: args, pos: p })
+}
+
+// ============================================================================
+// Main type parser dispatch
+// ============================================================================
+
+/// Parse any type expression.
+pub func parse_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    let tok: Token = p_peek(tokens, p)
+    when tok.kind {
+        // ref T / mut ref T
+        KwRef => {
+            p = p + 1
+            let inner_r: ParsedTypeExpr = parse_type(tokens, p)!
+            p = inner_r.pos
+            let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+            let rt: RefType = RefType { inner: inner_r.te, is_mut: false, span: span }
+            return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Ref(rt)), pos: p })
+        },
+        KwMut => {
+            if p_check_next(tokens, p, TokenKind::KwRef) {
+                p = p + 2  // consume 'mut' 'ref'
+                let inner_r: ParsedTypeExpr = parse_type(tokens, p)!
+                p = inner_r.pos
+                let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+                let rt: RefType = RefType { inner: inner_r.te, is_mut: true, span: span }
+                return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Ref(rt)), pos: p })
+            }
+            return Err(parse_err("Expected 'ref' after 'mut' in type", tok.span))
+        },
+        // *T (raw pointer)
+        Star => {
+            p = p + 1
+            let inner_r: ParsedTypeExpr = parse_type(tokens, p)!
+            p = inner_r.pos
+            let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+            let pt: PtrType = PtrType { inner: inner_r.te, is_mut: false, span: span }
+            return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Ptr(pt)), pos: p })
+        },
+        // (T, U) tuple or () unit
+        LParen => {
+            return parse_tuple_type(tokens, p)
+        },
+        // Func(T) -> R
+        KwFunc => {
+            return parse_func_type(tokens, p)
+        },
+        // dyn Behavior
+        KwDyn => {
+            p = p + 1
+            let path_r = parse_type_path_full(tokens, p)!
+            let path: TypePath = path_r.path
+            p = path_r.pos
+            var bounds: List[TypePath] = List::new(2)
+            bounds.push(path)
+            let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+            let dt: DynType = DynType { bounds: bounds, span: span }
+            return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Dyn(dt)), pos: p })
+        },
+        // Named type or generic application
+        Identifier => {
+            return parse_named_type(tokens, p)
+        },
+        _ => return Err(parse_err("Expected type", tok.span))
+    }
+}
+
+/// Parse a named/generic type: `Foo`, `List[I32]`, `HashMap[K, V]`.
+pub func parse_named_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+    let path_r = parse_type_path_full(tokens, pos)!
+    let path: TypePath = path_r.path
+    var p: I64 = path_r.pos
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+
+    // Optional generic args
+    let args_r: ParsedTypeExprs = parse_generic_args(tokens, p)!
+    p = args_r.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let span: SourceSpan = span_merge(start_span, end_span)
+
+    // `T?` sugar after the type
+    if p_check(tokens, p, TokenKind::Question) {
+        p = p + 1
+        let maybe_path: TypePath = TypePath { segments: List::new(0), span: span }
+        // Build Maybe[T] wrapper
+        var inner_args: List[Heap[TypeExpr]] = List::new(1)
+        let inner_nt: NamedType = NamedType { path: path, args: args_r.tes, span: span }
+        inner_args.push(Heap::new(TypeExpr::Named(inner_nt)))
+        var maybe_segs: List[Str] = List::new(1)
+        maybe_segs.push("Maybe")
+        let maybe_tp: TypePath = TypePath { segments: maybe_segs, span: span }
+        let outer: NamedType = NamedType { path: maybe_tp, args: inner_args, span: span }
+        return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Named(outer)), pos: p })
+    }
+
+    let nt: NamedType = NamedType { path: path, args: args_r.tes, span: span }
+    return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Named(nt)), pos: p })
+}
+
+/// Parse a tuple type `(T, U)` or unit type `()`.
+pub func parse_tuple_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume '('
+    p = p_skip_newlines(tokens, p)
+
+    var elems: List[Heap[TypeExpr]] = List::new(4)
+
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let r: ParsedTypeExpr = parse_type(tokens, p)!
+        p = r.pos
+        elems.push(r.te)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    if not p_check(tokens, p, TokenKind::RParen) {
+        return Err(parse_err("Expected ')' in tuple type", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume ')'
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let tt: TupleType = TupleType { elements: elems, span: span }
+    return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Tuple(tt)), pos: p })
+}
+
+/// Parse a function type: `Func(I32, Str) -> Bool`.
+pub func parse_func_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'func' / 'Func'
+
+    let lp = p_expect(tokens, p, TokenKind::LParen, "Expected '(' in function type")!
+    p = lp.pos
+    p = p_skip_newlines(tokens, p)
+
+    var params: List[Heap[TypeExpr]] = List::new(4)
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let r: ParsedTypeExpr = parse_type(tokens, p)!
+        p = r.pos
+        params.push(r.te)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    let rp = p_expect(tokens, p, TokenKind::RParen, "Expected ')' in function type")!
+    p = rp.pos
+
+    var ret: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Arrow) {
+        p = p + 1
+        let ret_r: ParsedTypeExpr = parse_type(tokens, p)!
+        p = ret_r.pos
+        ret = Just(ret_r.te)
+    }
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let ft: FuncType = FuncType { params: params, return_type: ret, span: span }
+    return Ok(ParsedTypeExpr { te: Heap::new(TypeExpr::Func(ft)), pos: p })
+}

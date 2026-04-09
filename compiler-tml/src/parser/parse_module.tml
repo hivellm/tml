@@ -1,0 +1,66 @@
+//! Module parser — top-level entry point for the TML self-hosting parser.
+//!
+//! `parse_module` takes a flat token list (produced by the lexer) and a module
+//! name, and returns a fully-parsed `Module` AST node. It drives the top-level
+//! declaration loop, accumulating `Decl` nodes until EOF.
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::Module
+use compiler::ast::nodes::module_new
+use compiler::ast::decls::Decl
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedDecl
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_check
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use compiler::parser::parse_decl::parse_decl
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+/// Parse a complete module from a token list.
+///
+/// `tokens`  — flat list of tokens from the lexer (must end with Eof).
+/// `name`    — module name (e.g. "compiler", "std::io").
+///
+/// Returns `Module` on success, or the first `ParseError` encountered.
+pub func parse_module(tokens: List[Token], name: Str) -> Outcome[Module, ParseError] {
+    var p: I64 = 0
+    var decls: List[Heap[Decl]] = List::new(16)
+    var docs: List[Str] = List::new(0)
+
+    let start_span: SourceSpan = p_peek(tokens, 0).span
+
+    loop (not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        if p_is_eof(tokens, p) { break }
+
+        // Collect module-level doc comments (`//!`)
+        if p_check(tokens, p, TokenKind::ModuleDocComment) {
+            let doc_tok: Token = p_peek(tokens, p)
+            docs.push(doc_tok.value)
+            p = p + 1
+            continue
+        }
+
+        // Skip regular doc comments at top level (they're consumed by parse_decl implicitly)
+        if p_check(tokens, p, TokenKind::DocComment) {
+            p = p + 1
+            continue
+        }
+
+        let decl_r: ParsedDecl = parse_decl(tokens, p)!
+        p = decl_r.pos
+        decls.push(decl_r.decl)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let span: SourceSpan = span_merge(start_span, end_span)
+    return Ok(module_new(name, docs, decls, span))
+}

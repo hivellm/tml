@@ -1,0 +1,343 @@
+//! Pattern parser for the TML self-hosting compiler frontend.
+//!
+//! Parses all `Pattern` variants used in `when` arms and `let`/`let-else`.
+//! Entry point: `parse_pattern` (includes or-patterns).
+//! `parse_pattern_no_or` is used inside or-patterns to avoid left-recursion.
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::IdentPattern
+use compiler::ast::nodes::LiteralPattern
+use compiler::ast::nodes::TuplePattern
+use compiler::ast::nodes::StructPattern
+use compiler::ast::nodes::FieldPattern
+use compiler::ast::nodes::EnumPattern
+use compiler::ast::nodes::OrPattern
+use compiler::ast::nodes::RangePattern
+use compiler::ast::nodes::ArrayPattern
+use compiler::ast::common::LiteralKind
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedPattern
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_peek_next
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_check
+use compiler::parser::common::p_check_next
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_expect
+use compiler::parser::common::p_expect_ident
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use compiler::parser::parse_type::parse_type_path_full
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Public entry points
+// ============================================================================
+
+/// Parse a pattern, including top-level or-patterns (`A | B`).
+pub func parse_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+    let first_r: ParsedPattern = parse_pattern_no_or(tokens, pos)!
+    var p: I64 = first_r.pos
+
+    // Check for or-pattern: `A | B | C`
+    if not p_check(tokens, p, TokenKind::BitOr) {
+        return Ok(first_r)
+    }
+
+    var alts: List[Heap[Pattern]] = List::new(4)
+    alts.push(first_r.pat)
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+
+    loop (p_check(tokens, p, TokenKind::BitOr)) {
+        p = p + 1  // consume '|'
+        p = p_skip_newlines(tokens, p)
+        let alt_r: ParsedPattern = parse_pattern_no_or(tokens, p)!
+        p = alt_r.pos
+        alts.push(alt_r.pat)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let span: SourceSpan = span_merge(start_span, end_span)
+    let or_pat: OrPattern = OrPattern { alternatives: alts, span: span }
+    return Ok(ParsedPattern { pat: Heap::new(Pattern::Or(or_pat)), pos: p })
+}
+
+/// Parse a single pattern (no or-pattern at the top level).
+pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    let tok: Token = p_peek(tokens, p)
+
+    when tok.kind {
+        // Wildcard `_`
+        Identifier => {
+            if tok.value == "_" {
+                p = p + 1
+                return Ok(ParsedPattern { pat: Heap::new(Pattern::Wildcard(tok.span)), pos: p })
+            }
+            // Could be ident pattern or struct/enum pattern
+            return parse_ident_or_path_pattern(tokens, p)
+        },
+        // Integer literal pattern
+        IntLiteral => {
+            p = p + 1
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(0), span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // Float literal pattern
+        FloatLiteral => {
+            p = p + 1
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitFloat(0), span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // String literal pattern
+        StringLiteral => {
+            p = p + 1
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitStr(tok.value), span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // Char literal pattern
+        CharLiteral => {
+            p = p + 1
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitChar(0), span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // Bool literal pattern (true / false via identifier lookup)
+        BoolLiteral => {
+            p = p + 1
+            let bval: Bool = tok.value == "true"
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitBool(bval), span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // Null literal pattern
+        NullLiteral => {
+            p = p + 1
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitNull, span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+        },
+        // Tuple pattern `(a, b)` or parenthesized pattern
+        LParen => {
+            return parse_tuple_pattern(tokens, p)
+        },
+        // Array pattern `[a, b, ..]`
+        LBracket => {
+            return parse_array_pattern(tokens, p)
+        },
+        // Negative number: `-42`
+        Minus => {
+            p = p + 1
+            let num_tok: Token = p_peek(tokens, p)
+            when num_tok.kind {
+                IntLiteral => {
+                    p = p + 1
+                    let span: SourceSpan = span_merge(tok.span, num_tok.span)
+                    let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(0), span: span }
+                    return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
+                },
+                _ => return Err(parse_err("Expected number after '-' in pattern", num_tok.span))
+            }
+        },
+        _ => return Err(parse_err("Expected pattern", tok.span))
+    }
+}
+
+// ============================================================================
+// Identifier / path / struct / enum pattern
+// ============================================================================
+
+/// Parse `ident`, `Path::Variant`, `Path::Variant(pats)`, or `Struct { fields }`.
+pub func parse_ident_or_path_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+    let path_r = parse_type_path_full(tokens, pos)!
+    let path: TypePath = path_r.path
+    var p: I64 = path_r.pos
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+
+    // Enum variant with payload: `Some(x)`, `List::Cons(h, t)`
+    if p_check(tokens, p, TokenKind::LParen) {
+        p = p + 1  // consume '('
+        p = p_skip_newlines(tokens, p)
+        var args: List[Heap[Pattern]] = List::new(4)
+        loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+            p = p_skip_newlines(tokens, p)
+            let sub_r: ParsedPattern = parse_pattern(tokens, p)!
+            p = sub_r.pos
+            args.push(sub_r.pat)
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) {
+                p = p + 1
+            } else {
+                break
+            }
+        }
+        if not p_check(tokens, p, TokenKind::RParen) {
+            return Err(parse_err("Expected ')' in enum pattern", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let ep: EnumPattern = EnumPattern { path: path, args: args, span: span }
+        return Ok(ParsedPattern { pat: Heap::new(Pattern::Enum(ep)), pos: p })
+    }
+
+    // Struct pattern: `Point { x, y }` or `Point { x: px, y: py }`
+    if p_check(tokens, p, TokenKind::LBrace) {
+        return parse_struct_pattern_body(tokens, p, path, start_span)
+    }
+
+    // Simple identifier binding (single-segment path)
+    let segs: List[Str] = path.segments
+    if segs.len() == 1 {
+        let name: Str = segs.get(0)
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let ip: IdentPattern = IdentPattern { name: name, subpat: Nothing, span: span }
+        return Ok(ParsedPattern { pat: Heap::new(Pattern::Ident(ip)), pos: p })
+    }
+
+    // Multi-segment path — emit as EnumPattern with no args
+    let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+    var empty_args: List[Heap[Pattern]] = List::new(0)
+    let ep: EnumPattern = EnumPattern { path: path, args: empty_args, span: span }
+    return Ok(ParsedPattern { pat: Heap::new(Pattern::Enum(ep)), pos: p })
+}
+
+/// Parse the `{ field: pat, .. }` body of a struct pattern.
+pub func parse_struct_pattern_body(tokens: List[Token], pos: I64, path: TypePath, start_span: SourceSpan) -> Outcome[ParsedPattern, ParseError] {
+    var p: I64 = pos + 1  // consume '{'
+    p = p_skip_newlines(tokens, p)
+
+    var fields: List[FieldPattern] = List::new(4)
+    var has_rest: Bool = false
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+
+        // `..` rest pattern
+        if p_check(tokens, p, TokenKind::DotDot) {
+            p = p + 1
+            has_rest = true
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+            break
+        }
+
+        // `name: pat` or shorthand `name`
+        let name_tok: Token = p_peek(tokens, p)
+        when name_tok.kind {
+            Identifier => {},
+            _ => return Err(parse_err("Expected field name in struct pattern", name_tok.span))
+        }
+        let field_name: Str = name_tok.value
+        p = p + 1
+
+        var field_pat: Heap[Pattern]
+        if p_check(tokens, p, TokenKind::Colon) {
+            p = p + 1
+            let sub_r: ParsedPattern = parse_pattern(tokens, p)!
+            p = sub_r.pos
+            field_pat = sub_r.pat
+        } else {
+            // Shorthand: `name` means bind `name` to `name`
+            let ip: IdentPattern = IdentPattern { name: field_name, subpat: Nothing, span: name_tok.span }
+            field_pat = Heap::new(Pattern::Ident(ip))
+        }
+
+        let fp: FieldPattern = FieldPattern { name: field_name, pat: field_pat, span: name_tok.span }
+        fields.push(fp)
+
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    p = p_skip_newlines(tokens, p)
+    if not p_check(tokens, p, TokenKind::RBrace) {
+        return Err(parse_err("Expected '}' in struct pattern", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+    let sp: StructPattern = StructPattern { path: path, fields: fields, has_rest: has_rest, span: span }
+    return Ok(ParsedPattern { pat: Heap::new(Pattern::Struct(sp)), pos: p })
+}
+
+// ============================================================================
+// Tuple / array patterns
+// ============================================================================
+
+/// Parse a tuple pattern `(a, b, c)`.
+pub func parse_tuple_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume '('
+    p = p_skip_newlines(tokens, p)
+
+    var pats: List[Heap[Pattern]] = List::new(4)
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let r: ParsedPattern = parse_pattern(tokens, p)!
+        p = r.pos
+        pats.push(r.pat)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    if not p_check(tokens, p, TokenKind::RParen) {
+        return Err(parse_err("Expected ')' in tuple pattern", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let tp: TuplePattern = TuplePattern { patterns: pats, span: span }
+    return Ok(ParsedPattern { pat: Heap::new(Pattern::Tuple(tp)), pos: p })
+}
+
+/// Parse an array pattern `[a, b, ..]`.
+pub func parse_array_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume '['
+    p = p_skip_newlines(tokens, p)
+
+    var pats: List[Heap[Pattern]] = List::new(4)
+    var rest: Maybe[Heap[Pattern]] = Nothing
+
+    loop (not p_check(tokens, p, TokenKind::RBracket) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::DotDot) {
+            p = p + 1
+            let wc_span: SourceSpan = p_prev(tokens, p).span
+            rest = Just(Heap::new(Pattern::Wildcard(wc_span)))
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+            break
+        }
+        let r: ParsedPattern = parse_pattern(tokens, p)!
+        p = r.pos
+        pats.push(r.pat)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    if not p_check(tokens, p, TokenKind::RBracket) {
+        return Err(parse_err("Expected ']' in array pattern", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let ap: ArrayPattern = ArrayPattern { patterns: pats, rest: rest, span: span }
+    return Ok(ParsedPattern { pat: Heap::new(Pattern::Array(ap)), pos: p })
+}

@@ -1,0 +1,1185 @@
+//! Expression parser (Pratt) for the TML self-hosting compiler frontend.
+//!
+//! Implements the Pratt (top-down operator precedence) algorithm for all
+//! TML expression forms. Entry point: `parse_expr`.
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::IdentPattern
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::BinaryOp
+use compiler::ast::exprs::UnaryOp
+use compiler::ast::exprs::LiteralExpr
+use compiler::ast::exprs::IdentExpr
+use compiler::ast::exprs::UnaryExpr
+use compiler::ast::exprs::BinaryExpr
+use compiler::ast::exprs::CallExpr
+use compiler::ast::exprs::MethodCallExpr
+use compiler::ast::exprs::FieldExpr
+use compiler::ast::exprs::IndexExpr
+use compiler::ast::exprs::TupleExpr
+use compiler::ast::exprs::ArrayExpr
+use compiler::ast::exprs::ArrayKind
+use compiler::ast::exprs::StructExpr
+use compiler::ast::exprs::StructExprField
+use compiler::ast::exprs::IfExpr
+use compiler::ast::exprs::IfLetExpr
+use compiler::ast::exprs::WhenExpr
+use compiler::ast::exprs::WhenArm
+use compiler::ast::exprs::LoopExpr
+use compiler::ast::exprs::WhileExpr
+use compiler::ast::exprs::ForExpr
+use compiler::ast::exprs::BlockExpr
+use compiler::ast::exprs::ReturnExpr
+use compiler::ast::exprs::BreakExpr
+use compiler::ast::exprs::ContinueExpr
+use compiler::ast::exprs::ClosureExpr
+use compiler::ast::exprs::ClosureParam
+use compiler::ast::exprs::RangeExpr
+use compiler::ast::exprs::CastExpr
+use compiler::ast::exprs::IsExpr
+use compiler::ast::exprs::TryExpr
+use compiler::ast::exprs::AwaitExpr
+use compiler::ast::exprs::PathExpr
+use compiler::ast::exprs::LowlevelExpr
+use compiler::ast::exprs::ThrowExpr
+use compiler::ast::common::LiteralKind
+use compiler::ast::stmts::Stmt
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedExpr
+use compiler::parser::common::ParsedExprs
+use compiler::parser::common::ParsedTypeExpr
+use compiler::parser::common::ParsedTypeExprs
+use compiler::parser::common::ParsedPattern
+use compiler::parser::common::ParsedStmt
+use compiler::parser::common::ParsedToken
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_peek_next
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_check
+use compiler::parser::common::p_check_next
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_consume_if
+use compiler::parser::common::p_expect
+use compiler::parser::common::p_expect_ident
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use compiler::parser::common::get_prec
+use compiler::parser::common::is_right_assoc
+use compiler::parser::common::token_to_binop
+use compiler::parser::common::token_to_unaryop
+use compiler::parser::common::PREC_NONE
+use compiler::parser::common::PREC_ASSIGN
+use compiler::parser::common::PREC_PIPE
+use compiler::parser::common::PREC_CALL
+use compiler::parser::parse_type::parse_type
+use compiler::parser::parse_type::parse_type_path_full
+use compiler::parser::parse_type::parse_generic_args
+use compiler::parser::parse_pattern::parse_pattern
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Entry points
+// ============================================================================
+
+/// Parse an expression (minimum precedence = 0).
+pub func parse_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    return parse_expr_with_prec(tokens, pos, PREC_NONE)
+}
+
+/// Parse an expression with a minimum precedence (Pratt main loop).
+pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> Outcome[ParsedExpr, ParseError] {
+    let prefix_r: ParsedExpr = parse_prefix_expr(tokens, pos)!
+    var p: I64 = prefix_r.pos
+    var left: Heap[Expr] = prefix_r.expr
+
+    loop (true) {
+        // Skip newlines — allow method chains to continue on next line
+        let saved_p: I64 = p
+        p = p_skip_newlines(tokens, p)
+        let cur: Token = p_peek(tokens, p)
+
+        // Postfix operators (call, index, field) — don't continue after newlines
+        // EXCEPT for dot (method chaining)
+        let is_dot: Bool = tok_kind_eq(cur.kind, TokenKind::Dot) or tok_kind_eq(cur.kind, TokenKind::QuestionDot)
+        let is_call: Bool = tok_kind_eq(cur.kind, TokenKind::LParen) or tok_kind_eq(cur.kind, TokenKind::LBracket) or
+                            tok_kind_eq(cur.kind, TokenKind::Bang) or tok_kind_eq(cur.kind, TokenKind::PlusPlus) or
+                            tok_kind_eq(cur.kind, TokenKind::MinusMinus)
+
+        // If we skipped newlines and it's a postfix-but-not-dot, restore
+        if saved_p != p and is_call and not is_dot {
+            p = saved_p
+            break
+        }
+
+        // Postfix operators (high implicit precedence)
+        if is_dot or is_call {
+            let post_r: ParsedExpr = parse_postfix_expr(tokens, p, left)!
+            p = post_r.pos
+            left = post_r.expr
+            continue
+        }
+
+        // Infix operator
+        let prec: I64 = get_prec(cur.kind)
+
+        // Not an infix — restore position if we skipped newlines
+        if prec == PREC_NONE {
+            if saved_p != p {
+                p = saved_p
+            }
+            break
+        }
+
+        if prec <= min_prec {
+            if saved_p != p {
+                p = saved_p
+            }
+            break
+        }
+
+        // Range operators
+        if tok_kind_eq(cur.kind, TokenKind::DotDot) or tok_kind_eq(cur.kind, TokenKind::KwTo) or
+           tok_kind_eq(cur.kind, TokenKind::KwThrough) {
+            let inclusive: Bool = tok_kind_eq(cur.kind, TokenKind::KwThrough)
+            p = p + 1  // consume range op
+            let end_r: ParsedExpr = parse_expr_with_prec(tokens, p, prec)!
+            p = end_r.pos
+            let span: SourceSpan = span_merge(left.get().span, end_r.expr.get().span)
+            let re: RangeExpr = RangeExpr { start: Just(left), end: Just(end_r.expr), inclusive: inclusive, span: span }
+            left = Heap::new(Expr::Range(re))
+            continue
+        }
+
+        // Type cast: expr as Type
+        if tok_kind_eq(cur.kind, TokenKind::KwAs) {
+            p = p + 1  // consume 'as'
+            let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
+            p = ty_r.pos
+            let span: SourceSpan = span_merge(left.get().span, p_prev(tokens, p).span)
+            let ce: CastExpr = CastExpr { expr: left, target: ty_r.te, span: span }
+            left = Heap::new(Expr::Cast(ce))
+            continue
+        }
+
+        // Type check: expr is Type
+        if tok_kind_eq(cur.kind, TokenKind::KwIs) {
+            p = p + 1  // consume 'is'
+            let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
+            p = ty_r.pos
+            let span: SourceSpan = span_merge(left.get().span, p_prev(tokens, p).span)
+            let ie: IsExpr = IsExpr { expr: left, target: ty_r.te, span: span }
+            left = Heap::new(Expr::Is(ie))
+            continue
+        }
+
+        // Pipe forward: a |> f
+        if tok_kind_eq(cur.kind, TokenKind::PipeRight) {
+            p = p + 1  // consume '|>'
+            let rhs_r: ParsedExpr = parse_expr_with_prec(tokens, p, PREC_PIPE)!
+            p = rhs_r.pos
+            // Desugar: a |> f(args) => f(a, args), a |> f => f(a)
+            let span: SourceSpan = span_merge(left.get().span, rhs_r.expr.get().span)
+            let rhs_expr: Heap[Expr] = rhs_r.expr
+            when rhs_expr.get() {
+                Expr::Call(call) => {
+                    var new_args: List[Heap[Expr]] = List::new(call.args.len() as I64 + 1)
+                    new_args.push(left)
+                    var i: I64 = 0
+                    loop (i < call.args.len() as I64) {
+                        new_args.push(call.args.get(i))
+                        i = i + 1
+                    }
+                    let ce: CallExpr = CallExpr { callee: call.callee, args: new_args, span: span }
+                    left = Heap::new(Expr::Call(ce))
+                },
+                _ => {
+                    var args: List[Heap[Expr]] = List::new(1)
+                    args.push(left)
+                    let ce: CallExpr = CallExpr { callee: rhs_expr, args: args, span: span }
+                    left = Heap::new(Expr::Call(ce))
+                }
+            }
+            continue
+        }
+
+        // Regular binary infix
+        let maybe_op: Maybe[BinaryOp] = token_to_binop(cur.kind)
+        when maybe_op {
+            Nothing => break,
+            Just(op) => {
+                let actual_prec: I64 = if is_right_assoc(cur.kind) { prec - 1 } else { prec }
+                p = p + 1  // consume operator
+                let right_r: ParsedExpr = parse_expr_with_prec(tokens, p, actual_prec)!
+                p = right_r.pos
+                let span: SourceSpan = span_merge(left.get().span, right_r.expr.get().span)
+                let be: BinaryExpr = BinaryExpr { op: op, left: left, right: right_r.expr, span: span }
+                left = Heap::new(Expr::Binary(be))
+            }
+        }
+    }
+
+    return Ok(ParsedExpr { expr: left, pos: p })
+}
+
+// ============================================================================
+// Prefix expressions
+// ============================================================================
+
+pub func parse_prefix_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    let tok: Token = p_peek(tokens, p)
+
+    // await expr
+    if tok_kind_eq(tok.kind, TokenKind::KwAwait) {
+        p = p + 1
+        let r: ParsedExpr = parse_prefix_expr(tokens, p)!
+        p = r.pos
+        let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Await(AwaitExpr { expr: r.expr, span: span })), pos: p })
+    }
+
+    // mut ref x
+    if tok_kind_eq(tok.kind, TokenKind::KwMut) and p_check_next(tokens, p, TokenKind::KwRef) {
+        p = p + 2  // consume 'mut' 'ref'
+        let r: ParsedExpr = parse_prefix_expr(tokens, p)!
+        p = r.pos
+        let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Unary(UnaryExpr { op: UnaryOp::OpRefMut, operand: r.expr, span: span })), pos: p })
+    }
+
+    // Unary prefix operators
+    let maybe_uop: Maybe[UnaryOp] = token_to_unaryop(tok.kind)
+    when maybe_uop {
+        Just(uop) => {
+            p = p + 1
+            // ref + mut -> RefMut
+            var final_op: UnaryOp = uop
+            when uop {
+                UnaryOp::OpRef => {
+                    if p_check(tokens, p, TokenKind::KwMut) {
+                        p = p + 1
+                        final_op = UnaryOp::OpRefMut
+                    }
+                },
+                _ => {}
+            }
+            let r: ParsedExpr = parse_prefix_expr(tokens, p)!
+            p = r.pos
+            let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Unary(UnaryExpr { op: final_op, operand: r.expr, span: span })), pos: p })
+        },
+        Nothing => {}
+    }
+
+    return parse_primary_with_postfix(tokens, p)
+}
+
+/// Primary expression followed by all postfix operators.
+pub func parse_primary_with_postfix(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let primary_r: ParsedExpr = parse_primary_expr(tokens, pos)!
+    var p: I64 = primary_r.pos
+    var left: Heap[Expr] = primary_r.expr
+
+    // Loop for all postfix operators (no newline skipping here)
+    loop (true) {
+        let cur: Token = p_peek(tokens, p)
+        let is_post: Bool = tok_kind_eq(cur.kind, TokenKind::LParen) or
+                            tok_kind_eq(cur.kind, TokenKind::LBracket) or
+                            tok_kind_eq(cur.kind, TokenKind::Dot) or
+                            tok_kind_eq(cur.kind, TokenKind::QuestionDot) or
+                            tok_kind_eq(cur.kind, TokenKind::Bang) or
+                            tok_kind_eq(cur.kind, TokenKind::PlusPlus) or
+                            tok_kind_eq(cur.kind, TokenKind::MinusMinus)
+        if not is_post { break }
+        let post_r: ParsedExpr = parse_postfix_expr(tokens, p, left)!
+        p = post_r.pos
+        left = post_r.expr
+    }
+
+    return Ok(ParsedExpr { expr: left, pos: p })
+}
+
+// ============================================================================
+// Postfix expressions
+// ============================================================================
+
+pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> Outcome[ParsedExpr, ParseError] {
+    let start_span: SourceSpan = left.get().span
+    let tok: Token = p_peek(tokens, pos)
+
+    // Function call: expr(args)
+    if tok_kind_eq(tok.kind, TokenKind::LParen) {
+        var p: I64 = pos + 1  // consume '('
+        let args_r: ParsedExprs = parse_call_args(tokens, p)!
+        p = args_r.pos
+        if not p_check(tokens, p, TokenKind::RParen) {
+            return Err(parse_err("Expected ')' after call arguments", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let ce: CallExpr = CallExpr { callee: left, args: args_r.exprs, span: span }
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Call(ce)), pos: p })
+    }
+
+    // Index: expr[index]
+    if tok_kind_eq(tok.kind, TokenKind::LBracket) {
+        var p: I64 = pos + 1  // consume '['
+        let idx_r: ParsedExpr = parse_expr(tokens, p)!
+        p = idx_r.pos
+        if not p_check(tokens, p, TokenKind::RBracket) {
+            return Err(parse_err("Expected ']' after index", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let ie: IndexExpr = IndexExpr { object: left, index: idx_r.expr, span: span }
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Index(ie)), pos: p })
+    }
+
+    // Field access or method call: expr.name or expr.name(args)
+    if tok_kind_eq(tok.kind, TokenKind::Dot) {
+        var p: I64 = pos + 1  // consume '.'
+        // .await
+        if p_check(tokens, p, TokenKind::KwAwait) {
+            p = p + 1
+            let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Await(AwaitExpr { expr: left, span: span })), pos: p })
+        }
+        let name_r = p_expect_ident(tokens, p, "Expected field or method name after '.'")!
+        let name: Str = name_r.value
+        p = name_r.pos
+
+        // Optional type args for method: .method[T](args)
+        var type_args: List[Heap[TypeExpr]] = List::new(0)
+        if p_check(tokens, p, TokenKind::LBracket) and is_likely_type_args(tokens, p) {
+            let targs_r: ParsedTypeExprs = parse_generic_args(tokens, p)!
+            p = targs_r.pos
+            type_args = targs_r.tes
+        }
+
+        // Method call
+        if p_check(tokens, p, TokenKind::LParen) {
+            p = p + 1  // consume '('
+            let args_r: ParsedExprs = parse_call_args(tokens, p)!
+            p = args_r.pos
+            if not p_check(tokens, p, TokenKind::RParen) {
+                return Err(parse_err("Expected ')' after method arguments", p_peek(tokens, p).span))
+            }
+            p = p + 1
+            let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: type_args, args: args_r.exprs, optional_chain: false, span: span }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::MethodCall(mc)), pos: p })
+        }
+
+        // Field access
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: false, span: span }
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Field(fe)), pos: p })
+    }
+
+    // Optional chaining: expr?.name or expr?.name(args)
+    if tok_kind_eq(tok.kind, TokenKind::QuestionDot) {
+        var p: I64 = pos + 1  // consume '?.'
+        let name_r = p_expect_ident(tokens, p, "Expected field or method name after '?.'")!
+        let name: Str = name_r.value
+        p = name_r.pos
+
+        if p_check(tokens, p, TokenKind::LParen) {
+            p = p + 1
+            let args_r: ParsedExprs = parse_call_args(tokens, p)!
+            p = args_r.pos
+            if not p_check(tokens, p, TokenKind::RParen) {
+                return Err(parse_err("Expected ')' after method arguments", p_peek(tokens, p).span))
+            }
+            p = p + 1
+            let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+            var empty_type_args: List[Heap[TypeExpr]] = List::new(0)
+            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: empty_type_args, args: args_r.exprs, optional_chain: true, span: span }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::MethodCall(mc)), pos: p })
+        }
+
+        let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: true, span: span }
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Field(fe)), pos: p })
+    }
+
+    // Try operator: expr!
+    if tok_kind_eq(tok.kind, TokenKind::Bang) {
+        let p: I64 = pos + 1
+        let span: SourceSpan = span_merge(start_span, tok.span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Try(TryExpr { expr: left, span: span })), pos: p })
+    }
+
+    // Postfix increment: expr++
+    if tok_kind_eq(tok.kind, TokenKind::PlusPlus) {
+        let p: I64 = pos + 1
+        let span: SourceSpan = span_merge(start_span, tok.span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Unary(UnaryExpr { op: UnaryOp::OpInc, operand: left, span: span })), pos: p })
+    }
+
+    // Postfix decrement: expr--
+    if tok_kind_eq(tok.kind, TokenKind::MinusMinus) {
+        let p: I64 = pos + 1
+        let span: SourceSpan = span_merge(start_span, tok.span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Unary(UnaryExpr { op: UnaryOp::OpDec, operand: left, span: span })), pos: p })
+    }
+
+    // Should not reach here
+    return Ok(ParsedExpr { expr: left, pos: pos })
+}
+
+/// Heuristic: look-ahead past `[` to check if it closes before `(` — type args pattern.
+func is_likely_type_args(tokens: List[Token], pos: I64) -> Bool {
+    var p: I64 = pos + 1  // past '['
+    var depth: I64 = 1
+    let n: I64 = tokens.len() as I64
+    loop (p < n and depth > 0) {
+        let k: TokenKind = tokens.get(p).kind
+        when k {
+            LBracket => { depth = depth + 1 },
+            RBracket => {
+                depth = depth - 1
+                if depth == 0 {
+                    // Check if followed by '('
+                    if p + 1 < n {
+                        let next_k: TokenKind = tokens.get(p + 1).kind
+                        when next_k {
+                            LParen => return true,
+                            _ => return false
+                        }
+                    }
+                    return false
+                }
+            },
+            Eof => return false,
+            _ => {}
+        }
+        p = p + 1
+    }
+    return false
+}
+
+// ============================================================================
+// Primary expressions
+// ============================================================================
+
+pub func parse_primary_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    let tok: Token = p_peek(tokens, p)
+
+    when tok.kind {
+        // Literals
+        IntLiteral => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitInt(0), span: tok.span })), pos: p })
+        },
+        FloatLiteral => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitFloat(0), span: tok.span })), pos: p })
+        },
+        StringLiteral => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitStr(tok.value), span: tok.span })), pos: p })
+        },
+        CharLiteral => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitChar(0), span: tok.span })), pos: p })
+        },
+        BoolLiteral => {
+            p = p + 1
+            let bval: Bool = tok.value == "true"
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitBool(bval), span: tok.span })), pos: p })
+        },
+        NullLiteral => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitNull, span: tok.span })), pos: p })
+        },
+        // Identifier or path
+        Identifier => {
+            return parse_ident_or_path_expr(tokens, p)
+        },
+        // this
+        KwThis => {
+            p = p + 1
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Ident(IdentExpr { name: "this", span: tok.span })), pos: p })
+        },
+        // Parenthesized or tuple
+        LParen => {
+            return parse_paren_or_tuple_expr(tokens, p)
+        },
+        // Array
+        LBracket => {
+            return parse_array_expr(tokens, p)
+        },
+        // Block
+        LBrace => {
+            return parse_block_expr(tokens, p)
+        },
+        // if expression
+        KwIf => {
+            return parse_if_expr(tokens, p)
+        },
+        // when (match) expression
+        KwWhen => {
+            return parse_when_expr(tokens, p)
+        },
+        // loop expression
+        KwLoop => {
+            return parse_loop_expr(tokens, p)
+        },
+        // while expression
+        KwWhile => {
+            return parse_while_expr(tokens, p)
+        },
+        // for expression
+        KwFor => {
+            return parse_for_expr(tokens, p)
+        },
+        // return expression
+        KwReturn => {
+            return parse_return_expr(tokens, p)
+        },
+        // break expression
+        KwBreak => {
+            return parse_break_expr(tokens, p)
+        },
+        // continue expression
+        KwContinue => {
+            return parse_continue_expr(tokens, p)
+        },
+        // throw expression
+        KwThrow => {
+            p = p + 1
+            let r: ParsedExpr = parse_expr(tokens, p)!
+            p = r.pos
+            let span: SourceSpan = span_merge(tok.span, p_prev(tokens, p).span)
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Throw(ThrowExpr { expr: r.expr, span: span })), pos: p })
+        },
+        // closure: do(params) body
+        KwDo => {
+            return parse_closure_expr(tokens, p)
+        },
+        KwMove => {
+            return parse_closure_expr(tokens, p)
+        },
+        // lowlevel block
+        KwLowlevel => {
+            return parse_lowlevel_expr(tokens, p)
+        },
+        // Interpolated strings
+        InterpStringStart => {
+            return parse_interp_string_expr(tokens, p)
+        },
+        _ => return Err(parse_err("Expected expression", tok.span))
+    }
+}
+
+// ============================================================================
+// Identifier / path expressions
+// ============================================================================
+
+pub func parse_ident_or_path_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let path_r = parse_type_path_full(tokens, pos)!
+    let path: TypePath = path_r.path
+    var p: I64 = path_r.pos
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+
+    // Generic args
+    let args_r: ParsedTypeExprs = parse_generic_args(tokens, p)!
+    p = args_r.pos
+
+    // Check for struct literal: Path { field: val }
+    if p_check(tokens, p, TokenKind::LBrace) {
+        if is_likely_struct_literal(tokens, p) {
+            let generic_args: Maybe[List[Heap[TypeExpr]]] = if args_r.tes.len() > 0 { Just(args_r.tes) } else { Nothing }
+            return parse_struct_expr(tokens, p, path, generic_args, start_span)
+        }
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let span: SourceSpan = span_merge(start_span, end_span)
+
+    // Single segment, no generics -> IdentExpr
+    if path.segments.len() == 1 and args_r.tes.len() == 0 {
+        let name: Str = path.segments.get(0)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Ident(IdentExpr { name: name, span: span })), pos: p })
+    }
+
+    // Path expression
+    let generic_args: Maybe[List[Heap[TypeExpr]]] = if args_r.tes.len() > 0 { Just(args_r.tes) } else { Nothing }
+    let pe: PathExpr = PathExpr { path: path, type_args: generic_args, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Path(pe)), pos: p })
+}
+
+/// Lookahead heuristic: after `{`, check if it looks like a struct literal.
+func is_likely_struct_literal(tokens: List[Token], pos: I64) -> Bool {
+    var p: I64 = pos + 1  // past '{'
+    p = p_skip_newlines(tokens, p)
+    let tok: Token = p_peek(tokens, p)
+    when tok.kind {
+        // Empty braces after path = struct
+        RBrace => return true,
+        // `..base` = struct update
+        DotDot => return true,
+        // `ident:` or `ident,` = struct fields
+        Identifier => {
+            let next: Token = p_peek_next(tokens, p)
+            when next.kind {
+                Colon => return true,
+                RBrace => return true,
+                // `ident,` — might be struct shorthand
+                Comma => return true,
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+// ============================================================================
+// Composite expressions
+// ============================================================================
+
+pub func parse_paren_or_tuple_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume '('
+    p = p_skip_newlines(tokens, p)
+
+    // Empty tuple ()
+    if p_check(tokens, p, TokenKind::RParen) {
+        p = p + 1
+        let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+        var empty: List[Heap[Expr]] = List::new(0)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Tuple(TupleExpr { elements: empty, span: span })), pos: p })
+    }
+
+    let first_r: ParsedExpr = parse_expr(tokens, p)!
+    p = first_r.pos
+    p = p_skip_newlines(tokens, p)
+
+    // Tuple: (a, b, ...)
+    if p_check(tokens, p, TokenKind::Comma) {
+        p = p + 1
+        var elems: List[Heap[Expr]] = List::new(4)
+        elems.push(first_r.expr)
+        p = p_skip_newlines(tokens, p)
+        loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+            p = p_skip_newlines(tokens, p)
+            let r: ParsedExpr = parse_expr(tokens, p)!
+            p = r.pos
+            elems.push(r.expr)
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) {
+                p = p + 1
+            } else {
+                break
+            }
+        }
+        if not p_check(tokens, p, TokenKind::RParen) {
+            return Err(parse_err("Expected ')' in tuple", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Tuple(TupleExpr { elements: elems, span: span })), pos: p })
+    }
+
+    // Just parenthesized
+    if not p_check(tokens, p, TokenKind::RParen) {
+        return Err(parse_err("Expected ')'", p_peek(tokens, p).span))
+    }
+    p = p + 1
+    return Ok(ParsedExpr { expr: first_r.expr, pos: p })
+}
+
+pub func parse_array_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume '['
+    p = p_skip_newlines(tokens, p)
+
+    // Empty array []
+    if p_check(tokens, p, TokenKind::RBracket) {
+        p = p + 1
+        let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+        var empty: List[Heap[Expr]] = List::new(0)
+        let ak: ArrayKind = ArrayKind::Elements(empty)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Array(ArrayExpr { kind: ak, span: span })), pos: p })
+    }
+
+    let first_r: ParsedExpr = parse_expr(tokens, p)!
+    p = first_r.pos
+    p = p_skip_newlines(tokens, p)
+
+    // Repeat syntax: [expr; count]
+    if p_check(tokens, p, TokenKind::Semi) {
+        p = p + 1
+        let count_r: ParsedExpr = parse_expr(tokens, p)!
+        p = count_r.pos
+        if not p_check(tokens, p, TokenKind::RBracket) {
+            return Err(parse_err("Expected ']'", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+        let ak: ArrayKind = ArrayKind::Repeat(first_r.expr, count_r.expr)
+        return Ok(ParsedExpr { expr: Heap::new(Expr::Array(ArrayExpr { kind: ak, span: span })), pos: p })
+    }
+
+    // Array literal
+    var elems: List[Heap[Expr]] = List::new(4)
+    elems.push(first_r.expr)
+    loop (p_check(tokens, p, TokenKind::Comma)) {
+        p = p + 1  // consume ','
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::RBracket) { break }
+        let r: ParsedExpr = parse_expr(tokens, p)!
+        p = r.pos
+        elems.push(r.expr)
+        p = p_skip_newlines(tokens, p)
+    }
+
+    if not p_check(tokens, p, TokenKind::RBracket) {
+        return Err(parse_err("Expected ']'", p_peek(tokens, p).span))
+    }
+    p = p + 1
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let ak: ArrayKind = ArrayKind::Elements(elems)
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Array(ArrayExpr { kind: ak, span: span })), pos: p })
+}
+
+pub func parse_block_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    if not p_check(tokens, pos, TokenKind::LBrace) {
+        return Err(parse_err("Expected '{'", start_tok.span))
+    }
+    var p: I64 = pos + 1  // consume '{'
+    p = p_skip_newlines(tokens, p)
+
+    var stmts: List[Heap[Stmt]] = List::new(8)
+    var trailing: Maybe[Heap[Expr]] = Nothing
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        // Import parse_stmt lazily (cross-module forward ref handled at link time)
+        let stmt_r: ParsedStmt = parse_stmt_in_block(tokens, p)!
+        p = stmt_r.pos
+        p = p_skip_newlines(tokens, p)
+
+        // If at '}', extract trailing expression from last ExprStmt
+        if p_check(tokens, p, TokenKind::RBrace) {
+            when stmt_r.stmt.get() {
+                Stmt::Expr(expr) => {
+                    trailing = Just(expr)
+                },
+                _ => {
+                    stmts.push(stmt_r.stmt)
+                }
+            }
+        } else {
+            stmts.push(stmt_r.stmt)
+            p = p_consume_if(tokens, p, TokenKind::Semi)
+            p = p_skip_newlines(tokens, p)
+        }
+    }
+
+    if not p_check(tokens, p, TokenKind::RBrace) {
+        return Err(parse_err("Expected '}'", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let be: BlockExpr = BlockExpr { stmts: stmts, expr: trailing, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Block(be)), pos: p })
+}
+
+// Forward declaration placeholder — implemented in parse_stmt.tml
+// In TML, cross-module functions are resolved at link time, so we call
+// compiler::parser::parse_stmt::parse_stmt directly.
+pub func parse_stmt_in_block(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+    return compiler::parser::parse_stmt::parse_stmt(tokens, pos)
+}
+
+pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'if'
+    p = p_skip_newlines(tokens, p)
+
+    // if-let: `if let Pattern = expr { then } else { else }`
+    if p_check(tokens, p, TokenKind::KwLet) {
+        p = p + 1
+        let pat_r: ParsedPattern = parse_pattern(tokens, p)!
+        p = pat_r.pos
+        if not p_check(tokens, p, TokenKind::Assign) {
+            return Err(parse_err("Expected '=' in if-let", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        let scrutinee_r: ParsedExpr = parse_expr(tokens, p)!
+        p = scrutinee_r.pos
+        let then_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+        p = then_r.pos
+
+        var else_branch: Maybe[Heap[Expr]] = Nothing
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::KwElse) {
+            p = p + 1
+            p = p_skip_newlines(tokens, p)
+            let else_r: ParsedExpr = if p_check(tokens, p, TokenKind::KwIf) {
+                parse_if_expr(tokens, p)!
+            } else {
+                parse_block_expr(tokens, p)!
+            }
+            p = else_r.pos
+            else_branch = Just(else_r.expr)
+        }
+
+        let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+        let ile: IfLetExpr = IfLetExpr { pattern: pat_r.pat, scrutinee: scrutinee_r.expr, then_branch: then_r.expr, else_branch: else_branch, span: span }
+        return Ok(ParsedExpr { expr: Heap::new(Expr::IfLet(ile)), pos: p })
+    }
+
+    // Regular if
+    let cond_r: ParsedExpr = parse_expr(tokens, p)!
+    p = cond_r.pos
+    let then_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+    p = then_r.pos
+
+    var else_branch: Maybe[Heap[Expr]] = Nothing
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::KwElse) {
+        p = p + 1
+        p = p_skip_newlines(tokens, p)
+        let else_r: ParsedExpr = if p_check(tokens, p, TokenKind::KwIf) {
+            parse_if_expr(tokens, p)!
+        } else {
+            parse_block_expr(tokens, p)!
+        }
+        p = else_r.pos
+        else_branch = Just(else_r.expr)
+    }
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let ie: IfExpr = IfExpr { condition: cond_r.expr, then_branch: then_r.expr, else_branch: else_branch, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::If(ie)), pos: p })
+}
+
+pub func parse_when_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'when'
+    p = p_skip_newlines(tokens, p)
+
+    let scrutinee_r: ParsedExpr = parse_expr(tokens, p)!
+    p = scrutinee_r.pos
+    p = p_skip_newlines(tokens, p)
+
+    if not p_check(tokens, p, TokenKind::LBrace) {
+        return Err(parse_err("Expected '{' after 'when' scrutinee", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume '{'
+    p = p_skip_newlines(tokens, p)
+
+    var arms: List[WhenArm] = List::new(4)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+
+        let pat_r: ParsedPattern = parse_pattern(tokens, p)!
+        p = pat_r.pos
+
+        // Optional guard: `if condition`
+        var guard: Maybe[Heap[Expr]] = Nothing
+        if p_check(tokens, p, TokenKind::KwIf) {
+            p = p + 1
+            let guard_r: ParsedExpr = parse_expr(tokens, p)!
+            p = guard_r.pos
+            guard = Just(guard_r.expr)
+        }
+
+        // `=>`
+        if not p_check(tokens, p, TokenKind::FatArrow) {
+            return Err(parse_err("Expected '=>' in when arm", p_peek(tokens, p).span))
+        }
+        p = p + 1
+        p = p_skip_newlines(tokens, p)
+
+        let arm_start: SourceSpan = p_peek(tokens, pos).span
+        let body_r: ParsedExpr = parse_expr(tokens, p)!
+        p = body_r.pos
+
+        let arm_span: SourceSpan = span_merge(arm_start, p_prev(tokens, p).span)
+        let arm: WhenArm = WhenArm { pattern: pat_r.pat, guard: guard, body: body_r.expr, span: arm_span }
+        arms.push(arm)
+
+        p = p_skip_newlines(tokens, p)
+        p = p_consume_if(tokens, p, TokenKind::Comma)
+        p = p_skip_newlines(tokens, p)
+    }
+
+    if not p_check(tokens, p, TokenKind::RBrace) {
+        return Err(parse_err("Expected '}' after when arms", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let we: WhenExpr = WhenExpr { scrutinee: scrutinee_r.expr, arms: arms, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::When(we)), pos: p })
+}
+
+pub func parse_loop_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'loop'
+    p = p_skip_newlines(tokens, p)
+
+    // loop (condition) { body }
+    if not p_check(tokens, p, TokenKind::LParen) {
+        return Err(parse_err("Expected '(' after 'loop'", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume '('
+    let cond_r: ParsedExpr = parse_expr(tokens, p)!
+    p = cond_r.pos
+    if not p_check(tokens, p, TokenKind::RParen) {
+        return Err(parse_err("Expected ')' after loop condition", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume ')'
+
+    let body_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+    p = body_r.pos
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let le: LoopExpr = LoopExpr { label: Nothing, loop_var: Nothing, condition: cond_r.expr, body: body_r.expr, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Loop(le)), pos: p })
+}
+
+pub func parse_while_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'while'
+    p = p_skip_newlines(tokens, p)
+    let cond_r: ParsedExpr = parse_expr(tokens, p)!
+    p = cond_r.pos
+    let body_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+    p = body_r.pos
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let we: WhileExpr = WhileExpr { label: Nothing, condition: cond_r.expr, body: body_r.expr, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::While(we)), pos: p })
+}
+
+pub func parse_for_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'for'
+    p = p_skip_newlines(tokens, p)
+    let pat_r: ParsedPattern = parse_pattern(tokens, p)!
+    p = pat_r.pos
+    if not p_check(tokens, p, TokenKind::KwIn) {
+        return Err(parse_err("Expected 'in' in for loop", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume 'in'
+    let iter_r: ParsedExpr = parse_expr(tokens, p)!
+    p = iter_r.pos
+    let body_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+    p = body_r.pos
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let fe: ForExpr = ForExpr { label: Nothing, pattern: pat_r.pat, iter: iter_r.expr, body: body_r.expr, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::For(fe)), pos: p })
+}
+
+pub func parse_return_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'return'
+    // Optional return value (if next is not newline/}/ EOF)
+    var value: Maybe[Heap[Expr]] = Nothing
+    let next: Token = p_peek(tokens, p)
+    let is_end: Bool = tok_kind_eq(next.kind, TokenKind::Newline) or tok_kind_eq(next.kind, TokenKind::RBrace) or
+                       tok_kind_eq(next.kind, TokenKind::Semi) or tok_kind_eq(next.kind, TokenKind::Eof)
+    if not is_end {
+        let val_r: ParsedExpr = parse_expr(tokens, p)!
+        p = val_r.pos
+        value = Just(val_r.expr)
+    }
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let re: ReturnExpr = ReturnExpr { value: value, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Return(re)), pos: p })
+}
+
+pub func parse_break_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'break'
+    let span: SourceSpan = start_tok.span
+    let be: BreakExpr = BreakExpr { label: Nothing, value: Nothing, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Break(be)), pos: p })
+}
+
+pub func parse_continue_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'continue'
+    let ce: ContinueExpr = ContinueExpr { label: Nothing, span: start_tok.span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Continue(ce)), pos: p })
+}
+
+pub func parse_closure_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos
+    var is_move: Bool = false
+    if tok_kind_eq(start_tok.kind, TokenKind::KwMove) {
+        is_move = true
+        p = p + 1
+        p = p_skip_newlines(tokens, p)
+    }
+    // consume 'do'
+    if not p_check(tokens, p, TokenKind::KwDo) {
+        return Err(parse_err("Expected 'do'", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    // Parameters: do(x, y: T) or do() or do(x)
+    if not p_check(tokens, p, TokenKind::LParen) {
+        return Err(parse_err("Expected '(' after 'do'", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume '('
+    p = p_skip_newlines(tokens, p)
+    var params: List[ClosureParam] = List::new(4)
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let pat_r: ParsedPattern = parse_pattern(tokens, p)!
+        p = pat_r.pos
+        var param_ty: Maybe[Heap[TypeExpr]] = Nothing
+        if p_check(tokens, p, TokenKind::Colon) {
+            p = p + 1
+            let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
+            p = ty_r.pos
+            param_ty = Just(ty_r.te)
+        }
+        let cp: ClosureParam = ClosureParam { pattern: pat_r.pat, ty: param_ty }
+        params.push(cp)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) { p = p + 1 } else { break }
+    }
+    if not p_check(tokens, p, TokenKind::RParen) {
+        return Err(parse_err("Expected ')' in closure params", p_peek(tokens, p).span))
+    }
+    p = p + 1  // consume ')'
+
+    // Optional return type
+    var ret_ty: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Arrow) {
+        p = p + 1
+        let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
+        p = ty_r.pos
+        ret_ty = Just(ty_r.te)
+    }
+
+    let body_r: ParsedExpr = parse_expr(tokens, p_skip_newlines(tokens, p))!
+    p = body_r.pos
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    let ce: ClosureExpr = ClosureExpr { params: params, return_type: ret_ty, body: body_r.expr, is_move: is_move, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Closure(ce)), pos: p })
+}
+
+pub func parse_lowlevel_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    let start_tok: Token = p_peek(tokens, pos)
+    var p: I64 = pos + 1  // consume 'lowlevel'
+    if not p_check(tokens, p, TokenKind::LBrace) {
+        return Err(parse_err("Expected '{' after 'lowlevel'", p_peek(tokens, p).span))
+    }
+    // Parse a block body, wrap as LowlevelExpr
+    let block_r: ParsedExpr = parse_block_expr(tokens, p)!
+    p = block_r.pos
+    let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
+    // Extract block contents and wrap in LowlevelExpr
+    when block_r.expr.get() {
+        Expr::Block(be) => {
+            let le: LowlevelExpr = LowlevelExpr { stmts: be.stmts, expr: be.expr, span: span }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Lowlevel(le)), pos: p })
+        },
+        _ => {
+            var empty_stmts: List[Heap[Stmt]] = List::new(0)
+            let le: LowlevelExpr = LowlevelExpr { stmts: empty_stmts, expr: Just(block_r.expr), span: span }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Lowlevel(le)), pos: p })
+        }
+    }
+}
+
+pub func parse_interp_string_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+    // Simplified: just consume the InterpStringStart token and emit a placeholder
+    let tok: Token = p_peek(tokens, pos)
+    let p: I64 = pos + 1
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitStr(tok.value), span: tok.span })), pos: p })
+}
+
+pub func parse_struct_expr(tokens: List[Token], pos: I64, path: TypePath, type_args: Maybe[List[Heap[TypeExpr]]], start_span: SourceSpan) -> Outcome[ParsedExpr, ParseError] {
+    var p: I64 = pos + 1  // consume '{'
+    p = p_skip_newlines(tokens, p)
+
+    var fields: List[StructExprField] = List::new(4)
+    var base_expr: Maybe[Heap[Expr]] = Nothing
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        // `..base` spread
+        if p_check(tokens, p, TokenKind::DotDot) {
+            p = p + 1
+            let base_r: ParsedExpr = parse_expr(tokens, p)!
+            p = base_r.pos
+            base_expr = Just(base_r.expr)
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+            break
+        }
+        let name_r = p_expect_ident(tokens, p, "Expected field name in struct literal")!
+        let field_name: Str = name_r.value
+        p = name_r.pos
+
+        var field_val: Heap[Expr]
+        if p_check(tokens, p, TokenKind::Colon) {
+            p = p + 1
+            let val_r: ParsedExpr = parse_expr(tokens, p)!
+            p = val_r.pos
+            field_val = val_r.expr
+        } else {
+            // Shorthand: `name` means `name: name`
+            let fspan: SourceSpan = p_prev(tokens, p).span
+            field_val = Heap::new(Expr::Ident(IdentExpr { name: field_name, span: fspan }))
+        }
+
+        let sf: StructExprField = StructExprField { name: field_name, value: field_val }
+        fields.push(sf)
+
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) { p = p + 1 } else { break }
+    }
+
+    p = p_skip_newlines(tokens, p)
+    if not p_check(tokens, p, TokenKind::RBrace) {
+        return Err(parse_err("Expected '}' in struct literal", p_peek(tokens, p).span))
+    }
+    p = p + 1
+
+    let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+    let se: StructExpr = StructExpr { path: path, type_args: type_args, fields: fields, base_expr: base_expr, span: span }
+    return Ok(ParsedExpr { expr: Heap::new(Expr::Struct(se)), pos: p })
+}
+
+// ============================================================================
+// Call arguments
+// ============================================================================
+
+pub func parse_call_args(tokens: List[Token], pos: I64) -> Outcome[ParsedExprs, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    var args: List[Heap[Expr]] = List::new(4)
+
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let r: ParsedExpr = parse_expr(tokens, p)!
+        p = r.pos
+        args.push(r.expr)
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    return Ok(ParsedExprs { exprs: args, pos: p })
+}

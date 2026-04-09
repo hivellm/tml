@@ -1,0 +1,1121 @@
+//! Declaration parser for the TML self-hosting compiler frontend.
+//!
+//! Parses all top-level declarations: func, type (struct/enum/alias/sum),
+//! behavior, impl, const, use, and mod.
+//! Entry point: `parse_decl`.
+//!
+//! Type disambiguation:
+//!   - `type Name { field: T }`  → StructDecl
+//!   - `type Name { Variant }`   → EnumDecl
+//!   - `type Name = A | B`       → EnumDecl (sum type)
+//!   - `type Name = SomeType`    → TypeAliasDecl
+
+use compiler::source::SourceSpan
+use compiler::source::span_merge
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::ast::common::Visibility
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::NamedType
+use compiler::ast::decls::GenericParam
+use compiler::ast::decls::FuncParam
+use compiler::ast::decls::FuncDecl
+use compiler::ast::decls::StructField
+use compiler::ast::decls::StructDecl
+use compiler::ast::decls::UnionDecl
+use compiler::ast::decls::EnumVariant
+use compiler::ast::decls::EnumDecl
+use compiler::ast::decls::TraitDecl
+use compiler::ast::decls::ImplDecl
+use compiler::ast::decls::TypeAliasDecl
+use compiler::ast::decls::ConstDecl
+use compiler::ast::decls::UsePath
+use compiler::ast::decls::UseDecl
+use compiler::ast::decls::ModDecl
+use compiler::ast::decls::Decl
+use compiler::ast::exprs::Expr
+use compiler::parser::common::ParseError
+use compiler::parser::common::ParsedDecl
+use compiler::parser::common::ParsedDecls
+use compiler::parser::common::ParsedStr
+use compiler::parser::common::p_peek
+use compiler::parser::common::p_peek_next
+use compiler::parser::common::p_prev
+use compiler::parser::common::p_check
+use compiler::parser::common::p_check_next
+use compiler::parser::common::p_is_eof
+use compiler::parser::common::p_skip_newlines
+use compiler::parser::common::p_consume_if
+use compiler::parser::common::p_expect
+use compiler::parser::common::p_expect_ident
+use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::parse_err
+use compiler::parser::parse_type::parse_type
+use compiler::parser::parse_type::parse_type_path_full
+use compiler::parser::parse_type::parse_named_type
+use compiler::parser::parse_type::parse_generic_args
+use compiler::parser::parse_expr::parse_expr
+use compiler::parser::parse_expr::parse_block_expr
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Local result types (private helpers return named structs, not tuples)
+// ============================================================================
+
+type ParsedVisibility {
+    vis: Visibility,
+    pos: I64
+}
+
+type ParsedGenericParams {
+    params: List[GenericParam],
+    pos: I64
+}
+
+type ParsedFuncParams {
+    params: List[FuncParam],
+    pos: I64
+}
+
+type ParsedFuncParam {
+    param: FuncParam,
+    pos: I64
+}
+
+type ParsedEnumVariant {
+    variant: EnumVariant,
+    pos: I64
+}
+
+type ParsedFuncDeclRaw {
+    func_decl: FuncDecl,
+    pos: I64
+}
+
+// ============================================================================
+// Entry point
+// ============================================================================
+
+/// Parse one declaration (func, type, behavior, impl, const, use, mod).
+pub func parse_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+
+    // Parse visibility
+    let vis_r = parse_visibility(tokens, p)
+    let vis: Visibility = vis_r.vis
+    p = vis_r.pos
+
+    let tok: Token = p_peek(tokens, p)
+    when tok.kind {
+        KwAsync => return parse_func_decl(tokens, p, vis),
+        KwLowlevel => return parse_func_decl(tokens, p, vis),
+        KwFunc => return parse_func_decl(tokens, p, vis),
+        KwType => return parse_type_decl(tokens, p, vis),
+        KwUnion => return parse_union_decl(tokens, p, vis),
+        KwBehavior => return parse_trait_decl(tokens, p, vis),
+        KwImpl => return parse_impl_decl(tokens, p),
+        KwConst => return parse_const_decl(tokens, p, vis),
+        KwUse => return parse_use_decl(tokens, p, vis),
+        KwMod => return parse_mod_decl(tokens, p, vis),
+        _ => return Err(parse_err("Expected declaration", tok.span))
+    }
+}
+
+// ============================================================================
+// Visibility
+// ============================================================================
+
+/// Parse optional visibility modifier. Returns ParsedVisibility { vis, pos }.
+func parse_visibility(tokens: List[Token], pos: I64) -> ParsedVisibility {
+    if not p_check(tokens, pos, TokenKind::KwPub) {
+        return ParsedVisibility { vis: Visibility::Private, pos: pos }
+    }
+    var p: I64 = pos + 1  // consume 'pub'
+    // pub(crate)
+    if p_check(tokens, p, TokenKind::LParen) {
+        p = p + 1  // consume '('
+        // skip to closing paren
+        loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+            p = p + 1
+        }
+        if p_check(tokens, p, TokenKind::RParen) { p = p + 1 }
+        return ParsedVisibility { vis: Visibility::PubCrate, pos: p }
+    }
+    return ParsedVisibility { vis: Visibility::Public, pos: p }
+}
+
+// ============================================================================
+// Generic parameters: [T, U: Bound]
+// ============================================================================
+
+/// Parse `[T, U: Bound + Bound2]`. Returns list of GenericParam and new pos.
+func parse_generic_params(tokens: List[Token], pos: I64) -> Outcome[ParsedGenericParams, ParseError] {
+    var p: I64 = pos
+    let lbr = p_expect(tokens, p, TokenKind::LBracket, "Expected '[' for generic parameters")!
+    p = lbr.pos
+
+    var params: List[GenericParam] = List::new(4)
+
+    loop (not p_check(tokens, p, TokenKind::RBracket) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let param_span: SourceSpan = p_peek(tokens, p).span
+        let name_r = p_expect_ident(tokens, p, "Expected type parameter name")!
+        p = name_r.pos
+        let pname: Str = name_r.value
+
+        var bounds: List[TypePath] = List::new(2)
+        if p_check(tokens, p, TokenKind::Colon) {
+            p = p + 1  // consume ':'
+            // Parse bounds: T: Bound1 + Bound2
+            loop (true) {
+                p = p_skip_newlines(tokens, p)
+                let bound_r = parse_type_path_full(tokens, p)!
+                p = bound_r.pos
+                // Consume generic args on bound (discard — TypePath has no room for them)
+                if p_check(tokens, p, TokenKind::LBracket) {
+                    let ga_r = parse_generic_args(tokens, p)!
+                    p = ga_r.pos
+                }
+                bounds.push(bound_r.path)
+                p = p_skip_newlines(tokens, p)
+                if not p_check(tokens, p, TokenKind::Plus) {
+                    break
+                }
+                p = p + 1  // consume '+'
+            }
+        }
+
+        let gp: GenericParam = GenericParam { name: pname, bounds: bounds, span: param_span }
+        params.push(gp)
+
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let rbr = p_expect(tokens, p, TokenKind::RBracket, "Expected ']' after generic parameters")!
+    p = rbr.pos
+    return Ok(ParsedGenericParams { params: params, pos: p })
+}
+
+// ============================================================================
+// Function parameter parsing
+// ============================================================================
+
+/// Parse function parameter list (caller has already consumed '(').
+func parse_func_params(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParams, ParseError] {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    var params: List[FuncParam] = List::new(4)
+
+    loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let fp_r = parse_func_param(tokens, p)!
+        p = fp_r.pos
+        params.push(fp_r.param)
+        p = p_skip_newlines(tokens, p)
+        if not p_check(tokens, p, TokenKind::RParen) {
+            let comma = p_expect(tokens, p, TokenKind::Comma, "Expected ',' between parameters")!
+            p = comma.pos
+            p = p_skip_newlines(tokens, p)
+        }
+    }
+
+    return Ok(ParsedFuncParams { params: params, pos: p })
+}
+
+/// Parse a single function parameter: `[mut] name: Type` or `[mut] this`.
+func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam, ParseError] {
+    let param_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos
+    var is_mut: Bool = false
+
+    // Optional 'mut' prefix
+    if p_check(tokens, p, TokenKind::KwMut) {
+        is_mut = true
+        p = p + 1
+    }
+
+    let name_r = p_expect_ident(tokens, p, "Expected parameter name")!
+    p = name_r.pos
+    let pname: Str = name_r.value
+
+    // 'this' / 'self' without type annotation
+    let is_this: Bool = pname == "this" or pname == "self"
+    if is_this and not p_check(tokens, p, TokenKind::Colon) {
+        // Synthesize 'This' type
+        var this_segs: List[Str] = List::new(1)
+        this_segs.push("This")
+        let this_path: TypePath = TypePath { segments: this_segs, span: param_span }
+        var this_args: List[Heap[TypeExpr]] = List::new(0)
+        let this_nt: NamedType = NamedType { path: this_path, args: this_args, span: param_span }
+        let this_te: Heap[TypeExpr] = Heap::new(TypeExpr::Named(this_nt))
+        let end_span: SourceSpan = p_prev(tokens, p).span
+        let fp: FuncParam = FuncParam { name: pname, ty: this_te, is_this: true, is_mut: is_mut, span: span_merge(param_span, end_span) }
+        return Ok(ParsedFuncParam { param: fp, pos: p })
+    }
+
+    let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after parameter name")!
+    p = colon.pos
+    let type_r = parse_type(tokens, p)!
+    p = type_r.pos
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let fp: FuncParam = FuncParam { name: pname, ty: type_r.te, is_this: is_this, is_mut: is_mut, span: span_merge(param_span, end_span) }
+    return Ok(ParsedFuncParam { param: fp, pos: p })
+}
+
+// ============================================================================
+// Function declaration
+// ============================================================================
+
+/// Parse `[async] [lowlevel] func name[T](params) -> RetType { body }`.
+pub func parse_func_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos
+
+    // Optional modifiers: async, lowlevel
+    var is_async: Bool = false
+    loop (true) {
+        if p_check(tokens, p, TokenKind::KwAsync) {
+            is_async = true
+            p = p + 1
+        } else if p_check(tokens, p, TokenKind::KwLowlevel) {
+            p = p + 1  // lowlevel modifier (unsafe) — not stored in simplified TML AST
+        } else {
+            break
+        }
+    }
+
+    let func_tok = p_expect(tokens, p, TokenKind::KwFunc, "Expected 'func'")!
+    p = func_tok.pos
+
+    let name_r = p_expect_ident(tokens, p, "Expected function name")!
+    p = name_r.pos
+    let fname: Str = name_r.value
+
+    // Optional generic parameters
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    // Parameter list
+    let lp = p_expect(tokens, p, TokenKind::LParen, "Expected '(' after function name")!
+    p = lp.pos
+    let params_r = parse_func_params(tokens, p)!
+    let fparams: List[FuncParam] = params_r.params
+    p = params_r.pos
+    let rp = p_expect(tokens, p, TokenKind::RParen, "Expected ')' after parameters")!
+    p = rp.pos
+
+    // Optional return type
+    var return_type: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Arrow) {
+        p = p + 1
+        let ret_r = parse_type(tokens, p)!
+        p = ret_r.pos
+        return_type = Just(ret_r.te)
+    }
+
+    // Skip where clause (where T: Bound) without storing it
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::KwWhere) {
+        p = skip_where_clause(tokens, p)
+    }
+
+    // Optional body
+    var body: Maybe[Heap[Expr]] = Nothing
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::LBrace) {
+        let body_r = parse_block_expr(tokens, p)!
+        p = body_r.pos
+        body = Just(body_r.expr)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let fd: FuncDecl = FuncDecl {
+        name: fname,
+        visibility: vis,
+        generics: generics,
+        params: fparams,
+        return_type: return_type,
+        body: body,
+        is_async: is_async,
+        is_override: false,
+        span: span_merge(start_span, end_span)
+    }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Func(fd)), pos: p })
+}
+
+/// Skip over a `where T: Bound, U: Bound2` clause without parsing it.
+func skip_where_clause(tokens: List[Token], pos: I64) -> I64 {
+    var p: I64 = pos + 1  // consume 'where'
+    var depth: I64 = 0
+    loop (not p_is_eof(tokens, p)) {
+        let tok: Token = p_peek(tokens, p)
+        when tok.kind {
+            LBrace => {
+                if depth == 0 { return p }  // stop before the body
+                depth = depth + 1
+            },
+            LBracket => { depth = depth + 1 },
+            LParen => { depth = depth + 1 },
+            RBrace => { depth = depth - 1 },
+            RBracket => { depth = depth - 1 },
+            RParen => { depth = depth - 1 },
+            Newline => {
+                if depth == 0 { return p }
+            },
+            _ => {}
+        }
+        p = p + 1
+    }
+    return p
+}
+
+// ============================================================================
+// Type declaration dispatcher
+// ============================================================================
+
+/// Dispatch `type` decl to struct/enum/sum-type/alias based on lookahead.
+func parse_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    // Lookahead to classify without consuming permanently
+    let kind: Str = classify_type_decl(tokens, pos)
+    if kind == "alias" {
+        return parse_type_alias_decl(tokens, pos, vis)
+    }
+    if kind == "sum_type" {
+        return parse_sum_type_decl(tokens, pos, vis)
+    }
+    if kind == "enum" {
+        return parse_enum_decl(tokens, pos, vis)
+    }
+    // Default: struct
+    return parse_struct_decl(tokens, pos, vis)
+}
+
+/// Lookahead classifier for `type` decl. Returns "struct" | "enum" | "alias" | "sum_type".
+func classify_type_decl(tokens: List[Token], pos: I64) -> Str {
+    var p: I64 = pos + 1  // skip 'type'
+    p = p_skip_newlines(tokens, p)
+    if not p_check(tokens, p, TokenKind::Identifier) { return "struct" }
+    p = p + 1  // skip name
+    // Skip generic params [...]
+    if p_check(tokens, p, TokenKind::LBracket) {
+        p = skip_matching_bracket(tokens, p, TokenKind::LBracket, TokenKind::RBracket)
+    }
+    p = p_skip_newlines(tokens, p)
+
+    // `type Name = ...`
+    if p_check(tokens, p, TokenKind::Assign) {
+        if peek_has_top_level_bitor(tokens, p + 1) {
+            return "sum_type"
+        }
+        return "alias"
+    }
+
+    // `type Name { ... }`
+    if p_check(tokens, p, TokenKind::LBrace) {
+        if peek_brace_body_is_enum(tokens, p + 1) {
+            return "enum"
+        }
+        return "struct"
+    }
+
+    return "struct"
+}
+
+/// Skip matching bracket pair, returning position AFTER the closing bracket.
+func skip_matching_bracket(tokens: List[Token], pos: I64, open: TokenKind, close: TokenKind) -> I64 {
+    var p: I64 = pos + 1  // skip opening bracket
+    var depth: I64 = 1
+    loop (depth > 0 and not p_is_eof(tokens, p)) {
+        let tok: Token = p_peek(tokens, p)
+        if tok_kind_eq(tok.kind, open) { depth = depth + 1 }
+        if tok_kind_eq(tok.kind, close) { depth = depth - 1 }
+        p = p + 1
+    }
+    return p
+}
+
+/// True if there is a `|` (BitOr) at depth 0 before newline/EOF in the given range.
+func peek_has_top_level_bitor(tokens: List[Token], pos: I64) -> Bool {
+    var p: I64 = pos
+    var depth: I64 = 0
+    loop (not p_is_eof(tokens, p)) {
+        let tok: Token = p_peek(tokens, p)
+        when tok.kind {
+            LParen => { depth = depth + 1 },
+            RParen => { depth = depth - 1 },
+            LBracket => { depth = depth + 1 },
+            RBracket => { depth = depth - 1 },
+            LBrace => { depth = depth + 1 },
+            RBrace => { depth = depth - 1 },
+            BitOr => { if depth == 0 { return true } },
+            Newline => { if depth == 0 { return false } },
+            Semi => { return false },
+            _ => {}
+        }
+        p = p + 1
+    }
+    return false
+}
+
+/// True if the brace body at `pos` (after `{`) looks like an enum, not a struct.
+func peek_brace_body_is_enum(tokens: List[Token], pos: I64) -> Bool {
+    var p: I64 = p_skip_newlines(tokens, pos)
+    if p_check(tokens, p, TokenKind::RBrace) { return false }  // empty → struct
+    if not p_check(tokens, p, TokenKind::Identifier) { return false }
+    p = p + 1  // consume first ident
+    let next: Token = p_peek(tokens, p)
+    when next.kind {
+        Colon => return false,    // struct: field: Type
+        LParen => return true,    // enum: Variant(T)
+        LBrace => return true,    // enum: Variant { ... }
+        Comma => return true,     // enum: Variant,
+        RBrace => return true,    // enum: Variant }
+        Newline => return true,   // enum: Variant\n
+        Assign => return true,    // enum: Variant = 0
+        _ => return false
+    }
+}
+
+// ============================================================================
+// Struct declaration
+// ============================================================================
+
+/// Parse `type Name[T] { field: Type, ... }`.
+func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'type'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected struct name")!
+    p = name_r.pos
+    let sname: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let lbr = p_expect(tokens, p, TokenKind::LBrace, "Expected '{' for struct body")!
+    p = lbr.pos
+
+    var fields: List[StructField] = List::new(4)
+    p = p_skip_newlines(tokens, p)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        // Field visibility
+        let fvis_r = parse_visibility(tokens, p)
+        let fvis: Visibility = fvis_r.vis
+        p = fvis_r.pos
+
+        let field_span: SourceSpan = p_peek(tokens, p).span
+        let fname_r = p_expect_ident(tokens, p, "Expected field name")!
+        p = fname_r.pos
+        let field_name: Str = fname_r.value
+
+        let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after field name")!
+        p = colon.pos
+
+        let ftype_r = parse_type(tokens, p)!
+        p = ftype_r.pos
+
+        let end_span: SourceSpan = p_prev(tokens, p).span
+        let sf: StructField = StructField { name: field_name, ty: ftype_r.te, visibility: fvis, span: span_merge(field_span, end_span) }
+        fields.push(sf)
+
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let rbr = p_expect(tokens, p, TokenKind::RBrace, "Expected '}' after struct fields")!
+    p = rbr.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let sd: StructDecl = StructDecl { name: sname, visibility: vis, generics: generics, fields: fields, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Struct(sd)), pos: p })
+}
+
+// ============================================================================
+// Union declaration
+// ============================================================================
+
+/// Parse `union Name { field: Type, ... }`.
+func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'union'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected union name")!
+    p = name_r.pos
+    let uname: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let lbr = p_expect(tokens, p, TokenKind::LBrace, "Expected '{' for union body")!
+    p = lbr.pos
+
+    var fields: List[StructField] = List::new(4)
+    p = p_skip_newlines(tokens, p)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let field_span: SourceSpan = p_peek(tokens, p).span
+        let fname_r = p_expect_ident(tokens, p, "Expected field name")!
+        p = fname_r.pos
+        let field_name: Str = fname_r.value
+
+        let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after field name")!
+        p = colon.pos
+
+        let ftype_r = parse_type(tokens, p)!
+        p = ftype_r.pos
+
+        let end_span: SourceSpan = p_prev(tokens, p).span
+        let sf: StructField = StructField { name: field_name, ty: ftype_r.te, visibility: Visibility::Private, span: span_merge(field_span, end_span) }
+        fields.push(sf)
+
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let rbr = p_expect(tokens, p, TokenKind::RBrace, "Expected '}' after union fields")!
+    p = rbr.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ud: UnionDecl = UnionDecl { name: uname, visibility: vis, generics: generics, fields: fields, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Union(ud)), pos: p })
+}
+
+// ============================================================================
+// Enum declaration (brace style: `type Name { Variant, Variant(T) }`)
+// ============================================================================
+
+/// Parse `type Name[T] { VariantA, VariantB(T), ... }`.
+func parse_enum_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'type'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected enum name")!
+    p = name_r.pos
+    let ename: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let lbr = p_expect(tokens, p, TokenKind::LBrace, "Expected '{' for enum body")!
+    p = lbr.pos
+
+    var variants: List[EnumVariant] = List::new(4)
+    p = p_skip_newlines(tokens, p)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        let v_r = parse_enum_variant(tokens, p)!
+        variants.push(v_r.variant)
+        p = v_r.pos
+        p = p_skip_newlines(tokens, p)
+        if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let rbr = p_expect(tokens, p, TokenKind::RBrace, "Expected '}' after enum variants")!
+    p = rbr.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ed: EnumDecl = EnumDecl { name: ename, visibility: vis, generics: generics, variants: variants, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Enum(ed)), pos: p })
+}
+
+// ============================================================================
+// Sum type declaration (`type Name = A | B(T) | C`)
+// ============================================================================
+
+/// Parse `type Name[T] = VariantA | VariantB(T) | ...`.
+func parse_sum_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'type'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected type name")!
+    p = name_r.pos
+    let ename: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let eq = p_expect(tokens, p, TokenKind::Assign, "Expected '=' in sum type")!
+    p = eq.pos
+    p = p_skip_newlines(tokens, p)
+
+    // Optional leading '|'
+    if p_check(tokens, p, TokenKind::BitOr) { p = p + 1 }
+    p = p_skip_newlines(tokens, p)
+
+    var variants: List[EnumVariant] = List::new(4)
+    let first_v = parse_enum_variant(tokens, p)!
+    variants.push(first_v.variant)
+    p = first_v.pos
+
+    p = p_skip_newlines(tokens, p)
+    loop (p_check(tokens, p, TokenKind::BitOr)) {
+        p = p + 1  // consume '|'
+        p = p_skip_newlines(tokens, p)
+        let v_r = parse_enum_variant(tokens, p)!
+        variants.push(v_r.variant)
+        p = v_r.pos
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ed: EnumDecl = EnumDecl { name: ename, visibility: vis, generics: generics, variants: variants, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Enum(ed)), pos: p })
+}
+
+/// Parse one enum variant: `Name` or `Name(T, U)`. Returns (EnumVariant, new_pos).
+func parse_enum_variant(tokens: List[Token], pos: I64) -> Outcome[ParsedEnumVariant, ParseError] {
+    let var_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos
+
+    let name_r = p_expect_ident(tokens, p, "Expected variant name")!
+    p = name_r.pos
+    let vname: Str = name_r.value
+
+    // Tuple fields: Variant(T1, T2)
+    var fields: List[Heap[TypeExpr]] = List::new(0)
+    if p_check(tokens, p, TokenKind::LParen) {
+        p = p + 1  // consume '('
+        p = p_skip_newlines(tokens, p)
+        loop (not p_check(tokens, p, TokenKind::RParen) and not p_is_eof(tokens, p)) {
+            p = p_skip_newlines(tokens, p)
+            let ft_r = parse_type(tokens, p)!
+            p = ft_r.pos
+            fields.push(ft_r.te)
+            p = p_skip_newlines(tokens, p)
+            if p_check(tokens, p, TokenKind::Comma) {
+                p = p + 1
+            } else {
+                break
+            }
+        }
+        let rp = p_expect(tokens, p, TokenKind::RParen, "Expected ')' after variant fields")!
+        p = rp.pos
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ev: EnumVariant = EnumVariant { name: vname, fields: fields, span: span_merge(var_span, end_span) }
+    return Ok(ParsedEnumVariant { variant: ev, pos: p })
+}
+
+// ============================================================================
+// Behavior (trait) declaration
+// ============================================================================
+
+/// Parse `behavior Name[T] [: Supertrait] { methods }`.
+func parse_trait_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'behavior'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected behavior name")!
+    p = name_r.pos
+    let tname: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    // Super traits: behavior Foo: Bar + Baz
+    var supertraits: List[TypePath] = List::new(0)
+    if p_check(tokens, p, TokenKind::Colon) {
+        p = p + 1
+        loop (true) {
+            p = p_skip_newlines(tokens, p)
+            let st_r = parse_type_path_full(tokens, p)!
+            p = st_r.pos
+            // Consume optional generic args on supertrait
+            if p_check(tokens, p, TokenKind::LBracket) {
+                let ga_r = parse_generic_args(tokens, p)!
+                p = ga_r.pos
+            }
+            supertraits.push(st_r.path)
+            p = p_skip_newlines(tokens, p)
+            if not p_check(tokens, p, TokenKind::Plus) { break }
+            p = p + 1
+        }
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let lbr = p_expect(tokens, p, TokenKind::LBrace, "Expected '{' for behavior body")!
+    p = lbr.pos
+
+    var methods: List[FuncDecl] = List::new(4)
+    p = p_skip_newlines(tokens, p)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        // Behavior methods may have 'type' for associated types — skip them
+        if p_check(tokens, p, TokenKind::KwType) {
+            // Skip associated type: type Name [: Bounds] [= Default]
+            p = skip_associated_type(tokens, p)
+            p = p_skip_newlines(tokens, p)
+            continue
+        }
+        // Parse method visibility + decl
+        let mvis_r = parse_visibility(tokens, p)
+        let mvis: Visibility = mvis_r.vis
+        p = mvis_r.pos
+        let fd_r = parse_func_decl_raw(tokens, p, mvis)!
+        p = fd_r.pos
+        methods.push(fd_r.func_decl)
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let rbr = p_expect(tokens, p, TokenKind::RBrace, "Expected '}' after behavior body")!
+    p = rbr.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let td: TraitDecl = TraitDecl { name: tname, visibility: vis, generics: generics, supertraits: supertraits, methods: methods, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Trait(td)), pos: p })
+}
+
+/// Skip an associated type declaration inside a behavior body.
+func skip_associated_type(tokens: List[Token], pos: I64) -> I64 {
+    var p: I64 = pos + 1  // consume 'type'
+    // Skip until newline at depth 0
+    var depth: I64 = 0
+    loop (not p_is_eof(tokens, p)) {
+        let tok: Token = p_peek(tokens, p)
+        when tok.kind {
+            LBracket => { depth = depth + 1 },
+            RBracket => { depth = depth - 1 },
+            LParen => { depth = depth + 1 },
+            RParen => { depth = depth - 1 },
+            Newline => { if depth == 0 { return p } },
+            Semi => { return p },
+            _ => {}
+        }
+        p = p + 1
+    }
+    return p
+}
+
+/// Parse a function decl, returning (FuncDecl, new_pos) directly.
+func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedFuncDeclRaw, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos
+
+    var is_async: Bool = false
+    loop (true) {
+        if p_check(tokens, p, TokenKind::KwAsync) {
+            is_async = true
+            p = p + 1
+        } else if p_check(tokens, p, TokenKind::KwLowlevel) {
+            p = p + 1
+        } else {
+            break
+        }
+    }
+
+    let func_tok = p_expect(tokens, p, TokenKind::KwFunc, "Expected 'func'")!
+    p = func_tok.pos
+
+    let name_r = p_expect_ident(tokens, p, "Expected function name")!
+    p = name_r.pos
+    let fname: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    let lp = p_expect(tokens, p, TokenKind::LParen, "Expected '(' after function name")!
+    p = lp.pos
+    let params_r = parse_func_params(tokens, p)!
+    let fparams: List[FuncParam] = params_r.params
+    p = params_r.pos
+    let rp = p_expect(tokens, p, TokenKind::RParen, "Expected ')' after parameters")!
+    p = rp.pos
+
+    var return_type: Maybe[Heap[TypeExpr]] = Nothing
+    if p_check(tokens, p, TokenKind::Arrow) {
+        p = p + 1
+        let ret_r = parse_type(tokens, p)!
+        p = ret_r.pos
+        return_type = Just(ret_r.te)
+    }
+
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::KwWhere) {
+        p = skip_where_clause(tokens, p)
+    }
+
+    var body: Maybe[Heap[Expr]] = Nothing
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::LBrace) {
+        let body_r = parse_block_expr(tokens, p)!
+        p = body_r.pos
+        body = Just(body_r.expr)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let fd: FuncDecl = FuncDecl {
+        name: fname,
+        visibility: vis,
+        generics: generics,
+        params: fparams,
+        return_type: return_type,
+        body: body,
+        is_async: is_async,
+        is_override: false,
+        span: span_merge(start_span, end_span)
+    }
+    return Ok(ParsedFuncDeclRaw { func_decl: fd, pos: p })
+}
+
+// ============================================================================
+// Impl declaration
+// ============================================================================
+
+/// Parse `impl[T] [Behavior for] Type { methods }`.
+pub func parse_impl_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'impl'
+    p = p_skip_newlines(tokens, p)
+
+    // Optional generic parameters
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+    p = p_skip_newlines(tokens, p)
+
+    // Parse first type path (could be behavior or self type)
+    let first_span: SourceSpan = p_peek(tokens, p).span
+    let first_path_r = parse_type_path_full(tokens, p)!
+    let first_path: TypePath = first_path_r.path
+    p = first_path_r.pos
+
+    // Parse generic args on first type (for the TypeExpr reconstruction)
+    var first_args_tes: List[Heap[TypeExpr]] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let ga_r = parse_generic_args(tokens, p)!
+        first_args_tes = ga_r.tes
+        p = ga_r.pos
+    }
+
+    p = p_skip_newlines(tokens, p)
+
+    var behavior_path: Maybe[TypePath] = Nothing
+    var self_te: Heap[TypeExpr]
+
+    if p_check(tokens, p, TokenKind::KwFor) {
+        // impl Behavior for Type
+        behavior_path = Just(first_path)
+        p = p + 1  // consume 'for'
+        p = p_skip_newlines(tokens, p)
+        let self_r = parse_type(tokens, p)!
+        p = self_r.pos
+        self_te = self_r.te
+    } else {
+        // impl Type { ... }
+        let te_span: SourceSpan = span_merge(first_span, p_prev(tokens, p).span)
+        let nt: NamedType = NamedType { path: first_path, args: first_args_tes, span: te_span }
+        self_te = Heap::new(TypeExpr::Named(nt))
+    }
+
+    p = p_skip_newlines(tokens, p)
+    if p_check(tokens, p, TokenKind::KwWhere) {
+        p = skip_where_clause(tokens, p)
+    }
+
+    p = p_skip_newlines(tokens, p)
+    let lbr = p_expect(tokens, p, TokenKind::LBrace, "Expected '{' for impl body")!
+    p = lbr.pos
+
+    var methods: List[FuncDecl] = List::new(4)
+    p = p_skip_newlines(tokens, p)
+
+    loop (not p_check(tokens, p, TokenKind::RBrace) and not p_is_eof(tokens, p)) {
+        p = p_skip_newlines(tokens, p)
+        // Skip associated type bindings: type Name = Type
+        if p_check(tokens, p, TokenKind::KwType) {
+            p = skip_associated_type(tokens, p)
+            p = p_skip_newlines(tokens, p)
+            continue
+        }
+        let mvis_r = parse_visibility(tokens, p)
+        let mvis: Visibility = mvis_r.vis
+        p = mvis_r.pos
+        let fd_r = parse_func_decl_raw(tokens, p, mvis)!
+        p = fd_r.pos
+        methods.push(fd_r.func_decl)
+        p = p_skip_newlines(tokens, p)
+    }
+
+    let rbr = p_expect(tokens, p, TokenKind::RBrace, "Expected '}' after impl body")!
+    p = rbr.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let id: ImplDecl = ImplDecl { ty: self_te, behavior_path: behavior_path, generics: generics, methods: methods, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Impl(id)), pos: p })
+}
+
+// ============================================================================
+// Type alias declaration
+// ============================================================================
+
+/// Parse `type Name[T] = AliasedType`.
+func parse_type_alias_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'type'
+    p = p_skip_newlines(tokens, p)
+
+    let name_r = p_expect_ident(tokens, p, "Expected type alias name")!
+    p = name_r.pos
+    let aname: Str = name_r.value
+
+    var generics: List[GenericParam] = List::new(0)
+    if p_check(tokens, p, TokenKind::LBracket) {
+        let gen_r = parse_generic_params(tokens, p)!
+        generics = gen_r.params
+        p = gen_r.pos
+    }
+
+    let eq = p_expect(tokens, p, TokenKind::Assign, "Expected '=' in type alias")!
+    p = eq.pos
+
+    let aliased_r = parse_type(tokens, p)!
+    p = aliased_r.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let ta: TypeAliasDecl = TypeAliasDecl { name: aname, visibility: vis, generics: generics, ty: aliased_r.te, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::TypeAlias(ta)), pos: p })
+}
+
+// ============================================================================
+// Const declaration
+// ============================================================================
+
+/// Parse `const NAME: Type = expr`.
+func parse_const_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'const'
+
+    let name_r = p_expect_ident(tokens, p, "Expected const name")!
+    p = name_r.pos
+    let cname: Str = name_r.value
+
+    let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after const name")!
+    p = colon.pos
+
+    let type_r = parse_type(tokens, p)!
+    p = type_r.pos
+
+    let eq = p_expect(tokens, p, TokenKind::Assign, "Expected '=' for const initializer")!
+    p = eq.pos
+
+    let val_r = parse_expr(tokens, p)!
+    p = val_r.pos
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let cd: ConstDecl = ConstDecl { name: cname, visibility: vis, ty: type_r.te, value: val_r.expr, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Const(cd)), pos: p })
+}
+
+// ============================================================================
+// Use declaration
+// ============================================================================
+
+/// Parse `use path::to::Name [as Alias]`.
+func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'use'
+
+    // Build path segments
+    var segs: List[Str] = List::new(4)
+
+    let first_r = p_expect_ident(tokens, p, "Expected identifier after 'use'")!
+    p = first_r.pos
+    segs.push(first_r.value)
+
+    // Continue path with '::' separators
+    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+        p = p + 1  // consume '::'
+        let seg_r = p_expect_ident(tokens, p, "Expected identifier after '::'")!
+        p = seg_r.pos
+        segs.push(seg_r.value)
+    }
+
+    // Optional alias: as Alias
+    var alias: Maybe[Str] = Nothing
+    if p_check(tokens, p, TokenKind::KwAs) {
+        p = p + 1
+        let alias_r = p_expect_ident(tokens, p, "Expected alias name after 'as'")!
+        p = alias_r.pos
+        alias = Just(alias_r.value)
+    }
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    let upath: UsePath = UsePath { segments: segs, alias: alias }
+    let ud: UseDecl = UseDecl { path: upath, visibility: vis, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Use(ud)), pos: p })
+}
+
+// ============================================================================
+// Mod declaration
+// ============================================================================
+
+/// Parse `mod name` (external module reference).
+func parse_mod_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+    let start_span: SourceSpan = p_peek(tokens, pos).span
+    var p: I64 = pos + 1  // consume 'mod'
+
+    let name_r = p_expect_ident(tokens, p, "Expected module name after 'mod'")!
+    p = name_r.pos
+    let mname: Str = name_r.value
+
+    let end_span: SourceSpan = p_prev(tokens, p).span
+    var empty_items: List[Heap[Decl]] = List::new(0)
+    let md: ModDecl = ModDecl { name: mname, visibility: vis, items: empty_items, span: span_merge(start_span, end_span) }
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Mod(md)), pos: p })
+}

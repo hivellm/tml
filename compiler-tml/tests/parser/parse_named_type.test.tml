@@ -1,0 +1,15 @@
+//! Test parse_named_type specifically.
+
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_type::parse_named_type
+
+@test
+func test_parse_named_type_simple() -> I32 {
+    let tokens = tokenize("I32", "test.tml")
+    let result = parse_named_type(tokens, 0)
+    when result {
+        Ok(_) => return 0,
+        Err(_) => return 1
+    }
+}

@@ -1,0 +1,276 @@
+//! Basic parser tests — parse TML source and verify AST structure.
+//!
+//! These tests tokenize source code using the lexer and then parse it
+//! with `parse_module`. They verify that the parser returns `Ok` for
+//! valid input and the correct number of top-level declarations.
+
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_module::parse_module
+use compiler::ast::decls::Decl
+
+// ============================================================================
+// Empty / trivial inputs
+// ============================================================================
+
+@test
+func test_parse_empty() -> I32 {
+    let tokens = tokenize("", "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_parse_only_newlines() -> I32 {
+    let tokens = tokenize("\n\n\n", "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 0)
+    return 0
+}
+
+// ============================================================================
+// Use declarations
+// ============================================================================
+
+@test
+func test_parse_use_decl() -> I32 {
+    let src = "use std::io::print"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_multiple_use_decls() -> I32 {
+    let src = "use std::io::print\nuse core::alloc::heap::Heap\nuse std::collections::list::List"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_parse_use_with_alias() -> I32 {
+    let src = "use std::io::File as IoFile"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Const declarations
+// ============================================================================
+
+@test
+func test_parse_const_decl() -> I32 {
+    let src = "const PI: F64 = 3"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_pub_const_decl() -> I32 {
+    let src = "pub const MAX: I64 = 100"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Function declarations
+// ============================================================================
+
+@test
+func test_parse_empty_func() -> I32 {
+    let src = "func main() {}"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_func_with_params() -> I32 {
+    let src = "func add(a: I32, b: I32) -> I32 { return 0 }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_pub_func() -> I32 {
+    let src = "pub func greet(name: Str) -> Str { return name }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_func_no_body() -> I32 {
+    let src = "func extern_func(x: I32) -> I32"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_generic_func() -> I32 {
+    let src = "func identity[T](x: T) -> T { return x }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Struct declarations
+// ============================================================================
+
+@test
+func test_parse_empty_struct() -> I32 {
+    let src = "type Empty {}"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_struct_with_fields() -> I32 {
+    let src = "type Point { x: I32, y: I32 }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_generic_struct() -> I32 {
+    let src = "type Pair[A, B] { first: A, second: B }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Enum declarations
+// ============================================================================
+
+@test
+func test_parse_simple_enum() -> I32 {
+    let src = "type Color { Red, Green, Blue }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_enum_with_payload() -> I32 {
+    let src = "type Shape { Circle(F64), Square(F64), Rect(F64, F64) }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_sum_type() -> I32 {
+    let src = "type Option[T] = Some(T) | None"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Impl declarations
+// ============================================================================
+
+@test
+func test_parse_impl_block() -> I32 {
+    let src = "impl Point { func new(x: I32, y: I32) -> Point { return Point { x: x, y: y } } }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_parse_impl_for_behavior() -> I32 {
+    let src = "impl Display for Point { func fmt(this) -> Str { return \"pt\" } }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 1)
+    return 0
+}
+
+// ============================================================================
+// Multiple declarations
+// ============================================================================
+
+@test
+func test_parse_multiple_decls() -> I32 {
+    let src = "use std::io::print\ntype Point { x: I32, y: I32 }\nfunc origin() -> Point { return Point { x: 0, y: 0 } }"
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    let Ok(m) = result else { return 1 }
+    assert_eq(m.decls.len() as I64, 3)
+    return 0
+}
+
+// ============================================================================
+// Error cases
+// ============================================================================
+
+@test
+func test_parse_error_unexpected_token() -> I32 {
+    let src = "}"  // unexpected token at top level
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    when result {
+        Err(_) => return 0,
+        Ok(_) => return 1  // should have failed
+    }
+}
+
+@test
+func test_parse_error_incomplete_func() -> I32 {
+    let src = "func"  // incomplete — no name
+    let tokens = tokenize(src, "test.tml")
+    let result = parse_module(tokens, "test")
+    when result {
+        Err(_) => return 0,
+        Ok(_) => return 1
+    }
+}
