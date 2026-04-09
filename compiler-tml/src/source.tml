@@ -29,7 +29,7 @@ type SourceSpan {
 }
 
 /// Construct a `SourceLocation` with all fields.
-func loc_new(file: Str, line: I64, column: I64, offset: I64, length: I64) -> SourceLocation {
+pub func loc_new(file: Str, line: I64, column: I64, offset: I64, length: I64) -> SourceLocation {
     return SourceLocation {
         file: file,
         line: line,
@@ -40,13 +40,13 @@ func loc_new(file: Str, line: I64, column: I64, offset: I64, length: I64) -> Sou
 }
 
 /// Construct a `SourceSpan` from two locations.
-func span_new(start: SourceLocation, end: SourceLocation) -> SourceSpan {
+pub func span_new(start: SourceLocation, end: SourceLocation) -> SourceSpan {
     return SourceSpan { start: start, end: end }
 }
 
 /// Merge two spans into one that covers both, preserving the start of `a` and
 /// the end of `b`. Matches `SourceSpan::merge` in `common.hpp`.
-func span_merge(a: SourceSpan, b: SourceSpan) -> SourceSpan {
+pub func span_merge(a: SourceSpan, b: SourceSpan) -> SourceSpan {
     return SourceSpan { start: a.start, end: b.end }
 }
 
@@ -60,7 +60,7 @@ type Source {
 
 /// Build a `Source` from an in-memory string. Equivalent to
 /// `Source::from_string` in the C++ reference.
-func source_from_string(filename: Str, content: Str) -> Source {
+pub func source_from_string(filename: Str, content: Str) -> Source {
     var offsets: List[I64] = List::new(16)
     offsets.push(0 as I64)
     let n: I64 = basic::len(content)
@@ -79,13 +79,13 @@ func source_from_string(filename: Str, content: Str) -> Source {
 }
 
 /// Total number of lines (always ≥ 1 — an empty file is one empty line).
-func source_line_count(src: Source) -> I64 {
+pub func source_line_count(src: Source) -> I64 {
     return src.line_offsets.len() as I64
 }
 
 /// Return the byte (as I32) at `offset`, or 0 if out of bounds. Matches the
 /// C++ `Source::at` convention of returning NUL on out-of-range.
-func source_at(src: Source, offset: I64) -> I32 {
+pub func source_at(src: Source, offset: I64) -> I32 {
     if offset < 0 or offset >= basic::len(src.content) {
         return 0
     }
@@ -93,7 +93,7 @@ func source_at(src: Source, offset: I64) -> I32 {
 }
 
 /// Slice `[start, end)` from the source content, clamped to valid bounds.
-func source_slice(src: Source, start: I64, end: I64) -> Str {
+pub func source_slice(src: Source, start: I64, end: I64) -> Str {
     let n: I64 = basic::len(src.content)
     var s: I64 = start
     var e: I64 = end
@@ -105,7 +105,7 @@ func source_slice(src: Source, start: I64, end: I64) -> Str {
 
 /// Convert a 0-based byte offset to a 1-based `SourceLocation` via binary
 /// search on `line_offsets`. Out-of-range offsets clamp to the last line.
-func source_location(src: Source, offset: I64) -> SourceLocation {
+pub func source_location(src: Source, offset: I64) -> SourceLocation {
     let count: I64 = src.line_offsets.len() as I64
     // Binary search for the greatest line_offsets[i] <= offset.
     var lo: I64 = 0

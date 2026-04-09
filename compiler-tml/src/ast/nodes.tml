@@ -1,11 +1,10 @@
-//! AST node types for the TML self-hosting compiler frontend.
+//! Core AST node types for the TML self-hosting compiler frontend.
 //!
 //! Mirrors `compiler/include/parser/ast_*.hpp` (common, types, patterns,
-//! exprs, stmts, decls, oop, module). All mutually-recursive variants live
-//! in this single file because the TML module system does not yet support
-//! circular imports; the logical split documented in `tasks.md`
-//! (types/patterns/exprs/stmts/decls/oop/module) is preserved as section
-//! banners and in re-export files under this directory.
+//! module). Expression types live in `exprs.tml`, statement types in
+//! `stmts.tml`, and declaration/OOP types in `decls.tml`. Each file
+//! cross-imports the others through `Heap[T]`-wrapped pointers, forming
+//! the natural cyclic dependency graph of a recursive AST.
 //!
 //! Recursive children are wrapped in `Heap[T]` to break cycles, matching
 //! the C++ side which uses `Box<T>` (`unique_ptr`). Every node carries a
@@ -14,6 +13,8 @@
 use compiler::source::SourceSpan
 use compiler::ast::common::Visibility
 use compiler::ast::common::LiteralKind
+use compiler::ast::exprs::Expr
+use compiler::ast::decls::Decl
 use std::collections::list::List
 use core::alloc::heap::Heap
 
@@ -22,63 +23,63 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Qualified type path: `std::io::File`, `Vec`, `core::Option`.
-type TypePath {
+pub type TypePath {
     segments: List[Str],
     span: SourceSpan
 }
 
-type NamedType {
+pub type NamedType {
     path: TypePath,
     args: List[Heap[TypeExpr]],
     span: SourceSpan
 }
 
-type RefType {
+pub type RefType {
     inner: Heap[TypeExpr],
     is_mut: Bool,
     span: SourceSpan
 }
 
-type PtrType {
+pub type PtrType {
     inner: Heap[TypeExpr],
     is_mut: Bool,
     span: SourceSpan
 }
 
-type ArrayType {
+pub type ArrayType {
     element: Heap[TypeExpr],
     size: Heap[Expr],
     span: SourceSpan
 }
 
-type SliceType {
+pub type SliceType {
     element: Heap[TypeExpr],
     span: SourceSpan
 }
 
-type TupleType {
+pub type TupleType {
     elements: List[Heap[TypeExpr]],
     span: SourceSpan
 }
 
-type FuncType {
+pub type FuncType {
     params: List[Heap[TypeExpr]],
     return_type: Maybe[Heap[TypeExpr]],
     span: SourceSpan
 }
 
-type DynType {
+pub type DynType {
     bounds: List[TypePath],
     span: SourceSpan
 }
 
-type ImplBehaviorType {
+pub type ImplBehaviorType {
     bounds: List[TypePath],
     span: SourceSpan
 }
 
 /// Sum of all type expression variants.
-enum TypeExpr {
+pub enum TypeExpr {
     Named(NamedType),
     Ref(RefType),
     Ptr(PtrType),
@@ -95,60 +96,60 @@ enum TypeExpr {
 // Pattern AST — mirrors ast_patterns.hpp
 // ============================================================================
 
-type IdentPattern {
+pub type IdentPattern {
     name: Str,
     subpat: Maybe[Heap[Pattern]],
     span: SourceSpan
 }
 
-type LiteralPattern {
+pub type LiteralPattern {
     value: LiteralKind,
     span: SourceSpan
 }
 
-type TuplePattern {
+pub type TuplePattern {
     patterns: List[Heap[Pattern]],
     span: SourceSpan
 }
 
-type FieldPattern {
+pub type FieldPattern {
     name: Str,
     pat: Heap[Pattern],
     span: SourceSpan
 }
 
-type StructPattern {
+pub type StructPattern {
     path: TypePath,
     fields: List[FieldPattern],
     has_rest: Bool,
     span: SourceSpan
 }
 
-type EnumPattern {
+pub type EnumPattern {
     path: TypePath,
     args: List[Heap[Pattern]],
     span: SourceSpan
 }
 
-type OrPattern {
+pub type OrPattern {
     alternatives: List[Heap[Pattern]],
     span: SourceSpan
 }
 
-type RangePattern {
+pub type RangePattern {
     start: LiteralKind,
     end: LiteralKind,
     inclusive: Bool,
     span: SourceSpan
 }
 
-type ArrayPattern {
+pub type ArrayPattern {
     patterns: List[Heap[Pattern]],
     rest: Maybe[Heap[Pattern]],
     span: SourceSpan
 }
 
-enum Pattern {
+pub enum Pattern {
     Wildcard(SourceSpan),
     Ident(IdentPattern),
     Literal(LiteralPattern),
@@ -158,556 +159,6 @@ enum Pattern {
     Or(OrPattern),
     Range(RangePattern),
     Array(ArrayPattern)
-}
-
-// ============================================================================
-// Expression AST — mirrors ast_exprs.hpp
-// ============================================================================
-
-enum UnaryOp {
-    OpNeg,
-    OpNot,
-    OpBitNot,
-    OpRef,
-    OpRefMut,
-    OpDeref,
-    OpInc,
-    OpDec
-}
-
-enum BinaryOp {
-    OpAdd,
-    OpSub,
-    OpMul,
-    OpDiv,
-    OpMod,
-    OpEq,
-    OpNe,
-    OpLt,
-    OpGt,
-    OpLe,
-    OpGe,
-    OpAnd,
-    OpOr,
-    OpBitAnd,
-    OpBitOr,
-    OpBitXor,
-    OpShl,
-    OpShr,
-    OpAssign,
-    OpAddAssign,
-    OpSubAssign,
-    OpMulAssign,
-    OpDivAssign,
-    OpModAssign,
-    OpBitAndAssign,
-    OpBitOrAssign,
-    OpBitXorAssign,
-    OpShlAssign,
-    OpShrAssign
-}
-
-type LiteralExpr {
-    value: LiteralKind,
-    span: SourceSpan
-}
-
-type IdentExpr {
-    name: Str,
-    span: SourceSpan
-}
-
-type UnaryExpr {
-    op: UnaryOp,
-    operand: Heap[Expr],
-    span: SourceSpan
-}
-
-type BinaryExpr {
-    op: BinaryOp,
-    left: Heap[Expr],
-    right: Heap[Expr],
-    span: SourceSpan
-}
-
-type CallExpr {
-    callee: Heap[Expr],
-    args: List[Heap[Expr]],
-    span: SourceSpan
-}
-
-type MethodCallExpr {
-    receiver: Heap[Expr],
-    method: Str,
-    type_args: List[Heap[TypeExpr]],
-    args: List[Heap[Expr]],
-    optional_chain: Bool,
-    span: SourceSpan
-}
-
-type FieldExpr {
-    object: Heap[Expr],
-    field: Str,
-    optional_chain: Bool,
-    span: SourceSpan
-}
-
-type IndexExpr {
-    object: Heap[Expr],
-    index: Heap[Expr],
-    span: SourceSpan
-}
-
-type TupleExpr {
-    elements: List[Heap[Expr]],
-    span: SourceSpan
-}
-
-enum ArrayKind {
-    Elements(List[Heap[Expr]]),
-    Repeat(Heap[Expr], Heap[Expr])
-}
-
-type ArrayExpr {
-    kind: ArrayKind,
-    span: SourceSpan
-}
-
-type StructExprField {
-    name: Str,
-    value: Heap[Expr]
-}
-
-type StructExpr {
-    path: TypePath,
-    type_args: Maybe[List[Heap[TypeExpr]]],
-    fields: List[StructExprField],
-    base_expr: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type IfExpr {
-    condition: Heap[Expr],
-    then_branch: Heap[Expr],
-    else_branch: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type TernaryExpr {
-    condition: Heap[Expr],
-    true_value: Heap[Expr],
-    false_value: Heap[Expr],
-    span: SourceSpan
-}
-
-type IfLetExpr {
-    pattern: Heap[Pattern],
-    scrutinee: Heap[Expr],
-    then_branch: Heap[Expr],
-    else_branch: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type WhenArm {
-    pattern: Heap[Pattern],
-    guard: Maybe[Heap[Expr]],
-    body: Heap[Expr],
-    span: SourceSpan
-}
-
-type WhenExpr {
-    scrutinee: Heap[Expr],
-    arms: List[WhenArm],
-    span: SourceSpan
-}
-
-type LoopVarDecl {
-    name: Str,
-    ty: Heap[TypeExpr],
-    span: SourceSpan
-}
-
-type LoopExpr {
-    label: Maybe[Str],
-    loop_var: Maybe[LoopVarDecl],
-    condition: Heap[Expr],
-    body: Heap[Expr],
-    span: SourceSpan
-}
-
-type WhileExpr {
-    label: Maybe[Str],
-    condition: Heap[Expr],
-    body: Heap[Expr],
-    span: SourceSpan
-}
-
-type ForExpr {
-    label: Maybe[Str],
-    pattern: Heap[Pattern],
-    iter: Heap[Expr],
-    body: Heap[Expr],
-    span: SourceSpan
-}
-
-type BlockExpr {
-    stmts: List[Heap[Stmt]],
-    expr: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type ReturnExpr {
-    value: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type BreakExpr {
-    label: Maybe[Str],
-    value: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type ContinueExpr {
-    label: Maybe[Str],
-    span: SourceSpan
-}
-
-type ClosureParam {
-    pattern: Heap[Pattern],
-    ty: Maybe[Heap[TypeExpr]]
-}
-
-type ClosureExpr {
-    params: List[ClosureParam],
-    return_type: Maybe[Heap[TypeExpr]],
-    body: Heap[Expr],
-    is_move: Bool,
-    span: SourceSpan
-}
-
-type RangeExpr {
-    start: Maybe[Heap[Expr]],
-    end: Maybe[Heap[Expr]],
-    inclusive: Bool,
-    span: SourceSpan
-}
-
-type CastExpr {
-    expr: Heap[Expr],
-    target: Heap[TypeExpr],
-    span: SourceSpan
-}
-
-type IsExpr {
-    expr: Heap[Expr],
-    target: Heap[TypeExpr],
-    span: SourceSpan
-}
-
-type TryExpr {
-    expr: Heap[Expr],
-    span: SourceSpan
-}
-
-type AwaitExpr {
-    expr: Heap[Expr],
-    span: SourceSpan
-}
-
-type ThrowExpr {
-    expr: Heap[Expr],
-    span: SourceSpan
-}
-
-type PathExpr {
-    path: TypePath,
-    type_args: Maybe[List[Heap[TypeExpr]]],
-    span: SourceSpan
-}
-
-type LowlevelExpr {
-    stmts: List[Heap[Stmt]],
-    expr: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-enum InterpolatedSegmentKind {
-    SegText(Str),
-    SegExpr(Heap[Expr])
-}
-
-type InterpolatedSegment {
-    kind: InterpolatedSegmentKind,
-    span: SourceSpan
-}
-
-type InterpolatedStringExpr {
-    segments: List[InterpolatedSegment],
-    span: SourceSpan
-}
-
-type TemplateLiteralExpr {
-    segments: List[InterpolatedSegment],
-    span: SourceSpan
-}
-
-type BaseExpr {
-    member: Str,
-    type_args: List[Heap[TypeExpr]],
-    args: List[Heap[Expr]],
-    is_method_call: Bool,
-    span: SourceSpan
-}
-
-type NewExpr {
-    class_type: TypePath,
-    type_args: Maybe[List[Heap[TypeExpr]]],
-    args: List[Heap[Expr]],
-    span: SourceSpan
-}
-
-/// Sum of all expression variants. Mirrors `Expr::kind` in the C++ AST.
-enum Expr {
-    Literal(LiteralExpr),
-    Ident(IdentExpr),
-    Unary(UnaryExpr),
-    Binary(BinaryExpr),
-    Call(CallExpr),
-    MethodCall(MethodCallExpr),
-    Field(FieldExpr),
-    Index(IndexExpr),
-    Tuple(TupleExpr),
-    Array(ArrayExpr),
-    Struct(StructExpr),
-    If(IfExpr),
-    Ternary(TernaryExpr),
-    IfLet(IfLetExpr),
-    When(WhenExpr),
-    Loop(LoopExpr),
-    While(WhileExpr),
-    For(ForExpr),
-    Block(BlockExpr),
-    Return(ReturnExpr),
-    Break(BreakExpr),
-    Continue(ContinueExpr),
-    Closure(ClosureExpr),
-    Range(RangeExpr),
-    Cast(CastExpr),
-    Is(IsExpr),
-    Try(TryExpr),
-    Await(AwaitExpr),
-    Throw(ThrowExpr),
-    Path(PathExpr),
-    Lowlevel(LowlevelExpr),
-    InterpolatedString(InterpolatedStringExpr),
-    TemplateLiteral(TemplateLiteralExpr),
-    Base(BaseExpr),
-    New(NewExpr)
-}
-
-// ============================================================================
-// Statement AST — mirrors ast_stmts.hpp
-// ============================================================================
-
-type LetStmt {
-    pattern: Heap[Pattern],
-    ty: Maybe[Heap[TypeExpr]],
-    init: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type VarStmt {
-    name: Str,
-    ty: Maybe[Heap[TypeExpr]],
-    init: Maybe[Heap[Expr]],
-    span: SourceSpan
-}
-
-type LetElseStmt {
-    pattern: Heap[Pattern],
-    init: Heap[Expr],
-    else_body: Heap[Expr],
-    span: SourceSpan
-}
-
-enum Stmt {
-    Let(LetStmt),
-    Var(VarStmt),
-    LetElse(LetElseStmt),
-    Expr(Heap[Expr]),
-    Decl(Heap[Decl])
-}
-
-// ============================================================================
-// Declaration AST — mirrors ast_decls.hpp
-// ============================================================================
-
-type GenericParam {
-    name: Str,
-    bounds: List[TypePath],
-    span: SourceSpan
-}
-
-type FuncParam {
-    name: Str,
-    ty: Heap[TypeExpr],
-    is_this: Bool,
-    is_mut: Bool,
-    span: SourceSpan
-}
-
-type FuncDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    params: List[FuncParam],
-    return_type: Maybe[Heap[TypeExpr]],
-    body: Maybe[Heap[Expr]],
-    is_async: Bool,
-    is_override: Bool,
-    span: SourceSpan
-}
-
-type StructField {
-    name: Str,
-    ty: Heap[TypeExpr],
-    visibility: Visibility,
-    span: SourceSpan
-}
-
-type StructDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    fields: List[StructField],
-    span: SourceSpan
-}
-
-type UnionDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    fields: List[StructField],
-    span: SourceSpan
-}
-
-type EnumVariant {
-    name: Str,
-    fields: List[Heap[TypeExpr]],
-    span: SourceSpan
-}
-
-type EnumDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    variants: List[EnumVariant],
-    span: SourceSpan
-}
-
-type TraitDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    supertraits: List[TypePath],
-    methods: List[FuncDecl],
-    span: SourceSpan
-}
-
-type ImplDecl {
-    ty: Heap[TypeExpr],
-    behavior_path: Maybe[TypePath],
-    generics: List[GenericParam],
-    methods: List[FuncDecl],
-    span: SourceSpan
-}
-
-type TypeAliasDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    ty: Heap[TypeExpr],
-    span: SourceSpan
-}
-
-type ConstDecl {
-    name: Str,
-    visibility: Visibility,
-    ty: Heap[TypeExpr],
-    value: Heap[Expr],
-    span: SourceSpan
-}
-
-type UsePath {
-    segments: List[Str],
-    alias: Maybe[Str]
-}
-
-type UseDecl {
-    path: UsePath,
-    visibility: Visibility,
-    span: SourceSpan
-}
-
-type ModDecl {
-    name: Str,
-    visibility: Visibility,
-    items: List[Heap[Decl]],
-    span: SourceSpan
-}
-
-// ============================================================================
-// OOP AST — mirrors ast_oop.hpp
-// ============================================================================
-
-type ClassField {
-    name: Str,
-    ty: Heap[TypeExpr],
-    visibility: Visibility,
-    span: SourceSpan
-}
-
-type ClassDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    parent: Maybe[TypePath],
-    interfaces: List[TypePath],
-    fields: List[ClassField],
-    methods: List[FuncDecl],
-    span: SourceSpan
-}
-
-type InterfaceDecl {
-    name: Str,
-    visibility: Visibility,
-    generics: List[GenericParam],
-    methods: List[FuncDecl],
-    span: SourceSpan
-}
-
-type NamespaceDecl {
-    name: Str,
-    visibility: Visibility,
-    items: List[Heap[Decl]],
-    span: SourceSpan
-}
-
-/// Sum of all top-level declarations. Mirrors `Decl::kind`.
-enum Decl {
-    Func(FuncDecl),
-    Struct(StructDecl),
-    Union(UnionDecl),
-    Enum(EnumDecl),
-    Trait(TraitDecl),
-    Impl(ImplDecl),
-    TypeAlias(TypeAliasDecl),
-    Const(ConstDecl),
-    Use(UseDecl),
-    Mod(ModDecl),
-    Class(ClassDecl),
-    Interface(InterfaceDecl),
-    Namespace(NamespaceDecl)
 }
 
 // ============================================================================

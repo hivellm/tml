@@ -8,8 +8,11 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
-// Helper to parse tuple type string into element types
-static std::vector<std::string> parse_tuple_types_for_coercion(const std::string& tuple_type) {
+// Helper to parse tuple type string into element types.
+// Exposed (non-static) so sibling codegen TUs (e.g. expr/tuple.cpp) can
+// consult it when propagating per-element expected types down into
+// tuple construction — see gen_tuple().
+std::vector<std::string> parse_tuple_types_for_coercion(const std::string& tuple_type) {
     std::vector<std::string> element_types;
     if (tuple_type.size() > 2 && tuple_type.front() == '{' && tuple_type.back() == '}') {
         // Parse "{ i32, i64, ptr }" -> ["i32", "i64", "ptr"]

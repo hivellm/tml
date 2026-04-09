@@ -1,0 +1,78 @@
+// Tests for compiler::ast::serial — module header round-trip.
+//
+// Note: Token and SourceLocation/SourceSpan serialization tests are blocked
+// by the SourceLocation vs TmlSourceLocation type layout mismatch:
+// - compiler::source::SourceLocation = {Str, I64, I64, I64, I64}  (5 fields, ptr + 4 i64)
+// - C++ serial TmlSourceLocation     = {I64, I64, I64, I64}       (4 fields, 4 i64)
+// The write_source_location/read_source_location functions were compiled
+// against TmlSourceLocation but we construct SourceLocation. This is tracked
+// as a known issue for resolution when the self-hosting lexer (phase13b)
+// provides its own serialization that bypasses the C++ TmlSourceLocation type.
+
+use test
+use compiler::serial::writer::BinaryWriter
+use compiler::serial::reader::BinaryReader
+use compiler::ast::serial::write_module_header
+use compiler::ast::serial::read_module_header
+use compiler::ast::serial::MODULE_MAGIC
+
+// ---------------------------------------------------------------------------
+// Module header round-trip
+// ---------------------------------------------------------------------------
+
+@test
+func test_module_header_roundtrip() -> I32 {
+    let w = BinaryWriter::new(64)
+    write_module_header(w)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    let major: I64 = read_module_header(r)!
+    assert_eq(major, 1)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}
+
+@test
+func test_module_header_magic_value() -> I32 {
+    // MODULE_MAGIC should be 0x4D4F4420 ("MOD " in ASCII LE)
+    assert_eq(MODULE_MAGIC, 0x4D4F4420)
+    return 0
+}
+
+@test
+func test_module_header_bad_magic() -> I32 {
+    let w = BinaryWriter::new(64)
+    w.write_u32(0xDEADBEEF)  // wrong magic
+    w.write_u8(1)
+    w.write_u8(0)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    when read_module_header(r) {
+        Ok(_) => assert_true(false),
+        Err(_) => assert_true(true)
+    }
+    r.destroy()
+    return 0
+}
+
+@test
+func test_module_header_wire_format() -> I32 {
+    // Verify the exact bytes written by write_module_header
+    let w = BinaryWriter::new(64)
+    write_module_header(w)
+    let buf = w.finish()
+    buf.reset_read()
+    let r = BinaryReader::from_buf(buf)
+    // 4 bytes: magic "MOD " = 0x4D4F4420
+    assert_eq(r.read_u32()!, 0x4D4F4420)
+    // 1 byte: major version = 1
+    assert_eq(r.read_u8()!, 1)
+    // 1 byte: minor version = 0
+    assert_eq(r.read_u8()!, 0)
+    assert_true(r.is_exhausted())
+    r.destroy()
+    return 0
+}

@@ -1,18 +1,188 @@
-//! Declaration AST nodes. Canonical definitions live in `ast/nodes.tml`.
+//! Declaration and OOP AST nodes.
+//!
+//! As of phase0p 9.3 (cross-module cyclic imports verified), the canonical
+//! Decl-family definitions live HERE rather than in `ast/nodes.tml`.
+//! `nodes.tml` still holds Type/Pattern/Module types; `stmts.tml` references
+//! `Decl` via `use compiler::ast::decls::Decl`.
 
-use compiler::ast::nodes::GenericParam
-use compiler::ast::nodes::FuncParam
-use compiler::ast::nodes::FuncDecl
-use compiler::ast::nodes::StructField
-use compiler::ast::nodes::StructDecl
-use compiler::ast::nodes::UnionDecl
-use compiler::ast::nodes::EnumVariant
-use compiler::ast::nodes::EnumDecl
-use compiler::ast::nodes::TraitDecl
-use compiler::ast::nodes::ImplDecl
-use compiler::ast::nodes::TypeAliasDecl
-use compiler::ast::nodes::ConstDecl
-use compiler::ast::nodes::UsePath
-use compiler::ast::nodes::UseDecl
-use compiler::ast::nodes::ModDecl
-use compiler::ast::nodes::Decl
+use compiler::source::SourceSpan
+use compiler::ast::common::Visibility
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::exprs::Expr
+use compiler::ast::stmts::Stmt
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Declaration AST — mirrors ast_decls.hpp
+// ============================================================================
+
+pub type GenericParam {
+    name: Str,
+    bounds: List[TypePath],
+    span: SourceSpan
+}
+
+pub type FuncParam {
+    name: Str,
+    ty: Heap[TypeExpr],
+    is_this: Bool,
+    is_mut: Bool,
+    span: SourceSpan
+}
+
+pub type FuncDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    params: List[FuncParam],
+    return_type: Maybe[Heap[TypeExpr]],
+    body: Maybe[Heap[Expr]],
+    is_async: Bool,
+    is_override: Bool,
+    span: SourceSpan
+}
+
+pub type StructField {
+    name: Str,
+    ty: Heap[TypeExpr],
+    visibility: Visibility,
+    span: SourceSpan
+}
+
+pub type StructDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    fields: List[StructField],
+    span: SourceSpan
+}
+
+pub type UnionDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    fields: List[StructField],
+    span: SourceSpan
+}
+
+pub type EnumVariant {
+    name: Str,
+    fields: List[Heap[TypeExpr]],
+    span: SourceSpan
+}
+
+pub type EnumDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    variants: List[EnumVariant],
+    span: SourceSpan
+}
+
+pub type TraitDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    supertraits: List[TypePath],
+    methods: List[FuncDecl],
+    span: SourceSpan
+}
+
+pub type ImplDecl {
+    ty: Heap[TypeExpr],
+    behavior_path: Maybe[TypePath],
+    generics: List[GenericParam],
+    methods: List[FuncDecl],
+    span: SourceSpan
+}
+
+pub type TypeAliasDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    ty: Heap[TypeExpr],
+    span: SourceSpan
+}
+
+pub type ConstDecl {
+    name: Str,
+    visibility: Visibility,
+    ty: Heap[TypeExpr],
+    value: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type UsePath {
+    segments: List[Str],
+    alias: Maybe[Str]
+}
+
+pub type UseDecl {
+    path: UsePath,
+    visibility: Visibility,
+    span: SourceSpan
+}
+
+pub type ModDecl {
+    name: Str,
+    visibility: Visibility,
+    items: List[Heap[Decl]],
+    span: SourceSpan
+}
+
+// ============================================================================
+// OOP AST — mirrors ast_oop.hpp
+// ============================================================================
+
+pub type ClassField {
+    name: Str,
+    ty: Heap[TypeExpr],
+    visibility: Visibility,
+    span: SourceSpan
+}
+
+pub type ClassDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    parent: Maybe[TypePath],
+    interfaces: List[TypePath],
+    fields: List[ClassField],
+    methods: List[FuncDecl],
+    span: SourceSpan
+}
+
+pub type InterfaceDecl {
+    name: Str,
+    visibility: Visibility,
+    generics: List[GenericParam],
+    methods: List[FuncDecl],
+    span: SourceSpan
+}
+
+pub type NamespaceDecl {
+    name: Str,
+    visibility: Visibility,
+    items: List[Heap[Decl]],
+    span: SourceSpan
+}
+
+/// Sum of all top-level declarations. Mirrors `Decl::kind`.
+pub enum Decl {
+    Func(FuncDecl),
+    Struct(StructDecl),
+    Union(UnionDecl),
+    Enum(EnumDecl),
+    Trait(TraitDecl),
+    Impl(ImplDecl),
+    TypeAlias(TypeAliasDecl),
+    Const(ConstDecl),
+    Use(UseDecl),
+    Mod(ModDecl),
+    Class(ClassDecl),
+    Interface(InterfaceDecl),
+    Namespace(NamespaceDecl)
+}

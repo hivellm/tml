@@ -1,0 +1,148 @@
+// Tests for compiler::source — SourceLocation, SourceSpan constructors and
+// span_merge utility.
+//
+// Note: Source struct functions (source_from_string, source_at, source_slice,
+// source_location) are not tested here because Source contains List[I64]
+// which triggers a known by-value struct codegen issue in the AST path.
+// Those functions will be testable once the self-hosting lexer (phase13b)
+// exercises them in-module.
+
+use test
+use compiler::source::SourceLocation
+use compiler::source::SourceSpan
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::source::span_merge
+
+// ---------------------------------------------------------------------------
+// loc_new
+// ---------------------------------------------------------------------------
+
+@test
+func test_loc_new_fields() -> I32 {
+    let loc: SourceLocation = loc_new("test.tml", 10, 5, 42, 3)
+    assert_eq(loc.file, "test.tml")
+    assert_eq(loc.line, 10)
+    assert_eq(loc.column, 5)
+    assert_eq(loc.offset, 42)
+    assert_eq(loc.length, 3)
+    return 0
+}
+
+@test
+func test_loc_new_zeros() -> I32 {
+    let loc: SourceLocation = loc_new("", 0, 0, 0, 0)
+    assert_eq(loc.file, "")
+    assert_eq(loc.line, 0)
+    assert_eq(loc.column, 0)
+    assert_eq(loc.offset, 0)
+    assert_eq(loc.length, 0)
+    return 0
+}
+
+@test
+func test_loc_new_large_values() -> I32 {
+    let loc: SourceLocation = loc_new("big.tml", 99999, 200, 1000000, 500)
+    assert_eq(loc.line, 99999)
+    assert_eq(loc.column, 200)
+    assert_eq(loc.offset, 1000000)
+    assert_eq(loc.length, 500)
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// span_new
+// ---------------------------------------------------------------------------
+
+@test
+func test_span_new_fields() -> I32 {
+    let s: SourceLocation = loc_new("a.tml", 1, 1, 0, 0)
+    let e: SourceLocation = loc_new("a.tml", 1, 10, 9, 0)
+    let sp: SourceSpan = span_new(s, e)
+    assert_eq(sp.start.line, 1)
+    assert_eq(sp.start.column, 1)
+    assert_eq(sp.start.offset, 0)
+    assert_eq(sp.end.column, 10)
+    assert_eq(sp.end.offset, 9)
+    return 0
+}
+
+@test
+func test_span_new_multiline() -> I32 {
+    let s: SourceLocation = loc_new("m.tml", 5, 3, 100, 10)
+    let e: SourceLocation = loc_new("m.tml", 8, 1, 200, 0)
+    let sp: SourceSpan = span_new(s, e)
+    assert_eq(sp.start.line, 5)
+    assert_eq(sp.start.column, 3)
+    assert_eq(sp.end.line, 8)
+    assert_eq(sp.end.column, 1)
+    return 0
+}
+
+@test
+func test_span_new_same_location() -> I32 {
+    let loc: SourceLocation = loc_new("p.tml", 1, 1, 0, 0)
+    let sp: SourceSpan = span_new(loc, loc)
+    assert_eq(sp.start.line, sp.end.line)
+    assert_eq(sp.start.column, sp.end.column)
+    assert_eq(sp.start.offset, sp.end.offset)
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// span_merge
+// ---------------------------------------------------------------------------
+
+@test
+func test_span_merge_basic() -> I32 {
+    let a: SourceSpan = span_new(
+        loc_new("f.tml", 1, 1, 0, 0),
+        loc_new("f.tml", 1, 5, 4, 0)
+    )
+    let b: SourceSpan = span_new(
+        loc_new("f.tml", 3, 1, 20, 0),
+        loc_new("f.tml", 3, 10, 29, 0)
+    )
+    let merged: SourceSpan = span_merge(a, b)
+    // merged.start == a.start
+    assert_eq(merged.start.line, 1)
+    assert_eq(merged.start.column, 1)
+    assert_eq(merged.start.offset, 0)
+    // merged.end == b.end
+    assert_eq(merged.end.line, 3)
+    assert_eq(merged.end.column, 10)
+    assert_eq(merged.end.offset, 29)
+    return 0
+}
+
+@test
+func test_span_merge_same_line() -> I32 {
+    let a: SourceSpan = span_new(
+        loc_new("s.tml", 5, 1, 40, 3),
+        loc_new("s.tml", 5, 4, 43, 0)
+    )
+    let b: SourceSpan = span_new(
+        loc_new("s.tml", 5, 10, 49, 2),
+        loc_new("s.tml", 5, 12, 51, 0)
+    )
+    let merged: SourceSpan = span_merge(a, b)
+    assert_eq(merged.start.column, 1)
+    assert_eq(merged.end.column, 12)
+    return 0
+}
+
+@test
+func test_span_merge_preserves_file() -> I32 {
+    let a: SourceSpan = span_new(
+        loc_new("start.tml", 1, 1, 0, 0),
+        loc_new("start.tml", 1, 5, 4, 0)
+    )
+    let b: SourceSpan = span_new(
+        loc_new("end.tml", 10, 1, 100, 0),
+        loc_new("end.tml", 10, 5, 104, 0)
+    )
+    let merged: SourceSpan = span_merge(a, b)
+    assert_eq(merged.start.file, "start.tml")
+    assert_eq(merged.end.file, "end.tml")
+    return 0
+}

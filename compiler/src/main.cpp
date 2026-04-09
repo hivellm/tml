@@ -36,6 +36,8 @@
 
 #include "cli/driver.hpp"
 
+#include <cstdio>
+
 /// Main entry point for the TML compiler.
 ///
 /// Delegates all work to `tml_main()` which handles argument parsing,
@@ -45,5 +47,11 @@
 /// @param argv Argument vector (null-terminated strings)
 /// @return Exit code: 0 for success, non-zero for errors
 int main(int argc, char* argv[]) {
+    // Make stderr unbuffered so diagnostics ("[dead-func-elim] ...",
+    // "[codegen-timing] ...", panic messages) are visible even when the
+    // compiler crashes or is killed before graceful shutdown. Without
+    // this, stderr is fully buffered when redirected to a file and the
+    // buffer is lost on abnormal termination (e.g., stack overflow).
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
     return tml_main(argc, argv);
 }

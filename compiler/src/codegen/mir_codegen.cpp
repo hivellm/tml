@@ -37,9 +37,12 @@ TML_MODULE("compiler")
 #include "codegen/mir_codegen.hpp"
 
 #include "codegen/target.hpp"
+#include "common.hpp"
 #include "profiler.hpp"
 #include "version_generated.hpp"
 
+#include <chrono>
+#include <cstdio>
 #include <sstream>
 
 namespace tml::codegen {
@@ -327,7 +330,22 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
             // Extern or imported function — no body, emit as declare
             emit_function_declaration(func);
         } else {
-            emit_function(func);
+            if (tml::CompilerOptions::debug_codegen_timing) {
+                auto t0 = std::chrono::steady_clock::now();
+                emit_function(func);
+                auto t1 = std::chrono::steady_clock::now();
+                auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                // Count basic blocks + instructions to give quick sense of size.
+                size_t inst_count = 0;
+                for (const auto& blk : func.blocks) {
+                    inst_count += blk.instructions.size();
+                }
+                std::fprintf(stderr, "[codegen-timing] %8lld us  blocks=%zu  insts=%zu  %s\n",
+                             static_cast<long long>(us), func.blocks.size(), inst_count,
+                             func.name.c_str());
+            } else {
+                emit_function(func);
+            }
         }
     }
 
@@ -529,7 +547,21 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     for (size_t i = 0; i < module.functions.size(); ++i) {
         const auto& func = module.functions[i];
         if (included.count(i) && !func.blocks.empty()) {
-            emit_function(func);
+            if (tml::CompilerOptions::debug_codegen_timing) {
+                auto t0 = std::chrono::steady_clock::now();
+                emit_function(func);
+                auto t1 = std::chrono::steady_clock::now();
+                auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                size_t inst_count = 0;
+                for (const auto& blk : func.blocks) {
+                    inst_count += blk.instructions.size();
+                }
+                std::fprintf(stderr, "[codegen-timing] %8lld us  blocks=%zu  insts=%zu  %s\n",
+                             static_cast<long long>(us), func.blocks.size(), inst_count,
+                             func.name.c_str());
+            } else {
+                emit_function(func);
+            }
         } else {
             emit_function_declaration(func);
         }

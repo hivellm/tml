@@ -40,6 +40,13 @@ struct SuiteCacheEntry {
     int64_t duration_us = 0;     // Execution time of last run (microseconds)
     int64_t compile_time_us = 0; // Compilation time of last run (microseconds)
     std::string exe_path;        // Path to compiled EXE (for potential reuse)
+
+    /// Phase 8.5 W5: the transitive source file paths (test files + imported
+    /// library/package modules) whose content hashes produced `source_hashes`.
+    /// Persisted so the early cache-check can re-hash the SAME set of files
+    /// without needing to re-compile. Populated on the first real compilation
+    /// and reused on subsequent runs.
+    std::vector<std::string> source_paths;
 };
 
 // ============================================================================

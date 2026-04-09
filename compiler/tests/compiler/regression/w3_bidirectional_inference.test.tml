@@ -1,0 +1,45 @@
+// Regression test for W3: bidirectional inference for comparison operators.
+// Previously, unsuffixed integer literals in comparisons defaulted to I32,
+// causing wasteful sext instructions. After W3, the concrete type of the
+// other operand propagates into the literal, so `i <= 138` where `i: I64`
+// treats 138 as I64 directly.
+
+use test
+
+@test
+func test_comparison_literal_type() -> I32 {
+    var count: I64 = 0
+    var i: I64 = 0
+    loop (i <= 10) {
+        count = count + 1
+        i = i + 1
+    }
+    assert_eq(count, 11)
+    return 0
+}
+
+@test
+func test_equality_literal_type() -> I32 {
+    let x: I64 = 42
+    if x == 42 {
+        assert_true(true)
+    } else {
+        assert_true(false)
+    }
+    if x != 43 {
+        assert_true(true)
+    } else {
+        assert_true(false)
+    }
+    return 0
+}
+
+@test
+func test_arithmetic_literal_type() -> I32 {
+    let x: I64 = 100
+    let y: I64 = x + 50
+    assert_eq(y, 150)
+    let z: I64 = x - 1
+    assert_eq(z, 99)
+    return 0
+}

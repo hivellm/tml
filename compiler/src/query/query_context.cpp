@@ -500,4 +500,61 @@ bool QueryContext::verify_all_inputs_green(const QueryKey& key) {
     return true;
 }
 
+// ============================================================================
+// Phase 8.5 W5: Transitive source file collection
+// ============================================================================
+
+std::set<std::string>
+QueryContext::collect_transitive_source_files(const std::string& file_path,
+                                              const std::string& module_name) const {
+    std::set<std::string> sources;
+
+    // BFS over the dependency graph, collecting ReadSourceKey file paths.
+    // We check both the in-memory cache (fresh computation path) and the
+    // previous session cache (GREEN / incremental reuse path).
+    std::vector<QueryKey> worklist;
+    std::unordered_set<QueryKey, QueryKeyHash, QueryKeyEqual> visited;
+
+    // Start from the CodegenUnit entry
+    QueryKey start_key = CodegenUnitKey{file_path, module_name};
+    worklist.push_back(start_key);
+
+    while (!worklist.empty()) {
+        auto key = worklist.back();
+        worklist.pop_back();
+
+        if (visited.count(key))
+            continue;
+        visited.insert(key);
+
+        // Collect ReadSourceKey file paths
+        if (auto* rsk = std::get_if<ReadSourceKey>(&key)) {
+            sources.insert(rsk->file_path);
+            continue; // ReadSource is a leaf — no further deps
+        }
+
+        // Get deps from in-memory cache first, then fall back to prev session
+        const std::vector<QueryKey>* deps_ptr = nullptr;
+        auto entry = cache_.get_entry(key);
+        if (entry) {
+            deps_ptr = &entry->dependencies;
+        } else if (prev_session_) {
+            const auto* prev = prev_session_->lookup(key);
+            if (prev) {
+                deps_ptr = &prev->dependencies;
+            }
+        }
+
+        if (deps_ptr) {
+            for (const auto& dep : *deps_ptr) {
+                if (!visited.count(dep)) {
+                    worklist.push_back(dep);
+                }
+            }
+        }
+    }
+
+    return sources;
+}
+
 } // namespace tml::query

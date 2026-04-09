@@ -297,7 +297,24 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::EnumInitInst>) {
                 // Initialize enum: { tag, payload }
-                // Use result type to get properly mangled enum type name
+                //
+                // The enum LLVM layout (see emit_enum_def) is either:
+                //   { i32 }                       — payloadless enums
+                //   { i32, [max_payload_size x i8] } — enums with any payload variant
+                //
+                // Payloadless variants only need to set the discriminant (field 0).
+                // We emit a single insertvalue directly into result_reg — historically
+                // this was split into a %tmp helper followed by `%result = %tmp`,
+                // which is NOT valid LLVM IR (bare SSA aliases have no opcode and
+                // are rejected by the IR parser). The bug surfaced on any MIR-path
+                // compile constructing enum values (phase0p C1 reproduction).
+                //
+                // For variants with payload, we must splat each payload scalar into
+                // the byte array at the correct offset. LLVM `insertvalue` cannot
+                // inject a non-i8 scalar into a `[N x i8]` directly, so we materialize
+                // the aggregate on the stack, store the discriminant and each payload
+                // field at its ABI offset, and load the final aggregate. The stack
+                // slot is always in the entry block so mem2reg can still promote it.
                 std::string enum_type;
                 if (result_type) {
                     enum_type = mir_type_to_llvm(result_type);
@@ -305,12 +322,65 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     // RC7 workaround: replace unresolved typevar suffixes
                     enum_type = "%struct." + replace_typevar_suffixes(i.enum_name);
                 }
-                // Insert tag
-                std::string with_tag = "%tmp" + std::to_string(temp_counter_++);
-                emitln("    " + with_tag + " = insertvalue " + enum_type + " undef, i32 " +
-                       std::to_string(i.variant_index) + ", 0");
-                // For simplicity, we're not handling payload here yet
-                emitln("    " + result_reg + " = " + with_tag);
+
+                if (i.payload.empty()) {
+                    // Payloadless: single insertvalue, directly into result_reg.
+                    emitln("    " + result_reg + " = insertvalue " + enum_type + " undef, i32 " +
+                           std::to_string(i.variant_index) + ", 0");
+                } else {
+                    // Payload variant: materialize on stack so we can memcpy-style
+                    // store each scalar at offset 0 (tag), +4 (payload[0]), etc.
+                    // Entry-block alloca => mem2reg can promote this to SSA later.
+                    std::string slot = "%tmp" + std::to_string(temp_counter_++);
+                    emitln("    " + slot + " = alloca " + enum_type + ", align 8");
+                    // Store the discriminant into field 0.
+                    std::string tag_ptr = "%tmp" + std::to_string(temp_counter_++);
+                    emitln("    " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                           slot + ", i32 0, i32 0");
+                    emitln("    store i32 " + std::to_string(i.variant_index) + ", ptr " + tag_ptr +
+                           ", align 4");
+                    // Store each payload field into the byte array starting at offset 0.
+                    // The payload array lives in field 1. We re-GEP from its base for
+                    // each element. Offsets accumulate by type size as measured in
+                    // emit_enum_def (i8/bool=1, i16=2, i32/f32=4, i64/f64/ptr/str=8).
+                    std::string payload_base = "%tmp" + std::to_string(temp_counter_++);
+                    emitln("    " + payload_base + " = getelementptr inbounds " + enum_type +
+                           ", ptr " + slot + ", i32 0, i32 1, i32 0");
+                    size_t byte_offset = 0;
+                    for (size_t pi = 0; pi < i.payload.size(); ++pi) {
+                        const auto& pval = i.payload[pi];
+                        const auto& ptype =
+                            pi < i.payload_types.size() ? i.payload_types[pi] : pval.type;
+                        std::string elem_type_str = ptype ? mir_type_to_llvm(ptype) : "i64";
+                        size_t elem_size = 8; // default pointer/i64
+                        size_t elem_align = 8;
+                        if (ptype) {
+                            if (ptype->is_integer() || ptype->is_float()) {
+                                elem_size = ptype->bit_width() / 8;
+                                elem_align = elem_size;
+                            } else if (ptype->is_bool()) {
+                                elem_size = 1;
+                                elem_align = 1;
+                            } else if (std::holds_alternative<mir::MirPointerType>(ptype->kind)) {
+                                elem_size = 8;
+                                elem_align = 8;
+                            }
+                        }
+                        std::string pval_reg = get_value_reg(pval);
+                        std::string slot_ptr = payload_base;
+                        if (byte_offset != 0) {
+                            slot_ptr = "%tmp" + std::to_string(temp_counter_++);
+                            emitln("    " + slot_ptr + " = getelementptr inbounds i8, ptr " +
+                                   payload_base + ", i64 " + std::to_string(byte_offset));
+                        }
+                        emitln("    store " + elem_type_str + " " + pval_reg + ", ptr " + slot_ptr +
+                               ", align " + std::to_string(elem_align));
+                        byte_offset += elem_size;
+                    }
+                    // Load the completed aggregate into the SSA result register.
+                    emitln("    " + result_reg + " = load " + enum_type + ", ptr " + slot +
+                           ", align 8");
+                }
 
             } else if constexpr (std::is_same_v<T, mir::TupleInitInst>) {
                 emit_tuple_init_inst(i, result_reg);

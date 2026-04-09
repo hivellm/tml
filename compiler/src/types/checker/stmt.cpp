@@ -327,8 +327,53 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 auto& named = resolved_type->as<NamedType>();
                 std::string enum_name = named.name;
 
-                // Lookup enum definition
+                // Lookup enum definition.
+                //
+                // Resolution strategy (mirrors `resolve_type_path` + `check_path`):
+                //   1. Local `lookup_enum(name)` — handles same-module and transitively
+                //      loaded enums via the `all_modules` fallback.
+                //   2. If `named.module_path` is populated (type came from an imported
+                //      `NamedType`), consult the module registry directly by FQN. This
+                //      covers cross-module pattern matching on a scrutinee whose type
+                //      was resolved with a known module path — the `bind_pattern` entry
+                //      point only sees the short name, so we have to re-hydrate the
+                //      module path we already know about.
+                //   3. Fallback: resolve `name` through the active import table
+                //      (`resolve_imported_symbol`) and consult the resulting module's
+                //      `enums` / `internal_enums` maps.
+                //
+                // Without step 2/3, pattern matching on an enum imported from another
+                // module fails with T023 ("Unknown enum type") even though the scrutinee
+                // type-checked correctly — see phase0p C3.
                 auto enum_def = env_.lookup_enum(enum_name);
+                if (!enum_def && !named.module_path.empty() && env_.module_registry()) {
+                    enum_def = env_.module_registry()->lookup_enum(named.module_path, enum_name);
+                }
+                if (!enum_def && env_.module_registry()) {
+                    auto imported_path = env_.resolve_imported_symbol(enum_name);
+                    if (imported_path.has_value()) {
+                        auto pos = imported_path->rfind("::");
+                        if (pos != std::string::npos) {
+                            std::string mod_path = imported_path->substr(0, pos);
+                            std::string sym_name = imported_path->substr(pos + 2);
+                            enum_def = env_.module_registry()->lookup_enum(mod_path, sym_name);
+                            if (!enum_def) {
+                                auto mod = env_.get_module(mod_path);
+                                if (mod) {
+                                    auto enum_it = mod->enums.find(sym_name);
+                                    if (enum_it != mod->enums.end()) {
+                                        enum_def = enum_it->second;
+                                    } else {
+                                        auto internal_it = mod->internal_enums.find(sym_name);
+                                        if (internal_it != mod->internal_enums.end()) {
+                                            enum_def = internal_it->second;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (!enum_def) {
                     error("Unknown enum type '" + enum_name + "' in pattern", pattern.span, "T023");
                     return;

@@ -220,7 +220,16 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
             using T = std::decay_t<decltype(e)>;
 
             if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
-                return check_literal(e, expected_type);
+                auto result = check_literal(e, expected_type);
+                // W3: record the resolved literal type so HIR lowering can
+                // use it instead of defaulting to I32 in `lower_literal`.
+                // Without this, an unsuffixed `138` in `i <= 138` (where
+                // `i: I64`) gets emitted as `sext i32 138 to i64` at the
+                // LLVM level.
+                if (result) {
+                    env_.set_expr_type(&e, result);
+                }
+                return result;
             } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
                 // For unary expressions like -5, propagate expected type to operand
                 if (e.op == parser::UnaryOp::Neg && e.operand->template is<parser::LiteralExpr>()) {
@@ -235,19 +244,38 @@ auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) ->
                             return expected_type; // Return expected type to continue checking
                         }
                     }
-                    return check_literal(e.operand->template as<parser::LiteralExpr>(),
-                                         expected_type, true /* is_negated */);
+                    auto result = check_literal(e.operand->template as<parser::LiteralExpr>(),
+                                                expected_type, true /* is_negated */);
+                    // W3: record the resolved literal type for HIR lowering.
+                    // The HIR lowerer consults this via `expr_types_` before
+                    // falling back to the I32 default. Store against the
+                    // LiteralExpr node (the actual leaf HIR will lower).
+                    if (result) {
+                        env_.set_expr_type(&e.operand->template as<parser::LiteralExpr>(), result);
+                    }
+                    return result;
                 }
                 return check_unary(e);
             } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
                 // For call expressions, propagate expected return type for generic type inference
                 // (e.g., Outcome::from_output(42) with expected Outcome[I32, Str] → infers E=Str)
-                return check_call(e, expected_type);
+                auto result = check_call(e, expected_type);
+                // W4: record the resolved type for HIR lowering. When a bare
+                // enum-variant call like `Just(1)` flows through bidirectional
+                // inference with an expected type (e.g., `Maybe[I64]`), the
+                // HIR builder consults this map to synthesize a
+                // `HirEnumExpr` with fully concretized type arguments.
+                if (result) {
+                    env_.set_expr_type(&e, result);
+                }
+                return result;
             } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
                 // For array expressions, propagate expected type for element coercion
                 return check_array(e, expected_type);
             } else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
                 // For tuple expressions, propagate expected element types for coercion
+                // so that e.g. `return (1, Just(1))` with expected `(I64, Maybe[I64])`
+                // infers each element against the expected tuple-element type.
                 std::vector<TypePtr> element_types;
                 const TupleType* expected_tuple = nullptr;
                 if (expected_type && expected_type->is<TupleType>()) {

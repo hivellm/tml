@@ -15,10 +15,6 @@
       "Skill(*)",
       "mcp__tml__*",
       "mcp__rulebook__*"
-    ],
-    "additionalDirectories": [
-      "C:\\Users\\Bolado\\.claude\\teams",
-      "f:\\Node\\hivellm\\tml-docs"
     ]
   },
   "env": {
@@ -28,8 +24,6 @@
     "BASH_MAX_OUTPUT_LENGTH": "200000",
     "MCP_TIMEOUT": "60000",
     "MCP_TOOL_TIMEOUT": "600000",
-    "MAX_THINKING_TOKENS": "32000",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000",
     "MAX_MCP_OUTPUT_TOKENS": "50000",
     "DISABLE_AUTOUPDATER": "1",
     "DISABLE_TELEMETRY": "1"
@@ -66,35 +60,6 @@
           {
             "type": "command",
             "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-mcp-for-tasks.sh"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/on-compact-reinject.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/resume-from-handoff.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/check-context-and-handoff.sh"
           }
         ]
       }

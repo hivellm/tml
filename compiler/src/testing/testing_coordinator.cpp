@@ -984,11 +984,17 @@ TestRunResult run_tests(const TestConfig& config) {
 
     // 5. Cache: load and check
     TestResultCache cache;
-    std::string compiler_hash;
-    std::string flags_hash;
+    // Phase 8.5 W5: always compute compiler and flags hashes so that entries
+    // written by `update_cache_entries` (which runs even in --no-cache mode)
+    // store correct hashes. Without this, a --no-cache run writes empty hashes
+    // and the next cached run can't match them.
+    std::string compiler_hash = TestResultCache::compute_compiler_hash();
+    std::string flags_hash = TestResultCache::compute_flags_hash(config);
 
     bool use_cache = !config.no_cache;
     bool compiler_changed = false; // True if compiler/runtime changed since last run
+    // Always set compiler hash so --no-cache runs write it to disk
+    cache.set_compiler_hash(compiler_hash);
     if (use_cache) {
         auto build_dir = fs::current_path() / "build" / "debug";
         auto cache_file = build_dir / "cache" / "tests.json";
@@ -998,9 +1004,6 @@ TestRunResult run_tests(const TestConfig& config) {
         } else {
             TML_LOG_INFO("test", "  [cache] No cache file at " << cache_file.string());
         }
-
-        compiler_hash = TestResultCache::compute_compiler_hash();
-        flags_hash = TestResultCache::compute_flags_hash(config);
 
         if (!cache.compiler_hash().empty() && cache.compiler_hash() != compiler_hash) {
             TML_LOG_INFO("test", "[cache] Compiler/runtime changed — invalidating all cached EXEs");
@@ -1026,10 +1029,24 @@ TestRunResult run_tests(const TestConfig& config) {
 
     if (use_cache) {
         for (auto& suite : suites) {
+            // Phase 8.5 W5: if the cache entry has stored transitive source
+            // paths from a previous compilation, re-hash THOSE instead of just
+            // the test files. This ensures the hash covers all imported library
+            // and package modules, so editing any of them invalidates the cache.
             std::vector<std::string> file_paths;
-            file_paths.reserve(suite.tests.size());
-            for (const auto& t : suite.tests) {
-                file_paths.push_back(t.file_path);
+            const auto* prev_entry = cache.get(suite.name);
+            if (prev_entry && !prev_entry->source_paths.empty()) {
+                file_paths = prev_entry->source_paths;
+                // Defensive: also add current test files in case the suite
+                // gained new test files since the last run.
+                for (const auto& t : suite.tests) {
+                    file_paths.push_back(t.file_path);
+                }
+            } else {
+                file_paths.reserve(suite.tests.size());
+                for (const auto& t : suite.tests) {
+                    file_paths.push_back(t.file_path);
+                }
             }
             auto source_hashes = TestResultCache::compute_source_hashes(file_paths);
             // Store for reuse in step 8
@@ -1068,10 +1085,17 @@ TestRunResult run_tests(const TestConfig& config) {
                 reuse_exe_paths.push_back(std::move(exe));
                 reuse_exe_suites.push_back(std::move(suite));
             } else {
-                // Fallback: check if exe exists on disk even without cache entry
+                // Fallback: check if exe exists on disk even without cache entry.
                 // Only for non-coverage runs and when compiler/runtime has NOT changed.
                 // If compiler_changed, old EXEs have stale runtime baked in — must recompile.
-                if (!config.coverage && !compiler_changed) {
+                //
+                // Phase 8.5 W5: Do NOT reuse from disk if the cache entry has
+                // `source_paths` — that means we computed transitive hashes and
+                // they didn't match, so the source genuinely changed and the
+                // exe is stale. Only use this fallback for suites with NO cache
+                // entry at all (first run, or cache was cleared).
+                bool has_transitive_cache = prev_entry && !prev_entry->source_paths.empty();
+                if (!config.coverage && !compiler_changed && !has_transitive_cache) {
                     auto exe_cache_dir = fs::current_path() / "build" / "debug" / "cache" / "tests";
                     auto disk_exe = exe_cache_dir / (suite.name + ".exe");
                     if (fs::exists(disk_exe)) {
@@ -1135,22 +1159,77 @@ TestRunResult run_tests(const TestConfig& config) {
         for (int i = 0; i < static_cast<int>(flush_suites.size()); ++i) {
             const auto& suite = flush_suites[i];
 
+            // Phase 8.5 W5: prefer the *transitive* source set captured by the
+            // compiler (test files PLUS every imported library/package module
+            // the type-checker pulled in). This makes the cache invalidate when
+            // any imported `.tml` file is edited, not just the test files
+            // themselves. Falls back to the test-file-only set when the compile
+            // step didn't produce a transitive set (e.g. compilation skipped or
+            // crashed before typechecking finished).
             std::vector<std::string> source_hashes;
-            auto hash_it = suite_source_hashes.find(suite.name);
-            if (hash_it != suite_source_hashes.end()) {
-                source_hashes = hash_it->second;
-            } else {
+            const CompileResult* cr_ptr = (i < static_cast<int>(flush_compile_results.size()))
+                                              ? &flush_compile_results[i]
+                                              : nullptr;
+            if (cr_ptr && !cr_ptr->loaded_source_files.empty()) {
+                TML_LOG_DEBUG("test", "[W5] Suite " << suite.name << " has "
+                                                    << cr_ptr->loaded_source_files.size()
+                                                    << " transitive sources for cache hash");
                 std::vector<std::string> file_paths;
-                file_paths.reserve(suite.tests.size());
+                file_paths.reserve(cr_ptr->loaded_source_files.size() + suite.tests.size());
+                for (const auto& src : cr_ptr->loaded_source_files) {
+                    file_paths.push_back(src);
+                }
+                // Defensive: ensure every test file is included even if the
+                // type-checker dropped one (e.g. parse error in that file).
                 for (const auto& t : suite.tests) {
                     file_paths.push_back(t.file_path);
                 }
+                // compute_source_hashes deduplicates and sorts internally.
                 source_hashes = TestResultCache::compute_source_hashes(file_paths);
+                // Refresh the cached lookup so subsequent invocations of
+                // update_cache_entries (e.g. crash flush) reuse the same set.
+                suite_source_hashes[suite.name] = source_hashes;
+            } else {
+                TML_LOG_DEBUG("test", "[W5] Suite "
+                                          << suite.name
+                                          << " has NO transitive sources, falling back to "
+                                          << suite.tests.size() << " test files only"
+                                          << " (cr_ptr=" << (cr_ptr ? "yes" : "no") << ")");
+                auto hash_it = suite_source_hashes.find(suite.name);
+                if (hash_it != suite_source_hashes.end()) {
+                    source_hashes = hash_it->second;
+                } else {
+                    std::vector<std::string> file_paths;
+                    file_paths.reserve(suite.tests.size());
+                    for (const auto& t : suite.tests) {
+                        file_paths.push_back(t.file_path);
+                    }
+                    source_hashes = TestResultCache::compute_source_hashes(file_paths);
+                }
             }
 
             SuiteCacheEntry entry;
             entry.source_hashes = std::move(source_hashes);
             entry.flags_hash = flags_hash;
+
+            // Phase 8.5 W5: persist transitive source paths for early re-hashing.
+            if (cr_ptr && !cr_ptr->loaded_source_files.empty()) {
+                // Real compilation happened — store the transitive file set.
+                entry.source_paths.reserve(cr_ptr->loaded_source_files.size() + suite.tests.size());
+                for (const auto& src : cr_ptr->loaded_source_files) {
+                    entry.source_paths.push_back(src);
+                }
+                for (const auto& t : suite.tests) {
+                    entry.source_paths.push_back(t.file_path);
+                }
+            } else {
+                // No real compilation (reuse-exe or crash) — preserve the
+                // previously stored source_paths from the cache.
+                const auto* prev = cache.get(suite.name);
+                if (prev && !prev->source_paths.empty()) {
+                    entry.source_paths = prev->source_paths;
+                }
+            }
 
             if (flush_results && i < static_cast<int>(flush_results->size())) {
                 const auto& sr = (*flush_results)[i];

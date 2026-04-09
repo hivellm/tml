@@ -262,6 +262,12 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                     }
                     std::string src = resolve_lib_module_path(lib_subdir, "src", fs_rest);
                     if (!src.empty()) {
+                        // Phase 8.5 W5: even when the module loads from the
+                        // GlobalModuleCache, the resolved `.tml` source path is
+                        // what the meta hash was computed against. Track it
+                        // (and all sibling files for directory modules) so any
+                        // edit to those files invalidates the query cache.
+                        track_source_file(src);
                         // Compute hash of current source and compare against meta file
                         uint64_t current_hash = compute_module_source_hash(src);
                         if (current_hash != 0) {
@@ -390,6 +396,14 @@ bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
                           : load_module_from_cache(module_path, meta_source_path);
         if (cached) {
             TML_DEBUG_LN("[MODULE] Binary meta cache hit for: " << module_path);
+            // Phase 8.5 W5: the binary meta cache is only considered fresh
+            // when its stored hash matches `compute_module_source_hash` on the
+            // resolved `.tml` path. Track that path (plus sibling files for
+            // directory modules) so the query cache re-hashes it on the next
+            // run and the test-binary cache invalidates if it changes.
+            if (!meta_source_path.empty()) {
+                track_source_file(meta_source_path);
+            }
 
             // Copy re-export and private import paths before moving the cached module
             std::vector<std::string> re_export_sources;

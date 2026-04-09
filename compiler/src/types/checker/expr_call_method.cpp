@@ -257,6 +257,18 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         extract_type_params(param_type, arg_type, func->type_params, subs);
                     }
                     method_ret = substitute_type(method_ret, subs);
+                } else {
+                    // Non-generic optional-chained method: still type-check args
+                    // so identifier uses propagate into `read_vars_`. We
+                    // intentionally do NOT pass an `expected_type` here: that
+                    // would trigger bidirectional inference and can retype
+                    // integer/literal expressions in ways that disagree with
+                    // downstream MIR/IR lowering (phase0p W2 regression). The
+                    // goal of this arg walk is only to run `check_ident` on
+                    // identifier uses inside the argument expressions.
+                    for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                        check_expr(*call.args[i]);
+                    }
                 }
                 // Flatten Maybe[Maybe[V]] -> Maybe[V]
                 if (method_ret && method_ret->is<NamedType>() &&
@@ -280,6 +292,14 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         }
                         method_ret = substitute_type(method_ret, subs);
                     }
+                    // Walk argument expressions so identifier reads propagate
+                    // into `read_vars_` (fixes S014 false positives). We do
+                    // NOT pass an expected type — see the note at the first
+                    // non-generic arg-check site above for why.
+                    for (size_t i = 0;
+                         i < call.args.size() && i + 1 < func_it->second.params.size(); ++i) {
+                        check_expr(*call.args[i]);
+                    }
                     if (method_ret && method_ret->is<NamedType>() &&
                         method_ret->as<NamedType>().name == "Maybe") {
                         return method_ret;
@@ -302,6 +322,12 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         }
                         method_ret = substitute_type(method_ret, subs);
                     }
+                    // Walk arguments for `read_vars_` tracking only — do NOT
+                    // pass expected types (W2 regression avoidance).
+                    for (size_t i = 0;
+                         i < call.args.size() && i + 1 < func_it->second.params.size(); ++i) {
+                        check_expr(*call.args[i]);
+                    }
                     if (method_ret && method_ret->is<NamedType>() &&
                         method_ret->as<NamedType>().name == "Maybe") {
                         return method_ret;
@@ -319,6 +345,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             auto func = env_.lookup_func(qualified);
             if (func) {
                 TypePtr method_ret = func->return_type;
+                // Walk arguments for `read_vars_` tracking only — do NOT
+                // pass expected types (W2 regression avoidance).
+                for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                    check_expr(*call.args[i]);
+                }
                 if (method_ret && method_ret->is<NamedType>() &&
                     method_ret->as<NamedType>().name == "Maybe") {
                     return method_ret;
@@ -466,7 +497,19 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
-    // Helper lambda to apply type arguments to a function signature
+    // Helper lambda to apply type arguments to a function signature.
+    //
+    // IMPORTANT: this helper also type-checks the call arguments against the
+    // method's declared parameter types. Without this, arguments like
+    // `w.write_str(loc.file)` silently skip type checking — which manifests
+    // as two visible bugs:
+    //   1. Type errors in call arguments are missed.
+    //   2. `check_ident` on an argument's identifier is never invoked, so
+    //      `read_vars_` does not get updated, producing spurious
+    //      `S014 Unused variable` warnings for parameters whose sole use is
+    //      in a method-call argument (W2 in phase0p).
+    // The `func.params[0]` slot is `this`, so the parameter list is offset
+    // by one relative to `call.args`.
     auto apply_type_args = [&](const FuncSig& func) -> TypePtr {
         if (!call.type_args.empty() && !func.type_params.empty()) {
             // Build substitution map from explicit type arguments
@@ -475,7 +518,26 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             for (size_t i = 0; i < func.type_params.size() && i < call.type_args.size(); ++i) {
                 subs[func.type_params[i]] = resolve_type(*call.type_args[i]);
             }
+            // Type-check arguments against substituted parameter types.
+            for (size_t i = 0; i < call.args.size() && i + 1 < func.params.size(); ++i) {
+                TypePtr expected_param = substitute_type(func.params[i + 1], subs);
+                check_expr(*call.args[i], expected_param);
+            }
             return substitute_type(func.return_type, subs);
+        }
+        // Non-generic path: walk argument expressions so identifier uses
+        // inside them propagate into `read_vars_` (fixes W2 S014 false
+        // positive for parameters used only as method-call arguments).
+        //
+        // IMPORTANT: we intentionally do NOT pass `func.params[i + 1]` as
+        // an expected type. Doing so triggers bidirectional inference that
+        // can retype integer literals / aggregate constructors in ways
+        // that disagree with downstream MIR/IR lowering (concrete failure:
+        // `core_async_iter_basic` saw `Maybe[I32]` reinterpreted as
+        // `Maybe[I64]` at a store site). The only job of this walk is to
+        // run `check_ident` on nested identifiers.
+        for (size_t i = 0; i < call.args.size() && i + 1 < func.params.size(); ++i) {
+            check_expr(*call.args[i]);
         }
         return func.return_type;
     };
@@ -1093,6 +1155,12 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         std::string qualified = type_name + "::" + call.method;
         auto func = env_.lookup_func(qualified);
         if (func) {
+            // Walk arguments so identifier reads propagate into
+            // `read_vars_`. Skip the receiver (`func->params[0]`).
+            // We do NOT pass an expected type (W2 regression avoidance).
+            for (size_t i = 0; i < call.args.size() && i + 1 < func->params.size(); ++i) {
+                check_expr(*call.args[i]);
+            }
             return func->return_type;
         }
     }
@@ -1266,7 +1334,21 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                                  ++i) {
                                 subs[func_sig.type_params[i]] = resolve_type(*call.type_args[i]);
                             }
+                            // Type-check arguments against substituted parameter types.
+                            for (size_t i = 0;
+                                 i < call.args.size() && i + 1 < func_sig.params.size(); ++i) {
+                                TypePtr expected_param =
+                                    substitute_type(func_sig.params[i + 1], subs);
+                                check_expr(*call.args[i], expected_param);
+                            }
                             return substitute_type(func_sig.return_type, subs);
+                        }
+                        // Non-generic Pin-inner method: walk args so
+                        // identifier uses propagate into `read_vars_`. No
+                        // expected type (W2 regression avoidance).
+                        for (size_t i = 0; i < call.args.size() && i + 1 < func_sig.params.size();
+                             ++i) {
+                            check_expr(*call.args[i]);
                         }
                         return func_sig.return_type;
                     };

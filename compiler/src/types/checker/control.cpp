@@ -271,6 +271,8 @@ auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
     TypePtr value_type = make_unit();
     if (ret.value) {
         // Pass expected return type so array literals can infer their size
+        // and so generic enum constructors (e.g. Just(1)) can pick up T from
+        // the enclosing function signature.
         value_type = check_expr(**ret.value, current_return_type_);
     }
 

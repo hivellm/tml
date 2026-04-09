@@ -25,7 +25,7 @@ type AstId {
 }
 
 /// Construct a fresh `AstId`.
-func ast_id_new(value: I64) -> AstId {
+pub func ast_id_new(value: I64) -> AstId {
     return AstId { value: value }
 }
 

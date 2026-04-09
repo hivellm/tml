@@ -1,18 +1,24 @@
-// Phase 5 — Token tag stability + varint encoding.
+// Phase 5 — Token tag roundtrip (full TokenKind reconstruction).
 //
-// Note: importing `compiler::ast::serial` (which transitively pulls in
-// the 760-line `ast::nodes` mutual-recursive type graph) currently
-// causes the test binary codegen to exceed the 30s budget. The forward
-// `write_token` / empty-`Module` paths are still exercised by
-// `mcp__tml__check` on `ast/serial.tml`. Execution tests here use the
-// direct `BinaryWriter` / `BinaryReader` primitives that `write_token`
-// would delegate to.
+// Exercises `token_kind_to_tag` (forward) and `tag_to_token_kind` (reverse)
+// for the 139-variant TokenKind enum. Previously limited to tag-only tests
+// because the 139-arm `tag_to_token_kind` dispatch caused codegen timeouts
+// (C1/C5); resolved by phase0p Phase 3 (switch codegen) and Phase 4
+// (enum-as-I64 zext fix in AST codegen path).
+//
+// Note: full `write_token` / `read_token` binary serialization round-trip
+// requires resolution of the SourceSpan vs TmlSourceSpan type alias issue
+// (the serial C++ runtime defines TmlSourceSpan while compiler::source
+// defines SourceSpan — nominally different types with identical layout).
+// That is tracked separately; tag-level round-trip is sufficient to verify
+// the C1/C2/C5 fixes.
 
 use test
 use compiler::serial::writer::BinaryWriter
 use compiler::serial::reader::BinaryReader
 use compiler::token::TokenKind
 use compiler::token::token_kind_to_tag
+use compiler::token::tag_to_token_kind
 
 @test
 func test_token_kind_tag_stable() -> I32 {
@@ -21,6 +27,45 @@ func test_token_kind_tag_stable() -> I32 {
     assert_eq(token_kind_to_tag(TokenKind::Identifier), 13)
     assert_eq(token_kind_to_tag(TokenKind::KwFunc), 14)
     assert_eq(token_kind_to_tag(TokenKind::ModuleDocComment), 138)
+    return 0
+}
+
+@test
+func test_tag_to_token_kind_roundtrip() -> I32 {
+    // Verify roundtrip: tag → kind → tag produces the same value.
+    when tag_to_token_kind(0) {
+        Just(k) => assert_eq(token_kind_to_tag(k), 0),
+        Nothing => assert_true(false)
+    }
+    when tag_to_token_kind(14) {
+        Just(k) => assert_eq(token_kind_to_tag(k), 14),
+        Nothing => assert_true(false)
+    }
+    when tag_to_token_kind(138) {
+        Just(k) => assert_eq(token_kind_to_tag(k), 138),
+        Nothing => assert_true(false)
+    }
+
+    // Boundary: tag 1 (IntLiteral) and tag 137 (DocComment).
+    when tag_to_token_kind(1) {
+        Just(k) => assert_eq(token_kind_to_tag(k), 1),
+        Nothing => assert_true(false)
+    }
+    when tag_to_token_kind(137) {
+        Just(k) => assert_eq(token_kind_to_tag(k), 137),
+        Nothing => assert_true(false)
+    }
+
+    // Out-of-range: negative and too-large tags return Nothing.
+    when tag_to_token_kind(999) {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when tag_to_token_kind(-1) {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+
     return 0
 }
 
@@ -38,5 +83,27 @@ func test_token_tag_varint_roundtrip() -> I32 {
     assert_eq(r.read_varint()!, 138)
     assert_true(r.is_exhausted())
     r.destroy()
+    return 0
+}
+
+@test
+func test_tag_to_token_kind_full_range() -> I32 {
+    // Verify every valid tag (0..138) round-trips correctly.
+    var tag: I64 = 0
+    loop (tag <= 138) {
+        when tag_to_token_kind(tag) {
+            Just(k) => assert_eq(token_kind_to_tag(k), tag),
+            Nothing => {
+                // Every tag in 0..138 should be valid.
+                assert_true(false)
+            }
+        }
+        tag = tag + 1
+    }
+    // Tag 139 should be out of range.
+    when tag_to_token_kind(139) {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
     return 0
 }

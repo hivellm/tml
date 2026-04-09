@@ -750,6 +750,31 @@ public:
                                      Module& mod);
 
     // ========================================================================
+    // Transitive Source File Tracking (for incremental cache invalidation)
+    // ========================================================================
+
+    /// Records a source file that was opened for reading during module loading.
+    /// Called by every code path that opens a `.tml` file via raw file I/O
+    /// (i.e. bypasses the query system). The set of tracked files is exposed
+    /// to the query provider so it can (a) register them as ReadSource query
+    /// dependencies, making `TypecheckModule` invalidate when any transitive
+    /// source changes, and (b) include their content hashes in the test-binary
+    /// cache so `tml test` re-runs when a package-level `.tml` is edited.
+    ///
+    /// The path stored is exactly what was passed to `std::ifstream` — we do
+    /// not canonicalize here so that the query system's fingerprint computation
+    /// (which reads the same path) stays consistent.
+    void track_source_file(const std::string& file_path);
+
+    /// Returns the set of source files loaded during module loading, in the
+    /// same textual form they were opened with. This is a **sorted** container
+    /// so that iteration order is deterministic across runs, which the query
+    /// cache and the test-binary cache both rely on for stable fingerprints.
+    [[nodiscard]] const std::set<std::string>& loaded_source_files() const {
+        return loaded_source_files_;
+    }
+
+    // ========================================================================
     // Type Utilities
     // ========================================================================
 
@@ -819,6 +844,12 @@ private:
     bool abort_on_module_error_ = true; ///< Abort on module load errors.
     std::unordered_set<std::string>
         loading_modules_; ///< Modules currently being loaded (cycle detection).
+
+    /// Source files opened during module loading (transitive).
+    /// Populated by `track_source_file`. Stored as `std::set` for deterministic
+    /// iteration in `loaded_source_files()`. See that method's doc comment for
+    /// why this is required by incremental compilation.
+    std::set<std::string> loaded_source_files_;
 
     // Builtin initialization
     void init_builtins();      ///< Initialize all builtins.

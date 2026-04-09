@@ -810,6 +810,17 @@ void ThirMirBuilder::emit_cond_branch(Value cond, uint32_t true_block, uint32_t 
     block->terminator = CondBranchTerm{cond, true_block, false_block};
 }
 
+void ThirMirBuilder::emit_switch(Value discriminant,
+                                 std::vector<std::pair<int64_t, uint32_t>> cases,
+                                 uint32_t default_block) {
+    if (!ctx_.current_func)
+        return;
+    auto* block = ctx_.current_func->get_block(ctx_.current_block);
+    if (!block || block->terminator.has_value())
+        return;
+    block->terminator = SwitchTerm{discriminant, std::move(cases), default_block};
+}
+
 void ThirMirBuilder::emit_unreachable() {
     if (!ctx_.current_func)
         return;

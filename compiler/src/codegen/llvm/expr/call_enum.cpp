@@ -595,7 +595,13 @@ auto LLVMIRGen::gen_call_enum_constructor(const parser::CallExpr& call, const st
                         // the inner type for the payload before generating the inner expression.
                         // expected_enum_type_ might be %struct.Maybe__Maybe__I32, but the
                         // inner Just(42) needs %struct.Maybe__I32 as its expected type.
-                        std::string saved_expected = expected_enum_type_;
+                        //
+                        // Similarly, for Maybe[I64] with an unsuffixed-literal payload
+                        // (e.g. `Just(1)`), we must set expected_literal_type_ so that
+                        // gen_literal chooses `i64` instead of the i32 default.
+                        std::string saved_expected_enum = expected_enum_type_;
+                        std::string saved_expected_literal = expected_literal_type_;
+                        bool saved_expected_literal_unsigned = expected_literal_is_unsigned_;
                         if (!enum_type.empty() && enum_type.starts_with("%struct.")) {
                             // Extract type args from the mangled name
                             std::string mangled = enum_type.substr(8); // Skip "%struct."
@@ -603,14 +609,48 @@ auto LLVMIRGen::gen_call_enum_constructor(const parser::CallExpr& call, const st
                             if (sep != std::string::npos) {
                                 std::string base = mangled.substr(0, sep);
                                 std::string type_arg_str = mangled.substr(sep + 2);
-                                // For single-type-param generics, the payload is the type arg
-                                // Check if this is a single-type-param enum
+                                // For single-type-param generics, the payload is the type arg.
                                 size_t num_type_params = gen_enum_decl->generics.size();
-                                if (num_type_params == 1 &&
-                                    type_arg_str.find("__") != std::string::npos) {
-                                    // The type arg itself is a generic - set expected type for
-                                    // inner
-                                    expected_enum_type_ = "%struct." + type_arg_str;
+                                if (num_type_params == 1) {
+                                    if (type_arg_str.find("__") != std::string::npos) {
+                                        // The type arg itself is a generic - set expected type
+                                        // for inner enum construction.
+                                        expected_enum_type_ = "%struct." + type_arg_str;
+                                    } else {
+                                        // The type arg is a leaf type. Map mangled primitive
+                                        // names (e.g. "I64") to LLVM types so that unsuffixed
+                                        // integer/float literals inside the payload pick up
+                                        // the correct width.
+                                        auto set_lit = [&](const std::string& lty, bool uns) {
+                                            expected_literal_type_ = lty;
+                                            expected_literal_is_unsigned_ = uns;
+                                        };
+                                        if (type_arg_str == "I8")
+                                            set_lit("i8", false);
+                                        else if (type_arg_str == "I16")
+                                            set_lit("i16", false);
+                                        else if (type_arg_str == "I32")
+                                            set_lit("i32", false);
+                                        else if (type_arg_str == "I64" || type_arg_str == "I128")
+                                            set_lit("i64", false);
+                                        else if (type_arg_str == "U8")
+                                            set_lit("i8", true);
+                                        else if (type_arg_str == "U16")
+                                            set_lit("i16", true);
+                                        else if (type_arg_str == "U32")
+                                            set_lit("i32", true);
+                                        else if (type_arg_str == "U64" || type_arg_str == "U128")
+                                            set_lit("i64", true);
+                                        else if (type_arg_str == "F32")
+                                            set_lit("float", false);
+                                        else if (type_arg_str == "F64")
+                                            set_lit("double", false);
+                                        else if (type_arg_str == "Bool")
+                                            set_lit("i1", true);
+                                        // Non-primitive leaf (e.g. a user struct) — leave
+                                        // expected_enum_type_ alone and let the existing
+                                        // widening path handle it.
+                                    }
                                 }
                             }
                         }
@@ -618,7 +658,9 @@ auto LLVMIRGen::gen_call_enum_constructor(const parser::CallExpr& call, const st
                         if (call.args.size() == 1) {
                             // Single-arg variant
                             std::string payload = gen_expr(*call.args[0]);
-                            expected_enum_type_ = saved_expected;
+                            expected_enum_type_ = saved_expected_enum;
+                            expected_literal_type_ = saved_expected_literal;
+                            expected_literal_is_unsigned_ = saved_expected_literal_unsigned;
 
                             // Mark variable as consumed (moved into enum variant)
                             // to prevent double-free at scope exit
@@ -682,7 +724,9 @@ auto LLVMIRGen::gen_call_enum_constructor(const parser::CallExpr& call, const st
                                     }
                                 }
                             }
-                            expected_enum_type_ = saved_expected;
+                            expected_enum_type_ = saved_expected_enum;
+                            expected_literal_type_ = saved_expected_literal;
+                            expected_literal_is_unsigned_ = saved_expected_literal_unsigned;
 
                             std::string tuple_type = "{ ";
                             for (size_t ai = 0; ai < arg_types.size(); ++ai) {

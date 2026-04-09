@@ -1,0 +1,50 @@
+// Regression test for C2: enum-as-I64 cast.
+// Previously, casting a payloadless enum to I64 produced invalid IR because
+// extractvalue yields i32 (the discriminant width) but ret expected i64
+// without an intervening zext instruction.
+
+use test
+
+enum Direction {
+    North,
+    East,
+    South,
+    West
+}
+
+func direction_to_i64(d: Direction) -> I64 {
+    return d as I64
+}
+
+func direction_to_i32(d: Direction) -> I32 {
+    return d as I32
+}
+
+@test
+func test_enum_as_i64_direct() -> I32 {
+    assert_eq(direction_to_i64(Direction::North), 0)
+    assert_eq(direction_to_i64(Direction::East), 1)
+    assert_eq(direction_to_i64(Direction::South), 2)
+    assert_eq(direction_to_i64(Direction::West), 3)
+    return 0
+}
+
+@test
+func test_enum_as_i32_direct() -> I32 {
+    assert_eq(direction_to_i32(Direction::North), 0)
+    assert_eq(direction_to_i32(Direction::East), 1)
+    assert_eq(direction_to_i32(Direction::South), 2)
+    assert_eq(direction_to_i32(Direction::West), 3)
+    return 0
+}
+
+@test
+func test_enum_as_i64_no_trampoline() -> I32 {
+    // Verify direct cast matches the I32-trampoline workaround.
+    let d: Direction = Direction::South
+    let direct: I64 = d as I64
+    let trampoline_i32: I32 = d as I32
+    let trampoline_i64: I64 = trampoline_i32 as I64
+    assert_eq(direct, trampoline_i64)
+    return 0
+}

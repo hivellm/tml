@@ -129,6 +129,8 @@ private:
     void emit_return(std::optional<Value> value = std::nullopt);
     void emit_branch(uint32_t target);
     void emit_cond_branch(Value cond, uint32_t true_block, uint32_t false_block);
+    void emit_switch(Value discriminant, std::vector<std::pair<int64_t, uint32_t>> cases,
+                     uint32_t default_block);
     void emit_unreachable();
 
     [[nodiscard]] auto const_int(int64_t value, int bit_width = 32, bool is_signed = true) -> Value;

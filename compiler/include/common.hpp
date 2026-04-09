@@ -164,6 +164,18 @@ struct CompilerOptions {
 
     /// Inspector WebSocket server port (default: 9229).
     static inline int inspect_port = 9229;
+
+    /// Print per-function MIR→LLVM lowering time to stderr.
+    /// Enabled by `--debug-codegen-timing`. Used to diagnose codegen
+    /// timeouts caused by pathological functions (e.g., large `when`
+    /// chains, large match dispatch) without needing a profiler.
+    static inline bool debug_codegen_timing = false;
+
+    /// Print the set of functions kept and removed by the
+    /// dead_function_elimination MIR pass. Enabled by
+    /// `--dump-dead-functions`. Used to diagnose why a slow or unused
+    /// function is still being lowered in a given binary.
+    static inline bool dump_dead_functions = false;
 };
 
 // ============================================================================

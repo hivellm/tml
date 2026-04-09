@@ -287,6 +287,9 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  -g0, -g1, -g2, -g3  Set debug info level (0=none, 1=minimal, "
                          "2=standard, 3=full)\n";
             std::cerr << "  --time              Show detailed compiler phase timings\n";
+            std::cerr << "  --debug-codegen-timing  Print per-function MIR→LLVM lowering time\n";
+            std::cerr << "  --dump-dead-functions  Print functions kept/removed by "
+                         "dead_function_elimination\n";
             std::cerr << "  --lto               Enable Link-Time Optimization\n";
             std::cerr << "  -O0...-O3           Set optimization level\n";
             std::cerr << "  -Os, -Oz            Optimize for size\n";
@@ -495,6 +498,17 @@ int tml_main(int argc, char* argv[]) {
                 tml::CompilerOptions::checked_math = true;
             } else if (arg == "--no-checked-math") {
                 tml::CompilerOptions::checked_math = false;
+            } else if (arg == "--debug-codegen-timing") {
+                // Print per-function MIR→LLVM lowering time to stderr.
+                // Used to diagnose codegen timeouts caused by pathological
+                // functions (e.g., phase0p C1/C5 blockers).
+                tml::CompilerOptions::debug_codegen_timing = true;
+            } else if (arg == "--dump-dead-functions") {
+                // Print the functions kept and removed by
+                // dead_function_elimination. Used to diagnose why an
+                // unused function is still being lowered into a test
+                // binary (e.g., phase0p C5 blocker).
+                tml::CompilerOptions::dump_dead_functions = true;
             } else if (arg == "--bundle") {
                 bundle = true;
             } else if (arg.starts_with("--bundle=")) {
@@ -704,6 +718,17 @@ int tml_main(int argc, char* argv[]) {
                 CompilerOptions::checked_math = true;
             } else if (arg == "--no-checked-math") {
                 CompilerOptions::checked_math = false;
+            } else if (arg == "--debug-codegen-timing") {
+                // Print per-function MIR→LLVM lowering time to stderr.
+                // Used to diagnose codegen timeouts caused by pathological
+                // functions (e.g., phase0p C1/C5 blockers).
+                CompilerOptions::debug_codegen_timing = true;
+            } else if (arg == "--dump-dead-functions") {
+                // Print the functions kept and removed by
+                // dead_function_elimination. Used to diagnose why an
+                // unused function is still being lowered into a test
+                // binary (e.g., phase0p C5 blocker).
+                CompilerOptions::dump_dead_functions = true;
             } else if (arg == "--emit-pipeline") {
                 opts.emit_pipeline = true;
             } else if (arg.starts_with("--emit-pipeline=")) {

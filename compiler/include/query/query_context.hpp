@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -126,6 +127,15 @@ public:
     void clear_cache() {
         cache_.clear();
     }
+
+    /// Phase 8.5 W5: collect every file path from ReadSourceKey entries in the
+    /// transitive dependency graph of a codegen unit. This works on both the
+    /// GREEN path (deps from prev_session_) and the fresh path (deps from
+    /// in-memory cache). The returned set includes every `.tml` file that
+    /// was loaded during compilation, suitable for test-binary cache hashing.
+    [[nodiscard]] std::set<std::string>
+    collect_transitive_source_files(const std::string& file_path,
+                                    const std::string& module_name) const;
 
     [[nodiscard]] QueryCache::Stats cache_stats() const {
         return cache_.get_stats();

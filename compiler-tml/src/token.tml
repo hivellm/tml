@@ -222,13 +222,13 @@ type Token {
 }
 
 /// Construct a token.
-func token_new(kind: TokenKind, value: Str, span: SourceSpan) -> Token {
+pub func token_new(kind: TokenKind, value: Str, span: SourceSpan) -> Token {
     return Token { kind: kind, value: value, span: span }
 }
 
 /// Look up a TML keyword by name. Returns `Nothing` for non-keyword
 /// identifiers. Mirrors the keyword table consulted by the C++ lexer.
-func keyword_lookup(name: Str) -> Maybe[TokenKind] {
+pub func keyword_lookup(name: Str) -> Maybe[TokenKind] {
     // Declarations
     if name == "func" { return Just(TokenKind::KwFunc) }
     if name == "type" { return Just(TokenKind::KwType) }
@@ -323,7 +323,7 @@ func keyword_lookup(name: Str) -> Maybe[TokenKind] {
 }
 
 /// True if `kind` is one of the literal token kinds.
-func token_kind_is_literal(kind: TokenKind) -> Bool {
+pub func token_kind_is_literal(kind: TokenKind) -> Bool {
     when kind {
         TokenKind::IntLiteral => return true,
         TokenKind::FloatLiteral => return true,
@@ -342,7 +342,7 @@ func token_kind_is_literal(kind: TokenKind) -> Bool {
 }
 
 /// True if `kind` is a reserved keyword (any `Kw*` variant).
-func token_kind_is_keyword(kind: TokenKind) -> Bool {
+pub func token_kind_is_keyword(kind: TokenKind) -> Bool {
     when kind {
         TokenKind::KwFunc => return true,
         TokenKind::KwType => return true,
@@ -416,7 +416,7 @@ func token_kind_is_keyword(kind: TokenKind) -> Bool {
 
 /// True if `kind` is a punctuation/symbol operator (excludes word operators
 /// like `and`/`or`/`not` — those are keywords; use `token_kind_is_keyword`).
-func token_kind_is_operator(kind: TokenKind) -> Bool {
+pub func token_kind_is_operator(kind: TokenKind) -> Bool {
     when kind {
         TokenKind::Plus => return true,
         TokenKind::Minus => return true,
@@ -475,7 +475,152 @@ func token_kind_is_operator(kind: TokenKind) -> Bool {
 /// binary token serializer (ast/serial.tml) and by the hybrid pipeline
 /// bridge (phase12f).
 pub func token_kind_to_tag(kind: TokenKind) -> I64 {
-    let t: I32 = kind as I32
-    return t as I64
+    return kind as I64
+}
+
+/// Convert a numeric tag (wire-format discriminant) back to a `TokenKind`.
+/// Returns `Nothing` if the tag is out of range. Inverse of
+/// `token_kind_to_tag`.
+pub func tag_to_token_kind(tag: I64) -> Maybe[TokenKind] {
+    if tag == 0 { return Just(TokenKind::Eof) }
+    if tag == 1 { return Just(TokenKind::IntLiteral) }
+    if tag == 2 { return Just(TokenKind::FloatLiteral) }
+    if tag == 3 { return Just(TokenKind::StringLiteral) }
+    if tag == 4 { return Just(TokenKind::CharLiteral) }
+    if tag == 5 { return Just(TokenKind::BoolLiteral) }
+    if tag == 6 { return Just(TokenKind::NullLiteral) }
+    if tag == 7 { return Just(TokenKind::InterpStringStart) }
+    if tag == 8 { return Just(TokenKind::InterpStringMiddle) }
+    if tag == 9 { return Just(TokenKind::InterpStringEnd) }
+    if tag == 10 { return Just(TokenKind::TemplateLiteralStart) }
+    if tag == 11 { return Just(TokenKind::TemplateLiteralMiddle) }
+    if tag == 12 { return Just(TokenKind::TemplateLiteralEnd) }
+    if tag == 13 { return Just(TokenKind::Identifier) }
+    if tag == 14 { return Just(TokenKind::KwFunc) }
+    if tag == 15 { return Just(TokenKind::KwType) }
+    if tag == 16 { return Just(TokenKind::KwUnion) }
+    if tag == 17 { return Just(TokenKind::KwBehavior) }
+    if tag == 18 { return Just(TokenKind::KwImpl) }
+    if tag == 19 { return Just(TokenKind::KwMod) }
+    if tag == 20 { return Just(TokenKind::KwUse) }
+    if tag == 21 { return Just(TokenKind::KwPub) }
+    if tag == 22 { return Just(TokenKind::KwDecorator) }
+    if tag == 23 { return Just(TokenKind::KwCrate) }
+    if tag == 24 { return Just(TokenKind::KwSuper) }
+    if tag == 25 { return Just(TokenKind::KwLet) }
+    if tag == 26 { return Just(TokenKind::KwVar) }
+    if tag == 27 { return Just(TokenKind::KwConst) }
+    if tag == 28 { return Just(TokenKind::KwIf) }
+    if tag == 29 { return Just(TokenKind::KwThen) }
+    if tag == 30 { return Just(TokenKind::KwElse) }
+    if tag == 31 { return Just(TokenKind::KwWhen) }
+    if tag == 32 { return Just(TokenKind::KwLoop) }
+    if tag == 33 { return Just(TokenKind::KwWhile) }
+    if tag == 34 { return Just(TokenKind::KwFor) }
+    if tag == 35 { return Just(TokenKind::KwIn) }
+    if tag == 36 { return Just(TokenKind::KwTo) }
+    if tag == 37 { return Just(TokenKind::KwThrough) }
+    if tag == 38 { return Just(TokenKind::KwBreak) }
+    if tag == 39 { return Just(TokenKind::KwContinue) }
+    if tag == 40 { return Just(TokenKind::KwReturn) }
+    if tag == 41 { return Just(TokenKind::KwAnd) }
+    if tag == 42 { return Just(TokenKind::KwOr) }
+    if tag == 43 { return Just(TokenKind::KwNot) }
+    if tag == 44 { return Just(TokenKind::KwXor) }
+    if tag == 45 { return Just(TokenKind::KwShl) }
+    if tag == 46 { return Just(TokenKind::KwShr) }
+    if tag == 47 { return Just(TokenKind::KwThis) }
+    if tag == 48 { return Just(TokenKind::KwThisType) }
+    if tag == 49 { return Just(TokenKind::KwAs) }
+    if tag == 50 { return Just(TokenKind::KwIs) }
+    if tag == 51 { return Just(TokenKind::KwMut) }
+    if tag == 52 { return Just(TokenKind::KwRef) }
+    if tag == 53 { return Just(TokenKind::KwLife) }
+    if tag == 54 { return Just(TokenKind::KwVolatile) }
+    if tag == 55 { return Just(TokenKind::KwDo) }
+    if tag == 56 { return Just(TokenKind::KwMove) }
+    if tag == 57 { return Just(TokenKind::KwAsync) }
+    if tag == 58 { return Just(TokenKind::KwAwait) }
+    if tag == 59 { return Just(TokenKind::KwWith) }
+    if tag == 60 { return Just(TokenKind::KwWhere) }
+    if tag == 61 { return Just(TokenKind::KwDyn) }
+    if tag == 62 { return Just(TokenKind::KwLowlevel) }
+    if tag == 63 { return Just(TokenKind::KwQuote) }
+    if tag == 64 { return Just(TokenKind::KwClass) }
+    if tag == 65 { return Just(TokenKind::KwInterface) }
+    if tag == 66 { return Just(TokenKind::KwExtends) }
+    if tag == 67 { return Just(TokenKind::KwImplements) }
+    if tag == 68 { return Just(TokenKind::KwOverride) }
+    if tag == 69 { return Just(TokenKind::KwVirtual) }
+    if tag == 70 { return Just(TokenKind::KwAbstract) }
+    if tag == 71 { return Just(TokenKind::KwSealed) }
+    if tag == 72 { return Just(TokenKind::KwNamespace) }
+    if tag == 73 { return Just(TokenKind::KwBase) }
+    if tag == 74 { return Just(TokenKind::KwProtected) }
+    if tag == 75 { return Just(TokenKind::KwPrivate) }
+    if tag == 76 { return Just(TokenKind::KwStatic) }
+    if tag == 77 { return Just(TokenKind::KwNew) }
+    if tag == 78 { return Just(TokenKind::KwProp) }
+    if tag == 79 { return Just(TokenKind::KwThrow) }
+    if tag == 80 { return Just(TokenKind::Plus) }
+    if tag == 81 { return Just(TokenKind::Minus) }
+    if tag == 82 { return Just(TokenKind::Star) }
+    if tag == 83 { return Just(TokenKind::Slash) }
+    if tag == 84 { return Just(TokenKind::Percent) }
+    if tag == 85 { return Just(TokenKind::StarStar) }
+    if tag == 86 { return Just(TokenKind::PlusPlus) }
+    if tag == 87 { return Just(TokenKind::MinusMinus) }
+    if tag == 88 { return Just(TokenKind::Eq) }
+    if tag == 89 { return Just(TokenKind::Ne) }
+    if tag == 90 { return Just(TokenKind::Lt) }
+    if tag == 91 { return Just(TokenKind::Gt) }
+    if tag == 92 { return Just(TokenKind::Le) }
+    if tag == 93 { return Just(TokenKind::Ge) }
+    if tag == 94 { return Just(TokenKind::BitAnd) }
+    if tag == 95 { return Just(TokenKind::BitOr) }
+    if tag == 96 { return Just(TokenKind::BitXor) }
+    if tag == 97 { return Just(TokenKind::BitNot) }
+    if tag == 98 { return Just(TokenKind::Shl) }
+    if tag == 99 { return Just(TokenKind::Shr) }
+    if tag == 100 { return Just(TokenKind::AndAnd) }
+    if tag == 101 { return Just(TokenKind::OrOr) }
+    if tag == 102 { return Just(TokenKind::Assign) }
+    if tag == 103 { return Just(TokenKind::PlusAssign) }
+    if tag == 104 { return Just(TokenKind::MinusAssign) }
+    if tag == 105 { return Just(TokenKind::StarAssign) }
+    if tag == 106 { return Just(TokenKind::SlashAssign) }
+    if tag == 107 { return Just(TokenKind::PercentAssign) }
+    if tag == 108 { return Just(TokenKind::BitAndAssign) }
+    if tag == 109 { return Just(TokenKind::BitOrAssign) }
+    if tag == 110 { return Just(TokenKind::BitXorAssign) }
+    if tag == 111 { return Just(TokenKind::ShlAssign) }
+    if tag == 112 { return Just(TokenKind::ShrAssign) }
+    if tag == 113 { return Just(TokenKind::Arrow) }
+    if tag == 114 { return Just(TokenKind::FatArrow) }
+    if tag == 115 { return Just(TokenKind::Dot) }
+    if tag == 116 { return Just(TokenKind::DotDot) }
+    if tag == 117 { return Just(TokenKind::Colon) }
+    if tag == 118 { return Just(TokenKind::ColonColon) }
+    if tag == 119 { return Just(TokenKind::Question) }
+    if tag == 120 { return Just(TokenKind::QuestionDot) }
+    if tag == 121 { return Just(TokenKind::Bang) }
+    if tag == 122 { return Just(TokenKind::At) }
+    if tag == 123 { return Just(TokenKind::Pipe) }
+    if tag == 124 { return Just(TokenKind::PipeRight) }
+    if tag == 125 { return Just(TokenKind::Dollar) }
+    if tag == 126 { return Just(TokenKind::DollarBrace) }
+    if tag == 127 { return Just(TokenKind::LParen) }
+    if tag == 128 { return Just(TokenKind::RParen) }
+    if tag == 129 { return Just(TokenKind::LBracket) }
+    if tag == 130 { return Just(TokenKind::RBracket) }
+    if tag == 131 { return Just(TokenKind::LBrace) }
+    if tag == 132 { return Just(TokenKind::RBrace) }
+    if tag == 133 { return Just(TokenKind::Comma) }
+    if tag == 134 { return Just(TokenKind::Semi) }
+    if tag == 135 { return Just(TokenKind::Newline) }
+    if tag == 136 { return Just(TokenKind::Error) }
+    if tag == 137 { return Just(TokenKind::DocComment) }
+    if tag == 138 { return Just(TokenKind::ModuleDocComment) }
+    return Nothing
 }
 

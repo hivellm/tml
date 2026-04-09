@@ -1,47 +1,356 @@
-//! Expression AST nodes. Canonical definitions live in `ast/nodes.tml`.
+//! Expression AST nodes.
+//!
+//! As of phase0p 9.3 (cross-module cyclic imports verified), the canonical
+//! Expr-family definitions live HERE rather than in `ast/nodes.tml`.
+//! `nodes.tml` still holds Type/Pattern/Module types and imports `Expr` via
+//! `use compiler::ast::exprs::Expr`.
 
-use compiler::ast::nodes::UnaryOp
-use compiler::ast::nodes::BinaryOp
-use compiler::ast::nodes::LiteralExpr
-use compiler::ast::nodes::IdentExpr
-use compiler::ast::nodes::UnaryExpr
-use compiler::ast::nodes::BinaryExpr
-use compiler::ast::nodes::CallExpr
-use compiler::ast::nodes::MethodCallExpr
-use compiler::ast::nodes::FieldExpr
-use compiler::ast::nodes::IndexExpr
-use compiler::ast::nodes::TupleExpr
-use compiler::ast::nodes::ArrayKind
-use compiler::ast::nodes::ArrayExpr
-use compiler::ast::nodes::StructExprField
-use compiler::ast::nodes::StructExpr
-use compiler::ast::nodes::IfExpr
-use compiler::ast::nodes::TernaryExpr
-use compiler::ast::nodes::IfLetExpr
-use compiler::ast::nodes::WhenArm
-use compiler::ast::nodes::WhenExpr
-use compiler::ast::nodes::LoopVarDecl
-use compiler::ast::nodes::LoopExpr
-use compiler::ast::nodes::WhileExpr
-use compiler::ast::nodes::ForExpr
-use compiler::ast::nodes::BlockExpr
-use compiler::ast::nodes::ReturnExpr
-use compiler::ast::nodes::BreakExpr
-use compiler::ast::nodes::ContinueExpr
-use compiler::ast::nodes::ClosureParam
-use compiler::ast::nodes::ClosureExpr
-use compiler::ast::nodes::RangeExpr
-use compiler::ast::nodes::CastExpr
-use compiler::ast::nodes::IsExpr
-use compiler::ast::nodes::TryExpr
-use compiler::ast::nodes::AwaitExpr
-use compiler::ast::nodes::ThrowExpr
-use compiler::ast::nodes::PathExpr
-use compiler::ast::nodes::LowlevelExpr
-use compiler::ast::nodes::InterpolatedSegmentKind
-use compiler::ast::nodes::InterpolatedSegment
-use compiler::ast::nodes::InterpolatedStringExpr
-use compiler::ast::nodes::TemplateLiteralExpr
-use compiler::ast::nodes::BaseExpr
-use compiler::ast::nodes::NewExpr
-use compiler::ast::nodes::Expr
+use compiler::source::SourceSpan
+use compiler::ast::common::LiteralKind
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::stmts::Stmt
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+pub enum UnaryOp {
+    OpNeg,
+    OpNot,
+    OpBitNot,
+    OpRef,
+    OpRefMut,
+    OpDeref,
+    OpInc,
+    OpDec
+}
+
+pub enum BinaryOp {
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpMod,
+    OpEq,
+    OpNe,
+    OpLt,
+    OpGt,
+    OpLe,
+    OpGe,
+    OpAnd,
+    OpOr,
+    OpBitAnd,
+    OpBitOr,
+    OpBitXor,
+    OpShl,
+    OpShr,
+    OpAssign,
+    OpAddAssign,
+    OpSubAssign,
+    OpMulAssign,
+    OpDivAssign,
+    OpModAssign,
+    OpBitAndAssign,
+    OpBitOrAssign,
+    OpBitXorAssign,
+    OpShlAssign,
+    OpShrAssign
+}
+
+pub type LiteralExpr {
+    value: LiteralKind,
+    span: SourceSpan
+}
+
+pub type IdentExpr {
+    name: Str,
+    span: SourceSpan
+}
+
+pub type UnaryExpr {
+    op: UnaryOp,
+    operand: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type BinaryExpr {
+    op: BinaryOp,
+    left: Heap[Expr],
+    right: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type CallExpr {
+    callee: Heap[Expr],
+    args: List[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type MethodCallExpr {
+    receiver: Heap[Expr],
+    method: Str,
+    type_args: List[Heap[TypeExpr]],
+    args: List[Heap[Expr]],
+    optional_chain: Bool,
+    span: SourceSpan
+}
+
+pub type FieldExpr {
+    object: Heap[Expr],
+    field: Str,
+    optional_chain: Bool,
+    span: SourceSpan
+}
+
+pub type IndexExpr {
+    object: Heap[Expr],
+    index: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type TupleExpr {
+    elements: List[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub enum ArrayKind {
+    Elements(List[Heap[Expr]]),
+    Repeat(Heap[Expr], Heap[Expr])
+}
+
+pub type ArrayExpr {
+    kind: ArrayKind,
+    span: SourceSpan
+}
+
+pub type StructExprField {
+    name: Str,
+    value: Heap[Expr]
+}
+
+pub type StructExpr {
+    path: TypePath,
+    type_args: Maybe[List[Heap[TypeExpr]]],
+    fields: List[StructExprField],
+    base_expr: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type IfExpr {
+    condition: Heap[Expr],
+    then_branch: Heap[Expr],
+    else_branch: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type TernaryExpr {
+    condition: Heap[Expr],
+    true_value: Heap[Expr],
+    false_value: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type IfLetExpr {
+    pattern: Heap[Pattern],
+    scrutinee: Heap[Expr],
+    then_branch: Heap[Expr],
+    else_branch: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type WhenArm {
+    pattern: Heap[Pattern],
+    guard: Maybe[Heap[Expr]],
+    body: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type WhenExpr {
+    scrutinee: Heap[Expr],
+    arms: List[WhenArm],
+    span: SourceSpan
+}
+
+pub type LoopVarDecl {
+    name: Str,
+    ty: Heap[TypeExpr],
+    span: SourceSpan
+}
+
+pub type LoopExpr {
+    label: Maybe[Str],
+    loop_var: Maybe[LoopVarDecl],
+    condition: Heap[Expr],
+    body: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type WhileExpr {
+    label: Maybe[Str],
+    condition: Heap[Expr],
+    body: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type ForExpr {
+    label: Maybe[Str],
+    pattern: Heap[Pattern],
+    iter: Heap[Expr],
+    body: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type BlockExpr {
+    stmts: List[Heap[Stmt]],
+    expr: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type ReturnExpr {
+    value: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type BreakExpr {
+    label: Maybe[Str],
+    value: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type ContinueExpr {
+    label: Maybe[Str],
+    span: SourceSpan
+}
+
+pub type ClosureParam {
+    pattern: Heap[Pattern],
+    ty: Maybe[Heap[TypeExpr]]
+}
+
+pub type ClosureExpr {
+    params: List[ClosureParam],
+    return_type: Maybe[Heap[TypeExpr]],
+    body: Heap[Expr],
+    is_move: Bool,
+    span: SourceSpan
+}
+
+pub type RangeExpr {
+    start: Maybe[Heap[Expr]],
+    end: Maybe[Heap[Expr]],
+    inclusive: Bool,
+    span: SourceSpan
+}
+
+pub type CastExpr {
+    expr: Heap[Expr],
+    target: Heap[TypeExpr],
+    span: SourceSpan
+}
+
+pub type IsExpr {
+    expr: Heap[Expr],
+    target: Heap[TypeExpr],
+    span: SourceSpan
+}
+
+pub type TryExpr {
+    expr: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type AwaitExpr {
+    expr: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type ThrowExpr {
+    expr: Heap[Expr],
+    span: SourceSpan
+}
+
+pub type PathExpr {
+    path: TypePath,
+    type_args: Maybe[List[Heap[TypeExpr]]],
+    span: SourceSpan
+}
+
+pub type LowlevelExpr {
+    stmts: List[Heap[Stmt]],
+    expr: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub enum InterpolatedSegmentKind {
+    SegText(Str),
+    SegExpr(Heap[Expr])
+}
+
+pub type InterpolatedSegment {
+    kind: InterpolatedSegmentKind,
+    span: SourceSpan
+}
+
+pub type InterpolatedStringExpr {
+    segments: List[InterpolatedSegment],
+    span: SourceSpan
+}
+
+pub type TemplateLiteralExpr {
+    segments: List[InterpolatedSegment],
+    span: SourceSpan
+}
+
+pub type BaseExpr {
+    member: Str,
+    type_args: List[Heap[TypeExpr]],
+    args: List[Heap[Expr]],
+    is_method_call: Bool,
+    span: SourceSpan
+}
+
+pub type NewExpr {
+    class_type: TypePath,
+    type_args: Maybe[List[Heap[TypeExpr]]],
+    args: List[Heap[Expr]],
+    span: SourceSpan
+}
+
+/// Sum of all expression variants. Mirrors `Expr::kind` in the C++ AST.
+pub enum Expr {
+    Literal(LiteralExpr),
+    Ident(IdentExpr),
+    Unary(UnaryExpr),
+    Binary(BinaryExpr),
+    Call(CallExpr),
+    MethodCall(MethodCallExpr),
+    Field(FieldExpr),
+    Index(IndexExpr),
+    Tuple(TupleExpr),
+    Array(ArrayExpr),
+    Struct(StructExpr),
+    If(IfExpr),
+    Ternary(TernaryExpr),
+    IfLet(IfLetExpr),
+    When(WhenExpr),
+    Loop(LoopExpr),
+    While(WhileExpr),
+    For(ForExpr),
+    Block(BlockExpr),
+    Return(ReturnExpr),
+    Break(BreakExpr),
+    Continue(ContinueExpr),
+    Closure(ClosureExpr),
+    Range(RangeExpr),
+    Cast(CastExpr),
+    Is(IsExpr),
+    Try(TryExpr),
+    Await(AwaitExpr),
+    Throw(ThrowExpr),
+    Path(PathExpr),
+    Lowlevel(LowlevelExpr),
+    InterpolatedString(InterpolatedStringExpr),
+    TemplateLiteral(TemplateLiteralExpr),
+    Base(BaseExpr),
+    New(NewExpr)
+}

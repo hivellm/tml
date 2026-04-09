@@ -306,6 +306,34 @@ std::any provide_typecheck_module(QueryContext& ctx, const QueryKey& key) {
         std::make_shared<types::TypeEnv>(std::move(std::get<types::TypeEnv>(check_result)));
     result.registry = registry;
     result.success = true;
+
+    // Phase 8.5 W5: register every transitively-loaded `.tml` source as a
+    // ReadSource query dependency of this TypecheckModule. The query system
+    // hashes each ReadSource's content and folds it into TypecheckModule's
+    // input fingerprint via `compute_input_fingerprint` (which combines the
+    // output fingerprints of all recorded dependencies). When the user edits
+    // any of those files, the next run computes a different input fingerprint
+    // and `verify_all_inputs_green` returns false, so the cached IR is rebuilt.
+    //
+    // Without this loop, library and package modules loaded via the legacy
+    // `load_native_module → load_module_from_file → ifstream` path would not
+    // appear in the dependency graph at all, and edits to them would silently
+    // replay broken IR until `cache/incr` was deleted manually (the W5 bug).
+    if (result.env) {
+        for (const auto& src : result.env->loaded_source_files()) {
+            // Skip the main file — it's already registered via parse_module → tokenize →
+            // read_source.
+            if (src == tk.file_path) {
+                continue;
+            }
+            // ctx.read_source() force-evaluates the ReadSource query if not
+            // already cached, records this query as a dep on the active query
+            // (i.e. TypecheckModule), and produces a stable fingerprint for
+            // the file content.
+            ctx.read_source(src);
+        }
+    }
+
     return result;
 }
 

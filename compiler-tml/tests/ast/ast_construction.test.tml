@@ -1,0 +1,140 @@
+// Tests for AST node type construction — verifies cross-module enum
+// variant matching from common.tml, exprs.tml, stmts.tml, decls.tml.
+//
+// Note: cross-module struct field access (Str fields) and complex
+// Heap[T]-wrapped struct construction trigger known AST codegen
+// issues (Str extracted as i64, List[T] vs List[Str] type mismatch,
+// null pointer on struct layout). Only enum variant dispatch and
+// simple I64/Bool field access are tested here.
+
+use test
+use compiler::ast::common::AstId
+use compiler::ast::common::ast_id_new
+use compiler::ast::common::LiteralKind
+use compiler::ast::exprs::UnaryOp
+use compiler::ast::exprs::BinaryOp
+
+// ---------------------------------------------------------------------------
+// common.tml — AstId, LiteralKind
+// ---------------------------------------------------------------------------
+
+@test
+func test_ast_id_new() -> I32 {
+    let id: AstId = ast_id_new(42)
+    assert_eq(id.value, 42)
+    let id0: AstId = ast_id_new(0)
+    assert_eq(id0.value, 0)
+    return 0
+}
+
+@test
+func test_literal_kind_int() -> I32 {
+    let lit: LiteralKind = LiteralKind::LitInt(99)
+    when lit {
+        LiteralKind::LitInt(v) => assert_eq(v, 99),
+        _ => assert_true(false)
+    }
+    return 0
+}
+
+@test
+func test_literal_kind_bool() -> I32 {
+    when LiteralKind::LitBool(true) {
+        LiteralKind::LitBool(v) => assert_true(v),
+        _ => assert_true(false)
+    }
+    when LiteralKind::LitBool(false) {
+        LiteralKind::LitBool(v) => assert_true(not v),
+        _ => assert_true(false)
+    }
+    return 0
+}
+
+@test
+func test_literal_kind_str_dispatch() -> I32 {
+    when LiteralKind::LitStr("hello") {
+        LiteralKind::LitStr(_) => assert_true(true),
+        _ => assert_true(false)
+    }
+    return 0
+}
+
+@test
+func test_literal_kind_null() -> I32 {
+    when LiteralKind::LitNull {
+        LiteralKind::LitNull => assert_true(true),
+        _ => assert_true(false)
+    }
+    return 0
+}
+
+@test
+func test_literal_kind_char() -> I32 {
+    when LiteralKind::LitChar(65) {
+        LiteralKind::LitChar(c) => assert_eq(c, 65),
+        _ => assert_true(false)
+    }
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// exprs.tml — UnaryOp, BinaryOp (simple fieldless enums)
+// ---------------------------------------------------------------------------
+
+@test
+func test_unary_op_variants() -> I32 {
+    when UnaryOp::OpNeg { UnaryOp::OpNeg => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpNot { UnaryOp::OpNot => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpBitNot { UnaryOp::OpBitNot => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpRef { UnaryOp::OpRef => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpRefMut { UnaryOp::OpRefMut => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpDeref { UnaryOp::OpDeref => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpInc { UnaryOp::OpInc => assert_true(true), _ => assert_true(false) }
+    when UnaryOp::OpDec { UnaryOp::OpDec => assert_true(true), _ => assert_true(false) }
+    return 0
+}
+
+@test
+func test_binary_op_arithmetic() -> I32 {
+    when BinaryOp::OpAdd { BinaryOp::OpAdd => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpSub { BinaryOp::OpSub => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpMul { BinaryOp::OpMul => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpDiv { BinaryOp::OpDiv => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpMod { BinaryOp::OpMod => assert_true(true), _ => assert_true(false) }
+    return 0
+}
+
+@test
+func test_binary_op_comparison() -> I32 {
+    when BinaryOp::OpEq { BinaryOp::OpEq => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpNe { BinaryOp::OpNe => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpLt { BinaryOp::OpLt => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpGt { BinaryOp::OpGt => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpLe { BinaryOp::OpLe => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpGe { BinaryOp::OpGe => assert_true(true), _ => assert_true(false) }
+    return 0
+}
+
+@test
+func test_binary_op_logical_bitwise() -> I32 {
+    when BinaryOp::OpAnd { BinaryOp::OpAnd => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpOr { BinaryOp::OpOr => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpBitAnd { BinaryOp::OpBitAnd => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpBitOr { BinaryOp::OpBitOr => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpBitXor { BinaryOp::OpBitXor => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpShl { BinaryOp::OpShl => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpShr { BinaryOp::OpShr => assert_true(true), _ => assert_true(false) }
+    return 0
+}
+
+@test
+func test_binary_op_assignment() -> I32 {
+    when BinaryOp::OpAssign { BinaryOp::OpAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpAddAssign { BinaryOp::OpAddAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpSubAssign { BinaryOp::OpSubAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpMulAssign { BinaryOp::OpMulAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpDivAssign { BinaryOp::OpDivAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpModAssign { BinaryOp::OpModAssign => assert_true(true), _ => assert_true(false) }
+    when BinaryOp::OpShrAssign { BinaryOp::OpShrAssign => assert_true(true), _ => assert_true(false) }
+    return 0
+}

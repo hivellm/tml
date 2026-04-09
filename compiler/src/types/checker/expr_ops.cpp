@@ -37,9 +37,18 @@ static bool is_literal_zero(const parser::Expr& expr) {
 auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     auto left = check_expr(*binary.left);
 
-    // For arithmetic operations, propagate left operand's type as expected type
-    // for the right operand. This allows unsuffixed integer literals to infer
-    // the correct type (e.g., `x * 3` where x is I32 → 3 infers as I32).
+    // For arithmetic AND comparison operators, propagate the left operand's
+    // type as the expected type for the right operand. This allows unsuffixed
+    // integer literals on the right-hand side to infer the correct type from
+    // the left (e.g., `x * 3` where x is I32 → 3 infers as I32; `i <= 138`
+    // where i is I64 → 138 infers as I64 — W3 in phase0p).
+    //
+    // Without this, unsuffixed literals in comparisons fall through to the
+    // HIR-builder default (I32) and generate a useless `sext i32 → i64` at
+    // codegen — see `.sandbox/w3_repro.tml` for the exact pre-fix IR shape.
+    //
+    // Bitwise/shift operators also propagate left type for the same reason.
+    // Logical `and`/`or` operate on Bool and don't need propagation.
     TypePtr right;
     switch (binary.op) {
     case parser::BinaryOp::Add:
@@ -47,6 +56,17 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     case parser::BinaryOp::Mul:
     case parser::BinaryOp::Div:
     case parser::BinaryOp::Mod:
+    case parser::BinaryOp::Lt:
+    case parser::BinaryOp::Le:
+    case parser::BinaryOp::Gt:
+    case parser::BinaryOp::Ge:
+    case parser::BinaryOp::Eq:
+    case parser::BinaryOp::Ne:
+    case parser::BinaryOp::BitAnd:
+    case parser::BinaryOp::BitOr:
+    case parser::BinaryOp::BitXor:
+    case parser::BinaryOp::Shl:
+    case parser::BinaryOp::Shr:
         right = check_expr(*binary.right, left);
         break;
     default:

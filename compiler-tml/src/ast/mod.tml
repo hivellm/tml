@@ -1,22 +1,18 @@
 //! AST module root for the TML self-hosting compiler frontend.
 //!
-//! The AST is logically split into sections mirroring the C++ header
-//! layout in `compiler/include/parser/ast_*.hpp`:
+//! The AST is split across four files with cyclic cross-imports:
 //!
+//! - `nodes`    — Type/Pattern/Module AST types (the core type graph)
+//! - `exprs`    — Expression AST types (Expr enum + all expression nodes)
+//! - `stmts`    — Statement AST types (Stmt enum + LetStmt/VarStmt/LetElseStmt)
+//! - `decls`    — Declaration + OOP AST types (Decl enum + all decl/class nodes)
+//!
+//! Supporting files:
 //! - `common`   — Visibility, Mutability, AstId, LiteralKind
-//! - `nodes`    — ALL recursive AST types (Type/Pattern/Expr/Stmt/Decl/OOP/Module)
-//! - `types`    — type-expression re-exports
-//! - `patterns` — pattern re-exports
-//! - `exprs`    — expression re-exports
-//! - `stmts`    — statement re-exports
-//! - `decls`    — declaration re-exports
-//! - `oop`      — class/interface/namespace re-exports
-//! - `module`   — top-level `Module` re-export
+//! - `serial`   — Binary serialization (Token/Module round-trip)
 //!
-//! All mutually-recursive AST node types live in `nodes.tml` because the
-//! TML module system does not yet support cross-module cyclic imports.
-//! The other files are thin re-export shims that preserve the logical
-//! split documented in the phase13a task.
+//! Re-export shims (`types`, `patterns`, `oop`, `module`) provide
+//! backwards-compatible import paths.
 
 use compiler::ast::common::Visibility
 use compiler::ast::common::Mutability
@@ -25,7 +21,7 @@ use compiler::ast::common::LiteralKind
 
 use compiler::ast::nodes::TypeExpr
 use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::Expr
-use compiler::ast::nodes::Stmt
-use compiler::ast::nodes::Decl
+use compiler::ast::exprs::Expr
+use compiler::ast::stmts::Stmt
+use compiler::ast::decls::Decl
 use compiler::ast::nodes::Module

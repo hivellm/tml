@@ -1,6 +1,42 @@
-//! Statement AST nodes. Canonical definitions live in `ast/nodes.tml`.
+//! Statement AST nodes.
+//!
+//! As of phase0p C6 (cross-module cyclic imports fixed), the canonical
+//! Stmt-family definitions live HERE rather than in `ast/nodes.tml`.
+//! `nodes.tml` still holds the other AST types (TypeExpr, Pattern, Expr,
+//! Decl) and freely references `Stmt` via `use compiler::ast::stmts::Stmt`.
 
-use compiler::ast::nodes::LetStmt
-use compiler::ast::nodes::VarStmt
-use compiler::ast::nodes::LetElseStmt
-use compiler::ast::nodes::Stmt
+use compiler::source::SourceSpan
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::exprs::Expr
+use compiler::ast::decls::Decl
+use core::alloc::heap::Heap
+
+pub type LetStmt {
+    pattern: Heap[Pattern],
+    ty: Maybe[Heap[TypeExpr]],
+    init: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type VarStmt {
+    name: Str,
+    ty: Maybe[Heap[TypeExpr]],
+    init: Maybe[Heap[Expr]],
+    span: SourceSpan
+}
+
+pub type LetElseStmt {
+    pattern: Heap[Pattern],
+    init: Heap[Expr],
+    else_body: Heap[Expr],
+    span: SourceSpan
+}
+
+pub enum Stmt {
+    Let(LetStmt),
+    Var(VarStmt),
+    LetElse(LetElseStmt),
+    Expr(Heap[Expr]),
+    Decl(Heap[Decl])
+}

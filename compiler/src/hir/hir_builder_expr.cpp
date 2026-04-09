@@ -146,7 +146,15 @@ auto HirBuilder::lower_literal(const parser::LiteralExpr& lit) -> HirExprPtr {
     case lexer::TokenKind::IntLiteral: {
         if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
             auto int_val = std::get<lexer::IntValue>(lit.token.value);
-            // Determine type from suffix or default to I32 (like most languages)
+            // Determine type from suffix, then from the type checker's
+            // resolved-type map, else default to I32 (like most languages).
+            //
+            // W3: the type-checker's `check_expr(expr, expected_type)` path
+            // records the resolved literal type in `expr_types_` when the
+            // literal was type-checked in a context that provides an expected
+            // type (e.g., `i <= 138` where `i: I64` gives `138` the expected
+            // type I64). Consulting that map here avoids emitting a useless
+            // `sext i32 138 to i64` at the LLVM level.
             HirType type = types::make_i32();
             if (!int_val.suffix.empty()) {
                 const auto& suffix = int_val.suffix;
@@ -166,6 +174,29 @@ auto HirBuilder::lower_literal(const parser::LiteralExpr& lit) -> HirExprPtr {
                     type = types::make_primitive(types::PrimitiveKind::U32);
                 else if (suffix == "u64")
                     type = types::make_primitive(types::PrimitiveKind::U64);
+            } else if (auto tc_type = type_env_.get_expr_type(&lit)) {
+                // Only override the I32 default with a type the checker
+                // actually resolved to a primitive integer — avoid trusting
+                // type-variable or unresolved entries.
+                if (tc_type->is<types::PrimitiveType>()) {
+                    auto kind = tc_type->as<types::PrimitiveType>().kind;
+                    switch (kind) {
+                    case types::PrimitiveKind::I8:
+                    case types::PrimitiveKind::I16:
+                    case types::PrimitiveKind::I32:
+                    case types::PrimitiveKind::I64:
+                    case types::PrimitiveKind::I128:
+                    case types::PrimitiveKind::U8:
+                    case types::PrimitiveKind::U16:
+                    case types::PrimitiveKind::U32:
+                    case types::PrimitiveKind::U64:
+                    case types::PrimitiveKind::U128:
+                        type = tc_type;
+                        break;
+                    default:
+                        break;
+                    }
+                }
             }
             return make_hir_literal(id, static_cast<int64_t>(int_val.value), type, lit.span);
         }
@@ -177,6 +208,18 @@ auto HirBuilder::lower_literal(const parser::LiteralExpr& lit) -> HirExprPtr {
             HirType type = types::make_f64();
             if (float_val.suffix == "f32") {
                 type = types::make_primitive(types::PrimitiveKind::F32);
+            } else if (float_val.suffix.empty()) {
+                // W3: same logic as IntLiteral above — consult the
+                // type-checker's resolved-type map for unsuffixed floats.
+                if (auto tc_type = type_env_.get_expr_type(&lit)) {
+                    if (tc_type->is<types::PrimitiveType>()) {
+                        auto kind = tc_type->as<types::PrimitiveType>().kind;
+                        if (kind == types::PrimitiveKind::F32 ||
+                            kind == types::PrimitiveKind::F64) {
+                            type = tc_type;
+                        }
+                    }
+                }
             }
             return make_hir_literal(id, float_val.value, type, lit.span);
         }
@@ -372,6 +415,75 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
                 func_name += "::";
             }
             func_name += path.path.segments[i];
+        }
+    }
+
+    // W4: Detect bare enum-variant constructor calls like `Just(1)` or
+    // `Some(value)`. The type checker handles this path via `all_enums()`
+    // lookup; the HIR must mirror that logic and emit a `HirEnumExpr` so
+    // downstream THIR/MIR sees a proper enum construction — not a function
+    // call to a non-existent `Just` symbol.
+    //
+    // We try this only for IdentExpr callees (bare variant name). PathExpr
+    // callees of the form `Enum::Variant` are handled by `lower_path` (which
+    // routes through `check_path`); their CallExpr wrapping is handled below
+    // via the general lower_expr(callee) fallback that produces the enum.
+    if (call.callee->is<parser::IdentExpr>()) {
+        const std::string& variant_name = call.callee->as<parser::IdentExpr>().name;
+        // Skip shadowing check: prefer an actual function of the same name
+        // over an enum variant lookup. This matches the type checker order
+        // in `check_call` (function lookup first, then enum variant fallback).
+        bool is_function = type_env_.lookup_func(variant_name).has_value();
+        if (!is_function) {
+            for (const auto& [enum_name, enum_def] : type_env_.all_enums()) {
+                int variant_index = -1;
+                for (size_t vi = 0; vi < enum_def.variants.size(); ++vi) {
+                    if (enum_def.variants[vi].first == variant_name) {
+                        variant_index = static_cast<int>(vi);
+                        break;
+                    }
+                }
+                if (variant_index < 0) {
+                    continue;
+                }
+                // Found a matching enum variant. Lower the payload arguments
+                // and consult the type checker's stored type for the full
+                // CallExpr so the enum's generic type arguments flow through
+                // bidirectional inference (W4: e.g. `Just(1)` inside
+                // `(I64, Maybe[I64])` takes `Maybe[I64]`).
+                std::vector<HirExprPtr> payload;
+                payload.reserve(call.args.size());
+                for (const auto& arg : call.args) {
+                    payload.push_back(lower_expr(*arg));
+                }
+
+                // Build the enum type. Prefer the type the type checker
+                // recorded for this CallExpr (contains concrete type args
+                // inferred via expected type propagation); otherwise fall
+                // back to payload-based inference in THIR.
+                HirType type;
+                if (auto tc_type = type_env_.get_expr_type(&call)) {
+                    type = tc_type;
+                }
+                std::vector<HirType> type_args;
+                if (type && type->is<types::NamedType>()) {
+                    const auto& n = type->as<types::NamedType>();
+                    type_args = n.type_args;
+                } else {
+                    // No stored type: synthesize a NamedType with empty
+                    // type_args — THIR's `lower_enum_expr` will recover the
+                    // concrete types from the payload via
+                    // `collect_type_param_substs`.
+                    type = std::make_shared<types::Type>();
+                    type->kind = types::NamedType{enum_name, "", {}};
+                }
+
+                auto expr = std::make_unique<HirExpr>();
+                expr->kind = HirEnumExpr{
+                    fresh_id(),           enum_name,          variant_name, variant_index,
+                    std::move(type_args), std::move(payload), type,         call.span};
+                return expr;
+            }
         }
     }
 

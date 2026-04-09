@@ -1,0 +1,359 @@
+// Tests for compiler::token utility functions —
+// keyword_lookup, token_kind_is_literal, token_kind_is_keyword,
+// token_kind_is_operator, token_new.
+
+use test
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::token::TokenKind
+use compiler::token::Token
+use compiler::token::token_new
+use compiler::token::keyword_lookup
+use compiler::token::token_kind_is_literal
+use compiler::token::token_kind_is_keyword
+use compiler::token::token_kind_is_operator
+use compiler::token::token_kind_to_tag
+
+// ---------------------------------------------------------------------------
+// token_new
+// ---------------------------------------------------------------------------
+
+@test
+func test_token_new_fields() -> I32 {
+    let sp = span_new(
+        loc_new("t.tml", 1, 1, 0, 3),
+        loc_new("t.tml", 1, 4, 3, 0)
+    )
+    let tok: Token = token_new(TokenKind::IntLiteral, "42", sp)
+    assert_eq(tok.value, "42")
+    assert_eq(token_kind_to_tag(tok.kind), 1)
+    assert_eq(tok.span.start.line, 1)
+    assert_eq(tok.span.start.column, 1)
+    return 0
+}
+
+@test
+func test_token_new_eof() -> I32 {
+    let sp = span_new(
+        loc_new("t.tml", 99, 1, 500, 0),
+        loc_new("t.tml", 99, 1, 500, 0)
+    )
+    let tok: Token = token_new(TokenKind::Eof, "", sp)
+    assert_eq(tok.value, "")
+    assert_eq(token_kind_to_tag(tok.kind), 0)
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// keyword_lookup
+// ---------------------------------------------------------------------------
+
+@test
+func test_keyword_lookup_declarations() -> I32 {
+    // Spot-check declaration keywords
+    let Just(k1) = keyword_lookup("func") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k1), 14)
+
+    let Just(k2) = keyword_lookup("type") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k2), 15)
+
+    let Just(k3) = keyword_lookup("pub") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k3), 21)
+
+    let Just(k4) = keyword_lookup("use") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k4), 20)
+
+    let Just(k5) = keyword_lookup("impl") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k5), 18)
+
+    let Just(k6) = keyword_lookup("behavior") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k6), 17)
+    return 0
+}
+
+@test
+func test_keyword_lookup_control_flow() -> I32 {
+    let Just(k1) = keyword_lookup("if") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k1), 28)
+
+    let Just(k2) = keyword_lookup("else") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k2), 30)
+
+    let Just(k3) = keyword_lookup("when") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k3), 31)
+
+    let Just(k4) = keyword_lookup("return") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k4), 40)
+
+    let Just(k5) = keyword_lookup("loop") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k5), 32)
+
+    let Just(k6) = keyword_lookup("break") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k6), 38)
+
+    let Just(k7) = keyword_lookup("continue") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k7), 39)
+    return 0
+}
+
+@test
+func test_keyword_lookup_logical_bitwise() -> I32 {
+    let Just(k1) = keyword_lookup("and") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k1), 41)
+
+    let Just(k2) = keyword_lookup("or") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k2), 42)
+
+    let Just(k3) = keyword_lookup("not") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k3), 43)
+
+    let Just(k4) = keyword_lookup("xor") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k4), 44)
+    return 0
+}
+
+@test
+func test_keyword_lookup_oop() -> I32 {
+    let Just(k1) = keyword_lookup("class") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k1), 64)
+
+    let Just(k2) = keyword_lookup("interface") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k2), 65)
+
+    let Just(k3) = keyword_lookup("extends") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k3), 66)
+
+    let Just(k4) = keyword_lookup("new") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k4), 77)
+    return 0
+}
+
+@test
+func test_keyword_lookup_literals_as_keywords() -> I32 {
+    // true, false, null are recognized at the keyword stage
+    let Just(k1) = keyword_lookup("true") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k1), 5)  // BoolLiteral
+
+    let Just(k2) = keyword_lookup("false") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k2), 5)  // BoolLiteral
+
+    let Just(k3) = keyword_lookup("null") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k3), 6)  // NullLiteral
+    return 0
+}
+
+@test
+func test_keyword_lookup_non_keywords() -> I32 {
+    // Regular identifiers should return Nothing
+    when keyword_lookup("foo") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when keyword_lookup("myVar") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when keyword_lookup("") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when keyword_lookup("Function") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    return 0
+}
+
+@test
+func test_keyword_lookup_case_sensitive() -> I32 {
+    // Keywords are case-sensitive: "Func" is not "func"
+    when keyword_lookup("Func") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when keyword_lookup("IF") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    when keyword_lookup("Return") {
+        Just(_) => assert_true(false),
+        Nothing => assert_true(true)
+    }
+    // But "This" IS a keyword (KwThisType, tag 48)
+    let Just(k) = keyword_lookup("This") else { assert_true(false); return 1 }
+    assert_eq(token_kind_to_tag(k), 48)
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// token_kind_is_literal
+// ---------------------------------------------------------------------------
+
+@test
+func test_is_literal_positive() -> I32 {
+    assert_true(token_kind_is_literal(TokenKind::IntLiteral))
+    assert_true(token_kind_is_literal(TokenKind::FloatLiteral))
+    assert_true(token_kind_is_literal(TokenKind::StringLiteral))
+    assert_true(token_kind_is_literal(TokenKind::CharLiteral))
+    assert_true(token_kind_is_literal(TokenKind::BoolLiteral))
+    assert_true(token_kind_is_literal(TokenKind::NullLiteral))
+    assert_true(token_kind_is_literal(TokenKind::InterpStringStart))
+    assert_true(token_kind_is_literal(TokenKind::InterpStringMiddle))
+    assert_true(token_kind_is_literal(TokenKind::InterpStringEnd))
+    assert_true(token_kind_is_literal(TokenKind::TemplateLiteralStart))
+    assert_true(token_kind_is_literal(TokenKind::TemplateLiteralMiddle))
+    assert_true(token_kind_is_literal(TokenKind::TemplateLiteralEnd))
+    return 0
+}
+
+@test
+func test_is_literal_negative() -> I32 {
+    assert_true(not token_kind_is_literal(TokenKind::Eof))
+    assert_true(not token_kind_is_literal(TokenKind::Identifier))
+    assert_true(not token_kind_is_literal(TokenKind::KwFunc))
+    assert_true(not token_kind_is_literal(TokenKind::Plus))
+    assert_true(not token_kind_is_literal(TokenKind::LParen))
+    assert_true(not token_kind_is_literal(TokenKind::Newline))
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// token_kind_is_keyword
+// ---------------------------------------------------------------------------
+
+@test
+func test_is_keyword_positive() -> I32 {
+    // Spot-check representative keywords from each category
+    assert_true(token_kind_is_keyword(TokenKind::KwFunc))
+    assert_true(token_kind_is_keyword(TokenKind::KwType))
+    assert_true(token_kind_is_keyword(TokenKind::KwLet))
+    assert_true(token_kind_is_keyword(TokenKind::KwIf))
+    assert_true(token_kind_is_keyword(TokenKind::KwReturn))
+    assert_true(token_kind_is_keyword(TokenKind::KwAnd))
+    assert_true(token_kind_is_keyword(TokenKind::KwAs))
+    assert_true(token_kind_is_keyword(TokenKind::KwMut))
+    assert_true(token_kind_is_keyword(TokenKind::KwDo))
+    assert_true(token_kind_is_keyword(TokenKind::KwAsync))
+    assert_true(token_kind_is_keyword(TokenKind::KwClass))
+    assert_true(token_kind_is_keyword(TokenKind::KwThrow))
+    // First and last keywords
+    assert_true(token_kind_is_keyword(TokenKind::KwFunc))    // tag 14
+    assert_true(token_kind_is_keyword(TokenKind::KwThrow))   // tag 79
+    return 0
+}
+
+@test
+func test_is_keyword_negative() -> I32 {
+    assert_true(not token_kind_is_keyword(TokenKind::Eof))
+    assert_true(not token_kind_is_keyword(TokenKind::IntLiteral))
+    assert_true(not token_kind_is_keyword(TokenKind::Identifier))
+    assert_true(not token_kind_is_keyword(TokenKind::Plus))
+    assert_true(not token_kind_is_keyword(TokenKind::LParen))
+    assert_true(not token_kind_is_keyword(TokenKind::Newline))
+    assert_true(not token_kind_is_keyword(TokenKind::DocComment))
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// token_kind_is_operator
+// ---------------------------------------------------------------------------
+
+@test
+func test_is_operator_arithmetic() -> I32 {
+    assert_true(token_kind_is_operator(TokenKind::Plus))
+    assert_true(token_kind_is_operator(TokenKind::Minus))
+    assert_true(token_kind_is_operator(TokenKind::Star))
+    assert_true(token_kind_is_operator(TokenKind::Slash))
+    assert_true(token_kind_is_operator(TokenKind::Percent))
+    assert_true(token_kind_is_operator(TokenKind::StarStar))
+    return 0
+}
+
+@test
+func test_is_operator_comparison() -> I32 {
+    assert_true(token_kind_is_operator(TokenKind::Eq))
+    assert_true(token_kind_is_operator(TokenKind::Ne))
+    assert_true(token_kind_is_operator(TokenKind::Lt))
+    assert_true(token_kind_is_operator(TokenKind::Gt))
+    assert_true(token_kind_is_operator(TokenKind::Le))
+    assert_true(token_kind_is_operator(TokenKind::Ge))
+    return 0
+}
+
+@test
+func test_is_operator_assignment() -> I32 {
+    assert_true(token_kind_is_operator(TokenKind::Assign))
+    assert_true(token_kind_is_operator(TokenKind::PlusAssign))
+    assert_true(token_kind_is_operator(TokenKind::MinusAssign))
+    assert_true(token_kind_is_operator(TokenKind::StarAssign))
+    assert_true(token_kind_is_operator(TokenKind::BitAndAssign))
+    return 0
+}
+
+@test
+func test_is_operator_misc() -> I32 {
+    assert_true(token_kind_is_operator(TokenKind::Arrow))
+    assert_true(token_kind_is_operator(TokenKind::FatArrow))
+    assert_true(token_kind_is_operator(TokenKind::Dot))
+    assert_true(token_kind_is_operator(TokenKind::DotDot))
+    assert_true(token_kind_is_operator(TokenKind::Colon))
+    assert_true(token_kind_is_operator(TokenKind::ColonColon))
+    assert_true(token_kind_is_operator(TokenKind::Question))
+    assert_true(token_kind_is_operator(TokenKind::QuestionDot))
+    assert_true(token_kind_is_operator(TokenKind::Bang))
+    assert_true(token_kind_is_operator(TokenKind::At))
+    assert_true(token_kind_is_operator(TokenKind::Pipe))
+    assert_true(token_kind_is_operator(TokenKind::PipeRight))
+    return 0
+}
+
+@test
+func test_is_operator_negative() -> I32 {
+    // Keywords are NOT operators (even word operators like and/or/not)
+    assert_true(not token_kind_is_operator(TokenKind::KwAnd))
+    assert_true(not token_kind_is_operator(TokenKind::KwOr))
+    assert_true(not token_kind_is_operator(TokenKind::KwNot))
+    // Delimiters are NOT operators
+    assert_true(not token_kind_is_operator(TokenKind::LParen))
+    assert_true(not token_kind_is_operator(TokenKind::RBrace))
+    assert_true(not token_kind_is_operator(TokenKind::Comma))
+    assert_true(not token_kind_is_operator(TokenKind::Semi))
+    // Specials are NOT operators
+    assert_true(not token_kind_is_operator(TokenKind::Eof))
+    assert_true(not token_kind_is_operator(TokenKind::Newline))
+    assert_true(not token_kind_is_operator(TokenKind::Identifier))
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// Category exclusivity: a token is at most one of literal/keyword/operator
+// ---------------------------------------------------------------------------
+
+@test
+func test_categories_mutually_exclusive() -> I32 {
+    // Literal but not keyword or operator
+    assert_true(token_kind_is_literal(TokenKind::IntLiteral))
+    assert_true(not token_kind_is_keyword(TokenKind::IntLiteral))
+    assert_true(not token_kind_is_operator(TokenKind::IntLiteral))
+
+    // Keyword but not literal or operator
+    assert_true(token_kind_is_keyword(TokenKind::KwFunc))
+    assert_true(not token_kind_is_literal(TokenKind::KwFunc))
+    assert_true(not token_kind_is_operator(TokenKind::KwFunc))
+
+    // Operator but not literal or keyword
+    assert_true(token_kind_is_operator(TokenKind::Plus))
+    assert_true(not token_kind_is_literal(TokenKind::Plus))
+    assert_true(not token_kind_is_keyword(TokenKind::Plus))
+
+    // Eof is none of the three
+    assert_true(not token_kind_is_literal(TokenKind::Eof))
+    assert_true(not token_kind_is_keyword(TokenKind::Eof))
+    assert_true(not token_kind_is_operator(TokenKind::Eof))
+
+    // Identifier is none of the three
+    assert_true(not token_kind_is_literal(TokenKind::Identifier))
+    assert_true(not token_kind_is_keyword(TokenKind::Identifier))
+    assert_true(not token_kind_is_operator(TokenKind::Identifier))
+    return 0
+}

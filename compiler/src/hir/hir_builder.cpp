@@ -962,8 +962,21 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
             }
 
             // For user-defined types (structs, enums), create a NamedType
+            // W4: Propagate parser-level generic type arguments so that
+            // references like `Maybe[I64]` in function signatures retain
+            // their type arguments. Without this, the HIR sees a bare
+            // `Maybe` with no args and downstream monomorphization cannot
+            // recover the concrete instantiation.
+            std::vector<types::TypePtr> type_args;
+            if (named.generics.has_value()) {
+                for (const auto& ga : named.generics->args) {
+                    if (ga.is_type()) {
+                        type_args.push_back(resolve_type(*ga.as_type()));
+                    }
+                }
+            }
             auto result = std::make_shared<types::Type>();
-            result->kind = types::NamedType{name, "", {}};
+            result->kind = types::NamedType{name, "", std::move(type_args)};
             return result;
         }
     } else if (type.is<parser::RefType>()) {
@@ -1070,6 +1083,28 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
                                 return types::make_primitive(types::PrimitiveKind::U32);
                             if (int_val.suffix == "u64")
                                 return types::make_primitive(types::PrimitiveKind::U64);
+                        }
+                        // W3: consult the type-checker's resolved-type map
+                        // before defaulting to I32. Same as `lower_literal`.
+                        if (auto tc_type = type_env_.get_expr_type(&e)) {
+                            if (tc_type->template is<types::PrimitiveType>()) {
+                                auto kind = tc_type->template as<types::PrimitiveType>().kind;
+                                switch (kind) {
+                                case types::PrimitiveKind::I8:
+                                case types::PrimitiveKind::I16:
+                                case types::PrimitiveKind::I32:
+                                case types::PrimitiveKind::I64:
+                                case types::PrimitiveKind::I128:
+                                case types::PrimitiveKind::U8:
+                                case types::PrimitiveKind::U16:
+                                case types::PrimitiveKind::U32:
+                                case types::PrimitiveKind::U64:
+                                case types::PrimitiveKind::U128:
+                                    return tc_type;
+                                default:
+                                    break;
+                                }
+                            }
                         }
                     }
                     // Default to I32 (like most languages)
@@ -1225,6 +1260,20 @@ auto HirBuilder::get_field_index(const std::string& struct_name, const std::stri
                 if (s->fields[i].name == field_name) {
                     return static_cast<int>(i);
                 }
+            }
+        }
+    }
+
+    // Then try imported structs from the type environment — mirrors the
+    // `get_variant_index` fallback below and fixes C4 (cross-module struct
+    // field access produced field_index == -1 / UINT_MAX at MIR time).
+    // `type_env_.lookup_struct` walks the registry across all loaded modules
+    // and returns both `pub type` (in `structs`) and private `type`
+    // (in `internal_structs`).
+    if (auto struct_def = type_env_.lookup_struct(struct_name)) {
+        for (size_t i = 0; i < struct_def->fields.size(); ++i) {
+            if (struct_def->fields[i].name == field_name) {
+                return static_cast<int>(i);
             }
         }
     }

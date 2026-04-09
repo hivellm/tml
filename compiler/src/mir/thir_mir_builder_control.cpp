@@ -8,7 +8,10 @@ TML_MODULE("compiler")
 
 #include "mir/thir_mir_builder.hpp"
 
+#include <cstddef>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace tml::mir {
 
@@ -406,11 +409,246 @@ auto ThirMirBuilder::build_continue(const thir::ThirContinueExpr& /*cont*/) -> V
     return const_unit();
 }
 
+// Classification of `when` arms for switch lowering. Each arm is either
+// a constant case (integer literal or payloadless enum variant pattern),
+// a catch-all (wildcard / binding / unmatched last arm), or an unhandled
+// pattern that forces fallback to linear if/else codegen.
+namespace {
+
+enum class WhenArmKind : uint8_t {
+    ConstCase, // literal int or enum-tag case with known int discriminator
+    Wildcard,  // _ or binding — becomes default
+    Unhandled, // guard, tuple, range, or or-pattern — bail out to linear
+};
+
+struct WhenArmClass {
+    WhenArmKind kind = WhenArmKind::Unhandled;
+    int64_t case_value = 0; // valid only when kind == ConstCase
+};
+
+// Switch lowering uses the tag field of an enum when the scrutinee is an
+// enum type and all arms reference the same enum. We track which mode we
+// are in so the code generator knows whether to extract the tag.
+enum class SwitchDiscKind : uint8_t {
+    Integer, // scrutinee itself is integer-typed
+    EnumTag, // discriminator is enum.tag (extractvalue idx 0)
+};
+
+constexpr size_t kMinSwitchArms = 4;
+
+} // namespace
+
 auto ThirMirBuilder::build_when(const thir::ThirWhenExpr& when) -> Value {
     auto scrutinee = build_expr(when.scrutinee);
     auto result_type = convert_type(when.type);
     auto merge_block = create_block("when.merge");
 
+    // ---------------------------------------------------------------------
+    // Phase 1: classify arms to decide between switch and linear lowering.
+    //
+    // Switch form requires: all non-default arms are constant integer or
+    // payloadless enum-variant patterns with no guards, at most one default
+    // (wildcard/binding) arm, and >= kMinSwitchArms cases. This rules out
+    // or-patterns, ranges, and tuple/struct destructuring — those still go
+    // through the linear path since they can't be expressed as LLVM switch
+    // cases directly.
+    // ---------------------------------------------------------------------
+    std::vector<WhenArmClass> arm_classes;
+    arm_classes.reserve(when.arms.size());
+
+    SwitchDiscKind disc_kind = SwitchDiscKind::Integer;
+    bool can_use_switch = true;
+    bool has_enum_arm = false;
+    bool has_int_arm = false;
+    size_t const_case_count = 0;
+    std::ptrdiff_t default_arm_index = -1;
+
+    for (size_t i = 0; i < when.arms.size(); ++i) {
+        const auto& arm = when.arms[i];
+        WhenArmClass cls;
+
+        if (arm.guard) {
+            cls.kind = WhenArmKind::Unhandled;
+            can_use_switch = false;
+        } else if (!arm.pattern) {
+            cls.kind = WhenArmKind::Wildcard;
+        } else if (arm.pattern->is<thir::ThirWildcardPattern>() ||
+                   arm.pattern->is<thir::ThirBindingPattern>()) {
+            cls.kind = WhenArmKind::Wildcard;
+        } else if (arm.pattern->is<thir::ThirLiteralPattern>()) {
+            const auto& lp = arm.pattern->as<thir::ThirLiteralPattern>();
+            if (std::holds_alternative<int64_t>(lp.value)) {
+                cls.kind = WhenArmKind::ConstCase;
+                cls.case_value = std::get<int64_t>(lp.value);
+                has_int_arm = true;
+                ++const_case_count;
+            } else if (std::holds_alternative<uint64_t>(lp.value)) {
+                cls.kind = WhenArmKind::ConstCase;
+                cls.case_value = static_cast<int64_t>(std::get<uint64_t>(lp.value));
+                has_int_arm = true;
+                ++const_case_count;
+            } else {
+                cls.kind = WhenArmKind::Unhandled;
+                can_use_switch = false;
+            }
+        } else if (arm.pattern->is<thir::ThirEnumPattern>()) {
+            const auto& ep = arm.pattern->as<thir::ThirEnumPattern>();
+            // Payloadless variant -> pure tag switch. Variants with payload
+            // bindings still need per-case extractvalue logic that the
+            // linear path handles via build_pattern_binding, so defer those.
+            bool has_bindings = ep.payload.has_value() && !ep.payload->empty();
+            if (!has_bindings) {
+                cls.kind = WhenArmKind::ConstCase;
+                cls.case_value = static_cast<int64_t>(ep.variant_index);
+                has_enum_arm = true;
+                ++const_case_count;
+            } else {
+                cls.kind = WhenArmKind::Unhandled;
+                can_use_switch = false;
+            }
+        } else {
+            cls.kind = WhenArmKind::Unhandled;
+            can_use_switch = false;
+        }
+
+        if (cls.kind == WhenArmKind::Wildcard) {
+            // Only the last wildcard can act as default; earlier wildcards
+            // in a `when` are legal TML but make switch lowering ambiguous
+            // because they short-circuit later cases.
+            if (i + 1 == when.arms.size()) {
+                default_arm_index = static_cast<std::ptrdiff_t>(i);
+            } else {
+                can_use_switch = false;
+            }
+        }
+
+        arm_classes.push_back(cls);
+    }
+
+    // Can't mix integer and enum arms in one switch (they refer to
+    // different discriminators). Also require a minimum case count so
+    // small `when` forms don't pay the jump-table overhead.
+    if (has_enum_arm && has_int_arm) {
+        can_use_switch = false;
+    }
+    if (const_case_count < kMinSwitchArms) {
+        can_use_switch = false;
+    }
+
+    // Detect duplicate case values. LLVM `switch` terminators require
+    // unique cases; duplicates in TML source mean the later arm is
+    // unreachable but not a hard error, so we fall back to linear
+    // lowering to preserve first-match semantics.
+    if (can_use_switch) {
+        std::vector<int64_t> seen;
+        seen.reserve(const_case_count);
+        for (const auto& cls : arm_classes) {
+            if (cls.kind != WhenArmKind::ConstCase)
+                continue;
+            for (int64_t v : seen) {
+                if (v == cls.case_value) {
+                    can_use_switch = false;
+                    break;
+                }
+            }
+            if (!can_use_switch)
+                break;
+            seen.push_back(cls.case_value);
+        }
+    }
+
+    if (has_enum_arm) {
+        disc_kind = SwitchDiscKind::EnumTag;
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 2a: fast path — emit a single `switch` terminator.
+    // ---------------------------------------------------------------------
+    if (can_use_switch) {
+        Value discriminant;
+        if (disc_kind == SwitchDiscKind::EnumTag) {
+            // Extract the tag (i32 at index 0 of the enum struct).
+            ExtractValueInst extract_tag;
+            extract_tag.aggregate = scrutinee;
+            extract_tag.indices = {0};
+            extract_tag.aggregate_type = scrutinee.type;
+            extract_tag.result_type = make_i32_type();
+            discriminant = emit(std::move(extract_tag), make_i32_type());
+        } else {
+            discriminant = scrutinee;
+        }
+
+        // Create one block per const case; the default block is either
+        // the trailing wildcard arm or a freshly-minted unreachable block.
+        std::vector<uint32_t> arm_blocks(when.arms.size(), 0);
+        for (size_t i = 0; i < when.arms.size(); ++i) {
+            arm_blocks[i] = create_block("when.arm." + std::to_string(i));
+        }
+        uint32_t default_block = 0;
+        bool synthetic_default = false;
+        if (default_arm_index >= 0) {
+            default_block = arm_blocks[static_cast<size_t>(default_arm_index)];
+        } else {
+            default_block = create_block("when.default");
+            synthetic_default = true;
+        }
+
+        std::vector<std::pair<int64_t, uint32_t>> switch_cases;
+        switch_cases.reserve(const_case_count);
+        for (size_t i = 0; i < when.arms.size(); ++i) {
+            if (arm_classes[i].kind == WhenArmKind::ConstCase) {
+                switch_cases.emplace_back(arm_classes[i].case_value, arm_blocks[i]);
+            }
+        }
+
+        emit_switch(discriminant, std::move(switch_cases), default_block);
+
+        std::vector<std::pair<Value, uint32_t>> phi_incoming;
+        phi_incoming.reserve(when.arms.size());
+
+        // Emit each case block with its body + branch to merge.
+        for (size_t i = 0; i < when.arms.size(); ++i) {
+            switch_to_block(arm_blocks[i]);
+            // Wildcard binding (e.g. `let x => ...`) still needs its
+            // pattern binding so the body can reference the scrutinee.
+            build_pattern_binding(when.arms[i].pattern, scrutinee);
+            auto arm_val = build_expr(when.arms[i].body);
+            if (!is_terminated()) {
+                uint32_t arm_exit_block = ctx_.current_block;
+                emit_branch(merge_block);
+                phi_incoming.emplace_back(arm_val, arm_exit_block);
+            }
+        }
+
+        // Synthetic default: no user-supplied catch-all, so the case is
+        // semantically unreachable (checker must have proved exhaustiveness).
+        if (synthetic_default) {
+            switch_to_block(default_block);
+            emit_unreachable();
+        }
+
+        switch_to_block(merge_block);
+
+        if (result_type && result_type->is_unit()) {
+            return const_unit();
+        }
+        if (phi_incoming.empty()) {
+            emit_unreachable();
+            return const_unit();
+        }
+        if (phi_incoming.size() == 1) {
+            return phi_incoming[0].first;
+        }
+
+        PhiInst phi;
+        phi.incoming = std::move(phi_incoming);
+        phi.result_type = result_type;
+        return emit(std::move(phi), result_type, when.span);
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 2b: linear if/else chain for patterns switch can't express.
+    // ---------------------------------------------------------------------
     // Collect (value, exit_block_id) pairs for phi node construction
     std::vector<std::pair<Value, uint32_t>> phi_incoming;
 

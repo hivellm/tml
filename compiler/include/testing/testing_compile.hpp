@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,17 @@ struct CompileResult {
 
     /// Total number of tests successfully compiled (for unified binary).
     int compiled_test_count = 0;
+
+    /// Phase 8.5 W5: union of all `.tml` source paths transitively loaded
+    /// during compilation of this suite — i.e. the test files themselves
+    /// PLUS every imported library/package module the type-checker pulled in
+    /// (via `load_native_module → load_module_from_file`). The test cache
+    /// folds these into its per-suite content fingerprint so editing any
+    /// transitively-imported module invalidates the cached `.exe`.
+    ///
+    /// Stored as `set` for deterministic iteration in `compute_source_hashes`,
+    /// and de-duplicated across the suite's individual test files.
+    std::set<std::string> loaded_source_files;
 };
 
 /// Configuration for the compilation pipeline.

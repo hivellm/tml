@@ -370,13 +370,82 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
 
     // Single-field struct to integer: extract the field
     // e.g., %struct.RawPtr__Unit { i64 } → i64
+    // For enums: %struct.TokenKind { i32 } → i64 (extract i32, then zext to i64)
     if (src_type.find("%struct.") == 0 || src_type.find("%enum.") == 0) {
         auto is_int = [](const std::string& t) {
             return t.size() > 1 && t[0] == 'i' && std::isdigit(static_cast<unsigned char>(t[1]));
         };
         if (is_int(target_type) || target_type == "ptr") {
+            // Determine the LLVM type of field 0 before extracting.
+            // This is needed because the extracted value's type may differ from the
+            // target type — e.g., enum discriminant is i32 but target is i64.
+            // We look up field 0's type from the codegen's own maps, which are
+            // populated for both local and cross-module types.
+            std::string field0_type;
+
+            // Extract the plain type name: "%struct.TokenKind" → "TokenKind"
+            std::string type_name;
+            if (src_type.size() > 8 && src_type.substr(0, 8) == "%struct.") {
+                type_name = src_type.substr(8);
+            } else if (src_type.size() > 6 && src_type.substr(0, 6) == "%enum.") {
+                type_name = src_type.substr(6);
+            }
+
+            if (!type_name.empty()) {
+                // Strategy 1: Look up struct_fields_ for field 0's LLVM type.
+                auto sf_it = struct_fields_.find(type_name);
+                if (sf_it != struct_fields_.end() && !sf_it->second.empty()) {
+                    field0_type = sf_it->second[0].llvm_type;
+                }
+
+                // Strategy 2: Check flags_enums_ for the underlying type.
+                if (field0_type.empty()) {
+                    auto fe_it = flags_enums_.find(type_name);
+                    if (fe_it != flags_enums_.end()) {
+                        field0_type = fe_it->second.underlying_llvm_type;
+                    }
+                }
+
+                // Strategy 3: Check if enum_variants_ has any key starting with
+                // "TypeName::" — if so, this is a simple enum with i32 discriminant.
+                // This covers cross-module enums not in struct_fields_.
+                if (field0_type.empty()) {
+                    std::string prefix = type_name + "::";
+                    for (const auto& [key, _val] : enum_variants_) {
+                        if (key.size() > prefix.size() &&
+                            key.compare(0, prefix.size(), prefix) == 0) {
+                            field0_type = "i32"; // Simple enum: discriminant is always i32
+                            break;
+                        }
+                    }
+                }
+            }
+
             std::string extracted = fresh_reg();
             emit_line("  " + extracted + " = extractvalue " + src_type + " " + src + ", 0");
+
+            // If we determined field 0's type AND it differs from the target,
+            // emit a width conversion (zext/trunc) to bridge the gap.
+            if (is_int(target_type) && !field0_type.empty() && field0_type != target_type &&
+                is_int(field0_type)) {
+                int field0_bits = get_bit_width(field0_type);
+                int tgt_bits = get_bit_width(target_type);
+                if (field0_bits > 0 && tgt_bits > 0 && field0_bits != tgt_bits) {
+                    std::string resized = fresh_reg();
+                    if (tgt_bits > field0_bits) {
+                        // Widen: enum discriminants are non-negative → zext
+                        emit_line("  " + resized + " = zext " + field0_type + " " + extracted +
+                                  " to " + target_type);
+                    } else {
+                        // Narrow: trunc
+                        emit_line("  " + resized + " = trunc " + field0_type + " " + extracted +
+                                  " to " + target_type);
+                    }
+                    last_expr_type_ = target_type;
+                    return resized;
+                }
+            }
+
             last_expr_type_ = target_type;
             return extracted;
         }

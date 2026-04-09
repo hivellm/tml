@@ -240,6 +240,39 @@ auto TypeEnv::current_module() const -> const std::string& {
     return current_module_path_;
 }
 
+void TypeEnv::track_source_file(const std::string& file_path) {
+    if (file_path.empty()) {
+        return;
+    }
+    // Track the path as-is (no canonicalization) so that the query system's
+    // fingerprint computation — which opens the exact same path — stays
+    // consistent with this record.
+    loaded_source_files_.insert(file_path);
+
+    // For directory modules, the resolved path points to `mod.tml` but the
+    // actual content hash covers ALL sibling `.tml` files in the directory
+    // (see `compute_module_source_hash`). To keep this set in sync with what
+    // the meta-cache hash actually covers — and with what `load_module_from_file`
+    // ends up parsing — we also track every sibling `.tml` file in the same
+    // directory when the input ends in `mod.tml`.
+    namespace fs = std::filesystem;
+    fs::path fs_path(file_path);
+    if (fs_path.filename() == "mod.tml") {
+        auto dir = fs_path.parent_path();
+        std::error_code ec;
+        if (!dir.empty() && fs::exists(dir, ec) && fs::is_directory(dir, ec)) {
+            for (const auto& entry : fs::directory_iterator(dir, ec)) {
+                if (ec) {
+                    break;
+                }
+                if (entry.is_regular_file(ec) && entry.path().extension() == ".tml") {
+                    loaded_source_files_.insert(entry.path().string());
+                }
+            }
+        }
+    }
+}
+
 void TypeEnv::import_symbol(const std::string& module_path, const std::string& symbol_name,
                             std::optional<std::string> alias) {
     // Determine the local name (use alias if provided, otherwise original name)

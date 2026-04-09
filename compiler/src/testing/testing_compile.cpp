@@ -619,6 +619,12 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         std::set<std::string> link_libs;
         std::shared_ptr<types::ModuleRegistry> registry;
         std::shared_ptr<parser::Module> parsed_module;
+        /// Phase 8.5 W5: every `.tml` source file the type-checker opened
+        /// while typechecking this test file (transitive imports). Captured
+        /// from `TypecheckResult::env->loaded_source_files()` so the test
+        /// cache can fold these into its content fingerprint and the query
+        /// cache can register them as `ReadSource` dependencies.
+        std::set<std::string> loaded_source_files;
     };
 
     std::vector<FileCompileResult> file_results(suite.tests.size());
@@ -795,12 +801,35 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             // Collect link libraries
             fr.link_libs.insert(codegen_result.link_libs.begin(), codegen_result.link_libs.end());
 
-            // Extract registry and parsed module
+            // Extract registry, parsed module, and transitive source files
             auto tc = qctx.cache().lookup<query::TypecheckResult>(
                 query::TypecheckModuleKey{file_path, module_name});
             if (tc && tc->success && tc->registry) {
                 fr.registry = tc->registry;
             }
+            // Phase 8.5 W5: capture every `.tml` source file the type-checker
+            // opened transitively (library + package modules). The test cache
+            // will hash these so editing any of them invalidates the cached
+            // `.exe`.
+            //
+            // Primary path: TypecheckResult::env has loaded_source_files_.
+            // This is populated when typecheck actually ran (non-GREEN path).
+            //
+            // Fallback path: On the GREEN (incremental cache hit) path, the
+            // type-checker didn't run, so env->loaded_source_files() is empty
+            // (or env is null). In that case, use QueryContext's BFS over the
+            // dependency graph to collect all ReadSourceKey file paths — works
+            // with both the in-memory cache and the previous session cache.
+            if (tc && tc->success && tc->env && !tc->env->loaded_source_files().empty()) {
+                const auto& env_sources = tc->env->loaded_source_files();
+                fr.loaded_source_files.insert(env_sources.begin(), env_sources.end());
+            } else {
+                // Fallback: BFS over query dep graph (GREEN/incremental path).
+                auto dep_sources = qctx.collect_transitive_source_files(file_path, module_name);
+                fr.loaded_source_files.insert(dep_sources.begin(), dep_sources.end());
+            }
+            // Always include the test file itself.
+            fr.loaded_source_files.insert(file_path);
             auto parsed = qctx.cache().lookup<query::ParseModuleResult>(
                 query::ParseModuleKey{file_path, module_name});
             if (parsed && parsed->success && parsed->module) {
@@ -850,8 +879,17 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             if (fr.parsed_module) {
                 parsed_module_holder = fr.parsed_module;
             }
+            // Phase 8.5 W5: union the per-file transitive source set into the
+            // suite-level result so the test cache can hash all sources at once.
+            result.loaded_source_files.insert(fr.loaded_source_files.begin(),
+                                              fr.loaded_source_files.end());
         } else {
             result.per_file_errors.push_back({fr.file_path, fr.error_message});
+            // Even on failure, fold whatever sources the type-checker did manage
+            // to load — this lets the cache invalidate next run when the user
+            // fixes the underlying file.
+            result.loaded_source_files.insert(fr.loaded_source_files.begin(),
+                                              fr.loaded_source_files.end());
         }
     }
 

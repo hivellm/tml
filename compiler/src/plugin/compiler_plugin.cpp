@@ -9,6 +9,7 @@ TML_MODULE("compiler")
 
 #include "plugin/abi.h"
 
+#include <cstdio>
 #include <cstring>
 
 // Forward declaration of tml_main from the dispatcher
@@ -57,6 +58,13 @@ PLUGIN_API void plugin_shutdown(void) {
 /// Main compiler entry point, called by the thin launcher.
 /// This is the modular equivalent of the monolithic main() → tml_main().
 PLUGIN_API int compiler_main(int argc, char* argv[]) {
+    // Make stderr unbuffered so diagnostic dumps ([dead-func-elim],
+    // [codegen-timing], panic messages) and any partial output are
+    // visible even when the compiler crashes (e.g., stack overflow)
+    // before reaching graceful shutdown. Without this, stderr is
+    // fully buffered when redirected to a file and the buffer is lost
+    // on abnormal termination.
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
     return tml_main(argc, argv);
 }
 

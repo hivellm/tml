@@ -13,10 +13,36 @@ TML_MODULE("codegen_x86")
 #include "parser/parser.hpp"
 #include "types/module_binary.hpp"
 
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <unordered_set>
 
 namespace tml::codegen {
+
+// Diagnostic: emit a timestamped marker to stderr for hang diagnosis.
+// Gated on the TML_DEBUG_EMIT_MODULE_PURE environment variable so this is zero-cost
+// in normal builds. Set the env var to any non-empty value to enable.
+static inline void hang_trace(const char* label, const std::string& detail = "") {
+    static const bool enabled = []() {
+        const char* e = std::getenv("TML_DEBUG_EMIT_MODULE_PURE");
+        return e != nullptr && *e != '\0';
+    }();
+    if (!enabled)
+        return;
+    using clock = std::chrono::steady_clock;
+    static const auto start = clock::now();
+    auto now = clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+    if (detail.empty()) {
+        std::fprintf(stderr, "[hang-trace] +%6lldms  %s\n", static_cast<long long>(ms), label);
+    } else {
+        std::fprintf(stderr, "[hang-trace] +%6lldms  %s  %s\n", static_cast<long long>(ms), label,
+                     detail.c_str());
+    }
+    std::fflush(stderr);
+}
 
 // Helper: Get the LLVM type string for a constant's declared type
 static std::string get_const_llvm_type(const parser::TypePtr& type) {
@@ -157,12 +183,19 @@ static std::string try_extract_const_value(const parser::Expr* expr, const parse
 
 void LLVMIRGen::emit_module_pure_tml_functions(
     const std::unordered_set<std::string>& skip_modules) {
+    // FORCED DEBUG: unconditional print to verify function is entered at all
+    std::fprintf(stderr, "[FORCE-TRACE] emit_module_pure_tml_functions BODY ENTER\n");
+    std::fflush(stderr);
+    hang_trace("emit_module_pure_tml_functions ENTER");
     // Emit LLVM IR for pure TML functions from imported modules
     if (!env_.module_registry()) {
+        hang_trace("emit_module_pure_tml_functions EXIT (no registry)");
         return;
     }
 
     auto registry = env_.module_registry();
+    std::fprintf(stderr, "[FORCE-TRACE] emit_module_pure_tml_functions got registry\n");
+    std::fflush(stderr);
 
     // Ensure essential library modules are in the ModuleRegistry even if not
     // explicitly imported.  The type checker handles List[T] as a builtin type,
@@ -676,6 +709,13 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     for (const auto& info : eligible_modules) {
         processed_module_paths_.insert(info.module_name);
     }
+    hang_trace("filter/parse done", "eligible=" + std::to_string(eligible_modules.size()));
+    if (std::getenv("TML_DEBUG_EMIT_MODULE_PURE")) {
+        for (const auto& info : eligible_modules) {
+            std::fprintf(stderr, "[hang-trace] eligible: %s\n", info.module_name.c_str());
+        }
+        std::fflush(stderr);
+    }
 
     // ========================================================================
     // PHASE 0: Register struct/enum types from ALL imported modules, including
@@ -768,12 +808,13 @@ void LLVMIRGen::emit_module_pure_tml_functions(
             if (!enum_def.type_params.empty())
                 continue;
             // Register enum variant info for pattern matching/construction
+            int tag = 0;
             for (const auto& variant : enum_def.variants) {
-                std::string key = enum_name + "::" + variant.name;
+                std::string key = enum_name + "::" + variant.first;
                 if (enum_variants_.find(key) == enum_variants_.end()) {
-                    enum_variants_[key] = EnumVariantInfo{
-                        variant.name, static_cast<int>(&variant - &enum_def.variants[0])};
+                    enum_variants_[key] = tag;
                 }
+                tag++;
             }
         }
     }
@@ -784,7 +825,9 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // "Ordering" are registered before any impl method tries to use them,
     // regardless of unordered_map iteration order.
     // ========================================================================
+    hang_trace("PHASE 1 START");
     for (const auto& info : eligible_modules) {
+        hang_trace("PHASE 1 module", info.module_name);
         const auto& parsed_module = *info.parsed_module_ptr;
         current_module_prefix_ = info.sanitized_prefix;
         current_module_name_ = info.module_name;
@@ -958,6 +1001,7 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     }
     current_module_prefix_.clear();
     current_module_name_.clear();
+    hang_trace("PHASE 1 DONE");
 
     // ========================================================================
     // PHASE 2: Generate code for functions and impl methods.
@@ -968,12 +1012,14 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // `declare` statements instead of full function definitions. The
     // implementations come from a shared library object compiled once per suite.
     // ========================================================================
+    hang_trace("PHASE 2 START");
     for (const auto& info : eligible_modules) {
         const auto& parsed_module = *info.parsed_module_ptr;
         const auto& module_name = info.module_name;
         current_module_prefix_ = info.sanitized_prefix;
         current_module_name_ = info.module_name;
         current_submodule_name_ = info.mod_name;
+        hang_trace("PHASE 2 module ENTER", module_name);
 
         emit_line("; Module: " + module_name);
 
@@ -1014,7 +1060,9 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                 // Generate code for both public AND private functions with bodies
                 // Private functions are needed for intra-module helper functions
                 if (!func.is_unsafe && func.body.has_value()) {
+                    hang_trace("gen_func_decl", module_name + "::" + func.name);
                     gen_func_decl(func);
+                    hang_trace("gen_func_decl DONE", module_name + "::" + func.name);
                 }
             }
             // Also handle impl blocks - generate methods for imported types

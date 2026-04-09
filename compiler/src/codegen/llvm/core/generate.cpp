@@ -17,6 +17,8 @@ TML_MODULE("codegen_x86")
 #include "types/module_binary.hpp"
 #include "version_generated.hpp"
 
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <set>
@@ -358,7 +360,6 @@ static std::string try_extract_const_value(const parser::Expr* expr, const parse
 
 auto LLVMIRGen::generate(const parser::Module& module)
     -> Result<std::string, std::vector<LLVMGenError>> {
-    // (debug prints removed)
     errors_.clear();
     output_.str("");
     type_defs_buffer_.str(""); // Clear type definitions buffer

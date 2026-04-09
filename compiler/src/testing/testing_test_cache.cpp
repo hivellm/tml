@@ -14,6 +14,7 @@ TML_MODULE("test")
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 #ifdef _WIN32
@@ -288,6 +289,13 @@ std::pair<SuiteCacheEntry, size_t> parse_suite_entry(const std::string& s, size_
                 return {entry, std::string::npos};
             entry.exe_path = std::move(val);
             pos = next;
+        } else if (key == "source_paths") {
+            // Phase 8.5 W5: transitive source file paths for re-hashing
+            auto [arr, next] = read_json_string_array(s, pos);
+            if (next == std::string::npos)
+                return {entry, std::string::npos};
+            entry.source_paths = std::move(arr);
+            pos = next;
         } else {
             pos = skip_json_value(s, pos);
             if (pos == std::string::npos)
@@ -436,6 +444,12 @@ bool TestResultCache::save(const std::string& cache_file) const {
         ss << "      \"compile_time_us\": " << entry.compile_time_us << ",\n";
         ss << "      \"exe_path\": ";
         write_json_string(ss, entry.exe_path);
+        // Phase 8.5 W5: persist transitive source paths when available
+        if (!entry.source_paths.empty()) {
+            ss << ",\n";
+            ss << "      \"source_paths\": ";
+            write_json_string_array(ss, entry.source_paths);
+        }
         ss << "\n";
         ss << "    }";
         if (++idx < entries_.size()) {
@@ -632,10 +646,26 @@ std::string TestResultCache::compute_flags_hash(const TestConfig& config) {
 
 std::vector<std::string>
 TestResultCache::compute_source_hashes(const std::vector<std::string>& file_paths) {
-    std::vector<std::string> hashes;
-    hashes.reserve(file_paths.size());
-
+    // Phase 8.5 W5: dedupe by canonical path before hashing. The transitive
+    // source set passed from `compile_suite` may legitimately overlap with
+    // the test files vector (the test file itself is in both), and on Windows
+    // the same file can also appear with mixed slash forms. Without dedup we
+    // would either (a) waste I/O hashing the same file twice, or (b) end up
+    // with a hash vector whose length depends on input order rather than the
+    // unique file set, breaking equality checks in `is_cached`.
+    std::set<std::string> unique_paths;
     for (const auto& path : file_paths) {
+        if (path.empty())
+            continue;
+        // Normalise slashes so `lib/foo.tml` and `lib\foo.tml` collapse to one.
+        std::string normalised = path;
+        std::replace(normalised.begin(), normalised.end(), '\\', '/');
+        unique_paths.insert(std::move(normalised));
+    }
+
+    std::vector<std::string> hashes;
+    hashes.reserve(unique_paths.size());
+    for (const auto& path : unique_paths) {
         auto hash = crc32c_file(path);
         if (hash.empty())
             hash = "error";

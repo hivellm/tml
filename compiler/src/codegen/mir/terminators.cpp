@@ -108,16 +108,26 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                 }
 
             } else if constexpr (std::is_same_v<T, mir::SwitchTerm>) {
+                // Emit LLVM `switch` terminator. Discriminant type is derived
+                // from the MIR value's type (must be integer); the case values
+                // must use the same integer width as the discriminant.
                 std::string disc = get_value_reg(t.discriminant);
+                std::string disc_type = "i32";
+                if (t.discriminant.type) {
+                    std::string ty = mir_type_to_llvm(t.discriminant.type);
+                    if (!ty.empty() && ty[0] == 'i') {
+                        disc_type = ty;
+                    }
+                }
                 auto def_it = block_labels_.find(t.default_block);
                 std::string default_label =
                     (def_it != block_labels_.end()) ? def_it->second : "unreachable";
-                emit("    switch i32 " + disc + ", label %" + default_label + " [");
+                emit("    switch " + disc_type + " " + disc + ", label %" + default_label + " [");
                 for (const auto& [val, block] : t.cases) {
                     auto case_it = block_labels_.find(block);
                     std::string label = (case_it != block_labels_.end()) ? case_it->second : "";
                     if (!label.empty()) {
-                        emit(" i32 " + std::to_string(val) + ", label %" + label);
+                        emit(" " + disc_type + " " + std::to_string(val) + ", label %" + label);
                     }
                 }
                 emitln(" ]");

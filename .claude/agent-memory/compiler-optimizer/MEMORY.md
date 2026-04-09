@@ -47,3 +47,29 @@ Used in: `call_user.cpp`, `method_impl.cpp`, `method_generic.cpp`, `method.cpp`,
 - Mangling utils: `compiler/src/codegen/llvm/core/llvm_utils.cpp:179`
 - Suite config: `compiler/src/cli/commands/cmd_test.cpp:233` (max_per_suite = coverage ? 1 : 10)
 - Suite grouping: `compiler/src/testing/testing_discovery.cpp:207` (group_into_suites)
+
+## Cross-Module Enum Resolution (2026-04-08)
+
+Three parallel resolver sites must all consult both `ModuleInfo::enums`
+AND `ModuleInfo::internal_enums` for non-`pub` imported enums. The fix
+pattern is the same 3-tier fallback (lookup_enum → module_registry FQN →
+resolve_imported_symbol + get_module with both maps):
+
+- `checker/stmt.cpp` bind_pattern EnumPattern branch — fixed in Phase 5 (C3)
+- `checker/types_checker.cpp` check_path segments.size()==2 branch — fixed in Phase 6 (C6)
+- `checker/resolve.cpp` resolve_type_path — already had full fallback
+
+Why this matters: non-`pub` enums stored in `ModuleInfo::internal_enums`
+(via `env_module_load_decls.cpp:340-349`), `lookup_enum` walks
+`all_modules` and checks both maps, but direct `get_module(path)->enums`
+lookups bypass that and must check `internal_enums` explicitly.
+
+## Known Silent Codegen Failures
+
+- **Heap[T] auto-import**: When a struct field has type `Heap[T]` but the
+  containing module does not explicitly `use core::alloc::heap::Heap`,
+  `require_struct_instantiation` in `llvm_struct_decl.cpp:224` fails
+  silently through all 3 lookup paths (pending_generic_structs_,
+  module_registry, GlobalASTCache) and returns the mangled name
+  unconditionally at line 695. LLVM then emits a reference to
+  `%struct.Heap__T` that is never defined. Separate bug, not Phase 0p.

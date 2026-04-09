@@ -29,6 +29,7 @@ TML_MODULE("compiler")
 //! `List`, `Eq`, `Ord`, etc.
 
 #include "lexer/token.hpp"
+#include "package/package_registry.hpp"
 #include "profiler.hpp"
 #include "types/builtins_cache.hpp"
 #include "types/checker.hpp"
@@ -489,6 +490,126 @@ void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
     env_.define_type_alias(decl.name, resolve_type(*decl.type), std::move(generic_params));
 }
 
+// ============================================================================
+// T027 "Module not found" — package namespace suggestion
+// ============================================================================
+
+/// Levenshtein edit distance between two strings. Used for fuzzy-matching
+/// package names in T027 diagnostics (e.g., "compiler_tml" → "compiler").
+static size_t edit_distance(const std::string& a, const std::string& b) {
+    const size_t m = a.size();
+    const size_t n = b.size();
+    std::vector<size_t> prev(n + 1), curr(n + 1);
+
+    for (size_t j = 0; j <= n; ++j)
+        prev[j] = j;
+
+    for (size_t i = 1; i <= m; ++i) {
+        curr[0] = i;
+        for (size_t j = 1; j <= n; ++j) {
+            size_t cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+            curr[j] = std::min({prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost});
+        }
+        std::swap(prev, curr);
+    }
+    return prev[n];
+}
+
+/// Build a suggestion suffix for T027 "Module not found" errors.
+///
+/// When the first segment of `module_path` (the package prefix) does not match
+/// any known package, this function checks the PackageRegistry for a close match
+/// and returns a hint string like:
+///   "; did you mean 'compiler::source::SourceSpan'?"
+///   "; available packages: core, std, test, compiler"
+///
+/// Returns an empty string if the prefix IS a known package (the problem is the
+/// submodule path, not the package prefix).
+static std::string suggest_package_for_t027(const std::string& module_path) {
+    // Extract the first segment (package prefix).
+    auto sep = module_path.find("::");
+    std::string prefix = (sep == std::string::npos) ? module_path : module_path.substr(0, sep);
+    std::string rest = (sep == std::string::npos) ? std::string{} : module_path.substr(sep);
+
+    // Hardcoded namespaces that are always available.
+    static const std::set<std::string> builtin_namespaces = {"core",      "std",  "test",
+                                                             "backtrace", "self", "super"};
+
+    // If the prefix is a builtin namespace, the problem isn't the prefix.
+    if (builtin_namespaces.count(prefix)) {
+        return {};
+    }
+
+    // Check if the prefix matches a registered package.
+    const auto& registry = pkg::PackageRegistry::instance();
+    if (registry.get(prefix) != nullptr) {
+        return {}; // Package exists — submodule is the issue, not the prefix.
+    }
+
+    // The prefix doesn't match any known package. Build a suggestion.
+    const auto& all_packages = registry.all();
+
+    // Collect all available namespace names (builtin + workspace packages),
+    // using a set to deduplicate (core, std, test appear in both).
+    std::set<std::string> name_set;
+    for (const auto& ns : builtin_namespaces) {
+        if (ns != "self" && ns != "super") { // Don't suggest self/super
+            name_set.insert(ns);
+        }
+    }
+    for (const auto& [name, _info] : all_packages) {
+        name_set.insert(name);
+    }
+    std::vector<std::string> all_names(name_set.begin(), name_set.end());
+
+    // --- Heuristic 1: substring containment ---
+    // Catches cases like "compiler_tml" where the real package name "compiler"
+    // is a prefix of the typed text, or the typed text is a suffix/transform
+    // of the real name. Common when users guess from directory names.
+    for (const auto& name : all_names) {
+        // Check if prefix contains the package name (e.g., "compiler_tml" contains "compiler")
+        if (prefix.size() > name.size() && prefix.find(name) != std::string::npos) {
+            return "; did you mean '" + name + rest + "'?";
+        }
+        // Check if the package name contains the prefix (e.g., "comp" → "compiler")
+        if (name.size() > prefix.size() && name.find(prefix) == 0) {
+            return "; did you mean '" + name + rest + "'?";
+        }
+    }
+
+    // --- Heuristic 2: edit distance ---
+    std::string best_match;
+    size_t best_dist = SIZE_MAX;
+    for (const auto& name : all_names) {
+        size_t dist = edit_distance(prefix, name);
+        if (dist < best_dist) {
+            best_dist = dist;
+            best_match = name;
+        }
+    }
+
+    // Threshold: suggest if edit distance is at most half the prefix length + 1,
+    // capped at 4. This catches typos ("coer" → "core", "compier" → "compiler")
+    // while avoiding nonsensical suggestions.
+    size_t threshold = std::min<size_t>(prefix.size() / 2 + 1, 4);
+    if (best_dist <= threshold && !best_match.empty()) {
+        return "; did you mean '" + best_match + rest + "'?";
+    }
+
+    // No close match. List all available packages so the user can find the right one.
+    if (!all_names.empty()) {
+        std::string listing;
+        for (size_t i = 0; i < all_names.size(); ++i) {
+            if (i > 0)
+                listing += ", ";
+            listing += all_names[i];
+        }
+        return "; available packages: " + listing;
+    }
+
+    return {};
+}
+
 void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     if (use_decl.path.segments.empty()) {
         return;
@@ -572,8 +693,11 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         }
 
         if (!module_opt.has_value()) {
-            errors_.push_back(
-                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
+            errors_.push_back(TypeError{"Module '" + module_path + "' not found" +
+                                            suggest_package_for_t027(module_path),
+                                        use_decl.span,
+                                        {},
+                                        "T027"});
             return;
         }
 
@@ -596,8 +720,11 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         }
 
         if (!module_opt.has_value()) {
-            errors_.push_back(
-                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
+            errors_.push_back(TypeError{"Module '" + module_path + "' not found" +
+                                            suggest_package_for_t027(module_path),
+                                        use_decl.span,
+                                        {},
+                                        "T027"});
             return;
         }
 
@@ -733,8 +860,11 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     }
 
     if (!module_opt.has_value()) {
-        errors_.push_back(
-            TypeError{"Module '" + module_path + "' not found", use_decl.span, {}, "T027"});
+        errors_.push_back(TypeError{"Module '" + module_path + "' not found" +
+                                        suggest_package_for_t027(module_path),
+                                    use_decl.span,
+                                    {},
+                                    "T027"});
         return;
     }
 

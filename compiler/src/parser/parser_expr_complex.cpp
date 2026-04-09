@@ -387,7 +387,28 @@ auto Parser::parse_return_expr() -> Result<ExprPtr, ParseError> {
         auto v = parse_expr();
         if (is_err(v))
             return v;
-        value = std::move(unwrap(v));
+        auto val_expr = std::move(unwrap(v));
+
+        // W1: Type ascription in return position — `return expr : Type`.
+        // Symmetric with `parse_call_args`: if a `:` follows the return
+        // value expression, parse a type and wrap in CastExpr. This
+        // cannot collide with the ternary `:` because `return a ? b : c`
+        // parses the ternary fully before reaching our check (there is
+        // no trailing `:` left for us to see).
+        if (check(lexer::TokenKind::Colon)) {
+            advance(); // consume ':'
+            auto target_type = parse_type();
+            if (is_err(target_type))
+                return unwrap_err(target_type);
+            auto span = SourceSpan::merge(val_expr->span, unwrap(target_type)->span);
+            val_expr =
+                make_box<Expr>(Expr{.kind = CastExpr{.expr = std::move(val_expr),
+                                                     .target = std::move(unwrap(target_type)),
+                                                     .span = span},
+                                    .span = span});
+        }
+
+        value = std::move(val_expr);
     }
 
     auto end_span = previous().span;
@@ -595,7 +616,30 @@ auto Parser::parse_call_args() -> Result<std::vector<ExprPtr>, ParseError> {
         auto arg = parse_expr();
         if (is_err(arg))
             return unwrap_err(arg);
-        args.push_back(std::move(unwrap(arg)));
+        auto arg_expr = std::move(unwrap(arg));
+
+        // W1: Type ascription in argument position — `f(expr : Type)`.
+        // If the next token is `:`, parse a type and wrap the argument
+        // in a CastExpr. This is only accepted here (not inside the
+        // Pratt loop) so it cannot conflict with the ternary operator's
+        // own `:` separator: `f(cond ? a : b)` still parses the ternary
+        // first, leaving no trailing `:` for us to consume. This mirrors
+        // Rust's `1i64` suffix and lets untyped integer literals be
+        // steered to a specific width without needing `(expr as Type)`.
+        if (check(lexer::TokenKind::Colon)) {
+            advance(); // consume ':'
+            auto target_type = parse_type();
+            if (is_err(target_type))
+                return unwrap_err(target_type);
+            auto span = SourceSpan::merge(arg_expr->span, unwrap(target_type)->span);
+            arg_expr =
+                make_box<Expr>(Expr{.kind = CastExpr{.expr = std::move(arg_expr),
+                                                     .target = std::move(unwrap(target_type)),
+                                                     .span = span},
+                                    .span = span});
+        }
+
+        args.push_back(std::move(arg_expr));
 
         skip_newlines();
         if (!check(lexer::TokenKind::RParen)) {

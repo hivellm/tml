@@ -539,6 +539,15 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
         }
 
         // Then try enum variant lookup (local enums first)
+        //
+        // Resolution strategy (mirrors `bind_pattern` for phase0p C3):
+        //   1. Local `lookup_enum(name)` — also searches all loaded modules
+        //      via the registry fallback (checks both `enums` and `internal_enums`).
+        //   2. If not found, resolve via the active import table and search
+        //      the specific module's `enums` AND `internal_enums`. Without
+        //      step 2's `internal_enums` check, non-`pub` enums imported via
+        //      `use` could be pattern-matched (bind_pattern has the fallback)
+        //      but could NOT be constructed (T056 "expected T, found ()").
         auto enum_def = env_.lookup_enum(segments[0]);
         std::string module_path = "";
 
@@ -554,6 +563,11 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
                         auto enum_it = module->enums.find(segments[0]);
                         if (enum_it != module->enums.end()) {
                             enum_def = enum_it->second;
+                        } else {
+                            auto internal_it = module->internal_enums.find(segments[0]);
+                            if (internal_it != module->internal_enums.end()) {
+                                enum_def = internal_it->second;
+                            }
                         }
                     }
                 }

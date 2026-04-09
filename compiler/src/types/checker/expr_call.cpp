@@ -383,10 +383,35 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
                     }
 
                     // Check args and collect inferred types to reconstruct type_args.
+                    // Seed substitutions from expected_type when it is a NamedType matching
+                    // the enum so that a generic payload (e.g. `T` in `Just(T)`) can be
+                    // concretized before type-checking the argument. This lets unsuffixed
+                    // literals take their width from the context — for example,
+                    // `return (1, Just(1)) : (I64, Maybe[I64])` treats both `1` literals as
+                    // I64 instead of defaulting to I32.
                     std::unordered_map<std::string, TypePtr> substitutions;
+                    if (expected_type && expected_type->is<NamedType>()) {
+                        const auto& exp_named = expected_type->as<NamedType>();
+                        if (exp_named.name == enum_name) {
+                            for (size_t pi = 0; pi < enum_def.type_params.size() &&
+                                                pi < exp_named.type_args.size();
+                                 ++pi) {
+                                if (exp_named.type_args[pi]) {
+                                    substitutions[enum_def.type_params[pi]] =
+                                        exp_named.type_args[pi];
+                                }
+                            }
+                        }
+                    }
                     for (size_t i = 0; i < call.args.size(); ++i) {
+                        // Concretize the payload type using any bindings we already have
+                        // so the argument sees a concrete expected type when possible.
+                        TypePtr expected_payload = payload_types[i];
+                        if (!substitutions.empty()) {
+                            expected_payload = substitute_type(payload_types[i], substitutions);
+                        }
                         // Pass expected payload type for numeric literal coercion
-                        auto arg_type = check_expr(*call.args[i], payload_types[i]);
+                        auto arg_type = check_expr(*call.args[i], expected_payload);
                         // Extract type param bindings (e.g., T=I32 from Just(42))
                         extract_type_params(payload_types[i], arg_type, enum_def.type_params,
                                             substitutions);

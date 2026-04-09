@@ -13,6 +13,7 @@ TML_MODULE("codegen_x86")
 #include <iomanip>
 #include <sstream>
 #include <unordered_set>
+#include <variant>
 
 namespace tml::codegen {
 
@@ -46,6 +47,95 @@ void MirCodegen::emit_cast_inst(const mir::CastInst& i, const std::string& resul
 
     if (!operand_actual_type.empty() && operand_actual_type != src_type) {
         src_type = operand_actual_type;
+    }
+
+    // Enum → integer cast. The source MIR type is MirEnumType, which lowers to
+    // `%struct.<Name>` = `{ i32 }` (payloadless) or `{ i32, [N x i8] }` (payload).
+    // The user-level cast `k as I64` must become:
+    //   (1) extract the i32 discriminant from field 0
+    //   (2) zext / trunc / noop to the target integer width
+    // Without this special-case, emit_cast falls through to the generic `bitcast
+    // %struct.Kind %k to i64` path, which LLVM rejects (aggregate-to-integer
+    // bitcast is invalid, and if the enum value arrived as a ptr parameter we
+    // would also be mis-using %k as an aggregate SSA register).
+    //
+    // Two sub-cases for the enum operand representation:
+    //   (a) SSA value of aggregate type (`%v = insertvalue %struct.Kind ...`)
+    //       → `%disc = extractvalue %struct.Kind %v, 0`
+    //   (b) Pointer to aggregate (`%k` after struct-by-pointer parameter lowering
+    //       or after a prior spill) → GEP field 0 + `load i32`
+    //
+    // After extracting the i32 discriminant, apply an int-to-int resize to match
+    // the target type width (zext when widening, trunc when narrowing, noop when
+    // target is also i32).
+    if (src_ptr && std::holds_alternative<mir::MirEnumType>(src_ptr->kind)) {
+        bool tgt_is_int = (!tgt_type.empty() && tgt_type[0] == 'i' && tgt_type != "i1");
+        if (tgt_is_int) {
+            // Resolve the actual LLVM struct type for the enum. Prefer the
+            // operand's recorded aggregate type so we match whatever insertvalue
+            // / extractvalue chain produced it; otherwise fall back to the MIR
+            // type mapping.
+            std::string enum_struct_type;
+            if (!operand_actual_type.empty() &&
+                codegen::is_aggregate_llvm_type(operand_actual_type)) {
+                enum_struct_type = operand_actual_type;
+            } else {
+                enum_struct_type = mir_type_to_llvm(src_ptr);
+            }
+
+            // Determine if the operand is a pointer (parameter-as-ptr case) or
+            // a direct aggregate SSA value.
+            bool operand_is_ptr = false;
+            if (cg_op_it != cg_values_.end()) {
+                operand_is_ptr = (cg_op_it->second.llvm_type == "ptr" ||
+                                  cg_op_it->second.kind == CGValueKind::Address ||
+                                  cg_op_it->second.kind == CGValueKind::FatPointer);
+            } else if (operand_actual_type == "ptr") {
+                operand_is_ptr = true;
+            }
+
+            // Extract the i32 discriminant.
+            std::string disc_reg = "%disc" + std::to_string(temp_counter_++);
+            if (operand_is_ptr) {
+                // GEP field 0 of the enum struct, then load i32.
+                std::string gep_reg = "%disc.gep" + std::to_string(temp_counter_++);
+                emitln("    " + gep_reg + " = getelementptr inbounds " + enum_struct_type +
+                       ", ptr " + operand + ", i32 0, i32 0");
+                emitln("    " + disc_reg + " = load i32, ptr " + gep_reg + ", align 4");
+            } else {
+                // Aggregate SSA value — extractvalue field 0.
+                emitln("    " + disc_reg + " = extractvalue " + enum_struct_type + " " + operand +
+                       ", 0");
+            }
+
+            // Resize the i32 discriminant to the target integer width.
+            int tgt_bits = 0;
+            try {
+                tgt_bits = std::stoi(tgt_type.substr(1));
+            } catch (...) {
+                tgt_bits = 32;
+            }
+            if (tgt_bits == 32) {
+                // Same width as discriminant — alias the SSA register directly.
+                value_regs_[inst.result] = disc_reg;
+                if (inst.result != mir::INVALID_VALUE) {
+                    cg_values_[inst.result] = CGValue::immediate(disc_reg, "i32", tgt_ptr);
+                }
+            } else if (tgt_bits > 32) {
+                // Widen (i64, i128) — discriminants are always non-negative, so zext.
+                emitln("    " + result_reg + " = zext i32 " + disc_reg + " to " + tgt_type);
+                if (inst.result != mir::INVALID_VALUE) {
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
+                }
+            } else {
+                // Narrow (i8, i16) — trunc.
+                emitln("    " + result_reg + " = trunc i32 " + disc_reg + " to " + tgt_type);
+                if (inst.result != mir::INVALID_VALUE) {
+                    cg_values_[inst.result] = CGValue::immediate(result_reg, tgt_type, tgt_ptr);
+                }
+            }
+            return;
+        }
     }
 
     // If casting an aggregate value to ptr, spill it first

@@ -773,6 +773,66 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     }
 
     // ========================================================================
+    // PHASE 0a: Forward-declare non-generic struct names for ALL needed modules.
+    //
+    // This pre-pass seeds `struct_types_` with `%struct.<Name>` for every
+    // non-generic struct we are about to process in Phase 0. The purpose is to
+    // break the recursive explosion in `llvm_type_from_semantic` (llvm_types.cpp
+    // lines 600-820) where a struct field of type `NamedType("X")` triggers a
+    // full walk of X's definition — which may in turn reference other named
+    // types, each of which re-walks, re-parses module sources, and re-computes
+    // enum payload sizes recursively.
+    //
+    // With the struct name already in `struct_types_`, line 602 of
+    // `llvm_type_from_semantic` short-circuits and returns `"%struct." + name`
+    // immediately — LLVM IR handles forward struct references via opaque type
+    // declarations.
+    //
+    // We deliberately do NOT populate `struct_fields_` here; Phase 0 below
+    // still needs to walk each struct's fields so that field offsets and types
+    // are registered for later field-access codegen. The guard in Phase 0 is
+    // switched from `struct_types_` to `struct_fields_` so that seeded structs
+    // still get their fields walked.
+    //
+    // Enums are intentionally NOT forward-declared here because `gen_enum_decl`
+    // (called from Phase 1) uses the presence of a `struct_types_` entry as a
+    // "skip emission" signal, and computes compact enum layouts based on
+    // payload analysis. Seeding an enum's `struct_types_` entry without also
+    // emitting a valid type definition would leave the enum undefined.
+    // ========================================================================
+    for (const auto& [module_name, module] : all_modules) {
+        bool is_needed = false;
+        for (const auto& imported_path : imported_module_paths) {
+            if (module_name == imported_path || imported_path.find(module_name + "::") == 0 ||
+                module_name.find(imported_path + "::") == 0) {
+                is_needed = true;
+                break;
+            }
+        }
+        if (!is_needed)
+            continue;
+
+        for (const auto& [struct_name, struct_def] : module.structs) {
+            if (!struct_def.type_params.empty())
+                continue;
+            if (struct_fields_.find(struct_name) != struct_fields_.end())
+                continue;
+            if (struct_types_.find(struct_name) != struct_types_.end())
+                continue;
+            struct_types_[struct_name] = "%struct." + struct_name;
+        }
+        for (const auto& [struct_name, struct_def] : module.internal_structs) {
+            if (!struct_def.type_params.empty())
+                continue;
+            if (struct_fields_.find(struct_name) != struct_fields_.end())
+                continue;
+            if (struct_types_.find(struct_name) != struct_types_.end())
+                continue;
+            struct_types_[struct_name] = "%struct." + struct_name;
+        }
+    }
+
+    // ========================================================================
     // PHASE 0: Register struct/enum types from ALL imported modules, including
     // type-only modules (has_pure_tml_functions=false, source_code empty).
     // These modules are excluded from eligible_modules but their types are
@@ -781,6 +841,12 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     // in infer_expr_type fails because struct_fields_ is empty for the type.
     //
     // Uses the module registry's StructDef directly (no re-parsing needed).
+    //
+    // IMPORTANT: Phase 0a has already seeded `struct_types_` with forward
+    // declarations for every struct we are about to process. This loop
+    // guards on `struct_fields_` (not `struct_types_`) so that field walks
+    // still populate `struct_fields_` for pre-seeded structs. Re-assigning
+    // `struct_types_[struct_name] = type_name` is harmless (same value).
     // ========================================================================
     for (const auto& [module_name, module] : all_modules) {
         // Only process if this module is actually imported
@@ -795,8 +861,6 @@ void LLVMIRGen::emit_module_pure_tml_functions(
         if (!is_needed)
             continue;
 
-        // Phase 0 processing this module
-
         // Register non-generic structs from the module registry's StructDef
         for (const auto& [struct_name, struct_def] : module.structs) {
             if (struct_fields_.find(struct_name) != struct_fields_.end())
@@ -805,42 +869,40 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                 continue;
 
             std::string type_name = "%struct." + struct_name;
-            if (struct_types_.find(struct_name) == struct_types_.end()) {
-                std::vector<FieldInfo> fields;
-                std::vector<std::string> field_types;
-                for (size_t i = 0; i < struct_def.fields.size(); ++i) {
-                    const auto& fld = struct_def.fields[i];
-                    std::string ft = llvm_type_from_semantic(fld.type, true);
-                    if (fld.type && fld.type->is<types::FuncType>()) {
-                        ft = "{ ptr, ptr }";
-                    }
-                    field_types.push_back(ft);
-                    fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
+            std::vector<FieldInfo> fields;
+            std::vector<std::string> field_types;
+            for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                const auto& fld = struct_def.fields[i];
+                std::string ft = llvm_type_from_semantic(fld.type, true);
+                if (fld.type && fld.type->is<types::FuncType>()) {
+                    ft = "{ ptr, ptr }";
                 }
-
-                // @simd structs emit LLVM vector types instead of regular structs
-                if (struct_def.is_simd && !field_types.empty()) {
-                    std::string elem_type = field_types[0];
-                    int lane_count = static_cast<int>(field_types.size());
-                    std::string def = type_name + " = type <" + std::to_string(lane_count) + " x " +
-                                      elem_type + ">";
-                    type_defs_buffer_ << def << "\n";
-                    simd_types_[struct_name] = {elem_type, lane_count};
-                } else {
-                    std::string def = type_name + " = type { ";
-                    bool first = true;
-                    for (const auto& ft : field_types) {
-                        if (!first)
-                            def += ", ";
-                        first = false;
-                        def += ft;
-                    }
-                    def += " }";
-                    type_defs_buffer_ << def << "\n";
-                }
-                struct_types_[struct_name] = type_name;
-                struct_fields_[struct_name] = std::move(fields);
+                field_types.push_back(ft);
+                fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
             }
+
+            // @simd structs emit LLVM vector types instead of regular structs
+            if (struct_def.is_simd && !field_types.empty()) {
+                std::string elem_type = field_types[0];
+                int lane_count = static_cast<int>(field_types.size());
+                std::string def =
+                    type_name + " = type <" + std::to_string(lane_count) + " x " + elem_type + ">";
+                type_defs_buffer_ << def << "\n";
+                simd_types_[struct_name] = {elem_type, lane_count};
+            } else {
+                std::string def = type_name + " = type { ";
+                bool first = true;
+                for (const auto& ft : field_types) {
+                    if (!first)
+                        def += ", ";
+                    first = false;
+                    def += ft;
+                }
+                def += " }";
+                type_defs_buffer_ << def << "\n";
+            }
+            struct_types_[struct_name] = type_name;
+            struct_fields_[struct_name] = std::move(fields);
         }
 
         // Also register internal structs (private types used by impl methods)
@@ -851,42 +913,40 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                 continue;
 
             std::string type_name = "%struct." + struct_name;
-            if (struct_types_.find(struct_name) == struct_types_.end()) {
-                std::vector<FieldInfo> fields;
-                std::vector<std::string> field_types;
-                for (size_t i = 0; i < struct_def.fields.size(); ++i) {
-                    const auto& fld = struct_def.fields[i];
-                    std::string ft = llvm_type_from_semantic(fld.type, true);
-                    if (fld.type && fld.type->is<types::FuncType>()) {
-                        ft = "{ ptr, ptr }";
-                    }
-                    field_types.push_back(ft);
-                    fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
+            std::vector<FieldInfo> fields;
+            std::vector<std::string> field_types;
+            for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                const auto& fld = struct_def.fields[i];
+                std::string ft = llvm_type_from_semantic(fld.type, true);
+                if (fld.type && fld.type->is<types::FuncType>()) {
+                    ft = "{ ptr, ptr }";
                 }
-
-                // @simd structs emit LLVM vector types instead of regular structs
-                if (struct_def.is_simd && !field_types.empty()) {
-                    std::string elem_type = field_types[0];
-                    int lane_count = static_cast<int>(field_types.size());
-                    std::string def = type_name + " = type <" + std::to_string(lane_count) + " x " +
-                                      elem_type + ">";
-                    type_defs_buffer_ << def << "\n";
-                    simd_types_[struct_name] = {elem_type, lane_count};
-                } else {
-                    std::string def = type_name + " = type { ";
-                    bool first = true;
-                    for (const auto& ft : field_types) {
-                        if (!first)
-                            def += ", ";
-                        first = false;
-                        def += ft;
-                    }
-                    def += " }";
-                    type_defs_buffer_ << def << "\n";
-                }
-                struct_types_[struct_name] = type_name;
-                struct_fields_[struct_name] = std::move(fields);
+                field_types.push_back(ft);
+                fields.push_back({fld.name, static_cast<int>(i), ft, fld.type});
             }
+
+            // @simd structs emit LLVM vector types instead of regular structs
+            if (struct_def.is_simd && !field_types.empty()) {
+                std::string elem_type = field_types[0];
+                int lane_count = static_cast<int>(field_types.size());
+                std::string def =
+                    type_name + " = type <" + std::to_string(lane_count) + " x " + elem_type + ">";
+                type_defs_buffer_ << def << "\n";
+                simd_types_[struct_name] = {elem_type, lane_count};
+            } else {
+                std::string def = type_name + " = type { ";
+                bool first = true;
+                for (const auto& ft : field_types) {
+                    if (!first)
+                        def += ", ";
+                    first = false;
+                    def += ft;
+                }
+                def += " }";
+                type_defs_buffer_ << def << "\n";
+            }
+            struct_types_[struct_name] = type_name;
+            struct_fields_[struct_name] = std::move(fields);
         }
     }
 

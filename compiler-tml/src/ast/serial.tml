@@ -57,9 +57,10 @@ use compiler::token::Token
 use compiler::token::TokenKind
 use compiler::token::token_new
 use compiler::token::token_kind_to_tag
+use compiler::token::tag_to_token_kind
 use compiler::ast::nodes::Module
 use compiler::ast::nodes::module_new
-use compiler::ast::nodes::Decl
+use compiler::ast::decls::Decl
 use std::collections::list::List
 use core::alloc::heap::Heap
 
@@ -111,17 +112,30 @@ pub func write_token(w: BinaryWriter, tok: Token) {
     write_source_span(w, tok.span)
 }
 
-/// Read the raw components of a token without reconstructing the
-/// `TokenKind` enum. Returns `(tag, value, span)`. Full reconstruction is
-/// intentionally deferred — a 139-arm `tag → TokenKind` dispatch currently
-/// hits a codegen timeout in the TML compiler (tracked as a follow-up);
-/// the hybrid pipeline bridge (phase13d) keeps tokens as tags until
-/// consumption, so this lower-level reader is sufficient for today.
+/// Read the raw tag of a serialized token without reconstructing the
+/// `TokenKind` enum. Returns just the tag as `I64`. Useful when the
+/// caller only needs the numeric discriminant (e.g. the hybrid pipeline
+/// bridge keeps tokens as tags until consumption).
 pub func read_token_tag(r: BinaryReader) -> Outcome[I64, SerialError] {
     let tag: I64 = r.read_varint()!
     let _value: Str = r.read_str()!
     let _span: SourceSpan = read_source_span(r)!
     return Ok(tag)
+}
+
+/// Deserialize a full `Token` — reconstructs `TokenKind` from the tag
+/// via `tag_to_token_kind` (the 139-arm dispatch that was previously
+/// blocked by codegen timeouts; resolved by phase0p C1/C2/C5 fixes).
+/// Returns `SerialError::InvalidTag` if the tag is out of range.
+pub func read_token(r: BinaryReader) -> Outcome[Token, SerialError] {
+    let tag: I64 = r.read_varint()!
+    let value: Str = r.read_str()!
+    let span: SourceSpan = read_source_span(r)!
+    let maybe_kind: Maybe[TokenKind] = tag_to_token_kind(tag)
+    when maybe_kind {
+        Just(kind) => return Ok(token_new(kind, value, span)),
+        Nothing => return Err(SerialError::InvalidTag)
+    }
 }
 
 // ============================================================================

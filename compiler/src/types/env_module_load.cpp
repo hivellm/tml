@@ -156,6 +156,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 auto entry_path = entry.path().string();
                 bool is_mod = (entry.path().stem() == "mod");
                 TML_DEBUG_LN("[MODULE]   Parsing: " << entry.path().filename());
+                // Phase 8.5 W5: record every source file opened for parsing so
+                // the query cache and test-binary cache can include it in their
+                // invalidation fingerprints. We track *before* parsing so even
+                // a parse failure still pins the file as a dependency — otherwise
+                // a syntax error in a library file would cause the next run to
+                // think the library is unchanged.
+                track_source_file(entry_path);
                 auto parsed = parse_tml_file(entry_path);
                 if (parsed.success) {
                     TML_DEBUG_LN("[MODULE]   OK: " << entry.path().filename());
@@ -200,6 +207,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         }
     } else {
         // Single file module
+        // Phase 8.5 W5: record the source file for incremental invalidation.
+        track_source_file(file_path);
         auto parsed = parse_tml_file(file_path);
         if (!parsed.success) {
             if (abort_on_module_error_) {

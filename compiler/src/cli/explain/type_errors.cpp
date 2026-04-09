@@ -450,6 +450,12 @@ How to fix:
 
     use std::collections::List     // use correct module path
 
+If the error message includes a "did you mean" suggestion, you may be
+using a directory name instead of the package name declared in tml.toml.
+For example, the directory `compiler-tml/` has package name `compiler`,
+so the correct import is `use compiler::serial::ast`, not
+`use compiler_tml::serial::ast`.
+
 Check available modules with `tml doc --all` or the documentation.
 )EX"},
 
