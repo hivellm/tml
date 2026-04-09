@@ -354,3 +354,46 @@ pub enum Expr {
     Base(BaseExpr),
     New(NewExpr)
 }
+
+/// Extract the source span from any expression variant.
+/// Every variant struct carries a `span: SourceSpan` field; this function
+/// consolidates the pattern-match so callers don't have to do it inline.
+pub func expr_span(e: Expr) -> SourceSpan {
+    when e {
+        Literal(x) => return x.span,
+        Ident(x) => return x.span,
+        Unary(x) => return x.span,
+        Binary(x) => return x.span,
+        Call(x) => return x.span,
+        MethodCall(x) => return x.span,
+        Field(x) => return x.span,
+        Index(x) => return x.span,
+        Tuple(x) => return x.span,
+        Array(x) => return x.span,
+        Struct(x) => return x.span,
+        If(x) => return x.span,
+        Ternary(x) => return x.span,
+        IfLet(x) => return x.span,
+        When(x) => return x.span,
+        Loop(x) => return x.span,
+        While(x) => return x.span,
+        For(x) => return x.span,
+        Block(x) => return x.span,
+        Return(x) => return x.span,
+        Break(x) => return x.span,
+        Continue(x) => return x.span,
+        Closure(x) => return x.span,
+        Range(x) => return x.span,
+        Cast(x) => return x.span,
+        Is(x) => return x.span,
+        Try(x) => return x.span,
+        Await(x) => return x.span,
+        Throw(x) => return x.span,
+        Path(x) => return x.span,
+        Lowlevel(x) => return x.span,
+        InterpolatedString(x) => return x.span,
+        TemplateLiteral(x) => return x.span,
+        Base(x) => return x.span,
+        New(x) => return x.span
+    }
+}

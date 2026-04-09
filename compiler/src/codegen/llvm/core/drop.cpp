@@ -448,11 +448,26 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
         // Check if this specific field needs drop
         bool field_has_drop = env_.type_implements(field_type_name, "Drop");
         // For generic types (List__Arg), check the base type too
+        std::string field_base_type;
         if (!field_has_drop) {
             auto sep_pos = field_type_name.find("__");
             if (sep_pos != std::string::npos) {
-                std::string base_type = field_type_name.substr(0, sep_pos);
-                field_has_drop = env_.type_implements(base_type, "Drop");
+                field_base_type = field_type_name.substr(0, sep_pos);
+                field_has_drop = env_.type_implements(field_base_type, "Drop");
+            }
+        }
+
+        // Skip Heap[T] field drops. TML doesn't have move semantics, so
+        // Heap[T] values are copied (not moved) when assigned to another
+        // variable. Auto-dropping the field frees memory that may still be
+        // referenced by the copy, causing use-after-free / heap corruption.
+        // Heap memory is managed by the runtime's bulk deallocation instead.
+        if (field_has_drop) {
+            std::string base = field_base_type.empty() ? field_type_name : field_base_type;
+            if (base == "Heap") {
+                TML_DEBUG_LN("[DROP]   Skipping Heap field " << info.type_name << "." << field.name
+                                                             << " (no move semantics)");
+                continue;
             }
         }
         bool field_needs_recursive = false;

@@ -373,6 +373,100 @@ TML_EXPORT void println(const char* message) {
 }
 
 /**
+ * @brief Prints a string to stderr without a newline.
+ *
+ * Maps to TML's `eprint(message: Str) -> Unit` builtin.
+ * Always written to stderr, not suppressed by tml_suppress_output.
+ *
+ * @param message The null-terminated string to print. NULL is ignored.
+ */
+TML_EXPORT void eprint(const char* message) {
+    if (message)
+        fprintf(stderr, "%s", message);
+}
+
+/**
+ * @brief Prints a string to stderr followed by a newline.
+ *
+ * Maps to TML's `eprintln(message: Str) -> Unit` builtin.
+ * Always written to stderr, not suppressed by tml_suppress_output.
+ *
+ * @param message The null-terminated string to print. NULL prints only newline.
+ */
+TML_EXPORT void eprintln(const char* message) {
+    if (message)
+        fprintf(stderr, "%s\n", message);
+    else
+        fprintf(stderr, "\n");
+}
+
+/**
+ * @brief Write raw bytes from a buffer to stdout.
+ *
+ * Used by the TML frontend binary to emit serialized AST bytes to the
+ * C++ parent process via the subprocess stdout pipe.
+ *
+ * @param buf_ptr Pointer to the byte buffer (as I64).
+ * @param count   Number of bytes to write.
+ * @return Number of bytes actually written.
+ */
+TML_EXPORT int64_t tml_write_stdout_bytes(int64_t buf_ptr, int64_t count) {
+    if (!buf_ptr || count <= 0)
+        return 0;
+    size_t written = fwrite((void*)buf_ptr, 1, (size_t)count, stdout);
+    fflush(stdout);
+    return (int64_t)written;
+}
+
+/**
+ * @brief Read an entire file into a TML string.
+ *
+ * Opens the file at `path`, reads all bytes, and returns a heap-allocated
+ * TML string (null-terminated, owned by the caller). Returns an empty string
+ * on error (file not found, permission denied, etc.).
+ *
+ * @param path  Null-terminated C string with the file path.
+ * @return      Pointer to a heap-allocated null-terminated string (TML Str).
+ */
+TML_EXPORT const char* tml_read_file_to_string(const char* path) {
+    if (!path) {
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0) {
+        fclose(f);
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+    char* buf = (char*)malloc((size_t)size + 1);
+    if (!buf) {
+        fclose(f);
+        char* empty = (char*)malloc(1);
+        if (empty)
+            empty[0] = '\0';
+        return empty;
+    }
+    size_t n = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+/**
  * @brief Terminates the program with an error message.
  *
  * If panic catching is enabled (inside `tml_run_should_panic`), saves

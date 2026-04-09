@@ -23,6 +23,95 @@ TML_MODULE("codegen_x86")
 #include <iomanip>
 #include <set>
 
+namespace {
+
+/// Hoist non-entry-block alloca instructions into each function's entry block.
+///
+/// The text-based LLVM IR generator emits `alloca` instructions at the current
+/// insertion point, which can be inside when-arms, try ok-blocks, or loop bodies.
+/// LLVM treats non-entry-block allocas as dynamic stack allocations that adjust
+/// the stack pointer at runtime. On Windows x64, many small dynamic allocas can
+/// cumulatively exceed the 4KB guard page, causing STATUS_HEAP_CORRUPTION.
+///
+/// This pass moves all alloca lines to right after the `entry:` label so LLVM
+/// sees them as static allocations and emits a single __chkstk probe if needed.
+void hoist_allocas_to_entry(std::string& ir) {
+    // Process each function: find "entry:\n" and collect allocas from the body.
+    size_t search_from = 0;
+    while (true) {
+        // Find next function entry block
+        auto entry_pos = ir.find("\nentry:\n", search_from);
+        if (entry_pos == std::string::npos) {
+            break;
+        }
+        // Position right after "entry:\n"
+        size_t insert_pos = entry_pos + 8; // length of "\nentry:\n"
+
+        // Find end of this function (closing brace at start of line)
+        auto func_end = ir.find("\n}\n", insert_pos);
+        if (func_end == std::string::npos) {
+            // Last function might end with "}\n" at EOF
+            func_end = ir.find("\n}", insert_pos);
+            if (func_end == std::string::npos) {
+                break;
+            }
+        }
+
+        // Scan for alloca lines in the function body AFTER the entry block's
+        // initial allocas. First skip existing entry-block allocas (contiguous
+        // alloca lines right after entry:).
+        size_t scan_from = insert_pos;
+        while (scan_from < func_end) {
+            auto line_end = ir.find('\n', scan_from);
+            if (line_end == std::string::npos || line_end > func_end) {
+                break;
+            }
+            std::string_view line(ir.data() + scan_from, line_end - scan_from);
+            // Entry-block allocas, lifetime.start, and empty lines are part of prologue
+            if (line.find("= alloca ") != std::string_view::npos ||
+                line.find("llvm.lifetime.start") != std::string_view::npos ||
+                line.find("store ") != std::string_view::npos || line.empty()) {
+                scan_from = line_end + 1;
+                continue;
+            }
+            break; // First non-alloca/store line = end of entry prologue
+        }
+
+        // Now collect non-entry allocas from scan_from to func_end
+        std::string hoisted;
+        size_t pos = scan_from;
+        while (pos < func_end) {
+            auto line_end = ir.find('\n', pos);
+            if (line_end == std::string::npos || line_end > func_end) {
+                break;
+            }
+            std::string_view line(ir.data() + pos, line_end - pos);
+            if (line.find("= alloca ") != std::string_view::npos) {
+                // Collect this alloca line
+                hoisted += line;
+                hoisted += '\n';
+                // Remove it from the current position
+                ir.erase(pos, line_end - pos + 1);
+                func_end -= (line_end - pos + 1);
+                // Don't advance pos — next line is now at current pos
+                continue;
+            }
+            pos = line_end + 1;
+        }
+
+        // Insert collected allocas at the entry block
+        if (!hoisted.empty()) {
+            ir.insert(insert_pos, hoisted);
+            // Adjust func_end for the insertion
+            func_end += hoisted.size();
+        }
+
+        search_from = func_end;
+    }
+}
+
+} // anonymous namespace
+
 namespace tml::codegen {
 
 // Helper: Parse a mangled type string back into a semantic type.
@@ -944,12 +1033,24 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // When coverage is enabled, add noinline to prevent LLVM from inlining library functions
     emit_line("");
     emit_line("; Function attributes for optimization");
+    // On Windows, add "probe-stack"="inline-asm" to ensure stack pages are
+    // probed for functions with large frames (many struct allocas from when-arms,
+    // try-operators, etc.). Without this, cumulative alloca adjustments can skip
+    // past the 4KB guard page, causing STATUS_HEAP_CORRUPTION.
+    const char* probe_attr =
+#ifdef _WIN32
+        " \"stack-probe-size\"=\"4096\"";
+#else
+        "";
+#endif
     if (options_.coverage_enabled) {
-        emit_line("attributes #0 = { nounwind noinline "
-                  "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\" }");
+        emit_line(std::string("attributes #0 = { nounwind noinline "
+                              "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\"") +
+                  probe_attr + " }");
     } else {
-        emit_line("attributes #0 = { nounwind "
-                  "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\" }");
+        emit_line(std::string("attributes #0 = { nounwind "
+                              "\"target-features\"=\"+sse2,+sse4.2,+avx,+avx2,+fma\"") +
+                  probe_attr + " }");
     }
 
     // Emit loop metadata at the end
@@ -1007,6 +1108,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
     if (!errors_.empty()) {
         return errors_;
     }
+
+    // Post-process: hoist non-entry-block allocas into the entry block.
+    // The text-based codegen emits allocas inline (e.g., inside when-arms,
+    // try ok-blocks), producing dynamic stack allocations. On Windows x64,
+    // many small dynamic allocas can cumulatively skip past the stack guard
+    // page, causing STATUS_HEAP_CORRUPTION (0xC0000374). Moving all allocas
+    // to the entry block lets LLVM compute the total static frame size and
+    // insert __chkstk when needed.
+    hoist_allocas_to_entry(final_output);
 
     return final_output;
 }

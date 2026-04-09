@@ -50,7 +50,7 @@ use compiler::ast::exprs::LowlevelExpr
 use compiler::ast::exprs::ThrowExpr
 use compiler::ast::common::LiteralKind
 use compiler::ast::stmts::Stmt
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedExpr
 use compiler::parser::common::ParsedExprs
 use compiler::parser::common::ParsedTypeExpr
@@ -90,12 +90,13 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Parse an expression (minimum precedence = 0).
-pub func parse_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     return parse_expr_with_prec(tokens, pos, PREC_NONE)
 }
 
 /// Parse an expression with a minimum precedence (Pratt main loop).
-pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> Outcome[ParsedExpr, ParseFailure] {
+
     let prefix_r: ParsedExpr = parse_prefix_expr(tokens, pos)!
     var p: I64 = prefix_r.pos
     var left: Heap[Expr] = prefix_r.expr
@@ -152,7 +153,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
             p = p + 1  // consume range op
             let end_r: ParsedExpr = parse_expr_with_prec(tokens, p, prec)!
             p = end_r.pos
-            let span: SourceSpan = span_merge(left.get().span, end_r.expr.get().span)
+            let span: SourceSpan = span_merge(expr_span(left.get()), expr_span(end_r.expr.get()))
             let re: RangeExpr = RangeExpr { start: Just(left), end: Just(end_r.expr), inclusive: inclusive, span: span }
             left = Heap::new(Expr::Range(re))
             continue
@@ -163,7 +164,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
             p = p + 1  // consume 'as'
             let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
             p = ty_r.pos
-            let span: SourceSpan = span_merge(left.get().span, p_prev(tokens, p).span)
+            let span: SourceSpan = span_merge(expr_span(left.get()), p_prev(tokens, p).span)
             let ce: CastExpr = CastExpr { expr: left, target: ty_r.te, span: span }
             left = Heap::new(Expr::Cast(ce))
             continue
@@ -174,7 +175,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
             p = p + 1  // consume 'is'
             let ty_r: ParsedTypeExpr = parse_type(tokens, p)!
             p = ty_r.pos
-            let span: SourceSpan = span_merge(left.get().span, p_prev(tokens, p).span)
+            let span: SourceSpan = span_merge(expr_span(left.get()), p_prev(tokens, p).span)
             let ie: IsExpr = IsExpr { expr: left, target: ty_r.te, span: span }
             left = Heap::new(Expr::Is(ie))
             continue
@@ -186,7 +187,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
             let rhs_r: ParsedExpr = parse_expr_with_prec(tokens, p, PREC_PIPE)!
             p = rhs_r.pos
             // Desugar: a |> f(args) => f(a, args), a |> f => f(a)
-            let span: SourceSpan = span_merge(left.get().span, rhs_r.expr.get().span)
+            let span: SourceSpan = span_merge(expr_span(left.get()), expr_span(rhs_r.expr.get()))
             let rhs_expr: Heap[Expr] = rhs_r.expr
             when rhs_expr.get() {
                 Expr::Call(call) => {
@@ -219,7 +220,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
                 p = p + 1  // consume operator
                 let right_r: ParsedExpr = parse_expr_with_prec(tokens, p, actual_prec)!
                 p = right_r.pos
-                let span: SourceSpan = span_merge(left.get().span, right_r.expr.get().span)
+                let span: SourceSpan = span_merge(expr_span(left.get()), expr_span(right_r.expr.get()))
                 let be: BinaryExpr = BinaryExpr { op: op, left: left, right: right_r.expr, span: span }
                 left = Heap::new(Expr::Binary(be))
             }
@@ -233,7 +234,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
 // Prefix expressions
 // ============================================================================
 
-pub func parse_prefix_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_prefix_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     let tok: Token = p_peek(tokens, p)
 
@@ -283,7 +284,7 @@ pub func parse_prefix_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr,
 }
 
 /// Primary expression followed by all postfix operators.
-pub func parse_primary_with_postfix(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_primary_with_postfix(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let primary_r: ParsedExpr = parse_primary_expr(tokens, pos)!
     var p: I64 = primary_r.pos
     var left: Heap[Expr] = primary_r.expr
@@ -311,8 +312,8 @@ pub func parse_primary_with_postfix(tokens: List[Token], pos: I64) -> Outcome[Pa
 // Postfix expressions
 // ============================================================================
 
-pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> Outcome[ParsedExpr, ParseError] {
-    let start_span: SourceSpan = left.get().span
+pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> Outcome[ParsedExpr, ParseFailure] {
+    let start_span: SourceSpan = expr_span(left.get())
     let tok: Token = p_peek(tokens, pos)
 
     // Function call: expr(args)
@@ -470,7 +471,7 @@ func is_likely_type_args(tokens: List[Token], pos: I64) -> Bool {
 // Primary expressions
 // ============================================================================
 
-pub func parse_primary_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_primary_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     let tok: Token = p_peek(tokens, p)
 
@@ -585,7 +586,7 @@ pub func parse_primary_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr
 // Identifier / path expressions
 // ============================================================================
 
-pub func parse_ident_or_path_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_ident_or_path_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let path_r = parse_type_path_full(tokens, pos)!
     let path: TypePath = path_r.path
     var p: I64 = path_r.pos
@@ -647,7 +648,7 @@ func is_likely_struct_literal(tokens: List[Token], pos: I64) -> Bool {
 // Composite expressions
 // ============================================================================
 
-pub func parse_paren_or_tuple_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_paren_or_tuple_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume '('
     p = p_skip_newlines(tokens, p)
@@ -698,7 +699,7 @@ pub func parse_paren_or_tuple_expr(tokens: List[Token], pos: I64) -> Outcome[Par
     return Ok(ParsedExpr { expr: first_r.expr, pos: p })
 }
 
-pub func parse_array_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_array_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume '['
     p = p_skip_newlines(tokens, p)
@@ -752,7 +753,7 @@ pub func parse_array_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, 
     return Ok(ParsedExpr { expr: Heap::new(Expr::Array(ArrayExpr { kind: ak, span: span })), pos: p })
 }
 
-pub func parse_block_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_block_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     if not p_check(tokens, pos, TokenKind::LBrace) {
         return Err(parse_err("Expected '{'", start_tok.span))
@@ -799,11 +800,11 @@ pub func parse_block_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, 
 // Forward declaration placeholder — implemented in parse_stmt.tml
 // In TML, cross-module functions are resolved at link time, so we call
 // compiler::parser::parse_stmt::parse_stmt directly.
-pub func parse_stmt_in_block(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+pub func parse_stmt_in_block(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     return compiler::parser::parse_stmt::parse_stmt(tokens, pos)
 }
 
-pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'if'
     p = p_skip_newlines(tokens, p)
@@ -866,7 +867,7 @@ pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, Par
     return Ok(ParsedExpr { expr: Heap::new(Expr::If(ie)), pos: p })
 }
 
-pub func parse_when_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_when_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'when'
     p = p_skip_newlines(tokens, p)
@@ -928,7 +929,7 @@ pub func parse_when_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, P
     return Ok(ParsedExpr { expr: Heap::new(Expr::When(we)), pos: p })
 }
 
-pub func parse_loop_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_loop_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'loop'
     p = p_skip_newlines(tokens, p)
@@ -952,7 +953,7 @@ pub func parse_loop_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, P
     return Ok(ParsedExpr { expr: Heap::new(Expr::Loop(le)), pos: p })
 }
 
-pub func parse_while_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_while_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'while'
     p = p_skip_newlines(tokens, p)
@@ -965,7 +966,7 @@ pub func parse_while_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, 
     return Ok(ParsedExpr { expr: Heap::new(Expr::While(we)), pos: p })
 }
 
-pub func parse_for_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_for_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'for'
     p = p_skip_newlines(tokens, p)
@@ -984,7 +985,7 @@ pub func parse_for_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, Pa
     return Ok(ParsedExpr { expr: Heap::new(Expr::For(fe)), pos: p })
 }
 
-pub func parse_return_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_return_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'return'
     // Optional return value (if next is not newline/}/ EOF)
@@ -993,16 +994,27 @@ pub func parse_return_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr,
     let is_end: Bool = tok_kind_eq(next.kind, TokenKind::Newline) or tok_kind_eq(next.kind, TokenKind::RBrace) or
                        tok_kind_eq(next.kind, TokenKind::Semi) or tok_kind_eq(next.kind, TokenKind::Eof)
     if not is_end {
-        let val_r: ParsedExpr = parse_expr(tokens, p)!
-        p = val_r.pos
-        value = Just(val_r.expr)
+        // IMPORTANT: Do NOT use `let val_r = parse_expr(...)!` here because
+        // the compiler drops val_r.expr (Heap[Expr]) at the if-block scope end,
+        // creating a use-after-free when the pointer is also stored in `value`.
+        // Instead, keep the result in the outer scope via var bindings.
+        let parsed: Outcome[ParsedExpr, ParseFailure] = parse_expr(tokens, p)
+        when parsed {
+            Ok(val_r) => {
+                p = val_r.pos
+                value = Just(val_r.expr)
+            },
+            Err(e) => {
+                return Err(e)
+            }
+        }
     }
     let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
     let re: ReturnExpr = ReturnExpr { value: value, span: span }
     return Ok(ParsedExpr { expr: Heap::new(Expr::Return(re)), pos: p })
 }
 
-pub func parse_break_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_break_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'break'
     let span: SourceSpan = start_tok.span
@@ -1010,14 +1022,14 @@ pub func parse_break_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, 
     return Ok(ParsedExpr { expr: Heap::new(Expr::Break(be)), pos: p })
 }
 
-pub func parse_continue_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_continue_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'continue'
     let ce: ContinueExpr = ContinueExpr { label: Nothing, span: start_tok.span }
     return Ok(ParsedExpr { expr: Heap::new(Expr::Continue(ce)), pos: p })
 }
 
-pub func parse_closure_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_closure_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos
     var is_move: Bool = false
@@ -1076,7 +1088,7 @@ pub func parse_closure_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr
     return Ok(ParsedExpr { expr: Heap::new(Expr::Closure(ce)), pos: p })
 }
 
-pub func parse_lowlevel_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_lowlevel_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'lowlevel'
     if not p_check(tokens, p, TokenKind::LBrace) {
@@ -1100,14 +1112,14 @@ pub func parse_lowlevel_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExp
     }
 }
 
-pub func parse_interp_string_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_interp_string_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, ParseFailure] {
     // Simplified: just consume the InterpStringStart token and emit a placeholder
     let tok: Token = p_peek(tokens, pos)
     let p: I64 = pos + 1
     return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitStr(tok.value), span: tok.span })), pos: p })
 }
 
-pub func parse_struct_expr(tokens: List[Token], pos: I64, path: TypePath, type_args: Maybe[List[Heap[TypeExpr]]], start_span: SourceSpan) -> Outcome[ParsedExpr, ParseError] {
+pub func parse_struct_expr(tokens: List[Token], pos: I64, path: TypePath, type_args: Maybe[List[Heap[TypeExpr]]], start_span: SourceSpan) -> Outcome[ParsedExpr, ParseFailure] {
     var p: I64 = pos + 1  // consume '{'
     p = p_skip_newlines(tokens, p)
 
@@ -1164,7 +1176,7 @@ pub func parse_struct_expr(tokens: List[Token], pos: I64, path: TypePath, type_a
 // Call arguments
 // ============================================================================
 
-pub func parse_call_args(tokens: List[Token], pos: I64) -> Outcome[ParsedExprs, ParseError] {
+pub func parse_call_args(tokens: List[Token], pos: I64) -> Outcome[ParsedExprs, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     var args: List[Heap[Expr]] = List::new(4)
 
