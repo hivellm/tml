@@ -1,0 +1,120 @@
+//! String and literal edge case tests for the TML lexer.
+
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::token::TokenKind
+
+@test
+func test_empty_string() -> I32 {
+    let tokens = tokenize("\"\"", "test.tml")
+    // StringLiteral + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_string_with_escape() -> I32 {
+    let tokens = tokenize("\"hello\\nworld\"", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_raw_string() -> I32 {
+    let tokens = tokenize("r\"no \\escapes here\"", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_char_literal() -> I32 {
+    let tokens = tokenize("'a'", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_char_escape() -> I32 {
+    let tokens = tokenize("'\\n'", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_template_literal_simple() -> I32 {
+    let tokens = tokenize("`hello world`", "test.tml")
+    // TemplateLiteralEnd + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_hex_number() -> I32 {
+    let tokens = tokenize("0xFF 0x1A2B", "test.tml")
+    // IntLiteral IntLiteral Eof = 3
+    assert_eq(tokens.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_binary_number() -> I32 {
+    let tokens = tokenize("0b1010 0b11_00", "test.tml")
+    assert_eq(tokens.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_octal_number() -> I32 {
+    let tokens = tokenize("0o755", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_float_with_exponent() -> I32 {
+    let tokens = tokenize("1.5e10 2.0E-3", "test.tml")
+    // FloatLiteral FloatLiteral Eof = 3
+    assert_eq(tokens.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_number_with_underscore() -> I32 {
+    let tokens = tokenize("1_000_000", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_adjacent_strings_and_ident() -> I32 {
+    // Tests that strings and identifiers tokenize correctly together
+    let tokens = tokenize("x \"hello\" y", "test.tml")
+    // x "hello" y Eof = 4
+    assert_eq(tokens.len() as I64, 4)
+    return 0
+}
+
+@test
+func test_multiple_strings() -> I32 {
+    let tokens = tokenize("\"a\" \"b\" \"c\"", "test.tml")
+    // 3 StringLiterals + Eof = 4
+    assert_eq(tokens.len() as I64, 4)
+    return 0
+}
+
+@test
+func test_string_after_operator() -> I32 {
+    let tokens = tokenize("x = \"hello\"", "test.tml")
+    // x = "hello" Eof = 4
+    assert_eq(tokens.len() as I64, 4)
+    return 0
+}
+
+@test
+func test_range_vs_float() -> I32 {
+    // 1..10 should be: IntLiteral DotDot IntLiteral, NOT FloatLiteral
+    let tokens = tokenize("1..10", "test.tml")
+    // 1 .. 10 Eof = 4
+    assert_eq(tokens.len() as I64, 4)
+    return 0
+}

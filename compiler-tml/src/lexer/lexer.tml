@@ -1,0 +1,644 @@
+//! Lexer module for the TML self-hosting compiler frontend.
+//!
+//! Converts source text into a flat list of `Token` values. Mirrors the
+//! C++ lexer in `compiler/src/lexer/` — same keyword table, same operator
+//! precedence, same string interpolation rules.
+//!
+//! Design: the `Lexer` struct holds mutable scanning state. Free functions
+//! take `var Lexer` or read-only `Lexer` parameters.
+
+use compiler::source::SourceLocation
+use compiler::source::SourceSpan
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::token::Token
+use compiler::token::TokenKind
+use compiler::token::token_new
+use compiler::token::keyword_lookup
+use core::str::basic::len
+use core::str::basic::char_at
+use core::str::basic::substring
+use std::collections::list::List
+
+// ============================================================================
+// Lexer type
+// ============================================================================
+
+pub type Lexer {
+    source: Str,
+    filename: Str,
+    src_len: I64,
+    pos: I64,
+    token_start: I64,
+    line: I64,
+    col: I64,
+    start_line: I64,
+    start_col: I64,
+    start_offset: I64,
+    interp_depth: I64,
+    template_depth: I64
+}
+
+pub func lexer_new(source: Str, filename: Str) -> Lexer {
+    return Lexer {
+        source: source,
+        filename: filename,
+        src_len: len(source),
+        pos: 0,
+        token_start: 0,
+        line: 1,
+        col: 1,
+        start_line: 1,
+        start_col: 1,
+        start_offset: 0,
+        interp_depth: 0,
+        template_depth: 0
+    }
+}
+
+// ============================================================================
+// Character access helpers
+// ============================================================================
+
+func lex_peek(source: Str, pos: I64, src_len: I64) -> I32 {
+    if pos >= src_len { return 0 }
+    return char_at(source, pos)
+}
+
+func lex_peek_next(source: Str, pos: I64, src_len: I64) -> I32 {
+    if pos + 1 >= src_len { return 0 }
+    return char_at(source, pos + 1)
+}
+
+func is_alpha(c: I32) -> Bool {
+    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+}
+
+func is_digit(c: I32) -> Bool {
+    return c >= 48 and c <= 57
+}
+
+func is_ident_start(c: I32) -> Bool {
+    return is_alpha(c) or c == 95  // '_'
+}
+
+func is_ident_continue(c: I32) -> Bool {
+    return is_ident_start(c) or is_digit(c)
+}
+
+func is_hex_digit(c: I32) -> Bool {
+    return is_digit(c) or (c >= 65 and c <= 70) or (c >= 97 and c <= 102)
+}
+
+// ============================================================================
+// Token construction
+// ============================================================================
+
+func make_span(filename: Str, start_line: I64, start_col: I64, start_offset: I64,
+               end_line: I64, end_col: I64, end_offset: I64) -> SourceSpan {
+    let start_loc: SourceLocation = loc_new(filename, start_line, start_col, start_offset, end_offset - start_offset)
+    let end_loc: SourceLocation = loc_new(filename, end_line, end_col, end_offset, end_offset - start_offset)
+    return span_new(start_loc, end_loc)
+}
+
+// ============================================================================
+// Main tokenize entry point
+// ============================================================================
+
+/// Tokenize source text into a list of tokens.
+pub func tokenize(source: Str, filename: Str) -> List[Token] {
+    var tokens: List[Token] = List::new(0)
+    let src_len: I64 = len(source)
+    var pos: I64 = 0
+    var line: I64 = 1
+    var col: I64 = 1
+    var interp_depth: I64 = 0
+    var template_depth: I64 = 0
+
+    loop (pos < src_len) {
+        // Skip whitespace (space, tab, CR) — NOT newlines
+        loop (pos < src_len) {
+            let c: I32 = char_at(source, pos)
+            if c == 32 or c == 9 or c == 13 {
+                pos = pos + 1
+                col = col + 1
+            } else if c == 47 {
+                // '/' — might be comment
+                let next: I32 = lex_peek_next(source, pos, src_len)
+                if next == 47 {
+                    // '//' line comment — check for doc comment first
+                    let third: I32 = lex_peek(source, pos + 2, src_len)
+                    if third == 47 or third == 33 {
+                        // '///' or '//!' — doc comment, don't skip
+                        break
+                    }
+                    // Regular line comment — skip to EOL
+                    pos = pos + 2
+                    col = col + 2
+                    loop (pos < src_len and char_at(source, pos) != 10) {
+                        pos = pos + 1
+                        col = col + 1
+                    }
+                } else if next == 42 {
+                    // '/*' block comment — skip with nesting
+                    pos = pos + 2
+                    col = col + 2
+                    var depth: I64 = 1
+                    loop (pos < src_len and depth > 0) {
+                        let bc: I32 = char_at(source, pos)
+                        if bc == 47 and lex_peek_next(source, pos, src_len) == 42 {
+                            pos = pos + 2
+                            col = col + 2
+                            depth = depth + 1
+                        } else if bc == 42 and lex_peek_next(source, pos, src_len) == 47 {
+                            pos = pos + 2
+                            col = col + 2
+                            depth = depth - 1
+                        } else if bc == 10 {
+                            pos = pos + 1
+                            line = line + 1
+                            col = 1
+                        } else {
+                            pos = pos + 1
+                            col = col + 1
+                        }
+                    }
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
+        }
+
+        if pos >= src_len {
+            break
+        }
+
+        // Mark token start
+        let tok_start: I64 = pos
+        let tok_line: I64 = line
+        let tok_col: I64 = col
+        let c: I32 = char_at(source, pos)
+
+        // ---- Newline (significant token) ----
+        if c == 10 {
+            pos = pos + 1
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, tok_line, tok_col, pos)
+            tokens.push(token_new(TokenKind::Newline, "\n", sp))
+            line = line + 1
+            col = 1
+            continue
+        }
+
+        // ---- Doc comments (/// or //!) ----
+        if c == 47 and lex_peek_next(source, pos, src_len) == 47 {
+            let third: I32 = lex_peek(source, pos + 2, src_len)
+            if third == 47 or third == 33 {
+                // Doc comment — skip /// or //! prefix
+                let kind: TokenKind = if third == 33 { TokenKind::ModuleDocComment } else { TokenKind::DocComment }
+                pos = pos + 3
+                col = col + 3
+                // Skip one leading space
+                if pos < src_len and char_at(source, pos) == 32 {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                let content_start: I64 = pos
+                loop (pos < src_len and char_at(source, pos) != 10) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                let value: Str = substring(source, content_start, pos)
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                tokens.push(token_new(kind, value, sp))
+                continue
+            }
+        }
+
+        // ---- Raw strings (r"...") ----
+        if c == 114 and lex_peek_next(source, pos, src_len) == 34 {
+            pos = pos + 2
+            col = col + 2
+            let str_start: I64 = pos
+            loop (pos < src_len and char_at(source, pos) != 34) {
+                if char_at(source, pos) == 10 {
+                    line = line + 1
+                    col = 1
+                } else {
+                    col = col + 1
+                }
+                pos = pos + 1
+            }
+            let value: Str = substring(source, str_start, pos)
+            if pos < src_len { pos = pos + 1; col = col + 1 }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::StringLiteral, value, sp))
+            continue
+        }
+
+        // ---- Identifiers and keywords ----
+        if is_ident_start(c) {
+            let id_start: I64 = pos
+            loop (pos < src_len and is_ident_continue(char_at(source, pos))) {
+                pos = pos + 1
+                col = col + 1
+            }
+            let ident: Str = substring(source, id_start, pos)
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            // Check keywords
+            when keyword_lookup(ident) {
+                Just(kw_kind) => {
+                    // Special handling for bool/null literals
+                    tokens.push(token_new(kw_kind, ident, sp))
+                },
+                Nothing => {
+                    tokens.push(token_new(TokenKind::Identifier, ident, sp))
+                }
+            }
+            continue
+        }
+
+        // ---- Number literals ----
+        if is_digit(c) {
+            let num_start: I64 = pos
+            let next: I32 = lex_peek_next(source, pos, src_len)
+
+            if c == 48 and (next == 120 or next == 88) {
+                // 0x hex
+                pos = pos + 2
+                col = col + 2
+                loop (pos < src_len and (is_hex_digit(char_at(source, pos)) or char_at(source, pos) == 95)) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                let value: Str = substring(source, num_start, pos)
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                tokens.push(token_new(TokenKind::IntLiteral, value, sp))
+                continue
+            }
+
+            if c == 48 and (next == 98 or next == 66) {
+                // 0b binary
+                pos = pos + 2
+                col = col + 2
+                loop (pos < src_len and (char_at(source, pos) == 48 or char_at(source, pos) == 49 or char_at(source, pos) == 95)) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                let value: Str = substring(source, num_start, pos)
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                tokens.push(token_new(TokenKind::IntLiteral, value, sp))
+                continue
+            }
+
+            if c == 48 and (next == 111 or next == 79) {
+                // 0o octal
+                pos = pos + 2
+                col = col + 2
+                loop (pos < src_len and (char_at(source, pos) >= 48 and char_at(source, pos) <= 55 or char_at(source, pos) == 95)) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                let value: Str = substring(source, num_start, pos)
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                tokens.push(token_new(TokenKind::IntLiteral, value, sp))
+                continue
+            }
+
+            // Decimal integer or float
+            var is_float: Bool = false
+            loop (pos < src_len and (is_digit(char_at(source, pos)) or char_at(source, pos) == 95)) {
+                pos = pos + 1
+                col = col + 1
+            }
+            // Check for decimal point (not range ..)
+            if pos < src_len and char_at(source, pos) == 46 {
+                let after_dot: I32 = lex_peek_next(source, pos, src_len)
+                if is_digit(after_dot) {
+                    is_float = true
+                    pos = pos + 1
+                    col = col + 1
+                    loop (pos < src_len and (is_digit(char_at(source, pos)) or char_at(source, pos) == 95)) {
+                        pos = pos + 1
+                        col = col + 1
+                    }
+                }
+            }
+            // Check for exponent
+            if pos < src_len and (char_at(source, pos) == 101 or char_at(source, pos) == 69) {
+                is_float = true
+                pos = pos + 1
+                col = col + 1
+                if pos < src_len and (char_at(source, pos) == 43 or char_at(source, pos) == 45) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+                loop (pos < src_len and (is_digit(char_at(source, pos)) or char_at(source, pos) == 95)) {
+                    pos = pos + 1
+                    col = col + 1
+                }
+            }
+            let value: Str = substring(source, num_start, pos)
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            if is_float {
+                tokens.push(token_new(TokenKind::FloatLiteral, value, sp))
+            } else {
+                tokens.push(token_new(TokenKind::IntLiteral, value, sp))
+            }
+            continue
+        }
+
+        // ---- String literals ----
+        if c == 34 {
+            pos = pos + 1
+            col = col + 1
+            let str_start: I64 = pos
+            var str_val: Str = ""
+            var has_interp: Bool = false
+            loop (pos < src_len and char_at(source, pos) != 34) {
+                let sc: I32 = char_at(source, pos)
+                if sc == 10 { break }
+                if sc == 92 {
+                    // backslash escape
+                    pos = pos + 1
+                    col = col + 1
+                    if pos < src_len {
+                        pos = pos + 1
+                        col = col + 1
+                    }
+                } else if sc == 123 {
+                    // '{' — check for interpolation
+                    if pos + 1 < src_len and is_ident_start(char_at(source, pos + 1)) {
+                        // Interpolated string — emit start token, set depth
+                        let val: Str = substring(source, str_start, pos)
+                        pos = pos + 1
+                        col = col + 1
+                        interp_depth = interp_depth + 1
+                        let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                        tokens.push(token_new(TokenKind::InterpStringStart, val, sp))
+                        has_interp = true
+                        break
+                    }
+                    pos = pos + 1
+                    col = col + 1
+                } else {
+                    pos = pos + 1
+                    col = col + 1
+                }
+            }
+            if has_interp { continue }
+            let value: Str = substring(source, str_start, pos)
+            if pos < src_len and char_at(source, pos) == 34 {
+                pos = pos + 1
+                col = col + 1
+            }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::StringLiteral, value, sp))
+            continue
+        }
+
+        // ---- Character literals ----
+        if c == 39 {
+            pos = pos + 1
+            col = col + 1
+            let char_start: I64 = pos
+            if pos < src_len and char_at(source, pos) == 92 {
+                pos = pos + 2
+                col = col + 2
+            } else {
+                pos = pos + 1
+                col = col + 1
+            }
+            let value: Str = substring(source, char_start, pos)
+            if pos < src_len and char_at(source, pos) == 39 {
+                pos = pos + 1
+                col = col + 1
+            }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::CharLiteral, value, sp))
+            continue
+        }
+
+        // ---- Template literals (backtick) ----
+        if c == 96 {
+            pos = pos + 1
+            col = col + 1
+            let tpl_start: I64 = pos
+            loop (pos < src_len and char_at(source, pos) != 96) {
+                let tc: I32 = char_at(source, pos)
+                if tc == 10 {
+                    line = line + 1
+                    col = 1
+                    pos = pos + 1
+                } else if tc == 123 and pos + 1 < src_len and is_ident_start(char_at(source, pos + 1)) {
+                    // Interpolation in template
+                    let val: Str = substring(source, tpl_start, pos)
+                    pos = pos + 1
+                    col = col + 1
+                    template_depth = template_depth + 1
+                    let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+                    tokens.push(token_new(TokenKind::TemplateLiteralStart, val, sp))
+                    break
+                } else if tc == 92 {
+                    pos = pos + 2
+                    col = col + 2
+                } else {
+                    pos = pos + 1
+                    col = col + 1
+                }
+            }
+            if template_depth > 0 { continue }
+            let value: Str = substring(source, tpl_start, pos)
+            if pos < src_len { pos = pos + 1; col = col + 1 }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::TemplateLiteralEnd, value, sp))
+            continue
+        }
+
+        // ---- Operators and punctuation ----
+        pos = pos + 1
+        col = col + 1
+
+        if c == 40 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::LParen, "(", sp))
+            continue
+        }
+        if c == 41 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::RParen, ")", sp))
+            continue
+        }
+        if c == 91 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::LBracket, "[", sp))
+            continue
+        }
+        if c == 93 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::RBracket, "]", sp))
+            continue
+        }
+        if c == 123 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::LBrace, "{", sp))
+            continue
+        }
+        if c == 125 {
+            // '}' — check interpolation/template state
+            // TODO: handle interp_depth/template_depth continuation
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::RBrace, "}", sp))
+            continue
+        }
+        if c == 44 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Comma, ",", sp))
+            continue
+        }
+        if c == 59 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Semi, ";", sp))
+            continue
+        }
+        if c == 126 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::BitNot, "~", sp))
+            continue
+        }
+        if c == 64 {
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::At, "@", sp))
+            continue
+        }
+
+        // Multi-character operators
+        let next: I32 = lex_peek(source, pos, src_len)
+
+        if c == 43 {
+            if next == 43 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::PlusPlus, "++", sp)); continue }
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::PlusAssign, "+=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Plus, "+", sp))
+            continue
+        }
+        if c == 45 {
+            if next == 45 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::MinusMinus, "--", sp)); continue }
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::MinusAssign, "-=", sp)); continue }
+            if next == 62 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Arrow, "->", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Minus, "-", sp))
+            continue
+        }
+        if c == 42 {
+            if next == 42 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::StarStar, "**", sp)); continue }
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::StarAssign, "*=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Star, "*", sp))
+            continue
+        }
+        if c == 47 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::SlashAssign, "/=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Slash, "/", sp))
+            continue
+        }
+        if c == 37 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::PercentAssign, "%=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Percent, "%", sp))
+            continue
+        }
+        if c == 61 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Eq, "==", sp)); continue }
+            if next == 62 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::FatArrow, "=>", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Assign, "=", sp))
+            continue
+        }
+        if c == 33 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Ne, "!=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Bang, "!", sp))
+            continue
+        }
+        if c == 60 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Le, "<=", sp)); continue }
+            if next == 60 {
+                pos = pos + 1; col = col + 1
+                if lex_peek(source, pos, src_len) == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::ShlAssign, "<<=", sp)); continue }
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Shl, "<<", sp)); continue
+            }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Lt, "<", sp))
+            continue
+        }
+        if c == 62 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Ge, ">=", sp)); continue }
+            if next == 62 {
+                pos = pos + 1; col = col + 1
+                if lex_peek(source, pos, src_len) == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::ShrAssign, ">>=", sp)); continue }
+                let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::Shr, ">>", sp)); continue
+            }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Gt, ">", sp))
+            continue
+        }
+        if c == 38 {
+            if next == 38 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::AndAnd, "&&", sp)); continue }
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::BitAndAssign, "&=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::BitAnd, "&", sp))
+            continue
+        }
+        if c == 124 {
+            if next == 124 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::OrOr, "||", sp)); continue }
+            if next == 62 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::PipeRight, "|>", sp)); continue }
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::BitOrAssign, "|=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::BitOr, "|", sp))
+            continue
+        }
+        if c == 94 {
+            if next == 61 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::BitXorAssign, "^=", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::BitXor, "^", sp))
+            continue
+        }
+        if c == 46 {
+            if next == 46 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::DotDot, "..", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Dot, ".", sp))
+            continue
+        }
+        if c == 58 {
+            if next == 58 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::ColonColon, "::", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Colon, ":", sp))
+            continue
+        }
+        if c == 63 {
+            if next == 46 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::QuestionDot, "?.", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Question, "?", sp))
+            continue
+        }
+        if c == 36 {
+            if next == 123 { pos = pos + 1; col = col + 1; let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos); tokens.push(token_new(TokenKind::DollarBrace, "${", sp)); continue }
+            let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+            tokens.push(token_new(TokenKind::Dollar, "$", sp))
+            continue
+        }
+
+        // Unknown character — emit Error token
+        let value: Str = substring(source, tok_start, pos)
+        let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
+        tokens.push(token_new(TokenKind::Error, value, sp))
+    }
+
+    // Emit EOF
+    let eof_sp: SourceSpan = make_span(filename, line, col, pos, line, col, pos)
+    tokens.push(token_new(TokenKind::Eof, "", eof_sp))
+    return tokens
+}

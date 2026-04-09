@@ -1,0 +1,124 @@
+//! Basic lexer tests — tokenize simple TML code and verify token sequences.
+
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::token::TokenKind
+
+@test
+func test_tokenize_empty() -> I32 {
+    let tokens = tokenize("", "test.tml")
+    // Should have exactly 1 token: Eof
+    assert_eq(tokens.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_tokenize_single_ident() -> I32 {
+    let tokens = tokenize("hello", "test.tml")
+    // Ident + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_tokenize_func_decl() -> I32 {
+    let tokens = tokenize("func main() -> I32 { return 0 }", "test.tml")
+    // func main ( ) -> I32 { return 0 } Eof
+    // At minimum we need > 5 tokens
+    assert_true(tokens.len() as I64 > 5)
+    return 0
+}
+
+@test
+func test_tokenize_operators() -> I32 {
+    let tokens = tokenize("+ - * / = == != -> =>", "test.tml")
+    // 9 operators + Eof = 10
+    assert_eq(tokens.len() as I64, 10)
+    return 0
+}
+
+@test
+func test_tokenize_number_literal() -> I32 {
+    let tokens = tokenize("42", "test.tml")
+    // IntLiteral + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_tokenize_string_literal() -> I32 {
+    let tokens = tokenize("\"hello world\"", "test.tml")
+    // StringLiteral + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_tokenize_line_comment() -> I32 {
+    let tokens = tokenize("x // comment\ny", "test.tml")
+    // x Newline y Eof = 4
+    assert_eq(tokens.len() as I64, 4)
+    return 0
+}
+
+@test
+func test_tokenize_block_comment() -> I32 {
+    let tokens = tokenize("x /* comment */ y", "test.tml")
+    // x y Eof = 3
+    assert_eq(tokens.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_tokenize_keywords() -> I32 {
+    let tokens = tokenize("let var func return if else when loop", "test.tml")
+    // 8 keywords + Eof = 9
+    assert_eq(tokens.len() as I64, 9)
+    return 0
+}
+
+@test
+func test_tokenize_nested_block_comment() -> I32 {
+    let tokens = tokenize("a /* outer /* inner */ end */ b", "test.tml")
+    // a b Eof = 3
+    assert_eq(tokens.len() as I64, 3)
+    return 0
+}
+
+@test
+func test_tokenize_hex_literal() -> I32 {
+    let tokens = tokenize("0xFF", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_tokenize_float_literal() -> I32 {
+    let tokens = tokenize("3.14", "test.tml")
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}
+
+@test
+func test_tokenize_delimiters() -> I32 {
+    let tokens = tokenize("()[]{},:;", "test.tml")
+    // ( ) [ ] { } , : ; Eof = 10
+    assert_eq(tokens.len() as I64, 10)
+    return 0
+}
+
+@test
+func test_tokenize_multichar_operators() -> I32 {
+    let tokens = tokenize(":: .. ?. |>", "test.tml")
+    // :: .. ?. |> Eof = 5
+    assert_eq(tokens.len() as I64, 5)
+    return 0
+}
+
+@test
+func test_tokenize_doc_comment() -> I32 {
+    let tokens = tokenize("/// hello doc", "test.tml")
+    // DocComment + Eof = 2
+    assert_eq(tokens.len() as I64, 2)
+    return 0
+}

@@ -6,6 +6,13 @@
 **Estimated effort**: 2 weeks
 **Risk**: Low
 
+## Why
+
+The self-hosting compiler frontend (phase13) cannot proceed without TML equivalents
+of the C++ token and AST types. The lexer needs TokenKind, the parser needs all AST
+node types, and the hybrid pipeline bridge needs serialization. This is the hard
+dependency that gates all subsequent compiler self-hosting work.
+
 ## Problem
 
 Before a single line of lexer or parser code can be written in TML, the data types
