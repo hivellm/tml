@@ -1,0 +1,16 @@
+{
+  "id": "2026-04-09T15-25-59-tml-plain-enum-pattern-matching-bare-variant-names-only",
+  "title": "TML plain enum pattern matching: bare variant names only",
+  "content": "In TML `when` arms, plain enum variants use BARE names without the enum type prefix:\n\n```tml\n// CORRECT\nwhen tok.kind {\n    Eof => return true,\n    Newline => { p = p + 1 },\n    Identifier => { ... },\n    _ => return false\n}\n\n// WRONG — T069 \"Pattern expects enum type, but got different type\"\nwhen tok.kind {\n    TokenKind::Eof => ...,    // ERROR: double-colon prefix in pattern\n}\n```\n\nThis applies to ALL plain enums (TokenKind, Visibility, etc.) in pattern position. ADT sum-type variant construction uses the full name (`TypeExpr::Named(nt)`) but pattern matching uses bare names (`Named(nt) =>`).\n\nFor equality checks on plain enums (not in pattern context), use integer cast:\n```tml\nfunc tok_kind_eq(a: TokenKind, b: TokenKind) -> Bool {\n    return a as I64 == b as I64\n}\n```",
+  "source": "manual",
+  "relatedTask": "phase13c_tml-parser",
+  "tags": [
+    "tml",
+    "enum",
+    "pattern-matching",
+    "when",
+    "t069",
+    "syntax"
+  ],
+  "createdAt": "2026-04-09T15:25:59.921Z"
+}

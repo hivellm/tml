@@ -21,22 +21,29 @@ These rules override `AGENTS.md` and generic rulebook guidance. Only TML-specifi
 
 ## T2. MCP Tools First (mandatory)
 
-**Never use `Bash` to run `tml.exe test/build/run` when an MCP tool exists.**
+**Never use `Bash` to run `tml.exe test/build/run` when an MCP tool or skill exists.**  
+**Preference order: skill (`/name`) → direct MCP tool → Bash** (see T9/T10).
 
-| Task | Tool |
-|------|------|
-| Type check | `mcp__tml__check` (≈10× faster than test) |
-| Run tests | `mcp__tml__test` with `suite=`, `path=`, `structured=true` |
-| Debug failure | `mcp__tml__test` + `debug_layers=true` (always on first failure) |
-| LLVM IR | `mcp__tml__emit-ir` |
-| MIR | `mcp__tml__emit-mir` |
-| API docs | `mcp__tml__docs_{search,list,get,resolve}` |
-| Memory leaks | `mcp__tml__debug(file, check_leaks=true)` |
-| Crash backtrace | `mcp__tml__debug(file, backtrace=true)` |
-| Build compiler | `mcp__tml__project_build` or `scripts\build.bat` |
-| Tasks | `mcp__rulebook__rulebook_task_*` |
+### MCP Tool Reference
 
-**Diagnostic-first order**: `check` → fix → `test`. Never run `test` before `check`.
+| Task | MCP Tool | Skill shortcut |
+|------|----------|----------------|
+| Type check | `mcp__tml__check` (≈10× faster) | `/check` |
+| Run tests | `mcp__tml__test` (`suite=`, `path=`, `structured=true`) | `/test` |
+| Debug failure | `mcp__tml__test` + `debug_layers=true` | `/investigate` |
+| LLVM IR | `mcp__tml__emit-ir` | `/emit-ir` |
+| MIR | `mcp__tml__emit-mir` | `/emit-mir` |
+| Format source | `mcp__tml__format` | `/format` |
+| Compile binary | `mcp__tml__compile` | `/compile` |
+| API docs | `mcp__tml__docs_{search,list,get,resolve}` | — |
+| Memory leaks | `mcp__tml__debug(file, check_leaks=true)` | `/debug` |
+| Crash backtrace | `mcp__tml__debug(file, backtrace=true)` | `/debug` |
+| Build compiler | `mcp__tml__project_build` | `/build-compiler` |
+| Tasks | `mcp__rulebook__rulebook_task_*` | `/tasks`, `/task-create` |
+| Knowledge/learn | `mcp__rulebook__rulebook_knowledge_add`, `rulebook_learn_capture` | — |
+| Session end | `mcp__rulebook__rulebook_session_end` | `/handoff` |
+
+**Diagnostic-first order**: `/check` → fix → `/test`. Never run test before check.
 
 **Never run tests multiple times to filter.** Run once, redirect to `.sandbox/test_output.log`, re-read the file.
 
@@ -153,7 +160,95 @@ Legacy HIR→MIR was removed. All MIR fixes go in:
 ## T9. Delegation Discipline
 
 - Main conversation = analysis, planning, dispatch, reporting. **Never implement code directly in main.**
-- Dispatch decision order: direct MCP tool → skill (`/commit`, `/test`, `/verify`, `/build-compiler`, …) → built-in tool → only then spawn an agent.
+- **Dispatch decision order (strict):**
+  1. MCP tool (`mcp__tml__*`, `mcp__rulebook__*`) — single-step, no overhead
+  2. Skill (`/check`, `/commit`, `/test`, …) — multi-step workflow, invoke via `Skill` tool
+  3. Built-in tools (Read, Grep, Edit, Bash) — only when no MCP/skill covers it
+  4. Agent spawn — last resort for long or parallel work
 - 2+ parallel agents MUST use a Team. Every team member needs a `name` for `SendMessage`.
 - After launching agents, actively monitor output — never go passive.
+
+---
+
+## T10. Skills Catalog (invoke with `/skill-name` or `Skill(skill: "name")`)
+
+Skills accept trigger words in **English and Portuguese**. Always prefer a skill over raw Bash.
+
+### Code Quality
+| Skill | When to use |
+|-------|-------------|
+| `/check` | Type-check a `.tml` file without compiling — first step before any test |
+| `/lint` | Lint TML source for style issues |
+| `/format` | Auto-format `.tml` files |
+| `/precommit` | format + lint + affected tests — run before every commit |
+
+### Testing
+| Skill | When to use |
+|-------|-------------|
+| `/test` | Run tests: specific file, suite, or filtered set (`path=`, `suite=`) |
+| `/write-tests` | Generate new tests for a module or feature |
+| `/coverage` | Run tests with coverage report |
+| `/affected-tests` | Detect which suites are affected by recent changes |
+| `/list-suites` | Enumerate all available test suites |
+| `/slow-tests` | Profile and explain slow compilation/test runs |
+| `/investigate` | Deep-dive a failing test: run → emit IR → analyze error |
+| `/parallel-test-execution` | Run multiple test suites in parallel |
+
+### Build & Compile
+| Skill | When to use |
+|-------|-------------|
+| `/build-compiler` | Rebuild TML compiler from C++ sources |
+| `/build-smart` | Incremental smart build — only rebuilds what changed |
+| `/build-fix` | Fix a broken build automatically |
+| `/compile` | Compile a single `.tml` file to binary |
+| `/verify` | Build compiler + run targeted tests end-to-end |
+| `/cache-invalidate` | Invalidate stale incremental cache for specific files |
+
+### Codegen & IR
+| Skill | When to use |
+|-------|-------------|
+| `/emit-ir` | Emit LLVM IR for a `.tml` source file |
+| `/emit-mir` | Emit MIR for a `.tml` source file |
+| `/compare-ir` | Rust-as-Reference: compile equivalent `.rs`+`.tml`, compare IR side-by-side |
+| `/fix-codegen` | Systematic codegen bug fix workflow |
+| `/optimize-ir` | Improve LLVM IR quality for a specific pattern |
+
+### Tasks & Planning
+| Skill | When to use |
+|-------|-------------|
+| `/tasks` | List active Rulebook tasks with status |
+| `/task-create` | Create a new tracked task (runs `rulebook_task_create`) |
+| `/task-archive` | Archive a completed task (runs `rulebook_task_archive`) |
+
+### Analysis & Review
+| Skill | When to use |
+|-------|-------------|
+| `/research` | Explore codebase and gather context on a topic |
+| `/investigate` | Root-cause analysis of a failing test |
+| `/review` | Deep code review of recent changes or specific files |
+| `/review-pr` | Review current branch vs main |
+| `/status` | Project health dashboard: tests, coverage, active tasks, build |
+| `/qa` | Quality audit of a module — creates improvement tasks |
+| `/analysis` | Structured analysis of a problem or code area |
+| `/perf` | Performance profiling and optimization analysis |
+| `/slow-tests` | Identify slow test suites and compilation bottlenecks |
+
+### Git & Session
+| Skill | When to use |
+|-------|-------------|
+| `/commit` | Stage + commit with conventional commit message |
+| `/handoff` | Save session state before `/clear` at context limit |
+
+### Docs & Explanation
+| Skill | When to use |
+|-------|-------------|
+| `/docs` | Generate or update documentation |
+| `/explain` | Explain a piece of code, error, or concept |
+| `/stdlib-architecture` | Inject deep context about TML stdlib structure before library work |
+
+### Debug
+| Skill | When to use |
+|-------|-------------|
+| `/debug` | Systematic debugging workflow for bugs and test failures |
+| `/fix-codegen` | Fix incorrect LLVM IR generation |
 <!-- OVERRIDE:END -->
