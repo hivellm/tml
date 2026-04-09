@@ -99,6 +99,7 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
 
         // Just block - the ptr IS the unwrapped value
         emit_line(ok_block + ":");
+        current_block_ = ok_block;
         last_expr_type_ = "ptr";
         return expr_val;
     }
@@ -106,7 +107,6 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     // Create basic blocks for control flow
     std::string ok_block = fresh_label();
     std::string err_block = fresh_label();
-    std::string continue_block = fresh_label();
 
     // Store the value to access its fields
     std::string alloca_reg = fresh_reg();
@@ -225,6 +225,7 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
 
     // Ok/Just block - extract the value and continue
     emit_line(ok_block + ":");
+    current_block_ = ok_block;
 
     // Extract the data from the Ok/Just variant
     std::string data_ptr = fresh_reg();

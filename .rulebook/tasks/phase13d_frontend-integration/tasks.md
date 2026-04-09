@@ -1,6 +1,6 @@
 # Tasks: Frontend Integration — Wire TML Lexer/Parser into Compiler
 
-**Status**: Planned (0/18)
+**Status**: In Progress (8/18)
 **Depends on**: phase13b (TML lexer), phase13c (TML parser), phase12f (hybrid pipeline framework)
 **Blocks**: Era 1 Phase 2 (type checker porting)
 **Duration**: 2–3 weeks
@@ -10,19 +10,23 @@
 
 ## Phase 1: TML Frontend Binary (4 items)
 
-- [ ] 1.1 Create `compiler-tml/src/main_frontend.tml` — standalone binary that reads .tml source, lexes, parses, serializes AST to stdout
-- [ ] 1.2 Wire: read source file path from CLI args → load file → tokenize → parse → serialize Module → write to stdout
-- [ ] 1.3 Error handling: if lex/parse fails, output error in structured format (JSON) to stderr, exit code 1
-- [ ] 1.4 Compile and verify: `tml build compiler-tml/src/main_frontend.tml` produces working binary
+- [x] 1.1 Create `compiler-tml/src/main_frontend.tml` — standalone binary that reads .tml source, lexes, parses, serializes AST to stdout
+- [x] 1.2 Wire: read source file path from CLI args → load file → tokenize → parse → serialize Module → write to stdout
+- [x] 1.3 Error handling: if lex/parse fails, output error in structured format (JSON) to stderr, exit code 1
+- [x] 1.4 Compile and verify: `tml build compiler-tml/src/main_frontend.tml` produces working binary
 
 ## Phase 2: C++ Deserializer Integration (4 items)
 
-- [ ] 2.1 `compiler/src/query/query_context.cpp` — Add `ParseModuleTml` query that invokes TML frontend binary
-- [ ] 2.2 Implement: spawn TML frontend process, pipe source path as arg, capture stdout as binary AST
-- [ ] 2.3 Deserialize binary AST to C++ `Module` struct using phase12e deserializer
-- [ ] 2.4 Wire `--stage=parser:tml` flag to dispatch to `ParseModuleTml` instead of `ParseModule`
+- [x] 2.1 `compiler/src/query/query_context.cpp` — Add `ParseModuleTml` query that invokes TML frontend binary
+- [x] 2.2 Implement: spawn TML frontend process, pipe source path as arg, capture stdout as binary AST
+- [x] 2.3 Deserialize binary AST to C++ `Module` struct using phase12e deserializer
+- [x] 2.4 Wire `--stage=parser:tml` flag to dispatch to `ParseModuleTml` instead of `ParseModule`
 
 ## Phase 3: Differential Testing — Full Suite (5 items)
+
+**BLOCKER**: The TML frontend crashes (exit 127 / heap corruption) when `parse_primary_expr` evaluates any expression inside a function body. Root cause: codegen bug in the C++ compiler affecting the large `when tok.kind { ... }` dispatch (~30 arms on TokenKind enum) in `parse_expr.tml:478`. Tokenization succeeds; empty-body functions parse OK; any content in braces crashes. Separate codegen fix required before Phase 3 can proceed. Two known sub-issues:
+1. **Parser crash**: `parse_primary_expr` codegen bug (PHI node or large-switch issue)
+2. **Format mismatch**: TML serializer writes "MOD " format (0x4D4F4420) but C++ `read_ast` expects "AST " format (0x41535420) — need to use `compiler::serial::ast::write_module` (TmlModule mirror types) instead of `compiler::ast::serial::write_module`
 
 - [ ] 3.1 Run test suite with `--stage=parser:tml` — record all failures
 - [ ] 3.2 For each failure: categorize as lexer bug / parser bug / serialization bug / deserialization bug

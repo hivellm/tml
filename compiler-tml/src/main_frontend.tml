@@ -1,0 +1,164 @@
+//! TML Self-Hosting Frontend Binary — phase13d
+//!
+//! Standalone binary that lex+parse a `.tml` source file and writes the
+//! serialized binary AST to stdout. Used by the hybrid pipeline: the C++
+//! compiler spawns this process with the source file path as the sole
+//! argument, reads the binary AST from stdout, and deserializes it via the
+//! phase12e C++ deserializer.
+//!
+//! # Protocol
+//!
+//! Success (exit 0): binary AST bytes on stdout.
+//! Failure (exit 1): one-line JSON error array on stderr:
+//!   `[{"message":"...","file":"...","line":N,"col":N}]`
+//!
+//! # Usage
+//!
+//!   frontend <source-file.tml>
+
+use std::os
+use std::os::Args
+use std::collections::Buffer
+use compiler::source::SourceSpan
+use compiler::source::SourceLocation
+use compiler::token::Token
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_module::parse_module
+use compiler::parser::common::ParseFailure
+use compiler::ast::nodes::Module
+use compiler::serial::writer::BinaryWriter
+use compiler::ast::serial::write_module
+use std::collections::list::List
+
+// ============================================================================
+// FFI: I/O helpers
+// ============================================================================
+
+/// Write `count` raw bytes from `buf_ptr` to stdout.
+/// Used to emit the serialized binary AST to the C++ parent process.
+@extern("tml_write_stdout_bytes")
+func ffi_write_stdout_bytes(buf_ptr: I64, count: I64) -> I64
+
+/// Print a string to stderr without a newline.
+@extern("eprint")
+func ffi_eprint(msg: Str)
+
+/// Print a string to stderr followed by a newline.
+@extern("eprintln")
+func ffi_eprintln(msg: Str)
+
+/// Read entire file into a string. Returns empty string on error.
+@extern("tml_read_file_to_string")
+func ffi_read_file(path: Str) -> Str
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Derive a module name from a file path by stripping the directory prefix
+/// and the `.tml` extension.
+///
+/// Examples:
+///   "src/foo/bar.tml"   → "bar"
+///   "hello.tml"         → "hello"
+///   "path/to/main.tml"  → "main"
+func derive_module_name(path: Str) -> Str {
+    let n: I64 = path.len()
+    // Find last directory separator ('/' or '\')
+    let sep_fwd: I64 = path.rfind("/")
+    let sep_back: I64 = path.rfind("\\")
+    var name_start: I64 = 0 as I64
+    if sep_fwd >= 0 as I64 and sep_fwd > sep_back {
+        name_start = sep_fwd + 1 as I64
+    } else if sep_back >= 0 as I64 {
+        name_start = sep_back + 1 as I64
+    }
+    // Strip the path prefix from the string to just get the filename
+    let filename: Str = path.slice(name_start, n)
+    // Find the last '.' to strip extension
+    let dot_pos: I64 = filename.rfind(".")
+    if dot_pos >= 0 as I64 {
+        return filename.slice(0 as I64, dot_pos)
+    }
+    return filename
+}
+
+/// Escape a string for embedding in a JSON string literal.
+/// Handles backslash and double-quote escaping.
+func json_escape(s: Str) -> Str {
+    let s1: Str = s.replace("\\", "\\\\")
+    let s2: Str = s1.replace("\"", "\\\"")
+    let s3: Str = s2.replace("\n", "\\n")
+    let s4: Str = s3.replace("\r", "\\r")
+    return s4
+}
+
+/// Build a one-line JSON error array from a ParseFailure.
+func parse_error_to_json(err: ParseFailure) -> Str {
+    let span = err.span
+    let loc = span.start
+    let msg: Str = json_escape(err.message)
+    let file: Str = json_escape(loc.file)
+    let line: Str = loc.line.to_string()
+    let col: Str = loc.column.to_string()
+    return "[{\"message\":\"" + msg + "\",\"file\":\"" + file + "\",\"line\":" + line + ",\"col\":" + col + "}]"
+}
+
+// ============================================================================
+// Entry point
+// ============================================================================
+
+func main() -> I32 {
+    var args: Args = os::args()
+
+    // Skip program name (argv[0])
+    if not args.has_next() {
+        ffi_eprintln("[{\"message\":\"missing source file argument\",\"file\":\"\",\"line\":0,\"col\":0}]")
+        return 1
+    }
+    let _prog: Str = args.next()
+
+    // Require exactly one more argument: the source file path
+    if not args.has_next() {
+        ffi_eprintln("[{\"message\":\"missing source file argument\",\"file\":\"\",\"line\":0,\"col\":0}]")
+        return 1
+    }
+    let path: Str = args.next()
+
+    // Read source file
+    let source: Str = ffi_read_file(path)
+    if source.len() == 0 {
+        let json: Str = "[{\"message\":\"cannot read source file: " + path + "\",\"file\":\"" + path + "\",\"line\":0,\"col\":0}]"
+        ffi_eprintln(json)
+        return 1
+    }
+
+    // Derive module name from path
+    let module_name: Str = derive_module_name(path)
+
+    // Tokenize
+    let tokens: List[Token] = tokenize(source, path)
+
+    // Parse
+    let parse_result = parse_module(tokens, module_name)
+    when parse_result {
+        Err(e) => {
+            let json: Str = parse_error_to_json(e)
+            ffi_eprintln(json)
+            return 1
+        },
+        Ok(m) => {
+            // Serialize module to binary
+            let w: BinaryWriter = BinaryWriter::new(4096)
+            write_module(w, m)
+            let buf: Buffer = w.finish()
+
+            // Write binary bytes to stdout for the C++ parent to consume
+            let ptr: I64 = buf.data_ptr()
+            let count: I64 = buf.len()
+            ffi_write_stdout_bytes(ptr, count)
+
+            return 0
+        }
+    }
+}

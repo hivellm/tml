@@ -27,7 +27,9 @@ TML_MODULE("compiler")
 #include "parser/parser.hpp"
 #include "pipeline/tml_stage.hpp"
 #include "preprocessor/preprocessor.hpp"
+#include "serial/ast_reader.hpp"
 #include "serial/token_reader.hpp"
+#include "testing/testing_process.hpp"
 #include "thir/thir.hpp"
 #include "thir/thir_lower.hpp"
 #include "traits/solver.hpp"
@@ -40,9 +42,64 @@ TML_MODULE("compiler")
 #include <functional>
 #include <unordered_set>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace tml::query::providers {
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Locate the running tml executable (duplicated from tml_stage.cpp).
+static fs::path get_self_exe_path() {
+#ifdef _WIN32
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (len > 0 && len < MAX_PATH) {
+        return fs::path(std::string(buf, len));
+    }
+#else
+    std::error_code ec;
+    auto exe = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec) {
+        return exe;
+    }
+#endif
+    return {};
+}
+
+/// Find the TML frontend binary (main_frontend.exe) used by --stage=parser:tml.
+/// Searches relative to the running tml.exe in well-known build output paths.
+static fs::path find_tml_frontend_exe() {
+    auto self = get_self_exe_path();
+    if (self.empty()) {
+        return {};
+    }
+    auto bin_dir = self.parent_path();      // e.g. build/debug/bin/
+    auto build_dir = bin_dir.parent_path(); // e.g. build/debug/
+
+    std::error_code ec;
+    // Primary: build/debug/main_frontend.exe (produced by tml build)
+    auto candidate = build_dir / "main_frontend.exe";
+    if (fs::exists(candidate, ec)) {
+        return candidate;
+    }
+    // Fallback: same directory as tml.exe
+    candidate = bin_dir / "main_frontend.exe";
+    if (fs::exists(candidate, ec)) {
+        return candidate;
+    }
+    // Fallback: TmlStage cache
+    candidate = build_dir / "cache" / "stages" / "parser.exe";
+    if (fs::exists(candidate, ec)) {
+        return candidate;
+    }
+    return {};
+}
 
 // ============================================================================
 // Pipeline Dump Helper
@@ -198,6 +255,65 @@ std::any provide_tokenize(QueryContext& ctx, const QueryKey& key) {
 std::any provide_parse_module(QueryContext& ctx, const QueryKey& key) {
     const auto& pk = std::get<ParseModuleKey>(key);
     ParseModuleResult result;
+
+    // phase13d hybrid pipeline: if --stage=parser:tml is active, delegate
+    // lexing+parsing to the TML frontend subprocess (main_frontend.exe) and
+    // deserialize its binary AST output.
+    {
+        const auto& overrides = ctx.options().stage_overrides;
+        auto it = overrides.find("parser");
+        if (it != overrides.end() && it->second == "tml") {
+            auto frontend_exe = find_tml_frontend_exe();
+            if (frontend_exe.empty()) {
+                result.errors.push_back(
+                    "TML frontend binary not found (main_frontend.exe). "
+                    "Build it first: tml build compiler-tml/src/main_frontend.tml");
+                return result;
+            }
+
+            tml::testing::ProcessOptions opts;
+            opts.exe_path = frontend_exe.string();
+            opts.args = {pk.file_path};
+            opts.timeout = std::chrono::milliseconds(30'000);
+
+            auto proc = tml::testing::Process::launch(opts);
+            if (!proc) {
+                result.errors.push_back("Failed to launch TML frontend subprocess: " +
+                                        frontend_exe.string());
+                return result;
+            }
+            auto run = proc->wait();
+
+            if (run.exit_code != 0) {
+                // stderr contains JSON error array from the TML frontend
+                if (!run.stderr_output.empty()) {
+                    result.errors.push_back(run.stderr_output);
+                } else {
+                    result.errors.push_back("TML frontend exited with code " +
+                                            std::to_string(run.exit_code));
+                }
+                return result;
+            }
+
+            // Deserialize binary AST from stdout
+            try {
+                std::vector<uint8_t> bytes(run.stdout_output.begin(), run.stdout_output.end());
+                // read_ast injects file_path into every SourceLocation::file
+                // (a string_view), so we must keep a stable copy alive.
+                auto path_storage = std::make_shared<std::string>(pk.file_path);
+                parser::Module mod = serial::read_ast(bytes, *path_storage);
+                result.module = std::shared_ptr<parser::Module>(
+                    new parser::Module(std::move(mod)), [path_storage](parser::Module* p) mutable {
+                        delete p;
+                        path_storage.reset();
+                    });
+                result.success = true;
+            } catch (const std::exception& e) {
+                result.errors.push_back(std::string("AST deserialization failed: ") + e.what());
+            }
+            return result;
+        }
+    }
 
     // Force tokenization
     auto tok = ctx.tokenize(pk.file_path);
