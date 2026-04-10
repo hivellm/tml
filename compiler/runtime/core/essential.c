@@ -1176,7 +1176,8 @@ static void tml_remove_exception_filter(void) {
         }
     }
 }
-#endif
+#endif // inner _WIN32 (tml_veh_handler block, line 956)
+#endif // _WIN32 (VEH declarations, line 849)
 
 /**
  * @brief Runs a test function with panic and crash catching.

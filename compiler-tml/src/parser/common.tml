@@ -190,13 +190,24 @@ pub func p_expect(tokens: List[Token], pos: I64, kind: TokenKind, msg: Str) -> O
     return Ok(ParsedToken { tok: tok, pos: pos + 1 })
 }
 
-/// Expect identifier and consume it, returning the lexeme.
+/// True if a token kind can act as an identifier/name in path and method position.
+/// Covers regular identifiers plus keywords that are commonly used as method names
+/// (e.g. `::new`, `.new()`) — the lexer emits these as keyword tokens, not Identifier.
+pub func tok_is_name(kind: TokenKind) -> Bool {
+    when kind {
+        Identifier => return true,
+        KwNew => return true,
+        _ => return false
+    }
+}
+
+/// Expect identifier (or keyword-as-name) and consume it, returning the lexeme.
 pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedStr, ParseFailure] {
     let tok: Token = p_peek(tokens, pos)
-    when tok.kind {
-        Identifier => return Ok(ParsedStr { value: tok.value, pos: pos + 1 }),
-        _ => return Err(parse_err(msg, tok.span))
+    if tok_is_name(tok.kind) {
+        return Ok(ParsedStr { value: tok.value, pos: pos + 1 })
     }
+    return Err(parse_err(msg, tok.span))
 }
 
 // ============================================================================

@@ -26,12 +26,14 @@ use compiler::parser::common::p_peek_next
 use compiler::parser::common::p_prev
 use compiler::parser::common::p_check
 use compiler::parser::common::p_check_next
+use compiler::parser::common::p_peek_next
 use compiler::parser::common::p_is_eof
 use compiler::parser::common::p_skip_newlines
 use compiler::parser::common::p_consume_if
 use compiler::parser::common::p_expect
 use compiler::parser::common::p_expect_ident
 use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::tok_is_name
 use compiler::parser::common::parse_err
 use std::collections::list::List
 use core::alloc::heap::Heap
@@ -52,7 +54,7 @@ pub func parse_type_path(tokens: List[Token], pos: I64) -> Outcome[ParsedStr, Pa
     var result: Str = start_tok.value
     var p: I64 = pos + 1
     // Collect `::segment` continuations
-    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+    loop (p_check(tokens, p, TokenKind::ColonColon) and tok_is_name(p_peek_next(tokens, p).kind)) {
         p = p + 1  // consume '::'
         let seg_tok: Token = p_peek(tokens, p)
         result = result  // path building: for now just take the last segment as name
@@ -73,7 +75,7 @@ pub func parse_type_path_full(tokens: List[Token], pos: I64) -> Outcome[ParsedTy
     segs.push(start_tok.value)
     var p: I64 = pos + 1
     let start_span: SourceSpan = start_tok.span
-    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+    loop (p_check(tokens, p, TokenKind::ColonColon) and tok_is_name(p_peek_next(tokens, p).kind)) {
         p = p + 1  // consume '::'
         let seg_tok: Token = p_peek(tokens, p)
         segs.push(seg_tok.value)
