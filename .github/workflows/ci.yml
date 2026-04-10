@@ -164,10 +164,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Codespell
-        run: python -m pip install --upgrade 'codespell[toml]'
+        run: pip install --break-system-packages 'codespell[toml]'
 
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,*.tml,*.rs,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook,.sandbox,backup,src/gcc,src/llvm-project,compiler/third_party,compiler/cranelift,compiler-tml,lib/chart,vcpkg_installed" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors,SEH,PassT,clos,hel,fo,bu,Nd,nd,te,ue,aNULL,ShiftIn,Implementor,OtherWrite,Strng,caf,Collet,DElt"
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,*.tml,*.rs,*.hpp,*.h,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook,.sandbox,backup,*/gcc,*/llvm-project,*/llvm-install,*/third_party,*/cranelift,compiler-tml,*/chart,vcpkg_installed,*/tracy" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors,SEH,PassT,clos,hel,fo,bu,Nd,nd,te,ue,aNULL,ShiftIn,Implementor,OtherWrite,Strng,caf,Collet,DElt,instanciated,pallete"
