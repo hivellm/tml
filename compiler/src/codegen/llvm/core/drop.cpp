@@ -457,16 +457,15 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
             }
         }
 
-        // Skip Heap[T] field drops. TML doesn't have move semantics, so
-        // Heap[T] values are copied (not moved) when assigned to another
-        // variable. Auto-dropping the field frees memory that may still be
-        // referenced by the copy, causing use-after-free / heap corruption.
-        // Heap memory is managed by the runtime's bulk deallocation instead.
+        // Skip field-level drops for heap-owning container types.
+        // TML doesn't have move semantics, so these types are copied (not moved)
+        // when assigned to another variable. Auto-dropping the field frees the
+        // internal heap allocation while the copy still references it →
+        // use-after-free / heap corruption.
         if (field_has_drop) {
             std::string base = field_base_type.empty() ? field_type_name : field_base_type;
-            if (base == "Heap") {
-                TML_DEBUG_LN("[DROP]   Skipping Heap field " << info.type_name << "." << field.name
-                                                             << " (no move semantics)");
+            if (base == "Heap" || base == "List" || base == "HashMap" || base == "Buffer" ||
+                base == "BinaryWriter" || base == "BinaryReader") {
                 continue;
             }
         }

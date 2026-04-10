@@ -130,35 +130,39 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     // Error/Nothing block - early return
     emit_line(err_block + ":");
 
-    // Emit drops for all locals before early return (RAII)
-    emit_all_drops();
-
-    bool ret_is_outcome =
-        !current_ret_type_.empty() && current_ret_type_.find("Outcome") != std::string::npos;
-    bool ret_is_maybe =
-        !current_ret_type_.empty() && current_ret_type_.find("Maybe") != std::string::npos;
+    // Determine the function's actual return type for error propagation.
+    // func_ret_type_ is the immutable return type; current_ret_type_ can be
+    // temporarily overwritten by let-statement struct literal resolution.
+    const std::string& try_ret =
+        (!func_ret_type_.empty() && (func_ret_type_.find("Outcome") != std::string::npos ||
+                                     func_ret_type_.find("Maybe") != std::string::npos))
+            ? func_ret_type_
+            : current_ret_type_;
+    bool ret_is_outcome = !try_ret.empty() && try_ret.find("Outcome") != std::string::npos;
+    bool ret_is_maybe = !try_ret.empty() && try_ret.find("Maybe") != std::string::npos;
 
     if (is_outcome && ret_is_outcome) {
-        // Propagate error from Outcome to Outcome-returning function
-        if (expr_type != current_ret_type_) {
-            // Different Outcome types - need to convert error
-            // e.g., Outcome[CipherAlgorithm, CryptoError] -> Outcome[(Buffer, AuthTag),
-            // CryptoError]
+        // Propagate error from Outcome to Outcome-returning function.
+        // CRITICAL: extract the error BEFORE emit_all_drops(), because drops
+        // may free Str/List memory that the error value references.
+        std::string error_type = "i64";
+        auto semantic_type = infer_expr_type(*try_expr.expr);
+        if (semantic_type && semantic_type->is<types::NamedType>()) {
+            const auto& named = semantic_type->as<types::NamedType>();
+            if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                error_type = llvm_type_from_semantic(named.type_args[1]);
+            }
+        }
+
+        if (expr_type == try_ret) {
+            // Same Outcome type - return as-is (no extraction needed)
+            emit_all_drops();
+            emit_line("  ret " + expr_type + " " + expr_val);
+        } else {
+            // Different Outcome types - extract error, drop, then return
             std::string err_data_ptr = fresh_reg();
             emit_line("  " + err_data_ptr + " = getelementptr inbounds " + expr_type + ", ptr " +
                       alloca_reg + ", i32 0, i32 1");
-
-            // Determine the error type from semantic analysis
-            std::string error_type = "i64"; // fallback
-            auto semantic_type = infer_expr_type(*try_expr.expr);
-            if (semantic_type && semantic_type->is<types::NamedType>()) {
-                const auto& named = semantic_type->as<types::NamedType>();
-                if (named.name == "Outcome" && named.type_args.size() >= 2) {
-                    error_type = llvm_type_from_semantic(named.type_args[1]);
-                }
-            }
-
-            // Load the error value (skip if void)
             std::string err_val;
             if (error_type == "void" || error_type == "{}") {
                 err_val = "zeroinitializer";
@@ -167,56 +171,47 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
                 emit_line("  " + err_val + " = load " + error_type + ", ptr " + err_data_ptr);
             }
 
-            // Construct a new Outcome of the function's return type with Err variant
+            // Now safe to drop locals — error value is already extracted
+            emit_all_drops();
+
+            // Construct return Outcome with Err variant
             std::string ret_alloc = fresh_reg();
-            emit_line("  " + ret_alloc + " = alloca " + current_ret_type_);
-            emit_line("  store " + current_ret_type_ + " zeroinitializer, ptr " + ret_alloc);
-
-            // Set tag = 1 (Err)
+            emit_line("  " + ret_alloc + " = alloca " + try_ret);
+            emit_line("  store " + try_ret + " zeroinitializer, ptr " + ret_alloc);
             std::string ret_tag_ptr = fresh_reg();
-            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + current_ret_type_ +
-                      ", ptr " + ret_alloc + ", i32 0, i32 0");
+            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + try_ret + ", ptr " +
+                      ret_alloc + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + ret_tag_ptr);
-
-            // Store error value into the data field (skip if void)
             if (error_type != "void" && error_type != "{}") {
                 std::string ret_data_ptr = fresh_reg();
-                emit_line("  " + ret_data_ptr + " = getelementptr inbounds " + current_ret_type_ +
-                          ", ptr " + ret_alloc + ", i32 0, i32 1");
+                emit_line("  " + ret_data_ptr + " = getelementptr inbounds " + try_ret + ", ptr " +
+                          ret_alloc + ", i32 0, i32 1");
                 emit_line("  store " + error_type + " " + err_val + ", ptr " + ret_data_ptr);
             }
-
-            // Load the complete return value and return
             std::string ret_val = fresh_reg();
-            emit_line("  " + ret_val + " = load " + current_ret_type_ + ", ptr " + ret_alloc);
-            emit_line("  ret " + current_ret_type_ + " " + ret_val);
-        } else {
-            // Same Outcome type - return as-is
-            emit_line("  ret " + expr_type + " " + expr_val);
+            emit_line("  " + ret_val + " = load " + try_ret + ", ptr " + ret_alloc);
+            emit_line("  ret " + try_ret + " " + ret_val);
         }
     } else if (is_maybe && ret_is_maybe) {
-        // Propagate Nothing from Maybe to Maybe-returning function
-        if (expr_type != current_ret_type_) {
-            // Different Maybe types - construct Nothing of the return type
+        // Propagate Nothing — no data to extract, just drop and return
+        emit_all_drops();
+        if (expr_type != try_ret) {
             std::string ret_alloc = fresh_reg();
-            emit_line("  " + ret_alloc + " = alloca " + current_ret_type_);
-            emit_line("  store " + current_ret_type_ + " zeroinitializer, ptr " + ret_alloc);
-
+            emit_line("  " + ret_alloc + " = alloca " + try_ret);
+            emit_line("  store " + try_ret + " zeroinitializer, ptr " + ret_alloc);
             std::string ret_tag_ptr = fresh_reg();
-            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + current_ret_type_ +
-                      ", ptr " + ret_alloc + ", i32 0, i32 0");
+            emit_line("  " + ret_tag_ptr + " = getelementptr inbounds " + try_ret + ", ptr " +
+                      ret_alloc + ", i32 0, i32 0");
             emit_line("  store i32 1, ptr " + ret_tag_ptr);
-
             std::string ret_val = fresh_reg();
-            emit_line("  " + ret_val + " = load " + current_ret_type_ + ", ptr " + ret_alloc);
-            emit_line("  ret " + current_ret_type_ + " " + ret_val);
+            emit_line("  " + ret_val + " = load " + try_ret + ", ptr " + ret_alloc);
+            emit_line("  ret " + try_ret + " " + ret_val);
         } else {
-            // Same Maybe type - return as-is
             emit_line("  ret " + expr_type + " " + expr_val);
         }
     } else {
         // Function does not return Outcome/Maybe - panic on error
-        // This handles cases like using ! in a function returning I32
+        emit_all_drops();
         std::string panic_msg =
             add_string_literal("try operator (!) failed: unwrap on error value");
         emit_line("  call void @panic(ptr " + panic_msg + ")");

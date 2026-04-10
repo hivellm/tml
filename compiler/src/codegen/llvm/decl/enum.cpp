@@ -192,9 +192,17 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
                 auto it = struct_fields_.find(struct_name);
                 if (it != struct_fields_.end()) {
                     size_t struct_size = 0;
+                    size_t max_align = 1;
                     for (const auto& field : it->second) {
-                        struct_size += calc_type_size(field.llvm_type);
+                        size_t fsz = calc_type_size(field.llvm_type);
+                        size_t fa = (field.llvm_type == "i1")    ? 1
+                                    : (field.llvm_type == "i32") ? 4
+                                                                 : 8;
+                        struct_size = (struct_size + fa - 1) & ~(fa - 1);
+                        struct_size += fsz;
+                        max_align = std::max(max_align, fa);
                     }
+                    struct_size = (struct_size + max_align - 1) & ~(max_align - 1);
                     return struct_size > 0 ? struct_size : 8;
                 }
 
@@ -223,7 +231,8 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             if (variant.tuple_fields.has_value()) {
                 for (const auto& field_type : *variant.tuple_fields) {
                     std::string ty = llvm_type_ptr(field_type);
-                    size += calc_type_size(ty);
+                    size_t fsz = calc_type_size(ty);
+                    size += fsz;
                 }
             }
             if (variant.struct_fields.has_value()) {
@@ -427,10 +436,20 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 }
                 auto it = struct_fields_.find(struct_name);
                 if (it != struct_fields_.end()) {
+                    // Compute alignment-aware struct size. Each field is aligned
+                    // to its natural alignment before accumulating.
                     size_t struct_size = 0;
+                    size_t max_align = 1;
                     for (const auto& field : it->second) {
-                        struct_size += calc_type_size(field.llvm_type);
+                        size_t fsz = calc_type_size(field.llvm_type);
+                        size_t fa = (field.llvm_type == "i1")    ? 1
+                                    : (field.llvm_type == "i32") ? 4
+                                                                 : 8;
+                        struct_size = (struct_size + fa - 1) & ~(fa - 1);
+                        struct_size += fsz;
+                        max_align = std::max(max_align, fa);
                     }
+                    struct_size = (struct_size + max_align - 1) & ~(max_align - 1);
                     return struct_size > 0 ? struct_size : 8;
                 }
 
