@@ -44,6 +44,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <unistd.h> // _exit() on POSIX
+#endif
 
 // Export macro for DLL visibility
 #ifdef _WIN32
@@ -318,7 +321,9 @@ TML_EXPORT int32_t tml_get_crash_abort_suite(void) {
 TML_EXPORT void tml_clear_crash_severity(void) {
     tml_crash_severity = CRASH_NONE;
     tml_crash_abort_suite = 0;
+#ifdef _WIN32
     tml_crash_bt_count = 0;
+#endif
 }
 
 /** @brief Get raw backtrace frames from last crash. */
@@ -1276,11 +1281,15 @@ static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
 #endif
 
 static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
+#ifdef _WIN32
     __try {
         return tml_run_with_timeout(test_fn);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return -2;
     }
+#else
+    return tml_run_with_timeout(test_fn);
+#endif
 }
 
 TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
