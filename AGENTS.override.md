@@ -5,6 +5,20 @@ These rules override `AGENTS.md` and generic rulebook guidance. Only TML-specifi
 
 ---
 
+## T0. NEVER mark a task as "blocked" — FIX IT (ABSOLUTE RULE)
+
+**NEVER write "BLOCKED", "blocker", or "blocked by" in tasks.md or any status update.** If something is broken, FIX IT. Do not stop. Do not summarize. Do not write a report about what's broken and wait for the next session. The task is not blocked — YOU haven't finished fixing it yet.
+
+- If a codegen bug prevents the frontend from working → **fix the codegen bug NOW**, in this session.
+- If a type mismatch crashes at runtime → **trace the root cause and fix it NOW**.
+- If the fix reveals another bug → **fix that one too**. Keep going until it works.
+- If you've tried 2 approaches and both failed → try a THIRD approach. Research deeper. Read the IR. Add debug prints. Trace the exact byte. Do NOT stop and label it "blocked".
+- The only acceptable output is **working code** or an explicit user decision to pause.
+- Writing "Phase 3 blocked by codegen bug" is FORBIDDEN. Instead: fix the codegen bug, then continue Phase 3.
+- This rule overrides the "fail twice → escalate" rule from AGENTS.md. You escalate to the USER only if you genuinely cannot figure out the root cause after exhaustive investigation — not after 2 attempts.
+
+---
+
 ## T1. Build & Toolchain
 
 - **NEVER run `cmake` directly.** Always use `scripts\build.bat` — CMakeLists.txt fails with a fatal error otherwise.

@@ -1,0 +1,1088 @@
+//! Binary serializer for the native parser AST types.
+//!
+//! Writes `Module`, `Decl`, `Expr`, `Stmt`, and `Pattern` from
+//! `compiler::ast::*` in the "AST " wire format that is compatible with
+//! the C++ `ast_reader.cpp` deserializer. This module operates directly on
+//! the parser's native types so the frontend binary (`main_frontend.tml`)
+//! no longer needs to convert to the `Tml*` mirror types in
+//! `compiler::serial::ast`.
+//!
+//! # SourceLocation encoding
+//!
+//! The native `SourceLocation` carries a `file` field, but the C++ reader
+//! does NOT read a file field — it injects the filename from the invocation
+//! context. Each location is therefore written as 4 × u32_le in the order:
+//! line, column, offset, length.
+//!
+//! # Entry point
+//!
+//! ```tml
+//! let w = BinaryWriter::new(4096)
+//! write_ast_module(w, my_module)
+//! let buf = w.finish()
+//! ```
+
+use compiler::serial::writer::BinaryWriter
+
+
+/// Magic bytes for the AST binary format: "AST " (0x41535420 LE).
+const AST_MAGIC: I64 = 0x41535420
+const AST_VERSION_MAJOR: I32 = 1
+const AST_VERSION_MINOR: I32 = 0
+use compiler::source::SourceLocation
+use compiler::source::SourceSpan
+use compiler::ast::common::Visibility
+use compiler::ast::common::LiteralKind
+use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::Module
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::UnaryOp
+use compiler::ast::exprs::BinaryOp
+use compiler::ast::exprs::ArrayKind
+use compiler::ast::exprs::InterpolatedSegment
+use compiler::ast::exprs::InterpolatedSegmentKind
+use compiler::ast::stmts::Stmt
+use compiler::ast::decls::Decl
+use compiler::ast::decls::FuncDecl
+use compiler::ast::decls::GenericParam
+use compiler::ast::decls::FuncParam
+use compiler::ast::decls::StructField
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// SourceLocation / SourceSpan
+// ============================================================================
+
+/// Write a SourceLocation as 4 × u32_le: line, column, offset, length.
+/// The `file` field is intentionally omitted — the C++ reader injects it.
+func write_loc(w: BinaryWriter, loc: SourceLocation) {
+    w.write_u32(loc.line)
+    w.write_u32(loc.column)
+    w.write_u32(loc.offset)
+    w.write_u32(loc.length)
+}
+
+/// Write a SourceSpan as two SourceLocations (start, end).
+func write_span(w: BinaryWriter, span: SourceSpan) {
+    write_loc(w, span.start)
+    write_loc(w, span.end)
+}
+
+// ============================================================================
+// Visibility
+// ============================================================================
+
+/// Write a Visibility as u8: 0=Private, 1=Public, 2=PubCrate.
+func ast_write_vis(w: BinaryWriter, vis: Visibility) {
+    when vis {
+        Private  => w.write_u8(0),
+        Public   => w.write_u8(1),
+        PubCrate => w.write_u8(2)
+    }
+}
+
+// ============================================================================
+// LiteralKind
+// ============================================================================
+
+/// Write a LiteralKind: u8 tag + payload.
+func write_literal_kind(w: BinaryWriter, lit: LiteralKind) {
+    when lit {
+        LitInt(v)   => { w.write_u8(0); w.write_u64(v) },
+        LitFloat(b) => { w.write_u8(1); w.write_u64(b) },
+        LitStr(s)   => { w.write_u8(2); w.write_str(s) },
+        LitBool(b)  => { w.write_u8(3); w.write_bool(b) },
+        LitChar(c)  => { w.write_u8(4); w.write_u32(c as I64) },
+        LitNull     => w.write_u8(5)
+    }
+}
+
+// ============================================================================
+// Operators
+// ============================================================================
+
+func write_unary_op(w: BinaryWriter, op: UnaryOp) {
+    when op {
+        OpNeg    => w.write_u8(0),
+        OpNot    => w.write_u8(1),
+        OpBitNot => w.write_u8(2),
+        OpRef    => w.write_u8(3),
+        OpRefMut => w.write_u8(4),
+        OpDeref  => w.write_u8(5),
+        OpInc    => w.write_u8(6),
+        OpDec    => w.write_u8(7)
+    }
+}
+
+func write_binary_op(w: BinaryWriter, op: BinaryOp) {
+    when op {
+        OpAdd          => w.write_u8(0),
+        OpSub          => w.write_u8(1),
+        OpMul          => w.write_u8(2),
+        OpDiv          => w.write_u8(3),
+        OpMod          => w.write_u8(4),
+        OpEq           => w.write_u8(5),
+        OpNe           => w.write_u8(6),
+        OpLt           => w.write_u8(7),
+        OpGt           => w.write_u8(8),
+        OpLe           => w.write_u8(9),
+        OpGe           => w.write_u8(10),
+        OpAnd          => w.write_u8(11),
+        OpOr           => w.write_u8(12),
+        OpBitAnd       => w.write_u8(13),
+        OpBitOr        => w.write_u8(14),
+        OpBitXor       => w.write_u8(15),
+        OpShl          => w.write_u8(16),
+        OpShr          => w.write_u8(17),
+        OpAssign       => w.write_u8(18),
+        OpAddAssign    => w.write_u8(19),
+        OpSubAssign    => w.write_u8(20),
+        OpMulAssign    => w.write_u8(21),
+        OpDivAssign    => w.write_u8(22),
+        OpModAssign    => w.write_u8(23),
+        OpBitAndAssign => w.write_u8(24),
+        OpBitOrAssign  => w.write_u8(25),
+        OpBitXorAssign => w.write_u8(26),
+        OpShlAssign    => w.write_u8(27),
+        OpShrAssign    => w.write_u8(28)
+    }
+}
+
+// ============================================================================
+// TypePath
+// ============================================================================
+
+/// Write a TypePath: varint(segment_count) + str[] segments + SourceSpan.
+func ast_write_type_path(w: BinaryWriter, path: TypePath) {
+    let segs: List[Str] = path.segments
+    w.write_varint(segs.len())
+    var i: I64 = 0
+    loop (i < segs.len()) {
+        w.write_str(segs.get(i))
+        i = i + 1
+    }
+    write_span(w, path.span)
+}
+
+// ============================================================================
+// TypeExpr
+// ============================================================================
+
+/// Write a Maybe[Heap[TypeExpr]]: tag u8 (0=Nothing, 1=Just) then type.
+func write_opt_type(w: BinaryWriter, mt: Maybe[Heap[TypeExpr]]) {
+    when mt {
+        Just(t) => { w.write_u8(1); ast_write_type(w, t.get()) },
+        Nothing => w.write_u8(0)
+    }
+}
+
+/// Write a List[Heap[TypeExpr]]: varint count then each type.
+func ast_write_type_list(w: BinaryWriter, types: List[Heap[TypeExpr]]) {
+    w.write_varint(types.len())
+    var i: I64 = 0
+    loop (i < types.len()) {
+        ast_write_type(w, types.get(i).get())
+        i = i + 1
+    }
+}
+
+/// Write a TypeExpr. Tag u8 + variant fields.
+///
+/// Tag mapping: 0=Named 1=Ref 2=Ptr 3=Array 4=Slice 5=Tuple 6=Func
+///              7=Infer 8=Dyn 9=ImplBehavior
+func ast_write_type(w: BinaryWriter, ty: TypeExpr) {
+    when ty {
+        Named(n) => {
+            w.write_u8(0)
+            ast_write_type_path(w, n.path)
+            ast_write_type_list(w, n.args)
+            write_span(w, n.span)
+        },
+        Ref(r) => {
+            w.write_u8(1)
+            ast_write_type(w, r.inner.get())
+            w.write_bool(r.is_mut)
+            write_span(w, r.span)
+        },
+        Ptr(p) => {
+            w.write_u8(2)
+            ast_write_type(w, p.inner.get())
+            w.write_bool(p.is_mut)
+            write_span(w, p.span)
+        },
+        Array(a) => {
+            w.write_u8(3)
+            ast_write_type(w, a.element.get())
+            ast_write_expr(w, a.size.get(), 0)
+            write_span(w, a.span)
+        },
+        Slice(s) => {
+            w.write_u8(4)
+            ast_write_type(w, s.element.get())
+            write_span(w, s.span)
+        },
+        Tuple(t) => {
+            w.write_u8(5)
+            ast_write_type_list(w, t.elements)
+            write_span(w, t.span)
+        },
+        Func(f) => {
+            w.write_u8(6)
+            ast_write_type_list(w, f.params)
+            write_opt_type(w, f.return_type)
+            write_span(w, f.span)
+        },
+        Infer(span) => {
+            w.write_u8(7)
+            write_span(w, span)
+        },
+        Dyn(d) => {
+            w.write_u8(8)
+            let bounds: List[TypePath] = d.bounds
+            w.write_varint(bounds.len())
+            var i: I64 = 0
+            loop (i < bounds.len()) {
+                ast_write_type_path(w, bounds.get(i))
+                i = i + 1
+            }
+            write_span(w, d.span)
+        },
+        ImplBehavior(ib) => {
+            w.write_u8(9)
+            let bounds: List[TypePath] = ib.bounds
+            w.write_varint(bounds.len())
+            var i: I64 = 0
+            loop (i < bounds.len()) {
+                ast_write_type_path(w, bounds.get(i))
+                i = i + 1
+            }
+            write_span(w, ib.span)
+        }
+    }
+}
+
+// ============================================================================
+// Pattern
+// ============================================================================
+
+/// Write a Pattern. Tag u8 + variant fields.
+///
+/// Tag mapping: 0=Wildcard 1=Ident 2=Literal 3=Tuple 4=Struct 5=Enum
+///              6=Or 7=Range 8=Array
+func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
+    when pat {
+        Wildcard(span) => {
+            w.write_u8(0)
+            write_span(w, span)
+        },
+        Ident(ip) => {
+            w.write_u8(1)
+            w.write_str(ip.name)
+            when ip.subpat {
+                Just(sp) => { w.write_u8(1); ast_write_pattern(w, sp.get()) },
+                Nothing  => w.write_u8(0)
+            }
+            write_span(w, ip.span)
+        },
+        Literal(lp) => {
+            w.write_u8(2)
+            write_literal_kind(w, lp.value)
+            write_span(w, lp.span)
+        },
+        Tuple(tp) => {
+            w.write_u8(3)
+            let pats: List[Heap[Pattern]] = tp.patterns
+            w.write_varint(pats.len())
+            var i: I64 = 0
+            loop (i < pats.len()) {
+                ast_write_pattern(w, pats.get(i).get())
+                i = i + 1
+            }
+            write_span(w, tp.span)
+        },
+        Struct(sp) => {
+            w.write_u8(4)
+            ast_write_type_path(w, sp.path)
+            let fields = sp.fields
+            w.write_varint(fields.len())
+            var i: I64 = 0
+            loop (i < fields.len()) {
+                let f = fields.get(i)
+                w.write_str(f.name)
+                ast_write_pattern(w, f.pat.get())
+                write_span(w, f.span)
+                i = i + 1
+            }
+            write_span(w, sp.span)
+        },
+        Enum(ep) => {
+            w.write_u8(5)
+            ast_write_type_path(w, ep.path)
+            let args: List[Heap[Pattern]] = ep.args
+            w.write_varint(args.len())
+            var i: I64 = 0
+            loop (i < args.len()) {
+                ast_write_pattern(w, args.get(i).get())
+                i = i + 1
+            }
+            write_span(w, ep.span)
+        },
+        Or(op) => {
+            w.write_u8(6)
+            let alts: List[Heap[Pattern]] = op.alternatives
+            w.write_varint(alts.len())
+            var i: I64 = 0
+            loop (i < alts.len()) {
+                ast_write_pattern(w, alts.get(i).get())
+                i = i + 1
+            }
+            write_span(w, op.span)
+        },
+        Range(rp) => {
+            w.write_u8(7)
+            write_literal_kind(w, rp.start)
+            write_literal_kind(w, rp.end)
+            w.write_bool(rp.inclusive)
+            write_span(w, rp.span)
+        },
+        Array(ap) => {
+            w.write_u8(8)
+            let pats: List[Heap[Pattern]] = ap.patterns
+            w.write_varint(pats.len())
+            var i: I64 = 0
+            loop (i < pats.len()) {
+                ast_write_pattern(w, pats.get(i).get())
+                i = i + 1
+            }
+            write_span(w, ap.span)
+        }
+    }
+}
+
+// ============================================================================
+// Interpolated string segment
+// ============================================================================
+
+func write_interpolated_segment(w: BinaryWriter, seg: InterpolatedSegment, depth: I64) {
+    when seg.kind {
+        SegText(s) => { w.write_u8(0); w.write_str(s) },
+        SegExpr(e) => { w.write_u8(1); ast_write_expr(w, e.get(), depth + 1) }
+    }
+    write_span(w, seg.span)
+}
+
+// ============================================================================
+// Expr
+// ============================================================================
+
+/// Write a Maybe[Heap[Expr]] with a presence tag byte.
+func write_opt_expr(w: BinaryWriter, me: Maybe[Heap[Expr]], depth: I64) {
+    when me {
+        Just(e) => { w.write_u8(1); ast_write_expr(w, e.get(), depth) },
+        Nothing => w.write_u8(0)
+    }
+}
+
+/// Write an Expr. Tag u8 + variant fields.
+///
+/// `depth` is incremented on each recursive call for debugging.
+/// Tag mapping: 0=Literal 1=Ident 2=Unary 3=Binary 4=Call 5=MethodCall
+///   6=Field 7=Index 8=Tuple 9=Array 10=Struct 11=If 12=Ternary 13=IfLet
+///   14=When 15=Loop 16=While 17=For 18=Block 19=Return 20=Break 21=Continue
+///   22=Closure 23=Range 24=Cast 25=Is 26=Try 27=Await 28=Throw 29=Path
+///   30=Lowlevel 31=InterpolatedString 32=TemplateLiteral 33=Base 34=New
+func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
+    when e {
+        Literal(le) => {
+            w.write_u8(0)
+            write_literal_kind(w, le.value)
+            write_span(w, le.span)
+        },
+        Ident(ie) => {
+            w.write_u8(1)
+            w.write_str(ie.name)
+            write_span(w, ie.span)
+        },
+        Unary(ue) => {
+            w.write_u8(2)
+            write_unary_op(w, ue.op)
+            ast_write_expr(w, ue.operand.get(), depth + 1)
+            write_span(w, ue.span)
+        },
+        Binary(be) => {
+            w.write_u8(3)
+            write_binary_op(w, be.op)
+            ast_write_expr(w, be.left.get(), depth + 1)
+            ast_write_expr(w, be.right.get(), depth + 1)
+            write_span(w, be.span)
+        },
+        Call(ce) => {
+            w.write_u8(4)
+            ast_write_expr(w, ce.callee.get(), depth + 1)
+            let args: List[Heap[Expr]] = ce.args
+            w.write_varint(args.len())
+            var i: I64 = 0
+            loop (i < args.len()) {
+                ast_write_expr(w, args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_span(w, ce.span)
+        },
+        MethodCall(mc) => {
+            w.write_u8(5)
+            ast_write_expr(w, mc.receiver.get(), depth + 1)
+            w.write_str(mc.method)
+            ast_write_type_list(w, mc.type_args)
+            let args: List[Heap[Expr]] = mc.args
+            w.write_varint(args.len())
+            var i: I64 = 0
+            loop (i < args.len()) {
+                ast_write_expr(w, args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            w.write_bool(mc.optional_chain)
+            write_span(w, mc.span)
+        },
+        Field(fe) => {
+            w.write_u8(6)
+            ast_write_expr(w, fe.object.get(), depth + 1)
+            w.write_str(fe.field)
+            w.write_bool(fe.optional_chain)
+            write_span(w, fe.span)
+        },
+        Index(ie) => {
+            w.write_u8(7)
+            ast_write_expr(w, ie.object.get(), depth + 1)
+            ast_write_expr(w, ie.index.get(), depth + 1)
+            write_span(w, ie.span)
+        },
+        Tuple(te) => {
+            w.write_u8(8)
+            let elems: List[Heap[Expr]] = te.elements
+            w.write_varint(elems.len())
+            var i: I64 = 0
+            loop (i < elems.len()) {
+                ast_write_expr(w, elems.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_span(w, te.span)
+        },
+        Array(ae) => {
+            w.write_u8(9)
+            when ae.kind {
+                Elements(elems) => {
+                    w.write_u8(0)
+                    w.write_varint(elems.len())
+                    var i: I64 = 0
+                    loop (i < elems.len()) {
+                        ast_write_expr(w, elems.get(i).get(), depth + 1)
+                        i = i + 1
+                    }
+                },
+                Repeat(val, cnt) => {
+                    w.write_u8(1)
+                    ast_write_expr(w, val.get(), depth + 1)
+                    ast_write_expr(w, cnt.get(), depth + 1)
+                }
+            }
+            write_span(w, ae.span)
+        },
+        Struct(se) => {
+            w.write_u8(10)
+            ast_write_type_path(w, se.path)
+            when se.type_args {
+                Just(targs) => { w.write_u8(1); ast_write_type_list(w, targs) },
+                Nothing     => w.write_u8(0)
+            }
+            let fields = se.fields
+            w.write_varint(fields.len())
+            var i: I64 = 0
+            loop (i < fields.len()) {
+                let f = fields.get(i)
+                w.write_str(f.name)
+                ast_write_expr(w, f.value.get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_expr(w, se.base_expr, depth + 1)
+            write_span(w, se.span)
+        },
+        If(ie) => {
+            w.write_u8(11)
+            ast_write_expr(w, ie.condition.get(), depth + 1)
+            ast_write_expr(w, ie.then_branch.get(), depth + 1)
+            write_opt_expr(w, ie.else_branch, depth + 1)
+            write_span(w, ie.span)
+        },
+        Ternary(te) => {
+            w.write_u8(12)
+            ast_write_expr(w, te.condition.get(), depth + 1)
+            ast_write_expr(w, te.true_value.get(), depth + 1)
+            ast_write_expr(w, te.false_value.get(), depth + 1)
+            write_span(w, te.span)
+        },
+        IfLet(ile) => {
+            w.write_u8(13)
+            ast_write_pattern(w, ile.pattern.get())
+            ast_write_expr(w, ile.scrutinee.get(), depth + 1)
+            ast_write_expr(w, ile.then_branch.get(), depth + 1)
+            write_opt_expr(w, ile.else_branch, depth + 1)
+            write_span(w, ile.span)
+        },
+        When(we) => {
+            w.write_u8(14)
+            ast_write_expr(w, we.scrutinee.get(), depth + 1)
+            let arms = we.arms
+            w.write_varint(arms.len())
+            var i: I64 = 0
+            loop (i < arms.len()) {
+                let arm = arms.get(i)
+                ast_write_pattern(w, arm.pattern.get())
+                when arm.guard {
+                    Just(g) => { w.write_u8(1); ast_write_expr(w, g.get(), depth + 1) },
+                    Nothing => w.write_u8(0)
+                }
+                ast_write_expr(w, arm.body.get(), depth + 1)
+                write_span(w, arm.span)
+                i = i + 1
+            }
+            write_span(w, we.span)
+        },
+        Loop(le) => {
+            w.write_u8(15)
+            w.write_opt_str(le.label)
+            when le.loop_var {
+                Just(lv) => {
+                    w.write_u8(1)
+                    w.write_str(lv.name)
+                    ast_write_type(w, lv.ty.get())
+                    write_span(w, lv.span)
+                },
+                Nothing => w.write_u8(0)
+            }
+            ast_write_expr(w, le.condition.get(), depth + 1)
+            ast_write_expr(w, le.body.get(), depth + 1)
+            write_span(w, le.span)
+        },
+        While(we) => {
+            w.write_u8(16)
+            w.write_opt_str(we.label)
+            ast_write_expr(w, we.condition.get(), depth + 1)
+            ast_write_expr(w, we.body.get(), depth + 1)
+            write_span(w, we.span)
+        },
+        For(fe) => {
+            w.write_u8(17)
+            w.write_opt_str(fe.label)
+            ast_write_pattern(w, fe.pattern.get())
+            ast_write_expr(w, fe.iter.get(), depth + 1)
+            ast_write_expr(w, fe.body.get(), depth + 1)
+            write_span(w, fe.span)
+        },
+        Block(be) => {
+            w.write_u8(18)
+            let stmts: List[Heap[Stmt]] = be.stmts
+            w.write_varint(stmts.len())
+            var i: I64 = 0
+            loop (i < stmts.len()) {
+                ast_write_stmt(w, stmts.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_expr(w, be.expr, depth + 1)
+            write_span(w, be.span)
+        },
+        Return(re) => {
+            w.write_u8(19)
+            write_opt_expr(w, re.value, depth + 1)
+            write_span(w, re.span)
+        },
+        Break(be) => {
+            w.write_u8(20)
+            w.write_opt_str(be.label)
+            write_opt_expr(w, be.value, depth + 1)
+            write_span(w, be.span)
+        },
+        Continue(ce) => {
+            w.write_u8(21)
+            w.write_opt_str(ce.label)
+            write_span(w, ce.span)
+        },
+        Closure(cle) => {
+            w.write_u8(22)
+            let params = cle.params
+            w.write_varint(params.len())
+            var i: I64 = 0
+            loop (i < params.len()) {
+                let p = params.get(i)
+                ast_write_pattern(w, p.pattern.get())
+                write_opt_type(w, p.ty)
+                i = i + 1
+            }
+            write_opt_type(w, cle.return_type)
+            ast_write_expr(w, cle.body.get(), depth + 1)
+            w.write_bool(cle.is_move)
+            write_span(w, cle.span)
+        },
+        Range(re) => {
+            w.write_u8(23)
+            write_opt_expr(w, re.start, depth + 1)
+            write_opt_expr(w, re.end, depth + 1)
+            w.write_bool(re.inclusive)
+            write_span(w, re.span)
+        },
+        Cast(ce) => {
+            w.write_u8(24)
+            ast_write_expr(w, ce.expr.get(), depth + 1)
+            ast_write_type(w, ce.target.get())
+            write_span(w, ce.span)
+        },
+        Is(ie) => {
+            w.write_u8(25)
+            ast_write_expr(w, ie.expr.get(), depth + 1)
+            ast_write_type(w, ie.target.get())
+            write_span(w, ie.span)
+        },
+        Try(te) => {
+            w.write_u8(26)
+            ast_write_expr(w, te.expr.get(), depth + 1)
+            write_span(w, te.span)
+        },
+        Await(ae) => {
+            w.write_u8(27)
+            ast_write_expr(w, ae.expr.get(), depth + 1)
+            write_span(w, ae.span)
+        },
+        Throw(te) => {
+            w.write_u8(28)
+            ast_write_expr(w, te.expr.get(), depth + 1)
+            write_span(w, te.span)
+        },
+        Path(pe) => {
+            w.write_u8(29)
+            ast_write_type_path(w, pe.path)
+            when pe.type_args {
+                Just(targs) => { w.write_u8(1); ast_write_type_list(w, targs) },
+                Nothing     => w.write_u8(0)
+            }
+            write_span(w, pe.span)
+        },
+        Lowlevel(lle) => {
+            w.write_u8(30)
+            let stmts: List[Heap[Stmt]] = lle.stmts
+            w.write_varint(stmts.len())
+            var i: I64 = 0
+            loop (i < stmts.len()) {
+                ast_write_stmt(w, stmts.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_opt_expr(w, lle.expr, depth + 1)
+            write_span(w, lle.span)
+        },
+        InterpolatedString(ise) => {
+            w.write_u8(31)
+            let segs = ise.segments
+            w.write_varint(segs.len())
+            var i: I64 = 0
+            loop (i < segs.len()) {
+                write_interpolated_segment(w, segs.get(i), depth)
+                i = i + 1
+            }
+            write_span(w, ise.span)
+        },
+        TemplateLiteral(tle) => {
+            w.write_u8(32)
+            let segs = tle.segments
+            w.write_varint(segs.len())
+            var i: I64 = 0
+            loop (i < segs.len()) {
+                write_interpolated_segment(w, segs.get(i), depth)
+                i = i + 1
+            }
+            write_span(w, tle.span)
+        },
+        Base(be) => {
+            w.write_u8(33)
+            w.write_str(be.member)
+            ast_write_type_list(w, be.type_args)
+            let args: List[Heap[Expr]] = be.args
+            w.write_varint(args.len())
+            var i: I64 = 0
+            loop (i < args.len()) {
+                ast_write_expr(w, args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            w.write_bool(be.is_method_call)
+            write_span(w, be.span)
+        },
+        New(ne) => {
+            w.write_u8(34)
+            ast_write_type_path(w, ne.class_type)
+            when ne.type_args {
+                Just(targs) => { w.write_u8(1); ast_write_type_list(w, targs) },
+                Nothing     => w.write_u8(0)
+            }
+            let args: List[Heap[Expr]] = ne.args
+            w.write_varint(args.len())
+            var i: I64 = 0
+            loop (i < args.len()) {
+                ast_write_expr(w, args.get(i).get(), depth + 1)
+                i = i + 1
+            }
+            write_span(w, ne.span)
+        }
+    }
+}
+
+// ============================================================================
+// Stmt
+// ============================================================================
+
+/// Write a Stmt. Tag u8 + variant fields.
+///
+/// Tag mapping: 0=Let 1=Var 2=LetElse 3=Expr 4=Decl
+func ast_write_stmt(w: BinaryWriter, s: Stmt, depth: I64) {
+    when s {
+        Let(ls) => {
+            w.write_u8(0)
+            ast_write_pattern(w, ls.pattern.get())
+            write_opt_type(w, ls.ty)
+            write_opt_expr(w, ls.init, depth + 1)
+            write_span(w, ls.span)
+        },
+        Var(vs) => {
+            w.write_u8(1)
+            w.write_str(vs.name)
+            write_opt_type(w, vs.ty)
+            write_opt_expr(w, vs.init, depth + 1)
+            write_span(w, vs.span)
+        },
+        LetElse(les) => {
+            w.write_u8(2)
+            ast_write_pattern(w, les.pattern.get())
+            ast_write_expr(w, les.init.get(), depth + 1)
+            ast_write_expr(w, les.else_body.get(), depth + 1)
+            write_span(w, les.span)
+        },
+        Expr(e) => {
+            w.write_u8(3)
+            ast_write_expr(w, e.get(), depth + 1)
+        },
+        Decl(d) => {
+            w.write_u8(4)
+            ast_write_decl(w, d.get())
+        }
+    }
+}
+
+// ============================================================================
+// Decl helpers
+// ============================================================================
+
+func write_generic_param(w: BinaryWriter, gp: GenericParam) {
+    w.write_str(gp.name)
+    let bounds: List[TypePath] = gp.bounds
+    w.write_varint(bounds.len())
+    var i: I64 = 0
+    loop (i < bounds.len()) {
+        ast_write_type_path(w, bounds.get(i))
+        i = i + 1
+    }
+    write_span(w, gp.span)
+}
+
+func write_generic_params(w: BinaryWriter, generics: List[GenericParam]) {
+    w.write_varint(generics.len())
+    var i: I64 = 0
+    loop (i < generics.len()) {
+        write_generic_param(w, generics.get(i))
+        i = i + 1
+    }
+}
+
+// Note: write_func_param is inlined at call sites because FuncParam is a
+// large struct and List[FuncParam].get() returns by value via pointer.
+
+// Note: write_struct_field is inlined at call sites because StructField is a
+// large struct and List[StructField].get() returns by value via pointer, which
+// the current codegen can't pass to another function correctly.
+
+/// Write a FuncDecl's body fields (shared by standalone funcs, trait methods,
+/// impl methods, class methods, and interface methods).
+func ast_write_func_decl_body(w: BinaryWriter, fd: FuncDecl) {
+    w.write_str(fd.name)
+    ast_write_vis(w, fd.visibility)
+    write_generic_params(w, fd.generics)
+    let params: List[FuncParam] = fd.params
+    w.write_varint(params.len())
+    var i: I64 = 0
+    loop (i < params.len()) {
+        let fp: FuncParam = params.get(i)
+        w.write_str(fp.name)
+        ast_write_type(w, fp.ty.get())
+        w.write_bool(fp.is_this)
+        w.write_bool(fp.is_mut)
+        write_span(w, fp.span)
+        i = i + 1
+    }
+    write_opt_type(w, fd.return_type)
+    when fd.body {
+        Just(b) => { w.write_u8(1); ast_write_expr(w, b.get(), 0) },
+        Nothing => w.write_u8(0)
+    }
+    w.write_bool(fd.is_async)
+    w.write_bool(fd.is_override)
+    write_span(w, fd.span)
+}
+
+func ast_write_func_decl_list(w: BinaryWriter, methods: List[FuncDecl]) {
+    w.write_varint(methods.len())
+    var i: I64 = 0
+    loop (i < methods.len()) {
+        ast_write_func_decl_body(w, methods.get(i))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// Decl
+// ============================================================================
+
+/// Write a Decl. Tag u8 + variant fields.
+///
+/// Tag mapping: 0=Func 1=Struct 2=Union 3=Enum 4=Trait 5=Impl 6=TypeAlias
+///              7=Const 8=Use 9=Mod 10=Class 11=Interface 12=Namespace
+/// Wrapper that takes Heap[Decl] to avoid large struct by-value corruption.
+func ast_write_decl_heap(w: BinaryWriter, h: Heap[Decl]) {
+    let d: Decl = h.get()
+    ast_write_decl(w, d)
+}
+
+func ast_write_decl(w: BinaryWriter, d: Decl) {
+    // DEBUG: check if data is valid by accessing the tag
+    // The tag is the first field of the Decl enum (i32)
+    when d {
+        Func(fd) => {
+            w.write_u8(0)
+            ast_write_func_decl_body(w, fd)
+        },
+        Struct(sd) => {
+            w.write_u8(1)
+            w.write_str(sd.name)
+            ast_write_vis(w, sd.visibility)
+            write_generic_params(w, sd.generics)
+            let fields: List[StructField] = sd.fields
+            w.write_varint(fields.len())
+            var i: I64 = 0
+            loop (i < fields.len()) {
+                let sf: StructField = fields.get(i)
+                w.write_str(sf.name)
+                ast_write_type(w, sf.ty.get())
+                ast_write_vis(w, sf.visibility)
+                write_span(w, sf.span)
+                i = i + 1
+            }
+            write_span(w, sd.span)
+        },
+        Union(ud) => {
+            w.write_u8(2)
+            w.write_str(ud.name)
+            ast_write_vis(w, ud.visibility)
+            write_generic_params(w, ud.generics)
+            let fields: List[StructField] = ud.fields
+            w.write_varint(fields.len())
+            var i: I64 = 0
+            loop (i < fields.len()) {
+                let sf: StructField = fields.get(i)
+                w.write_str(sf.name)
+                ast_write_type(w, sf.ty.get())
+                ast_write_vis(w, sf.visibility)
+                write_span(w, sf.span)
+                i = i + 1
+            }
+            write_span(w, ud.span)
+        },
+        Enum(ed) => {
+            w.write_u8(3)
+            w.write_str(ed.name)
+            ast_write_vis(w, ed.visibility)
+            write_generic_params(w, ed.generics)
+            let variants = ed.variants
+            w.write_varint(variants.len())
+            var i: I64 = 0
+            loop (i < variants.len()) {
+                let v = variants.get(i)
+                w.write_str(v.name)
+                ast_write_type_list(w, v.fields)
+                write_span(w, v.span)
+                i = i + 1
+            }
+            write_span(w, ed.span)
+        },
+        Trait(td) => {
+            w.write_u8(4)
+            w.write_str(td.name)
+            ast_write_vis(w, td.visibility)
+            write_generic_params(w, td.generics)
+            let supertraits: List[TypePath] = td.supertraits
+            w.write_varint(supertraits.len())
+            var i: I64 = 0
+            loop (i < supertraits.len()) {
+                ast_write_type_path(w, supertraits.get(i))
+                i = i + 1
+            }
+            ast_write_func_decl_list(w, td.methods)
+            write_span(w, td.span)
+        },
+        Impl(id) => {
+            w.write_u8(5)
+            ast_write_type(w, id.ty.get())
+            when id.behavior_path {
+                Just(bp) => { w.write_u8(1); ast_write_type_path(w, bp) },
+                Nothing  => w.write_u8(0)
+            }
+            write_generic_params(w, id.generics)
+            ast_write_func_decl_list(w, id.methods)
+            write_span(w, id.span)
+        },
+        TypeAlias(ta) => {
+            w.write_u8(6)
+            w.write_str(ta.name)
+            ast_write_vis(w, ta.visibility)
+            write_generic_params(w, ta.generics)
+            ast_write_type(w, ta.ty.get())
+            write_span(w, ta.span)
+        },
+        Const(cd) => {
+            w.write_u8(7)
+            w.write_str(cd.name)
+            ast_write_vis(w, cd.visibility)
+            ast_write_type(w, cd.ty.get())
+            ast_write_expr(w, cd.value.get(), 0)
+            write_span(w, cd.span)
+        },
+        Use(ud) => {
+            w.write_u8(8)
+            let segs: List[Str] = ud.path.segments
+            w.write_varint(segs.len())
+            var i: I64 = 0
+            loop (i < segs.len()) {
+                w.write_str(segs.get(i))
+                i = i + 1
+            }
+            w.write_opt_str(ud.path.alias)
+            ast_write_vis(w, ud.visibility)
+            write_span(w, ud.span)
+        },
+        Mod(md) => {
+            w.write_u8(9)
+            w.write_str(md.name)
+            ast_write_vis(w, md.visibility)
+            let items: List[Heap[Decl]] = md.items
+            w.write_varint(items.len())
+            var i: I64 = 0
+            loop (i < items.len()) {
+                ast_write_decl(w, items.get(i).get())
+                i = i + 1
+            }
+            write_span(w, md.span)
+        },
+        Class(cd) => {
+            w.write_u8(10)
+            w.write_str(cd.name)
+            ast_write_vis(w, cd.visibility)
+            write_generic_params(w, cd.generics)
+            when cd.parent {
+                Just(p) => { w.write_u8(1); ast_write_type_path(w, p) },
+                Nothing => w.write_u8(0)
+            }
+            let ifaces: List[TypePath] = cd.interfaces
+            w.write_varint(ifaces.len())
+            var i: I64 = 0
+            loop (i < ifaces.len()) {
+                ast_write_type_path(w, ifaces.get(i))
+                i = i + 1
+            }
+            let cfields = cd.fields
+            w.write_varint(cfields.len())
+            i = 0
+            loop (i < cfields.len()) {
+                let cf = cfields.get(i)
+                w.write_str(cf.name)
+                ast_write_type(w, cf.ty.get())
+                ast_write_vis(w, cf.visibility)
+                write_span(w, cf.span)
+                i = i + 1
+            }
+            ast_write_func_decl_list(w, cd.methods)
+            write_span(w, cd.span)
+        },
+        Interface(ifd) => {
+            w.write_u8(11)
+            w.write_str(ifd.name)
+            ast_write_vis(w, ifd.visibility)
+            write_generic_params(w, ifd.generics)
+            ast_write_func_decl_list(w, ifd.methods)
+            write_span(w, ifd.span)
+        },
+        Namespace(nd) => {
+            w.write_u8(12)
+            w.write_str(nd.name)
+            ast_write_vis(w, nd.visibility)
+            let items: List[Heap[Decl]] = nd.items
+            w.write_varint(items.len())
+            var i: I64 = 0
+            loop (i < items.len()) {
+                ast_write_decl(w, items.get(i).get())
+                i = i + 1
+            }
+            write_span(w, nd.span)
+        }
+    }
+}
+
+// ============================================================================
+// Module — top-level entry point
+// ============================================================================
+
+/// Serialize a `Module` to the "AST " binary format.
+///
+/// Writes the header (magic u32 + version major/minor u8), module name,
+/// doc comments, module span, declaration count, and all declarations.
+/// Compatible with the C++ `ast_reader.cpp` `read_ast()` deserializer.
+///
+/// # Example
+///
+/// ```tml
+/// let w = BinaryWriter::new(4096)
+/// write_ast_module(w, my_module)
+/// let buf = w.finish()
+/// ```
+pub func write_ast_module(w: BinaryWriter, m: Module) {
+    // Header
+    w.write_u32(AST_MAGIC)
+    w.write_u8(AST_VERSION_MAJOR)
+    w.write_u8(AST_VERSION_MINOR)
+    // Module name
+    w.write_str(m.name)
+    // Doc comments
+    let docs: List[Str] = m.docs
+    w.write_varint(docs.len())
+    var i: I64 = 0
+    loop (i < docs.len()) {
+        w.write_str(docs.get(i))
+        i = i + 1
+    }
+    // Module span — 2 × SourceLocation (each 4 × u32_le, no file field)
+    write_span(w, m.span)
+    // Declarations
+    let decls: List[Heap[Decl]] = m.decls
+    w.write_varint(decls.len())
+    i = 0
+    loop (i < decls.len()) {
+        let decl_heap: Heap[Decl] = decls.get(i)
+        ast_write_decl_heap(w, decl_heap)
+        i = i + 1
+    }
+}

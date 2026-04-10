@@ -261,7 +261,7 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             type_defs_buffer_ << type_name << " = type { i32, i64 }\n";
             enum_payload_type_[type_name] = "i64";
         } else {
-            // Large payloads — keep [N x i64] union
+            // Large payloads — use [N x i64] for 8-byte-aligned data storage.
             size_t num_i64 = (max_size + 7) / 8;
             type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
                               << " x i64] }\n";
@@ -535,8 +535,6 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
             type_defs_buffer_ << type_name << " = type { i32, i64 }\n";
             enum_payload_type_[type_name] = "i64";
         } else {
-            // Large payloads — keep [N x i64] union for proper 8-byte alignment.
-            // Use [N x i64] instead of [N x i8] to ensure alignment of the payload data.
             size_t num_i64 = (max_size + 7) / 8;
             type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
                               << " x i64] }\n";

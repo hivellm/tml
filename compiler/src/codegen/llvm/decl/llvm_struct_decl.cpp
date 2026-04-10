@@ -164,31 +164,31 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
                             return false;
                         const auto& edef = it->second;
                         // Compute enum layout: { i32 tag, [max_payload] }
-                        int max_payload_bytes = 0;
+                        size_t max_payload_bytes = 0;
                         for (const auto& [vname, vtypes] : edef.variants) {
-                            int variant_size = 0;
+                            size_t variant_size = 0;
                             for (const auto& vt : vtypes) {
                                 std::string llvm_ft = llvm_type_from_semantic(vt);
-                                if (llvm_ft == "i8")
-                                    variant_size += 1;
-                                else if (llvm_ft == "i16")
-                                    variant_size += 2;
-                                else if (llvm_ft == "i32" || llvm_ft == "float")
-                                    variant_size += 4;
-                                else
-                                    variant_size += 8;
+                                // Use compute_llvm_type_byte_size for accurate struct sizes.
+                                variant_size += compute_llvm_type_byte_size(llvm_ft, dep_name);
                             }
-                            if (variant_size > max_payload_bytes)
+                            if (variant_size > max_payload_bytes) {
                                 max_payload_bytes = variant_size;
+                            }
                         }
                         std::string dep_type_name = "%struct." + dep_name;
                         std::string enum_def;
-                        if (max_payload_bytes == 0)
+                        if (max_payload_bytes == 0) {
                             enum_def = dep_type_name + " = type { i32 }";
-                        else if (max_payload_bytes <= 4)
+                        } else if (max_payload_bytes <= 4) {
                             enum_def = dep_type_name + " = type { i32, i32 }";
-                        else
-                            enum_def = dep_type_name + " = type { i32, [1 x i64] }";
+                        } else if (max_payload_bytes <= 8) {
+                            enum_def = dep_type_name + " = type { i32, i64 }";
+                        } else {
+                            size_t num_i64 = (max_payload_bytes + 7) / 8;
+                            enum_def = dep_type_name + " = type { i32, [" +
+                                       std::to_string(num_i64) + " x i64] }";
+                        }
                         type_defs_buffer_ << enum_def << "\n";
                         struct_types_[dep_name] = dep_type_name;
                         int tag = 0;
