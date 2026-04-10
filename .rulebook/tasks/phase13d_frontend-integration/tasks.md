@@ -24,9 +24,8 @@
 
 ## Phase 3: Differential Testing — Full Suite (5 items)
 
-**BLOCKER**: The TML frontend crashes (exit 127 / heap corruption) when `parse_primary_expr` evaluates any expression inside a function body. Root cause: codegen bug in the C++ compiler affecting the large `when tok.kind { ... }` dispatch (~30 arms on TokenKind enum) in `parse_expr.tml:478`. Tokenization succeeds; empty-body functions parse OK; any content in braces crashes. Separate codegen fix required before Phase 3 can proceed. Two known sub-issues:
-1. **Parser crash**: `parse_primary_expr` codegen bug (PHI node or large-switch issue)
-2. **Format mismatch**: TML serializer writes "MOD " format (0x4D4F4420) but C++ `read_ast` expects "AST " format (0x41535420) — need to use `compiler::serial::ast::write_module` (TmlModule mirror types) instead of `compiler::ast::serial::write_module`
+**RESOLVED**: Parser crash fixed (commit 42a7a85e) — root cause was use-after-free from Heap[T] field drops without move semantics. Parser now returns errors gracefully instead of crashing.
+**REMAINING**: Format mismatch — TML serializer writes "MOD " format but C++ `read_ast` expects "AST " format. Need to use `compiler::serial::ast::write_module` (TmlModule mirror types) or write a conversion layer.
 
 - [ ] 3.1 Run test suite with `--stage=parser:tml` — record all failures
 - [ ] 3.2 For each failure: categorize as lexer bug / parser bug / serialization bug / deserialization bug

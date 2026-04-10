@@ -27,7 +27,9 @@ use compiler::parser::parse_module::parse_module
 use compiler::parser::common::ParseFailure
 use compiler::ast::nodes::Module
 use compiler::serial::writer::BinaryWriter
-use compiler::ast::serial::write_module
+use compiler::serial::ast::AST_MAGIC
+use compiler::serial::ast::AST_VERSION_MAJOR
+use compiler::serial::ast::AST_VERSION_MINOR
 use std::collections::list::List
 
 // ============================================================================
@@ -148,12 +150,38 @@ func main() -> I32 {
             return 1
         },
         Ok(m) => {
-            // Serialize module to binary
+            // Serialize module in "AST " format (0x41535420) compatible with
+            // the C++ read_ast() deserializer in ast_reader.cpp.
+            // SourceLocation: 4 × u32_le (line, column, offset, length)
+            // — no file field (C++ injects it from the file_path argument).
             let w: BinaryWriter = BinaryWriter::new(4096)
-            write_module(w, m)
-            let buf: Buffer = w.finish()
+            // Header
+            w.write_u32(AST_MAGIC)
+            w.write_u8(AST_VERSION_MAJOR)
+            w.write_u8(AST_VERSION_MINOR)
+            // Module body
+            let docs: List[Str] = m.docs
+            w.write_str(m.name)
+            let doc_count: I64 = docs.len() as I64
+            w.write_varint(doc_count)
+            var di: I64 = 0
+            loop (di < doc_count) {
+                w.write_str(docs.get(di))
+                di = di + 1
+            }
+            // SourceSpan = 2 × SourceLocation, each as 4 × u32_le
+            w.write_u32(m.span.start.line)
+            w.write_u32(m.span.start.column)
+            w.write_u32(m.span.start.offset)
+            w.write_u32(m.span.start.length)
+            w.write_u32(m.span.end.line)
+            w.write_u32(m.span.end.column)
+            w.write_u32(m.span.end.offset)
+            w.write_u32(m.span.end.length)
+            // Declarations (TODO: full Decl serialization for Phase 3)
+            w.write_varint(0 as I64)
 
-            // Write binary bytes to stdout for the C++ parent to consume
+            let buf: Buffer = w.finish()
             let ptr: I64 = buf.data_ptr()
             let count: I64 = buf.len()
             ffi_write_stdout_bytes(ptr, count)

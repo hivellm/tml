@@ -1144,16 +1144,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Register arm-bound variables for drop (e.g., MutexGuard from Just(guard))
-        // BUT: if the scrutinee is an enum with drop glue, the enum's drop function
-        // already handles all field cleanup. Pattern bindings are GEP aliases into
+        // BUT: if the scrutinee is an enum, pattern bindings are GEP aliases into
         // the enum's payload — registering them for independent drop would cause
-        // double-free (once from the arm cleanup, once from the enum drop glue).
-        bool scrutinee_has_enum_drop = false;
+        // double-free (once from the arm cleanup, once from the enum's own drop
+        // or the scrutinee going out of scope).
+        // Without move semantics, arm bindings from `when` should NEVER be
+        // independently dropped — the scrutinee owns the data.
+        bool scrutinee_is_enum = false;
         if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
             const auto& named = scrutinee_semantic->as<types::NamedType>();
             auto enum_def = env_.lookup_enum(named.name);
-            if (enum_def.has_value() && env_.type_needs_drop(named.name)) {
-                scrutinee_has_enum_drop = true;
+            if (enum_def.has_value()) {
+                scrutinee_is_enum = true;
             }
         }
         for (const auto& [name, info] : locals_) {
@@ -1163,17 +1165,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 if (info.type.starts_with("%struct.")) {
                     type_name = info.type.substr(8); // Strip "%struct."
                 }
-                if (!type_name.empty() && !scrutinee_has_enum_drop) {
-                    register_for_drop(name, info.reg, type_name, info.type);
-                }
-                // Register Str bindings from pattern destructuring (e.g., Ok(s))
-                // for heap-str drop. These are heap-allocated strings extracted
-                // from Outcome/Maybe payloads that need cleanup at arm scope exit.
-                else if (info.type == "ptr" && info.semantic_type) {
-                    if (info.semantic_type->is<types::PrimitiveType>() &&
-                        info.semantic_type->as<types::PrimitiveType>().kind ==
-                            types::PrimitiveKind::Str) {
-                        register_heap_str_for_drop(name, info.reg);
+                // Without move semantics, arm bindings from enum scrutinees
+                // are aliases into the scrutinee's payload. Dropping them
+                // independently causes double-free with the scrutinee's drop.
+                if (!scrutinee_is_enum) {
+                    if (!type_name.empty()) {
+                        register_for_drop(name, info.reg, type_name, info.type);
+                    } else if (info.type == "ptr" && info.semantic_type) {
+                        if (info.semantic_type->is<types::PrimitiveType>() &&
+                            info.semantic_type->as<types::PrimitiveType>().kind ==
+                                types::PrimitiveKind::Str) {
+                            register_heap_str_for_drop(name, info.reg);
+                        }
                     }
                 }
             }
