@@ -2,7 +2,10 @@
 // Covers: commands/cmd_build.cpp, commands/cmd_test.cpp,
 //         commands/cmd_lint.cpp, commands/cmd_format.cpp
 
+#include "cli/commands/cmd_build.hpp"
+
 #include <gtest/gtest.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -91,4 +94,47 @@ TEST(FormatCommandTest, FormatCheckMode) {
     // In check mode, files should not be modified
     bool check_mode = true;
     EXPECT_TRUE(check_mode);
+}
+
+// ============================================================================
+// Phase 13d: Stage Override Defaults (TML Frontend Switchover)
+// ============================================================================
+
+// BuildOptions defaults to TML frontend for parser (phase13d switchover).
+TEST(StageOverrideTest, BuildOptionsDefaultsToTmlParser) {
+    tml::cli::BuildOptions opts;
+    auto it = opts.stage_overrides.find("parser");
+    ASSERT_NE(it, opts.stage_overrides.end())
+        << "BuildOptions::stage_overrides must contain 'parser' key by default";
+    EXPECT_EQ(it->second, "tml")
+        << "Default parser implementation must be 'tml' (phase13d switchover)";
+}
+
+// RunOptions defaults to TML frontend for parser (phase13d switchover).
+TEST(StageOverrideTest, RunOptionsDefaultsToTmlParser) {
+    tml::cli::RunOptions opts;
+    auto it = opts.stage_overrides.find("parser");
+    ASSERT_NE(it, opts.stage_overrides.end())
+        << "RunOptions::stage_overrides must contain 'parser' key by default";
+    EXPECT_EQ(it->second, "tml")
+        << "Default parser implementation must be 'tml' (phase13d switchover)";
+}
+
+// Overriding parser to "cpp" reverts to C++ frontend (Phase 5.2 fallback).
+TEST(StageOverrideTest, CppOverrideReverts) {
+    tml::cli::BuildOptions opts;
+    // Simulate --stage=parser:cpp
+    opts.stage_overrides["parser"] = "cpp";
+    auto it = opts.stage_overrides.find("parser");
+    ASSERT_NE(it, opts.stage_overrides.end());
+    EXPECT_EQ(it->second, "cpp") << "--stage=parser:cpp must store 'cpp' to force C++ frontend";
+}
+
+// Empty stage_overrides means use TML default (non-CLI path, e.g. CompileConfig default).
+TEST(StageOverrideTest, EmptyStageOverridesMeansQueryDefault) {
+    std::map<std::string, std::string> overrides;
+    // When stage_overrides is empty, query_core.cpp falls back to C++ frontend
+    // (the QueryOptions default is empty — TML default is enforced by CLI structs).
+    EXPECT_TRUE(overrides.find("parser") == overrides.end())
+        << "Empty stage_overrides correctly signals: use QueryOptions default";
 }

@@ -172,6 +172,19 @@ static TestOptions parse_args(int argc, char* argv[], int start_index) {
             std::string output_spec = arg.substr(9);
             // For now, just store it; cmd_test.cpp will parse the format
             opts.output_dir = output_spec;
+        } else if (arg.starts_with("--stage=")) {
+            // phase13d hybrid pipeline: --stage=<name>:<impl>
+            // impl="tml"  → use TML frontend (default since phase13d)
+            // impl="cpp"  → force C++ frontend (fallback)
+            std::string spec = arg.substr(8);
+            auto colon = spec.find(':');
+            if (colon != std::string::npos) {
+                std::string stage_name = spec.substr(0, colon);
+                std::string impl = spec.substr(colon + 1);
+                if (impl == "tml" || impl == "cpp") {
+                    opts.stage_overrides[stage_name] = impl;
+                }
+            }
         } else if (!arg.starts_with("--")) {
             opts.patterns.push_back(arg);
         }
@@ -293,6 +306,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.list_suites = opts.list_suites;
     tc.debug_layers = opts.debug_layers;
     tc.use_unified_binary = opts.unified_binary;
+    tc.stage_overrides = opts.stage_overrides;
 
     auto result = testing::run_tests(tc);
 

@@ -33,6 +33,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,11 @@ struct TestConfig {
     std::string root_dir;       // Discovery root (empty = cwd)
     bool debug_layers = false;  // Emit multi-layer IR diagnostics on failure
     bool use_unified_binary = false; // Compile all tests into one mega-binary (Zig model)
+
+    // Hybrid pipeline (phase13d): stage overrides propagated from --stage=<name>:<impl>.
+    // Empty = use default for each stage (TML for parser since phase13d switchover).
+    // Set {"parser", "cpp"} to force C++ frontend for all test compilation.
+    std::map<std::string, std::string> stage_overrides;
 };
 
 // ============================================================================

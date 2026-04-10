@@ -778,6 +778,7 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.optimization_level = 0;
         compile_config.num_threads = config.compile_threads;
         compile_config.no_cache = config.no_cache;
+        compile_config.stage_overrides = config.stage_overrides;
 
         std::atomic<bool> should_stop_unified{false};
         std::vector<UnifiedTestMapping> mapping;
@@ -1285,6 +1286,7 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.no_cache = config.no_cache;
         compile_config.fail_fast = config.fail_fast;
         compile_config.num_threads = config.compile_threads; // 0 = auto (up to 8)
+        compile_config.stage_overrides = config.stage_overrides;
 
         // (incremental cache saves happen after each batch below)
 

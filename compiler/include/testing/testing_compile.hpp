@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -59,6 +60,10 @@ struct CompileConfig {
     bool fail_fast = false; ///< Stop immediately on first compile error
     int optimization_level = 0;
     int num_threads = 0; ///< Parallel compile workers (0 = auto)
+
+    // Hybrid pipeline (phase13d): stage overrides propagated from --stage flag.
+    // Empty = use default for each stage.
+    std::map<std::string, std::string> stage_overrides;
 };
 
 /// Initialize the compilation environment.

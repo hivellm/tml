@@ -76,11 +76,11 @@ struct QueryOptions {
     /// for library functions (definitions come from pre-compiled stdlib .obj).
     bool library_decls_only = false;
 
-    /// Hybrid pipeline (phase12f): map from canonical stage name to
-    /// implementation tag. Currently only "tml" is recognized — overrides
-    /// the named stage with a TML subprocess for the duration of the build.
-    /// Valid stage names: lexer, parser, typechecker, hir, mir, codegen.
-    /// Empty by default (pure C++ pipeline).
+    /// Hybrid pipeline (phase12f/phase13d): map from canonical stage name to
+    /// implementation tag. "tml" uses the TML frontend subprocess; "cpp" forces
+    /// the C++ pipeline. Valid stage names: lexer, parser, typechecker, hir, mir, codegen.
+    /// Empty by default here — callers (BuildOptions, RunOptions) default parser to "tml"
+    /// since the phase13d switchover. Use --stage=parser:cpp to force C++ frontend.
     std::map<std::string, std::string> stage_overrides;
 };
 

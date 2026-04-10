@@ -88,8 +88,10 @@ struct BuildOptions {
 
     // Hybrid pipeline (phase12f): --stage=<name>:tml overrides for individual
     // pipeline stages. Map key = canonical stage name (lexer/parser/...),
-    // value = implementation tag ("tml" today).
-    std::map<std::string, std::string> stage_overrides;
+    // value = implementation tag ("tml" or "cpp").
+    // Default: TML frontend for parser (phase13d switchover).
+    // Use --stage=parser:cpp to force C++ frontend.
+    std::map<std::string, std::string> stage_overrides = {{"parser", "tml"}};
 };
 
 // Run options (for run command)
@@ -114,7 +116,8 @@ struct RunOptions {
     int inspect_port = 9229;  // Inspector port (--inspect-port=PORT)
 
     // Hybrid pipeline (phase12f): same semantics as BuildOptions::stage_overrides.
-    std::map<std::string, std::string> stage_overrides;
+    // Default: TML frontend for parser (phase13d switchover).
+    std::map<std::string, std::string> stage_overrides = {{"parser", "tml"}};
 };
 
 // Build commands

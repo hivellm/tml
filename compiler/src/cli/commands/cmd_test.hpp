@@ -185,6 +185,11 @@ struct TestOptions {
     bool new_runner = false;                // Deprecated (always true now)
     int max_compile_suites = 0;             // Max suites to compile per run (0 = unlimited)
     bool unified_binary = false;            // Compile all tests into one mega-binary (Zig model)
+
+    // Hybrid pipeline (phase13d): --stage=<name>:<impl> overrides.
+    // Empty = use default (TML for parser since phase13d switchover).
+    // Use --stage=parser:cpp to force C++ frontend.
+    std::map<std::string, std::string> stage_overrides;
 };
 
 // Run the test command

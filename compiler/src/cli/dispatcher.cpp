@@ -368,8 +368,10 @@ int tml_main(int argc, char* argv[]) {
         bool bundle = false;
         std::string bundle_dir;
 
-        // Hybrid pipeline (phase12f): --stage=<name>:tml stage overrides
-        std::map<std::string, std::string> stage_overrides;
+        // Hybrid pipeline (phase12f): --stage=<name>:tml stage overrides.
+        // Default: TML frontend for parser (phase13d switchover).
+        // Use --stage=parser:cpp to force C++ frontend.
+        std::map<std::string, std::string> stage_overrides = {{"parser", "tml"}};
 
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
@@ -516,13 +518,16 @@ int tml_main(int argc, char* argv[]) {
                 bundle_dir = arg.substr(9);
             } else if (arg.starts_with("--stage=")) {
                 // phase12f hybrid pipeline: --stage=<name>:<impl>
+                // impl="tml"  → use TML frontend (default since phase13d)
+                // impl="cpp"  → force C++ frontend (fallback)
                 std::string spec = arg.substr(8);
                 auto colon = spec.find(':');
                 if (colon == std::string::npos) {
-                    TML_LOG_ERROR("build", "Invalid --stage flag '"
-                                               << arg << "'. Expected --stage=<name>:tml where "
-                                               << "<name> is one of: "
-                                               << tml::query::valid_stage_names_csv());
+                    TML_LOG_ERROR("build",
+                                  "Invalid --stage flag '"
+                                      << arg << "'. Expected --stage=<name>:<impl> where "
+                                      << "<name> is one of: " << tml::query::valid_stage_names_csv()
+                                      << " and <impl> is 'tml' or 'cpp'");
                     return 1;
                 }
                 std::string stage_name = spec.substr(0, colon);
@@ -533,10 +538,11 @@ int tml_main(int argc, char* argv[]) {
                                                << tml::query::valid_stage_names_csv());
                     return 1;
                 }
-                if (impl != "tml") {
+                if (impl != "tml" && impl != "cpp") {
                     TML_LOG_ERROR("build", "Unknown stage implementation '"
                                                << impl << "' for stage '" << stage_name
-                                               << "'. Only 'tml' is supported.");
+                                               << "'. Valid values: 'tml' (TML frontend, default)"
+                                               << " or 'cpp' (C++ frontend).");
                     return 1;
                 }
                 stage_overrides[stage_name] = impl;
@@ -735,14 +741,17 @@ int tml_main(int argc, char* argv[]) {
                 opts.emit_pipeline = true;
                 opts.pipeline_output_dir = arg.substr(16);
             } else if (arg.starts_with("--stage=")) {
-                // phase12f hybrid pipeline: --stage=<name>:tml
+                // phase12f hybrid pipeline: --stage=<name>:<impl>
+                // impl="tml"  → use TML frontend (default since phase13d)
+                // impl="cpp"  → force C++ frontend (fallback)
                 std::string spec = arg.substr(8);
                 auto colon = spec.find(':');
                 if (colon == std::string::npos) {
-                    TML_LOG_ERROR("run", "Invalid --stage flag '"
-                                             << arg << "'. Expected --stage=<name>:tml where "
-                                             << "<name> is one of: "
-                                             << tml::query::valid_stage_names_csv());
+                    TML_LOG_ERROR("run",
+                                  "Invalid --stage flag '"
+                                      << arg << "'. Expected --stage=<name>:<impl> where "
+                                      << "<name> is one of: " << tml::query::valid_stage_names_csv()
+                                      << " and <impl> is 'tml' or 'cpp'");
                     return 1;
                 }
                 std::string stage_name = spec.substr(0, colon);
@@ -752,10 +761,11 @@ int tml_main(int argc, char* argv[]) {
                                                            << tml::query::valid_stage_names_csv());
                     return 1;
                 }
-                if (impl != "tml") {
+                if (impl != "tml" && impl != "cpp") {
                     TML_LOG_ERROR("run", "Unknown stage implementation '"
                                              << impl << "' for stage '" << stage_name
-                                             << "'. Only 'tml' is supported.");
+                                             << "'. Valid values: 'tml' (TML frontend, default)"
+                                             << " or 'cpp' (C++ frontend).");
                     return 1;
                 }
                 opts.stage_overrides[stage_name] = impl;

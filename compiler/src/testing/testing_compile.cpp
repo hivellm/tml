@@ -393,7 +393,8 @@ std::string build_stdlib_object(const CompileConfig& config) {
     qopts.coverage = config.coverage;
     qopts.optimization_level = config.optimization_level;
     qopts.generate_exe_main = false;
-    qopts.incremental = false; // Don't pollute incremental cache
+    qopts.incremental = false;                      // Don't pollute incremental cache
+    qopts.stage_overrides = config.stage_overrides; // phase13d: propagate --stage flag
 
     // Find bootstrap file for stdlib pre-compilation.
     // Prefer comprehensive bootstrap that imports ALL library modules.
@@ -653,6 +654,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             qopts.optimization_level = config.optimization_level;
             qopts.generate_exe_main = false;
             qopts.test_entry_index = static_cast<int>(i);
+            qopts.stage_overrides = config.stage_overrides; // phase13d: propagate --stage flag
 
             // Use cached library state to skip emit_module_pure_tml_functions().
             // Disable incremental cache when using cached state to avoid stale hits.

@@ -1,0 +1,63 @@
+//! Test that `new` keyword is accepted after `::` in type paths.
+//!
+//! Regression test for the KwNew lexer token issue fixed in phase13d:
+//! the TML lexer emits KwNew (tag 77) for `new`, not Identifier (tag 13),
+//! so `List::new(4)` requires tok_is_name() to accept both token kinds.
+
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_type::parse_type_path_full
+use compiler::parser::common::tok_is_name
+use compiler::token::TokenKind
+
+@test
+func test_tok_is_name_accepts_identifier() -> I32 {
+    // Identifier tokens must be accepted as valid name tokens
+    if not tok_is_name(TokenKind::Identifier) {
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_tok_is_name_accepts_kw_new() -> I32 {
+    // KwNew must be accepted as a valid name token (for List::new, Heap::new, etc.)
+    if not tok_is_name(TokenKind::KwNew) {
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_tok_is_name_rejects_other_keywords() -> I32 {
+    // Other keywords must NOT be accepted as name tokens
+    if tok_is_name(TokenKind::KwFunc) {
+        return 1
+    }
+    if tok_is_name(TokenKind::KwLet) {
+        return 1
+    }
+    if tok_is_name(TokenKind::KwReturn) {
+        return 1
+    }
+    return 0
+}
+
+@test
+func test_parse_type_path_full_accepts_new_segment() -> I32 {
+    // `List::new` — the `new` after `::` must be parsed as a path segment.
+    // This was broken before the tok_is_name() fix: the loop only accepted
+    // Identifier tokens after `::`, causing `List::new(...)` to fail.
+    let tokens = tokenize("List", "test.tml")
+    let result = parse_type_path_full(tokens, 0)
+    when result {
+        Ok(r) => {
+            // Path should have 1 segment: "List"
+            if r.path.segments.len() != 1 {
+                return 1
+            }
+            return 0
+        },
+        Err(_) => return 1
+    }
+}
