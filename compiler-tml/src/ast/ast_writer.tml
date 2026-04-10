@@ -204,13 +204,13 @@ func ast_write_type(w: BinaryWriter, ty: TypeExpr) {
         Ref(r) => {
             w.write_u8(1)
             ast_write_type(w, r.inner.get())
-            w.write_bool(r.is_mut)
+            w.write_u8(r.is_mut as I32)
             write_span(w, r.span)
         },
         Ptr(p) => {
             w.write_u8(2)
             ast_write_type(w, p.inner.get())
-            w.write_bool(p.is_mut)
+            w.write_u8(p.is_mut as I32)
             write_span(w, p.span)
         },
         Array(a) => {
@@ -345,7 +345,7 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             w.write_u8(7)
             write_literal_kind(w, rp.start)
             write_literal_kind(w, rp.end)
-            w.write_bool(rp.inclusive)
+            w.write_u8(rp.inclusive as I32)
             write_span(w, rp.span)
         },
         Array(ap) => {
@@ -443,14 +443,14 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
                 i = i + 1
             }
-            w.write_bool(mc.optional_chain)
+            w.write_u8(mc.optional_chain as I32)
             write_span(w, mc.span)
         },
         Field(fe) => {
             w.write_u8(6)
             ast_write_expr(w, fe.object.get(), depth + 1)
             w.write_str(fe.field)
-            w.write_bool(fe.optional_chain)
+            w.write_u8(fe.optional_chain as I32)
             write_span(w, fe.span)
         },
         Index(ie) => {
@@ -622,14 +622,14 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             }
             write_opt_type(w, cle.return_type)
             ast_write_expr(w, cle.body.get(), depth + 1)
-            w.write_bool(cle.is_move)
+            w.write_u8(cle.is_move as I32)
             write_span(w, cle.span)
         },
         Range(re) => {
             w.write_u8(23)
             write_opt_expr(w, re.start, depth + 1)
             write_opt_expr(w, re.end, depth + 1)
-            w.write_bool(re.inclusive)
+            w.write_u8(re.inclusive as I32)
             write_span(w, re.span)
         },
         Cast(ce) => {
@@ -713,7 +713,7 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
                 i = i + 1
             }
-            w.write_bool(be.is_method_call)
+            w.write_u8(be.is_method_call as I32)
             write_span(w, be.span)
         },
         New(ne) => {
@@ -821,8 +821,8 @@ func ast_write_func_decl_body(w: BinaryWriter, fd: FuncDecl) {
         let fp: FuncParam = params.get(i)
         w.write_str(fp.name)
         ast_write_type(w, fp.ty.get())
-        w.write_bool(fp.is_this)
-        w.write_bool(fp.is_mut)
+        w.write_u8(fp.is_this as I32)
+        w.write_u8(fp.is_mut as I32)
         write_span(w, fp.span)
         i = i + 1
     }
@@ -831,8 +831,8 @@ func ast_write_func_decl_body(w: BinaryWriter, fd: FuncDecl) {
         Just(b) => { w.write_u8(1); ast_write_expr(w, b.get(), 0) },
         Nothing => w.write_u8(0)
     }
-    w.write_bool(fd.is_async)
-    w.write_bool(fd.is_override)
+    w.write_u8(fd.is_async as I32)
+    w.write_u8(fd.is_override as I32)
     write_span(w, fd.span)
 }
 

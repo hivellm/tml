@@ -22,7 +22,7 @@ use compiler::ast::stmts::VarStmt
 use compiler::ast::stmts::LetElseStmt
 use compiler::ast::stmts::Stmt
 use compiler::ast::decls::Decl
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedStmt
 use compiler::parser::common::ParsedDecl
 use compiler::parser::common::p_peek
@@ -47,7 +47,7 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Parse one statement. Dispatches to let/var/decl/expr branches.
-pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     let tok: Token = p_peek(tokens, p)
 
@@ -73,7 +73,7 @@ pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseE
 // ============================================================================
 
 /// Parse `let pattern [: type] [= expr] [else block]`.
-pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'let'
 
@@ -114,9 +114,8 @@ pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
     p = p_skip_newlines(tokens, p)
     if p_check(tokens, p, TokenKind::KwElse) {
         // Must have an initializer
-        let init_expr: Heap[Expr] = when init {
-            Just(e) => e,
-            Nothing => return Err(parse_err("let-else requires an initializer ('= expr')", p_peek(tokens, p).span))
+        let Just(init_expr) = init else {
+            return Err(parse_err("let-else requires an initializer ('= expr')", p_peek(tokens, p).span))
         }
         p = p + 1  // consume 'else'
         let else_r = parse_block_expr(tokens, p)!
@@ -147,7 +146,7 @@ pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
 
 /// Parse `var name [: type] [= expr]`.
 /// `var` is syntactic sugar for a mutable binding — stored as `VarStmt`.
-pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'var'
 
@@ -200,7 +199,7 @@ pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
 // ============================================================================
 
 /// Parse an expression statement (expression used as a statement).
-pub func parse_expr_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseError] {
+pub func parse_expr_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     let expr_r = parse_expr(tokens, pos)!
     let p: I64 = expr_r.pos
     return Ok(ParsedStmt { stmt: Heap::new(Stmt::Expr(expr_r.expr)), pos: p })

@@ -167,13 +167,18 @@ pub func read_module_header(r: BinaryReader) -> Outcome[I64, SerialError] {
 /// that are either empty or converted before writing. An empty module
 /// (`decls.len() == 0`) is round-trip complete via this function alone.
 pub func write_module(w: BinaryWriter, m: Module) {
+    // Extract aggregate fields to locals before calling methods on them.
+    // The legacy codegen generates GEP on struct value parameters when calling
+    // methods on fields, which fails because GEP requires a pointer.
+    // Extracting to locals forces extractvalue (valid for values) instead.
+    let docs: List[Str] = m.docs
     write_module_header(w)
     w.write_str(m.name)
-    w.write_varint(m.docs.len() as I64)
+    let doc_count: I64 = docs.len() as I64
+    w.write_varint(doc_count)
     var i: I64 = 0
-    let n: I64 = m.docs.len() as I64
-    loop (i < n) {
-        w.write_str(m.docs.get(i))
+    loop (i < doc_count) {
+        w.write_str(docs.get(i))
         i = i + 1
     }
     write_source_span(w, m.span)

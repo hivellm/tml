@@ -9,6 +9,13 @@ The authoritative rules come from the imports below. Claude Code loads all of th
 automatically at session start (see [Anthropic memory docs](https://code.claude.com/docs/en/memory#claude-md-imports)).
 
 
+## Core standards (team-shared, versioned)
+@AGENTS.md
+
+## Project-specific overrides (user-owned, survives `rulebook update`)
+@AGENTS.override.md
+
+
 ## Critical rules (highest precedence — apply on every turn)
 
 1. **Read `AGENTS.md` and `AGENTS.override.md`** before making changes. These contain project-specific conventions that override generic guidance.

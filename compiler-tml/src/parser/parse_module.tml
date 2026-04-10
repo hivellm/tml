@@ -11,7 +11,7 @@ use compiler::token::TokenKind
 use compiler::ast::nodes::Module
 use compiler::ast::nodes::module_new
 use compiler::ast::decls::Decl
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedDecl
 use compiler::parser::common::p_peek
 use compiler::parser::common::p_prev
@@ -20,6 +20,7 @@ use compiler::parser::common::p_skip_newlines
 use compiler::parser::common::p_check
 use compiler::parser::common::tok_kind_eq
 use compiler::parser::common::parse_err
+use compiler::parser::parse_stmt::parse_stmt
 use compiler::parser::parse_decl::parse_decl
 use std::collections::list::List
 use core::alloc::heap::Heap
@@ -29,8 +30,8 @@ use core::alloc::heap::Heap
 /// `tokens`  — flat list of tokens from the lexer (must end with Eof).
 /// `name`    — module name (e.g. "compiler", "std::io").
 ///
-/// Returns `Module` on success, or the first `ParseError` encountered.
-pub func parse_module(tokens: List[Token], name: Str) -> Outcome[Module, ParseError] {
+/// Returns `Module` on success, or the first `ParseFailure` encountered.
+pub func parse_module(tokens: List[Token], name: Str) -> Outcome[Module, ParseFailure] {
     var p: I64 = 0
     var decls: List[Heap[Decl]] = List::new(16)
     var docs: List[Str] = List::new(0)

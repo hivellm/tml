@@ -856,6 +856,10 @@ private:
     auto llvm_type_from_semantic(const types::TypePtr& type, bool for_data = true) -> std::string;
     /// Ensures a type is defined in the LLVM IR output (emits type definition if needed)
     void ensure_type_defined(const parser::TypePtr& type);
+    /// Computes the byte size of an LLVM type string using struct_fields_ for recursion.
+    /// Used for correct enum payload sizing. Returns 8 for unknown types (conservative).
+    auto compute_llvm_type_byte_size(const std::string& ty,
+                                     const std::string& self_guard = "") const -> size_t;
 
     // Generic type mangling
     auto mangle_type(const types::TypePtr& type) -> std::string;

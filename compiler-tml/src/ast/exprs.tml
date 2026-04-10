@@ -91,14 +91,14 @@ pub type MethodCallExpr {
     method: Str,
     type_args: List[Heap[TypeExpr]],
     args: List[Heap[Expr]],
-    optional_chain: Bool,
+    optional_chain: I64,
     span: SourceSpan
 }
 
 pub type FieldExpr {
     object: Heap[Expr],
     field: Str,
-    optional_chain: Bool,
+    optional_chain: I64,
     span: SourceSpan
 }
 
@@ -231,14 +231,14 @@ pub type ClosureExpr {
     params: List[ClosureParam],
     return_type: Maybe[Heap[TypeExpr]],
     body: Heap[Expr],
-    is_move: Bool,
+    is_move: I64,
     span: SourceSpan
 }
 
 pub type RangeExpr {
     start: Maybe[Heap[Expr]],
     end: Maybe[Heap[Expr]],
-    inclusive: Bool,
+    inclusive: I64,
     span: SourceSpan
 }
 
@@ -305,7 +305,7 @@ pub type BaseExpr {
     member: Str,
     type_args: List[Heap[TypeExpr]],
     args: List[Heap[Expr]],
-    is_method_call: Bool,
+    is_method_call: I64,
     span: SourceSpan
 }
 

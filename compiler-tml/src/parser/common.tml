@@ -1,9 +1,9 @@
 //! Parser infrastructure for the TML self-hosting compiler frontend.
 //!
-//! Provides ParseError, per-construct ParseResult types, and low-level token
+//! Provides ParseFailure, per-construct ParseResult types, and low-level token
 //! helpers used by all parse_*.tml modules. The parser threads position state
 //! explicitly: every parse function takes `(tokens: List[Token], pos: I64)` and
-//! returns `Outcome[ParsedX, ParseError]` where `ParsedX` carries both the
+//! returns `Outcome[ParsedX, ParseFailure]` where `ParsedX` carries both the
 //! parsed value and the updated position.
 
 use compiler::source::SourceSpan
@@ -22,16 +22,16 @@ use std::collections::list::List
 use core::alloc::heap::Heap
 
 // ============================================================================
-// ParseError
+// ParseFailure
 // ============================================================================
 
-pub type ParseError {
+pub type ParseFailure {
     message: Str,
     span: SourceSpan
 }
 
-pub func parse_err(message: Str, span: SourceSpan) -> ParseError {
-    return ParseError { message: message, span: span }
+pub func parse_err(message: Str, span: SourceSpan) -> ParseFailure {
+    return ParseFailure { message: message, span: span }
 }
 
 // ============================================================================
@@ -182,7 +182,7 @@ pub func p_consume_if(tokens: List[Token], pos: I64, kind: TokenKind) -> I64 {
 }
 
 /// Expect token of `kind` and consume it, or return an error.
-pub func p_expect(tokens: List[Token], pos: I64, kind: TokenKind, msg: Str) -> Outcome[ParsedToken, ParseError] {
+pub func p_expect(tokens: List[Token], pos: I64, kind: TokenKind, msg: Str) -> Outcome[ParsedToken, ParseFailure] {
     let tok: Token = p_peek(tokens, pos)
     if not tok_kind_eq(tok.kind, kind) {
         return Err(parse_err(msg, tok.span))
@@ -191,7 +191,7 @@ pub func p_expect(tokens: List[Token], pos: I64, kind: TokenKind, msg: Str) -> O
 }
 
 /// Expect identifier and consume it, returning the lexeme.
-pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedStr, ParseError] {
+pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedStr, ParseFailure] {
     let tok: Token = p_peek(tokens, pos)
     when tok.kind {
         Identifier => return Ok(ParsedStr { value: tok.value, pos: pos + 1 }),

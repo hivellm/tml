@@ -35,7 +35,7 @@ use compiler::ast::decls::UseDecl
 use compiler::ast::decls::ModDecl
 use compiler::ast::decls::Decl
 use compiler::ast::exprs::Expr
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedDecl
 use compiler::parser::common::ParsedDecls
 use compiler::parser::common::ParsedStr
@@ -99,7 +99,7 @@ type ParsedFuncDeclRaw {
 // ============================================================================
 
 /// Parse one declaration (func, type, behavior, impl, const, use, mod).
-pub func parse_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseError] {
+pub func parse_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
 
     // Parse visibility
@@ -151,7 +151,7 @@ func parse_visibility(tokens: List[Token], pos: I64) -> ParsedVisibility {
 // ============================================================================
 
 /// Parse `[T, U: Bound + Bound2]`. Returns list of GenericParam and new pos.
-func parse_generic_params(tokens: List[Token], pos: I64) -> Outcome[ParsedGenericParams, ParseError] {
+func parse_generic_params(tokens: List[Token], pos: I64) -> Outcome[ParsedGenericParams, ParseFailure] {
     var p: I64 = pos
     let lbr = p_expect(tokens, p, TokenKind::LBracket, "Expected '[' for generic parameters")!
     p = lbr.pos
@@ -209,7 +209,7 @@ func parse_generic_params(tokens: List[Token], pos: I64) -> Outcome[ParsedGeneri
 // ============================================================================
 
 /// Parse function parameter list (caller has already consumed '(').
-func parse_func_params(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParams, ParseError] {
+func parse_func_params(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParams, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     var params: List[FuncParam] = List::new(4)
 
@@ -230,14 +230,14 @@ func parse_func_params(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam
 }
 
 /// Parse a single function parameter: `[mut] name: Type` or `[mut] this`.
-func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam, ParseError] {
+func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam, ParseFailure] {
     let param_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos
-    var is_mut: Bool = false
+    var is_mut: I64 = 0
 
     // Optional 'mut' prefix
     if p_check(tokens, p, TokenKind::KwMut) {
-        is_mut = true
+        is_mut = 1
         p = p + 1
     }
 
@@ -256,7 +256,7 @@ func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam,
         let this_nt: NamedType = NamedType { path: this_path, args: this_args, span: param_span }
         let this_te: Heap[TypeExpr] = Heap::new(TypeExpr::Named(this_nt))
         let end_span: SourceSpan = p_prev(tokens, p).span
-        let fp: FuncParam = FuncParam { name: pname, ty: this_te, is_this: true, is_mut: is_mut, span: span_merge(param_span, end_span) }
+        let fp: FuncParam = FuncParam { name: pname, ty: this_te, is_this: 1, is_mut: is_mut, span: span_merge(param_span, end_span) }
         return Ok(ParsedFuncParam { param: fp, pos: p })
     }
 
@@ -265,7 +265,7 @@ func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam,
     let type_r = parse_type(tokens, p)!
     p = type_r.pos
     let end_span: SourceSpan = p_prev(tokens, p).span
-    let fp: FuncParam = FuncParam { name: pname, ty: type_r.te, is_this: is_this, is_mut: is_mut, span: span_merge(param_span, end_span) }
+    let fp: FuncParam = FuncParam { name: pname, ty: type_r.te, is_this: if is_this { 1 } else { 0 }, is_mut: is_mut, span: span_merge(param_span, end_span) }
     return Ok(ParsedFuncParam { param: fp, pos: p })
 }
 
@@ -274,15 +274,15 @@ func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam,
 // ============================================================================
 
 /// Parse `[async] [lowlevel] func name[T](params) -> RetType { body }`.
-pub func parse_func_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+pub func parse_func_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos
 
     // Optional modifiers: async, lowlevel
-    var is_async: Bool = false
+    var is_async: I64 = 0
     loop (true) {
         if p_check(tokens, p, TokenKind::KwAsync) {
-            is_async = true
+            is_async = 1
             p = p + 1
         } else if p_check(tokens, p, TokenKind::KwLowlevel) {
             p = p + 1  // lowlevel modifier (unsafe) — not stored in simplified TML AST
@@ -348,7 +348,7 @@ pub func parse_func_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
         return_type: return_type,
         body: body,
         is_async: is_async,
-        is_override: false,
+        is_override: 0,
         span: span_merge(start_span, end_span)
     }
     return Ok(ParsedDecl { decl: Heap::new(Decl::Func(fd)), pos: p })
@@ -385,7 +385,7 @@ func skip_where_clause(tokens: List[Token], pos: I64) -> I64 {
 // ============================================================================
 
 /// Dispatch `type` decl to struct/enum/sum-type/alias based on lookahead.
-func parse_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     // Lookahead to classify without consuming permanently
     let kind: Str = classify_type_decl(tokens, pos)
     if kind == "alias" {
@@ -492,7 +492,7 @@ func peek_brace_body_is_enum(tokens: List[Token], pos: I64) -> Bool {
 // ============================================================================
 
 /// Parse `type Name[T] { field: Type, ... }`.
-func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'type'
     p = p_skip_newlines(tokens, p)
@@ -555,7 +555,7 @@ func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcom
 // ============================================================================
 
 /// Parse `union Name { field: Type, ... }`.
-func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'union'
     p = p_skip_newlines(tokens, p)
@@ -613,7 +613,7 @@ func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
 // ============================================================================
 
 /// Parse `type Name[T] { VariantA, VariantB(T), ... }`.
-func parse_enum_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_enum_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'type'
     p = p_skip_newlines(tokens, p)
@@ -659,7 +659,7 @@ func parse_enum_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[
 // ============================================================================
 
 /// Parse `type Name[T] = VariantA | VariantB(T) | ...`.
-func parse_sum_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_sum_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'type'
     p = p_skip_newlines(tokens, p)
@@ -705,7 +705,7 @@ func parse_sum_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
 }
 
 /// Parse one enum variant: `Name` or `Name(T, U)`. Returns (EnumVariant, new_pos).
-func parse_enum_variant(tokens: List[Token], pos: I64) -> Outcome[ParsedEnumVariant, ParseError] {
+func parse_enum_variant(tokens: List[Token], pos: I64) -> Outcome[ParsedEnumVariant, ParseFailure] {
     let var_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos
 
@@ -744,7 +744,7 @@ func parse_enum_variant(tokens: List[Token], pos: I64) -> Outcome[ParsedEnumVari
 // ============================================================================
 
 /// Parse `behavior Name[T] [: Supertrait] { methods }`.
-func parse_trait_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_trait_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'behavior'
     p = p_skip_newlines(tokens, p)
@@ -836,14 +836,14 @@ func skip_associated_type(tokens: List[Token], pos: I64) -> I64 {
 }
 
 /// Parse a function decl, returning (FuncDecl, new_pos) directly.
-func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedFuncDeclRaw, ParseError] {
+func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedFuncDeclRaw, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos
 
-    var is_async: Bool = false
+    var is_async: I64 = 0
     loop (true) {
         if p_check(tokens, p, TokenKind::KwAsync) {
-            is_async = true
+            is_async = 1
             p = p + 1
         } else if p_check(tokens, p, TokenKind::KwLowlevel) {
             p = p + 1
@@ -904,7 +904,7 @@ func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
         return_type: return_type,
         body: body,
         is_async: is_async,
-        is_override: false,
+        is_override: 0,
         span: span_merge(start_span, end_span)
     }
     return Ok(ParsedFuncDeclRaw { func_decl: fd, pos: p })
@@ -915,7 +915,7 @@ func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
 // ============================================================================
 
 /// Parse `impl[T] [Behavior for] Type { methods }`.
-pub func parse_impl_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseError] {
+pub func parse_impl_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'impl'
     p = p_skip_newlines(tokens, p)
@@ -1005,7 +1005,7 @@ pub func parse_impl_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, P
 // ============================================================================
 
 /// Parse `type Name[T] = AliasedType`.
-func parse_type_alias_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_type_alias_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'type'
     p = p_skip_newlines(tokens, p)
@@ -1037,7 +1037,7 @@ func parse_type_alias_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Ou
 // ============================================================================
 
 /// Parse `const NAME: Type = expr`.
-func parse_const_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_const_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'const'
 
@@ -1067,7 +1067,7 @@ func parse_const_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
 // ============================================================================
 
 /// Parse `use path::to::Name [as Alias]`.
-func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'use'
 
@@ -1106,7 +1106,7 @@ func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[P
 // ============================================================================
 
 /// Parse `mod name` (external module reference).
-func parse_mod_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseError] {
+func parse_mod_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[ParsedDecl, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'mod'
 

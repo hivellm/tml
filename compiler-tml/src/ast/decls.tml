@@ -28,8 +28,8 @@ pub type GenericParam {
 pub type FuncParam {
     name: Str,
     ty: Heap[TypeExpr],
-    is_this: Bool,
-    is_mut: Bool,
+    is_this: I64,
+    is_mut: I64,
     span: SourceSpan
 }
 
@@ -40,8 +40,8 @@ pub type FuncDecl {
     params: List[FuncParam],
     return_type: Maybe[Heap[TypeExpr]],
     body: Maybe[Heap[Expr]],
-    is_async: Bool,
-    is_override: Bool,
+    is_async: I64,
+    is_override: I64,
     span: SourceSpan
 }
 

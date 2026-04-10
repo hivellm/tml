@@ -154,7 +154,7 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
             let end_r: ParsedExpr = parse_expr_with_prec(tokens, p, prec)!
             p = end_r.pos
             let span: SourceSpan = span_merge(expr_span(left.get()), expr_span(end_r.expr.get()))
-            let re: RangeExpr = RangeExpr { start: Just(left), end: Just(end_r.expr), inclusive: inclusive, span: span }
+            let re: RangeExpr = RangeExpr { start: Just(left), end: Just(end_r.expr), inclusive: if inclusive { 1 } else { 0 }, span: span }
             left = Heap::new(Expr::Range(re))
             continue
         }
@@ -375,13 +375,13 @@ pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> 
             }
             p = p + 1
             let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
-            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: type_args, args: args_r.exprs, optional_chain: false, span: span }
+            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: type_args, args: args_r.exprs, optional_chain: 0, span: span }
             return Ok(ParsedExpr { expr: Heap::new(Expr::MethodCall(mc)), pos: p })
         }
 
         // Field access
         let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
-        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: false, span: span }
+        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: 0, span: span }
         return Ok(ParsedExpr { expr: Heap::new(Expr::Field(fe)), pos: p })
     }
 
@@ -402,12 +402,12 @@ pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> 
             p = p + 1
             let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
             var empty_type_args: List[Heap[TypeExpr]] = List::new(0)
-            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: empty_type_args, args: args_r.exprs, optional_chain: true, span: span }
+            let mc: MethodCallExpr = MethodCallExpr { receiver: left, method: name, type_args: empty_type_args, args: args_r.exprs, optional_chain: 1, span: span }
             return Ok(ParsedExpr { expr: Heap::new(Expr::MethodCall(mc)), pos: p })
         }
 
         let span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
-        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: true, span: span }
+        let fe: FieldExpr = FieldExpr { object: left, field: name, optional_chain: 1, span: span }
         return Ok(ParsedExpr { expr: Heap::new(Expr::Field(fe)), pos: p })
     }
 
@@ -1084,7 +1084,7 @@ pub func parse_closure_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr
     let body_r: ParsedExpr = parse_expr(tokens, p_skip_newlines(tokens, p))!
     p = body_r.pos
     let span: SourceSpan = span_merge(start_tok.span, p_prev(tokens, p).span)
-    let ce: ClosureExpr = ClosureExpr { params: params, return_type: ret_ty, body: body_r.expr, is_move: is_move, span: span }
+    let ce: ClosureExpr = ClosureExpr { params: params, return_type: ret_ty, body: body_r.expr, is_move: if is_move { 1 } else { 0 }, span: span }
     return Ok(ParsedExpr { expr: Heap::new(Expr::Closure(ce)), pos: p })
 }
 

@@ -20,7 +20,7 @@ use compiler::ast::nodes::OrPattern
 use compiler::ast::nodes::RangePattern
 use compiler::ast::nodes::ArrayPattern
 use compiler::ast::common::LiteralKind
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedPattern
 use compiler::parser::common::p_peek
 use compiler::parser::common::p_peek_next
@@ -42,7 +42,7 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Parse a pattern, including top-level or-patterns (`A | B`).
-pub func parse_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseFailure] {
     let first_r: ParsedPattern = parse_pattern_no_or(tokens, pos)!
     var p: I64 = first_r.pos
 
@@ -70,7 +70,7 @@ pub func parse_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, 
 }
 
 /// Parse a single pattern (no or-pattern at the top level).
-pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     let tok: Token = p_peek(tokens, p)
 
@@ -152,7 +152,7 @@ pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
 // ============================================================================
 
 /// Parse `ident`, `Path::Variant`, `Path::Variant(pats)`, or `Struct { fields }`.
-pub func parse_ident_or_path_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_ident_or_path_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseFailure] {
     let path_r = parse_type_path_full(tokens, pos)!
     let path: TypePath = path_r.path
     var p: I64 = path_r.pos
@@ -206,7 +206,7 @@ pub func parse_ident_or_path_pattern(tokens: List[Token], pos: I64) -> Outcome[P
 }
 
 /// Parse the `{ field: pat, .. }` body of a struct pattern.
-pub func parse_struct_pattern_body(tokens: List[Token], pos: I64, path: TypePath, start_span: SourceSpan) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_struct_pattern_body(tokens: List[Token], pos: I64, path: TypePath, start_span: SourceSpan) -> Outcome[ParsedPattern, ParseFailure] {
     var p: I64 = pos + 1  // consume '{'
     p = p_skip_newlines(tokens, p)
 
@@ -273,7 +273,7 @@ pub func parse_struct_pattern_body(tokens: List[Token], pos: I64, path: TypePath
 // ============================================================================
 
 /// Parse a tuple pattern `(a, b, c)`.
-pub func parse_tuple_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_tuple_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume '('
     p = p_skip_newlines(tokens, p)
@@ -303,7 +303,7 @@ pub func parse_tuple_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
 }
 
 /// Parse an array pattern `[a, b, ..]`.
-pub func parse_array_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseError] {
+pub func parse_array_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPattern, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume '['
     p = p_skip_newlines(tokens, p)
@@ -316,7 +316,8 @@ pub func parse_array_pattern(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
         if p_check(tokens, p, TokenKind::DotDot) {
             p = p + 1
             let wc_span: SourceSpan = p_prev(tokens, p).span
-            rest = Just(Heap::new(Pattern::Wildcard(wc_span)))
+            let wc_pat: Heap[Pattern] = Heap::new(Pattern::Wildcard(wc_span))
+            rest = Just(wc_pat)
             p = p_skip_newlines(tokens, p)
             if p_check(tokens, p, TokenKind::Comma) { p = p + 1 }
             break

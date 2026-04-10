@@ -12,9 +12,13 @@ TML_MODULE("codegen_x86")
 
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <sstream>
 #include <thread>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 // LLVM C API headers
 #include <llvm-c/Analysis.h>
@@ -125,6 +129,59 @@ auto LLVMBackend::get_default_target_triple() const -> std::string {
     LLVMDisposeMessage(triple);
     return result;
 }
+
+// ============================================================================
+// Large-stack thread helper
+// ============================================================================
+//
+// LLVM's code generator uses deep recursion (e.g., dominator tree DFS, register
+// allocator, liveness analysis). For large IR files (35k+ lines) with many
+// functions the default 1–16 MB thread stack can overflow.  We run the emit
+// operation on a new OS thread whose reserved stack is 128 MB so that even the
+// biggest TML parser/serializer modules compile without crashing.
+
+namespace {
+
+#ifdef _WIN32
+struct LargeStackTask {
+    std::function<void()> fn;
+    std::exception_ptr exc{nullptr};
+};
+
+DWORD WINAPI large_stack_thread_proc(LPVOID param) {
+    auto* task = static_cast<LargeStackTask*>(param);
+    try {
+        task->fn();
+    } catch (...) {
+        task->exc = std::current_exception();
+    }
+    return 0;
+}
+
+/// Run `fn` on a thread whose stack is reserved at `stack_bytes`.
+/// Returns without throwing; any exception from `fn` is re-thrown here.
+void run_on_large_stack(std::function<void()> fn, SIZE_T stack_bytes = 128ULL * 1024 * 1024) {
+    LargeStackTask task{std::move(fn)};
+    HANDLE h = CreateThread(nullptr, stack_bytes, large_stack_thread_proc, &task,
+                            STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+    if (!h) {
+        // CreateThread failed — fall back to running on current thread
+        task.fn();
+    } else {
+        WaitForSingleObject(h, INFINITE);
+        CloseHandle(h);
+        if (task.exc) {
+            std::rethrow_exception(task.exc);
+        }
+    }
+}
+#else
+static void run_on_large_stack(std::function<void()> fn, std::size_t /*stack_bytes*/ = 0) {
+    fn(); // On Linux/macOS the default stack is usually 8 MB and ulimit can raise it
+}
+#endif
+
+} // namespace
 
 auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::path& output_path,
                                        const LLVMCompileOptions& options) -> LLVMCompileResult {
@@ -281,34 +338,48 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
     // may be temporarily locked by another process (linker, antivirus, etc.).
     // "The requested operation cannot be performed on a file with a user-mapped
     // section open" is a transient Windows error that resolves on retry.
+    //
+    // Large IR files (35k+ lines from programs importing the full parser chain)
+    // can overflow LLVM's register allocator / dominator-tree DFS stack (16 MB
+    // default on Windows).  Run the emit on a thread with 128 MB reserved stack
+    // so LLVM has enough headroom.
     std::string output_str = output_path.string();
     error = nullptr;
     constexpr int max_retries = 3;
     constexpr int retry_delay_ms = 100;
     bool emit_ok = false;
-    for (int attempt = 0; attempt < max_retries; ++attempt) {
-        error = nullptr;
-        if (LLVMTargetMachineEmitToFile(target_machine, module, output_str.c_str(), LLVMObjectFile,
-                                        &error) == 0) {
-            emit_ok = true;
-            break;
+    std::string emit_error_msg;
+    run_on_large_stack([&] {
+        for (int attempt = 0; attempt < max_retries; ++attempt) {
+            char* emit_err = nullptr;
+            if (LLVMTargetMachineEmitToFile(target_machine, module, output_str.c_str(),
+                                            LLVMObjectFile, &emit_err) == 0) {
+                emit_ok = true;
+                return;
+            }
+            std::string msg = emit_err ? emit_err : "";
+            if (emit_err) {
+                LLVMDisposeMessage(emit_err);
+                emit_err = nullptr;
+            }
+            // Only retry on Windows file locking errors
+            if (msg.find("user-mapped section") != std::string::npos ||
+                msg.find("being used by another process") != std::string::npos) {
+                TML_LOG_DEBUG("backend", "Object file locked (attempt "
+                                             << (attempt + 1) << "/" << max_retries
+                                             << "), retrying in " << retry_delay_ms
+                                             << "ms: " << output_path.string());
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(retry_delay_ms * (attempt + 1)));
+                continue;
+            }
+            // Non-retryable error — capture and stop
+            emit_error_msg = msg;
+            return;
         }
-        std::string err_msg = error ? error : "";
-        if (error) {
-            LLVMDisposeMessage(error);
-            error = nullptr;
-        }
-        // Only retry on Windows file locking errors
-        if (err_msg.find("user-mapped section") != std::string::npos ||
-            err_msg.find("being used by another process") != std::string::npos) {
-            TML_LOG_DEBUG("backend", "Object file locked (attempt "
-                                         << (attempt + 1) << "/" << max_retries << "), retrying in "
-                                         << retry_delay_ms << "ms: " << output_path);
-            std::this_thread::sleep_for(std::chrono::milliseconds(retry_delay_ms * (attempt + 1)));
-            continue;
-        }
-        // Non-retryable error
-        result.error_message = "[K004] Failed to emit object file: " + err_msg;
+    });
+    if (!emit_error_msg.empty()) {
+        result.error_message = "[K004] Failed to emit object file: " + emit_error_msg;
         LLVMDisposeTargetMachine(target_machine);
         LLVMDisposeModule(module);
         return result;

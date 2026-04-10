@@ -16,7 +16,7 @@ use compiler::ast::nodes::TupleType
 use compiler::ast::nodes::FuncType
 use compiler::ast::nodes::DynType
 use compiler::ast::nodes::SliceType
-use compiler::parser::common::ParseError
+use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedTypeExpr
 use compiler::parser::common::ParsedTypeExprs
 use compiler::parser::common::ParsedStr
@@ -42,7 +42,7 @@ use core::alloc::heap::Heap
 
 /// Parse a qualified type path: `Foo`, `std::io::File`, `HashMap`.
 /// Returns the segments list and advances pos past the last segment.
-pub func parse_type_path(tokens: List[Token], pos: I64) -> Outcome[ParsedStr, ParseError] {
+pub func parse_type_path(tokens: List[Token], pos: I64) -> Outcome[ParsedStr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     when start_tok.kind {
         Identifier => {},
@@ -63,7 +63,7 @@ pub func parse_type_path(tokens: List[Token], pos: I64) -> Outcome[ParsedStr, Pa
 }
 
 /// Parse a qualified type path as a full `TypePath` struct.
-pub func parse_type_path_full(tokens: List[Token], pos: I64) -> Outcome[ParsedTypePath, ParseError] {
+pub func parse_type_path_full(tokens: List[Token], pos: I64) -> Outcome[ParsedTypePath, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     when start_tok.kind {
         Identifier => {},
@@ -89,7 +89,7 @@ pub func parse_type_path_full(tokens: List[Token], pos: I64) -> Outcome[ParsedTy
 // ============================================================================
 
 /// Parse optional generic arguments `[T, U]`. Returns empty list if no `[`.
-pub func parse_generic_args(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExprs, ParseError] {
+pub func parse_generic_args(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExprs, ParseFailure] {
     if not p_check(tokens, pos, TokenKind::LBracket) {
         let empty: List[Heap[TypeExpr]] = List::new(0)
         return Ok(ParsedTypeExprs { tes: empty, pos: pos })
@@ -122,7 +122,7 @@ pub func parse_generic_args(tokens: List[Token], pos: I64) -> Outcome[ParsedType
 // ============================================================================
 
 /// Parse any type expression.
-pub func parse_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+pub func parse_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseFailure] {
     var p: I64 = p_skip_newlines(tokens, pos)
     let tok: Token = p_peek(tokens, p)
     when tok.kind {
@@ -184,7 +184,7 @@ pub func parse_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, Pa
 }
 
 /// Parse a named/generic type: `Foo`, `List[I32]`, `HashMap[K, V]`.
-pub func parse_named_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+pub func parse_named_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseFailure] {
     let path_r = parse_type_path_full(tokens, pos)!
     let path: TypePath = path_r.path
     var p: I64 = path_r.pos
@@ -217,7 +217,7 @@ pub func parse_named_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeEx
 }
 
 /// Parse a tuple type `(T, U)` or unit type `()`.
-pub func parse_tuple_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+pub func parse_tuple_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume '('
     p = p_skip_newlines(tokens, p)
@@ -247,7 +247,7 @@ pub func parse_tuple_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeEx
 }
 
 /// Parse a function type: `Func(I32, Str) -> Bool`.
-pub func parse_func_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseError] {
+pub func parse_func_type(tokens: List[Token], pos: I64) -> Outcome[ParsedTypeExpr, ParseFailure] {
     let start_tok: Token = p_peek(tokens, pos)
     var p: I64 = pos + 1  // consume 'func' / 'Func'
 
