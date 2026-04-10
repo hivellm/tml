@@ -953,6 +953,7 @@ static CONTEXT tml_recovery_context;
 static volatile int32_t tml_recovery_context_valid = 0;
 #endif
 
+#ifdef _WIN32
 /**
  * @brief Vectored Exception Handler (VEH) for crash catching.
  *

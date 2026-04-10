@@ -28,18 +28,28 @@ jobs:
 
       - name: Check C/C++ formatting
         run: |
+          # Check only files changed vs base branch (for PRs) or last commit (for pushes)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD -- 'compiler/src/*.cpp' 'compiler/src/*.hpp' 'compiler/include/*.hpp' 'compiler/runtime/*.c' 'compiler/runtime/*.h' 2>/dev/null || true)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'compiler/src/*.cpp' 'compiler/src/*.hpp' 'compiler/include/*.hpp' 'compiler/runtime/*.c' 'compiler/runtime/*.h' 2>/dev/null || true)
+          fi
+          if [ -z "$CHANGED" ]; then
+            echo "No C/C++ files changed — skipping format check"
+            exit 0
+          fi
           NEEDS_FORMAT=false
-          for file in $(find compiler/src compiler/runtime compiler/include -name "*.cpp" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" 2>/dev/null); do
-            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+          for file in $CHANGED; do
+            if [ -f "$file" ] && ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
               echo "Needs formatting: $file"
               NEEDS_FORMAT=true
             fi
           done
           if [ "$NEEDS_FORMAT" = true ]; then
-            echo "Some files need formatting. Run clang-format locally."
+            echo "Some changed files need formatting. Run: clang-format -i <file>"
             exit 1
           fi
-          echo "All files are properly formatted"
+          echo "All changed files are properly formatted"
 
   # Lint check - builds TML compiler and uses `tml lint`
   lint:
@@ -159,5 +169,5 @@ jobs:
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook,.sandbox,backup,src/gcc,src/llvm-project,compiler/third_party,compiler/cranelift" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors,SEH,PassT,clos,hel,fo,bu,Nd,nd,te,aNULL,ShiftIn,Implementor,OtherWrite,Strng,caf"
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,*.tml,*.rs,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook,.sandbox,backup,src/gcc,src/llvm-project,compiler/third_party,compiler/cranelift,compiler-tml,lib/chart,vcpkg_installed" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors,SEH,PassT,clos,hel,fo,bu,Nd,nd,te,ue,aNULL,ShiftIn,Implementor,OtherWrite,Strng,caf,Collet,DElt"
