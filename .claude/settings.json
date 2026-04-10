@@ -63,6 +63,35 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/on-compact-reinject.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/resume-from-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/check-context-and-handoff.sh"
+          }
+        ]
+      }
     ]
   },
   "enabledMcpjsonServers": [
