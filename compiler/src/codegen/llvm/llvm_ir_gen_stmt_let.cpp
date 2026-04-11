@@ -239,6 +239,90 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
+    // Handle struct pattern destructuring: let Point { x: a, y: b } = expr
+    if (let.pattern->is<parser::StructPattern>()) {
+        if (!let.init.has_value()) {
+            errors_.push_back(LLVMGenError{.message = "Struct pattern requires an initializer",
+                                           .span = let.span,
+                                           .notes = {},
+                                           .code = "C023"});
+            return;
+        }
+
+        const auto& struct_pat = let.pattern->as<parser::StructPattern>();
+
+        // Resolve the struct type name from the pattern's type path
+        std::string struct_name =
+            struct_pat.path.segments.empty() ? "" : struct_pat.path.segments.back();
+
+        // Generate the initializer expression
+        std::string init_val = gen_expr(*let.init.value());
+        std::string expr_type = last_expr_type_;
+
+        // Determine struct LLVM type
+        std::string struct_type = expr_type;
+        if (struct_type.empty() || struct_type == "i32") {
+            struct_type = "%struct." + struct_name;
+        }
+
+        // Infer semantic type for field lookups
+        types::TypePtr semantic_struct_type = nullptr;
+        if (let.type_annotation) {
+            semantic_struct_type =
+                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+        } else {
+            semantic_struct_type = infer_expr_type(*let.init.value());
+        }
+
+        // Store struct value to a temp alloca so we can GEP into it
+        std::string struct_ptr = fresh_reg();
+        emit_line("  " + struct_ptr + " = alloca " + struct_type);
+        emit_line("  store " + struct_type + " " + init_val + ", ptr " + struct_ptr);
+
+        // For each field binding in the pattern, extract the field value
+        for (const auto& field_pat : struct_pat.fields) {
+            // field_pat.first = field name in the struct
+            // field_pat.second = binding pattern (IdentPattern for the variable name)
+            const std::string& field_name = field_pat.first;
+            std::string binding_name;
+            if (field_pat.second && field_pat.second->is<parser::IdentPattern>()) {
+                binding_name = field_pat.second->as<parser::IdentPattern>().name;
+            } else {
+                // Shorthand: `let Point { x, y } = p` — field name IS the binding name
+                binding_name = field_name;
+            }
+
+            // Look up field index and type
+            int field_idx = get_field_index(struct_name, field_name);
+            std::string field_type = get_field_type(struct_name, field_name);
+            types::TypePtr field_sem_type = get_field_semantic_type(struct_name, field_name);
+
+            // GEP to field and load
+            std::string gep = fresh_reg();
+            emit_line("  " + gep + " = getelementptr inbounds " + struct_type + ", ptr " +
+                      struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+            std::string field_val = fresh_reg();
+            emit_line("  " + field_val + " = load " + field_type + ", ptr " + gep);
+
+            // Bool (i8 in struct) needs trunc to i1 for register use
+            if (field_type == "i8" && field_sem_type &&
+                field_sem_type->is<types::PrimitiveType>() &&
+                field_sem_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Bool) {
+                std::string truncated = fresh_reg();
+                emit_line("  " + truncated + " = trunc i8 " + field_val + " to i1");
+                field_val = truncated;
+                field_type = "i1";
+            }
+
+            // Allocate and store the binding variable
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + field_type);
+            emit_line("  store " + field_type + " " + field_val + ", ptr " + alloca_reg);
+            locals_[binding_name] = VarInfo{alloca_reg, field_type, field_sem_type, std::nullopt};
+        }
+        return;
+    }
+
     std::string var_name;
     if (let.pattern->is<parser::IdentPattern>()) {
         var_name = let.pattern->as<parser::IdentPattern>().name;

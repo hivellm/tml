@@ -1,0 +1,27 @@
+use test
+
+type Pair {
+    first: I64,
+    second: I64,
+}
+
+type Triple {
+    x: I64,
+    y: I64,
+    z: I64,
+}
+
+@test func test_destructure_pair() {
+    let p: Pair = Pair { first: 42 as I64, second: 77 as I64 }
+    let Pair { first: a, second: b } = p
+    test::assert(a == 42 as I64, "first should be 42")
+    test::assert(b == 77 as I64, "second should be 77")
+}
+
+@test func test_destructure_triple() {
+    let t: Triple = Triple { x: 10 as I64, y: 20 as I64, z: 30 as I64 }
+    let Triple { x: a, y: b, z: c } = t
+    test::assert(a == 10 as I64, "x should be 10")
+    test::assert(b == 20 as I64, "y should be 20")
+    test::assert(c == 30 as I64, "z should be 30")
+}

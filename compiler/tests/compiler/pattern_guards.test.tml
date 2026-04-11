@@ -1,0 +1,37 @@
+use test
+
+type Shape {
+    Circle(I64),
+    Rect(I64, I64),
+    Empty,
+}
+
+@test func test_pattern_guard_basic() {
+    let s: Shape = Shape::Circle(5 as I64)
+    let result: I64 = when s {
+        Shape::Circle(r) if r > 3 as I64 => 1 as I64,
+        Shape::Circle(r) => 0 as I64,
+        _ => 2 as I64,
+    }
+    test::assert(result == 1 as I64, "should match guarded Circle arm")
+}
+
+@test func test_pattern_guard_fallthrough() {
+    let s: Shape = Shape::Circle(2 as I64)
+    let result: I64 = when s {
+        Shape::Circle(r) if r > 3 as I64 => 1 as I64,
+        Shape::Circle(r) => 0 as I64,
+        _ => 2 as I64,
+    }
+    test::assert(result == 0 as I64, "guard false should fall to next Circle arm")
+}
+
+@test func test_pattern_guard_wildcard() {
+    let s: Shape = Shape::Empty
+    let result: I64 = when s {
+        Shape::Circle(r) if r > 0 as I64 => 1 as I64,
+        Shape::Circle(r) => 2 as I64,
+        _ => 3 as I64,
+    }
+    test::assert(result == 3 as I64, "Empty should match wildcard")
+}

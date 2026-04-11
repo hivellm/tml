@@ -1,0 +1,31 @@
+use test
+
+type Point {
+    x: I64,
+    y: I64,
+    z: I64,
+}
+
+@test func test_struct_update_one_field() {
+    let p1: Point = Point { x: 100 as I64, y: 200 as I64, z: 300 as I64 }
+    let p2: Point = Point { x: 999 as I64, ..p1 }
+    test::assert(p2.x == 999 as I64, "x should be overridden")
+    test::assert(p2.y == 200 as I64, "y should come from p1")
+    test::assert(p2.z == 300 as I64, "z should come from p1")
+}
+
+@test func test_struct_update_two_fields() {
+    let p1: Point = Point { x: 1 as I64, y: 2 as I64, z: 3 as I64 }
+    let p2: Point = Point { x: 10 as I64, z: 30 as I64, ..p1 }
+    test::assert(p2.x == 10 as I64, "x should be overridden")
+    test::assert(p2.y == 2 as I64, "y should come from p1")
+    test::assert(p2.z == 30 as I64, "z should be overridden")
+}
+
+@test func test_struct_update_preserves_original() {
+    let p1: Point = Point { x: 5 as I64, y: 6 as I64, z: 7 as I64 }
+    let p2: Point = Point { x: 50 as I64, ..p1 }
+    // p1 should be unchanged
+    test::assert(p1.x == 5 as I64, "p1.x should be unchanged")
+    test::assert(p1.y == 6 as I64, "p1.y should be unchanged")
+}
