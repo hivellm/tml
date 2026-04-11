@@ -425,24 +425,31 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
             emit_line("  " + extracted + " = extractvalue " + src_type + " " + src + ", 0");
 
             // If we determined field 0's type AND it differs from the target,
-            // emit a width conversion (zext/trunc) to bridge the gap.
-            if (is_int(target_type) && !field0_type.empty() && field0_type != target_type &&
-                is_int(field0_type)) {
-                int field0_bits = get_bit_width(field0_type);
-                int tgt_bits = get_bit_width(target_type);
-                if (field0_bits > 0 && tgt_bits > 0 && field0_bits != tgt_bits) {
-                    std::string resized = fresh_reg();
-                    if (tgt_bits > field0_bits) {
-                        // Widen: enum discriminants are non-negative → zext
-                        emit_line("  " + resized + " = zext " + field0_type + " " + extracted +
-                                  " to " + target_type);
-                    } else {
-                        // Narrow: trunc
-                        emit_line("  " + resized + " = trunc " + field0_type + " " + extracted +
-                                  " to " + target_type);
-                    }
+            // emit a conversion to bridge the gap.
+            if (!field0_type.empty() && field0_type != target_type) {
+                // ptr → integer: ptrtoint
+                if (field0_type == "ptr" && is_int(target_type)) {
+                    std::string conv = fresh_reg();
+                    emit_line("  " + conv + " = ptrtoint ptr " + extracted + " to " + target_type);
                     last_expr_type_ = target_type;
-                    return resized;
+                    return conv;
+                }
+                // integer → integer: zext/trunc
+                if (is_int(field0_type) && is_int(target_type)) {
+                    int field0_bits = get_bit_width(field0_type);
+                    int tgt_bits = get_bit_width(target_type);
+                    if (field0_bits > 0 && tgt_bits > 0 && field0_bits != tgt_bits) {
+                        std::string resized = fresh_reg();
+                        if (tgt_bits > field0_bits) {
+                            emit_line("  " + resized + " = zext " + field0_type + " " + extracted +
+                                      " to " + target_type);
+                        } else {
+                            emit_line("  " + resized + " = trunc " + field0_type + " " + extracted +
+                                      " to " + target_type);
+                        }
+                        last_expr_type_ = target_type;
+                        return resized;
+                    }
                 }
             }
 
@@ -457,9 +464,58 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
             return t.size() > 1 && t[0] == 'i' && std::isdigit(static_cast<unsigned char>(t[1]));
         };
         if (is_int(src_type) || src_type == "ptr") {
+            // Determine the actual LLVM type of field 0 in the target struct.
+            // If the source is an integer (e.g., i32 0) but field 0 is ptr,
+            // we must convert to ptr first — otherwise the insertvalue type
+            // disagrees with the struct layout (e.g., `0 as List[Str]` where
+            // List has `handle: *Unit` as field 0 which is ptr, not i32).
+            std::string insert_type = src_type;
+            std::string insert_val = src;
+
+            std::string tgt_name;
+            if (target_type.size() > 8 && target_type.substr(0, 8) == "%struct.") {
+                tgt_name = target_type.substr(8);
+            } else if (target_type.size() > 6 && target_type.substr(0, 6) == "%enum.") {
+                tgt_name = target_type.substr(6);
+            }
+            if (!tgt_name.empty()) {
+                auto sf_it = struct_fields_.find(tgt_name);
+                if (sf_it != struct_fields_.end() && !sf_it->second.empty()) {
+                    std::string field0 = sf_it->second[0].llvm_type;
+                    if (field0 != src_type) {
+                        // Convert source to match field 0's type
+                        if (field0 == "ptr" && is_int(src_type)) {
+                            std::string conv = fresh_reg();
+                            emit_line("  " + conv + " = inttoptr " + src_type + " " + src +
+                                      " to ptr");
+                            insert_type = "ptr";
+                            insert_val = conv;
+                        } else if (is_int(field0) && is_int(src_type)) {
+                            int src_bits = 0, tgt_bits = 0;
+                            if (src_type.size() > 1)
+                                src_bits = std::stoi(src_type.substr(1));
+                            if (field0.size() > 1)
+                                tgt_bits = std::stoi(field0.substr(1));
+                            if (src_bits > 0 && tgt_bits > 0 && src_bits != tgt_bits) {
+                                std::string conv = fresh_reg();
+                                if (tgt_bits > src_bits) {
+                                    emit_line("  " + conv + " = zext " + src_type + " " + src +
+                                              " to " + field0);
+                                } else {
+                                    emit_line("  " + conv + " = trunc " + src_type + " " + src +
+                                              " to " + field0);
+                                }
+                                insert_type = field0;
+                                insert_val = conv;
+                            }
+                        }
+                    }
+                }
+            }
+
             std::string wrapped = fresh_reg();
-            emit_line("  " + wrapped + " = insertvalue " + target_type + " undef, " + src_type +
-                      " " + src + ", 0");
+            emit_line("  " + wrapped + " = insertvalue " + target_type + " undef, " + insert_type +
+                      " " + insert_val + ", 0");
             last_expr_type_ = target_type;
             return wrapped;
         }

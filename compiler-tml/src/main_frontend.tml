@@ -17,7 +17,6 @@
 //!   frontend <source-file.tml>
 
 use std::os
-use std::os::Args
 use std::collections::Buffer
 use compiler::source::SourceSpan
 use compiler::source::SourceLocation
@@ -67,11 +66,12 @@ func derive_module_name(path: Str) -> Str {
     // Find last directory separator ('/' or '\')
     let sep_fwd: I64 = path.rfind("/")
     let sep_back: I64 = path.rfind("\\")
-    var name_start: I64 = 0 as I64
-    if sep_fwd >= 0 as I64 and sep_fwd > sep_back {
-        name_start = sep_fwd + 1 as I64
+    let name_start: I64 = if sep_fwd >= 0 as I64 and sep_fwd > sep_back {
+        sep_fwd + 1 as I64
     } else if sep_back >= 0 as I64 {
-        name_start = sep_back + 1 as I64
+        sep_back + 1 as I64
+    } else {
+        0 as I64
     }
     // Strip the path prefix from the string to just get the filename
     let filename: Str = path.slice(name_start, n)
@@ -109,21 +109,12 @@ func parse_error_to_json(err: ParseFailure) -> Str {
 // ============================================================================
 
 func main() -> I32 {
-    var args: Args = os::args()
-
-    // Skip program name (argv[0])
-    if not args.has_next() {
+    // Require exactly one argument beyond the program name: the source file path
+    if os::args_count() < 2 {
         ffi_eprintln("[{\"message\":\"missing source file argument\",\"file\":\"\",\"line\":0,\"col\":0}]")
         return 1
     }
-    let _prog: Str = args.next()
-
-    // Require exactly one more argument: the source file path
-    if not args.has_next() {
-        ffi_eprintln("[{\"message\":\"missing source file argument\",\"file\":\"\",\"line\":0,\"col\":0}]")
-        return 1
-    }
-    let path: Str = args.next()
+    let path: Str = os::args_get(1)
 
     // Read source file
     let source: Str = ffi_read_file(path)

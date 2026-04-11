@@ -1,0 +1,508 @@
+//! AST declaration walker — registers type definitions from parsed AST into
+//! the TypeEnv.
+//!
+//! Mirrors the phase-1 registration logic in `env_definitions.cpp` and
+//! `checker/core.cpp`. Walks a `Module` AST node and populates the TypeEnv
+//! with struct, enum, function, behavior, and impl declarations.
+//!
+//! Phase 14a — items 4.1–4.4.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::make_primitive
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_generic_simple
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_named
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_ptr
+use compiler::types::ty::make_array
+use compiler::types::ty::make_slice
+use compiler::types::ty::make_tuple
+use compiler::types::ty::make_func
+use compiler::types::ty::make_dyn_behavior
+use compiler::types::ty::make_impl_behavior
+use compiler::types::ty::PrimitiveKind
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::StructFieldDef
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::BehaviorDef
+use compiler::types::env::AssociatedTypeDef
+use compiler::types::env::ConstGenericParam
+use compiler::types::env::WhereConstraint
+use compiler::types::env::env_register_struct
+use compiler::types::env::env_register_enum
+use compiler::types::env::env_register_function
+use compiler::types::env::env_register_behavior
+use compiler::types::env::env_register_impl
+use compiler::types::env::env_register_type_alias
+use compiler::ast::nodes::Module
+use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::TypePath
+use compiler::ast::decls::Decl
+use compiler::ast::decls::FuncDecl
+use compiler::ast::decls::FuncParam
+use compiler::ast::decls::StructDecl
+use compiler::ast::decls::StructField
+use compiler::ast::decls::UnionDecl
+use compiler::ast::decls::EnumDecl
+use compiler::ast::decls::EnumVariant
+use compiler::ast::decls::TraitDecl
+use compiler::ast::decls::ImplDecl
+use compiler::ast::decls::TypeAliasDecl
+use compiler::ast::decls::GenericParam
+use compiler::ast::decls::ConstDecl
+use compiler::ast::decls::UseDecl
+use compiler::ast::decls::ModDecl
+use compiler::ast::decls::ClassDecl
+use compiler::ast::decls::InterfaceDecl
+use compiler::ast::decls::NamespaceDecl
+use compiler::source::loc_new
+use compiler::source::span_new
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// 4.1 — Walk AST Module, register all declarations
+// ============================================================================
+
+/// Walk a Module's declaration list and register all types into the TypeEnv.
+/// This is the phase-1 registration pass — it collects names and shapes only,
+/// no type inference or checking.
+pub func register_module_decls(env: TypeEnv, mod_ast: Module) {
+    let decls: List[Heap[Decl]] = mod_ast.decls
+    let count: I64 = decls.len() as I64
+    var i: I64 = 0
+    loop (i < count) {
+        let d: Decl = decls.get(i).get()
+        register_decl(env, d)
+        i = i + 1
+    }
+}
+
+/// Dispatch a single declaration for registration.
+func register_decl(env: TypeEnv, decl: Decl) {
+    when decl {
+        Func(fd) => register_func_decl(env, fd),
+        Struct(sd) => register_struct_decl(env, sd),
+        Union(ud) => register_union_decl(env, ud),
+        Enum(ed) => register_enum_decl(env, ed),
+        Trait(td) => register_trait_decl(env, td),
+        Impl(id_ptr) => register_impl_decl(env, id_ptr.get()),
+        TypeAlias(ta) => register_type_alias_decl(env, ta),
+        Const(_) => {},      // Constants handled in later phase
+        Use(_) => {},        // Imports handled by module resolution (phase14b)
+        Mod(md) => register_mod_decl(env, md),
+        Class(cd) => {},     // OOP classes deferred
+        Interface(ifd) => {},  // OOP interfaces deferred
+        Namespace(ns) => register_namespace_decl(env, ns)
+    }
+}
+
+// ============================================================================
+// 4.2 — Struct registration
+// ============================================================================
+
+/// Register a struct declaration into the TypeEnv.
+func register_struct_decl(env: TypeEnv, sd: StructDecl) {
+    let name: Str = sd.name
+    let type_params: List[Str] = extract_generic_names(sd.generics)
+    let fields: List[StructFieldDef] = convert_struct_fields(sd.fields)
+
+    let def: StructDef = StructDef {
+        name: name,
+        type_params: type_params,
+        const_params: List[ConstGenericParam]::new(0 as I64),
+        fields: fields,
+        span: sd.span,
+        is_interior_mutable: 0,
+        is_union: 0,
+        is_simd: 0
+    }
+    env_register_struct(env, name, def)
+}
+
+/// Register a union declaration (same shape as struct, with is_union flag).
+func register_union_decl(env: TypeEnv, ud: UnionDecl) {
+    let name: Str = ud.name
+    let type_params: List[Str] = extract_generic_names(ud.generics)
+    let fields: List[StructFieldDef] = convert_struct_fields(ud.fields)
+
+    let def: StructDef = StructDef {
+        name: name,
+        type_params: type_params,
+        const_params: List[ConstGenericParam]::new(0 as I64),
+        fields: fields,
+        span: ud.span,
+        is_interior_mutable: 0,
+        is_union: 1,
+        is_simd: 0
+    }
+    env_register_struct(env, name, def)
+}
+
+/// Convert AST StructField list to StructFieldDef list.
+func convert_struct_fields(fields: List[StructField]) -> List[StructFieldDef] {
+    let count: I64 = fields.len() as I64
+    let result: List[StructFieldDef] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let f: StructField = fields.get(i)
+        let ty: Type = type_expr_to_type(f.ty.get())
+        result.push(StructFieldDef { name: f.name, ty: Heap::new(ty), has_default: 0 })
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// 4.3 — Enum registration
+// ============================================================================
+
+/// Register an enum declaration into the TypeEnv.
+func register_enum_decl(env: TypeEnv, ed: EnumDecl) {
+    let name: Str = ed.name
+    let type_params: List[Str] = extract_generic_names(ed.generics)
+    let variants: List[EnumVariantDef] = convert_enum_variants(ed.variants)
+
+    let def: EnumDef = EnumDef {
+        name: name,
+        type_params: type_params,
+        const_params: List[ConstGenericParam]::new(0 as I64),
+        variants: variants,
+        span: ed.span,
+        is_flags: 0
+    }
+    env_register_enum(env, name, def)
+}
+
+/// Convert AST EnumVariant list to EnumVariantDef list.
+func convert_enum_variants(variants: List[EnumVariant]) -> List[EnumVariantDef] {
+    let count: I64 = variants.len() as I64
+    let result: List[EnumVariantDef] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let v: EnumVariant = variants.get(i)
+        let payload: List[Heap[Type]] = convert_type_expr_list(v.fields)
+        result.push(EnumVariantDef { name: v.name, payload_types: payload })
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// 4.4 — Function registration
+// ============================================================================
+
+/// Register a function declaration.
+func register_func_decl(env: TypeEnv, fd: FuncDecl) {
+    let name: Str = fd.name
+    let type_params: List[Str] = extract_generic_names(fd.generics)
+    let params: List[Heap[Type]] = convert_func_params(fd.params)
+    let ret: Type = when fd.return_type {
+        Just(rt) => type_expr_to_type(rt.get()),
+        Nothing => make_unit()
+    }
+
+    let sig: FuncSig = FuncSig {
+        name: name,
+        params: params,
+        return_type: Heap::new(ret),
+        type_params: type_params,
+        is_async: fd.is_async,
+        span: fd.span,
+        where_constraints: List[WhereConstraint]::new(0 as I64),
+        is_lowlevel: 0,
+        is_intrinsic: 0,
+        extern_abi: Nothing,
+        extern_name: Nothing,
+        const_params: List::new(0 as I64)
+    }
+    env_register_function(env, name, sig)
+}
+
+/// Convert FuncParam list to Type list.
+func convert_func_params(params: List[FuncParam]) -> List[Heap[Type]] {
+    let count: I64 = params.len() as I64
+    let result: List[Heap[Type]] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let p: FuncParam = params.get(i)
+        let ty: Type = type_expr_to_type(p.ty.get())
+        result.push(Heap::new(ty))
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Trait / Impl / TypeAlias / Mod / Namespace registration
+// ============================================================================
+
+/// Register a trait (behavior) declaration.
+func register_trait_decl(env: TypeEnv, td: TraitDecl) {
+    let name: Str = td.name
+    let type_params: List[Str] = extract_generic_names(td.generics)
+
+    // Convert method declarations to FuncSig list
+    let methods: List[FuncSig] = convert_method_list(td.methods)
+
+    // Convert supertraits
+    let supers: List[Str] = convert_type_path_names(td.supertraits)
+
+    let def: BehaviorDef = BehaviorDef {
+        name: name,
+        type_params: type_params,
+        const_params: List[ConstGenericParam]::new(0 as I64),
+        associated_types: List[AssociatedTypeDef]::new(0 as I64),
+        methods: methods,
+        super_behaviors: supers,
+        methods_with_defaults: List[Str]::new(0 as I64),
+        span: td.span
+    }
+    env_register_behavior(env, name, def)
+}
+
+/// Register an impl block — records behavior implementations.
+func register_impl_decl(env: TypeEnv, id: ImplDecl) {
+    let type_name: Str = type_expr_name(id.ty.get())
+    when id.behavior_path {
+        Just(bp) => {
+            let behavior_name: Str = type_path_to_str(bp)
+            env_register_impl(env, type_name, behavior_name)
+        },
+        Nothing => {
+            // Inherent impl — register methods as functions
+            let methods: List[FuncDecl] = id.methods
+            let mc: I64 = methods.len() as I64
+            var i: I64 = 0
+            loop (i < mc) {
+                let m: FuncDecl = methods.get(i)
+                register_func_decl(env, m)
+                i = i + 1
+            }
+        }
+    }
+}
+
+/// Register a type alias.
+func register_type_alias_decl(env: TypeEnv, ta: TypeAliasDecl) {
+    let ty: Type = type_expr_to_type(ta.ty.get())
+    env_register_type_alias(env, ta.name, ty)
+}
+
+/// Register declarations inside a mod block.
+func register_mod_decl(env: TypeEnv, md: ModDecl) {
+    let items: List[Heap[Decl]] = md.items
+    let count: I64 = items.len() as I64
+    var i: I64 = 0
+    loop (i < count) {
+        register_decl(env, items.get(i).get())
+        i = i + 1
+    }
+}
+
+/// Register declarations inside a namespace block.
+func register_namespace_decl(env: TypeEnv, ns: NamespaceDecl) {
+    let items: List[Heap[Decl]] = ns.items
+    let count: I64 = items.len() as I64
+    var i: I64 = 0
+    loop (i < count) {
+        register_decl(env, items.get(i).get())
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// AST → Type conversion helpers
+// ============================================================================
+
+/// Convert an AST TypeExpr to a Type.
+/// This is a shallow conversion — it resolves names but does not perform
+/// full type checking or inference.
+func type_expr_to_type(te: TypeExpr) -> Type {
+    when te {
+        Named(nt) => {
+            let name: Str = type_path_to_str(nt.path)
+            // Check if this is a known primitive
+            let prim: Maybe[Type] = lookup_primitive(name)
+            when prim {
+                Just(t) => return t,
+                Nothing => {
+                    let args: List[Heap[Type]] = convert_type_expr_list(nt.args)
+                    return make_named(name, "", args)
+                }
+            }
+        },
+        Tuple(tt) => {
+            let elems: List[Heap[Type]] = convert_type_expr_list(tt.elements)
+            return make_tuple(elems)
+        },
+        Array(at) => {
+            let elem: Type = type_expr_to_type(at.element.get())
+            // Array size is an Expr in AST; during registration we use 0 as placeholder
+            return make_array(elem, 0 as I64)
+        },
+        Slice(st) => {
+            let elem: Type = type_expr_to_type(st.element.get())
+            return make_slice(elem)
+        },
+        Ref(rt) => {
+            let inner: Type = type_expr_to_type(rt.inner.get())
+            let mut_flag: I64 = if rt.is_mut { 1 as I64 } else { 0 as I64 }
+            return make_ref(inner, mut_flag)
+        },
+        Ptr(pt) => {
+            let inner: Type = type_expr_to_type(pt.inner.get())
+            let mut_flag: I64 = if pt.is_mut { 1 as I64 } else { 0 as I64 }
+            return make_ptr(inner, mut_flag)
+        },
+        Func(ft) => {
+            let params: List[Heap[Type]] = convert_type_expr_list(ft.params)
+            let ret: Type = when ft.return_type {
+                Just(rt) => type_expr_to_type(rt.get()),
+                Nothing => make_unit()
+            }
+            return make_func(params, ret, 0 as I64)
+        },
+        Infer(_) => {
+            // Placeholder — will be resolved during inference
+            return make_unit()
+        },
+        Dyn(dt) => {
+            // dyn Behavior — use first bound as the behavior name
+            let bname: Str = if dt.bounds.len() as I64 > 0 {
+                type_path_to_str(dt.bounds.get(0))
+            } else {
+                "<unknown>"
+            }
+            return make_dyn_behavior(bname, List[Heap[Type]]::new(0 as I64), 0 as I64)
+        },
+        ImplBehavior(ib) => {
+            let bname: Str = if ib.bounds.len() as I64 > 0 {
+                type_path_to_str(ib.bounds.get(0))
+            } else {
+                "<unknown>"
+            }
+            return make_impl_behavior(bname, List[Heap[Type]]::new(0 as I64))
+        }
+    }
+}
+
+/// Convert a list of Heap[TypeExpr] to List[Heap[Type]].
+func convert_type_expr_list(exprs: List[Heap[TypeExpr]]) -> List[Heap[Type]] {
+    let count: I64 = exprs.len() as I64
+    let result: List[Heap[Type]] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let ty: Type = type_expr_to_type(exprs.get(i).get())
+        result.push(Heap::new(ty))
+        i = i + 1
+    }
+    return result
+}
+
+/// Extract the simple name from a TypeExpr (for impl blocks).
+func type_expr_name(te: TypeExpr) -> Str {
+    when te {
+        Named(nt) => return type_path_to_str(nt.path),
+        _ => return "<unknown>"
+    }
+}
+
+/// Convert a TypePath to a dot-separated string.
+func type_path_to_str(path: TypePath) -> Str {
+    let segs: List[Str] = path.segments
+    let count: I64 = segs.len() as I64
+    if count == 0 { return "" }
+    if count == 1 { return segs.get(0) }
+    var result: Str = segs.get(0)
+    var i: I64 = 1
+    loop (i < count) {
+        result = result + "::" + segs.get(i)
+        i = i + 1
+    }
+    return result
+}
+
+/// Convert a list of TypePaths to a list of name strings.
+func convert_type_path_names(paths: List[TypePath]) -> List[Str] {
+    let count: I64 = paths.len() as I64
+    let result: List[Str] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        result.push(type_path_to_str(paths.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+/// Extract generic parameter names from AST GenericParam list.
+func extract_generic_names(generics: List[GenericParam]) -> List[Str] {
+    let count: I64 = generics.len() as I64
+    let result: List[Str] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        result.push(generics.get(i).name)
+        i = i + 1
+    }
+    return result
+}
+
+/// Convert a list of FuncDecl to FuncSig list (for behavior methods).
+func convert_method_list(methods: List[FuncDecl]) -> List[FuncSig] {
+    let count: I64 = methods.len() as I64
+    let result: List[FuncSig] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let fd: FuncDecl = methods.get(i)
+        let type_params: List[Str] = extract_generic_names(fd.generics)
+        let params: List[Heap[Type]] = convert_func_params(fd.params)
+        let ret: Type = when fd.return_type {
+            Just(rt) => type_expr_to_type(rt.get()),
+            Nothing => make_unit()
+        }
+        let sig: FuncSig = FuncSig {
+            name: fd.name,
+            params: params,
+            return_type: Heap::new(ret),
+            type_params: type_params,
+            is_async: fd.is_async,
+            span: fd.span,
+            where_constraints: List[WhereConstraint]::new(0 as I64),
+            is_lowlevel: 0,
+            is_intrinsic: 0,
+            extern_abi: Nothing,
+            extern_name: Nothing,
+            const_params: List::new(0 as I64)
+        }
+        result.push(sig)
+        i = i + 1
+    }
+    return result
+}
+
+/// Try to resolve a name to a primitive type.
+func lookup_primitive(name: Str) -> Maybe[Type] {
+    if name == "I8" { return Just(make_primitive(PrimitiveKind::KindI8)) }
+    if name == "I16" { return Just(make_primitive(PrimitiveKind::KindI16)) }
+    if name == "I32" { return Just(make_primitive(PrimitiveKind::KindI32)) }
+    if name == "I64" { return Just(make_primitive(PrimitiveKind::KindI64)) }
+    if name == "I128" { return Just(make_primitive(PrimitiveKind::KindI128)) }
+    if name == "U8" { return Just(make_primitive(PrimitiveKind::KindU8)) }
+    if name == "U16" { return Just(make_primitive(PrimitiveKind::KindU16)) }
+    if name == "U32" { return Just(make_primitive(PrimitiveKind::KindU32)) }
+    if name == "U64" { return Just(make_primitive(PrimitiveKind::KindU64)) }
+    if name == "U128" { return Just(make_primitive(PrimitiveKind::KindU128)) }
+    if name == "F32" { return Just(make_primitive(PrimitiveKind::KindF32)) }
+    if name == "F64" { return Just(make_primitive(PrimitiveKind::KindF64)) }
+    if name == "Bool" { return Just(make_primitive(PrimitiveKind::KindBool)) }
+    if name == "Char" { return Just(make_primitive(PrimitiveKind::KindChar)) }
+    if name == "Str" { return Just(make_primitive(PrimitiveKind::KindStr)) }
+    if name == "Unit" { return Just(make_primitive(PrimitiveKind::KindUnit)) }
+    if name == "Never" { return Just(make_primitive(PrimitiveKind::KindNever)) }
+    return Nothing
+}

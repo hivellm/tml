@@ -62,6 +62,15 @@
             "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-mcp-for-tasks.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-bash-grep.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [

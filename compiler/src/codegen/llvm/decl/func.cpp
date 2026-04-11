@@ -697,13 +697,13 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         // Resolve semantic type for the parameter
         types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
 
-        // For by-value struct parameters (immutable, no debug info), keep as SSA values.
-        // This avoids the alloca+store+GEP+load pattern — enables extractvalue for field access.
-        bool has_tuple_pattern =
-            func.params[i].pattern && func.params[i].pattern->is<parser::TuplePattern>();
-        bool is_struct_value = param_type.find("%struct.") == 0 && param_type != "ptr";
-        bool can_be_direct = is_struct_value && !is_func_type && !has_tuple_pattern &&
-                             !(options_.emit_debug_info && options_.debug_level >= 2);
+        // Always alloca struct parameters. The SSA "direct" path (extractvalue)
+        // only works when ALL field accesses in the function body use extractvalue.
+        // If any code path emits getelementptr on the param (e.g., passing the
+        // struct to a method, accessing nested fields), the IR is invalid because
+        // GEP requires a pointer, not an SSA struct value. The alloca+store path
+        // is always correct and the optimizer can eliminate it when possible.
+        bool can_be_direct = false;
 
         if (can_be_direct) {
             locals_[original_name] =

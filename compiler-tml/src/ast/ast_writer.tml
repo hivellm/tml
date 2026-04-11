@@ -46,6 +46,7 @@ use compiler::ast::exprs::InterpolatedSegmentKind
 use compiler::ast::stmts::Stmt
 use compiler::ast::decls::Decl
 use compiler::ast::decls::FuncDecl
+use compiler::ast::decls::ImplDecl
 use compiler::ast::decls::GenericParam
 use compiler::ast::decls::FuncParam
 use compiler::ast::decls::StructField
@@ -935,7 +936,8 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             ast_write_func_decl_list(w, td.methods)
             write_span(w, td.span)
         },
-        Impl(id) => {
+        Impl(id_ptr) => {
+            let id: ImplDecl = id_ptr.get()
             w.write_u8(5)
             ast_write_type(w, id.ty.get())
             when id.behavior_path {

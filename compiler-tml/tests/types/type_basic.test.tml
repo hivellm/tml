@@ -1,0 +1,149 @@
+//! Basic tests for compiler::types::ty — Type enum, equality, display,
+//! size/align, predicates.
+
+use test
+use compiler::types::ty::Type
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_ptr
+use compiler::types::ty::make_array
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::ty::type_size
+use compiler::types::ty::type_align
+use compiler::types::ty::prim_kind_eq
+use compiler::types::ty::prim_kind_to_str
+use compiler::types::ty::is_never
+use compiler::types::ty::is_unit
+use compiler::types::ty::is_primitive
+use compiler::types::ty::is_numeric
+use compiler::types::ty::is_integer
+use compiler::types::ty::is_float
+
+// ============================================================================
+// Primitive factories + equality
+// ============================================================================
+
+@test
+func test_primitive_equality() -> I32 {
+    assert(types_equal(make_i32(), make_i32()))
+    assert(types_equal(make_str(), make_str()))
+    assert(not types_equal(make_i32(), make_i64()))
+    assert(not types_equal(make_bool(), make_str()))
+    return 0
+}
+
+@test
+func test_cross_variant_inequality() -> I32 {
+    // Primitive vs Ref — different variants should never be equal
+    assert(not types_equal(make_i32(), make_ref(make_i32(), 0)))
+    assert(not types_equal(make_i32(), make_ptr(make_i64(), 0)))
+    return 0
+}
+
+// ============================================================================
+// Display
+// ============================================================================
+
+@test
+func test_primitive_display() -> I32 {
+    assert_eq(type_to_str(make_i32()), "I32")
+    assert_eq(type_to_str(make_str()), "Str")
+    assert_eq(type_to_str(make_bool()), "Bool")
+    assert_eq(type_to_str(make_unit()), "Unit")
+    assert_eq(type_to_str(make_never()), "Never")
+    return 0
+}
+
+@test
+func test_ref_display() -> I32 {
+    assert_eq(type_to_str(make_ref(make_i32(), 0)), "ref I32")
+    assert_eq(type_to_str(make_ref(make_i32(), 1)), "mut ref I32")
+    return 0
+}
+
+@test
+func test_ptr_display() -> I32 {
+    assert_eq(type_to_str(make_ptr(make_i64(), 0)), "*I64")
+    assert_eq(type_to_str(make_ptr(make_i64(), 1)), "*mut I64")
+    return 0
+}
+
+@test
+func test_array_display() -> I32 {
+    assert_eq(type_to_str(make_array(make_i32(), 10 as I64)), "[I32; 10]")
+    return 0
+}
+
+// ============================================================================
+// Size / alignment
+// ============================================================================
+
+@test
+func test_primitive_sizes() -> I32 {
+    assert_eq(type_size(make_i32()), 4 as I64)
+    assert_eq(type_size(make_i64()), 8 as I64)
+    assert_eq(type_size(make_bool()), 1 as I64)
+    assert_eq(type_size(make_unit()), 0 as I64)
+    return 0
+}
+
+@test
+func test_ptr_ref_sizes() -> I32 {
+    assert_eq(type_size(make_ref(make_i32(), 0)), 8 as I64)
+    assert_eq(type_size(make_ptr(make_i64(), 0)), 8 as I64)
+    return 0
+}
+
+@test
+func test_array_size() -> I32 {
+    assert_eq(type_size(make_array(make_i32(), 4 as I64)), 16 as I64)
+    assert_eq(type_align(make_array(make_i32(), 4 as I64)), 4 as I64)
+    return 0
+}
+
+// ============================================================================
+// Predicates
+// ============================================================================
+
+@test
+func test_predicates() -> I32 {
+    assert(is_never(make_never()))
+    assert(not is_never(make_i32()))
+    assert(is_unit(make_unit()))
+    assert(is_primitive(make_i32()))
+    assert(is_numeric(make_i32()))
+    assert(is_numeric(make_f64()))
+    assert(not is_numeric(make_bool()))
+    assert(is_integer(make_i32()))
+    assert(not is_integer(make_f64()))
+    assert(is_float(make_f64()))
+    assert(not is_float(make_i32()))
+    return 0
+}
+
+// ============================================================================
+// PrimitiveKind helpers
+// ============================================================================
+
+@test
+func test_prim_kind_eq() -> I32 {
+    assert(prim_kind_eq(PrimitiveKind::KindI32, PrimitiveKind::KindI32))
+    assert(not prim_kind_eq(PrimitiveKind::KindI32, PrimitiveKind::KindI64))
+    return 0
+}
+
+@test
+func test_prim_kind_to_str() -> I32 {
+    assert_eq(prim_kind_to_str(PrimitiveKind::KindI32), "I32")
+    assert_eq(prim_kind_to_str(PrimitiveKind::KindF64), "F64")
+    assert_eq(prim_kind_to_str(PrimitiveKind::KindStr), "Str")
+    return 0
+}

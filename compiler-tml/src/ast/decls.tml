@@ -177,7 +177,7 @@ pub enum Decl {
     Union(UnionDecl),
     Enum(EnumDecl),
     Trait(TraitDecl),
-    Impl(ImplDecl),
+    Impl(Heap[ImplDecl]),
     TypeAlias(TypeAliasDecl),
     Const(ConstDecl),
     Use(UseDecl),

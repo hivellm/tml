@@ -1,0 +1,365 @@
+//! Builtin type and behavior registration for the TML type checker.
+//!
+//! Mirrors `compiler/src/types/builtins/types.cpp` and `register.cpp`.
+//! Registers all primitive types, core enums (Maybe, Outcome, Ordering),
+//! builtin behaviors, memory builtins, and collection builtins into a
+//! TypeEnv.
+//!
+//! Phase 14a — items 3.1–3.4.
+
+use compiler::types::ty::Type
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::make_primitive
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_generic_simple
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::BehaviorDef
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::StructDef
+use compiler::types::env::AssociatedTypeDef
+use compiler::types::env::ConstGenericParam
+use compiler::types::env::WhereConstraint
+use compiler::types::env::env_register_builtin
+use compiler::types::env::env_register_behavior
+use compiler::types::env::env_register_enum
+use compiler::types::env::env_register_impl
+use compiler::types::env::env_register_function
+use compiler::source::SourceSpan
+use compiler::source::SourceLocation
+use compiler::source::loc_new
+use compiler::source::span_new
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Create a dummy span for builtin definitions.
+func builtin_span() -> SourceSpan {
+    let loc: SourceLocation = loc_new("<builtin>", 0, 0, 0, 0)
+    return span_new(loc, loc)
+}
+
+/// Create an empty FuncSig with just name, params, return type.
+func make_func_sig(name: Str, params: List[Heap[Type]], ret: Type) -> FuncSig {
+    return FuncSig {
+        name: name,
+        params: params,
+        return_type: Heap::new(ret),
+        type_params: List[Str]::new(0 as I64),
+        is_async: 0,
+        span: builtin_span(),
+        where_constraints: List[WhereConstraint]::new(0 as I64),
+        is_lowlevel: 0,
+        is_intrinsic: 0,
+        extern_abi: Nothing,
+        extern_name: Nothing,
+        const_params: List[ConstGenericParam]::new(0 as I64)
+    }
+}
+
+/// Create an empty List[Str] — avoids generic List::new(0 as I64) monomorphization bug.
+func empty_str_list() -> List[Str] {
+    return List[Str]::new(0 as I64)
+}
+
+/// Create an empty List[FuncSig].
+func empty_func_sig_list() -> List[FuncSig] {
+    return List[FuncSig]::new(0 as I64)
+}
+
+/// Create an empty List[ConstGenericParam].
+func empty_const_param_list() -> List[ConstGenericParam] {
+    return List[ConstGenericParam]::new(0 as I64)
+}
+
+/// Create an empty List[AssociatedTypeDef].
+func empty_assoc_type_list() -> List[AssociatedTypeDef] {
+    return List[AssociatedTypeDef]::new(0 as I64)
+}
+
+/// Create an empty List[WhereConstraint].
+func empty_where_list() -> List[WhereConstraint] {
+    return List[WhereConstraint]::new(0 as I64)
+}
+
+/// Create an empty behavior definition with just a name and methods.
+func make_behavior_def(name: Str, type_params: List[Str], methods: List[FuncSig]) -> BehaviorDef {
+    return BehaviorDef {
+        name: name,
+        type_params: type_params,
+        const_params: empty_const_param_list(),
+        associated_types: empty_assoc_type_list(),
+        methods: methods,
+        super_behaviors: empty_str_list(),
+        methods_with_defaults: empty_str_list(),
+        span: builtin_span()
+    }
+}
+
+// ============================================================================
+// 3.1 — Register all primitive types
+// ============================================================================
+
+/// Register all 14 primitive types + Unit + Never as builtins.
+pub func register_primitive_types(env: TypeEnv) {
+    env_register_builtin(env, "I8",    make_primitive(PrimitiveKind::KindI8))
+    env_register_builtin(env, "I16",   make_primitive(PrimitiveKind::KindI16))
+    env_register_builtin(env, "I32",   make_primitive(PrimitiveKind::KindI32))
+    env_register_builtin(env, "I64",   make_primitive(PrimitiveKind::KindI64))
+    env_register_builtin(env, "I128",  make_primitive(PrimitiveKind::KindI128))
+    env_register_builtin(env, "U8",    make_primitive(PrimitiveKind::KindU8))
+    env_register_builtin(env, "U16",   make_primitive(PrimitiveKind::KindU16))
+    env_register_builtin(env, "U32",   make_primitive(PrimitiveKind::KindU32))
+    env_register_builtin(env, "U64",   make_primitive(PrimitiveKind::KindU64))
+    env_register_builtin(env, "U128",  make_primitive(PrimitiveKind::KindU128))
+    env_register_builtin(env, "F32",   make_primitive(PrimitiveKind::KindF32))
+    env_register_builtin(env, "F64",   make_primitive(PrimitiveKind::KindF64))
+    env_register_builtin(env, "Bool",  make_primitive(PrimitiveKind::KindBool))
+    env_register_builtin(env, "Char",  make_primitive(PrimitiveKind::KindChar))
+    env_register_builtin(env, "Str",   make_primitive(PrimitiveKind::KindStr))
+    env_register_builtin(env, "Unit",  make_primitive(PrimitiveKind::KindUnit))
+    env_register_builtin(env, "Never", make_primitive(PrimitiveKind::KindNever))
+}
+
+/// Register core enums: Ordering, Maybe, Outcome, Poll.
+pub func register_core_enums(env: TypeEnv) {
+    let span: SourceSpan = builtin_span()
+
+    // Ordering { Less, Equal, Greater }
+    let ord_variants: List[EnumVariantDef] = List::new(3)
+    ord_variants.push(EnumVariantDef { name: "Less", payload_types: List[Heap[Type]]::new(0 as I64) })
+    ord_variants.push(EnumVariantDef { name: "Equal", payload_types: List[Heap[Type]]::new(0 as I64) })
+    ord_variants.push(EnumVariantDef { name: "Greater", payload_types: List[Heap[Type]]::new(0 as I64) })
+    let ordering_def: EnumDef = EnumDef {
+        name: "Ordering", type_params: List[Str]::new(0 as I64), const_params: List[ConstGenericParam]::new(0 as I64),
+        variants: ord_variants, span: span, is_flags: 0
+    }
+    env_register_enum(env, "Ordering", ordering_def)
+
+    // Maybe[T] { Just(T), Nothing }
+    let maybe_tp: List[Str] = List::new(1)
+    maybe_tp.push("T")
+    let maybe_variants: List[EnumVariantDef] = List::new(2)
+    let just_payload: List[Heap[Type]] = List::new(1)
+    just_payload.push(Heap::new(make_generic_simple("T")))
+    maybe_variants.push(EnumVariantDef { name: "Just", payload_types: just_payload })
+    maybe_variants.push(EnumVariantDef { name: "Nothing", payload_types: List[Heap[Type]]::new(0 as I64) })
+    let maybe_def: EnumDef = EnumDef {
+        name: "Maybe", type_params: maybe_tp, const_params: List[ConstGenericParam]::new(0 as I64),
+        variants: maybe_variants, span: span, is_flags: 0
+    }
+    env_register_enum(env, "Maybe", maybe_def)
+
+    // Outcome[T, E] { Ok(T), Err(E) }
+    let outcome_tp: List[Str] = List::new(2)
+    outcome_tp.push("T")
+    outcome_tp.push("E")
+    let outcome_variants: List[EnumVariantDef] = List::new(2)
+    let ok_payload: List[Heap[Type]] = List::new(1)
+    ok_payload.push(Heap::new(make_generic_simple("T")))
+    outcome_variants.push(EnumVariantDef { name: "Ok", payload_types: ok_payload })
+    let err_payload: List[Heap[Type]] = List::new(1)
+    err_payload.push(Heap::new(make_generic_simple("E")))
+    outcome_variants.push(EnumVariantDef { name: "Err", payload_types: err_payload })
+    let outcome_def: EnumDef = EnumDef {
+        name: "Outcome", type_params: outcome_tp, const_params: List[ConstGenericParam]::new(0 as I64),
+        variants: outcome_variants, span: span, is_flags: 0
+    }
+    env_register_enum(env, "Outcome", outcome_def)
+
+    // Poll[T] { Ready(T), Pending }
+    let poll_tp: List[Str] = List::new(1)
+    poll_tp.push("T")
+    let poll_variants: List[EnumVariantDef] = List::new(2)
+    let ready_payload: List[Heap[Type]] = List::new(1)
+    ready_payload.push(Heap::new(make_generic_simple("T")))
+    poll_variants.push(EnumVariantDef { name: "Ready", payload_types: ready_payload })
+    poll_variants.push(EnumVariantDef { name: "Pending", payload_types: List[Heap[Type]]::new(0 as I64) })
+    let poll_def: EnumDef = EnumDef {
+        name: "Poll", type_params: poll_tp, const_params: List[ConstGenericParam]::new(0 as I64),
+        variants: poll_variants, span: span, is_flags: 0
+    }
+    env_register_enum(env, "Poll", poll_def)
+}
+
+// ============================================================================
+// 3.2 — Register builtin behaviors
+// ============================================================================
+
+/// Register all builtin behaviors.
+pub func register_builtin_behaviors(env: TypeEnv) {
+    // Marker behaviors (no methods)
+    env_register_behavior(env, "Send", make_behavior_def("Send", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Sync", make_behavior_def("Sync", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Copy", make_behavior_def("Copy", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Clone", make_behavior_def("Clone", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Duplicate", make_behavior_def("Duplicate", empty_str_list(), empty_func_sig_list()))
+
+    // Eq — func eq(this, other: Self) -> Bool
+    env_register_behavior(env, "Eq", make_behavior_def("Eq", empty_str_list(), empty_func_sig_list()))
+
+    // Ord — func cmp(this, other: Self) -> Ordering
+    env_register_behavior(env, "Ord", make_behavior_def("Ord", empty_str_list(), empty_func_sig_list()))
+
+    // Numeric — Add, Sub, Mul, Div
+    env_register_behavior(env, "Add", make_behavior_def("Add", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Sub", make_behavior_def("Sub", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Mul", make_behavior_def("Mul", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Div", make_behavior_def("Div", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Numeric", make_behavior_def("Numeric", empty_str_list(), empty_func_sig_list()))
+
+    // Hash, Display, Debug, Default, Drop, Iterator
+    env_register_behavior(env, "Hash", make_behavior_def("Hash", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Display", make_behavior_def("Display", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Debug", make_behavior_def("Debug", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Default", make_behavior_def("Default", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Drop", make_behavior_def("Drop", empty_str_list(), empty_func_sig_list()))
+    env_register_behavior(env, "Iterator", make_behavior_def("Iterator", empty_str_list(), empty_func_sig_list()))
+}
+
+/// Register behavior implementations for all primitive types.
+pub func register_primitive_impls(env: TypeEnv) {
+    // Integer types: Eq, Ord, Numeric, Hash, Display, Debug, Default, Duplicate, Send, Sync
+    let int_types: List[Str] = List::new(10)
+    int_types.push("I8")
+    int_types.push("I16")
+    int_types.push("I32")
+    int_types.push("I64")
+    int_types.push("I128")
+    int_types.push("U8")
+    int_types.push("U16")
+    int_types.push("U32")
+    int_types.push("U64")
+    int_types.push("U128")
+
+    let int_behaviors: List[Str] = List::new(10)
+    int_behaviors.push("Eq")
+    int_behaviors.push("Ord")
+    int_behaviors.push("Numeric")
+    int_behaviors.push("Hash")
+    int_behaviors.push("Display")
+    int_behaviors.push("Debug")
+    int_behaviors.push("Default")
+    int_behaviors.push("Duplicate")
+    int_behaviors.push("Send")
+    int_behaviors.push("Sync")
+
+    let it_count: I64 = int_types.len() as I64
+    let ib_count: I64 = int_behaviors.len() as I64
+    var i: I64 = 0
+    loop (i < it_count) {
+        let tn: Str = int_types.get(i)
+        var j: I64 = 0
+        loop (j < ib_count) {
+            env_register_impl(env, tn, int_behaviors.get(j))
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    // Float types: same as integers
+    env_register_impl(env, "F32", "Eq")
+    env_register_impl(env, "F32", "Ord")
+    env_register_impl(env, "F32", "Numeric")
+    env_register_impl(env, "F32", "Display")
+    env_register_impl(env, "F32", "Debug")
+    env_register_impl(env, "F32", "Default")
+    env_register_impl(env, "F32", "Duplicate")
+    env_register_impl(env, "F32", "Send")
+    env_register_impl(env, "F32", "Sync")
+
+    env_register_impl(env, "F64", "Eq")
+    env_register_impl(env, "F64", "Ord")
+    env_register_impl(env, "F64", "Numeric")
+    env_register_impl(env, "F64", "Display")
+    env_register_impl(env, "F64", "Debug")
+    env_register_impl(env, "F64", "Default")
+    env_register_impl(env, "F64", "Duplicate")
+    env_register_impl(env, "F64", "Send")
+    env_register_impl(env, "F64", "Sync")
+
+    // Bool: Eq, Ord, Hash, Display, Debug, Default, Duplicate, Send, Sync
+    env_register_impl(env, "Bool", "Eq")
+    env_register_impl(env, "Bool", "Ord")
+    env_register_impl(env, "Bool", "Hash")
+    env_register_impl(env, "Bool", "Display")
+    env_register_impl(env, "Bool", "Debug")
+    env_register_impl(env, "Bool", "Default")
+    env_register_impl(env, "Bool", "Duplicate")
+    env_register_impl(env, "Bool", "Send")
+    env_register_impl(env, "Bool", "Sync")
+
+    // Char: Eq, Ord, Hash, Display, Debug, Duplicate, Send, Sync
+    env_register_impl(env, "Char", "Eq")
+    env_register_impl(env, "Char", "Ord")
+    env_register_impl(env, "Char", "Hash")
+    env_register_impl(env, "Char", "Display")
+    env_register_impl(env, "Char", "Debug")
+    env_register_impl(env, "Char", "Duplicate")
+    env_register_impl(env, "Char", "Send")
+    env_register_impl(env, "Char", "Sync")
+
+    // Str: Eq, Ord, Hash, Display, Debug, Duplicate, Send, Sync
+    env_register_impl(env, "Str", "Eq")
+    env_register_impl(env, "Str", "Ord")
+    env_register_impl(env, "Str", "Hash")
+    env_register_impl(env, "Str", "Display")
+    env_register_impl(env, "Str", "Debug")
+    env_register_impl(env, "Str", "Duplicate")
+    env_register_impl(env, "Str", "Send")
+    env_register_impl(env, "Str", "Sync")
+
+    // Unit: Send, Sync
+    env_register_impl(env, "Unit", "Send")
+    env_register_impl(env, "Unit", "Sync")
+
+    // Ordering: Send, Sync
+    env_register_impl(env, "Ordering", "Send")
+    env_register_impl(env, "Ordering", "Sync")
+}
+
+// ============================================================================
+// 3.3 — Register memory builtins
+// ============================================================================
+
+/// Register memory builtins: Heap[T], Shared[T], Sync[T], Weak[T], RawPtr.
+pub func register_memory_builtins(env: TypeEnv) {
+    env_register_builtin(env, "Heap", make_named_simple("Heap", "core::alloc::heap"))
+    env_register_builtin(env, "Shared", make_named_simple("Shared", "core::alloc::shared"))
+    env_register_builtin(env, "Sync", make_named_simple("Sync", "core::alloc::sync"))
+    env_register_builtin(env, "Weak", make_named_simple("Weak", "core::alloc::weak"))
+    env_register_builtin(env, "RawPtr", make_named_simple("RawPtr", "core::alloc::rawptr"))
+}
+
+// ============================================================================
+// 3.4 — Register collection builtins
+// ============================================================================
+
+/// Register collection builtins: List[T], HashMap[K,V], Maybe[T], Outcome[T,E].
+pub func register_collection_builtins(env: TypeEnv) {
+    env_register_builtin(env, "List", make_named_simple("List", "std::collections::list"))
+    env_register_builtin(env, "HashMap", make_named_simple("HashMap", "std::collections::hashmap"))
+    env_register_builtin(env, "Maybe", make_named_simple("Maybe", "core"))
+    env_register_builtin(env, "Outcome", make_named_simple("Outcome", "core"))
+}
+
+// ============================================================================
+// Master registration entry point
+// ============================================================================
+
+/// Register all builtins into a TypeEnv. Call this immediately after
+/// `env_new()` to match the C++ `TypeEnv::init_builtins()` behavior.
+pub func register_all_builtins(env: TypeEnv) {
+    register_primitive_types(env)
+    register_core_enums(env)
+    register_builtin_behaviors(env)
+    register_primitive_impls(env)
+    register_memory_builtins(env)
+    register_collection_builtins(env)
+}

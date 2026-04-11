@@ -513,7 +513,14 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
         }
 
         if (i.fields.empty()) {
-            emitln("    " + result_reg + " = insertvalue " + struct_type + " undef, i32 0, 0");
+            // Empty struct init: produce zeroinitializer instead of an
+            // incorrect `insertvalue ... i32 0, 0` which assumes field 0
+            // is i32 (breaks for structs whose field 0 is ptr).
+            // Zero-init alloca on stack and load it to get the SSA value.
+            std::string tmp_alloca = "%zi_tmp" + std::to_string(temp_counter_++);
+            emitln("    " + tmp_alloca + " = alloca " + struct_type);
+            emitln("    store " + struct_type + " zeroinitializer, ptr " + tmp_alloca);
+            emitln("    " + result_reg + " = load " + struct_type + ", ptr " + tmp_alloca);
         }
     }
 

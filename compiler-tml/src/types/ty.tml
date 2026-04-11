@@ -1,0 +1,901 @@
+//! Type representation for the TML self-hosting type checker.
+//!
+//! Mirrors `compiler/include/types/type.hpp`. The C++ code uses a `Type` struct
+//! wrapping `std::variant<PrimitiveType, NamedType, ...>` — TML enums express
+//! the same structure natively with exhaustive `when` matching.
+//!
+//! Phase 14a — item 1.1 (Type enum), 1.2 (equality), 1.3 (display),
+//! 1.4 (substitution), 1.5 (size/align).
+
+use compiler::source::SourceSpan
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Primitive kind — all builtin scalar types
+// ============================================================================
+
+/// Mirrors `PrimitiveKind` in `type.hpp`.
+pub enum PrimitiveKind {
+    KindI8,
+    KindI16,
+    KindI32,
+    KindI64,
+    KindI128,
+    KindU8,
+    KindU16,
+    KindU32,
+    KindU64,
+    KindU128,
+    KindF32,
+    KindF64,
+    KindBool,
+    KindChar,
+    KindStr,
+    KindUnit,
+    KindNever
+}
+
+// ============================================================================
+// Type sub-structures (payloads for Type enum variants)
+// ============================================================================
+
+/// A primitive (scalar) type.
+pub type PrimitiveType {
+    kind: PrimitiveKind
+}
+
+/// A user-defined named type (struct, enum, type alias after resolution).
+/// `type_args` holds concrete type arguments for generic instantiations.
+pub type NamedType {
+    name: Str,
+    module_path: Str,
+    type_args: List[Heap[Type]]
+}
+
+/// A reference type: `ref T` or `mut ref T`.
+pub type RefType {
+    is_mut: I64,
+    inner: Heap[Type],
+    lifetime: Maybe[Str]
+}
+
+/// A raw pointer type: `*T` or `*mut T`.
+pub type PtrType {
+    is_mut: I64,
+    inner: Heap[Type]
+}
+
+/// A fixed-size array: `[T; N]`.
+pub type ArrayType {
+    element: Heap[Type],
+    size: I64,
+    const_generic_param: Str
+}
+
+/// A dynamically-sized slice: `[T]`.
+pub type SliceType {
+    element: Heap[Type]
+}
+
+/// A tuple type: `(T, U, V)`.
+pub type TupleType {
+    elements: List[Heap[Type]]
+}
+
+/// A function type: `func(A, B) -> R`.
+pub type FuncType {
+    params: List[Heap[Type]],
+    return_type: Heap[Type],
+    is_async: I64
+}
+
+/// A captured variable in a closure environment.
+pub type CapturedVar {
+    name: Str,
+    ty: Heap[Type],
+    is_mut: I64
+}
+
+/// A closure type with captured environment.
+pub type ClosureType {
+    params: List[Heap[Type]],
+    return_type: Heap[Type],
+    captures: List[CapturedVar]
+}
+
+/// A type variable for inference (`?T0`, `?T1`, ...).
+pub type TypeVarType {
+    id: I64,
+    bound: Maybe[Heap[Type]]
+}
+
+/// A generic type parameter placeholder (`T`, `K`, `V`).
+pub type GenericType {
+    name: Str,
+    bounds: List[Heap[Type]]
+}
+
+/// A const generic parameter: `const N: U64`.
+pub type ConstGenericType {
+    name: Str,
+    value_type: Heap[Type],
+    resolved_value: Maybe[I64]
+}
+
+/// Type-erased behavior object: `dyn Behavior[T]`.
+pub type DynBehaviorType {
+    behavior_name: Str,
+    type_args: List[Heap[Type]],
+    is_mut: I64
+}
+
+/// Opaque impl return: `impl Behavior[T]`.
+pub type ImplBehaviorType {
+    behavior_name: Str,
+    type_args: List[Heap[Type]]
+}
+
+/// OOP class type.
+pub type ClassType {
+    name: Str,
+    module_path: Str,
+    type_args: List[Heap[Type]]
+}
+
+/// OOP interface type.
+pub type InterfaceType {
+    name: Str,
+    module_path: Str,
+    type_args: List[Heap[Type]]
+}
+
+// ============================================================================
+// Type — the unified sum type
+// ============================================================================
+
+/// Sum of all type representations. Mirrors the `std::variant` inside C++
+/// `Type`. Each variant carries its payload struct.
+pub enum Type {
+    Primitive(PrimitiveType),
+    Named(NamedType),
+    Ref(RefType),
+    Ptr(PtrType),
+    Array(ArrayType),
+    Slice(SliceType),
+    Tuple(TupleType),
+    Func(FuncType),
+    Closure(ClosureType),
+    TypeVar(TypeVarType),
+    Generic(GenericType),
+    ConstGeneric(ConstGenericType),
+    DynBehavior(DynBehaviorType),
+    ImplBehavior(ImplBehaviorType),
+    Class(ClassType),
+    Interface(InterfaceType)
+}
+
+// ============================================================================
+// Factory functions
+// ============================================================================
+
+/// Create a primitive type.
+pub func make_primitive(kind: PrimitiveKind) -> Type {
+    return Type::Primitive(PrimitiveType { kind: kind })
+}
+
+/// Convenience: common primitive constructors.
+pub func make_i8()   -> Type { return make_primitive(PrimitiveKind::KindI8) }
+pub func make_i16()  -> Type { return make_primitive(PrimitiveKind::KindI16) }
+pub func make_i32()  -> Type { return make_primitive(PrimitiveKind::KindI32) }
+pub func make_i64()  -> Type { return make_primitive(PrimitiveKind::KindI64) }
+pub func make_i128() -> Type { return make_primitive(PrimitiveKind::KindI128) }
+pub func make_u8()   -> Type { return make_primitive(PrimitiveKind::KindU8) }
+pub func make_u16()  -> Type { return make_primitive(PrimitiveKind::KindU16) }
+pub func make_u32()  -> Type { return make_primitive(PrimitiveKind::KindU32) }
+pub func make_u64()  -> Type { return make_primitive(PrimitiveKind::KindU64) }
+pub func make_u128() -> Type { return make_primitive(PrimitiveKind::KindU128) }
+pub func make_f32()  -> Type { return make_primitive(PrimitiveKind::KindF32) }
+pub func make_f64()  -> Type { return make_primitive(PrimitiveKind::KindF64) }
+pub func make_bool() -> Type { return make_primitive(PrimitiveKind::KindBool) }
+pub func make_char() -> Type { return make_primitive(PrimitiveKind::KindChar) }
+pub func make_str()  -> Type { return make_primitive(PrimitiveKind::KindStr) }
+pub func make_unit() -> Type { return make_primitive(PrimitiveKind::KindUnit) }
+pub func make_never() -> Type { return make_primitive(PrimitiveKind::KindNever) }
+
+/// Create a named type (struct, enum, alias) with optional generic args.
+pub func make_named(name: Str, module_path: Str, type_args: List[Heap[Type]]) -> Type {
+    return Type::Named(NamedType { name: name, module_path: module_path, type_args: type_args })
+}
+
+/// Create a named type with no generic args.
+pub func make_named_simple(name: Str, module_path: Str) -> Type {
+    return make_named(name, module_path, List[Heap[Type]]::new(0 as I64))
+}
+
+/// Create a reference type.
+pub func make_ref(inner: Type, is_mut: I64) -> Type {
+    return Type::Ref(RefType { is_mut: is_mut, inner: Heap::new(inner), lifetime: Nothing })
+}
+
+/// Create a pointer type.
+pub func make_ptr(inner: Type, is_mut: I64) -> Type {
+    return Type::Ptr(PtrType { is_mut: is_mut, inner: Heap::new(inner) })
+}
+
+/// Create a fixed-size array type.
+pub func make_array(element: Type, size: I64) -> Type {
+    return Type::Array(ArrayType { element: Heap::new(element), size: size, const_generic_param: "" })
+}
+
+/// Create a slice type.
+pub func make_slice(element: Type) -> Type {
+    return Type::Slice(SliceType { element: Heap::new(element) })
+}
+
+/// Create a tuple type.
+pub func make_tuple(elements: List[Heap[Type]]) -> Type {
+    return Type::Tuple(TupleType { elements: elements })
+}
+
+/// Create a function type.
+pub func make_func(params: List[Heap[Type]], return_type: Type, is_async: I64) -> Type {
+    return Type::Func(FuncType { params: params, return_type: Heap::new(return_type), is_async: is_async })
+}
+
+/// Create a closure type.
+pub func make_closure(params: List[Heap[Type]], return_type: Type, captures: List[CapturedVar]) -> Type {
+    return Type::Closure(ClosureType { params: params, return_type: Heap::new(return_type), captures: captures })
+}
+
+/// Create a type variable for inference.
+pub func make_type_var(id: I64) -> Type {
+    return Type::TypeVar(TypeVarType { id: id, bound: Nothing })
+}
+
+/// Create a generic type parameter.
+pub func make_generic(name: Str, bounds: List[Heap[Type]]) -> Type {
+    return Type::Generic(GenericType { name: name, bounds: bounds })
+}
+
+/// Create a generic type parameter with no bounds.
+pub func make_generic_simple(name: Str) -> Type {
+    return make_generic(name, List[Heap[Type]]::new(0 as I64))
+}
+
+/// Create a const generic type.
+pub func make_const_generic(name: Str, value_type: Type) -> Type {
+    return Type::ConstGeneric(ConstGenericType { name: name, value_type: Heap::new(value_type), resolved_value: Nothing })
+}
+
+/// Create a dyn behavior type.
+pub func make_dyn_behavior(behavior_name: Str, type_args: List[Heap[Type]], is_mut: I64) -> Type {
+    return Type::DynBehavior(DynBehaviorType { behavior_name: behavior_name, type_args: type_args, is_mut: is_mut })
+}
+
+/// Create an impl behavior type.
+pub func make_impl_behavior(behavior_name: Str, type_args: List[Heap[Type]]) -> Type {
+    return Type::ImplBehavior(ImplBehaviorType { behavior_name: behavior_name, type_args: type_args })
+}
+
+/// Create a class type.
+pub func make_class(name: Str, module_path: Str, type_args: List[Heap[Type]]) -> Type {
+    return Type::Class(ClassType { name: name, module_path: module_path, type_args: type_args })
+}
+
+/// Create an interface type.
+pub func make_interface(name: Str, module_path: Str, type_args: List[Heap[Type]]) -> Type {
+    return Type::Interface(InterfaceType { name: name, module_path: module_path, type_args: type_args })
+}
+
+// ============================================================================
+// Type equality — item 1.2
+// ============================================================================
+
+/// Structural equality comparison between two types.
+/// Handles all variants recursively. Does NOT follow type variable
+/// substitutions (use `resolve` first for inference).
+pub func types_equal(a: Type, b: Type) -> Bool {
+    when a {
+        Primitive(pa) => {
+            when b {
+                Primitive(pb) => return prim_kind_eq(pa.kind, pb.kind),
+                _ => return false
+            }
+        },
+        Named(na) => {
+            when b {
+                Named(nb) => {
+                    if na.name != nb.name { return false }
+                    if na.module_path != nb.module_path { return false }
+                    return type_lists_equal(na.type_args, nb.type_args)
+                },
+                _ => return false
+            }
+        },
+        Ref(ra) => {
+            when b {
+                Ref(rb) => {
+                    if ra.is_mut != rb.is_mut { return false }
+                    return types_equal(ra.inner.get(), rb.inner.get())
+                },
+                _ => return false
+            }
+        },
+        Ptr(pa) => {
+            when b {
+                Ptr(pb) => {
+                    if pa.is_mut != pb.is_mut { return false }
+                    return types_equal(pa.inner.get(), pb.inner.get())
+                },
+                _ => return false
+            }
+        },
+        Array(aa) => {
+            when b {
+                Array(ab) => {
+                    if aa.size != ab.size { return false }
+                    return types_equal(aa.element.get(), ab.element.get())
+                },
+                _ => return false
+            }
+        },
+        Slice(sa) => {
+            when b {
+                Slice(sb) => return types_equal(sa.element.get(), sb.element.get()),
+                _ => return false
+            }
+        },
+        Tuple(ta) => {
+            when b {
+                Tuple(tb) => return type_lists_equal(ta.elements, tb.elements),
+                _ => return false
+            }
+        },
+        Func(fa) => {
+            when b {
+                Func(fb) => {
+                    if fa.is_async != fb.is_async { return false }
+                    if not types_equal(fa.return_type.get(), fb.return_type.get()) { return false }
+                    return type_lists_equal(fa.params, fb.params)
+                },
+                _ => return false
+            }
+        },
+        Closure(ca) => {
+            when b {
+                Closure(cb) => {
+                    if not types_equal(ca.return_type.get(), cb.return_type.get()) { return false }
+                    return type_lists_equal(ca.params, cb.params)
+                },
+                _ => return false
+            }
+        },
+        TypeVar(va) => {
+            when b {
+                TypeVar(vb) => return va.id == vb.id,
+                _ => return false
+            }
+        },
+        Generic(ga) => {
+            when b {
+                Generic(gb) => return ga.name == gb.name,
+                _ => return false
+            }
+        },
+        ConstGeneric(cga) => {
+            when b {
+                ConstGeneric(cgb) => return cga.name == cgb.name,
+                _ => return false
+            }
+        },
+        DynBehavior(da) => {
+            when b {
+                DynBehavior(db) => {
+                    if da.behavior_name != db.behavior_name { return false }
+                    if da.is_mut != db.is_mut { return false }
+                    return type_lists_equal(da.type_args, db.type_args)
+                },
+                _ => return false
+            }
+        },
+        ImplBehavior(ia) => {
+            when b {
+                ImplBehavior(ib) => {
+                    if ia.behavior_name != ib.behavior_name { return false }
+                    return type_lists_equal(ia.type_args, ib.type_args)
+                },
+                _ => return false
+            }
+        },
+        Class(ca) => {
+            when b {
+                Class(cb) => {
+                    if ca.name != cb.name { return false }
+                    if ca.module_path != cb.module_path { return false }
+                    return type_lists_equal(ca.type_args, cb.type_args)
+                },
+                _ => return false
+            }
+        },
+        Interface(ia) => {
+            when b {
+                Interface(ib) => {
+                    if ia.name != ib.name { return false }
+                    if ia.module_path != ib.module_path { return false }
+                    return type_lists_equal(ia.type_args, ib.type_args)
+                },
+                _ => return false
+            }
+        }
+    }
+}
+
+/// Compare two lists of types element-wise.
+func type_lists_equal(a: List[Heap[Type]], b: List[Heap[Type]]) -> Bool {
+    let la: I64 = a.len() as I64
+    let lb: I64 = b.len() as I64
+    if la != lb { return false }
+    var i: I64 = 0
+    loop (i < la) {
+        if not types_equal(a.get(i).get(), b.get(i).get()) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+/// Compare two PrimitiveKind values.
+pub func prim_kind_eq(a: PrimitiveKind, b: PrimitiveKind) -> Bool {
+    return prim_kind_tag(a) == prim_kind_tag(b)
+}
+
+/// Map PrimitiveKind to an integer tag for comparison.
+pub func prim_kind_tag(k: PrimitiveKind) -> I64 {
+    when k {
+        KindI8    => return 0,
+        KindI16   => return 1,
+        KindI32   => return 2,
+        KindI64   => return 3,
+        KindI128  => return 4,
+        KindU8    => return 5,
+        KindU16   => return 6,
+        KindU32   => return 7,
+        KindU64   => return 8,
+        KindU128  => return 9,
+        KindF32   => return 10,
+        KindF64   => return 11,
+        KindBool  => return 12,
+        KindChar  => return 13,
+        KindStr   => return 14,
+        KindUnit  => return 15,
+        KindNever => return 16
+    }
+}
+
+// ============================================================================
+// Type display — item 1.3
+// ============================================================================
+
+/// Human-readable string representation of a type, for error messages.
+pub func type_to_str(ty: Type) -> Str {
+    when ty {
+        Primitive(p) => return prim_kind_to_str(p.kind),
+        Named(n) => {
+            let type_name: Str = n.name
+            let argc: I64 = n.type_args.len() as I64
+            if argc == 0 { return type_name }
+            var s: Str = type_name + "["
+            var i: I64 = 0
+            loop (i < argc) {
+                if i > 0 { s = s + ", " }
+                s = s + type_to_str(n.type_args.get(i).get())
+                i = i + 1
+            }
+            return s + "]"
+        },
+        Ref(r) => {
+            if r.is_mut != 0 {
+                return "mut ref " + type_to_str(r.inner.get())
+            }
+            return "ref " + type_to_str(r.inner.get())
+        },
+        Ptr(p) => {
+            if p.is_mut != 0 {
+                return "*mut " + type_to_str(p.inner.get())
+            }
+            return "*" + type_to_str(p.inner.get())
+        },
+        Array(a) => {
+            return "[" + type_to_str(a.element.get()) + "; " + a.size.to_string() + "]"
+        },
+        Slice(s) => {
+            return "[" + type_to_str(s.element.get()) + "]"
+        },
+        Tuple(t) => {
+            var s: Str = "("
+            let count: I64 = t.elements.len() as I64
+            var i: I64 = 0
+            loop (i < count) {
+                if i > 0 { s = s + ", " }
+                s = s + type_to_str(t.elements.get(i).get())
+                i = i + 1
+            }
+            return s + ")"
+        },
+        Func(f) => {
+            var s: Str = "func("
+            let pc: I64 = f.params.len() as I64
+            var i: I64 = 0
+            loop (i < pc) {
+                if i > 0 { s = s + ", " }
+                s = s + type_to_str(f.params.get(i).get())
+                i = i + 1
+            }
+            s = s + ") -> " + type_to_str(f.return_type.get())
+            return s
+        },
+        Closure(c) => {
+            var s: Str = "do("
+            let pc: I64 = c.params.len() as I64
+            var i: I64 = 0
+            loop (i < pc) {
+                if i > 0 { s = s + ", " }
+                s = s + type_to_str(c.params.get(i).get())
+                i = i + 1
+            }
+            s = s + ") -> " + type_to_str(c.return_type.get())
+            return s
+        },
+        TypeVar(v) => return "?T" + v.id.to_string(),
+        Generic(g) => return g.name,
+        ConstGeneric(cg) => return "const " + cg.name,
+        DynBehavior(d) => {
+            var s: Str = "dyn " + d.behavior_name
+            let argc: I64 = d.type_args.len() as I64
+            if argc > 0 {
+                s = s + "["
+                var i: I64 = 0
+                loop (i < argc) {
+                    if i > 0 { s = s + ", " }
+                    s = s + type_to_str(d.type_args.get(i).get())
+                    i = i + 1
+                }
+                s = s + "]"
+            }
+            return s
+        },
+        ImplBehavior(im) => {
+            var s: Str = "impl " + im.behavior_name
+            let argc: I64 = im.type_args.len() as I64
+            if argc > 0 {
+                s = s + "["
+                var i: I64 = 0
+                loop (i < argc) {
+                    if i > 0 { s = s + ", " }
+                    s = s + type_to_str(im.type_args.get(i).get())
+                    i = i + 1
+                }
+                s = s + "]"
+            }
+            return s
+        },
+        Class(cl) => {
+            let s: Str = cl.name
+            let argc: I64 = cl.type_args.len() as I64
+            if argc == 0 { return s }
+            var r: Str = s + "["
+            var i: I64 = 0
+            loop (i < argc) {
+                if i > 0 { r = r + ", " }
+                r = r + type_to_str(cl.type_args.get(i).get())
+                i = i + 1
+            }
+            return r + "]"
+        },
+        Interface(ifc) => {
+            let s: Str = ifc.name
+            let argc: I64 = ifc.type_args.len() as I64
+            if argc == 0 { return s }
+            var r: Str = s + "["
+            var i: I64 = 0
+            loop (i < argc) {
+                if i > 0 { r = r + ", " }
+                r = r + type_to_str(ifc.type_args.get(i).get())
+                i = i + 1
+            }
+            return r + "]"
+        }
+    }
+}
+
+/// Human-readable name for a PrimitiveKind.
+pub func prim_kind_to_str(k: PrimitiveKind) -> Str {
+    when k {
+        KindI8    => return "I8",
+        KindI16   => return "I16",
+        KindI32   => return "I32",
+        KindI64   => return "I64",
+        KindI128  => return "I128",
+        KindU8    => return "U8",
+        KindU16   => return "U16",
+        KindU32   => return "U32",
+        KindU64   => return "U64",
+        KindU128  => return "U128",
+        KindF32   => return "F32",
+        KindF64   => return "F64",
+        KindBool  => return "Bool",
+        KindChar  => return "Char",
+        KindStr   => return "Str",
+        KindUnit  => return "Unit",
+        KindNever => return "Never"
+    }
+}
+
+// ============================================================================
+// Generic substitution — item 1.4
+// ============================================================================
+
+/// Substitute generic type parameters throughout a type tree.
+/// `subs` maps generic parameter names (e.g. "T", "K") to concrete types.
+/// Returns a new type with all `Generic(name)` variants replaced.
+pub func substitute_type(ty: Type, subs: HashMap[Str, Heap[Type]]) -> Type {
+    when ty {
+        Primitive(_) => return ty,
+        Generic(g) => {
+            if subs.has(g.name) {
+                return subs.get(g.name).get()
+            }
+            return ty
+        },
+        Named(n) => {
+            let new_args: List[Heap[Type]] = substitute_type_list(n.type_args, subs)
+            return Type::Named(NamedType { name: n.name, module_path: n.module_path, type_args: new_args })
+        },
+        Ref(r) => {
+            let new_inner: Type = substitute_type(r.inner.get(), subs)
+            return Type::Ref(RefType { is_mut: r.is_mut, inner: Heap::new(new_inner), lifetime: r.lifetime })
+        },
+        Ptr(p) => {
+            let new_inner: Type = substitute_type(p.inner.get(), subs)
+            return Type::Ptr(PtrType { is_mut: p.is_mut, inner: Heap::new(new_inner) })
+        },
+        Array(a) => {
+            let new_elem: Type = substitute_type(a.element.get(), subs)
+            return Type::Array(ArrayType { element: Heap::new(new_elem), size: a.size, const_generic_param: a.const_generic_param })
+        },
+        Slice(s) => {
+            let new_elem: Type = substitute_type(s.element.get(), subs)
+            return Type::Slice(SliceType { element: Heap::new(new_elem) })
+        },
+        Tuple(t) => {
+            let new_elems: List[Heap[Type]] = substitute_type_list(t.elements, subs)
+            return Type::Tuple(TupleType { elements: new_elems })
+        },
+        Func(f) => {
+            let new_params: List[Heap[Type]] = substitute_type_list(f.params, subs)
+            let new_ret: Type = substitute_type(f.return_type.get(), subs)
+            return Type::Func(FuncType { params: new_params, return_type: Heap::new(new_ret), is_async: f.is_async })
+        },
+        Closure(c) => {
+            let new_params: List[Heap[Type]] = substitute_type_list(c.params, subs)
+            let new_ret: Type = substitute_type(c.return_type.get(), subs)
+            // Captures are concrete — do not substitute into them
+            return Type::Closure(ClosureType { params: new_params, return_type: Heap::new(new_ret), captures: c.captures })
+        },
+        TypeVar(_) => return ty,
+        ConstGeneric(_) => return ty,
+        DynBehavior(d) => {
+            let new_args: List[Heap[Type]] = substitute_type_list(d.type_args, subs)
+            return Type::DynBehavior(DynBehaviorType { behavior_name: d.behavior_name, type_args: new_args, is_mut: d.is_mut })
+        },
+        ImplBehavior(im) => {
+            let new_args: List[Heap[Type]] = substitute_type_list(im.type_args, subs)
+            return Type::ImplBehavior(ImplBehaviorType { behavior_name: im.behavior_name, type_args: new_args })
+        },
+        Class(cl) => {
+            let new_args: List[Heap[Type]] = substitute_type_list(cl.type_args, subs)
+            return Type::Class(ClassType { name: cl.name, module_path: cl.module_path, type_args: new_args })
+        },
+        Interface(ifc) => {
+            let new_args: List[Heap[Type]] = substitute_type_list(ifc.type_args, subs)
+            return Type::Interface(InterfaceType { name: ifc.name, module_path: ifc.module_path, type_args: new_args })
+        }
+    }
+}
+
+/// Substitute across a list of types.
+func substitute_type_list(types: List[Heap[Type]], subs: HashMap[Str, Heap[Type]]) -> List[Heap[Type]] {
+    let count: I64 = types.len() as I64
+    var result: List[Heap[Type]] = List::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let substituted: Type = substitute_type(types.get(i).get(), subs)
+        result.push(Heap::new(substituted))
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Type size / alignment — item 1.5
+// ============================================================================
+
+/// Return the size in bytes for a type. Returns -1 for unsized types.
+/// This is a simplified calculation matching the C++ `type.cpp` logic for
+/// primitives, pointers, arrays, and tuples. Named types require lookup
+/// in a TypeEnv (handled there, not here).
+pub func type_size(ty: Type) -> I64 {
+    when ty {
+        Primitive(p) => return prim_size(p.kind),
+        Ref(_) => return 8,
+        Ptr(_) => return 8,
+        Array(a) => {
+            let elem_size: I64 = type_size(a.element.get())
+            if elem_size < 0 { return -1 as I64 }
+            return elem_size * a.size
+        },
+        Slice(_) => return 16,   // fat pointer: ptr + len
+        Tuple(t) => {
+            var total: I64 = 0
+            let count: I64 = t.elements.len() as I64
+            var i: I64 = 0
+            loop (i < count) {
+                let es: I64 = type_size(t.elements.get(i).get())
+                if es < 0 { return -1 as I64 }
+                let al: I64 = type_align(t.elements.get(i).get())
+                // Align the offset
+                let rem: I64 = total % al
+                if rem != 0 { total = total + (al - rem) }
+                total = total + es
+                i = i + 1
+            }
+            return total
+        },
+        Func(_) => return 8,    // function pointer
+        Closure(_) => return -1 as I64,  // depends on captures
+        TypeVar(_) => return -1 as I64,
+        Generic(_) => return -1 as I64,
+        ConstGeneric(_) => return -1 as I64,
+        Named(_) => return -1 as I64,    // requires TypeEnv lookup
+        DynBehavior(_) => return 16,     // fat pointer
+        ImplBehavior(_) => return -1 as I64,
+        Class(_) => return -1 as I64,    // requires TypeEnv lookup
+        Interface(_) => return -1 as I64
+    }
+}
+
+/// Return the alignment in bytes for a type. Returns 1 for unknown.
+pub func type_align(ty: Type) -> I64 {
+    when ty {
+        Primitive(p) => return prim_align(p.kind),
+        Ref(_) => return 8,
+        Ptr(_) => return 8,
+        Array(a) => return type_align(a.element.get()),
+        Slice(_) => return 8,
+        Tuple(t) => {
+            var max_align: I64 = 1
+            let count: I64 = t.elements.len() as I64
+            var i: I64 = 0
+            loop (i < count) {
+                let al: I64 = type_align(t.elements.get(i).get())
+                if al > max_align { max_align = al }
+                i = i + 1
+            }
+            return max_align
+        },
+        Func(_) => return 8,
+        _ => return 1
+    }
+}
+
+/// Size in bytes for a primitive kind.
+pub func prim_size(k: PrimitiveKind) -> I64 {
+    when k {
+        KindI8    => return 1,
+        KindI16   => return 2,
+        KindI32   => return 4,
+        KindI64   => return 8,
+        KindI128  => return 16,
+        KindU8    => return 1,
+        KindU16   => return 2,
+        KindU32   => return 4,
+        KindU64   => return 8,
+        KindU128  => return 16,
+        KindF32   => return 4,
+        KindF64   => return 8,
+        KindBool  => return 1,
+        KindChar  => return 4,
+        KindStr   => return 8,   // pointer to string data
+        KindUnit  => return 0,
+        KindNever => return 0
+    }
+}
+
+/// Alignment in bytes for a primitive kind.
+pub func prim_align(k: PrimitiveKind) -> I64 {
+    when k {
+        KindI8    => return 1,
+        KindI16   => return 2,
+        KindI32   => return 4,
+        KindI64   => return 8,
+        KindI128  => return 16,
+        KindU8    => return 1,
+        KindU16   => return 2,
+        KindU32   => return 4,
+        KindU64   => return 8,
+        KindU128  => return 16,
+        KindF32   => return 4,
+        KindF64   => return 8,
+        KindBool  => return 1,
+        KindChar  => return 4,
+        KindStr   => return 8,
+        KindUnit  => return 1,
+        KindNever => return 1
+    }
+}
+
+// ============================================================================
+// Utility predicates
+// ============================================================================
+
+/// Check if a type is the Never (bottom) type.
+pub func is_never(ty: Type) -> Bool {
+    when ty {
+        Primitive(p) => return prim_kind_eq(p.kind, PrimitiveKind::KindNever),
+        _ => return false
+    }
+}
+
+/// Check if a type is Unit.
+pub func is_unit(ty: Type) -> Bool {
+    when ty {
+        Primitive(p) => return prim_kind_eq(p.kind, PrimitiveKind::KindUnit),
+        _ => return false
+    }
+}
+
+/// Check if a type is a primitive.
+pub func is_primitive(ty: Type) -> Bool {
+    when ty {
+        Primitive(_) => return true,
+        _ => return false
+    }
+}
+
+/// Check if a type is a numeric primitive (integer or float).
+pub func is_numeric(ty: Type) -> Bool {
+    when ty {
+        Primitive(p) => {
+            let tag: I64 = prim_kind_tag(p.kind)
+            // I8..F64 = tags 0..11
+            return tag >= 0 and tag <= 11
+        },
+        _ => return false
+    }
+}
+
+/// Check if a type is an integer primitive.
+pub func is_integer(ty: Type) -> Bool {
+    when ty {
+        Primitive(p) => {
+            let tag: I64 = prim_kind_tag(p.kind)
+            // I8..U128 = tags 0..9
+            return tag >= 0 and tag <= 9
+        },
+        _ => return false
+    }
+}
+
+/// Check if a type is a float primitive.
+pub func is_float(ty: Type) -> Bool {
+    when ty {
+        Primitive(p) => {
+            let tag: I64 = prim_kind_tag(p.kind)
+            return tag == 10 or tag == 11
+        },
+        _ => return false
+    }
+}

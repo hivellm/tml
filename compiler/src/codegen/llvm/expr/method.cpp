@@ -1629,6 +1629,44 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
     }
 
+    // =========================================================================
+    // FALLBACK: Auto-generate duplicate() for any struct/enum via bitwise copy.
+    // Matches the pattern used by @derive(Duplicate) for enums (load+ret) and
+    // by Maybe::duplicate / Outcome::duplicate (return receiver as-is).
+    // This handles generic code (HashMap, collection behaviors) that calls
+    // .duplicate() on types without explicit @derive(Duplicate).
+    // =========================================================================
+    if (method == "duplicate") {
+        std::string llvm_type;
+        if (!receiver_type_name.empty()) {
+            llvm_type = "%struct." + receiver_type_name;
+        }
+        if (llvm_type.empty() && !last_expr_type_.empty() &&
+            last_expr_type_.starts_with("%struct.")) {
+            llvm_type = last_expr_type_;
+        }
+
+        if (!llvm_type.empty()) {
+            // Use receiver_ptr (pointer to the struct) for the load.
+            std::string ptr = receiver_ptr.empty() ? receiver : receiver_ptr;
+
+            // If ptr is a struct value (not a pointer), spill it to a stack
+            // alloca first so we can load from it.
+            if (ptr == receiver && !last_expr_type_.empty() &&
+                last_expr_type_.starts_with("%struct.")) {
+                std::string tmp = fresh_reg();
+                emit_line("  " + tmp + " = alloca " + llvm_type);
+                emit_line("  store " + llvm_type + " " + receiver + ", ptr " + tmp);
+                ptr = tmp;
+            }
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + llvm_type + ", ptr " + ptr);
+            last_expr_type_ = llvm_type;
+            return result;
+        }
+    }
+
     report_error("Unknown method: " + method, call.span, "C006");
     return "0";
 }

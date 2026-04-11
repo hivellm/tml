@@ -1,0 +1,28 @@
+//! Simple TypeEnv test — just create and register primitives.
+
+use test
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_new
+use compiler::types::env::env_register_builtin
+use compiler::types::env::env_lookup_type
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_str
+use compiler::types::ty::is_primitive
+use compiler::types::ty::type_to_str
+
+@test
+func test_env_register_lookup() -> I32 {
+    let env: TypeEnv = env_new()
+    env_register_builtin(env, "I32", make_i32())
+    env_register_builtin(env, "Str", make_str())
+    let result: Maybe[Type] = env_lookup_type(env, "I32")
+    when result {
+        Just(t) => {
+            assert(is_primitive(t))
+            assert_eq(type_to_str(t), "I32")
+            return 0
+        },
+        Nothing => return 1
+    }
+}
