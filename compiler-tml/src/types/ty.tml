@@ -437,12 +437,10 @@ func type_lists_equal(a: List[Heap[Type]], b: List[Heap[Type]]) -> Bool {
     let la: I64 = a.len() as I64
     let lb: I64 = b.len() as I64
     if la != lb { return false }
-    var i: I64 = 0
-    loop (i < la) {
+    for i in 0 to la {
         if not types_equal(a.get(i).get(), b.get(i).get()) {
             return false
         }
-        i = i + 1
     }
     return true
 }
@@ -488,11 +486,9 @@ pub func type_to_str(ty: Type) -> Str {
             let argc: I64 = n.type_args.len() as I64
             if argc == 0 { return type_name }
             var s: Str = type_name + "["
-            var i: I64 = 0
-            loop (i < argc) {
+            for i in 0 to argc {
                 if i > 0 { s = s + ", " }
                 s = s + type_to_str(n.type_args.get(i).get())
-                i = i + 1
             }
             return s + "]"
         },
@@ -517,22 +513,18 @@ pub func type_to_str(ty: Type) -> Str {
         Tuple(t) => {
             var s: Str = "("
             let count: I64 = t.elements.len() as I64
-            var i: I64 = 0
-            loop (i < count) {
+            for i in 0 to count {
                 if i > 0 { s = s + ", " }
                 s = s + type_to_str(t.elements.get(i).get())
-                i = i + 1
             }
             return s + ")"
         },
         Func(f) => {
             var s: Str = "func("
             let pc: I64 = f.params.len() as I64
-            var i: I64 = 0
-            loop (i < pc) {
+            for i in 0 to pc {
                 if i > 0 { s = s + ", " }
                 s = s + type_to_str(f.params.get(i).get())
-                i = i + 1
             }
             s = s + ") -> " + type_to_str(f.return_type.get())
             return s
@@ -540,11 +532,9 @@ pub func type_to_str(ty: Type) -> Str {
         Closure(c) => {
             var s: Str = "do("
             let pc: I64 = c.params.len() as I64
-            var i: I64 = 0
-            loop (i < pc) {
+            for i in 0 to pc {
                 if i > 0 { s = s + ", " }
                 s = s + type_to_str(c.params.get(i).get())
-                i = i + 1
             }
             s = s + ") -> " + type_to_str(c.return_type.get())
             return s
@@ -557,11 +547,9 @@ pub func type_to_str(ty: Type) -> Str {
             let argc: I64 = d.type_args.len() as I64
             if argc > 0 {
                 s = s + "["
-                var i: I64 = 0
-                loop (i < argc) {
+                for i in 0 to argc {
                     if i > 0 { s = s + ", " }
                     s = s + type_to_str(d.type_args.get(i).get())
-                    i = i + 1
                 }
                 s = s + "]"
             }
@@ -572,11 +560,9 @@ pub func type_to_str(ty: Type) -> Str {
             let argc: I64 = im.type_args.len() as I64
             if argc > 0 {
                 s = s + "["
-                var i: I64 = 0
-                loop (i < argc) {
+                for i in 0 to argc {
                     if i > 0 { s = s + ", " }
                     s = s + type_to_str(im.type_args.get(i).get())
-                    i = i + 1
                 }
                 s = s + "]"
             }
@@ -587,11 +573,9 @@ pub func type_to_str(ty: Type) -> Str {
             let argc: I64 = cl.type_args.len() as I64
             if argc == 0 { return s }
             var r: Str = s + "["
-            var i: I64 = 0
-            loop (i < argc) {
+            for i in 0 to argc {
                 if i > 0 { r = r + ", " }
                 r = r + type_to_str(cl.type_args.get(i).get())
-                i = i + 1
             }
             return r + "]"
         },
@@ -600,11 +584,9 @@ pub func type_to_str(ty: Type) -> Str {
             let argc: I64 = ifc.type_args.len() as I64
             if argc == 0 { return s }
             var r: Str = s + "["
-            var i: I64 = 0
-            loop (i < argc) {
+            for i in 0 to argc {
                 if i > 0 { r = r + ", " }
                 r = r + type_to_str(ifc.type_args.get(i).get())
-                i = i + 1
             }
             return r + "]"
         }
@@ -710,11 +692,9 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Heap[Type]]) -> Type {
 func substitute_type_list(types: List[Heap[Type]], subs: HashMap[Str, Heap[Type]]) -> List[Heap[Type]] {
     let count: I64 = types.len() as I64
     var result: List[Heap[Type]] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let substituted: Type = substitute_type(types.get(i).get(), subs)
         result.push(Heap::new(substituted))
-        i = i + 1
     }
     return result
 }
@@ -741,8 +721,7 @@ pub func type_size(ty: Type) -> I64 {
         Tuple(t) => {
             var total: I64 = 0
             let count: I64 = t.elements.len() as I64
-            var i: I64 = 0
-            loop (i < count) {
+            for i in 0 to count {
                 let es: I64 = type_size(t.elements.get(i).get())
                 if es < 0 { return -1 as I64 }
                 let al: I64 = type_align(t.elements.get(i).get())
@@ -750,7 +729,6 @@ pub func type_size(ty: Type) -> I64 {
                 let rem: I64 = total % al
                 if rem != 0 { total = total + (al - rem) }
                 total = total + es
-                i = i + 1
             }
             return total
         },
@@ -778,11 +756,9 @@ pub func type_align(ty: Type) -> I64 {
         Tuple(t) => {
             var max_align: I64 = 1
             let count: I64 = t.elements.len() as I64
-            var i: I64 = 0
-            loop (i < count) {
+            for i in 0 to count {
                 let al: I64 = type_align(t.elements.get(i).get())
                 if al > max_align { max_align = al }
-                i = i + 1
             }
             return max_align
         },

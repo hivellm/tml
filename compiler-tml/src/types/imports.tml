@@ -50,10 +50,8 @@ pub func resolve_use_decl(reg: ModuleRegistry, env: TypeEnv, decl: UseDecl) {
 
     // Build module path from segments 0..count-1
     var mod_path: Str = segs.get(0)
-    var i: I64 = 1
-    loop (i < count - 1) {
+    for i in 1 to (count - 1) {
         mod_path = mod_path + "::" + segs.get(i)
-        i = i + 1
     }
 
     // Check for alias
@@ -88,10 +86,8 @@ pub func resolve_single_import(reg: ModuleRegistry, env: TypeEnv, mod_path: Str,
 func resolve_single_import_impl(reg: ModuleRegistry, env: TypeEnv, mod_path: Str, symbol: Str, local_name: Str, visited: List[Str]) {
     // Cycle check
     let vc: I64 = visited.len() as I64
-    var vi: I64 = 0
-    loop (vi < vc) {
+    for vi in 0 to vc {
         if visited.get(vi) == mod_path { return }
-        vi = vi + 1
     }
     visited.push(mod_path)
 
@@ -105,75 +101,54 @@ func resolve_single_import_impl(reg: ModuleRegistry, env: TypeEnv, mod_path: Str
             // Try function
             let func_r: Maybe[FuncSig] = module_lookup_func(m, symbol)
             when func_r {
-                Just(sig) => {
-                    env_register_function(env, local_name, sig)
-                    return
-                },
+                Just(sig) => { env_register_function(env, local_name, sig); return },
                 Nothing => {}
             }
 
             // Try struct
             let struct_r: Maybe[StructDef] = module_lookup_struct(m, symbol)
             when struct_r {
-                Just(def) => {
-                    env_register_struct(env, local_name, def)
-                    return
-                },
+                Just(def) => { env_register_struct(env, local_name, def); return },
                 Nothing => {}
             }
 
             // Try enum
             let enum_r: Maybe[EnumDef] = module_lookup_enum(m, symbol)
             when enum_r {
-                Just(def) => {
-                    env_register_enum(env, local_name, def)
-                    return
-                },
+                Just(def) => { env_register_enum(env, local_name, def); return },
                 Nothing => {}
             }
 
             // Try behavior
             let beh_r: Maybe[BehaviorDef] = module_lookup_behavior(m, symbol)
             when beh_r {
-                Just(def) => {
-                    env_register_behavior(env, local_name, def)
-                    return
-                },
+                Just(def) => { env_register_behavior(env, local_name, def); return },
                 Nothing => {}
             }
 
             // Try type alias
             let alias_r: Maybe[Type] = module_lookup_alias(m, symbol)
             when alias_r {
-                Just(ty) => {
-                    env_register_type_alias(env, local_name, ty)
-                    return
-                },
+                Just(ty) => { env_register_type_alias(env, local_name, ty); return },
                 Nothing => {}
             }
 
             // Try re-exports
             let re_count: I64 = m.re_exports.len() as I64
-            var ri: I64 = 0
-            loop (ri < re_count) {
+            for ri in 0 to re_count {
                 let re: ReExport = m.re_exports.get(ri)
                 if re.is_glob != 0 {
-                    // Glob re-export: search in source module
                     resolve_single_import_impl(reg, env, re.source_path, symbol, local_name, visited)
                     return
                 } else {
-                    // Check if symbol is in the re-export's symbol list
                     let sc: I64 = re.symbols.len() as I64
-                    var si: I64 = 0
-                    loop (si < sc) {
+                    for si in 0 to sc {
                         if re.symbols.get(si) == symbol {
                             resolve_single_import_impl(reg, env, re.source_path, symbol, local_name, visited)
                             return
                         }
-                        si = si + 1
                     }
                 }
-                ri = ri + 1
             }
         }
     }
@@ -191,57 +166,45 @@ pub func resolve_glob_import(reg: ModuleRegistry, env: TypeEnv, mod_path: Str) {
         Just(m) => {
             // Register all functions
             let fc: I64 = m.func_store.len() as I64
-            var fi: I64 = 0
-            loop (fi < fc) {
+            for fi in 0 to fc {
                 let sig: FuncSig = m.func_store.get(fi)
                 env_register_function(env, sig.name, sig)
-                fi = fi + 1
             }
 
             // Register all structs
             let sc: I64 = m.struct_store.len() as I64
-            var si: I64 = 0
-            loop (si < sc) {
+            for si in 0 to sc {
                 let def: StructDef = m.struct_store.get(si)
                 env_register_struct(env, def.name, def)
-                si = si + 1
             }
 
             // Register all enums
             let ec: I64 = m.enum_store.len() as I64
-            var ei: I64 = 0
-            loop (ei < ec) {
+            for ei in 0 to ec {
                 let def: EnumDef = m.enum_store.get(ei)
                 env_register_enum(env, def.name, def)
-                ei = ei + 1
             }
 
             // Register all behaviors
             let bc: I64 = m.behavior_store.len() as I64
-            var bi: I64 = 0
-            loop (bi < bc) {
+            for bi in 0 to bc {
                 let def: BehaviorDef = m.behavior_store.get(bi)
                 env_register_behavior(env, def.name, def)
-                bi = bi + 1
             }
 
             // Propagate re-exports
             let rc: I64 = m.re_exports.len() as I64
-            var ri: I64 = 0
-            loop (ri < rc) {
+            for ri in 0 to rc {
                 let re: ReExport = m.re_exports.get(ri)
                 if re.is_glob != 0 {
                     resolve_glob_import(reg, env, re.source_path)
                 } else {
                     let rsc: I64 = re.symbols.len() as I64
-                    var rsi: I64 = 0
-                    loop (rsi < rsc) {
+                    for rsi in 0 to rsc {
                         let sym: Str = re.symbols.get(rsi)
                         resolve_single_import(reg, env, re.source_path, sym, sym)
-                        rsi = rsi + 1
                     }
                 }
-                ri = ri + 1
             }
         }
     }

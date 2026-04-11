@@ -1,0 +1,10 @@
+{
+  "slug": "core-std-ergonomics-audit",
+  "topic": "core-std-ergonomics-audit",
+  "agents": [
+    "researcher"
+  ],
+  "noTasks": true,
+  "createdAt": "2026-04-11T22:54:24.707Z",
+  "version": "5.3.0"
+}

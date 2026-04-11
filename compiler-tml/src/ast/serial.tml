@@ -176,10 +176,8 @@ pub func write_module(w: BinaryWriter, m: Module) {
     w.write_str(m.name)
     let doc_count: I64 = docs.len() as I64
     w.write_varint(doc_count)
-    var i: I64 = 0
-    loop (i < doc_count) {
+    for i in 0 to doc_count {
         w.write_str(docs.get(i))
-        i = i + 1
     }
     write_source_span(w, m.span)
     // Full Decl serialization is performed via `compiler::serial::ast`
@@ -198,11 +196,9 @@ pub func read_module(r: BinaryReader) -> Outcome[Module, SerialError] {
     let name: Str = r.read_str()!
     let doc_count: I64 = r.read_varint()!
     var docs: List[Str] = List::new(doc_count)
-    var i: I64 = 0
-    loop (i < doc_count) {
+    for i in 0 to doc_count {
         let s: Str = r.read_str()!
         docs.push(s)
-        i = i + 1
     }
     let span: SourceSpan = read_source_span(r)!
     let decl_count: I64 = r.read_varint()!

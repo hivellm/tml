@@ -160,10 +160,8 @@ func write_binary_op(w: BinaryWriter, op: BinaryOp) {
 func ast_write_type_path(w: BinaryWriter, path: TypePath) {
     let segs: List[Str] = path.segments
     w.write_varint(segs.len())
-    var i: I64 = 0
-    loop (i < segs.len()) {
+    for i in 0 to segs.len() {
         w.write_str(segs.get(i))
-        i = i + 1
     }
     write_span(w, path.span)
 }
@@ -183,10 +181,8 @@ func write_opt_type(w: BinaryWriter, mt: Maybe[Heap[TypeExpr]]) {
 /// Write a List[Heap[TypeExpr]]: varint count then each type.
 func ast_write_type_list(w: BinaryWriter, types: List[Heap[TypeExpr]]) {
     w.write_varint(types.len())
-    var i: I64 = 0
-    loop (i < types.len()) {
+    for i in 0 to types.len() {
         ast_write_type(w, types.get(i).get())
-        i = i + 1
     }
 }
 
@@ -244,10 +240,8 @@ func ast_write_type(w: BinaryWriter, ty: TypeExpr) {
             w.write_u8(8)
             let bounds: List[TypePath] = d.bounds
             w.write_varint(bounds.len())
-            var i: I64 = 0
-            loop (i < bounds.len()) {
+            for i in 0 to bounds.len() {
                 ast_write_type_path(w, bounds.get(i))
-                i = i + 1
             }
             write_span(w, d.span)
         },
@@ -255,10 +249,8 @@ func ast_write_type(w: BinaryWriter, ty: TypeExpr) {
             w.write_u8(9)
             let bounds: List[TypePath] = ib.bounds
             w.write_varint(bounds.len())
-            var i: I64 = 0
-            loop (i < bounds.len()) {
+            for i in 0 to bounds.len() {
                 ast_write_type_path(w, bounds.get(i))
-                i = i + 1
             }
             write_span(w, ib.span)
         }
@@ -297,10 +289,8 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             w.write_u8(3)
             let pats: List[Heap[Pattern]] = tp.patterns
             w.write_varint(pats.len())
-            var i: I64 = 0
-            loop (i < pats.len()) {
+            for i in 0 to pats.len() {
                 ast_write_pattern(w, pats.get(i).get())
-                i = i + 1
             }
             write_span(w, tp.span)
         },
@@ -309,13 +299,11 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             ast_write_type_path(w, sp.path)
             let fields = sp.fields
             w.write_varint(fields.len())
-            var i: I64 = 0
-            loop (i < fields.len()) {
+            for i in 0 to fields.len() {
                 let f = fields.get(i)
                 w.write_str(f.name)
                 ast_write_pattern(w, f.pat.get())
                 write_span(w, f.span)
-                i = i + 1
             }
             write_span(w, sp.span)
         },
@@ -324,10 +312,8 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             ast_write_type_path(w, ep.path)
             let args: List[Heap[Pattern]] = ep.args
             w.write_varint(args.len())
-            var i: I64 = 0
-            loop (i < args.len()) {
+            for i in 0 to args.len() {
                 ast_write_pattern(w, args.get(i).get())
-                i = i + 1
             }
             write_span(w, ep.span)
         },

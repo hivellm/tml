@@ -1,6 +1,7 @@
 # Codegen Debugger Memory
 
 ## Index
+- [operator-overload-ast-codegen-fix.md](operator-overload-ast-codegen-fix.md) - AST codegen binary_ops.cpp had no operator overloading — struct operators treated as primitive ops (2026-04-11, FIXED)
 - [private-func-module-decls-fix.md](private-func-module-decls-fix.md) - Private functions excluded from module declarations caused ref-param ABI mismatch segfault during lazy codegen (2026-04-07, FIXED)
 - [tool-module-use-path-prefix-bug.md](tool-module-use-path-prefix-bug.md) - Tool module use-path prefix: absolute paths wrongly treated as relative in env_module_load_decls.cpp (2026-04-06, FIXED)
 - [let-else-nullable-maybe-fix.md](let-else-nullable-maybe-fix.md) - let-else GEP on nullable Maybe[Str]: gen_let_else_stmt missing nullable ptr optimization (2026-04-04, FIXED)

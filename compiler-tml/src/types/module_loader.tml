@@ -75,10 +75,8 @@ pub func loading_stack_new() -> LoadingStack {
 
 pub func loading_stack_contains(stack: LoadingStack, path: Str) -> Bool {
     let count: I64 = stack.paths.len() as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         if stack.paths.get(i) == path { return true }
-        i = i + 1
     }
     return false
 }
@@ -162,10 +160,8 @@ func module_path_to_fs_rest(segs: List[Str], start: I64) -> Str {
     let count: I64 = segs.len() as I64
     if start >= count { return "" }
     var result: Str = segs.get(start)
-    var i: I64 = start + 1
-    loop (i < count) {
+    for i in (start + 1) to count {
         result = result + "/" + segs.get(i)
-        i = i + 1
     }
     return result
 }
@@ -201,10 +197,8 @@ pub func join_module_path(segs: List[Str]) -> Str {
     let count: I64 = segs.len() as I64
     if count == 0 { return "" }
     var result: Str = segs.get(0)
-    var i: I64 = 1
-    loop (i < count) {
+    for i in 1 to count {
         result = result + "::" + segs.get(i)
-        i = i + 1
     }
     return result
 }

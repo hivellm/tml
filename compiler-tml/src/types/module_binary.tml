@@ -66,13 +66,11 @@ pub func compute_source_hash(source: Str) -> I64 {
     let n: I64 = source.len()
     // FNV-1a offset basis (64-bit)
     var h: I64 = -3750763034362895579 as I64  // 14695981039346656037 as signed
-    var i: I64 = 0
-    loop (i < n) {
+    for i in 0 to n {
         let byte: I64 = source.char_at(i) as I64
         h = h ^ byte
         // FNV prime: 1099511628211
         h = h * 1099511628211 as I64
-        i = i + 1
     }
     return h
 }
@@ -98,63 +96,51 @@ pub func serialize_module(m: Module, source_hash: I64) -> Buffer {
     // Function count + names
     let fc: I64 = m.func_store.len() as I64
     w.write_u32(fc)
-    var fi: I64 = 0
-    loop (fi < fc) {
+    for fi in 0 to fc {
         let sig: FuncSig = m.func_store.get(fi)
         write_func_sig(w, sig)
-        fi = fi + 1
     }
 
     // Struct count + names
     let sc: I64 = m.struct_store.len() as I64
     w.write_u32(sc)
-    var si: I64 = 0
-    loop (si < sc) {
+    for si in 0 to sc {
         let def: StructDef = m.struct_store.get(si)
         write_struct_def(w, def)
-        si = si + 1
     }
 
     // Enum count
     let ec: I64 = m.enum_store.len() as I64
     w.write_u32(ec)
-    var ei: I64 = 0
-    loop (ei < ec) {
+    for ei in 0 to ec {
         let def: EnumDef = m.enum_store.get(ei)
         write_enum_def(w, def)
-        ei = ei + 1
     }
 
     // Behavior count
     let bc: I64 = m.behavior_store.len() as I64
     w.write_u32(bc)
-    var bi: I64 = 0
-    loop (bi < bc) {
+    for bi in 0 to bc {
         let def: BehaviorDef = m.behavior_store.get(bi)
         write_behavior_def(w, def)
-        bi = bi + 1
     }
 
     // Re-export count
     let rc: I64 = m.re_exports.len() as I64
     w.write_u32(rc)
-    var ri: I64 = 0
-    loop (ri < rc) {
+    for ri in 0 to rc {
         let re: ReExport = m.re_exports.get(ri)
         w.write_str(re.source_path)
         w.write_u8(re.is_glob as I32)
         let sym_count: I64 = re.symbols.len() as I64
         w.write_u32(sym_count)
-        var rsi: I64 = 0
-        loop (rsi < sym_count) {
+        for rsi in 0 to sym_count {
             w.write_str(re.symbols.get(rsi))
-            rsi = rsi + 1
         }
         when re.alias {
             Just(a) => { w.write_u8(1); w.write_str(a) },
             Nothing => w.write_u8(0)
         }
-        ri = ri + 1
     }
 
     return w.finish()
@@ -165,10 +151,8 @@ func write_func_sig(w: BinaryWriter, sig: FuncSig) {
     w.write_str(sig.name)
     let pc: I64 = sig.params.len() as I64
     w.write_u32(pc)
-    var i: I64 = 0
-    loop (i < pc) {
+    for i in 0 to pc {
         w.write_str(type_to_str(sig.params.get(i).get()))
-        i = i + 1
     }
     w.write_str(type_to_str(sig.return_type.get()))
     w.write_u8(sig.is_async as I32)
@@ -176,10 +160,8 @@ func write_func_sig(w: BinaryWriter, sig: FuncSig) {
     // Type params
     let tp: I64 = sig.type_params.len() as I64
     w.write_u32(tp)
-    var ti: I64 = 0
-    loop (ti < tp) {
+    for ti in 0 to tp {
         w.write_str(sig.type_params.get(ti))
-        ti = ti + 1
     }
 }
 
@@ -188,20 +170,16 @@ func write_struct_def(w: BinaryWriter, def: StructDef) {
     w.write_str(def.name)
     let fc: I64 = def.fields.len() as I64
     w.write_u32(fc)
-    var i: I64 = 0
-    loop (i < fc) {
+    for i in 0 to fc {
         let f: StructFieldDef = def.fields.get(i)
         w.write_str(f.name)
         w.write_str(type_to_str(f.ty.get()))
-        i = i + 1
     }
     // Type params
     let tp: I64 = def.type_params.len() as I64
     w.write_u32(tp)
-    var ti: I64 = 0
-    loop (ti < tp) {
+    for ti in 0 to tp {
         w.write_str(def.type_params.get(ti))
-        ti = ti + 1
     }
 }
 
@@ -210,26 +188,20 @@ func write_enum_def(w: BinaryWriter, def: EnumDef) {
     w.write_str(def.name)
     let vc: I64 = def.variants.len() as I64
     w.write_u32(vc)
-    var i: I64 = 0
-    loop (i < vc) {
+    for i in 0 to vc {
         let v: EnumVariantDef = def.variants.get(i)
         w.write_str(v.name)
         let pc: I64 = v.payload_types.len() as I64
         w.write_u32(pc)
-        var pi: I64 = 0
-        loop (pi < pc) {
+        for pi in 0 to pc {
             w.write_str(type_to_str(v.payload_types.get(pi).get()))
-            pi = pi + 1
         }
-        i = i + 1
     }
     // Type params
     let tp: I64 = def.type_params.len() as I64
     w.write_u32(tp)
-    var ti: I64 = 0
-    loop (ti < tp) {
+    for ti in 0 to tp {
         w.write_str(def.type_params.get(ti))
-        ti = ti + 1
     }
 }
 
@@ -238,18 +210,14 @@ func write_behavior_def(w: BinaryWriter, def: BehaviorDef) {
     w.write_str(def.name)
     let mc: I64 = def.methods.len() as I64
     w.write_u32(mc)
-    var i: I64 = 0
-    loop (i < mc) {
+    for i in 0 to mc {
         write_func_sig(w, def.methods.get(i))
-        i = i + 1
     }
     // Super behaviors
     let sc: I64 = def.super_behaviors.len() as I64
     w.write_u32(sc)
-    var si: I64 = 0
-    loop (si < sc) {
+    for si in 0 to sc {
         w.write_str(def.super_behaviors.get(si))
-        si = si + 1
     }
 }
 
@@ -279,12 +247,10 @@ pub func read_cache_hash(cache_path: Str) -> I64 {
     // Read source hash (bytes 6-13, little-endian u64)
     var hash: I64 = 0
     var shift: I64 = 0
-    var i: I64 = 6
-    loop (i < 14) {
+    for i in 6 to 14 {
         let byte: I64 = content.char_at(i) as I64
         hash = hash + (byte * (1 as I64 << shift))
         shift = shift + 8
-        i = i + 1
     }
     return hash
 }

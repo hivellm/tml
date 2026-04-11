@@ -75,11 +75,9 @@ use core::alloc::heap::Heap
 pub func register_module_decls(env: TypeEnv, mod_ast: Module) {
     let decls: List[Heap[Decl]] = mod_ast.decls
     let count: I64 = decls.len() as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let d: Decl = decls.get(i).get()
         register_decl(env, d)
-        i = i + 1
     }
 }
 
@@ -148,12 +146,10 @@ func register_union_decl(env: TypeEnv, ud: UnionDecl) {
 func convert_struct_fields(fields: List[StructField]) -> List[StructFieldDef] {
     let count: I64 = fields.len() as I64
     let result: List[StructFieldDef] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let f: StructField = fields.get(i)
         let ty: Type = type_expr_to_type(f.ty.get())
         result.push(StructFieldDef { name: f.name, ty: Heap::new(ty), has_default: 0 })
-        i = i + 1
     }
     return result
 }
@@ -183,12 +179,10 @@ func register_enum_decl(env: TypeEnv, ed: EnumDecl) {
 func convert_enum_variants(variants: List[EnumVariant]) -> List[EnumVariantDef] {
     let count: I64 = variants.len() as I64
     let result: List[EnumVariantDef] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let v: EnumVariant = variants.get(i)
         let payload: List[Heap[Type]] = convert_type_expr_list(v.fields)
         result.push(EnumVariantDef { name: v.name, payload_types: payload })
-        i = i + 1
     }
     return result
 }
@@ -228,12 +222,10 @@ func register_func_decl(env: TypeEnv, fd: FuncDecl) {
 func convert_func_params(params: List[FuncParam]) -> List[Heap[Type]] {
     let count: I64 = params.len() as I64
     let result: List[Heap[Type]] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let p: FuncParam = params.get(i)
         let ty: Type = type_expr_to_type(p.ty.get())
         result.push(Heap::new(ty))
-        i = i + 1
     }
     return result
 }
@@ -278,11 +270,9 @@ func register_impl_decl(env: TypeEnv, id: ImplDecl) {
             // Inherent impl — register methods as functions
             let methods: List[FuncDecl] = id.methods
             let mc: I64 = methods.len() as I64
-            var i: I64 = 0
-            loop (i < mc) {
+            for i in 0 to mc {
                 let m: FuncDecl = methods.get(i)
                 register_func_decl(env, m)
-                i = i + 1
             }
         }
     }
@@ -298,10 +288,8 @@ func register_type_alias_decl(env: TypeEnv, ta: TypeAliasDecl) {
 func register_mod_decl(env: TypeEnv, md: ModDecl) {
     let items: List[Heap[Decl]] = md.items
     let count: I64 = items.len() as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         register_decl(env, items.get(i).get())
-        i = i + 1
     }
 }
 
@@ -309,10 +297,8 @@ func register_mod_decl(env: TypeEnv, md: ModDecl) {
 func register_namespace_decl(env: TypeEnv, ns: NamespaceDecl) {
     let items: List[Heap[Decl]] = ns.items
     let count: I64 = items.len() as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         register_decl(env, items.get(i).get())
-        i = i + 1
     }
 }
 
@@ -396,11 +382,9 @@ func type_expr_to_type(te: TypeExpr) -> Type {
 func convert_type_expr_list(exprs: List[Heap[TypeExpr]]) -> List[Heap[Type]] {
     let count: I64 = exprs.len() as I64
     let result: List[Heap[Type]] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let ty: Type = type_expr_to_type(exprs.get(i).get())
         result.push(Heap::new(ty))
-        i = i + 1
     }
     return result
 }
@@ -420,10 +404,8 @@ func type_path_to_str(path: TypePath) -> Str {
     if count == 0 { return "" }
     if count == 1 { return segs.get(0) }
     var result: Str = segs.get(0)
-    var i: I64 = 1
-    loop (i < count) {
+    for i in 1 to count {
         result = result + "::" + segs.get(i)
-        i = i + 1
     }
     return result
 }
@@ -432,10 +414,8 @@ func type_path_to_str(path: TypePath) -> Str {
 func convert_type_path_names(paths: List[TypePath]) -> List[Str] {
     let count: I64 = paths.len() as I64
     let result: List[Str] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         result.push(type_path_to_str(paths.get(i)))
-        i = i + 1
     }
     return result
 }
@@ -444,10 +424,8 @@ func convert_type_path_names(paths: List[TypePath]) -> List[Str] {
 func extract_generic_names(generics: List[GenericParam]) -> List[Str] {
     let count: I64 = generics.len() as I64
     let result: List[Str] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         result.push(generics.get(i).name)
-        i = i + 1
     }
     return result
 }
@@ -456,8 +434,7 @@ func extract_generic_names(generics: List[GenericParam]) -> List[Str] {
 func convert_method_list(methods: List[FuncDecl]) -> List[FuncSig] {
     let count: I64 = methods.len() as I64
     let result: List[FuncSig] = List::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let fd: FuncDecl = methods.get(i)
         let type_params: List[Str] = extract_generic_names(fd.generics)
         let params: List[Heap[Type]] = convert_func_params(fd.params)
@@ -480,7 +457,6 @@ func convert_method_list(methods: List[FuncDecl]) -> List[FuncSig] {
             const_params: List::new(0 as I64)
         }
         result.push(sig)
-        i = i + 1
     }
     return result
 }
