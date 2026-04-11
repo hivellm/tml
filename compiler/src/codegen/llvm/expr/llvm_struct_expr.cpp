@@ -328,6 +328,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                           field_val + ", 0");
                 field_val = fat;
             }
+            // Bool (i1) values must be zero-extended to i8 for struct fields
+            else if (last_expr_type_ == "i1" && field_type == "i8") {
+                std::string extended = fresh_reg();
+                emit_line("  " + extended + " = zext i1 " + field_val + " to i8");
+                field_val = extended;
+            }
 
             std::string field_ptr = fresh_reg();
             emit_line("  " + field_ptr + " = getelementptr inbounds " + struct_type + ", ptr " +
@@ -418,6 +424,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 emit_line("  " + fat + " = insertvalue { ptr, ptr } { ptr null, ptr null }, ptr " +
                           field_val + ", 0");
                 field_val = fat;
+            }
+            // Bool (i1) values must be zero-extended to i8 for struct fields
+            else if (last_expr_type_ == "i1" && field_type == "i8") {
+                std::string extended = fresh_reg();
+                emit_line("  " + extended + " = zext i1 " + field_val + " to i8");
+                field_val = extended;
             }
 
             std::string field_ptr = fresh_reg();
@@ -839,6 +851,12 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                               " = insertvalue { ptr, ptr } { ptr null, ptr null }, ptr " +
                               field_val + ", 0");
                     field_val = fat;
+                }
+                // Bool (i1) values must be zero-extended to i8 for struct fields
+                else if (actual_llvm_type == "i1" && target_field_type == "i8") {
+                    std::string extended = fresh_reg();
+                    emit_line("  " + extended + " = zext i1 " + field_val + " to i8");
+                    field_val = extended;
                 }
                 // Handle float/double conversions
                 // LLVM float literals are always double, so truncate to float if needed

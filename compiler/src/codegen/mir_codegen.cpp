@@ -1261,6 +1261,10 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
                     emit(", ");
                 }
                 std::string ft = field_types[i] ? mir_type_to_llvm(field_types[i]) : "i64";
+                // Bool (i1) promoted to i8 in struct fields to fix alignment
+                if (ft == "i1") {
+                    ft = "i8";
+                }
                 emit(ft);
                 llvm_field_types.push_back(ft);
             }
@@ -1346,6 +1350,10 @@ void MirCodegen::emit_struct_def(const mir::StructDef& s) {
             emit(", ");
         }
         std::string field_type = mir_type_to_llvm(s.fields[i].type);
+        // Bool (i1) promoted to i8 in struct fields to fix alignment
+        if (field_type == "i1") {
+            field_type = "i8";
+        }
         emit(field_type);
         field_types.push_back(field_type);
     }

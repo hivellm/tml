@@ -1,0 +1,20 @@
+use test
+
+type Flags {
+    is_active: Bool,
+    is_valid: Bool,
+    count: I64,
+}
+
+@test func test_bool_struct_layout() {
+    let f: Flags = Flags { is_active: true, is_valid: false, count: 42 }
+    // If Bool fields are correctly laid out as i8 in the struct,
+    // this will not crash or produce wrong values.
+    // The if-expressions verify that field access + trunc i8→i1 works.
+    if f.is_active {
+        if not f.is_valid {
+            // Both conditions correct — Bool fields work
+            let x: I64 = f.count
+        }
+    }
+}

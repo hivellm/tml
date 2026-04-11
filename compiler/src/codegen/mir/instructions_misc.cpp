@@ -427,9 +427,11 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
                 int expected_bits = std::stoi(expected_type.substr(1));
                 int actual_bits = std::stoi(actual_type.substr(1));
                 if (expected_bits > actual_bits) {
+                    // Use zext for Bool (i1→i8) to avoid sign-extending true to -1
+                    std::string ext_op = (actual_type == "i1") ? "zext" : "sext";
                     std::string ext_tmp = "%ext" + std::to_string(temp_counter_++);
-                    emitln("    " + ext_tmp + " = sext " + actual_type + " " + field_val + " to " +
-                           expected_type);
+                    emitln("    " + ext_tmp + " = " + ext_op + " " + actual_type + " " + field_val +
+                           " to " + expected_type);
                     field_val = ext_tmp;
                 } else if (expected_bits < actual_bits) {
                     std::string trunc_tmp = "%trunc" + std::to_string(temp_counter_++);

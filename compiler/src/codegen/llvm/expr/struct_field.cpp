@@ -1110,6 +1110,21 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
     std::string result = fresh_reg();
     emit_line("  " + result + " = load " + field_type + ", ptr " + field_ptr);
+
+    // Bool fields are stored as i8 in structs but the rest of codegen expects i1.
+    // Truncate i8 back to i1 after loading.
+    if (field_type == "i8") {
+        // Check if this field is semantically a Bool
+        auto sem_type = get_field_semantic_type(type_name, field.field);
+        if (sem_type && sem_type->is<types::PrimitiveType>() &&
+            sem_type->as<types::PrimitiveType>().kind == types::PrimitiveKind::Bool) {
+            std::string truncated = fresh_reg();
+            emit_line("  " + truncated + " = trunc i8 " + result + " to i1");
+            last_expr_type_ = "i1";
+            return truncated;
+        }
+    }
+
     last_expr_type_ = field_type;
     return result;
 }

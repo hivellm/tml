@@ -8,6 +8,14 @@ TML_MODULE("codegen_x86")
 
 namespace tml::codegen {
 
+// Bool (i1) in struct fields causes LLVM layout bugs — i1 is 1 bit but struct
+// alignment expects byte-sized fields. Promote to i8 in struct contexts only.
+static std::string promote_bool_for_struct(const std::string& llvm_type) {
+    if (llvm_type == "i1")
+        return "i8";
+    return llvm_type;
+}
+
 void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     // Store struct declaration for all structs (needed for default field values)
     struct_decls_[s.name] = &s;
@@ -29,6 +37,7 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
             if (s.fields[i].type && s.fields[i].type->is<parser::FuncType>()) {
                 ft = "{ ptr, ptr }";
             }
+            ft = promote_bool_for_struct(ft);
             types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
             fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
         }
@@ -64,6 +73,8 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         if (s.fields[i].type && s.fields[i].type->is<parser::FuncType>()) {
             ft = "{ ptr, ptr }";
         }
+        // Bool (i1) promoted to i8 in struct fields to fix alignment
+        ft = promote_bool_for_struct(ft);
         field_types.push_back(ft);
         types::TypePtr sem_type = resolve_parser_type_with_subs(*s.fields[i].type, {});
         fields.push_back({s.fields[i].name, static_cast<int>(i), ft, sem_type});
@@ -142,6 +153,8 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
         if (field_type && field_type->is<types::FuncType>()) {
             ft = "{ ptr, ptr }";
         }
+        // Bool (i1) promoted to i8 in struct fields to fix alignment
+        ft = promote_bool_for_struct(ft);
         field_types.push_back(ft);
         fields.push_back({decl.fields[i].name, static_cast<int>(i), ft, field_type});
     }
