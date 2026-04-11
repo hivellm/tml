@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.0](docs/patches/v0.3.0.md) | 2026-04-11 | Language ergonomics — `for i in 0 to N`, `Point { x: 5, ..p1 }`, pattern guards, `let Pair { a, b } = p`, Bool struct fix |
 | [0.2.16](docs/patches/v0.2.16.md) | 2026-04-11 | Language documentation overhaul — grammar, lexical spec, RFCs, PEG, tree-sitter, VS Code extension synchronized with actual parser |
 | [0.2.15](docs/patches/v0.2.15.md) | 2026-04-10 | TML self-hosting frontend now default parser, `--stage=parser:cpp` fallback, 7 codegen fixes, 0.9% overhead |
 | [0.2.14](docs/patches/v0.2.14.md) | 2026-04-06 | MIR consolidation, string interning, 86% compile failure reduction (214→29), RC1-RC9 codegen fixes, 27 Maybe/Outcome methods |
