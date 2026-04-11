@@ -500,6 +500,8 @@ struct StructInitInst {
     std::vector<Value> fields;
     std::vector<MirTypePtr> field_types; // Types of field values
     bool is_stack_eligible = false;      ///< True if instance can be stack-allocated.
+    std::optional<Value> base;           ///< Struct update syntax: ..base expression
+    std::vector<bool> from_base;         ///< True for fields extracted from base (not explicit)
 };
 
 // Enum variant construction: result = EnumName::Variant(payload...)

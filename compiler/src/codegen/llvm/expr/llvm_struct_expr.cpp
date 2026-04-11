@@ -691,15 +691,49 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
     }
 
     // Handle struct update syntax (..base)
-    // If base is present, first copy all fields from base, then override with specified fields
+    // If base is present, copy unspecified fields from base to the new struct.
+    // We copy field-by-field (not bulk store) to handle type mismatches correctly.
     if (s.base.has_value()) {
-        // Generate the base expression to get a struct value
         std::string base_val = gen_expr(**s.base);
+        std::string base_type = last_expr_type_;
 
-        // Skip store for empty structs (unit types) - "{}" has no data to copy
         if (struct_type != "{}") {
-            // Store the base value into our new struct (copies all fields)
-            emit_line("  store " + struct_type + " " + base_val + ", ptr " + ptr);
+            // Build set of explicitly specified field names
+            std::unordered_set<std::string> specified_fields;
+            for (const auto& [fname, fexpr] : s.fields) {
+                specified_fields.insert(fname);
+            }
+
+            // For each field NOT in the explicit list, copy from base
+            auto fields_it = struct_fields_.find(struct_name_for_lookup);
+            if (fields_it != struct_fields_.end()) {
+                // If base is a pointer (alloca), store it first so we can GEP into it
+                std::string base_ptr = fresh_reg();
+                emit_line("  " + base_ptr + " = alloca " + struct_type);
+                emit_line("  store " + struct_type + " " + base_val + ", ptr " + base_ptr);
+
+                for (const auto& field_info : fields_it->second) {
+                    if (specified_fields.count(field_info.name) == 0) {
+                        // Copy this field from base to new struct
+                        std::string src_gep = fresh_reg();
+                        emit_line("  " + src_gep + " = getelementptr inbounds " + struct_type +
+                                  ", ptr " + base_ptr + ", i32 0, i32 " +
+                                  std::to_string(field_info.index));
+                        std::string val = fresh_reg();
+                        emit_line("  " + val + " = load " + field_info.llvm_type + ", ptr " +
+                                  src_gep);
+                        std::string dst_gep = fresh_reg();
+                        emit_line("  " + dst_gep + " = getelementptr inbounds " + struct_type +
+                                  ", ptr " + ptr + ", i32 0, i32 " +
+                                  std::to_string(field_info.index));
+                        emit_line("  store " + field_info.llvm_type + " " + val + ", ptr " +
+                                  dst_gep);
+                    }
+                }
+            } else {
+                // Fallback: bulk store if no field info available
+                emit_line("  store " + struct_type + " " + base_val + ", ptr " + ptr);
+            }
         }
     }
 

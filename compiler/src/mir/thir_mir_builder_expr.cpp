@@ -14,6 +14,8 @@ TML_MODULE("compiler")
 #include "mir/thir_mir_builder.hpp"
 
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace tml::mir {
 
@@ -22,21 +24,71 @@ namespace tml::mir {
 // ============================================================================
 
 auto ThirMirBuilder::build_struct_expr(const thir::ThirStructExpr& s) -> Value {
+    auto result_type = convert_type(s.type);
+
+    // When struct update syntax (..base) is present, we need ALL fields:
+    // - Explicitly provided fields use the given expression
+    // - Missing fields are extracted from the base expression
+    if (s.base.has_value()) {
+        auto base_val = build_expr(s.base.value());
+
+        // Build set of explicitly provided field names
+        std::unordered_set<std::string> provided;
+        std::unordered_map<std::string, const thir::ThirExprPtr*> provided_exprs;
+        for (const auto& [name, expr] : s.fields) {
+            provided.insert(name);
+            provided_exprs[name] = &expr;
+        }
+
+        // Look up the struct definition to get ALL field names in order
+        auto struct_def = env_.lookup_struct(s.struct_name);
+        if (struct_def.has_value()) {
+            std::vector<Value> fields;
+            std::vector<MirTypePtr> field_types_vec;
+            std::vector<bool> from_base_flags;
+
+            for (size_t i = 0; i < struct_def->fields.size(); ++i) {
+                const auto& field_def = struct_def->fields[i];
+                if (provided.count(field_def.name) != 0) {
+                    auto val = build_expr(*provided_exprs[field_def.name]);
+                    fields.push_back(val);
+                    field_types_vec.push_back(val.type);
+                    from_base_flags.push_back(false);
+                } else {
+                    // Field comes from base — store base_val as the field value.
+                    // The MIR codegen emitter will extract field [i] from base_val
+                    // using extractvalue before the insertvalue chain.
+                    auto field_mir_type = convert_type(field_def.type);
+                    fields.push_back(base_val);
+                    field_types_vec.push_back(field_mir_type);
+                    from_base_flags.push_back(true);
+                }
+            }
+
+            StructInitInst inst;
+            inst.struct_name = s.struct_name;
+            inst.fields = std::move(fields);
+            inst.field_types = std::move(field_types_vec);
+            inst.base = base_val;
+            inst.from_base = std::move(from_base_flags);
+            return emit(std::move(inst), result_type, s.span);
+        }
+    }
+
+    // No struct update — emit only explicitly provided fields
     std::vector<Value> fields;
-    std::vector<MirTypePtr> field_types;
+    std::vector<MirTypePtr> field_types_vec;
 
     for (const auto& field_pair : s.fields) {
         auto val = build_expr(field_pair.second);
         fields.push_back(val);
-        field_types.push_back(val.type);
+        field_types_vec.push_back(val.type);
     }
-
-    auto result_type = convert_type(s.type);
 
     StructInitInst inst;
     inst.struct_name = s.struct_name;
     inst.fields = std::move(fields);
-    inst.field_types = std::move(field_types);
+    inst.field_types = std::move(field_types_vec);
     return emit(std::move(inst), result_type, s.span);
 }
 

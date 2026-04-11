@@ -784,6 +784,8 @@ auto is_value_used(const Function& func, ValueId value) -> bool {
                         return i.condition.id == value || i.true_val.id == value ||
                                i.false_val.id == value;
                     } else if constexpr (std::is_same_v<T, StructInitInst>) {
+                        if (i.base.has_value() && i.base->id == value)
+                            return true;
                         for (const auto& field : i.fields) {
                             if (field.id == value)
                                 return true;

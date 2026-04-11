@@ -75,6 +75,36 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     type_ptr = mir::make_i32_type();
                 }
                 std::string type_str = mir_type_to_llvm(type_ptr);
+                // Bool (i1) stored to i8 struct field: the value might be i1 but
+                // the struct field expects i8. We check the value's registered LLVM
+                // type OR its MIR type to detect Bool values that need promotion.
+                if (type_str == "i8") {
+                    bool needs_zext = false;
+                    auto cg_it = cg_values_.find(i.value.id);
+                    if (cg_it != cg_values_.end() && cg_it->second.llvm_type == "i1") {
+                        needs_zext = true;
+                    } else {
+                        // Check the value's own MIR type
+                        mir::MirTypePtr val_type = i.value.type;
+                        if (val_type) {
+                            if (auto* prim = std::get_if<mir::MirPrimitiveType>(&val_type->kind)) {
+                                needs_zext = (prim->kind == mir::PrimitiveType::Bool);
+                            }
+                        }
+                        // Check the StoreInst's value_type too (may differ from value.type)
+                        if (!needs_zext && i.value_type) {
+                            if (auto* prim =
+                                    std::get_if<mir::MirPrimitiveType>(&i.value_type->kind)) {
+                                needs_zext = (prim->kind == mir::PrimitiveType::Bool);
+                            }
+                        }
+                    }
+                    if (needs_zext) {
+                        std::string ext = "%zext_store" + std::to_string(temp_counter_++);
+                        emitln("    " + ext + " = zext i1 " + value + " to i8");
+                        value = ext;
+                    }
+                }
                 // Array stores need align 16 to match the alignment of array allocas
                 // and prevent LLVM backend crashes with SIMD aggregate stores.
                 bool is_array_store = type_ptr && type_ptr->is_array();

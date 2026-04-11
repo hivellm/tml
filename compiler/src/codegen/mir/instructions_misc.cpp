@@ -475,6 +475,24 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
 
             coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
 
+            // Bool (i1) values must be zero-extended to i8 for struct fields.
+            // coerce_int_type may miss this if the value isn't in cg_values_.
+            if (field_type == "i8") {
+                auto cg_it = cg_values_.find(i.fields[j].id);
+                bool is_i1 = cg_it != cg_values_.end() && cg_it->second.llvm_type == "i1";
+                if (!is_i1 && i.fields[j].type) {
+                    // Check MIR type for Bool
+                    if (auto* prim = std::get_if<mir::MirPrimitiveType>(&i.fields[j].type->kind)) {
+                        is_i1 = (prim->kind == mir::PrimitiveType::Bool);
+                    }
+                }
+                if (is_i1) {
+                    std::string ext = "%zext" + std::to_string(temp_counter_++);
+                    emitln("    " + ext + " = zext i1 " + field_val + " to i8");
+                    field_val = ext;
+                }
+            }
+
             std::string field_ptr_reg = "%gep" + std::to_string(temp_counter_++);
             emitln("    " + field_ptr_reg + " = getelementptr inbounds " + struct_type + ", ptr " +
                    alloc_reg + ", i32 0, i32 " + std::to_string(j));
@@ -485,8 +503,25 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
         // For non-class types: use insertvalue chain (much more efficient!)
         std::string current_val = "undef";
 
+        // If struct update (..base) is present, pre-extract fields from base value
+        std::string base_reg;
+        if (i.base.has_value()) {
+            base_reg = get_value_reg(i.base.value());
+        }
+
         for (size_t j = 0; j < i.fields.size(); ++j) {
-            std::string field_val = get_value_reg(i.fields[j]);
+            std::string field_val;
+
+            // Check if this field should be extracted from the base struct
+            bool is_from_base = j < i.from_base.size() && i.from_base[j] && !base_reg.empty();
+            if (is_from_base) {
+                // Emit extractvalue to get this field from the base struct value
+                field_val = "%base_ext" + std::to_string(temp_counter_++);
+                emitln("    " + field_val + " = extractvalue " + struct_type + " " + base_reg +
+                       ", " + std::to_string(j));
+            } else {
+                field_val = get_value_reg(i.fields[j]);
+            }
 
             std::string field_type;
             if (expected_field_types && j < expected_field_types->size()) {
@@ -504,7 +539,9 @@ void MirCodegen::emit_struct_init_inst(const mir::StructInitInst& i, const std::
                 field_type = mir_type_to_llvm(field_ptr);
             }
 
-            coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+            if (!is_from_base) {
+                coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+            }
 
             std::string next_reg = (j == i.fields.size() - 1)
                                        ? result_reg
