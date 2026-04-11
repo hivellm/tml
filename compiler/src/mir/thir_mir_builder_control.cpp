@@ -332,6 +332,27 @@ auto ThirMirBuilder::build_while(const thir::ThirWhileExpr& while_expr) -> Value
 }
 
 auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
+    // Check if the iterator is a Range/RangeInclusive struct — desugar to counter loop.
+    // Range { start, end } is created by HIR desugaring of `a to b` / `a through b`.
+    auto iter_type = for_expr.iter->type();
+    bool is_range = false;
+    bool inclusive = false;
+    if (iter_type && iter_type->is<types::NamedType>()) {
+        const auto& named = iter_type->as<types::NamedType>();
+        if (named.name == "Range") {
+            is_range = true;
+            inclusive = false;
+        } else if (named.name == "RangeInclusive") {
+            is_range = true;
+            inclusive = true;
+        }
+    }
+
+    if (is_range) {
+        return build_for_range(for_expr, inclusive);
+    }
+
+    // Generic iterator path: call next() in a loop
     auto iter_val = build_expr(for_expr.iter);
 
     auto header = create_block("for.header");
@@ -354,7 +375,6 @@ auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
     next_inst.return_type = result_type;
     auto next_val = emit(std::move(next_inst), result_type);
 
-    // Simplified: check for value
     auto has_value = const_bool(true);
     emit_cond_branch(has_value, body, exit);
 
@@ -364,6 +384,127 @@ auto ThirMirBuilder::build_for(const thir::ThirForExpr& for_expr) -> Value {
     if (!is_terminated()) {
         emit_branch(header);
     }
+
+    ctx_.loop_stack.pop();
+    switch_to_block(exit);
+    return const_unit();
+}
+
+auto ThirMirBuilder::build_for_range(const thir::ThirForExpr& for_expr, bool inclusive) -> Value {
+    // Desugar `for i in a to b { body }` into a counter loop.
+    // The iter expression is a Range { start, end } struct created by HIR desugaring.
+    // Instead of building the Range struct and extracting fields, we directly access
+    // the start/end sub-expressions from the ThirStructExpr to avoid type mangling issues.
+
+    // Determine the element type (I32 or I64) from Range[T]
+    auto elem_type = mir::make_i32_type();
+    auto iter_type = for_expr.iter->type();
+    if (iter_type && iter_type->is<types::NamedType>()) {
+        const auto& named = iter_type->as<types::NamedType>();
+        if (!named.type_args.empty()) {
+            elem_type = convert_type(named.type_args[0]);
+        }
+    }
+
+    // Extract start/end values directly from the Range struct expression
+    Value start_val = const_int(0);
+    Value end_val = const_int(0);
+
+    // The iter expr should be a ThirStructExpr with fields "start" and "end"
+    if (auto* struct_expr = std::get_if<thir::ThirStructExpr>(&for_expr.iter->kind)) {
+        for (const auto& [name, expr] : struct_expr->fields) {
+            if (name == "start") {
+                start_val = build_expr(expr);
+            } else if (name == "end") {
+                end_val = build_expr(expr);
+            }
+        }
+    } else {
+        // Fallback: build the range value and extract fields
+        auto range_val = build_expr(for_expr.iter);
+        start_val = range_val;
+        end_val = range_val;
+    }
+
+    // Allocate the loop counter variable
+    AllocaInst counter_alloca;
+    counter_alloca.alloc_type = elem_type;
+    auto counter_ptr = emit(std::move(counter_alloca), mir::make_ptr_type(), for_expr.span);
+
+    // Store initial value (start)
+    StoreInst init_store;
+    init_store.ptr = counter_ptr;
+    init_store.value = start_val;
+    init_store.value_type = elem_type;
+    (void)emit(std::move(init_store), nullptr, for_expr.span);
+
+    // Create loop blocks
+    auto header = create_block("for.header");
+    auto body_block = create_block("for.body");
+    auto latch = create_block("for.latch");
+    auto exit = create_block("for.exit");
+
+    BuildContext::LoopContext lc;
+    lc.header_block = latch; // continue goes to latch (increment + backedge)
+    lc.exit_block = exit;
+    ctx_.loop_stack.push(std::move(lc));
+
+    emit_branch(header);
+    switch_to_block(header);
+
+    // Load current counter value
+    LoadInst load_counter;
+    load_counter.ptr = counter_ptr;
+    load_counter.result_type = elem_type;
+    auto current = emit(std::move(load_counter), elem_type, for_expr.span);
+
+    // Compare: current < end (exclusive) or current <= end (inclusive)
+    BinaryInst cmp;
+    cmp.op = inclusive ? BinOp::Le : BinOp::Lt;
+    cmp.left = current;
+    cmp.right = end_val;
+    auto cond = emit(std::move(cmp), mir::make_bool_type(), for_expr.span);
+
+    emit_cond_branch(cond, body_block, exit);
+
+    // Body: bind pattern to current value, execute body
+    switch_to_block(body_block);
+    build_pattern_binding(for_expr.pattern, current);
+    (void)build_expr(for_expr.body);
+    if (!is_terminated()) {
+        emit_branch(latch);
+    }
+
+    // Latch: increment counter and loop back to header
+    switch_to_block(latch);
+    LoadInst reload;
+    reload.ptr = counter_ptr;
+    reload.result_type = elem_type;
+    auto current_latch = emit(std::move(reload), elem_type, for_expr.span);
+
+    // Determine bit width from element type (I32=32, I64=64)
+    int bit_width = 32;
+    if (elem_type) {
+        if (auto* prim = std::get_if<MirPrimitiveType>(&elem_type->kind)) {
+            if (prim->kind == PrimitiveType::I64 || prim->kind == PrimitiveType::U64) {
+                bit_width = 64;
+            }
+        }
+    }
+    auto one = const_int(1, bit_width);
+    BinaryInst increment;
+    increment.op = BinOp::Add;
+    increment.left = current_latch;
+    increment.right = one;
+    auto next_counter = emit(std::move(increment), elem_type, for_expr.span);
+
+    StoreInst store_next;
+    store_next.ptr = counter_ptr;
+    store_next.value = next_counter;
+    store_next.value_type = elem_type;
+    (void)emit(std::move(store_next), nullptr, for_expr.span);
+
+    emit_branch(header);
 
     ctx_.loop_stack.pop();
     switch_to_block(exit);

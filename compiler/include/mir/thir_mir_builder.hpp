@@ -90,6 +90,7 @@ private:
     [[nodiscard]] auto build_loop(const thir::ThirLoopExpr& loop) -> Value;
     [[nodiscard]] auto build_while(const thir::ThirWhileExpr& while_expr) -> Value;
     [[nodiscard]] auto build_for(const thir::ThirForExpr& for_expr) -> Value;
+    [[nodiscard]] auto build_for_range(const thir::ThirForExpr& for_expr, bool inclusive) -> Value;
     [[nodiscard]] auto build_return(const thir::ThirReturnExpr& ret) -> Value;
     [[nodiscard]] auto build_break(const thir::ThirBreakExpr& brk) -> Value;
     [[nodiscard]] auto build_continue(const thir::ThirContinueExpr& cont) -> Value;
