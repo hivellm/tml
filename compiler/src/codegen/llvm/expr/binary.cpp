@@ -732,6 +732,13 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     emit_line("  " + field_ptr + " = getelementptr inbounds " + gep_type +
                               ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
+                    // Bool (i1) values must be zero-extended to i8 for struct fields
+                    if (field_type == "i8" && last_expr_type_ == "i1") {
+                        std::string extended = fresh_reg();
+                        emit_line("  " + extended + " = zext i1 " + right + " to i8");
+                        right = extended;
+                    }
+
                     // Store value to field
                     emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
 
