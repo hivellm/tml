@@ -9,31 +9,39 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (57 reserved words)
+## 2. Keywords (70 reserved words)
 
 ```
 // Declarations
-func      type      behavior  impl
-mod       use       pub       let
-const     decorator where
+func      type      enum      union
+behavior  impl      mod       use
+pub       let       var       const
+decorator crate     super     where
 
 // Control flow
 if        then      else      when
 loop      while     for       in
 to        through   break     continue
-return    do
+return    do        throw
 
 // Logical operators (words, not symbols)
 and       or        not
 
+// Bitwise operators (word forms)
+xor       shl       shr
+
 // Types and references
-this      This      as        dyn
-mut       ref       lowlevel  life
+this      This      as        is
+dyn       mut       ref       lowlevel
+life      volatile
 
-// Modules
-crate     super     with
+// Closures
+move
 
-// Async (reserved for future)
+// Modules & capabilities
+with
+
+// Async
 async     await     quote
 
 // OOP (C#-style object-oriented programming)
@@ -43,6 +51,7 @@ namespace base      protected private
 static    new       prop
 ```
 
+> **Note:** `enum` is a keyword alias for `type` — both produce the same token.
 > **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.
 > **Note:** `null` is lexed as `NullLiteral` and represents the null pointer value.
 
@@ -53,8 +62,12 @@ static    new       prop
 | `&&` `\|\|` `!` | `and` `or` `not` | Natural language, unambiguous |
 | `&T` `&mut T` | `ref T` `mut ref T` | Clear meaning, no symbol overload |
 | `..` `..=` | `to` `through` | Reads like English |
+| `^` (logical) | `xor` | Unambiguous bitwise XOR |
+| `<<` `>>` | `shl` `shr` | Word alternatives for shifts |
 | `unsafe` | `lowlevel` | Neutral, descriptive |
 | `trait` | `behavior` | Describes what it defines |
+| `instanceof` | `is` | Type checking |
+| `throw` | `throw` | Error/exception throwing |
 
 ## 3. Identifiers
 
@@ -439,14 +452,47 @@ let result: I32 = score > 60 ? score * 2 : score + 10
 
 **Precedence:** Between assignment and logical OR (right-associative)
 
-### 5.7 Other
+### 5.7 Postfix
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `!` | Error propagation (try) | `file.read()!` |
+| `++` | Postfix increment | `count++` |
+| `--` | Postfix decrement | `count--` |
+
+### 5.8 Optional Chaining
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `?.` | Optional field/method access | `user?.name`, `list?.get(0)` |
+
+If the left-hand side is `Nothing`, the entire expression evaluates to `Nothing`.
+Auto-flattening: if the method returns `Maybe[V]`, result is `Maybe[V]` (not `Maybe[Maybe[V]]`).
+
+### 5.9 Type Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `as` | Type cast | `x as I64` |
+| `is` | Type check (returns Bool) | `value is String` |
+
+### 5.10 Pipe Forward
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `\|>` | Pipe forward | `data \|> process()` |
+
+Desugars `a \|> f(b)` to `f(a, b)` and `a \|> f` to `f(a)`.
+
+### 5.11 Other
 
 | Operator | Meaning |
 |----------|---------|
 | `->` | Return type arrow |
-| `!` | Error propagation |
+| `=>` | Match arm separator |
+| `..` | Range / struct spread |
 
-### 5.8 Range Keywords
+### 5.12 Range Keywords
 
 | Keyword | Meaning | Example |
 |---------|---------|---------|
@@ -524,7 +570,14 @@ fn process(data: &String) -> &String
 | `:` | Type annotation |
 | `::` | Path separator |
 | `.` | Member access |
+| `?.` | Optional chaining |
+| `->` | Return type arrow |
+| `=>` | Match arm separator |
+| `..` | Range / struct spread |
+| `\|>` | Pipe forward |
+| `!` | Error propagation (postfix) |
 | `@` | Directive prefix |
+| `$` `${` | Metaprogramming splice |
 
 ### Why `[]` for Generics?
 
@@ -772,19 +825,22 @@ module utils
 
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
-| 1 (lowest) | `or` | Left |
-| 2 | `and` | Left |
-| 3 | `not` | Unary |
-| 4 | `==` `!=` `<` `>` `<=` `>=` | None |
-| 5 | `\|` | Left |
-| 6 | `^` | Left |
-| 7 | `&` | Left |
-| 8 | `<<` `>>` | Left |
-| 9 | `+` `-` | Left |
-| 10 | `*` `/` `%` | Left |
-| 11 | `**` | Right |
-| 12 | Unary `-` `~` | Unary |
-| 13 (highest) | `.` `()` `[]` | Left |
+| 1 (lowest) | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | Right |
+| 2 | `or` | Left |
+| 3 | `and` | Left |
+| 4 | `not` | Unary |
+| 5 | `==` `!=` `<` `>` `<=` `>=` | None |
+| 6 | `\|` | Left |
+| 7 | `^` `xor` | Left |
+| 8 | `&` | Left |
+| 9 | `<<` `>>` `shl` `shr` | Left |
+| 10 | `+` `-` | Left |
+| 11 | `*` `/` `%` | Left |
+| 12 | `**` | Right |
+| 13 | `as` `is` | Left |
+| 14 | Unary `-` `~` `not` `ref` | Unary |
+| 15 | `\|>` | Left |
+| 16 (highest) | `.` `?.` `()` `[]` `!` `++` `--` | Left |
 
 ## 13. Tokenization Example
 

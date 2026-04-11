@@ -82,7 +82,7 @@ func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
 ```tml
 type Point { x: F64, y: F64 }
 
-extend Point {
+impl Point {
     func new(x: F64, y: F64) -> This {
         return This { x: x, y: y }
     }
@@ -98,8 +98,8 @@ extend Point {
 **Pattern matching:**
 ```tml
 when value {
-    Just(x) -> if x > 0 then x * 2 else x,
-    Nothing -> 0,
+    Just(x) => if x > 0 then x * 2 else x,
+    Nothing => 0,
 }
 ```
 
@@ -142,11 +142,11 @@ func append(s: mut ref String, suffix: String) {
 **Behaviors (interfaces):**
 ```tml
 behavior Printable {
-    func to_text(this) -> String
+    func to_text(this) -> Str
 }
 
-extend Point with Printable {
-    func to_text(this) -> String {
+impl Printable for Point {
+    func to_text(this) -> Str {
         return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
     }
 }
@@ -244,11 +244,11 @@ const PI: F64 = 3.14159   // not: const PI = 3.14159
 ### 7.2 One Way to Do It
 
 ```tml
-// One form of loop
-loop item in items { }
-loop i in 0 to 10 { }
-loop while condition { }
-loop { }
+// Loop variants
+for item in items { }          // iteration
+for i in 0 to 10 { }          // range
+while condition { }            // conditional
+loop (true) { }                // infinite
 
 // One form of pattern match
 when x { }

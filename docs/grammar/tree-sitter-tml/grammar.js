@@ -67,6 +67,7 @@ module.exports = grammar({
     // ==========================================================================
 
     func_def: $ => seq(
+      optional($.func_modifiers),
       'func',
       field('name', $.ident),
       optional($.generic_params),
@@ -74,8 +75,22 @@ module.exports = grammar({
       optional($.params),
       ')',
       optional(seq('->', field('return_type', $._type))),
-      optional($.effects),
+      optional($.where_clause),
       choice($.block, ';'),
+    ),
+
+    func_modifiers: $ => repeat1(choice('async', 'lowlevel')),
+
+    where_clause: $ => seq(
+      'where',
+      $.where_constraint,
+      repeat(seq(',', $.where_constraint)),
+    ),
+
+    where_constraint: $ => seq(
+      $._type,
+      ':',
+      $.type_bound,
     ),
 
     type_def: $ => seq(
@@ -521,8 +536,13 @@ module.exports = grammar({
     _expr: $ => $.assignment_expr,
 
     assignment_expr: $ => prec.right(1, seq(
-      $.or_expr,
+      $.pipe_expr,
       optional(seq($.assign_op, $.assignment_expr)),
+    )),
+
+    pipe_expr: $ => prec.left(2, seq(
+      $.or_expr,
+      repeat(seq('|>', $.or_expr)),
     )),
 
     assign_op: $ => choice('=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>='),
@@ -596,9 +616,14 @@ module.exports = grammar({
       $.index_expr,
       $.field_access,
       $.method_call,
+      $.optional_field_access,
+      $.optional_method_call,
       $.propagate,
+      $.increment,
+      $.decrement,
       $.await_expr,
       $.cast_expr,
+      $.type_check,
     ),
 
     call_expr: $ => seq('(', optional($.arg_list), ')'),
@@ -627,11 +652,27 @@ module.exports = grammar({
       ')',
     ),
 
+    optional_field_access: $ => seq('?.', $.ident),
+
+    optional_method_call: $ => seq(
+      '?.',
+      $.ident,
+      '(',
+      optional($.arg_list),
+      ')',
+    ),
+
     propagate: $ => '!',
+
+    increment: $ => '++',
+
+    decrement: $ => '--',
 
     await_expr: $ => seq('.', 'await'),
 
     cast_expr: $ => seq('as', $._type),
+
+    type_check: $ => seq('is', $._type),
 
     // ==========================================================================
     // PRIMARY EXPRESSIONS
@@ -640,22 +681,33 @@ module.exports = grammar({
     primary_expr: $ => choice(
       $._literal,
       'this',
+      'This',
       $.parenthesized_expr,
       $.tuple_expr,
       $.block,
       $.if_expr,
       $.when_expr,
       $.loop_expr,
+      $.while_expr,
       $.for_expr,
       $.return_expr,
       $.break_expr,
       $.continue_expr,
+      $.throw_expr,
+      $.lowlevel_expr,
+      $.await_prefix_expr,
       $.closure,
       $.struct_init,
       $.array_init,
       $.quote_expr,
       $.path,
     ),
+
+    throw_expr: $ => prec.right(seq('throw', $._expr)),
+
+    lowlevel_expr: $ => seq('lowlevel', $.block),
+
+    await_prefix_expr: $ => prec.right(seq('await', $._expr)),
 
     parenthesized_expr: $ => seq('(', $._expr, ')'),
 
@@ -674,12 +726,14 @@ module.exports = grammar({
     if_expr: $ => prec.right(seq(
       'if',
       choice(
-        seq(optional('let'), $.pattern, '=', $._expr),
+        seq('let', $.pattern, '=', $._expr),
         $._expr,
       ),
-      'then',
-      $._expr,
-      optional(seq('else', $._expr)),
+      choice(
+        seq('then', $._expr),
+        $.block,
+      ),
+      optional(seq('else', choice($.if_expr, seq('then', $._expr), $.block))),
     )),
 
     when_expr: $ => seq(
@@ -693,14 +747,20 @@ module.exports = grammar({
     match_arm: $ => seq(
       $.pattern,
       optional(seq('if', $._expr)),
-      '->',
-      $._expr,
+      '=>',
+      choice($._expr, $.block),
       optional(','),
     ),
 
     loop_expr: $ => seq(
       'loop',
-      optional($._expr),
+      optional(seq('(', $._expr, ')')),
+      $.block,
+    ),
+
+    while_expr: $ => seq(
+      'while',
+      $._expr,
       $.block,
     ),
 
@@ -741,6 +801,7 @@ module.exports = grammar({
 
     _statement: $ => choice(
       $.let_stmt,
+      $.var_stmt,
       $.expr_stmt,
       $._item,
       ';',
@@ -751,6 +812,17 @@ module.exports = grammar({
       optional('mut'),
       $.pattern,
       optional(seq(':', $._type)),
+      '=',
+      $._expr,
+      optional(seq('else', $.block)),
+      optional(';'),
+    ),
+
+    var_stmt: $ => seq(
+      'var',
+      field('name', $.ident),
+      ':',
+      field('type', $._type),
       '=',
       $._expr,
       optional(';'),
@@ -842,6 +914,7 @@ module.exports = grammar({
     // ==========================================================================
 
     closure: $ => seq(
+      optional('move'),
       'do',
       optional($.closure_params),
       optional(seq('->', $._type)),

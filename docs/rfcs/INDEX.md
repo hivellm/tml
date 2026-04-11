@@ -30,10 +30,10 @@ TML uses a **layered architecture**:
 | RFC | Title | Status | Summary |
 |-----|-------|--------|---------|
 | [RFC-0001](./RFC-0001-CORE.md) | Core Language | **Active** | Types, effects, ownership, IR, concurrency |
-| [RFC-0002](./RFC-0002-SYNTAX.md) | Surface Syntax | Draft | Human syntax + desugaring rules |
+| [RFC-0002](./RFC-0002-SYNTAX.md) | Surface Syntax | **Active** | Human syntax + desugaring rules |
 | [RFC-0003](./RFC-0003-CONTRACTS.md) | Contracts | Draft | pre/post/forall/exists, static vs runtime |
-| [RFC-0004](./RFC-0004-ERRORS.md) | Error Handling | Draft | Outcome, ! operator, error propagation |
-| [RFC-0005](./RFC-0005-MODULES.md) | Modules & Caps | Draft | Module system, capabilities, imports |
+| [RFC-0004](./RFC-0004-ERRORS.md) | Error Handling | **Active** | Outcome, ! operator, error propagation |
+| [RFC-0005](./RFC-0005-MODULES.md) | Modules & Imports | **Active** | Module system, imports, visibility |
 | [RFC-0006](./RFC-0006-OO.md) | OO Sugar | Superseded | Replaced by RFC-0014 |
 | [RFC-0007](./RFC-0007-IR.md) | Intermediate Representation | Active | IR format, normalization, stable IDs, serialization |
 | [RFC-0008](./RFC-0008-GENERICS.md) | Generics | **Active** | Monomorphization, generic structs/enums |
@@ -103,15 +103,15 @@ Related work, inspiration, prior art.
 2. **RFC-0007** (IR) - ✅ Implemented in v0.1.0 - Canonical format
 3. **RFC-0008** (Generics) - ✅ Implemented in v0.4.0 - Monomorphization
 4. **RFC-0010** (Testing) - ✅ Implemented - @test decorator
-5. **RFC-0004** (Errors) - Critical for any real code
-6. **RFC-0005** (Modules) - ✅ Basic implementation - `use` declarations
-7. **RFC-0002** (Syntax) - Can evolve as sugar
+5. **RFC-0004** (Errors) - ✅ Implemented - Outcome[T,E], Maybe[T], `!` operator
+6. **RFC-0005** (Modules) - ✅ Basic implementation - `use` declarations, `mod` paths
+7. **RFC-0002** (Syntax) - ✅ Implemented - `impl`, `when`, closures, let-else, `?.`
 8. **RFC-0003** (Contracts) - Can be added incrementally
 9. **RFC-0014** (OOP) - ✅ Implemented - Classes, interfaces, inheritance, vtables
    - ✅ Class/interface declarations
    - ✅ Virtual methods and polymorphism
    - ✅ Vtable generation and dispatch
-   - 🔄 Namespace support (in progress)
+   - ✅ Namespace support
    - 📋 OOP optimizations (planned)
 10. **RFC-0015** (JSON) - ✅ Implemented in v0.6.0 - Native JSON for MCP
     - ✅ Parser with integer precision preservation

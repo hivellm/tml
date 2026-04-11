@@ -201,11 +201,11 @@
       "patterns": [
         {
           "name": "keyword.control.tml",
-          "match": "\\b(if|then|else|when|loop|while|for|in|break|continue|return|catch|do)\\b"
+          "match": "\\b(if|then|else|when|loop|while|for|in|break|continue|return|do|throw|move)\\b"
         },
         {
           "name": "keyword.declaration.tml",
-          "match": "\\b(module|import|public|private|func|type|enum|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator|namespace)\\b"
+          "match": "\\b(func|type|enum|union|behavior|impl|const|let|var|where|use|mod|crate|super|pub|decorator|namespace)\\b"
         },
         {
           "name": "keyword.control.oop.tml",
@@ -225,7 +225,7 @@
         },
         {
           "name": "keyword.other.tml",
-          "match": "\\b(this|This|ref|mut|volatile|dyn|lowlevel|unsafe|async|await|with|quote|as|is)\\b"
+          "match": "\\b(this|This|ref|mut|volatile|dyn|lowlevel|async|await|with|quote|as|is|life)\\b"
         },
         {
           "name": "keyword.control.range.tml",
