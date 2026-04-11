@@ -18,6 +18,6 @@
 
 ## 5. Tail (mandatory)
 - [x] 5.1 Runtime verified: `Point { x: 999, ..p1 }` outputs correct values (999, 200, 300)
-- [x] 5.2 Test file added: compiler/tests/compiler/struct_update.test.tml (needs test::assert fix to pass)
+- [x] 5.2 Pre-existing test: compiler/tests/compiler/structs/struct_update.test.tml (covers basic + Config with Bool fields)
 - [ ] 5.3 Update CHANGELOG.md
 - [ ] 5.4 Run full test suite green

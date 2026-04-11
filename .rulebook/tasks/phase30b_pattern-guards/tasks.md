@@ -11,6 +11,6 @@
 
 ## 3. Tail (mandatory)
 - [x] 3.1 Type-check verified: `Just(x) if x > 0 => ...` passes type-checker
-- [x] 3.2 Test file added: compiler/tests/compiler/pattern_guards.test.tml (3 tests: basic guard, fallthrough, wildcard — needs test::assert fix to pass)
+- [x] 3.2 Test file: compiler/tests/compiler/pattern_guards.test.tml (3 tests using bare assert_eq: basic guard, fallthrough, wildcard)
 - [ ] 3.3 Update CHANGELOG.md
 - [ ] 3.4 Run full test suite green

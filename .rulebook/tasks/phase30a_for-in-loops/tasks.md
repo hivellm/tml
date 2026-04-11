@@ -10,15 +10,14 @@
 ## 3. Codegen — Legacy AST path
 - [x] 3.1 Full for-loop codegen in loop.cpp:276-453 (range loops + iterator protocol)
 
-## 4. Codegen — MIR path (this session)
+## 4. Codegen — MIR path
 - [x] 4.1 Detect Range/RangeInclusive iter type in build_for (thir_mir_builder_control.cpp)
-- [x] 4.2 build_for_range: extract start/end from ThirStructExpr fields
-- [x] 4.3 Emit counter alloca + header (load+cmp) + body (bind i) + latch (increment) + exit
-- [x] 4.4 Simple for-in with println in body works: `for i in 0 to 3 { println(i.to_string()) }` → 0,1,2
-- [ ] 4.5 **BUG**: mutable outer variables (`var sum`) read wrong value after loop — SSA phi for outer vars not generated in for-body/exit blocks. `sum = sum + i` inside for-in produces wrong result.
+- [x] 4.2 build_for_range: extract start/end directly from ThirStructExpr fields (avoids Range struct type mangling)
+- [x] 4.3 Emit counter alloca + header (load+cmp) + body (pattern bind) + increment + backedge + exit
+- [x] 4.4 SSA phi nodes for pre-loop variables — same pattern as build_while: create phis in header, complete back-edges after body, restore header vars at exit
+- [x] 4.5 Verified: `for i in 0 to 5 { sum += i }` → sum=10, `for i in 1 through 5 { sum += i }` → sum=15
 
 ## 5. Tail (mandatory)
-- [ ] 5.1 Fix outer mutable variable tracking across for-in loop body
-- [ ] 5.2 Add test file for for-in loops
-- [ ] 5.3 Update CHANGELOG.md
-- [ ] 5.4 Run tests and confirm they pass
+- [x] 5.1 Test file added: compiler/tests/compiler/for_in_range.test.tml (exclusive sum, inclusive sum, empty range)
+- [ ] 5.2 Update CHANGELOG.md
+- [ ] 5.3 Run full test suite green

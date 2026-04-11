@@ -1,4 +1,4 @@
-## 1. Struct destructuring in let (commit 9d051f28+)
+## 1. Struct destructuring in let
 - [x] 1.1 Parser accepts `let TypeName { field1: a, field2: b } = expr` — uses parse_pattern() for StructPattern
 - [x] 1.2 Type-checker validates struct pattern bindings
 - [x] 1.3 Codegen: added StructPattern handler in gen_let_stmt (llvm_ir_gen_stmt_let.cpp) — alloca + GEP + load for each field binding, Bool i8→i1 trunc included
@@ -10,6 +10,6 @@
 - [x] 2.3 Codegen emits GEP + load for each positional element
 
 ## 3. Tail (mandatory)
-- [x] 3.1 Test file added: compiler/tests/compiler/destructuring_let.test.tml (2 tests: pair + triple — needs test::assert fix to pass)
+- [x] 3.1 Test file: compiler/tests/compiler/destructuring_let.test.tml (2 tests using bare assert_eq: pair + triple destructuring)
 - [ ] 3.2 Update CHANGELOG.md
 - [ ] 3.3 Run full test suite green
