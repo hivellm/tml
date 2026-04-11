@@ -17,6 +17,7 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Mirrors `PrimitiveKind` in `type.hpp`.
+@repr(U8)
 pub enum PrimitiveKind {
     KindI8,
     KindI16,

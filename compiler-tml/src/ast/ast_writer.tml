@@ -321,10 +321,8 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             w.write_u8(6)
             let alts: List[Heap[Pattern]] = op.alternatives
             w.write_varint(alts.len())
-            var i: I64 = 0
-            loop (i < alts.len()) {
+            for i in 0 to alts.len() {
                 ast_write_pattern(w, alts.get(i).get())
-                i = i + 1
             }
             write_span(w, op.span)
         },
@@ -339,10 +337,8 @@ func ast_write_pattern(w: BinaryWriter, pat: Pattern) {
             w.write_u8(8)
             let pats: List[Heap[Pattern]] = ap.patterns
             w.write_varint(pats.len())
-            var i: I64 = 0
-            loop (i < pats.len()) {
+            for i in 0 to pats.len() {
                 ast_write_pattern(w, pats.get(i).get())
-                i = i + 1
             }
             write_span(w, ap.span)
         }
@@ -411,10 +407,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             ast_write_expr(w, ce.callee.get(), depth + 1)
             let args: List[Heap[Expr]] = ce.args
             w.write_varint(args.len())
-            var i: I64 = 0
-            loop (i < args.len()) {
+            for i in 0 to args.len() {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_span(w, ce.span)
         },
@@ -425,10 +419,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             ast_write_type_list(w, mc.type_args)
             let args: List[Heap[Expr]] = mc.args
             w.write_varint(args.len())
-            var i: I64 = 0
-            loop (i < args.len()) {
+            for i in 0 to args.len() {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
-                i = i + 1
             }
             w.write_u8(mc.optional_chain as I32)
             write_span(w, mc.span)
@@ -450,10 +442,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(8)
             let elems: List[Heap[Expr]] = te.elements
             w.write_varint(elems.len())
-            var i: I64 = 0
-            loop (i < elems.len()) {
+            for i in 0 to elems.len() {
                 ast_write_expr(w, elems.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_span(w, te.span)
         },
@@ -463,10 +453,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
                 Elements(elems) => {
                     w.write_u8(0)
                     w.write_varint(elems.len())
-                    var i: I64 = 0
-                    loop (i < elems.len()) {
+                    for i in 0 to elems.len() {
                         ast_write_expr(w, elems.get(i).get(), depth + 1)
-                        i = i + 1
                     }
                 },
                 Repeat(val, cnt) => {
@@ -486,12 +474,10 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             }
             let fields = se.fields
             w.write_varint(fields.len())
-            var i: I64 = 0
-            loop (i < fields.len()) {
+            for i in 0 to fields.len() {
                 let f = fields.get(i)
                 w.write_str(f.name)
                 ast_write_expr(w, f.value.get(), depth + 1)
-                i = i + 1
             }
             write_opt_expr(w, se.base_expr, depth + 1)
             write_span(w, se.span)
@@ -523,8 +509,7 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             ast_write_expr(w, we.scrutinee.get(), depth + 1)
             let arms = we.arms
             w.write_varint(arms.len())
-            var i: I64 = 0
-            loop (i < arms.len()) {
+            for i in 0 to arms.len() {
                 let arm = arms.get(i)
                 ast_write_pattern(w, arm.pattern.get())
                 when arm.guard {
@@ -533,7 +518,6 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
                 }
                 ast_write_expr(w, arm.body.get(), depth + 1)
                 write_span(w, arm.span)
-                i = i + 1
             }
             write_span(w, we.span)
         },
@@ -572,10 +556,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(18)
             let stmts: List[Heap[Stmt]] = be.stmts
             w.write_varint(stmts.len())
-            var i: I64 = 0
-            loop (i < stmts.len()) {
+            for i in 0 to stmts.len() {
                 ast_write_stmt(w, stmts.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_opt_expr(w, be.expr, depth + 1)
             write_span(w, be.span)
@@ -600,12 +582,10 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(22)
             let params = cle.params
             w.write_varint(params.len())
-            var i: I64 = 0
-            loop (i < params.len()) {
+            for i in 0 to params.len() {
                 let p = params.get(i)
                 ast_write_pattern(w, p.pattern.get())
                 write_opt_type(w, p.ty)
-                i = i + 1
             }
             write_opt_type(w, cle.return_type)
             ast_write_expr(w, cle.body.get(), depth + 1)
@@ -659,10 +639,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(30)
             let stmts: List[Heap[Stmt]] = lle.stmts
             w.write_varint(stmts.len())
-            var i: I64 = 0
-            loop (i < stmts.len()) {
+            for i in 0 to stmts.len() {
                 ast_write_stmt(w, stmts.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_opt_expr(w, lle.expr, depth + 1)
             write_span(w, lle.span)
@@ -671,10 +649,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(31)
             let segs = ise.segments
             w.write_varint(segs.len())
-            var i: I64 = 0
-            loop (i < segs.len()) {
+            for i in 0 to segs.len() {
                 write_interpolated_segment(w, segs.get(i), depth)
-                i = i + 1
             }
             write_span(w, ise.span)
         },
@@ -682,10 +658,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             w.write_u8(32)
             let segs = tle.segments
             w.write_varint(segs.len())
-            var i: I64 = 0
-            loop (i < segs.len()) {
+            for i in 0 to segs.len() {
                 write_interpolated_segment(w, segs.get(i), depth)
-                i = i + 1
             }
             write_span(w, tle.span)
         },
@@ -695,10 +669,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             ast_write_type_list(w, be.type_args)
             let args: List[Heap[Expr]] = be.args
             w.write_varint(args.len())
-            var i: I64 = 0
-            loop (i < args.len()) {
+            for i in 0 to args.len() {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
-                i = i + 1
             }
             w.write_u8(be.is_method_call as I32)
             write_span(w, be.span)
@@ -712,10 +684,8 @@ func ast_write_expr(w: BinaryWriter, e: Expr, depth: I64) {
             }
             let args: List[Heap[Expr]] = ne.args
             w.write_varint(args.len())
-            var i: I64 = 0
-            loop (i < args.len()) {
+            for i in 0 to args.len() {
                 ast_write_expr(w, args.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_span(w, ne.span)
         }
@@ -771,20 +741,16 @@ func write_generic_param(w: BinaryWriter, gp: GenericParam) {
     w.write_str(gp.name)
     let bounds: List[TypePath] = gp.bounds
     w.write_varint(bounds.len())
-    var i: I64 = 0
-    loop (i < bounds.len()) {
+    for i in 0 to bounds.len() {
         ast_write_type_path(w, bounds.get(i))
-        i = i + 1
     }
     write_span(w, gp.span)
 }
 
 func write_generic_params(w: BinaryWriter, generics: List[GenericParam]) {
     w.write_varint(generics.len())
-    var i: I64 = 0
-    loop (i < generics.len()) {
+    for i in 0 to generics.len() {
         write_generic_param(w, generics.get(i))
-        i = i + 1
     }
 }
 
@@ -803,15 +769,13 @@ func ast_write_func_decl_body(w: BinaryWriter, fd: FuncDecl) {
     write_generic_params(w, fd.generics)
     let params: List[FuncParam] = fd.params
     w.write_varint(params.len())
-    var i: I64 = 0
-    loop (i < params.len()) {
+    for i in 0 to params.len() {
         let fp: FuncParam = params.get(i)
         w.write_str(fp.name)
         ast_write_type(w, fp.ty.get())
         w.write_u8(fp.is_this as I32)
         w.write_u8(fp.is_mut as I32)
         write_span(w, fp.span)
-        i = i + 1
     }
     write_opt_type(w, fd.return_type)
     when fd.body {
@@ -825,10 +789,8 @@ func ast_write_func_decl_body(w: BinaryWriter, fd: FuncDecl) {
 
 func ast_write_func_decl_list(w: BinaryWriter, methods: List[FuncDecl]) {
     w.write_varint(methods.len())
-    var i: I64 = 0
-    loop (i < methods.len()) {
+    for i in 0 to methods.len() {
         ast_write_func_decl_body(w, methods.get(i))
-        i = i + 1
     }
 }
 
@@ -861,14 +823,12 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             write_generic_params(w, sd.generics)
             let fields: List[StructField] = sd.fields
             w.write_varint(fields.len())
-            var i: I64 = 0
-            loop (i < fields.len()) {
+            for i in 0 to fields.len() {
                 let sf: StructField = fields.get(i)
                 w.write_str(sf.name)
                 ast_write_type(w, sf.ty.get())
                 ast_write_vis(w, sf.visibility)
                 write_span(w, sf.span)
-                i = i + 1
             }
             write_span(w, sd.span)
         },
@@ -879,14 +839,12 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             write_generic_params(w, ud.generics)
             let fields: List[StructField] = ud.fields
             w.write_varint(fields.len())
-            var i: I64 = 0
-            loop (i < fields.len()) {
+            for i in 0 to fields.len() {
                 let sf: StructField = fields.get(i)
                 w.write_str(sf.name)
                 ast_write_type(w, sf.ty.get())
                 ast_write_vis(w, sf.visibility)
                 write_span(w, sf.span)
-                i = i + 1
             }
             write_span(w, ud.span)
         },
@@ -897,13 +855,11 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             write_generic_params(w, ed.generics)
             let variants = ed.variants
             w.write_varint(variants.len())
-            var i: I64 = 0
-            loop (i < variants.len()) {
+            for i in 0 to variants.len() {
                 let v = variants.get(i)
                 w.write_str(v.name)
                 ast_write_type_list(w, v.fields)
                 write_span(w, v.span)
-                i = i + 1
             }
             write_span(w, ed.span)
         },
@@ -914,10 +870,8 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             write_generic_params(w, td.generics)
             let supertraits: List[TypePath] = td.supertraits
             w.write_varint(supertraits.len())
-            var i: I64 = 0
-            loop (i < supertraits.len()) {
+            for i in 0 to supertraits.len() {
                 ast_write_type_path(w, supertraits.get(i))
-                i = i + 1
             }
             ast_write_func_decl_list(w, td.methods)
             write_span(w, td.span)
@@ -954,10 +908,8 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             w.write_u8(8)
             let segs: List[Str] = ud.path.segments
             w.write_varint(segs.len())
-            var i: I64 = 0
-            loop (i < segs.len()) {
+            for i in 0 to segs.len() {
                 w.write_str(segs.get(i))
-                i = i + 1
             }
             w.write_opt_str(ud.path.alias)
             ast_write_vis(w, ud.visibility)
@@ -969,10 +921,8 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             ast_write_vis(w, md.visibility)
             let items: List[Heap[Decl]] = md.items
             w.write_varint(items.len())
-            var i: I64 = 0
-            loop (i < items.len()) {
+            for i in 0 to items.len() {
                 ast_write_decl(w, items.get(i).get())
-                i = i + 1
             }
             write_span(w, md.span)
         },
@@ -987,21 +937,17 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             }
             let ifaces: List[TypePath] = cd.interfaces
             w.write_varint(ifaces.len())
-            var i: I64 = 0
-            loop (i < ifaces.len()) {
+            for i in 0 to ifaces.len() {
                 ast_write_type_path(w, ifaces.get(i))
-                i = i + 1
             }
             let cfields = cd.fields
             w.write_varint(cfields.len())
-            i = 0
-            loop (i < cfields.len()) {
+            for i in 0 to cfields.len() {
                 let cf = cfields.get(i)
                 w.write_str(cf.name)
                 ast_write_type(w, cf.ty.get())
                 ast_write_vis(w, cf.visibility)
                 write_span(w, cf.span)
-                i = i + 1
             }
             ast_write_func_decl_list(w, cd.methods)
             write_span(w, cd.span)
@@ -1020,10 +966,8 @@ func ast_write_decl(w: BinaryWriter, d: Decl) {
             ast_write_vis(w, nd.visibility)
             let items: List[Heap[Decl]] = nd.items
             w.write_varint(items.len())
-            var i: I64 = 0
-            loop (i < items.len()) {
+            for i in 0 to items.len() {
                 ast_write_decl(w, items.get(i).get())
-                i = i + 1
             }
             write_span(w, nd.span)
         }
@@ -1057,20 +1001,16 @@ pub func write_ast_module(w: BinaryWriter, m: Module) {
     // Doc comments
     let docs: List[Str] = m.docs
     w.write_varint(docs.len())
-    var i: I64 = 0
-    loop (i < docs.len()) {
+    for i in 0 to docs.len() {
         w.write_str(docs.get(i))
-        i = i + 1
     }
     // Module span — 2 × SourceLocation (each 4 × u32_le, no file field)
     write_span(w, m.span)
     // Declarations
     let decls: List[Heap[Decl]] = m.decls
     w.write_varint(decls.len())
-    i = 0
-    loop (i < decls.len()) {
+    for i in 0 to decls.len() {
         let decl_heap: Heap[Decl] = decls.get(i)
         ast_write_decl_heap(w, decl_heap)
-        i = i + 1
     }
 }
