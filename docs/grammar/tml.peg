@@ -1,5 +1,5 @@
-// TML PEG Grammar v0.1.0
-// For compiler parsing - generates AST with spans
+// TML PEG Grammar v0.2.0
+// Synchronized with compiler-tml/src/parser/ (2026-04-11)
 //
 // Usage: This grammar is for PEG parser generators like:
 //   - pest (Rust)
@@ -14,17 +14,21 @@
 
 Module = SOI ~ ModuleHeader? ~ Item* ~ EOI
 
-ModuleHeader = "module" ~ Ident ~ ";"?
+ModuleHeader = "mod" ~ ModulePath ~ ";"?
+
+ModulePath = Ident ~ ("::" ~ Ident)*
 
 Item = Decorator* ~ Visibility? ~ ItemKind
 
 ItemKind = FuncDef
          / TypeDef
+         / UnionDef
          / ConstDef
          / BehaviorDef
          / ImplBlock
          / ClassDef
          / InterfaceDef
+         / NamespaceDef
          / ModDef
          / DecoratorDef
          / Use
@@ -33,23 +37,42 @@ ItemKind = FuncDef
 // DECLARATIONS
 // =============================================================================
 
-FuncDef = "func" ~ Ident ~ GenericParams? ~ "(" ~ Params? ~ ")"
-        ~ ("->" ~ Type)? ~ Effects? ~ (Block / ";")
+FuncDef = FuncModifiers? ~ "func" ~ Ident ~ GenericParams? ~ "(" ~ Params? ~ ")"
+        ~ ("->" ~ Type)? ~ WhereClause? ~ (Block / ";")
 
-TypeDef = ("type" / "enum") ~ Ident ~ GenericParams? ~ "=" ~ TypeBody
+FuncModifiers = ("async" / "lowlevel")*
+
+TypeDef = ("type" / "enum") ~ Ident ~ GenericParams? ~ TypeBody
+
+TypeBody = "=" ~ Type               // type alias: type Foo = Bar
+         / "{" ~ StructFields ~ "}"  // struct body
+         / "{" ~ EnumVariants ~ "}"  // enum body
+
+EnumVariants = Variant ~ ("," ~ Variant)* ~ ","?
+
+Variant = Ident ~ VariantFields?
+
+VariantFields = "(" ~ TypeList ~ ")"
+
+UnionDef = "union" ~ Ident ~ "{" ~ StructFields ~ "}"
 
 ConstDef = "const" ~ Ident ~ ":" ~ Type ~ "=" ~ Expr ~ ";"?
 
-BehaviorDef = "behavior" ~ Ident ~ GenericParams? ~ "{" ~ BehaviorItem* ~ "}"
+BehaviorDef = "behavior" ~ Ident ~ GenericParams?
+            ~ (":" ~ TypeBound)? ~ "{" ~ BehaviorItem* ~ "}"
 
-BehaviorItem = Decorator* ~ "func" ~ Ident ~ GenericParams?
-             ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)? ~ Effects?
+BehaviorItem = AssociatedType / BehaviorFunc
+
+BehaviorFunc = Decorator* ~ Visibility? ~ "func" ~ Ident ~ GenericParams?
+             ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)?
              ~ (Block / ";")
 
-ImplBlock = "impl" ~ GenericParams? ~ Type ~ ("for" ~ Type)?
-          ~ "{" ~ ImplItem* ~ "}"
+AssociatedType = "type" ~ Ident ~ (":" ~ TypeBound)? ~ ("=" ~ Type)? ~ ";"?
 
-ImplItem = Decorator* ~ Visibility? ~ FuncDef
+ImplBlock = "impl" ~ GenericParams? ~ Type ~ ("for" ~ Type)?
+          ~ WhereClause? ~ "{" ~ ImplItem* ~ "}"
+
+ImplItem = AssociatedType / Decorator* ~ Visibility? ~ FuncDef
 
 // =============================================================================
 // OOP - CLASSES AND INTERFACES (C#-style)
@@ -65,7 +88,7 @@ ClassInheritance = "extends" ~ Type ~ ("implements" ~ TypeList)?
 
 ClassMember = Decorator* ~ MemberVisibility? ~ ClassMemberKind
 
-MemberVisibility = "public" / "protected" / "private"
+MemberVisibility = "pub" / "protected" / "private"
 
 ClassMemberKind = FieldDef
                 / MethodDef
@@ -103,6 +126,10 @@ InterfaceMethodDef = "func" ~ Ident ~ GenericParams?
                    ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)? ~ ";"
 
 InterfacePropertyDef = "prop" ~ Ident ~ ":" ~ Type ~ ";"
+
+NamespaceDef = "namespace" ~ NamespacePath ~ "{" ~ Item* ~ "}"
+
+NamespacePath = Ident ~ ("::" ~ Ident)*
 
 // =============================================================================
 // MODULES
@@ -143,6 +170,10 @@ GenericParam = Ident ~ (":" ~ TypeBound)?
 
 TypeBound = Path ~ ("+" ~ Path)*
 
+WhereClause = "where" ~ WhereConstraint ~ ("," ~ WhereConstraint)*
+
+WhereConstraint = Type ~ ":" ~ TypeBound
+
 Params = Param ~ ("," ~ Param)* ~ ","?
 
 Param = "mut"? ~ Ident ~ ":" ~ Type
@@ -153,7 +184,7 @@ Param = "mut"? ~ Ident ~ ":" ~ Type
 
 Type = FuncType / ReferenceType / BaseType
 
-FuncType = "func" ~ "(" ~ TypeList? ~ ")" ~ "->" ~ Type ~ Effects?
+FuncType = "func" ~ "(" ~ TypeList? ~ ")" ~ "->" ~ Type
 
 ReferenceType = "mut"? ~ "ref" ~ Type
 
@@ -173,28 +204,9 @@ GenericArgs = "[" ~ TypeList ~ "]"
 
 TypeList = Type ~ ("," ~ Type)* ~ ","?
 
-TypeBody = SumType / StructType / Type
-
-SumType = "|"? ~ Variant ~ ("|" ~ Variant)+
-
-Variant = Ident ~ VariantFields?
-
-VariantFields = "(" ~ TypeList ~ ")"
-              / "{" ~ StructFields ~ "}"
-
-StructType = "{" ~ StructFields ~ "}"
-
 StructFields = (StructField ~ ("," ~ StructField)*)? ~ ","?
 
 StructField = Decorator* ~ Visibility? ~ Ident ~ ":" ~ Type ~ ("=" ~ Expr)?
-
-// =============================================================================
-// EFFECTS
-// =============================================================================
-
-Effects = "with" ~ EffectList
-
-EffectList = Ident ~ ("," ~ Ident)*
 
 // =============================================================================
 // DECORATORS
@@ -205,6 +217,7 @@ Decorator = "@" ~ DecoratorExpr
 DecoratorExpr = Path ~ DecoratorArgs?
 
 DecoratorArgs = "(" ~ (DecoratorArg ~ ("," ~ DecoratorArg)*)? ~ ")"
+              / "[" ~ (DecoratorArg ~ ("," ~ DecoratorArg)*)? ~ "]"
 
 DecoratorArg = (Ident ~ ":")? ~ Expr
 
@@ -214,14 +227,18 @@ DecoratorArg = (Ident ~ ":")? ~ Expr
 
 Expr = Assignment
 
-Assignment = LogicalOr ~ (AssignOp ~ Assignment)?
+Assignment = Pipe ~ (AssignOp ~ Assignment)?
 
 AssignOp = "=" / "+=" / "-=" / "*=" / "/=" / "%="
          / "&=" / "|=" / "^=" / "<<=" / ">>="
 
+Pipe = LogicalOr ~ ("|>" ~ LogicalOr)*
+
 LogicalOr = LogicalAnd ~ ("or" ~ LogicalAnd)*
 
-LogicalAnd = Comparison ~ ("and" ~ Comparison)*
+LogicalAnd = LogicalNot ~ ("and" ~ LogicalNot)*
+
+LogicalNot = "not" ~ LogicalNot / Comparison
 
 Comparison = BitwiseOr ~ (CompareOp ~ BitwiseOr)?
 
@@ -245,7 +262,9 @@ Multiplicative = Power ~ (MulOp ~ Power)*
 
 MulOp = "*" / "/" / "%"
 
-Power = Unary ~ ("**" ~ Power)?
+Power = Cast ~ ("**" ~ Power)?
+
+Cast = Unary ~ (("as" / "is") ~ Type)*
 
 Unary = UnaryOp* ~ Postfix
 
@@ -253,7 +272,9 @@ UnaryOp = "-" / "not" / "~" / "ref" / "mut" ~ "ref" / "*"
 
 Postfix = Primary ~ PostfixOp*
 
-PostfixOp = Call / Index / FieldAccess / MethodCall / Propagate / Await / Cast
+PostfixOp = Call / Index / FieldAccess / MethodCall
+          / OptionalFieldAccess / OptionalMethodCall
+          / Propagate / Increment / Decrement / Await
 
 Call = "(" ~ ArgList? ~ ")"
 
@@ -267,11 +288,17 @@ FieldAccess = "." ~ Ident
 
 MethodCall = "." ~ Ident ~ GenericArgs? ~ "(" ~ ArgList? ~ ")"
 
+OptionalFieldAccess = "?." ~ Ident
+
+OptionalMethodCall = "?." ~ Ident ~ "(" ~ ArgList? ~ ")"
+
 Propagate = "!"
 
-Await = "." ~ "await"
+Increment = "++"
 
-Cast = "as" ~ Type
+Decrement = "--"
+
+Await = "." ~ "await"
 
 // =============================================================================
 // PRIMARY EXPRESSIONS
@@ -279,11 +306,16 @@ Cast = "as" ~ Type
 
 Primary = Literal
         / "this"
-        / "(" ~ Expr ~ ")"          // Parenthesized / Tuple
+        / "This"
+        / "await" ~ Expr                // prefix await
+        / "throw" ~ Expr                // throw expression
+        / "lowlevel" ~ Block            // lowlevel block
+        / "(" ~ Expr ~ ")"             // Parenthesized / Tuple
         / Block
         / IfExpr
         / WhenExpr
         / LoopExpr
+        / WhileExpr
         / ForExpr
         / ReturnExpr
         / BreakExpr
@@ -298,15 +330,23 @@ Primary = Literal
 // CONTROL FLOW
 // =============================================================================
 
-IfExpr = "if" ~ Expr ~ "then" ~ Expr ~ ("else" ~ Expr)?
-       / "if" ~ "let" ~ Pattern ~ "=" ~ Expr ~ "then" ~ Expr ~ ("else" ~ Expr)?
+IfExpr = "if" ~ "let" ~ Pattern ~ "=" ~ Expr ~ IfBody ~ ("else" ~ ElseBody)?
+       / "if" ~ Expr ~ IfBody ~ ("else" ~ ElseBody)?
+
+IfBody = "then" ~ Expr / Block
+
+ElseBody = IfExpr / "then" ~ Expr / Block
 
 WhenExpr = "when" ~ Expr ~ "{" ~ MatchArm* ~ "}"
 
-MatchArm = Pattern ~ ("->" ~ Expr)? ~ ","?
+MatchArm = Pattern ~ Guard? ~ "=>" ~ (Expr / Block) ~ ","?
 
-LoopExpr = "loop" ~ Expr? ~ Block
+Guard = "if" ~ Expr
+
+LoopExpr = "loop" ~ "(" ~ Expr ~ ")" ~ Block
          / "loop" ~ Block
+
+WhileExpr = "while" ~ Expr ~ Block
 
 ForExpr = "for" ~ Pattern ~ "in" ~ Expr ~ Block
 
@@ -322,9 +362,11 @@ ContinueExpr = "continue" ~ Ident?
 
 Block = "{" ~ Statement* ~ Expr? ~ "}"
 
-Statement = LetStmt / ExprStmt / Item / ";"
+Statement = LetStmt / VarStmt / ExprStmt / Item / ";"
 
-LetStmt = "let" ~ "mut"? ~ Pattern ~ (":" ~ Type)? ~ "=" ~ Expr ~ ";"?
+LetStmt = "let" ~ Pattern ~ (":" ~ Type)? ~ "=" ~ Expr ~ ("else" ~ Block)? ~ ";"?
+
+VarStmt = "var" ~ Ident ~ ":" ~ Type ~ "=" ~ Expr ~ ";"?
 
 ExprStmt = Expr ~ ";"
 
@@ -373,9 +415,13 @@ RefPattern = "ref" ~ "mut"? ~ Pattern
 // CLOSURES
 // =============================================================================
 
-Closure = "do" ~ ClosureParams? ~ ("->" ~ Type)? ~ ClosureBody
+Closure = "move"? ~ "do" ~ ClosureParams? ~ ("->" ~ Type)? ~ ClosureBody
 
-ClosureParams = "(" ~ Params? ~ ")" / Ident
+ClosureParams = "(" ~ ClosureParamList? ~ ")" / Ident
+
+ClosureParamList = ClosureParam ~ ("," ~ ClosureParam)* ~ ","?
+
+ClosureParam = "mut"? ~ Ident ~ (":" ~ Type)?  // Type optional — inferred from context
 
 ClosureBody = Block / Expr
 
@@ -415,6 +461,7 @@ Literal = TemplateLiteral
         / CharLiteral
         / NumberLiteral
         / BoolLiteral
+        / NullLiteral
         / UnitLiteral
 
 // Template Literals (backticks) - produce Text type
@@ -456,6 +503,8 @@ CharLiteral = "'" ~ CharContent ~ "'"
 
 CharContent = !("'" / "\\") ~ ANY
             / "\\" ~ EscapeSeq
+
+NullLiteral = "null"
 
 NumberLiteral = FloatLiteral / IntLiteral
 
@@ -514,18 +563,20 @@ IdentStart = 'a'..'z' / 'A'..'Z' / '_'
 IdentContinue = IdentStart / '0'..'9'
 
 // =============================================================================
-// KEYWORDS
+// KEYWORDS (70 reserved words)
 // =============================================================================
 
 Keyword = "abstract" / "and" / "as" / "async" / "await" / "base" / "behavior"
         / "break" / "class" / "const" / "continue" / "crate" / "decorator"
-        / "do" / "else" / "extends" / "false" / "for" / "func"
-        / "get" / "if" / "impl" / "implements" / "in" / "interface"
-        / "let" / "loop" / "mod" / "mut" / "new" / "not" / "or"
-        / "override" / "private" / "prop" / "protected" / "pub" / "public"
-        / "quote" / "ref" / "return" / "sealed" / "self" / "set" / "static" / "super"
-        / "then" / "this" / "This" / "through" / "to"
-        / "true" / "type" / "use" / "virtual" / "when" / "with"
+        / "do" / "dyn" / "else" / "enum" / "extends" / "false" / "for" / "func"
+        / "if" / "impl" / "implements" / "in" / "interface" / "is"
+        / "let" / "life" / "loop" / "lowlevel" / "mod" / "move" / "mut"
+        / "namespace" / "new" / "not" / "null" / "or"
+        / "override" / "private" / "prop" / "protected" / "pub"
+        / "quote" / "ref" / "return" / "sealed" / "shl" / "shr"
+        / "static" / "super" / "then" / "this" / "This" / "through"
+        / "throw" / "to" / "true" / "type" / "union" / "use" / "var"
+        / "virtual" / "volatile" / "when" / "where" / "while" / "with" / "xor"
 
 // =============================================================================
 // WHITESPACE & COMMENTS
@@ -533,11 +584,15 @@ Keyword = "abstract" / "and" / "as" / "async" / "await" / "base" / "behavior"
 
 WHITESPACE = " " / "\t" / "\r" / "\n"
 
-COMMENT = LineComment / BlockComment
+COMMENT = LineComment / BlockComment / DocComment / ModuleDocComment
 
 LineComment = "//" ~ (!"\n" ~ ANY)*
 
 BlockComment = "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+
+DocComment = "///" ~ (!"\n" ~ ANY)*
+
+ModuleDocComment = "//!" ~ (!"\n" ~ ANY)*
 
 // =============================================================================
 // SOI/EOI (Start/End of Input)

@@ -45,22 +45,25 @@ Item = Function
      | TypeDecl
      | UnionDecl
      | BehaviorDecl
-     | ExtendDecl
+     | ImplDecl
      | ConstDecl
+     | TypeAliasDecl
      | ClassDecl
      | InterfaceDecl
      | NamespaceDecl
 
-Visibility = 'pub' | 'private' | 'protected'
+Visibility = 'pub' | 'pub' '(' 'crate' ')' | 'private'
 ```
 
 ### 3.1 Functions
 
 ```ebnf
-Function = Directive* Visibility? 'func' Ident
+Function = Directive* Visibility? FuncModifiers? 'func' Ident
            GenericParams? '(' Params? ')' ('->' Type)?
            WhereClause?
            Block
+
+FuncModifiers = 'async' | 'lowlevel'
 
 GenericParams = '[' GenericParam (',' GenericParam)* ']'
 GenericParam  = Ident (':' TypeBound)?
@@ -82,33 +85,36 @@ func add(a: I32, b: I32) -> I32 {
 pub func first[T](list: List[T]) -> Maybe[T] {
     return list.get(0)
 }
+
+async func fetch_data(url: Str) -> Outcome[Str, Error] {
+    let response = http::get(url).await!
+    return Ok(response.body())
+}
 ```
 
 ### 3.2 Types
 
 ```ebnf
-TypeDecl = Directive* Visibility? 'type' Ident
+TypeDecl = Directive* Visibility? ('type' | 'enum') Ident
            GenericParams? TypeBody
 
-TypeBody = StructBody | EnumBody | AliasBody
+TypeBody = StructBody | EnumBody
 
 StructBody = '{' (Field (',' Field)* ','?)? '}'
-Field      = Ident ':' Type
+Field      = Visibility? Ident ':' Type
 
 EnumBody = '{' Variant (',' Variant)* ','? '}'
-Variant  = Ident VariantData? ('=' IntLiteral)?
+Variant  = Ident VariantData?
 VariantData = '(' Type (',' Type)* ')'
-            | '{' Field (',' Field)* '}'
 
-AliasBody = '=' Type
+TypeAliasDecl = Visibility? 'type' Ident GenericParams? '=' Type
 
 UnionDecl = Directive* Visibility? 'union' Ident
             '{' (Field (',' Field)* ','?)? '}'
 ```
 
-> **Implementation Note (v0.4.0):** Generic types are fully implemented via
-> monomorphization. `Pair[I32]` becomes `Pair__I32` in LLVM IR. Both generic
-> structs and enums with pattern matching are supported.
+> **Note:** `enum` is a keyword alias for `type` — both produce the same token.
+> Enum variants use positional data only (e.g. `Ok(T)`), not named fields.
 
 **Examples:**
 ```tml
@@ -118,18 +124,17 @@ type Point {
     y: F64,
 }
 
-// Simple Enum (no data)
+// Struct with visibility
+type Config {
+    pub name: Str,
+    pub value: I32,
+}
+
+// Enum (no data)
 type Color {
     Red,
     Green,
     Blue,
-}
-
-type Direction {
-    North,
-    South,
-    East,
-    West,
 }
 
 // Enum with data
@@ -147,9 +152,9 @@ type JsonValue {
     Null,
     Bool(Bool),
     Number(F64),
-    Text(String),
+    Text(Str),
     Array(List[JsonValue]),
-    Object(Map[String, JsonValue]),
+    Object(HashMap[Str, JsonValue]),
 }
 
 // Alias
@@ -161,9 +166,6 @@ union IntOrPtr {
     int_val: I32,
     ptr_val: I64,
 }
-
-// Union construction (single field only)
-let v: IntOrPtr = IntOrPtr { int_val: 42 }
 ```
 
 ### 3.3 Behaviors
@@ -172,12 +174,12 @@ let v: IntOrPtr = IntOrPtr { int_val: 42 }
 BehaviorDecl = Directive* Visibility? 'behavior' Ident GenericParams?
                (':' TypeBound)? '{' BehaviorItem* '}'
 
-BehaviorItem = BehaviorFunc | BehaviorType
+BehaviorItem = BehaviorFunc | AssociatedType
 
-BehaviorFunc = 'func' Ident GenericParams? '(' Params? ')' ('->' Type)?
+BehaviorFunc = Visibility? 'func' Ident GenericParams? '(' Params? ')' ('->' Type)?
                (Block | ';')
 
-BehaviorType = 'type' Ident (':' TypeBound)? ('=' Type)? ';'
+AssociatedType = 'type' Ident (':' TypeBound)? ('=' Type)?
 ```
 
 **Examples:**
@@ -201,33 +203,48 @@ behavior Iterable {
 }
 ```
 
-### 3.4 Extend
+### 3.4 Impl
 
 ```ebnf
-ExtendDecl = 'extend' Type ('with' TypeBound)? '{' ExtendItem* '}'
+ImplDecl = 'impl' GenericParams? TypePath GenericArgs?
+           ('for' Type)? WhereClause?
+           '{' ImplItem* '}'
 
-ExtendItem = Function
+ImplItem = AssociatedType | Visibility? Function
 ```
+
+Two forms:
+- **Inherent impl:** `impl Type { methods }` — adds methods to a type
+- **Behavior impl:** `impl Behavior for Type { methods }` — implements a behavior
 
 **Examples:**
 ```tml
-extend Point {
-    func new(x: F64, y: F64) -> This {
-        return This { x: x, y: y }
+// Inherent impl (add methods to a type)
+impl Point {
+    pub func new(x: F64, y: F64) -> This {
+        return This { x, y }
     }
 
-    func origin() -> This {
+    pub func origin() -> This {
         return This.new(0.0, 0.0)
+    }
+
+    pub func distance(this, other: Point) -> F64 {
+        let dx: F64 = this.x - other.x
+        let dy: F64 = this.y - other.y
+        return (dx**2 + dy**2).sqrt()
     }
 }
 
-extend Point with Equal {
+// Behavior impl (implement a behavior for a type)
+impl Equal for Point {
     func eq(this, other: This) -> Bool {
         return this.x == other.x and this.y == other.y
     }
 }
 
-extend List[T] with Iterable {
+// Generic impl
+impl[T] Iterable for List[T] {
     type Item = T;
 
     func next(this) -> Maybe[T] {
@@ -239,14 +256,14 @@ extend List[T] with Iterable {
 ### 3.5 Constants
 
 ```ebnf
-ConstDecl = Visibility? 'const' Ident (':' Type)? '=' Expr
+ConstDecl = Visibility? 'const' Ident ':' Type '=' Expr
 ```
 
 **Examples:**
 ```tml
 const PI: F64 = 3.14159265359
 const MAX_SIZE: I32 = 1024
-pub const VERSION: String = "1.0.0"
+pub const VERSION: Str = "1.0.0"
 ```
 
 ### 3.6 Classes (OOP)
@@ -280,17 +297,6 @@ BaseCall = 'base' ':' TypePath '::' Ident '(' Args? ')'
 
 **Examples:**
 ```tml
-// Simple class
-class Point {
-    x: F64
-    y: F64
-
-    func new(x: F64, y: F64) -> Point {
-        return Point { x: x, y: y }
-    }
-}
-
-// Abstract class with virtual methods
 abstract class Animal {
     protected name: Str
 
@@ -301,7 +307,6 @@ abstract class Animal {
     }
 }
 
-// Class with inheritance
 class Dog extends Animal implements Speakable {
     private breed: Str
 
@@ -316,7 +321,6 @@ class Dog extends Animal implements Speakable {
     }
 }
 
-// Sealed class (cannot be extended)
 sealed class GermanShepherd extends Dog {
     static count: I32 = 0
 }
@@ -338,27 +342,14 @@ InterfaceMethod = 'func' Ident GenericParams?
 
 **Examples:**
 ```tml
-// Simple interface
 interface Speakable {
     func speak(this) -> Str
 }
 
-// Generic interface
-interface Comparable[T] {
-    func compare(this, other: T) -> I32
-}
-
-// Interface extending another
 interface Orderable extends Comparable[This] {
     func less_than(this, other: This) -> Bool {
         return this.compare(other) < 0
     }
-}
-
-// Multiple methods
-interface Drawable {
-    func draw(this)
-    func get_bounds(this) -> (F64, F64, F64, F64)
 }
 ```
 
@@ -370,39 +361,11 @@ NamespaceDecl = 'namespace' NamespacePath '{' Item* '}'
 NamespacePath = Ident ('::' Ident)*
 ```
 
-**Examples:**
-```tml
-namespace graphics::shapes {
-    class Circle {
-        radius: F64
-    }
-
-    class Rectangle {
-        width: F64
-        height: F64
-    }
-
-    interface Drawable {
-        func draw(this)
-    }
-}
-
-// Nested namespaces
-namespace app {
-    namespace models {
-        class User { }
-    }
-
-    namespace controllers {
-        class UserController { }
-    }
-}
-```
-
 ## 4. Statements
 
 ```ebnf
 Statement = LetStmt
+          | LetElseStmt
           | VarStmt
           | ExprStmt
           | ReturnStmt
@@ -423,11 +386,13 @@ ContinueStmt = 'continue'
 **Examples:**
 ```tml
 let x: I32 = 42
-let y: I64 = 100
 let Point { x, y } = get_point()
 
+// Let-else: unwrap or early exit
+let Just(value) = maybe_result else { return }
+let Ok(data) = fetch(url) else { return Err(e) }
+
 var count: I32 = 0
-var name: String = "default"
 
 return result
 break
@@ -441,11 +406,11 @@ continue
 ```ebnf
 Expr = AssignExpr
 
-AssignExpr  = TernaryExpr (AssignOp TernaryExpr)?
+AssignExpr  = PipeExpr (AssignOp PipeExpr)?
 AssignOp    = '=' | '+=' | '-=' | '*=' | '/=' | '%='
             | '&=' | '|=' | '^=' | '<<=' | '>>='
 
-TernaryExpr = OrExpr ('?' Expr ':' Expr)?   // Ternary conditional
+PipeExpr    = OrExpr ('|>' OrExpr)*
 
 OrExpr      = AndExpr ('or' AndExpr)*
 AndExpr     = NotExpr ('and' NotExpr)*
@@ -461,16 +426,24 @@ ShiftExpr   = AddExpr (('<<' | '>>') AddExpr)*
 
 AddExpr     = MulExpr (('+' | '-') MulExpr)*
 MulExpr     = PowExpr (('*' | '/' | '%') PowExpr)*
-PowExpr     = UnaryExpr ('**' UnaryExpr)*
+PowExpr     = CastExpr ('**' CastExpr)*
 
-UnaryExpr   = ('-' | '~') UnaryExpr
+CastExpr    = UnaryExpr (('as' | 'is') Type)*
+
+UnaryExpr   = ('-' | '~' | 'not' | 'ref') UnaryExpr
             | PostfixExpr
 
 PostfixExpr = PrimaryExpr Postfix*
-Postfix     = '.' Ident
-            | '(' Args? ')'
-            | '[' Expr ']'
-            | '!'
+Postfix     = '.' Ident                         // field access
+            | '.' Ident GenericArgs? '(' Args? ')'  // method call
+            | '?.' Ident                         // optional field access
+            | '?.' Ident '(' Args? ')'          // optional method call
+            | '(' Args? ')'                      // function call
+            | '[' Expr ']'                       // index
+            | '!'                                // error propagation (try)
+            | '++'                               // postfix increment
+            | '--'                               // postfix decrement
+            | '.' 'await'                        // async await
 ```
 
 ### 5.2 Primary Expressions
@@ -478,9 +451,11 @@ Postfix     = '.' Ident
 ```ebnf
 PrimaryExpr = Literal
             | Ident
+            | TypePath
             | 'this'
             | 'This'
             | 'ref' Expr
+            | 'await' Expr
             | GroupExpr
             | BlockExpr
             | IfExpr
@@ -488,8 +463,9 @@ PrimaryExpr = Literal
             | LoopExpr
             | WhileExpr
             | ForExpr
-            | CatchExpr
             | DoExpr
+            | ThrowExpr
+            | LowlevelExpr
             | StructExpr
             | ArrayExpr
 
@@ -498,15 +474,16 @@ GroupExpr = '(' Expr ')'
 BlockExpr = Block
 Block     = '{' Statement* Expr? '}'
 
-Literal = IntLit | FloatLit | StringLit | InterpolatedString | BoolLit | CharLit | NullLit
+Literal = IntLit | FloatLit | StringLit | InterpolatedString
+        | TemplateLiteral | BoolLit | CharLit | NullLit
 BoolLit = 'true' | 'false'
 NullLit = 'null'
 
 // Interpolated strings: "Hello {name}!" where {expr} are embedded expressions
 InterpolatedString = InterpStart (Expr InterpMiddle)* Expr? InterpEnd
-InterpStart  = '"' StringChars? '{'
-InterpMiddle = '}' StringChars? '{'
-InterpEnd    = '}' StringChars? '"' | '"'  // no expressions case is just StringLit
+
+// Template literals: `Hello, {name}!` — produces Text type
+TemplateLiteral = '`' (TemplateChar | '{' Expr '}')* '`'
 ```
 
 ### 5.3 If Expression
@@ -528,12 +505,6 @@ ElseBody  = 'if' IfCond IfBody ('else' ElseBody)?  // else-if chain
 ```tml
 if x > 0 then x else -x
 
-if valid then
-    process()
-else
-    error()
-
-// Chained
 if x < 0 then "negative"
 else if x == 0 then "zero"
 else "positive"
@@ -555,20 +526,22 @@ if let Just(value) = maybe_x {
 } else {
     println("nothing")
 }
-
-if let Ok(data) = result {
-    process(data)
-}
 ```
 
 ### 5.4 When Expression (Pattern Matching)
 
 ```ebnf
 WhenExpr = 'when' Expr '{' WhenArm+ '}'
-WhenArm  = Pattern '=>' Expr ','?
+WhenArm  = Pattern Guard? '=>' (Expr | Block) ','?
 
-Pattern = RangePattern
-        | LiteralPattern
+Guard = 'if' Expr
+```
+
+**Pattern Types:**
+
+```ebnf
+Pattern = LiteralPattern
+        | RangePattern
         | IdentPattern
         | WildcardPattern
         | StructPattern
@@ -587,8 +560,6 @@ TuplePattern     = '(' Pattern (',' Pattern)+ ')'
 ArrayPattern     = '[' Pattern (',' Pattern)* ('..' Ident?)? ']'
 ```
 
-**Pattern Types:**
-
 | Pattern | Syntax | Example |
 |---------|--------|---------|
 | Literal | `value` | `42`, `"hello"`, `true` |
@@ -601,8 +572,8 @@ ArrayPattern     = '[' Pattern (',' Pattern)* ('..' Ident?)? ']'
 | Array | `[patterns]` | `[first, second, _]` |
 
 **Range Keywords:**
-- `to` - exclusive end: `0 to 10` matches 0-9
-- `through` - inclusive end: `0 through 9` matches 0-9
+- `to` — exclusive end: `0 to 10` matches 0–9
+- `through` — inclusive end: `0 through 9` matches 0–9
 
 **Examples:**
 ```tml
@@ -626,20 +597,11 @@ when result {
     Err(e) => log(e),
 }
 
-// Struct patterns with destructuring
-when point {
-    Point { x: 0, y: 0 } => "origin",
-    Point { x, y } => "at " + x.to_string(),
-}
-
-// Tuple patterns
-when pair {
-    (a, b) => a + b,
-}
-
-// Array patterns
-when arr {
-    [first, _, _] => first,
+// With guards
+when token {
+    Ident(name) if name == "self" => handle_self(),
+    Ident(name) => handle_ident(name),
+    _ => skip(),
 }
 
 // Block bodies in arms
@@ -652,66 +614,14 @@ when n {
 }
 ```
 
-### 5.4.1 Ternary Conditional Operator
-
-The ternary operator provides a concise syntax for inline conditional expressions.
-
-```ebnf
-TernaryExpr = OrExpr ('?' Expr ':' Expr)?
-```
-
-**Characteristics:**
-- **Right-associative**: Groups from right to left
-- **Precedence**: Between assignment and logical OR
-- **Type checking**: Both branches must return the same type
-- **Nestable**: Can be nested for multiple conditions
-
-**Examples:**
-```tml
-// Basic usage
-let max: I32 = x > y ? x : y
-let min: I32 = x < y ? x : y
-
-// With expressions
-let result: I32 = score > 60 ? score * 2 : score + 10
-
-// Nested (find max of three)
-let max3: I32 = a > b ? (a > c ? a : c) : (b > c ? b : c)
-
-// In assignments
-let status: String = is_valid ? "PASS" : "FAIL"
-
-// With method calls
-let value: I32 = list.is_empty() ? 0 : list.get(0)
-```
-
-**Comparison with if-then-else:**
-```tml
-// Ternary (concise)
-let x: I32 = condition ? 10 : 20
-
-// If-then-else (verbose)
-let x: I32 = if condition then 10 else 20
-```
-
 ### 5.5 Loop Expressions
 
 #### 5.5.1 Conditional Loop
 
 ```ebnf
-LoopExpr = 'loop' '(' LoopHeader ')' Block
-
-LoopHeader = LoopVarDecl           // loop (var i: I32 < N)
-           | Expr                  // loop (condition)
-
-LoopVarDecl = 'var' Ident ':' Type '<' Expr
+LoopExpr = 'loop' '(' Expr ')' Block
+         | 'loop' '(' 'true' ')' Block      // infinite loop
 ```
-
-The `loop (var name: Type < limit)` syntax:
-- Declares a new variable in loop scope
-- Initializes the variable to `0`
-- Continues while `name < limit`
-- Variable must be manually incremented
 
 **Examples:**
 ```tml
@@ -721,27 +631,14 @@ loop (count < 10) {
     count = count + 1
 }
 
-// Loop with variable declaration (auto-initialized to 0)
-loop (var i: I32 < 5) {
-    println(i)
-    i = i + 1
-}
-
 // Infinite loop
 loop (true) {
     if done then break
     work()
 }
-
-// With break/continue
-loop (running) {
-    if should_exit then break
-    if should_skip then continue
-    process()
-}
 ```
 
-#### 5.5.2 While Loop (Alias)
+#### 5.5.2 While Loop
 
 ```ebnf
 WhileExpr = 'while' Expr Block
@@ -751,7 +648,6 @@ The `while` keyword is an alias for `loop (condition)`.
 
 **Examples:**
 ```tml
-// Traditional while loop (alias for loop (condition))
 while running {
     tick()
 }
@@ -779,13 +675,9 @@ for i in 1 through 5 {
     print(i)  // 1, 2, 3, 4, 5
 }
 
-// Collection iteration (List, HashMap, Buffer, Vec)
+// Collection iteration
 for item in list {
     process(item)
-}
-
-for value in hashmap {
-    print(value)
 }
 
 // With pattern destructuring
@@ -794,57 +686,35 @@ for Point { x, y } in points {
 }
 ```
 
-**Note:** The `for` loop supports:
-- Range expressions: `0 to 10`, `1 through 5`
-- Collection types: `List`, `HashMap`, `Buffer`, `Vec`
-- Pattern matching in the loop variable
-
 ### 5.6 Error Propagation with `!`
 
 ```ebnf
-PropagateExpr = Expr '!'
-ElseExpr      = Expr '!' 'else' (Expr | 'do' '(' Ident ')' Expr)
+TryExpr = Expr '!'
 ```
 
-Propagates errors automatically or recovers with else.
+Propagates errors automatically. If the expression is `Err(e)`, the enclosing function returns `Err(e)`. If `Ok(v)`, unwraps to `v`.
 
 **Examples:**
 ```tml
-let file: Outcome[File, Error] = File.open(path)!
-let data: Outcome[String, Error] = file.read()!
-
-// With fallback
-let port: Outcome[String, Error] = env.get("PORT")!.parse[U16]()! else 8080
-
-// With error binding
-let data: Outcome[Data, Error] = fetch(url)! else do(err) {
-    log.warn(err.to_string())
-    Data.default()
-}
+let file = File.open(path)!
+let data = file.read()!
 ```
 
-### 5.7 Catch Expression
+### 5.7 Throw Expression
 
 ```ebnf
-CatchExpr = 'catch' Block 'else' ('do' '(' Ident ')')? Block
+ThrowExpr = 'throw' Expr
 ```
 
 **Examples:**
 ```tml
-catch {
-    let local: Data = load_local()!
-    let remote: Outcome[Data, Error] = fetch_remote()!
-    return Ok(merge(local, remote)!)
-} else do(err) {
-    log.error(err.to_string())
-    return Err(err)
-}
+throw Error::new("invalid input")
 ```
 
 ### 5.8 Do Expression (Closures/Lambdas)
 
 ```ebnf
-DoExpr = 'do' DoParams? DoBody
+DoExpr = 'move'? 'do' DoParams? ('->' Type)? DoBody
 
 DoParams = '(' Param (',' Param)* ')'
          | Ident
@@ -855,25 +725,92 @@ DoBody = Expr
 
 **Examples:**
 ```tml
-let add: func(I32, I32) -> I32 = do(x, y) x + y
+let add = do(x: I32, y: I32) x + y
 
-let double: func(I32) -> I32 = do(x) x * 2
+let double = do(x) x * 2
 
-let complex: func(I32, I32) -> I32 = do(x, y) {
+let complex = do(x: I32, y: I32) -> I32 {
     let sum: I32 = x + y
     return sum * 2
 }
 
-// Usage
+// Move closure (captures by value)
+let callback = move do(x) {
+    captured_value.process(x)
+}
+
+// Usage with higher-order functions
 items.map(do(x) x * 2)
 items.filter(do(x) x > 0)
 items.fold(0, do(acc, x) acc + x)
 ```
 
-### 5.9 Struct Expression
+### 5.9 Lowlevel Expression
 
 ```ebnf
-StructExpr = TypePath '{' FieldInit (',' FieldInit)* ','? '}'
+LowlevelExpr = 'lowlevel' Block
+```
+
+Enables low-level operations (raw pointers, intrinsics) within the block.
+
+**Examples:**
+```tml
+lowlevel {
+    let ptr = mem_alloc(size)
+    ptr_write(ptr, value)
+    ptr_read(ptr)
+}
+```
+
+### 5.10 Pipe Forward
+
+```ebnf
+PipeExpr = Expr '|>' Expr
+```
+
+Desugars `a |> f(b)` to `f(a, b)` and `a |> f` to `f(a)`.
+
+**Examples:**
+```tml
+let result = data
+    |> parse()
+    |> transform(config)
+    |> serialize()
+```
+
+### 5.11 Optional Chaining
+
+```ebnf
+OptionalCall   = Expr '?.' Ident '(' Args? ')'
+OptionalField  = Expr '?.' Ident
+```
+
+If the left-hand side is `Nothing`, the entire expression evaluates to `Nothing`.
+Auto-flattening: if the method returns `Maybe[V]`, result is `Maybe[V]` (not `Maybe[Maybe[V]]`).
+
+**Examples:**
+```tml
+let name = parse(json_str)?.get_string("name")
+let age = user?.profile?.age
+```
+
+### 5.12 Type Operations
+
+```ebnf
+CastExpr  = Expr 'as' Type     // type cast
+TypeCheck = Expr 'is' Type     // type check (returns Bool)
+```
+
+**Examples:**
+```tml
+let wide: I64 = narrow as I64
+let is_string: Bool = value is Str
+```
+
+### 5.13 Struct Expression
+
+```ebnf
+StructExpr = TypePath '{' FieldInit (',' FieldInit)* ','? (',' '..' Expr)? '}'
 FieldInit  = Ident (':' Expr)?
 ```
 
@@ -890,7 +827,7 @@ Point { x, y }
 Point { x: 5.0, ..old_point }
 ```
 
-### 5.10 Array Expression
+### 5.14 Array Expression
 
 ```ebnf
 ArrayExpr = '[' (Expr (',' Expr)* ','?)? ']'
@@ -899,54 +836,17 @@ ArrayExpr = '[' (Expr (',' Expr)* ','?)? ']'
 
 **Examples:**
 ```tml
-// Array literals (dynamic lists)
 let numbers: List[I32] = [1, 2, 3, 4, 5]
-let names: List[String] = ["alice", "bob", "charlie"]
 let empty: List[I32] = []
-
-// Repeat syntax
-let zeros: [I32; 100] = [0; 100]  // 100 zeros
-let ones: [I32; 10] = [1; 10]    // 10 ones
-
-// Indexing
-let first: I32 = numbers[0]
-let second: I32 = numbers[1]
-
-// Method syntax
-println(numbers.len())     // 5
-numbers.push(6)
-let last: Maybe[I32] = numbers.pop()
-numbers.set(0, 100)
-let val: Maybe[I32] = numbers.get(0)
-numbers.clear()
+let zeros = [0; 100]  // 100 zeros
 ```
 
-### 5.11 Method Call Expression
+### 5.15 Method Call & Field Access
 
 ```ebnf
-MethodCall     = Expr '.' Ident '(' Args? ')'
-OptionalCall   = Expr '?.' Ident '(' Args? ')'   // optional chaining
-OptionalField  = Expr '?.' Ident                  // optional field access
+MethodCall     = Expr '.' Ident GenericArgs? '(' Args? ')'
+FieldAccess    = Expr '.' Ident
 Args           = Expr (',' Expr)*
-```
-
-**Examples:**
-```tml
-// Collection methods
-let arr: List[I32] = [1, 2, 3]
-arr.push(4)
-arr.pop()
-arr.len()
-arr.get(0)
-arr.set(0, 10)
-arr.clear()
-arr.is_empty()
-arr.capacity()
-
-// String methods (future)
-str.len()
-str.to_upper()
-str.contains("x")
 ```
 
 ## 6. Types
@@ -959,11 +859,11 @@ Type = PrimitiveType
      | FuncType
      | ArrayType
      | TupleType
-     | MaybeType
+     | PointerType
 
 PrimitiveType = 'Bool' | 'I8' | 'I16' | 'I32' | 'I64' | 'I128'
               | 'U8' | 'U16' | 'U32' | 'U64' | 'U128'
-              | 'F32' | 'F64' | 'String' | 'Char'
+              | 'F32' | 'F64' | 'Str' | 'Char'
 
 NamedType    = TypePath
 GenericType  = TypePath '[' Type (',' Type)* ']'
@@ -971,41 +871,41 @@ RefType      = 'ref' Type | 'mut' 'ref' Type
 FuncType     = 'func' '(' (Type (',' Type)*)? ')' '->' Type
 ArrayType    = '[' Type ';' Expr ']'
 TupleType    = '(' Type (',' Type)+ ')'
-MaybeType    = Type '?'
+PointerType  = '*' 'mut'? Type
 
 TypePath = Ident ('::' Ident)*
+GenericArgs = '[' Type (',' Type)* ']'
 ```
 
 **Examples:**
 ```tml
 // Primitives
-Bool, I32, U64, F64, String, Char
+Bool, I32, U64, F64, Str, Char
 
 // Named and Generic
 Point
 List[I32]
-Map[String, Value]
+HashMap[Str, Value]
 Outcome[Data, Error]
 
 // References
-ref String
+ref Str
 mut ref List[T]
 
 // Functions
 func(I32, I32) -> I32
-func(String) -> Bool
+func(Str) -> Bool
 
 // Arrays
 [I32; 10]
-[Byte; 256]
 
 // Tuples
-(I32, String)
+(I32, Str)
 (F64, F64, F64)
 
-// Maybe (sugar for Maybe[T])
-String?
-User?
+// Pointers (lowlevel)
+*I32
+*mut U8
 ```
 
 ## 7. Directives
@@ -1014,17 +914,21 @@ User?
 Directive     = '@' DirectiveName DirectiveArgs?
 DirectiveName = Ident
 DirectiveArgs = '(' (DirectiveArg (',' DirectiveArg)*)? ')'
+              | '[' (DirectiveArg (',' DirectiveArg)*)? ']'
 DirectiveArg  = Ident (':' Value)?
+              | Expr
 ```
 
 **Examples:**
 ```tml
 @test
 @when(os: linux)
-@auto(debug, duplicate, equal)
+@derive(PartialEq, Hash, Debug)
 @deprecated("Use new_func instead")
 @hint(inline: always)
 @lowlevel
+@extern("c")
+@link("libfoo")
 ```
 
 ## 8. LL(1) Verification
@@ -1038,31 +942,38 @@ DirectiveArg  = Ident (':' Value)?
 | `pub` | Visibility + Item or Use |
 | `private` | Visibility + Item |
 | `func` | Function |
-| `type` | TypeDecl (struct or enum) |
-| `union` | UnionDecl (C-style union) |
+| `async` | Async Function (`async func ...`) |
+| `lowlevel` | Lowlevel function or block |
+| `type` / `enum` | TypeDecl (struct, enum, or alias) |
+| `union` | UnionDecl |
 | `behavior` | BehaviorDecl |
-| `extend` | ExtendDecl |
+| `impl` | ImplDecl |
 | `const` | ConstDecl |
-| `let` | LetStmt |
+| `class` | ClassDecl |
+| `interface` | InterfaceDecl |
+| `namespace` | NamespaceDecl |
+| `let` | LetStmt / LetElseStmt |
 | `var` | VarStmt |
 | `if` | IfExpr |
 | `when` | WhenExpr |
 | `loop` | LoopExpr |
-| `for` | ForExpr (loop i in N) |
-| `catch` | CatchExpr |
+| `while` | WhileExpr |
+| `for` | ForExpr |
 | `return` | ReturnStmt |
 | `break` | BreakStmt |
 | `continue` | ContinueStmt |
-| `do` | DoExpr |
+| `throw` | ThrowExpr |
+| `do` / `move do` | DoExpr (closure) |
 | `this` | ThisExpr |
 | `This` | ThisType or Constructor |
 | `ref` | RefExpr or RefType |
+| `await` | AwaitExpr (prefix form) |
 | `{` | BlockExpr |
 | `(` | GroupExpr or TupleExpr |
-| `[` | ArrayExpr (dynamic list) |
+| `[` | ArrayExpr |
 | `@` | Directive |
 | Ident | VarRef or FuncCall or TypeRef |
-| Ident `::` Ident | PathExpr (enum variant) |
+| Ident `::` Ident | PathExpr (enum variant, module path) |
 | Literal | LiteralExpr |
 
 ### 8.2 No Ambiguities
@@ -1108,7 +1019,7 @@ pub type Circle {
     radius: F64,
 }
 
-extend Point {
+impl Point {
     pub func new(x: F64, y: F64) -> This {
         return This { x, y }
     }
@@ -1124,7 +1035,7 @@ extend Point {
     }
 }
 
-extend Circle {
+impl Circle {
     pub func new(center: Point, radius: F64) -> This {
         return This { center, radius }
     }
