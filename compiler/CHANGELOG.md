@@ -5,6 +5,34 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-04-11
+
+### Added
+
+- **For-in range loops** — `for i in 0 to 10` / `for i in 1 through 5` with MIR codegen (SSA phi nodes, counter alloca + header/body/increment/backedge)
+- **Struct update syntax** — `Point { x: 5, ..p1 }` copies unspecified fields from base expression (MIR `extractvalue` + `insertvalue` chain, legacy GEP copy)
+- **Struct destructuring in let** — `let Pair { first: a, second: b } = p` with alloca + GEP + load per field
+- **Operator overloading** — `a + b` on user-defined structs dispatches to `Add::add(a, b)` behavior method (THIR lowering + MIR CallInst + AST legacy path)
+- **@repr(U8/U16/I32/I64) directive** — sequential enum discriminants with specified integer type
+- **@auto(duplicate, equal, debug, ...) directive** — alias for `@derive` with lowercase name mapping; all 11 derive codegen files updated
+- **@packed directive** — structs emitted with LLVM packed layout `<{ ... }>` (no inter-field padding)
+- **Behavior aliases** — `behavior Numeric = Add + Sub + Mul + Div` parsed as `BehaviorAliasDecl`, expanded by type checker
+- **Closure type inference** — unannotated closure params inferred from expected function signature via bidirectional unification; implicit return for expression bodies
+
+### Fixed
+
+- **Operator overloading K001 GEP bug** — AST legacy codegen treated all binary ops as primitive arithmetic; added struct-aware operator dispatch in `binary_ops.cpp`
+- **Bool struct field layout** — `i1` promoted to `i8` in struct contexts with `trunc`/`zext` on load/store (5 codegen paths fixed)
+- **Pattern guards** — verified and tested end-to-end (already implemented but undocumented)
+- **Or-patterns** — verified across parser, HIR, THIR, MIR, and exhaustiveness checker
+
+### Tests
+
+- 6 new test files organized into subdirectories:
+  - `directives/auto.test.tml`, `directives/repr.test.tml`, `directives/packed.test.tml`
+  - `behaviors/operator_overload.test.tml`, `behaviors/behavior_alias.test.tml`
+  - `closures/closure_type_inference.test.tml`
+
 ## [0.2.5] — 2026-04-06
 
 ### Added
