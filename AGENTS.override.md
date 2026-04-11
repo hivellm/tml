@@ -155,6 +155,7 @@ Legacy HIR→MIR was removed. All MIR fixes go in:
 - All native TML packages use **Apache-2.0** license.
 - Always increment `CHANGELOG.md` version (semver) — current baseline see STATE.md.
 - HTTP must be a real generic implementation using existing TML APIs (Buffer, Text, HashMap) — no benchmark hacks, no `lowlevel` everywhere.
+- Temporary/scratch test files MUST go in `.sandbox/` — never in `scripts/`, project root, or `/tmp`. Clean up after use.
 
 ---
 

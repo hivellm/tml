@@ -1,0 +1,253 @@
+//! Module loader for the TML self-hosting type checker.
+//!
+//! Resolves module paths to filesystem paths, reads source files, parses them,
+//! and registers declarations in the ModuleRegistry and TypeEnv.
+//!
+//! Uses `std::file::{File, Path, Dir}` for filesystem operations.
+//!
+//! Phase 14b — items 3.1–3.5.
+
+use compiler::types::ty::Type
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_register_struct
+use compiler::types::env::env_register_enum
+use compiler::types::env::env_register_function
+use compiler::types::env::env_register_behavior
+use compiler::types::env::env_register_impl
+use compiler::types::module::Module
+use compiler::types::module::ModuleRegistry
+use compiler::types::module::module_new
+use compiler::types::module::registry_register
+use compiler::types::module::registry_has
+use compiler::types::module::registry_get
+use compiler::types::register::register_module_decls
+use compiler::ast::nodes::Module as AstModule
+use compiler::token::Token
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_module::parse_module
+use std::collections::list::List
+use std::file::Path
+use std::file::File
+
+// ============================================================================
+// Module loader configuration
+// ============================================================================
+
+/// Configuration for the module loader.
+/// Contains search roots for resolving module paths to filesystem paths.
+pub type LoaderConfig {
+    lib_root: Str,
+    source_dir: Str
+}
+
+/// Create a loader config with library and source roots.
+pub func loader_config_new(lib_root: Str, source_dir: Str) -> LoaderConfig {
+    return LoaderConfig { lib_root: lib_root, source_dir: source_dir }
+}
+
+// ============================================================================
+// Circular import detection
+// ============================================================================
+
+/// Loading stack for circular import detection.
+pub type LoadingStack {
+    paths: List[Str]
+}
+
+pub func loading_stack_new() -> LoadingStack {
+    return LoadingStack { paths: List[Str]::new(8 as I64) }
+}
+
+pub func loading_stack_contains(stack: LoadingStack, path: Str) -> Bool {
+    let count: I64 = stack.paths.len() as I64
+    var i: I64 = 0
+    loop (i < count) {
+        if stack.paths.get(i) == path { return true }
+        i = i + 1
+    }
+    return false
+}
+
+pub func loading_stack_push(stack: LoadingStack, path: Str) {
+    stack.paths.push(path)
+}
+
+pub func loading_stack_pop(stack: LoadingStack) {
+    stack.paths.pop()
+}
+
+// ============================================================================
+// Module path resolution
+// ============================================================================
+
+/// Resolve a module path to a filesystem path.
+/// Tries standard library paths, then local source directory.
+/// Returns empty string if not found.
+pub func resolve_module_path(config: LoaderConfig, mod_path: Str) -> Str {
+    // Split module path into segments
+    let segs: List[Str] = split_module_path(mod_path)
+    let seg_count: I64 = segs.len() as I64
+    if seg_count == 0 { return "" }
+
+    let first: Str = segs.get(0)
+
+    // Special: core::*
+    if first == "core" and seg_count >= 2 {
+        let rest: Str = module_path_to_fs_rest(segs, 1)
+        let result: Str = try_lib_path(config.lib_root, "core", rest)
+        if result.len() > 0 { return result }
+    }
+
+    // Special: std::*
+    if first == "std" and seg_count >= 2 {
+        let rest: Str = module_path_to_fs_rest(segs, 1)
+        let result: Str = try_lib_path(config.lib_root, "std", rest)
+        if result.len() > 0 { return result }
+    }
+
+    // Special: test
+    if first == "test" {
+        let p1: Str = Path::join(config.lib_root, "test/src/mod.tml")
+        if Path::exists(p1) { return p1 }
+    }
+
+    // Special: compiler::*
+    if first == "compiler" and seg_count >= 2 {
+        let rest: Str = module_path_to_fs_rest(segs, 1)
+        let result: Str = try_lib_path(config.lib_root, "compiler-tml", rest)
+        if result.len() > 0 { return result }
+    }
+
+    // Local module: relative to source directory
+    if config.source_dir.len() > 0 {
+        let local_rest: Str = module_path_to_fs_rest(segs, 0)
+        let p1: Str = Path::join(config.source_dir, local_rest + ".tml")
+        if Path::exists(p1) { return p1 }
+        let p2: Str = Path::join(config.source_dir, local_rest + "/mod.tml")
+        if Path::exists(p2) { return p2 }
+    }
+
+    return ""
+}
+
+/// Try to find a module file in a library directory.
+/// Tries both `lib/<pkg>/src/<rest>.tml` and `lib/<pkg>/src/<rest>/mod.tml`.
+func try_lib_path(lib_root: Str, pkg: Str, rest: Str) -> Str {
+    let pkg_src: Str = Path::join(Path::join(lib_root, pkg), "src")
+    let p1: Str = Path::join(pkg_src, rest + ".tml")
+    if Path::exists(p1) { return p1 }
+    let p2: Str = Path::join(pkg_src, rest + "/mod.tml")
+    if Path::exists(p2) { return p2 }
+    return ""
+}
+
+/// Convert module path segments to a filesystem path fragment.
+/// e.g., ["std", "collections", "list"] starting at index 1 → "collections/list"
+func module_path_to_fs_rest(segs: List[Str], start: I64) -> Str {
+    let count: I64 = segs.len() as I64
+    if start >= count { return "" }
+    var result: Str = segs.get(start)
+    var i: I64 = start + 1
+    loop (i < count) {
+        result = result + "/" + segs.get(i)
+        i = i + 1
+    }
+    return result
+}
+
+/// Split a module path string by "::" into segments.
+/// e.g., "std::collections::list" → ["std", "collections", "list"]
+pub func split_module_path(path: Str) -> List[Str] {
+    let result: List[Str] = List[Str]::new(8 as I64)
+    let n: I64 = path.len()
+    var start: I64 = 0
+    var i: I64 = 0
+    loop (i < n - 1) {
+        if path.char_at(i) == 58 and path.char_at(i + 1) == 58 {
+            // Found "::" (58 = ':')
+            if i > start {
+                result.push(path.slice(start, i))
+            }
+            i = i + 2
+            start = i
+        } else {
+            i = i + 1
+        }
+    }
+    // Last segment
+    if start < n {
+        result.push(path.slice(start, n))
+    }
+    return result
+}
+
+/// Join module path segments with "::".
+pub func join_module_path(segs: List[Str]) -> Str {
+    let count: I64 = segs.len() as I64
+    if count == 0 { return "" }
+    var result: Str = segs.get(0)
+    var i: I64 = 1
+    loop (i < count) {
+        result = result + "::" + segs.get(i)
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Module loading pipeline
+// ============================================================================
+
+/// Load a module by path, parse it, and register in the registry.
+/// Returns true if successful, false if not found or already loaded.
+pub func load_module(config: LoaderConfig, reg: ModuleRegistry, env: TypeEnv, stack: LoadingStack, mod_path: Str) -> Bool {
+    // Already loaded?
+    if registry_has(reg, mod_path) { return true }
+
+    // Circular import check
+    if loading_stack_contains(stack, mod_path) { return true }
+
+    // Resolve filesystem path
+    let fs_path: Str = resolve_module_path(config, mod_path)
+    if fs_path.len() == 0 { return false }
+
+    // Mark as loading
+    loading_stack_push(stack, mod_path)
+
+    // Read source
+    let source: Str = File::read_all(fs_path)
+    if source.len() == 0 {
+        loading_stack_pop(stack)
+        return false
+    }
+
+    // Derive module name from last segment
+    let segs: List[Str] = split_module_path(mod_path)
+    let seg_count: I64 = segs.len() as I64
+    let mod_name: Str = if seg_count > 0 { segs.get(seg_count - 1) } else { mod_path }
+
+    // Tokenize and parse
+    let tokens: List[Token] = tokenize(source, fs_path)
+    let parse_result = parse_module(tokens, mod_name)
+    when parse_result {
+        Err(_) => {
+            loading_stack_pop(stack)
+            return false
+        },
+        Ok(ast_mod) => {
+            // Create module and register declarations
+            let m: Module = module_new(mod_name, fs_path)
+            m.source_code = source
+
+            // Register AST declarations into TypeEnv
+            register_module_decls(env, ast_mod)
+
+            // Register module in registry
+            registry_register(reg, mod_path, m)
+
+            // Done loading
+            loading_stack_pop(stack)
+            return true
+        }
+    }
+}

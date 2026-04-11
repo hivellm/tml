@@ -1,0 +1,223 @@
+//! Module representation and registry for the TML self-hosting type checker.
+//!
+//! Mirrors `compiler/include/types/module.hpp`. A Module holds all declarations
+//! (functions, structs, enums, behaviors, type aliases) loaded from a source
+//! file. The ModuleRegistry maps module paths to Module instances.
+//!
+//! Phase 14b — items 1.1–1.4.
+
+use compiler::types::ty::Type
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::EnumDef
+use compiler::types::env::BehaviorDef
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Re-export type
+// ============================================================================
+
+/// A re-exported symbol from another module.
+/// Mirrors `ReExport` in module.hpp.
+pub type ReExport {
+    source_path: Str,
+    is_glob: I64,
+    symbols: List[Str],
+    alias: Maybe[Str]
+}
+
+/// An imported symbol bound in the current scope.
+/// Mirrors `ImportedSymbol` in module.hpp.
+pub type ImportedSymbol {
+    original_name: Str,
+    local_name: Str,
+    module_path: Str
+}
+
+// ============================================================================
+// Module struct
+// ============================================================================
+
+/// A loaded module with all its declarations.
+/// Uses index-based storage (List + HashMap[Str, I64]) to avoid the
+/// codegen "duplicate" bug with complex HashMap values.
+pub type Module {
+    name: Str,
+    file_path: Str,
+
+    // Declaration stores (append-only)
+    func_store: List[FuncSig],
+    struct_store: List[StructDef],
+    enum_store: List[EnumDef],
+    behavior_store: List[BehaviorDef],
+    type_store: List[Type],
+
+    // Name → index maps
+    func_index: HashMap[Str, I64],
+    struct_index: HashMap[Str, I64],
+    enum_index: HashMap[Str, I64],
+    behavior_index: HashMap[Str, I64],
+    alias_index: HashMap[Str, I64],
+
+    // Re-exports and behavior impls
+    re_exports: List[ReExport],
+    behavior_impls: HashMap[Str, List[Str]],
+
+    // Source code (for codegen)
+    source_code: Str
+}
+
+/// Create a new empty Module.
+pub func module_new(name: Str, file_path: Str) -> Module {
+    return Module {
+        name: name,
+        file_path: file_path,
+        func_store: List[FuncSig]::new(16 as I64),
+        struct_store: List[StructDef]::new(8 as I64),
+        enum_store: List[EnumDef]::new(4 as I64),
+        behavior_store: List[BehaviorDef]::new(4 as I64),
+        type_store: List[Type]::new(8 as I64),
+        func_index: HashMap[Str, I64]::new(32 as I64),
+        struct_index: HashMap[Str, I64]::new(16 as I64),
+        enum_index: HashMap[Str, I64]::new(8 as I64),
+        behavior_index: HashMap[Str, I64]::new(8 as I64),
+        alias_index: HashMap[Str, I64]::new(8 as I64),
+        re_exports: List[ReExport]::new(4 as I64),
+        behavior_impls: HashMap[Str, List[Str]]::new(16 as I64),
+        source_code: ""
+    }
+}
+
+// ============================================================================
+// Module registration helpers
+// ============================================================================
+
+/// Register a function in the module.
+pub func module_add_func(m: Module, name: Str, sig: FuncSig) {
+    let idx: I64 = m.func_store.len() as I64
+    m.func_store.push(sig)
+    m.func_index.set(name, idx)
+}
+
+/// Register a struct in the module.
+pub func module_add_struct(m: Module, name: Str, def: StructDef) {
+    let idx: I64 = m.struct_store.len() as I64
+    m.struct_store.push(def)
+    m.struct_index.set(name, idx)
+}
+
+/// Register an enum in the module.
+pub func module_add_enum(m: Module, name: Str, def: EnumDef) {
+    let idx: I64 = m.enum_store.len() as I64
+    m.enum_store.push(def)
+    m.enum_index.set(name, idx)
+}
+
+/// Register a behavior in the module.
+pub func module_add_behavior(m: Module, name: Str, def: BehaviorDef) {
+    let idx: I64 = m.behavior_store.len() as I64
+    m.behavior_store.push(def)
+    m.behavior_index.set(name, idx)
+}
+
+/// Register a type alias in the module.
+pub func module_add_alias(m: Module, name: Str, ty: Type) {
+    let idx: I64 = m.type_store.len() as I64
+    m.type_store.push(ty)
+    m.alias_index.set(name, idx)
+}
+
+/// Add a re-export entry.
+pub func module_add_re_export(m: Module, re: ReExport) {
+    m.re_exports.push(re)
+}
+
+// ============================================================================
+// Module lookup helpers
+// ============================================================================
+
+/// Lookup a function by name. Returns Maybe[FuncSig].
+pub func module_lookup_func(m: Module, name: Str) -> Maybe[FuncSig] {
+    if m.func_index.has(name) {
+        let idx: I64 = m.func_index.get(name)
+        return Just(m.func_store.get(idx))
+    }
+    return Nothing
+}
+
+/// Lookup a struct by name.
+pub func module_lookup_struct(m: Module, name: Str) -> Maybe[StructDef] {
+    if m.struct_index.has(name) {
+        let idx: I64 = m.struct_index.get(name)
+        return Just(m.struct_store.get(idx))
+    }
+    return Nothing
+}
+
+/// Lookup an enum by name.
+pub func module_lookup_enum(m: Module, name: Str) -> Maybe[EnumDef] {
+    if m.enum_index.has(name) {
+        let idx: I64 = m.enum_index.get(name)
+        return Just(m.enum_store.get(idx))
+    }
+    return Nothing
+}
+
+/// Lookup a behavior by name.
+pub func module_lookup_behavior(m: Module, name: Str) -> Maybe[BehaviorDef] {
+    if m.behavior_index.has(name) {
+        let idx: I64 = m.behavior_index.get(name)
+        return Just(m.behavior_store.get(idx))
+    }
+    return Nothing
+}
+
+/// Lookup a type alias by name.
+pub func module_lookup_alias(m: Module, name: Str) -> Maybe[Type] {
+    if m.alias_index.has(name) {
+        let idx: I64 = m.alias_index.get(name)
+        return Just(m.type_store.get(idx))
+    }
+    return Nothing
+}
+
+// ============================================================================
+// ModuleRegistry
+// ============================================================================
+
+/// Central registry mapping module paths to Module instances.
+/// Uses index-based storage like TypeEnv.
+pub type ModuleRegistry {
+    module_store: List[Module],
+    path_index: HashMap[Str, I64]
+}
+
+/// Create a new empty ModuleRegistry.
+pub func registry_new() -> ModuleRegistry {
+    return ModuleRegistry {
+        module_store: List[Module]::new(32 as I64),
+        path_index: HashMap[Str, I64]::new(64 as I64)
+    }
+}
+
+/// Register a module under a path. Overwrites if path already registered.
+pub func registry_register(reg: ModuleRegistry, path: Str, m: Module) {
+    let idx: I64 = reg.module_store.len() as I64
+    reg.module_store.push(m)
+    reg.path_index.set(path, idx)
+}
+
+/// Check if a module path is registered.
+pub func registry_has(reg: ModuleRegistry, path: Str) -> Bool {
+    return reg.path_index.has(path)
+}
+
+/// Get a module by path.
+pub func registry_get(reg: ModuleRegistry, path: Str) -> Maybe[Module] {
+    if reg.path_index.has(path) {
+        let idx: I64 = reg.path_index.get(path)
+        return Just(reg.module_store.get(idx))
+    }
+    return Nothing
+}
