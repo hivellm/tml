@@ -1,0 +1,16 @@
+use test
+
+@auto(duplicate)
+type Point {
+    x: I32,
+    y: I32,
+}
+
+@test
+func test_auto_duplicate() -> I32 {
+    let p1 = Point { x: 10, y: 20 }
+    let p2 = p1.duplicate()
+    assert_eq(p2.x, 10, "duplicate x")
+    assert_eq(p2.y, 20, "duplicate y")
+    return 0
+}
