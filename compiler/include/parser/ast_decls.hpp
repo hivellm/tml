@@ -419,6 +419,29 @@ struct TraitDecl {
     SourceSpan span;                              ///< Source location.
 };
 
+/// Behavior alias declaration: `behavior Name = Bound1 + Bound2 + Bound3`.
+///
+/// Aliases are expanded at usage sites during type checking.
+/// They cannot have methods or associated types — use a regular `behavior`
+/// with super-traits for that.
+///
+/// # Examples
+///
+/// ```tml
+/// behavior Numeric = Add[Self] + Sub[Self] + Mul[Self] + Div[Self]
+/// behavior Describable = Printable
+/// behavior Serializable = Serialize + Deserialize
+/// ```
+struct BehaviorAliasDecl {
+    std::optional<std::string> doc;     ///< Documentation comment.
+    std::vector<Decorator> decorators;  ///< Decorators.
+    Visibility vis;                     ///< Public/private visibility.
+    std::string name;                   ///< Alias name.
+    std::vector<GenericParam> generics; ///< Optional generic parameters.
+    std::vector<TypePtr> bounds;        ///< Constituent behavior bounds.
+    SourceSpan span;                    ///< Source location.
+};
+
 // ============================================================================
 // Implementation Blocks
 // ============================================================================

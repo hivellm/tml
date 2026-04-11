@@ -24,11 +24,11 @@ namespace tml::codegen {
 /// Check if a struct has @derive(PartialOrd) decorator
 static bool has_derive_partial_ord(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "PartialOrd") {
+                    if (name == "PartialOrd" || name == "partial_ord") {
                         return true;
                     }
                 }
@@ -41,11 +41,11 @@ static bool has_derive_partial_ord(const parser::StructDecl& s) {
 /// Check if a struct has @derive(Ord) decorator
 static bool has_derive_ord(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Ord") {
+                    if (name == "Ord" || name == "ord") {
                         return true;
                     }
                 }
@@ -58,11 +58,11 @@ static bool has_derive_ord(const parser::StructDecl& s) {
 /// Check if an enum has @derive(PartialOrd) decorator
 static bool has_derive_partial_ord(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "PartialOrd") {
+                    if (name == "PartialOrd" || name == "partial_ord") {
                         return true;
                     }
                 }
@@ -75,11 +75,11 @@ static bool has_derive_partial_ord(const parser::EnumDecl& e) {
 /// Check if an enum has @derive(Ord) decorator
 static bool has_derive_ord(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Ord") {
+                    if (name == "Ord" || name == "ord") {
                         return true;
                     }
                 }

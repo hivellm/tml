@@ -94,6 +94,7 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Check for decorators
     bool is_interior_mutable = false;
     bool is_simd = false;
+    bool is_packed = false;
     bool has_derive_reflect = false;
     bool has_derive_partial_eq = false;
     bool has_derive_duplicate = false;
@@ -129,11 +130,45 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
             is_interior_mutable = true;
         } else if (decorator.name == "simd") {
             is_simd = true;
-        } else if (decorator.name == "derive") {
-            // Check for @derive arguments
+        } else if (decorator.name == "packed") {
+            is_packed = true;
+        } else if (decorator.name == "derive" || decorator.name == "auto") {
+            // @auto is an alias for @derive with lowercased argument names.
+            // Argument mapping: duplicate->Duplicate, equal->PartialEq, debug->Debug,
+            //                   display->Display, hash->Hash, ord->Ord, default->Default,
+            //                   serialize->Serialize, deserialize->Deserialize, fromstr->FromStr
             for (const auto& arg : decorator.args) {
                 if (arg->is<parser::IdentExpr>()) {
-                    const auto& name = arg->as<parser::IdentExpr>().name;
+                    std::string name = arg->as<parser::IdentExpr>().name;
+                    // Normalize @auto lowercase aliases to their @derive equivalents
+                    if (decorator.name == "auto") {
+                        if (name == "duplicate")
+                            name = "Duplicate";
+                        else if (name == "equal")
+                            name = "PartialEq";
+                        else if (name == "debug")
+                            name = "Debug";
+                        else if (name == "display")
+                            name = "Display";
+                        else if (name == "hash")
+                            name = "Hash";
+                        else if (name == "ord")
+                            name = "Ord";
+                        else if (name == "default")
+                            name = "Default";
+                        else if (name == "serialize")
+                            name = "Serialize";
+                        else if (name == "deserialize")
+                            name = "Deserialize";
+                        else if (name == "fromstr")
+                            name = "FromStr";
+                        else if (name == "reflect")
+                            name = "Reflect";
+                        else if (name == "partial_eq")
+                            name = "PartialEq";
+                        else if (name == "partial_ord")
+                            name = "PartialOrd";
+                    }
                     if (name == "Reflect") {
                         has_derive_reflect = true;
                     } else if (name == "PartialEq" || name == "Eq") {
@@ -186,7 +221,8 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
                                  .fields = std::move(fields),
                                  .span = decl.span,
                                  .is_interior_mutable = is_interior_mutable,
-                                 .is_simd = is_simd});
+                                 .is_simd = is_simd,
+                                 .is_packed = is_packed});
 
     // Handle @derive(Reflect) - register impl and type_info method
     // Skip generic types - they need instantiation first
@@ -676,6 +712,30 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         }
     }
 
+    // Check for @repr decorator
+    std::string repr_underlying;
+    for (const auto& decorator : decl.decorators) {
+        if (decorator.name == "repr") {
+            if (!decorator.args.empty() && decorator.args[0]->is<parser::IdentExpr>()) {
+                const auto& type_arg = decorator.args[0]->as<parser::IdentExpr>().name;
+                if (type_arg == "U8" || type_arg == "U16" || type_arg == "I32" ||
+                    type_arg == "I64") {
+                    repr_underlying = type_arg;
+                } else {
+                    error("@repr underlying type must be U8, U16, I32, or I64, got '" + type_arg +
+                              "'",
+                          decorator.span, "T086");
+                    return;
+                }
+            } else {
+                error("@repr requires a type argument: U8, U16, I32, or I64", decorator.span,
+                      "T086");
+                return;
+            }
+            break;
+        }
+    }
+
     // Check for @flags decorator
     bool is_flags = false;
     std::string flags_underlying = "U32";
@@ -753,6 +813,26 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         }
     }
 
+    // Compute sequential discriminant values for @repr enums (0, 1, 2, ...)
+    // Only populate if @repr is present and @flags is not (they are mutually exclusive in meaning)
+    if (!repr_underlying.empty() && !is_flags) {
+        if (discriminant_values.empty()) {
+            uint64_t next_disc = 0;
+            for (const auto& variant : decl.variants) {
+                if (variant.discriminant) {
+                    if (variant.discriminant->get()->is<parser::LiteralExpr>()) {
+                        const auto& lit = variant.discriminant->get()->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            next_disc = std::stoull(std::string(lit.token.lexeme));
+                        }
+                    }
+                }
+                discriminant_values.push_back(next_disc);
+                ++next_disc;
+            }
+        }
+    }
+
     env_.define_enum(EnumDef{.name = decl.name,
                              .type_params = std::move(type_params),
                              .const_params = std::move(const_params),
@@ -760,7 +840,8 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
                              .span = decl.span,
                              .is_flags = is_flags,
                              .flags_underlying_type = flags_underlying,
-                             .discriminant_values = std::move(discriminant_values)});
+                             .discriminant_values = std::move(discriminant_values),
+                             .repr_type = repr_underlying});
 
     // Handle @flags — register built-in method signatures
     if (is_flags) {

@@ -32,10 +32,11 @@ namespace tml::codegen {
 /// Check if a struct has @derive(Reflect) decorator
 static bool has_derive_reflect(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
-                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                    if (arg->as<parser::IdentExpr>().name == "Reflect" ||
+                        arg->as<parser::IdentExpr>().name == "reflect") {
                         return true;
                     }
                 }
@@ -48,10 +49,11 @@ static bool has_derive_reflect(const parser::StructDecl& s) {
 /// Check if an enum has @derive(Reflect) decorator
 static bool has_derive_reflect(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
-                    if (arg->as<parser::IdentExpr>().name == "Reflect") {
+                    if (arg->as<parser::IdentExpr>().name == "Reflect" ||
+                        arg->as<parser::IdentExpr>().name == "reflect") {
                         return true;
                     }
                 }

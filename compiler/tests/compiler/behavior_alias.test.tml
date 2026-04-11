@@ -1,0 +1,25 @@
+use test
+
+behavior Greetable {
+    func greet(this) -> I32
+}
+
+behavior Friendly = Greetable
+
+type Dog {
+    age: I32,
+}
+
+impl Greetable for Dog {
+    pub func greet(this) -> I32 {
+        return this.age
+    }
+}
+
+@test
+func test_behavior_alias_basic() -> I32 {
+    let d = Dog { age: 5 }
+    let result = d.greet()
+    assert_eq(result, 5, "behavior alias compiles")
+    return 0
+}

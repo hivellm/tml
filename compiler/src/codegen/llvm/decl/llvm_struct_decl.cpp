@@ -84,12 +84,14 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     struct_types_[s.name] = type_name;
     struct_fields_[s.name] = fields;
 
-    // Check for @simd annotation — emit LLVM vector type instead of struct
+    // Check for @simd and @packed annotations
     bool is_simd = false;
+    bool is_packed = false;
     for (const auto& deco : s.decorators) {
         if (deco.name == "simd") {
             is_simd = true;
-            break;
+        } else if (deco.name == "packed") {
+            is_packed = true;
         }
     }
 
@@ -101,6 +103,18 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
             type_name + " = type <" + std::to_string(lane_count) + " x " + elem_type + ">";
         type_defs_buffer_ << def << "\n";
         simd_types_[s.name] = {elem_type, lane_count};
+    } else if (is_packed) {
+        // Emit packed struct type definition using LLVM packed syntax <{ ... }>
+        // Packed structs have no inter-field padding, matching C __attribute__((packed)).
+        std::string def = type_name + " = type <{ ";
+        for (size_t i = 0; i < field_types.size(); ++i) {
+            if (i > 0)
+                def += ", ";
+            def += field_types[i];
+        }
+        def += " }>";
+        type_defs_buffer_ << def << "\n";
+        // Packed type emitted with <{ }> syntax above
     } else {
         // Emit struct type definition to type_defs_buffer_ (ensures types before functions)
         std::string def = type_name + " = type { ";

@@ -1850,6 +1850,30 @@ DeclPtr read_decl(Cursor& c) {
         result->span = span;
         break;
     }
+    case 13: { // BehaviorAlias
+        BehaviorAliasDecl ba;
+        ba.name = c.read_str();
+        ba.vis = read_visibility(c);
+        ba.generics = read_generic_params(c);
+        uint64_t bn = c.read_varint();
+        ba.bounds.reserve(static_cast<size_t>(bn));
+        for (uint64_t i = 0; i < bn; i++) {
+            TypePath p = read_type_path(c);
+            SourceSpan psp = p.span;
+            auto t = std::make_unique<Type>();
+            NamedType nt;
+            nt.path = std::move(p);
+            nt.span = psp;
+            t->kind = std::move(nt);
+            t->span = psp;
+            ba.bounds.push_back(std::move(t));
+        }
+        ba.span = read_source_span(c);
+        SourceSpan span = ba.span;
+        result->kind = std::move(ba);
+        result->span = span;
+        break;
+    }
     default:
         c.fail("invalid Decl tag");
     }

@@ -885,6 +885,32 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators,
         generics = std::move(unwrap(gen_result));
     }
 
+    // Check for alias syntax: `behavior Name = Bound1 + Bound2`
+    // Must be checked BEFORE colon (super traits) and brace (body).
+    if (check(lexer::TokenKind::Assign)) {
+        advance(); // consume '='
+        std::vector<TypePtr> bounds;
+        do {
+            skip_newlines();
+            auto bound = parse_type();
+            if (is_err(bound))
+                return unwrap_err(bound);
+            bounds.push_back(std::move(unwrap(bound)));
+            skip_newlines();
+        } while (match(lexer::TokenKind::Plus));
+
+        auto end_span = previous().span;
+        auto alias_decl = BehaviorAliasDecl{.doc = std::move(doc),
+                                            .decorators = std::move(decorators),
+                                            .vis = vis,
+                                            .name = std::move(name),
+                                            .generics = std::move(generics),
+                                            .bounds = std::move(bounds),
+                                            .span = SourceSpan::merge(start_span, end_span)};
+        return make_box<Decl>(
+            Decl{.kind = std::move(alias_decl), .span = SourceSpan::merge(start_span, end_span)});
+    }
+
     // Super traits (behavior Foo: Bar + Baz, behavior Foo[T]: Borrow[T])
     std::vector<TypePtr> super_traits;
     if (match(lexer::TokenKind::Colon)) {

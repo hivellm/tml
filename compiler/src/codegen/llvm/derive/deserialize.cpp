@@ -20,11 +20,11 @@ namespace tml::codegen {
 /// Check if a struct has @derive(Deserialize) decorator
 static bool has_derive_deserialize(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Deserialize") {
+                    if (name == "Deserialize" || name == "deserialize") {
                         return true;
                     }
                 }
@@ -37,11 +37,11 @@ static bool has_derive_deserialize(const parser::StructDecl& s) {
 /// Check if an enum has @derive(Deserialize) decorator
 static bool has_derive_deserialize(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "Deserialize") {
+                    if (name == "Deserialize" || name == "deserialize") {
                         return true;
                     }
                 }

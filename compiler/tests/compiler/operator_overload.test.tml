@@ -1,0 +1,42 @@
+use test
+use core::ops::Add
+
+type Vec2 {
+    x: I32,
+    y: I32,
+}
+
+impl Add[Vec2] for Vec2 {
+    pub func add(this, rhs: Vec2) -> Vec2 {
+        return Vec2 { x: this.x + rhs.x, y: this.y + rhs.y }
+    }
+}
+
+@test
+func test_vec2_add_method() -> I32 {
+    let a = Vec2 { x: 1, y: 2 }
+    let b = Vec2 { x: 3, y: 4 }
+    let c = a.add(b)
+    assert_eq(c.x, 4, "Vec2 add x")
+    assert_eq(c.y, 6, "Vec2 add y")
+    return 0
+}
+
+@test
+func test_vec2_add_operator() -> I32 {
+    let a = Vec2 { x: 1, y: 2 }
+    let b = Vec2 { x: 3, y: 4 }
+    let c = a + b
+    assert_eq(c.x, 4, "Vec2 operator+ x")
+    assert_eq(c.y, 6, "Vec2 operator+ y")
+    return 0
+}
+
+@test
+func test_primitives_unchanged() -> I32 {
+    assert_eq(5 + 3, 8, "I32 add")
+    assert_eq(10 - 4, 6, "I32 sub")
+    assert_eq(3 * 7, 21, "I32 mul")
+    assert_eq(15 / 3, 5, "I32 div")
+    return 0
+}

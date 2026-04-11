@@ -1,0 +1,19 @@
+use test
+
+@repr(U8)
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+@test
+func test_repr_discriminant() -> I32 {
+    let r = Color::Red
+    let g = Color::Green
+    let b = Color::Blue
+    assert_eq(r as I32, 0, "Red = 0")
+    assert_eq(g as I32, 1, "Green = 1")
+    assert_eq(b as I32, 2, "Blue = 2")
+    return 0
+}

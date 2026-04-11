@@ -52,11 +52,12 @@ namespace tml::codegen {
 /// Check if a struct has @derive(PartialEq) decorator
 static bool has_derive_partial_eq(const parser::StructDecl& s) {
     for (const auto& deco : s.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "PartialEq" || name == "Eq") {
+                    if (name == "PartialEq" || name == "Eq" || name == "equal" ||
+                        name == "partial_eq") {
                         return true;
                     }
                 }
@@ -69,11 +70,12 @@ static bool has_derive_partial_eq(const parser::StructDecl& s) {
 /// Check if an enum has @derive(PartialEq) decorator
 static bool has_derive_partial_eq(const parser::EnumDecl& e) {
     for (const auto& deco : e.decorators) {
-        if (deco.name == "derive") {
+        if (deco.name == "derive" || deco.name == "auto") {
             for (const auto& arg : deco.args) {
                 if (arg->is<parser::IdentExpr>()) {
                     const auto& name = arg->as<parser::IdentExpr>().name;
-                    if (name == "PartialEq" || name == "Eq") {
+                    if (name == "PartialEq" || name == "Eq" || name == "equal" ||
+                        name == "partial_eq") {
                         return true;
                     }
                 }

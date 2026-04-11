@@ -262,7 +262,7 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
                     module.structs.push_back(lower_class_to_struct(d));
                     module.impls.push_back(lower_class_to_impl(d));
                 }
-                // TypeAliasDecl and ModDecl are handled during type checking
+                // TypeAliasDecl, ModDecl, and BehaviorAliasDecl are handled during type checking
             },
             decl->kind);
     }

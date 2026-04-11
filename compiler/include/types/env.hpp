@@ -205,6 +205,12 @@ struct StructDef {
     /// This flag ensures library-imported SIMD structs get the correct LLVM
     /// type definition even when loaded from the module registry cache.
     bool is_simd = false;
+
+    /// True if @packed decorator present.
+    ///
+    /// Packed structs are emitted with `<{ ... }>` LLVM syntax, removing all
+    /// inter-field padding. Useful for binary protocol buffers and on-wire formats.
+    bool is_packed = false;
 };
 
 /// Enum (algebraic data type) definition.
@@ -230,6 +236,13 @@ struct EnumDef {
     bool is_flags = false;                     ///< True if @flags decorator present.
     std::string flags_underlying_type = "U32"; ///< @flags underlying type: "U8","U16","U32","U64".
     std::vector<uint64_t> discriminant_values; ///< Per-variant discriminant values.
+
+    /// @repr underlying integer type. Empty string = default (i32 discriminant).
+    ///
+    /// Valid values: "U8", "U16", "I32", "I64". When set, discriminant values
+    /// are sequential (0, 1, 2, …) and `as U8`/`as I32` casts on the enum
+    /// extract the discriminant field directly.
+    std::string repr_type;
 };
 
 /// Associated type declaration in a behavior.
@@ -462,6 +475,26 @@ public:
 
     /// Registers a behavior definition.
     void define_behavior(BehaviorDef def);
+
+    /// Registers a behavior alias: maps an alias name to its constituent bound names.
+    ///
+    /// The bound names are stored as plain strings (the behavior names that the
+    /// alias expands to). During trait solving, any occurrence of `alias_name` as
+    /// a bound is replaced with all names in `bound_names`.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// behavior Numeric = Add[Self] + Sub[Self]
+    /// // registers "Numeric" -> ["Add", "Sub"]
+    /// ```
+    void define_behavior_alias(const std::string& alias_name, std::vector<std::string> bound_names);
+
+    /// Looks up a behavior alias, returning its constituent bound names.
+    ///
+    /// Returns `nullptr` if no alias with that name is registered.
+    [[nodiscard]] auto lookup_behavior_alias(const std::string& alias_name) const
+        -> const std::vector<std::string>*;
 
     /// Registers a function signature (supports overloading).
     void define_func(FuncSig sig);
@@ -811,6 +844,8 @@ private:
     std::unordered_map<std::string, BehaviorDef>
         behaviors_; ///< Registered behaviors, keyed by FQN (module::Name) or short name for
                     ///< builtins.
+    std::unordered_map<std::string, std::vector<std::string>>
+        behavior_aliases_; ///< Behavior alias name -> constituent bound names.
     std::unordered_map<std::string, std::vector<FuncSig>>
         functions_; ///< Functions (with overloads).
     std::unordered_map<std::string, std::vector<std::string>>

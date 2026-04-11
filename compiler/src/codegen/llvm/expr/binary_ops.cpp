@@ -36,6 +36,80 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     // Check if either operand is a struct (enum)
     bool is_enum_struct = left_type.starts_with("%struct.") && right_type.starts_with("%struct.");
 
+    // =========================================================================
+    // Operator Overloading for User-Defined Struct Types
+    // =========================================================================
+    // When the left operand is a struct type and the operator maps to a known
+    // behavior (Add, Sub, Mul, Div, Mod, BitAnd, BitOr, BitXor, Shl, Shr),
+    // desugar the operator to a method call: `a + b` → `a.add(b)`.
+    //
+    // The method is called with `this` as a pointer (ptr) and the right operand
+    // by value (%struct.T), matching the calling convention of impl methods.
+    if (left_type.starts_with("%struct.") && left_type == right_type) {
+        // Map binary operators to their behavior method names
+        const char* op_method = nullptr;
+        switch (bin.op) {
+        case parser::BinaryOp::Add:
+            op_method = "add";
+            break;
+        case parser::BinaryOp::Sub:
+            op_method = "sub";
+            break;
+        case parser::BinaryOp::Mul:
+            op_method = "mul";
+            break;
+        case parser::BinaryOp::Div:
+            op_method = "div";
+            break;
+        case parser::BinaryOp::Mod:
+            op_method = "rem";
+            break;
+        case parser::BinaryOp::BitAnd:
+            op_method = "bitand";
+            break;
+        case parser::BinaryOp::BitOr:
+            op_method = "bitor";
+            break;
+        case parser::BinaryOp::BitXor:
+            op_method = "bitxor";
+            break;
+        case parser::BinaryOp::Shl:
+            op_method = "shl";
+            break;
+        case parser::BinaryOp::Shr:
+            op_method = "shr";
+            break;
+        default:
+            break;
+        }
+
+        if (op_method) {
+            // Extract type name from "%struct.Vec2" → "Vec2"
+            std::string type_name = left_type.substr(8); // skip "%struct."
+
+            // Check if the operator method is registered in functions_ map.
+            // The key format is "TypeName_method" (e.g., "Vec2_add"), which is
+            // set during impl block registration in gen_impl_method.
+            std::string func_key = type_name + "_" + op_method;
+            auto fn_it = functions_.find(func_key);
+            if (fn_it != functions_.end()) {
+                // Use the LLVM function name from the registered FuncInfo
+                const std::string& fn_ref = fn_it->second.llvm_name;
+
+                // Spill left operand to memory for `this` (ptr) parameter
+                std::string left_alloca = fresh_reg();
+                emit_line("  " + left_alloca + " = alloca " + left_type);
+                emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
+
+                // Call the method: result = @fn_name(ptr %this, %struct.T %rhs)
+                emit_line("  " + result + " = call " + left_type + " " + fn_ref + "(ptr " +
+                          left_alloca + ", " + left_type + " " + right + ")");
+                last_expr_type_ = left_type;
+                return result;
+            }
+        }
+    }
+
     // Check if operands are tuples (anonymous LLVM structs: { type1, type2, ... })
     bool is_tuple = left_type.starts_with("{ ") && left_type.ends_with(" }") &&
                     right_type.starts_with("{ ") && right_type.ends_with(" }") &&
