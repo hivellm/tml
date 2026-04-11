@@ -111,13 +111,25 @@ module.exports = grammar({
       optional(';'),
     ),
 
-    behavior_def: $ => seq(
-      'behavior',
-      field('name', $.ident),
-      optional($.generic_params),
-      '{',
-      repeat($.behavior_item),
-      '}',
+    behavior_def: $ => choice(
+      // Full behavior definition
+      seq(
+        'behavior',
+        field('name', $.ident),
+        optional($.generic_params),
+        optional(seq(':', $.type_bound)),
+        '{',
+        repeat($.behavior_item),
+        '}',
+      ),
+      // Behavior alias: behavior Name = Bound1 + Bound2
+      seq(
+        'behavior',
+        field('name', $.ident),
+        optional($.generic_params),
+        '=',
+        $.type_bound,
+      ),
     ),
 
     behavior_item: $ => seq(

@@ -59,6 +59,8 @@ UnionDef = "union" ~ Ident ~ "{" ~ StructFields ~ "}"
 ConstDef = "const" ~ Ident ~ ":" ~ Type ~ "=" ~ Expr ~ ";"?
 
 BehaviorDef = "behavior" ~ Ident ~ GenericParams?
+            ~ "=" ~ TypeBound ("+" ~ TypeBound)*       // Behavior alias
+            / "behavior" ~ Ident ~ GenericParams?
             ~ (":" ~ TypeBound)? ~ "{" ~ BehaviorItem* ~ "}"
 
 BehaviorItem = AssociatedType / BehaviorFunc

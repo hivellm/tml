@@ -171,8 +171,10 @@ union IntOrPtr {
 ### 3.3 Behaviors
 
 ```ebnf
-BehaviorDecl = Directive* Visibility? 'behavior' Ident GenericParams?
-               (':' TypeBound)? '{' BehaviorItem* '}'
+BehaviorDecl  = Directive* Visibility? 'behavior' Ident GenericParams?
+                (':' TypeBound)? '{' BehaviorItem* '}'
+BehaviorAlias = Directive* Visibility? 'behavior' Ident GenericParams?
+                '=' TypeBound ('+' TypeBound)*
 
 BehaviorItem = BehaviorFunc | AssociatedType
 
@@ -201,7 +203,29 @@ behavior Iterable {
     type Item;
     func next(this) -> Maybe[This.Item];
 }
+
+// Behavior alias — names a combination of bounds
+behavior Numeric = Add[Self] + Sub[Self] + Mul[Self] + Div[Self]
 ```
+
+#### 3.3.1 Operator Behaviors
+
+Binary and unary operators on non-primitive types dispatch to behavior method calls:
+
+| Operator | Behavior | Method |
+|----------|----------|--------|
+| `+` | `Add[Rhs]` | `add(this, rhs)` |
+| `-` | `Sub[Rhs]` | `sub(this, rhs)` |
+| `*` | `Mul[Rhs]` | `mul(this, rhs)` |
+| `/` | `Div[Rhs]` | `div(this, rhs)` |
+| `%` | `Rem[Rhs]` | `rem(this, rhs)` |
+| `-x` | `Neg` | `neg(this)` |
+| `!x` | `Not` | `not(this)` |
+| `==` | `PartialEq` | `eq(this, rhs)` |
+| `<` | `PartialOrd` | `lt(this, rhs)` |
+| `a[i]` | `Index[Idx]` | `index(this, idx)` |
+
+Primitive types (I8–I64, U8–U64, F32, F64) use built-in LLVM arithmetic — no behavior dispatch.
 
 ### 3.4 Impl
 
@@ -924,12 +948,39 @@ DirectiveArg  = Ident (':' Value)?
 @test
 @when(os: linux)
 @derive(PartialEq, Hash, Debug)
+@auto(duplicate, equal, debug)    // alias for @derive with lowercase names
 @deprecated("Use new_func instead")
 @hint(inline: always)
 @lowlevel
 @extern("c")
 @link("libfoo")
+@repr(U8)                         // enum discriminant type
+@packed                           // struct with no padding
+@flags(U32)                       // bitflag enum
+@simd                             // LLVM vector type
+@no_mangle                        // bare symbol name
+@intrinsic("llvm.fence")          // compiler builtin
+@interior_mutable                 // Cell/Mutex-like types
 ```
+
+### 7.1 Built-in Directives
+
+| Directive | Target | Description |
+|-----------|--------|-------------|
+| `@test` | func | Mark as test function |
+| `@derive(...)` | type/enum | Auto-generate behavior impls (Debug, Duplicate, PartialEq, Hash, ...) |
+| `@auto(...)` | type/enum | Alias for `@derive` with lowercase names (`duplicate`→`Duplicate`, `equal`→`PartialEq`) |
+| `@repr(U8\|U16\|I32\|I64)` | enum | Sequential discriminants with specified integer type |
+| `@packed` | type | Packed struct layout — no inter-field padding |
+| `@flags(U8\|U16\|U32\|U64)` | enum | Bitflag enum with power-of-2 discriminants |
+| `@simd` | type | Compile fields as LLVM vector type |
+| `@extern("abi")` | func | FFI function with ABI spec ("c", "c++", "stdcall") |
+| `@link("lib")` | func | Specify library to link |
+| `@no_mangle` | func | Don't mangle symbol name |
+| `@intrinsic("name")` | func | Compiler builtin intrinsic |
+| `@interior_mutable` | type | Allows mutation through shared references (Cell, Mutex) |
+| `@deprecated("msg")` | any | Mark as deprecated with message |
+| `@lowlevel` | func/block | Unsafe/lowlevel context |
 
 ## 8. LL(1) Verification
 
@@ -946,7 +997,7 @@ DirectiveArg  = Ident (':' Value)?
 | `lowlevel` | Lowlevel function or block |
 | `type` / `enum` | TypeDecl (struct, enum, or alias) |
 | `union` | UnionDecl |
-| `behavior` | BehaviorDecl |
+| `behavior` | BehaviorDecl or BehaviorAlias (peek `=` after name → alias) |
 | `impl` | ImplDecl |
 | `const` | ConstDecl |
 | `class` | ClassDecl |
