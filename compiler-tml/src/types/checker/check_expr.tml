@@ -1,0 +1,462 @@
+//! Expression type inference for the TML self-hosting type checker.
+//!
+//! Implements `infer_expr(ctx, env, expr) -> Type` — the main expression
+//! type inference dispatcher. Each Expr variant maps to a specific inference
+//! rule that produces the type of the expression.
+//!
+//! Phase 14c — items 2.1–2.6.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::NamedType
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_tuple
+use compiler::types::ty::type_to_str
+use compiler::types::ty::is_never
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::StructFieldDef
+use compiler::types::env::EnumDef
+use compiler::types::env::env_lookup_type
+use compiler::types::env::env_lookup_function
+use compiler::types::env::env_lookup_struct
+use compiler::types::env::env_lookup_enum
+use compiler::types::env::env_push_scope
+use compiler::types::env::env_pop_scope
+use compiler::types::env::ScopeKind
+use compiler::types::env::scope_define
+use compiler::types::env::scope_lookup
+use compiler::types::env::Symbol
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::errors::undefined_variable
+use compiler::types::checker::errors::undefined_function
+use compiler::types::checker::errors::unknown_field
+use compiler::ast::common::LiteralKind
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::LiteralExpr
+use compiler::ast::exprs::IdentExpr
+use compiler::ast::exprs::UnaryExpr
+use compiler::ast::exprs::BinaryExpr
+use compiler::ast::exprs::CallExpr
+use compiler::ast::exprs::MethodCallExpr
+use compiler::ast::exprs::FieldExpr
+use compiler::ast::exprs::IndexExpr
+use compiler::ast::exprs::TupleExpr
+use compiler::ast::exprs::ArrayExpr
+use compiler::ast::exprs::IfExpr
+use compiler::ast::exprs::BlockExpr
+use compiler::ast::exprs::ReturnExpr
+use compiler::ast::exprs::CastExpr
+use compiler::ast::exprs::ClosureExpr
+use compiler::ast::exprs::WhenExpr
+use compiler::ast::exprs::StructExpr
+use compiler::ast::exprs::StructExprField
+use compiler::ast::exprs::ArrayKind
+use compiler::ast::stmts::Stmt
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::IdentPattern
+// Note: compiler::ast::nodes::TypeExpr NOT imported to avoid NamedType collision
+// with compiler::types::ty::NamedType
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Main dispatcher
+// ============================================================================
+
+/// Infer the type of an expression.
+pub func infer_expr(ctx: InferCtx, env: TypeEnv, expr: Expr) -> Type {
+    when expr {
+        Literal(lit) => return infer_literal(lit),
+        Ident(id) => return infer_ident(ctx, env, id),
+        Binary(bin) => return infer_binary(ctx, env, bin),
+        Unary(un) => return infer_unary(ctx, env, un),
+        Call(call) => return infer_call(ctx, env, call),
+        Field(fld) => return infer_field(ctx, env, fld),
+        Tuple(tup) => return infer_tuple(ctx, env, tup),
+        Array(arr) => return infer_array(ctx, env, arr),
+        If(ife) => return infer_if(ctx, env, ife),
+        Block(blk) => return infer_block(ctx, env, blk),
+        Return(ret) => return infer_return(ctx, env, ret),
+        Cast(cast) => return make_unit(),
+        Struct(st) => return infer_struct(ctx, env, st),
+        // For variants not yet implemented, return a fresh type variable
+        _ => return fresh_var(ctx)
+    }
+    // Unreachable — all when arms return
+    return make_unit()
+}
+
+// ============================================================================
+// Literal inference
+// ============================================================================
+
+/// Integer → I32, Float → F64, String → Str, Bool → Bool, Char → I32, Null → Unit.
+func infer_literal(lit: LiteralExpr) -> Type {
+    when lit.value {
+        LitInt(_) => return make_i32(),
+        LitFloat(_) => return make_f64(),
+        LitStr(_) => return make_str(),
+        LitBool(_) => return make_bool(),
+        LitChar(_) => return make_i32(),
+        LitNull => return make_unit()
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Identifier lookup
+// ============================================================================
+
+/// Look up a name in the scope chain, then builtins/aliases.
+func infer_ident(ctx: InferCtx, env: TypeEnv, id: IdentExpr) -> Type {
+    // Check scope chain
+    let scope_count: I64 = env.scopes.len() as I64
+    if scope_count > 0 {
+        let top = env.scopes.get(scope_count - 1)
+        let sym: Maybe[Symbol] = scope_lookup(top, id.name)
+        when sym {
+            Just(s) => return s.ty.get(),
+            Nothing => {}
+        }
+    }
+
+    // Check functions
+    let func_r = env_lookup_function(env, id.name)
+    when func_r {
+        Just(sig) => return sig.return_type.get(),
+        Nothing => {}
+    }
+
+    // Check builtins
+    let type_r = env_lookup_type(env, id.name)
+    when type_r {
+        Just(t) => return t,
+        Nothing => {}
+    }
+
+    ctx.errors.push(undefined_variable(id.name, id.span))
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Binary expression
+// ============================================================================
+
+/// Infer both operands and return the result type based on the operator.
+func infer_binary(ctx: InferCtx, env: TypeEnv, bin: BinaryExpr) -> Type {
+    let left: Type = infer_expr(ctx, env, bin.left.get())
+    let right: Type = infer_expr(ctx, env, bin.right.get())
+
+    when bin.op {
+        // Comparison operators always return Bool
+        OpEq => return make_bool(),
+        OpNe => return make_bool(),
+        OpLt => return make_bool(),
+        OpGt => return make_bool(),
+        OpLe => return make_bool(),
+        OpGe => return make_bool(),
+        // Logical operators: both sides Bool, result Bool
+        OpAnd => {
+            unify(ctx, left, make_bool(), bin.span)
+            unify(ctx, right, make_bool(), bin.span)
+            return make_bool()
+        },
+        OpOr => {
+            unify(ctx, left, make_bool(), bin.span)
+            unify(ctx, right, make_bool(), bin.span)
+            return make_bool()
+        },
+        // Arithmetic: unify operands, return same type
+        _ => {
+            unify(ctx, left, right, bin.span)
+            return resolve(ctx, left)
+        }
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Unary expression
+// ============================================================================
+
+func infer_unary(ctx: InferCtx, env: TypeEnv, un: UnaryExpr) -> Type {
+    let operand: Type = infer_expr(ctx, env, un.operand.get())
+    when un.op {
+        OpNot => return make_bool(),
+        OpNeg => return operand,
+        OpRef => return make_ref(operand, 0),
+        OpRefMut => return make_ref(operand, 1),
+        _ => return operand
+    }
+    return operand
+}
+
+// ============================================================================
+// Function call
+// ============================================================================
+
+/// Resolve the callee, infer arguments, check parameter types.
+func infer_call(ctx: InferCtx, env: TypeEnv, call: CallExpr) -> Type {
+    // Try to resolve callee as a function name
+    let callee: Type = infer_expr(ctx, env, call.callee.get())
+
+    // If callee is a function type, use its return type
+    when callee {
+        Func(ft) => {
+            // Check argument count
+            let expected: I64 = ft.params.len() as I64
+            let actual: I64 = call.args.len() as I64
+            // Infer each argument and unify with parameter types
+            var i: I64 = 0
+            loop (i < actual and i < expected) {
+                let arg_ty: Type = infer_expr(ctx, env, call.args.get(i).get())
+                unify(ctx, arg_ty, ft.params.get(i).get(), call.span)
+                i = i + 1
+            }
+            return ft.return_type.get()
+        },
+        _ => {
+            // Not a function type — infer arguments anyway
+            let ac: I64 = call.args.len() as I64
+            var i: I64 = 0
+            loop (i < ac) {
+                infer_expr(ctx, env, call.args.get(i).get())
+                i = i + 1
+            }
+            return fresh_var(ctx)
+        }
+    }
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Field access
+// ============================================================================
+
+func infer_field(ctx: InferCtx, env: TypeEnv, fld: FieldExpr) -> Type {
+    let recv_ty: Type = infer_expr(ctx, env, fld.object.get())
+    let resolved: Type = resolve(ctx, recv_ty)
+
+    when resolved {
+        Named(nt) => {
+            // Look up struct definition
+            let struct_r = env_lookup_struct(env, nt.name)
+            when struct_r {
+                Just(def) => {
+                    // Find field by name
+                    let fc: I64 = def.fields.len() as I64
+                    var i: I64 = 0
+                    loop (i < fc) {
+                        let f: StructFieldDef = def.fields.get(i)
+                        if f.name == fld.field {
+                            return f.ty.get()
+                        }
+                        i = i + 1
+                    }
+                    ctx.errors.push(unknown_field(nt.name, fld.field, fld.span))
+                    return fresh_var(ctx)
+                },
+                Nothing => {
+                    return fresh_var(ctx)
+                }
+            }
+        },
+        _ => return fresh_var(ctx)
+    }
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Tuple expression
+// ============================================================================
+
+func infer_tuple(ctx: InferCtx, env: TypeEnv, tup: TupleExpr) -> Type {
+    let count: I64 = tup.elements.len() as I64
+    let elements: List[Heap[Type]] = List[Heap[Type]]::new(count)
+    var i: I64 = 0
+    loop (i < count) {
+        let elem_ty: Type = infer_expr(ctx, env, tup.elements.get(i).get())
+        elements.push(Heap::new(elem_ty))
+        i = i + 1
+    }
+    return make_tuple(elements)
+}
+
+// ============================================================================
+// Array expression
+// ============================================================================
+
+func infer_array(ctx: InferCtx, env: TypeEnv, arr: ArrayExpr) -> Type {
+    when arr.kind {
+        Elements(elems) => {
+            let count: I64 = elems.len() as I64
+            if count == 0 { return fresh_var(ctx) }
+            let first: Type = infer_expr(ctx, env, elems.get(0).get())
+            var i: I64 = 1
+            loop (i < count) {
+                let elem_ty: Type = infer_expr(ctx, env, elems.get(i).get())
+                unify(ctx, first, elem_ty, arr.span)
+                i = i + 1
+            }
+            return resolve(ctx, first)
+        },
+        Repeat(val, _count) => {
+            return infer_expr(ctx, env, val.get())
+        }
+    }
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// If expression
+// ============================================================================
+
+func infer_if(ctx: InferCtx, env: TypeEnv, ife: IfExpr) -> Type {
+    // Check condition is Bool
+    let cond_ty: Type = infer_expr(ctx, env, ife.condition.get())
+    unify(ctx, cond_ty, make_bool(), ife.span)
+
+    // Infer then branch
+    let then_ty: Type = infer_expr(ctx, env, ife.then_branch.get())
+
+    // Infer else branch if present
+    when ife.else_branch {
+        Just(else_expr) => {
+            let else_ty: Type = infer_expr(ctx, env, else_expr.get())
+            // If neither branch is Never, unify them
+            if not is_never(then_ty) and not is_never(else_ty) {
+                unify(ctx, then_ty, else_ty, ife.span)
+            }
+            return resolve(ctx, then_ty)
+        },
+        Nothing => return make_unit()
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Block expression
+// ============================================================================
+
+func infer_block(ctx: InferCtx, env: TypeEnv, blk: BlockExpr) -> Type {
+    env_push_scope(env, ScopeKind::BlockScope)
+    let count: I64 = blk.stmts.len() as I64
+    var i: I64 = 0
+    loop (i < count) {
+        check_stmt_inline(ctx, env, blk.stmts.get(i).get())
+        i = i + 1
+    }
+    // Block type is the type of the trailing expression if present
+    let result: Type = when blk.expr {
+        Just(e) => infer_expr(ctx, env, e.get()),
+        Nothing => make_unit()
+    }
+    env_pop_scope(env)
+    return result
+}
+
+// ============================================================================
+// Return expression
+// ============================================================================
+
+func infer_return(ctx: InferCtx, env: TypeEnv, ret: ReturnExpr) -> Type {
+    when ret.value {
+        Just(val) => { let _ = infer_expr(ctx, env, val.get()) },
+        Nothing => {}
+    }
+    return make_never()
+}
+
+// ============================================================================
+// Struct literal
+// ============================================================================
+
+func infer_struct(ctx: InferCtx, env: TypeEnv, st: StructExpr) -> Type {
+    // Extract name from path (last segment)
+    let segs = st.path.segments
+    let seg_count: I64 = segs.len() as I64
+    let name: Str = if seg_count > 0 { segs.get(seg_count - 1) } else { "<unknown>" }
+    let struct_r = env_lookup_struct(env, name)
+    when struct_r {
+        Just(def) => {
+            // Check each field in the literal
+            let fc: I64 = st.fields.len() as I64
+            var i: I64 = 0
+            loop (i < fc) {
+                let field_expr = st.fields.get(i)
+                let _ = infer_expr(ctx, env, field_expr.value.get())
+                i = i + 1
+            }
+            return make_named_simple(name, "")
+        },
+        Nothing => {
+            ctx.errors.push(type_error("Unknown struct: " + name, st.span))
+            return fresh_var(ctx)
+        }
+    }
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Inline statement checker (avoids circular import with check_stmt.tml)
+// ============================================================================
+
+/// Check a statement — simplified inline version to avoid circular deps.
+pub func check_stmt_inline(ctx: InferCtx, env: TypeEnv, stmt: Stmt) {
+    when stmt {
+        Let(ls) => {
+            // Infer init if present
+            when ls.init {
+                Just(init_expr) => {
+                    let init_ty: Type = infer_expr(ctx, env, init_expr.get())
+                    // Extract name from IdentPattern (simplified — full pattern matching in check_pattern)
+                    let scope_count: I64 = env.scopes.len() as I64
+                    if scope_count > 0 {
+                        let top = env.scopes.get(scope_count - 1)
+                        // Try to get variable name from pattern
+                        let pat = ls.pattern.get()
+                        when pat {
+                            Ident(ip) => scope_define(top, ip.name, init_ty, 0, ls.span),
+                            _ => {}
+                        }
+                    }
+                },
+                Nothing => {}
+            }
+        },
+        Var(vs) => {
+            when vs.init {
+                Just(init_expr) => {
+                    let init_ty: Type = infer_expr(ctx, env, init_expr.get())
+                    let scope_count: I64 = env.scopes.len() as I64
+                    if scope_count > 0 {
+                        let top = env.scopes.get(scope_count - 1)
+                        scope_define(top, vs.name, init_ty, 1, vs.span)
+                    }
+                },
+                Nothing => {}
+            }
+        },
+        Expr(e) => {
+            let _ = infer_expr(ctx, env, e.get())
+        },
+        _ => {}
+    }
+}

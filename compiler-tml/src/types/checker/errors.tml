@@ -1,0 +1,56 @@
+//! Type error types for the TML self-hosting type checker.
+//!
+//! Phase 14c — error representation.
+
+use compiler::source::SourceSpan
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::types::ty::Type
+use compiler::types::ty::type_to_str
+
+/// A type checking error with source location and error code.
+pub type TypeError {
+    message: Str,
+    span: SourceSpan,
+    code: Str
+}
+
+/// Create a generic type error.
+pub func type_error(message: Str, span: SourceSpan) -> TypeError {
+    return TypeError { message: message, span: span, code: "T000" }
+}
+
+/// Create a type error with a specific code.
+pub func type_error_code(message: Str, span: SourceSpan, code: Str) -> TypeError {
+    return TypeError { message: message, span: span, code: code }
+}
+
+/// Create a type mismatch error.
+pub func type_mismatch(expected: Type, actual: Type, span: SourceSpan) -> TypeError {
+    let msg: Str = "Type mismatch: expected " + type_to_str(expected) + ", found " + type_to_str(actual)
+    return TypeError { message: msg, span: span, code: "T056" }
+}
+
+/// Create an undefined variable error.
+pub func undefined_variable(name: Str, span: SourceSpan) -> TypeError {
+    let msg: Str = "Undefined variable: " + name
+    return TypeError { message: msg, span: span, code: "T001" }
+}
+
+/// Create an undefined function error.
+pub func undefined_function(name: Str, span: SourceSpan) -> TypeError {
+    let msg: Str = "Undefined function: " + name
+    return TypeError { message: msg, span: span, code: "T002" }
+}
+
+/// Create an unknown field error.
+pub func unknown_field(type_name: Str, field_name: Str, span: SourceSpan) -> TypeError {
+    let msg: Str = "Unknown field '" + field_name + "' on type " + type_name
+    return TypeError { message: msg, span: span, code: "T059" }
+}
+
+/// Create a dummy span for errors without source location.
+pub func dummy_span() -> SourceSpan {
+    let loc = loc_new("<unknown>", 0, 0, 0, 0)
+    return span_new(loc, loc)
+}

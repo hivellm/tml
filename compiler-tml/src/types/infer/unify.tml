@@ -1,0 +1,289 @@
+//! Inference context and unification for the TML self-hosting type checker.
+//!
+//! Implements directional substitution-based unification (TypeVar ← Concrete).
+//! Not full Hindley-Milner union-find — matches the C++ `TypeEnv::unify` semantics.
+//!
+//! Phase 14c — items 1.1–1.6.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::PrimitiveType
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::NamedType
+use compiler::types::ty::RefType
+use compiler::types::ty::PtrType
+use compiler::types::ty::ArrayType
+use compiler::types::ty::SliceType
+use compiler::types::ty::TupleType
+use compiler::types::ty::FuncType
+use compiler::types::ty::TypeVarType
+use compiler::types::ty::GenericType
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::ty::prim_kind_eq
+use compiler::types::ty::make_type_var
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::errors::dummy_span
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// InferCtx — inference context
+// ============================================================================
+
+/// Inference context holding type variable substitutions and error accumulation.
+/// The substitutions map TypeVar IDs (I64) to resolved Type indices in the
+/// type_store list. Uses index-based storage to avoid HashMap[I64, Type] issues.
+pub type InferCtx {
+    type_store: List[Type],
+    subs_index: HashMap[Str, I64],
+    errors: List[TypeError],
+    next_var_id: I64
+}
+
+/// Create a new inference context.
+pub func infer_ctx_new() -> InferCtx {
+    return InferCtx {
+        type_store: List[Type]::new(32 as I64),
+        subs_index: HashMap[Str, I64]::new(32 as I64),
+        errors: List[TypeError]::new(8 as I64),
+        next_var_id: 0
+    }
+}
+
+/// Generate a fresh type variable.
+pub func fresh_var(ctx: InferCtx) -> Type {
+    let id: I64 = ctx.next_var_id
+    ctx.next_var_id = id + 1
+    return make_type_var(id)
+}
+
+// ============================================================================
+// Substitution management
+// ============================================================================
+
+/// Record a substitution: TypeVar(id) → ty.
+func set_sub(ctx: InferCtx, var_id: I64, ty: Type) {
+    let key: Str = var_id.to_string()
+    let idx: I64 = ctx.type_store.len() as I64
+    ctx.type_store.push(ty)
+    ctx.subs_index.set(key, idx)
+}
+
+/// Lookup a substitution for TypeVar(id). Returns Nothing if unbound.
+func get_sub(ctx: InferCtx, var_id: I64) -> Maybe[Type] {
+    let key: Str = var_id.to_string()
+    if ctx.subs_index.has(key) {
+        let idx: I64 = ctx.subs_index.get(key)
+        return Just(ctx.type_store.get(idx))
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Resolve — follow substitution chains
+// ============================================================================
+
+/// Resolve a type by following TypeVar substitution chains.
+/// Returns the concrete type at the end of the chain, or the TypeVar itself
+/// if it's unbound.
+pub func resolve(ctx: InferCtx, ty: Type) -> Type {
+    return resolve_impl(ctx, ty, 0)
+}
+
+/// Internal resolve with depth limit to prevent infinite loops.
+func resolve_impl(ctx: InferCtx, ty: Type, depth: I64) -> Type {
+    if depth > 100 { return ty }
+    when ty {
+        TypeVar(tv) => {
+            let sub: Maybe[Type] = get_sub(ctx, tv.id)
+            when sub {
+                Just(resolved) => return resolve_impl(ctx, resolved, depth + 1),
+                Nothing => return ty
+            }
+        },
+        _ => return ty
+    }
+}
+
+// ============================================================================
+// Unify — directional substitution
+// ============================================================================
+
+/// Unify two types. Returns true on success, false on mismatch (error added).
+/// If one side is a TypeVar, it gets bound to the other side.
+/// Otherwise, structural equality is checked recursively.
+pub func unify(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
+    let ra: Type = resolve(ctx, a)
+    let rb: Type = resolve(ctx, b)
+    return unify_resolved(ctx, ra, rb, span)
+}
+
+/// Unify two already-resolved types.
+func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
+    // TypeVar on left: bind to right
+    when a {
+        TypeVar(tv) => {
+            set_sub(ctx, tv.id, b)
+            return true
+        },
+        _ => {}
+    }
+
+    // TypeVar on right: bind to left
+    when b {
+        TypeVar(tv) => {
+            set_sub(ctx, tv.id, a)
+            return true
+        },
+        _ => {}
+    }
+
+    // Both concrete: structural check
+    when a {
+        Primitive(pa) => {
+            when b {
+                Primitive(pb) => return prim_kind_eq(pa.kind, pb.kind),
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        Named(na) => {
+            when b {
+                Named(nb) => {
+                    if na.name != nb.name {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    // Check type args match
+                    let ac: I64 = na.type_args.len() as I64
+                    let bc: I64 = nb.type_args.len() as I64
+                    if ac != bc {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    var i: I64 = 0
+                    loop (i < ac) {
+                        if not unify(ctx, na.type_args.get(i).get(), nb.type_args.get(i).get(), span) {
+                            return false
+                        }
+                        i = i + 1
+                    }
+                    return true
+                },
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        Ref(ra) => {
+            when b {
+                Ref(rb) => {
+                    if ra.is_mut != rb.is_mut {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    return unify(ctx, ra.inner.get(), rb.inner.get(), span)
+                },
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        Ptr(pa) => {
+            when b {
+                Ptr(pb) => {
+                    if pa.is_mut != pb.is_mut {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    return unify(ctx, pa.inner.get(), pb.inner.get(), span)
+                },
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        Tuple(ta) => {
+            when b {
+                Tuple(tb) => {
+                    let tc: I64 = ta.elements.len() as I64
+                    let td: I64 = tb.elements.len() as I64
+                    if tc != td {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    var i: I64 = 0
+                    loop (i < tc) {
+                        if not unify(ctx, ta.elements.get(i).get(), tb.elements.get(i).get(), span) {
+                            return false
+                        }
+                        i = i + 1
+                    }
+                    return true
+                },
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        Func(fa) => {
+            when b {
+                Func(fb) => {
+                    if not unify(ctx, fa.return_type.get(), fb.return_type.get(), span) {
+                        return false
+                    }
+                    let pc: I64 = fa.params.len() as I64
+                    let pd: I64 = fb.params.len() as I64
+                    if pc != pd {
+                        ctx.errors.push(type_mismatch(a, b, span))
+                        return false
+                    }
+                    var i: I64 = 0
+                    loop (i < pc) {
+                        if not unify(ctx, fa.params.get(i).get(), fb.params.get(i).get(), span) {
+                            return false
+                        }
+                        i = i + 1
+                    }
+                    return true
+                },
+                _ => {
+                    ctx.errors.push(type_mismatch(a, b, span))
+                    return false
+                }
+            }
+        },
+        _ => {
+            // For all other types (Generic, Array, Slice, etc.),
+            // fall back to structural equality
+            if types_equal(a, b) {
+                return true
+            }
+            ctx.errors.push(type_mismatch(a, b, span))
+            return false
+        }
+    }
+}
+
+// ============================================================================
+// Error access
+// ============================================================================
+
+/// Check if the context has errors.
+pub func has_errors(ctx: InferCtx) -> Bool {
+    return ctx.errors.len() as I64 > 0
+}
+
+/// Get the number of errors.
+pub func error_count(ctx: InferCtx) -> I64 {
+    return ctx.errors.len() as I64
+}
