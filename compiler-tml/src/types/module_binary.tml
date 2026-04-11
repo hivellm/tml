@@ -1,0 +1,327 @@
+//! Module binary cache for the TML self-hosting type checker.
+//!
+//! Serializes resolved modules to a compact binary format for incremental
+//! compilation. Uses FNV-1a hash for source fingerprinting (the C++ side
+//! uses CRC32C, but FNV is available in pure TML).
+//!
+//! Binary format (TML-specific, not compatible with C++ .tml.meta):
+//!   [0..4)   magic: u32 = 0x544D4C42 ("TMLB")
+//!   [4..6)   version: u16 = 1
+//!   [6..14)  source_hash: u64 (FNV-1a of source content)
+//!   [14..)   module data (name, declarations, re-exports)
+//!
+//! Phase 14b — items 4.1–4.4.
+
+use compiler::types::ty::Type
+use compiler::types::ty::type_to_str
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::StructFieldDef
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::BehaviorDef
+use compiler::types::env::ConstGenericParam
+use compiler::types::module::Module
+use compiler::types::module::ReExport
+use compiler::serial::writer::BinaryWriter
+use std::collections::buffer::Buffer
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// Direct FFI to avoid pulling in full std::file dependency chain
+@extern("path_exists")
+func ffi_path_exists(path: Str) -> Bool
+
+@allocates
+@extern("file_read_all")
+func ffi_file_read_all(path: Str) -> Str
+
+/// Simple path join using "/" separator (pure TML, no FFI).
+func simple_path_join(a: Str, b: Str) -> Str {
+    if a.len() == 0 { return b }
+    if b.len() == 0 { return a }
+    let last: I64 = a.char_at(a.len() - 1) as I64
+    // 47 = '/', 92 = '\'
+    if last == 47 or last == 92 { return a + b }
+    return a + "/" + b
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Magic bytes "TMLB" (TML Binary module cache).
+func cache_magic() -> I64 { return 0x544D4C42 as I64 }
+
+/// Current cache format version.
+func cache_version() -> I64 { return 1 as I64 }
+
+// ============================================================================
+// 4.2 — Source fingerprinting
+// ============================================================================
+
+/// Compute FNV-1a hash of a source string for cache invalidation.
+/// This is a fast, non-cryptographic hash suitable for change detection.
+pub func compute_source_hash(source: Str) -> I64 {
+    let n: I64 = source.len()
+    // FNV-1a offset basis (64-bit)
+    var h: I64 = -3750763034362895579 as I64  // 14695981039346656037 as signed
+    var i: I64 = 0
+    loop (i < n) {
+        let byte: I64 = source.char_at(i) as I64
+        h = h ^ byte
+        // FNV prime: 1099511628211
+        h = h * 1099511628211 as I64
+        i = i + 1
+    }
+    return h
+}
+
+// ============================================================================
+// 4.1 — Serialize module to binary
+// ============================================================================
+
+/// Serialize a Module to binary format for caching.
+/// Returns the serialized bytes as a Buffer.
+pub func serialize_module(m: Module, source_hash: I64) -> Buffer {
+    let w: BinaryWriter = BinaryWriter::new(4096 as I64)
+
+    // Header
+    w.write_u32(cache_magic())
+    w.write_u16(cache_version() as I32)
+    w.write_u64(source_hash)
+
+    // Module name and file path
+    w.write_str(m.name)
+    w.write_str(m.file_path)
+
+    // Function count + names
+    let fc: I64 = m.func_store.len() as I64
+    w.write_u32(fc)
+    var fi: I64 = 0
+    loop (fi < fc) {
+        let sig: FuncSig = m.func_store.get(fi)
+        write_func_sig(w, sig)
+        fi = fi + 1
+    }
+
+    // Struct count + names
+    let sc: I64 = m.struct_store.len() as I64
+    w.write_u32(sc)
+    var si: I64 = 0
+    loop (si < sc) {
+        let def: StructDef = m.struct_store.get(si)
+        write_struct_def(w, def)
+        si = si + 1
+    }
+
+    // Enum count
+    let ec: I64 = m.enum_store.len() as I64
+    w.write_u32(ec)
+    var ei: I64 = 0
+    loop (ei < ec) {
+        let def: EnumDef = m.enum_store.get(ei)
+        write_enum_def(w, def)
+        ei = ei + 1
+    }
+
+    // Behavior count
+    let bc: I64 = m.behavior_store.len() as I64
+    w.write_u32(bc)
+    var bi: I64 = 0
+    loop (bi < bc) {
+        let def: BehaviorDef = m.behavior_store.get(bi)
+        write_behavior_def(w, def)
+        bi = bi + 1
+    }
+
+    // Re-export count
+    let rc: I64 = m.re_exports.len() as I64
+    w.write_u32(rc)
+    var ri: I64 = 0
+    loop (ri < rc) {
+        let re: ReExport = m.re_exports.get(ri)
+        w.write_str(re.source_path)
+        w.write_u8(re.is_glob as I32)
+        let sym_count: I64 = re.symbols.len() as I64
+        w.write_u32(sym_count)
+        var rsi: I64 = 0
+        loop (rsi < sym_count) {
+            w.write_str(re.symbols.get(rsi))
+            rsi = rsi + 1
+        }
+        when re.alias {
+            Just(a) => { w.write_u8(1); w.write_str(a) },
+            Nothing => w.write_u8(0)
+        }
+        ri = ri + 1
+    }
+
+    return w.finish()
+}
+
+/// Write a FuncSig to binary (name + param count + return type name).
+func write_func_sig(w: BinaryWriter, sig: FuncSig) {
+    w.write_str(sig.name)
+    let pc: I64 = sig.params.len() as I64
+    w.write_u32(pc)
+    var i: I64 = 0
+    loop (i < pc) {
+        w.write_str(type_to_str(sig.params.get(i).get()))
+        i = i + 1
+    }
+    w.write_str(type_to_str(sig.return_type.get()))
+    w.write_u8(sig.is_async as I32)
+
+    // Type params
+    let tp: I64 = sig.type_params.len() as I64
+    w.write_u32(tp)
+    var ti: I64 = 0
+    loop (ti < tp) {
+        w.write_str(sig.type_params.get(ti))
+        ti = ti + 1
+    }
+}
+
+/// Write a StructDef to binary.
+func write_struct_def(w: BinaryWriter, def: StructDef) {
+    w.write_str(def.name)
+    let fc: I64 = def.fields.len() as I64
+    w.write_u32(fc)
+    var i: I64 = 0
+    loop (i < fc) {
+        let f: StructFieldDef = def.fields.get(i)
+        w.write_str(f.name)
+        w.write_str(type_to_str(f.ty.get()))
+        i = i + 1
+    }
+    // Type params
+    let tp: I64 = def.type_params.len() as I64
+    w.write_u32(tp)
+    var ti: I64 = 0
+    loop (ti < tp) {
+        w.write_str(def.type_params.get(ti))
+        ti = ti + 1
+    }
+}
+
+/// Write an EnumDef to binary.
+func write_enum_def(w: BinaryWriter, def: EnumDef) {
+    w.write_str(def.name)
+    let vc: I64 = def.variants.len() as I64
+    w.write_u32(vc)
+    var i: I64 = 0
+    loop (i < vc) {
+        let v: EnumVariantDef = def.variants.get(i)
+        w.write_str(v.name)
+        let pc: I64 = v.payload_types.len() as I64
+        w.write_u32(pc)
+        var pi: I64 = 0
+        loop (pi < pc) {
+            w.write_str(type_to_str(v.payload_types.get(pi).get()))
+            pi = pi + 1
+        }
+        i = i + 1
+    }
+    // Type params
+    let tp: I64 = def.type_params.len() as I64
+    w.write_u32(tp)
+    var ti: I64 = 0
+    loop (ti < tp) {
+        w.write_str(def.type_params.get(ti))
+        ti = ti + 1
+    }
+}
+
+/// Write a BehaviorDef to binary.
+func write_behavior_def(w: BinaryWriter, def: BehaviorDef) {
+    w.write_str(def.name)
+    let mc: I64 = def.methods.len() as I64
+    w.write_u32(mc)
+    var i: I64 = 0
+    loop (i < mc) {
+        write_func_sig(w, def.methods.get(i))
+        i = i + 1
+    }
+    // Super behaviors
+    let sc: I64 = def.super_behaviors.len() as I64
+    w.write_u32(sc)
+    var si: I64 = 0
+    loop (si < sc) {
+        w.write_str(def.super_behaviors.get(si))
+        si = si + 1
+    }
+}
+
+// ============================================================================
+// 4.3 — Read cached module header
+// ============================================================================
+
+/// Read the source hash from a cache file header.
+/// Returns 0 if the file doesn't exist or has invalid magic/version.
+pub func read_cache_hash(cache_path: Str) -> I64 {
+    if not ffi_path_exists(cache_path) { return 0 }
+    let content: Str = ffi_file_read_all(cache_path)
+    if content.len() < 14 { return 0 }
+
+    // Check magic (bytes 0-3)
+    let b0: I64 = content.char_at(0) as I64
+    let b1: I64 = content.char_at(1) as I64
+    let b2: I64 = content.char_at(2) as I64
+    let b3: I64 = content.char_at(3) as I64
+    let magic: I64 = b0 + (b1 * 256 as I64) + (b2 * 65536 as I64) + (b3 * 16777216 as I64)
+    if magic != cache_magic() { return 0 }
+
+    // Check version (bytes 4-5)
+    let ver: I64 = (content.char_at(4) as I64) + ((content.char_at(5) as I64) * 256 as I64)
+    if ver != cache_version() { return 0 }
+
+    // Read source hash (bytes 6-13, little-endian u64)
+    var hash: I64 = 0
+    var shift: I64 = 0
+    var i: I64 = 6
+    loop (i < 14) {
+        let byte: I64 = content.char_at(i) as I64
+        hash = hash + (byte * (1 as I64 << shift))
+        shift = shift + 8
+        i = i + 1
+    }
+    return hash
+}
+
+// ============================================================================
+// 4.4 — Cache invalidation
+// ============================================================================
+
+/// Check if a cached module is still valid by comparing source hashes.
+/// Returns true if the cache exists and the source hasn't changed.
+pub func is_cache_valid(cache_path: Str, source_path: Str) -> Bool {
+    let cached_hash: I64 = read_cache_hash(cache_path)
+    if cached_hash == 0 { return false }
+
+    let source: Str = ffi_file_read_all(source_path)
+    if source.len() == 0 { return false }
+
+    let current_hash: I64 = compute_source_hash(source)
+    return cached_hash == current_hash
+}
+
+/// Build the cache file path for a module path.
+/// e.g., "core::mem" → "<build_root>/cache/meta/core/mem.tmlb"
+pub func cache_path_for_module(build_root: Str, mod_path: Str) -> Str {
+    let n: I64 = mod_path.len()
+    var fs_path: Str = ""
+    var i: I64 = 0
+    loop (i < n) {
+        let ch: I64 = mod_path.char_at(i) as I64
+        if ch == 58 and i + 1 < n and (mod_path.char_at(i + 1) as I64) == 58 {
+            // "::" → "/"
+            fs_path = fs_path + "/"
+            i = i + 2
+        } else {
+            fs_path = fs_path + mod_path.slice(i, i + 1)
+            i = i + 1
+        }
+    }
+    return simple_path_join(simple_path_join(build_root, "cache/meta"), fs_path + ".tmlb")
+}

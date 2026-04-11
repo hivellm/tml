@@ -26,8 +26,23 @@ use compiler::token::Token
 use compiler::lexer::lexer::tokenize
 use compiler::parser::parse_module::parse_module
 use std::collections::list::List
-use std::file::Path
-use std::file::File
+
+// Direct FFI to avoid pulling in full std::file dependency chain
+@extern("path_exists")
+func ffi_path_exists(path: Str) -> Bool
+
+@allocates
+@extern("file_read_all")
+func ffi_file_read_all(path: Str) -> Str
+
+/// Simple path join using "/" separator (pure TML, no FFI).
+func simple_path_join(a: Str, b: Str) -> Str {
+    if a.len() == 0 { return b }
+    if b.len() == 0 { return a }
+    let last: I64 = a.char_at(a.len() - 1) as I64
+    if last == 47 or last == 92 { return a + b }
+    return a + "/" + b
+}
 
 // ============================================================================
 // Module loader configuration
@@ -107,8 +122,8 @@ pub func resolve_module_path(config: LoaderConfig, mod_path: Str) -> Str {
 
     // Special: test
     if first == "test" {
-        let p1: Str = Path::join(config.lib_root, "test/src/mod.tml")
-        if Path::exists(p1) { return p1 }
+        let p1: Str = simple_path_join(config.lib_root, "test/src/mod.tml")
+        if ffi_path_exists(p1) { return p1 }
     }
 
     // Special: compiler::*
@@ -121,10 +136,10 @@ pub func resolve_module_path(config: LoaderConfig, mod_path: Str) -> Str {
     // Local module: relative to source directory
     if config.source_dir.len() > 0 {
         let local_rest: Str = module_path_to_fs_rest(segs, 0)
-        let p1: Str = Path::join(config.source_dir, local_rest + ".tml")
-        if Path::exists(p1) { return p1 }
-        let p2: Str = Path::join(config.source_dir, local_rest + "/mod.tml")
-        if Path::exists(p2) { return p2 }
+        let p1: Str = simple_path_join(config.source_dir, local_rest + ".tml")
+        if ffi_path_exists(p1) { return p1 }
+        let p2: Str = simple_path_join(config.source_dir, local_rest + "/mod.tml")
+        if ffi_path_exists(p2) { return p2 }
     }
 
     return ""
@@ -133,11 +148,11 @@ pub func resolve_module_path(config: LoaderConfig, mod_path: Str) -> Str {
 /// Try to find a module file in a library directory.
 /// Tries both `lib/<pkg>/src/<rest>.tml` and `lib/<pkg>/src/<rest>/mod.tml`.
 func try_lib_path(lib_root: Str, pkg: Str, rest: Str) -> Str {
-    let pkg_src: Str = Path::join(Path::join(lib_root, pkg), "src")
-    let p1: Str = Path::join(pkg_src, rest + ".tml")
-    if Path::exists(p1) { return p1 }
-    let p2: Str = Path::join(pkg_src, rest + "/mod.tml")
-    if Path::exists(p2) { return p2 }
+    let pkg_src: Str = simple_path_join(simple_path_join(lib_root, pkg), "src")
+    let p1: Str = simple_path_join(pkg_src, rest + ".tml")
+    if ffi_path_exists(p1) { return p1 }
+    let p2: Str = simple_path_join(pkg_src, rest + "/mod.tml")
+    if ffi_path_exists(p2) { return p2 }
     return ""
 }
 
@@ -215,7 +230,7 @@ pub func load_module(config: LoaderConfig, reg: ModuleRegistry, env: TypeEnv, st
     loading_stack_push(stack, mod_path)
 
     // Read source
-    let source: Str = File::read_all(fs_path)
+    let source: Str = ffi_file_read_all(fs_path)
     if source.len() == 0 {
         loading_stack_pop(stack)
         return false

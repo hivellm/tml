@@ -1,0 +1,59 @@
+//! Tests for module source hashing and path utilities.
+
+use test
+use compiler::types::module_binary::compute_source_hash
+use compiler::types::module_binary::cache_path_for_module
+use compiler::types::module_loader::split_module_path
+use compiler::types::module_loader::join_module_path
+use std::collections::list::List
+
+@test
+func test_split_module_path() -> I32 {
+    let segs = split_module_path("std::collections::list")
+    assert_eq(segs.len() as I64, 3 as I64)
+    assert_eq(segs.get(0), "std")
+    assert_eq(segs.get(1), "collections")
+    assert_eq(segs.get(2), "list")
+    return 0
+}
+
+@test
+func test_split_single() -> I32 {
+    let segs = split_module_path("test")
+    assert_eq(segs.len() as I64, 1 as I64)
+    assert_eq(segs.get(0), "test")
+    return 0
+}
+
+@test
+func test_join_module_path() -> I32 {
+    let segs: List[Str] = List[Str]::new(3 as I64)
+    segs.push("std")
+    segs.push("collections")
+    segs.push("list")
+    assert_eq(join_module_path(segs), "std::collections::list")
+    return 0
+}
+
+@test
+func test_hash_deterministic() -> I32 {
+    let h1: I64 = compute_source_hash("hello world")
+    let h2: I64 = compute_source_hash("hello world")
+    assert_eq(h1, h2)
+    return 0
+}
+
+@test
+func test_hash_differs() -> I32 {
+    let h1: I64 = compute_source_hash("hello")
+    let h2: I64 = compute_source_hash("world")
+    assert(h1 != h2)
+    return 0
+}
+
+@test
+func test_cache_path() -> I32 {
+    let p: Str = cache_path_for_module("build", "core::mem")
+    assert(p.len() > 0)
+    return 0
+}
