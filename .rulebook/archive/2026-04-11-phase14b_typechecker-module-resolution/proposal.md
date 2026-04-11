@@ -1,5 +1,9 @@
 # Proposal: Type Checker — Module Resolution (Sub-phase 2b)
 
+## Why
+
+Port module resolution to TML so the self-hosted type checker can resolve `use` imports and make declared types visible across modules, enabling multi-file program compilation.
+
 ## Problem
 
 Before the type checker can check any expression, it must resolve all `use` imports and make

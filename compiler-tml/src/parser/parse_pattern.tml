@@ -36,6 +36,8 @@ use compiler::parser::common::parse_err
 use compiler::parser::parse_type::parse_type_path_full
 use std::collections::list::List
 use core::alloc::heap::Heap
+use core::str::parse::parse_i64
+use core::str::parse::parse_f64
 
 // ============================================================================
 // Public entry points
@@ -87,13 +89,15 @@ pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
         // Integer literal pattern
         IntLiteral => {
             p = p + 1
-            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(0), span: tok.span }
+            let int_val: I64 = when parse_i64(tok.value) { Just(v) => v, Nothing => 0 }
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(int_val), span: tok.span }
             return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
         },
         // Float literal pattern
         FloatLiteral => {
             p = p + 1
-            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitFloat(0), span: tok.span }
+            let float_val: F64 = when parse_f64(tok.value) { Just(v) => v, Nothing => 0.0 }
+            let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitFloat(float_val), span: tok.span }
             return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
         },
         // String literal pattern
@@ -129,6 +133,14 @@ pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
         LBracket => {
             return parse_array_pattern(tokens, p)
         },
+        // Mutable binding: `mut name`
+        KwMut => {
+            p = p + 1  // consume 'mut'
+            let name_r = p_expect_ident(tokens, p, "Expected identifier after 'mut'")!
+            p = name_r.pos
+            let ip: IdentPattern = IdentPattern { name: name_r.tok.value, subpat: Nothing, span: tok.span }
+            return Ok(ParsedPattern { pat: Heap::new(Pattern::Ident(ip)), pos: p })
+        },
         // Negative number: `-42`
         Minus => {
             p = p + 1
@@ -137,7 +149,8 @@ pub func parse_pattern_no_or(tokens: List[Token], pos: I64) -> Outcome[ParsedPat
                 IntLiteral => {
                     p = p + 1
                     let span: SourceSpan = span_merge(tok.span, num_tok.span)
-                    let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(0), span: span }
+                    let int_val: I64 = when parse_i64(num_tok.value) { Just(v) => 0 - v, Nothing => 0 }
+                    let lit: LiteralPattern = LiteralPattern { value: LiteralKind::LitInt(int_val), span: span }
                     return Ok(ParsedPattern { pat: Heap::new(Pattern::Literal(lit)), pos: p })
                 },
                 _ => return Err(parse_err("Expected number after '-' in pattern", num_tok.span))

@@ -38,7 +38,7 @@ use compiler::ast::exprs::Expr
 use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedDecl
 use compiler::parser::common::ParsedDecls
-use compiler::parser::common::ParsedStr
+use compiler::parser::common::ParsedToken
 use compiler::parser::common::p_peek
 use compiler::parser::common::p_peek_next
 use compiler::parser::common::p_prev
@@ -50,6 +50,7 @@ use compiler::parser::common::p_consume_if
 use compiler::parser::common::p_expect
 use compiler::parser::common::p_expect_ident
 use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::tok_is_name
 use compiler::parser::common::parse_err
 use compiler::parser::parse_type::parse_type
 use compiler::parser::parse_type::parse_type_path_full
@@ -107,6 +108,12 @@ pub func parse_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseF
     let vis: Visibility = vis_r.vis
     p = vis_r.pos
 
+    // Skip attributes: @test, @extern("..."), @derive(...), etc.
+    loop (p_check(tokens, p, TokenKind::At)) {
+        p = skip_attribute(tokens, p)
+        p = p_skip_newlines(tokens, p)
+    }
+
     let tok: Token = p_peek(tokens, p)
     when tok.kind {
         KwAsync => return parse_func_decl(tokens, p, vis),
@@ -121,6 +128,48 @@ pub func parse_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, ParseF
         KwMod => return parse_mod_decl(tokens, p, vis),
         _ => return Err(parse_err("Expected declaration", tok.span))
     }
+}
+
+// ============================================================================
+// Attribute skipping
+// ============================================================================
+
+/// Skip a single attribute: `@name` or `@name(...)` or `@name[...]`.
+func skip_attribute(tokens: List[Token], pos: I64) -> I64 {
+    var p: I64 = pos
+    // consume '@'
+    p = p + 1
+    // consume the name (identifier or keyword like 'test', 'extern', 'derive')
+    if not p_is_eof(tokens, p) {
+        p = p + 1
+    }
+    // optional argument list: (...) or [...]
+    if p_check(tokens, p, TokenKind::LParen) {
+        p = p + 1
+        var depth: I64 = 1
+        loop (depth > 0 and not p_is_eof(tokens, p)) {
+            let k: TokenKind = p_peek(tokens, p).kind
+            when k {
+                LParen => { depth = depth + 1 },
+                RParen => { depth = depth - 1 },
+                _ => {}
+            }
+            p = p + 1
+        }
+    } else if p_check(tokens, p, TokenKind::LBracket) {
+        p = p + 1
+        var depth: I64 = 1
+        loop (depth > 0 and not p_is_eof(tokens, p)) {
+            let k: TokenKind = p_peek(tokens, p).kind
+            when k {
+                LBracket => { depth = depth + 1 },
+                RBracket => { depth = depth - 1 },
+                _ => {}
+            }
+            p = p + 1
+        }
+    }
+    return p
 }
 
 // ============================================================================
@@ -161,9 +210,13 @@ func parse_generic_params(tokens: List[Token], pos: I64) -> Outcome[ParsedGeneri
     loop (not p_check(tokens, p, TokenKind::RBracket) and not p_is_eof(tokens, p)) {
         p = p_skip_newlines(tokens, p)
         let param_span: SourceSpan = p_peek(tokens, p).span
+        // Handle lifetime parameters: `life a` — skip the `life` modifier
+        if p_check(tokens, p, TokenKind::KwLife) {
+            p = p + 1
+        }
         let name_r = p_expect_ident(tokens, p, "Expected type parameter name")!
         p = name_r.pos
-        let pname: Str = name_r.value
+        let pname: Str = name_r.tok.value
 
         var bounds: List[TypePath] = List::new(2)
         if p_check(tokens, p, TokenKind::Colon) {
@@ -243,7 +296,7 @@ func parse_func_param(tokens: List[Token], pos: I64) -> Outcome[ParsedFuncParam,
 
     let name_r = p_expect_ident(tokens, p, "Expected parameter name")!
     p = name_r.pos
-    let pname: Str = name_r.value
+    let pname: Str = name_r.tok.value
 
     // 'this' / 'self' without type annotation
     let is_this: Bool = pname == "this" or pname == "self"
@@ -296,7 +349,7 @@ pub func parse_func_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
 
     let name_r = p_expect_ident(tokens, p, "Expected function name")!
     p = name_r.pos
-    let fname: Str = name_r.value
+    let fname: Str = name_r.tok.value
 
     // Optional generic parameters
     var generics: List[GenericParam] = List::new(0)
@@ -499,7 +552,7 @@ func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcom
 
     let name_r = p_expect_ident(tokens, p, "Expected struct name")!
     p = name_r.pos
-    let sname: Str = name_r.value
+    let sname: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -525,7 +578,7 @@ func parse_struct_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcom
         let field_span: SourceSpan = p_peek(tokens, p).span
         let fname_r = p_expect_ident(tokens, p, "Expected field name")!
         p = fname_r.pos
-        let field_name: Str = fname_r.value
+        let field_name: Str = fname_r.tok.value
 
         let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after field name")!
         p = colon.pos
@@ -562,7 +615,7 @@ func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
 
     let name_r = p_expect_ident(tokens, p, "Expected union name")!
     p = name_r.pos
-    let uname: Str = name_r.value
+    let uname: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -583,7 +636,7 @@ func parse_union_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
         let field_span: SourceSpan = p_peek(tokens, p).span
         let fname_r = p_expect_ident(tokens, p, "Expected field name")!
         p = fname_r.pos
-        let field_name: Str = fname_r.value
+        let field_name: Str = fname_r.tok.value
 
         let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after field name")!
         p = colon.pos
@@ -620,7 +673,7 @@ func parse_enum_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[
 
     let name_r = p_expect_ident(tokens, p, "Expected enum name")!
     p = name_r.pos
-    let ename: Str = name_r.value
+    let ename: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -666,7 +719,7 @@ func parse_sum_type_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
 
     let name_r = p_expect_ident(tokens, p, "Expected type name")!
     p = name_r.pos
-    let ename: Str = name_r.value
+    let ename: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -711,7 +764,7 @@ func parse_enum_variant(tokens: List[Token], pos: I64) -> Outcome[ParsedEnumVari
 
     let name_r = p_expect_ident(tokens, p, "Expected variant name")!
     p = name_r.pos
-    let vname: Str = name_r.value
+    let vname: Str = name_r.tok.value
 
     // Tuple fields: Variant(T1, T2)
     var fields: List[Heap[TypeExpr]] = List::new(0)
@@ -751,7 +804,7 @@ func parse_trait_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
 
     let name_r = p_expect_ident(tokens, p, "Expected behavior name")!
     p = name_r.pos
-    let tname: Str = name_r.value
+    let tname: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -857,7 +910,7 @@ func parse_func_decl_raw(tokens: List[Token], pos: I64, vis: Visibility) -> Outc
 
     let name_r = p_expect_ident(tokens, p, "Expected function name")!
     p = name_r.pos
-    let fname: Str = name_r.value
+    let fname: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -997,7 +1050,7 @@ pub func parse_impl_decl(tokens: List[Token], pos: I64) -> Outcome[ParsedDecl, P
 
     let end_span: SourceSpan = p_prev(tokens, p).span
     let id: ImplDecl = ImplDecl { ty: self_te, behavior_path: behavior_path, generics: generics, methods: methods, span: span_merge(start_span, end_span) }
-    return Ok(ParsedDecl { decl: Heap::new(Decl::Impl(id)), pos: p })
+    return Ok(ParsedDecl { decl: Heap::new(Decl::Impl(Heap::new(id))), pos: p })
 }
 
 // ============================================================================
@@ -1012,7 +1065,7 @@ func parse_type_alias_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Ou
 
     let name_r = p_expect_ident(tokens, p, "Expected type alias name")!
     p = name_r.pos
-    let aname: Str = name_r.value
+    let aname: Str = name_r.tok.value
 
     var generics: List[GenericParam] = List::new(0)
     if p_check(tokens, p, TokenKind::LBracket) {
@@ -1043,7 +1096,7 @@ func parse_const_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome
 
     let name_r = p_expect_ident(tokens, p, "Expected const name")!
     p = name_r.pos
-    let cname: Str = name_r.value
+    let cname: Str = name_r.tok.value
 
     let colon = p_expect(tokens, p, TokenKind::Colon, "Expected ':' after const name")!
     p = colon.pos
@@ -1076,14 +1129,24 @@ func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[P
 
     let first_r = p_expect_ident(tokens, p, "Expected identifier after 'use'")!
     p = first_r.pos
-    segs.push(first_r.value)
+    segs.push(first_r.tok.value)
 
-    // Continue path with '::' separators
-    loop (p_check(tokens, p, TokenKind::ColonColon) and p_check_next(tokens, p, TokenKind::Identifier)) {
+    // Continue path with '::' separators; also handle '::*' glob imports
+    loop (p_check(tokens, p, TokenKind::ColonColon)) {
+        let next_kind: TokenKind = p_peek_next(tokens, p).kind
+        // Only continue for identifiers or glob '*'
+        if not tok_is_name(next_kind) and not tok_kind_eq(next_kind, TokenKind::Star) {
+            break
+        }
         p = p + 1  // consume '::'
+        if p_check(tokens, p, TokenKind::Star) {
+            segs.push("*")
+            p = p + 1  // consume '*'
+            break
+        }
         let seg_r = p_expect_ident(tokens, p, "Expected identifier after '::'")!
         p = seg_r.pos
-        segs.push(seg_r.value)
+        segs.push(seg_r.tok.value)
     }
 
     // Optional alias: as Alias
@@ -1092,7 +1155,7 @@ func parse_use_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[P
         p = p + 1
         let alias_r = p_expect_ident(tokens, p, "Expected alias name after 'as'")!
         p = alias_r.pos
-        alias = Just(alias_r.value)
+        alias = Just(alias_r.tok.value)
     }
 
     let end_span: SourceSpan = p_prev(tokens, p).span
@@ -1112,7 +1175,7 @@ func parse_mod_decl(tokens: List[Token], pos: I64, vis: Visibility) -> Outcome[P
 
     let name_r = p_expect_ident(tokens, p, "Expected module name after 'mod'")!
     p = name_r.pos
-    let mname: Str = name_r.value
+    let mname: Str = name_r.tok.value
 
     let end_span: SourceSpan = p_prev(tokens, p).span
     var empty_items: List[Heap[Decl]] = List::new(0)

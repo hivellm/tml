@@ -197,15 +197,20 @@ pub func tok_is_name(kind: TokenKind) -> Bool {
     when kind {
         Identifier => return true,
         KwNew => return true,
+        KwLife => return true,
+        KwThis => return true,
         _ => return false
     }
 }
 
-/// Expect identifier (or keyword-as-name) and consume it, returning the lexeme.
-pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedStr, ParseFailure] {
+/// Expect identifier (or keyword-as-name) and consume it, returning the token.
+/// Returns ParsedToken (not ParsedStr) so that the caller can access tok.value
+/// without triggering tml_str_free on drop — Token is an external type whose
+/// Str fields are not freed when the token goes out of scope.
+pub func p_expect_ident(tokens: List[Token], pos: I64, msg: Str) -> Outcome[ParsedToken, ParseFailure] {
     let tok: Token = p_peek(tokens, pos)
     if tok_is_name(tok.kind) {
-        return Ok(ParsedStr { value: tok.value, pos: pos + 1 })
+        return Ok(ParsedToken { tok: tok, pos: pos + 1 })
     }
     return Err(parse_err(msg, tok.span))
 }

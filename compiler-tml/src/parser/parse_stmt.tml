@@ -25,6 +25,7 @@ use compiler::ast::decls::Decl
 use compiler::parser::common::ParseFailure
 use compiler::parser::common::ParsedStmt
 use compiler::parser::common::ParsedDecl
+use compiler::parser::common::ParsedToken
 use compiler::parser::common::p_peek
 use compiler::parser::common::p_prev
 use compiler::parser::common::p_check
@@ -76,6 +77,34 @@ pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseF
 pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseFailure] {
     let start_span: SourceSpan = p_peek(tokens, pos).span
     var p: I64 = pos + 1  // consume 'let'
+
+    // `let mut ident` is equivalent to `var ident` — produce VarStmt
+    if p_check(tokens, p, TokenKind::KwMut) {
+        p = p + 1  // consume 'mut'
+        let name_r = p_expect_ident(tokens, p, "Expected variable name after 'let mut'")!
+        p = name_r.pos
+        let name: Str = name_r.tok.value
+
+        var ty: Maybe[Heap[TypeExpr]] = Nothing
+        if p_check(tokens, p, TokenKind::Colon) {
+            p = p + 1
+            let type_r = parse_type(tokens, p)!
+            p = type_r.pos
+            ty = Just(type_r.te)
+        }
+
+        var init: Maybe[Heap[Expr]] = Nothing
+        if p_check(tokens, p, TokenKind::Assign) {
+            p = p + 1
+            let expr_r = parse_expr(tokens, p)!
+            p = expr_r.pos
+            init = Just(expr_r.expr)
+        }
+
+        let end_span: SourceSpan = p_prev(tokens, p).span
+        let vs: VarStmt = VarStmt { name: name, ty: ty, init: init, span: span_merge(start_span, end_span) }
+        return Ok(ParsedStmt { stmt: Heap::new(Stmt::Var(vs)), pos: p })
+    }
 
     // Pattern (ident, tuple, enum, struct, wildcard, …)
     let pat_r = parse_pattern(tokens, p)!
@@ -153,7 +182,7 @@ pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
     // Variable name (identifier only — no complex patterns for var)
     let name_r = p_expect_ident(tokens, p, "Expected variable name after 'var'")!
     p = name_r.pos
-    let name: Str = name_r.value
+    let name: Str = name_r.tok.value
 
     // Optional type annotation `: Type`
     var ty: Maybe[Heap[TypeExpr]] = Nothing

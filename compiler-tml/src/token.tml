@@ -232,6 +232,7 @@ pub func keyword_lookup(name: Str) -> Maybe[TokenKind] {
     // Declarations
     if name == "func" { return Just(TokenKind::KwFunc) }
     if name == "type" { return Just(TokenKind::KwType) }
+    if name == "enum" { return Just(TokenKind::KwType) }  // alias — mirrors C++ lexer (lexer_core.cpp:46)
     if name == "union" { return Just(TokenKind::KwUnion) }
     if name == "behavior" { return Just(TokenKind::KwBehavior) }
     if name == "impl" { return Just(TokenKind::KwImpl) }

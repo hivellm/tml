@@ -46,6 +46,9 @@
 #include <string.h>
 #ifndef _WIN32
 #include <unistd.h> // _exit() on POSIX
+#else
+#include <fcntl.h> // _O_BINARY
+#include <io.h>    // _setmode, _fileno
 #endif
 
 // Export macro for DLL visibility
@@ -418,6 +421,19 @@ TML_EXPORT void eprintln(const char* message) {
 TML_EXPORT int64_t tml_write_stdout_bytes(int64_t buf_ptr, int64_t count) {
     if (!buf_ptr || count <= 0)
         return 0;
+#ifdef _WIN32
+    /* On Windows, stdout is text-mode by default and translates \n (0x0A) to
+     * \r\n (0x0D 0x0A) for BOTH fwrite() and _write(). Binary AST data may
+     * contain 0x0A bytes anywhere (e.g. varint for string length 10 =
+     * "Visibility"), so we switch stdout to binary mode once and then write.
+     * _setmode persists for the lifetime of the process — that's intentional:
+     * main_frontend.exe writes only binary AST to stdout, no text. */
+    static int stdout_binary_mode_set = 0;
+    if (!stdout_binary_mode_set) {
+        _setmode(_fileno(stdout), _O_BINARY);
+        stdout_binary_mode_set = 1;
+    }
+#endif
     size_t written = fwrite((void*)buf_ptr, 1, (size_t)count, stdout);
     fflush(stdout);
     return (int64_t)written;

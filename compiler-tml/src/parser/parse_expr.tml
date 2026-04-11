@@ -48,6 +48,7 @@ use compiler::ast::exprs::AwaitExpr
 use compiler::ast::exprs::PathExpr
 use compiler::ast::exprs::LowlevelExpr
 use compiler::ast::exprs::ThrowExpr
+use compiler::ast::exprs::expr_span
 use compiler::ast::common::LiteralKind
 use compiler::ast::stmts::Stmt
 use compiler::parser::common::ParseFailure
@@ -84,6 +85,8 @@ use compiler::parser::parse_type::parse_generic_args
 use compiler::parser::parse_pattern::parse_pattern
 use std::collections::list::List
 use core::alloc::heap::Heap
+use core::str::parse::parse_i64
+use core::str::parse::parse_f64
 
 // ============================================================================
 // Entry points
@@ -354,7 +357,7 @@ pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> 
             return Ok(ParsedExpr { expr: Heap::new(Expr::Await(AwaitExpr { expr: left, span: span })), pos: p })
         }
         let name_r = p_expect_ident(tokens, p, "Expected field or method name after '.'")!
-        let name: Str = name_r.value
+        let name: Str = name_r.tok.value
         p = name_r.pos
 
         // Optional type args for method: .method[T](args)
@@ -389,7 +392,7 @@ pub func parse_postfix_expr(tokens: List[Token], pos: I64, left: Heap[Expr]) -> 
     if tok_kind_eq(tok.kind, TokenKind::QuestionDot) {
         var p: I64 = pos + 1  // consume '?.'
         let name_r = p_expect_ident(tokens, p, "Expected field or method name after '?.'")!
-        let name: Str = name_r.value
+        let name: Str = name_r.tok.value
         p = name_r.pos
 
         if p_check(tokens, p, TokenKind::LParen) {
@@ -479,11 +482,19 @@ pub func parse_primary_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr
         // Literals
         IntLiteral => {
             p = p + 1
-            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitInt(0), span: tok.span })), pos: p })
+            let int_val: I64 = when parse_i64(tok.value) {
+                Just(v) => v,
+                Nothing => 0
+            }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitInt(int_val), span: tok.span })), pos: p })
         },
         FloatLiteral => {
             p = p + 1
-            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitFloat(0), span: tok.span })), pos: p })
+            let float_val: F64 = when parse_f64(tok.value) {
+                Just(v) => v,
+                Nothing => 0.0
+            }
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Literal(LiteralExpr { value: LiteralKind::LitFloat(float_val), span: tok.span })), pos: p })
         },
         StringLiteral => {
             p = p + 1
@@ -845,7 +856,17 @@ pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, Par
     // Regular if
     let cond_r: ParsedExpr = parse_expr(tokens, p)!
     p = cond_r.pos
-    let then_r: ParsedExpr = parse_block_expr(tokens, p_skip_newlines(tokens, p))!
+    p = p_skip_newlines(tokens, p)
+
+    // Support both `if cond { block }` and `if cond then expr`
+    var inline_then: Bool = false
+    let then_r: ParsedExpr = if p_check(tokens, p, TokenKind::KwThen) {
+        inline_then = true
+        p = p + 1  // consume 'then'
+        parse_expr(tokens, p)!
+    } else {
+        parse_block_expr(tokens, p)!
+    }
     p = then_r.pos
 
     var else_branch: Maybe[Heap[Expr]] = Nothing
@@ -855,6 +876,8 @@ pub func parse_if_expr(tokens: List[Token], pos: I64) -> Outcome[ParsedExpr, Par
         p = p_skip_newlines(tokens, p)
         let else_r: ParsedExpr = if p_check(tokens, p, TokenKind::KwIf) {
             parse_if_expr(tokens, p)!
+        } else if inline_then and not p_check(tokens, p, TokenKind::LBrace) {
+            parse_expr(tokens, p)!
         } else {
             parse_block_expr(tokens, p)!
         }
@@ -1139,7 +1162,7 @@ pub func parse_struct_expr(tokens: List[Token], pos: I64, path: TypePath, type_a
             break
         }
         let name_r = p_expect_ident(tokens, p, "Expected field name in struct literal")!
-        let field_name: Str = name_r.value
+        let field_name: Str = name_r.tok.value
         p = name_r.pos
 
         var field_val: Heap[Expr]

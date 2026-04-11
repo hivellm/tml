@@ -1,5 +1,9 @@
 # Proposal: Type Checker — Type Registration (Sub-phase 2a)
 
+## Why
+
+Port the C++ type representation and environment initialization to TML as the entry point for self-hosting the type checker, unblocking all subsequent checking sub-phases (14b–14d).
+
 ## Problem
 
 The TML type checker's first phase populates `TypeEnv` with all type declarations before any
