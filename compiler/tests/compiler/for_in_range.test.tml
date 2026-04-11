@@ -1,0 +1,25 @@
+use test
+
+@test func test_for_in_exclusive_sum() {
+    var sum: I32 = 0
+    for i in 0 to 5 {
+        sum = sum + i
+    }
+    assert_eq(sum, 10, "0+1+2+3+4 should be 10")
+}
+
+@test func test_for_in_inclusive_sum() {
+    var sum: I32 = 0
+    for i in 1 through 5 {
+        sum = sum + i
+    }
+    assert_eq(sum, 15, "1+2+3+4+5 should be 15")
+}
+
+@test func test_for_in_empty_range() {
+    var count: I32 = 0
+    for i in 5 to 5 {
+        count = count + 1
+    }
+    assert_eq(count, 0, "empty range should not execute")
+}

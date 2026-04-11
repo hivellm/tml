@@ -426,6 +426,8 @@ auto ThirMirBuilder::build_for_range(const thir::ThirForExpr& for_expr, bool inc
         end_val = range_val;
     }
 
+    uint32_t entry_block = ctx_.current_block;
+
     // Allocate the loop counter variable
     AllocaInst counter_alloca;
     counter_alloca.alloc_type = elem_type;
@@ -438,19 +440,39 @@ auto ThirMirBuilder::build_for_range(const thir::ThirForExpr& for_expr, bool inc
     init_store.value_type = elem_type;
     (void)emit(std::move(init_store), nullptr, for_expr.span);
 
+    // Save pre-loop variable values for phi node creation
+    auto pre_loop_vars = ctx_.variables;
+
     // Create loop blocks
     auto header = create_block("for.header");
     auto body_block = create_block("for.body");
-    auto latch = create_block("for.latch");
     auto exit = create_block("for.exit");
-
-    BuildContext::LoopContext lc;
-    lc.header_block = latch; // continue goes to latch (increment + backedge)
-    lc.exit_block = exit;
-    ctx_.loop_stack.push(std::move(lc));
 
     emit_branch(header);
     switch_to_block(header);
+
+    // Create phi nodes for pre-loop variables so the body sees updated values
+    // on each iteration (same pattern as build_while)
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+        if (var_value.type && var_value.type->is_array())
+            continue;
+        if (ctx_.mut_struct_vars.count(var_name) > 0)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
+    }
+
+    auto header_vars = ctx_.variables;
+
+    ctx_.loop_stack.push({header, exit, std::nullopt, {}});
 
     // Load current counter value
     LoadInst load_counter;
@@ -469,45 +491,75 @@ auto ThirMirBuilder::build_for_range(const thir::ThirForExpr& for_expr, bool inc
 
     // Body: bind pattern to current value, execute body
     switch_to_block(body_block);
+    ctx_.push_drop_scope();
     build_pattern_binding(for_expr.pattern, current);
     (void)build_expr(for_expr.body);
+    emit_scope_drops();
+    ctx_.pop_drop_scope();
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi back-edges with the values updated during the body
     if (!is_terminated()) {
-        emit_branch(latch);
-    }
+        // Increment counter in the body-end (merged latch)
+        LoadInst reload;
+        reload.ptr = counter_ptr;
+        reload.result_type = elem_type;
+        auto current_body_end = emit(std::move(reload), elem_type, for_expr.span);
 
-    // Latch: increment counter and loop back to header
-    switch_to_block(latch);
-    LoadInst reload;
-    reload.ptr = counter_ptr;
-    reload.result_type = elem_type;
-    auto current_latch = emit(std::move(reload), elem_type, for_expr.span);
-
-    // Determine bit width from element type (I32=32, I64=64)
-    int bit_width = 32;
-    if (elem_type) {
-        if (auto* prim = std::get_if<MirPrimitiveType>(&elem_type->kind)) {
-            if (prim->kind == PrimitiveType::I64 || prim->kind == PrimitiveType::U64) {
-                bit_width = 64;
+        int bit_width = 32;
+        if (elem_type) {
+            if (auto* prim = std::get_if<MirPrimitiveType>(&elem_type->kind)) {
+                if (prim->kind == PrimitiveType::I64 || prim->kind == PrimitiveType::U64) {
+                    bit_width = 64;
+                }
             }
         }
+        auto one = const_int(1, bit_width);
+        BinaryInst increment;
+        increment.op = BinOp::Add;
+        increment.left = current_body_end;
+        increment.right = one;
+        auto next_counter = emit(std::move(increment), elem_type, for_expr.span);
+
+        StoreInst store_next;
+        store_next.ptr = counter_ptr;
+        store_next.value = next_counter;
+        store_next.value_type = elem_type;
+        (void)emit(std::move(store_next), nullptr, for_expr.span);
+
+        // Update phi back-edges with body-end variable values
+        auto* header_blk = ctx_.current_func->get_block(header);
+        if (header_blk) {
+            for (auto& inst : header_blk->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            auto it = ctx_.variables.find(var_name);
+                            if (it != ctx_.variables.end()) {
+                                phi->incoming.push_back({it->second, body_end_block});
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        emit_branch(header);
     }
-    auto one = const_int(1, bit_width);
-    BinaryInst increment;
-    increment.op = BinOp::Add;
-    increment.left = current_latch;
-    increment.right = one;
-    auto next_counter = emit(std::move(increment), elem_type, for_expr.span);
 
-    StoreInst store_next;
-    store_next.ptr = counter_ptr;
-    store_next.value = next_counter;
-    store_next.value_type = elem_type;
-    (void)emit(std::move(store_next), nullptr, for_expr.span);
-
-    emit_branch(header);
+    auto break_sources = ctx_.loop_stack.top().break_sources;
 
     ctx_.loop_stack.pop();
     switch_to_block(exit);
+
+    // Restore variables at exit with header phi values (condition-false path)
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+        set_variable(var_name, header_val);
+    }
+
     return const_unit();
 }
 

@@ -13,7 +13,7 @@ type Shape {
         Shape::Circle(r) => 0 as I64,
         _ => 2 as I64,
     }
-    test::assert(result == 1 as I64, "should match guarded Circle arm")
+    assert_eq(result, 1 as I64, "should match guarded Circle arm")
 }
 
 @test func test_pattern_guard_fallthrough() {
@@ -23,7 +23,7 @@ type Shape {
         Shape::Circle(r) => 0 as I64,
         _ => 2 as I64,
     }
-    test::assert(result == 0 as I64, "guard false should fall to next Circle arm")
+    assert_eq(result, 0 as I64, "guard false should fall to next Circle arm")
 }
 
 @test func test_pattern_guard_wildcard() {
@@ -33,5 +33,5 @@ type Shape {
         Shape::Circle(r) => 2 as I64,
         _ => 3 as I64,
     }
-    test::assert(result == 3 as I64, "Empty should match wildcard")
+    assert_eq(result, 3 as I64, "Empty should match wildcard")
 }
