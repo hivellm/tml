@@ -67,6 +67,31 @@ pub use compiler::codegen::emit_func::emit_extern_decl
 pub use compiler::codegen::emit_func::calling_convention
 pub use compiler::codegen::emit_func::emit_attribute_group
 
+// --- Call emission ---
+pub use compiler::codegen::emit_call::AbiClass
+pub use compiler::codegen::emit_call::abi_class
+pub use compiler::codegen::emit_call::abi_return_class
+pub use compiler::codegen::emit_call::cc_for_func
+pub use compiler::codegen::emit_call::is_win64_triple
+pub use compiler::codegen::emit_call::emit_direct_call
+pub use compiler::codegen::emit_call::emit_try_operator
+
+// --- Method dispatch ---
+pub use compiler::codegen::emit_method::mangle_type_name
+pub use compiler::codegen::emit_method::mangle_inherent
+pub use compiler::codegen::emit_method::mangle_behavior
+pub use compiler::codegen::emit_method::emit_inherent_call
+pub use compiler::codegen::emit_method::emit_behavior_call
+pub use compiler::codegen::emit_method::emit_vtable_call
+
+// --- Generic instantiation ---
+pub use compiler::codegen::emit_generic::GenericInstantiator
+pub use compiler::codegen::emit_generic::instantiator_new
+pub use compiler::codegen::emit_generic::is_instantiated
+pub use compiler::codegen::emit_generic::mark_instantiated
+pub use compiler::codegen::emit_generic::mangle_generic_func
+pub use compiler::codegen::emit_generic::mir_type_to_mangle
+
 // --- Instruction emission ---
 pub use compiler::codegen::emit_inst::emit_instruction
 pub use compiler::codegen::emit_inst::emit_terminator

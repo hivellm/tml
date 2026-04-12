@@ -1,0 +1,275 @@
+//! Call emission — direct calls, sret, byval, ABI classification.
+//!
+//! `emit_direct_call` handles all direct (non-method, non-virtual) function calls.
+//! Before emitting the call instruction, it classifies each argument and the return
+//! type using `abi_class()` to decide whether to use sret, byval, or register passing.
+//!
+//! ## ABI Rules (x86_64)
+//!
+//! | Case                    | Win64                  | SysV                    |
+//! |-------------------------|------------------------|-------------------------|
+//! | Struct ≤ 8 bytes        | Register               | Register                |
+//! | Struct 9–16 bytes       | Pointer (caller copy)  | Split 2 registers       |
+//! | Struct > 16 bytes       | Pointer (caller copy)  | Pointer (caller copy)   |
+//! | Return struct ≤ 8       | RAX                    | RAX                     |
+//! | Return struct > 8       | sret hidden first arg  | sret hidden first arg   |
+//! | Return struct 9–16 SysV | —                      | RAX + RDX               |
+//!
+//! Phase 16c — items 1.1–2.4.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::ValueId
+use compiler::mir::inst::CallInst
+use compiler::mir::module::MirFunc
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::config::CodegenConfig
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::emit_type::llvm_type_byte_size
+use compiler::codegen::emit_type::llvm_type_alignment
+use compiler::codegen::emit_inst::reg
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// ABI Classification (item 1.2)
+// ============================================================================
+
+/// ABI class for an argument or return type.
+@repr(U8)
+pub enum AbiClass {
+    /// Passed in integer register (≤ 8 bytes on both ABIs).
+    Register,
+    /// Passed in SSE register (floats).
+    Sse,
+    /// Passed by pointer (caller allocates copy, passes address).
+    Memory,
+    /// Return via sret hidden first argument.
+    Sret
+}
+
+/// Classify a type for calling convention purposes.
+/// `is_win64`: 1 for Win64 ABI, 0 for SysV.
+pub func abi_class(ty: MirType, is_win64: I64) -> AbiClass {
+    when ty {
+        Primitive(p) => {
+            when p {
+                F32 => return AbiClass::Sse,
+                F64 => return AbiClass::Sse,
+                Unit => return AbiClass::Register,
+                _ => return AbiClass::Register
+            }
+        },
+        Pointer(_) => return AbiClass::Register,
+        Struct(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Memory }
+            // SysV: structs 9–16 bytes can go in register pairs
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Memory
+        },
+        Enum(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Memory }
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Memory
+        },
+        Tuple(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Memory }
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Memory
+        },
+        Function(_) => return AbiClass::Memory,
+        _ => return AbiClass::Register
+    }
+}
+
+/// Classify a return type — same as abi_class but uses Sret for large structs.
+pub func abi_return_class(ty: MirType, is_win64: I64) -> AbiClass {
+    when ty {
+        Primitive(p) => {
+            when p {
+                Unit => return AbiClass::Register,
+                F32 => return AbiClass::Sse,
+                F64 => return AbiClass::Sse,
+                _ => return AbiClass::Register
+            }
+        },
+        Struct(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Sret }
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Sret
+        },
+        Enum(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Sret }
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Sret
+        },
+        Tuple(_) => {
+            let size: I64 = llvm_type_byte_size(mir_to_llvm(ty, 1))
+            if size <= 8 { return AbiClass::Register }
+            if is_win64 > 0 { return AbiClass::Sret }
+            if size <= 16 { return AbiClass::Register }
+            return AbiClass::Sret
+        },
+        _ => return AbiClass::Register
+    }
+}
+
+// ============================================================================
+// Calling convention (item 1.3)
+// ============================================================================
+
+/// Get the calling convention string for a function.
+pub func cc_for_func(is_extern: I64) -> Str {
+    if is_extern > 0 { return "ccc" }
+    return "fastcc"
+}
+
+// ============================================================================
+// ABI helper: detect Win64 from target triple
+// ============================================================================
+
+/// Returns 1 if the target triple indicates Win64 ABI.
+pub func is_win64_triple(triple: Str) -> I64 {
+    if triple.contains("windows") { return 1 }
+    if triple.contains("win32") { return 1 }
+    return 0
+}
+
+// ============================================================================
+// Direct call emission (items 2.1–2.4)
+// ============================================================================
+
+/// Emit a direct function call with proper ABI handling.
+///
+/// Handles:
+/// - Simple value-return calls
+/// - sret calls (large struct returns)
+/// - byval arguments (small struct args)
+/// - void calls
+///
+/// `result`: the ValueId for the result register.
+/// `ret_type`: the MIR return type of the callee.
+/// `callee`: the mangled function name.
+/// `arg_values`: the ValueId of each argument.
+/// `arg_types`: the MIR type of each argument.
+/// `cfg`: codegen config for ABI selection.
+pub func emit_direct_call(
+    result: I64,
+    ret_type: MirType,
+    callee: Str,
+    arg_values: List[I64],
+    arg_types: List[MirType],
+    is_extern: I64,
+    cfg: CodegenConfig
+) -> Str {
+    let win64: I64 = is_win64_triple(cfg.target_triple)
+    let ret_class: AbiClass = abi_return_class(ret_type, win64)
+    let cc: Str = cc_for_func(is_extern)
+    let ret_ty_str: Str = emit_type(ret_type)
+    let ret_data_str: Str = emit_type_for_data(ret_type)
+
+    var preamble: Str = ""
+    var call_line: Str = ""
+    var postamble: Str = ""
+
+    // Check if we need sret
+    when ret_class {
+        Sret => {
+            // Allocate sret slot
+            let sret_reg: Str = reg(result as I64 - 1)
+            let align: I64 = llvm_type_alignment(mir_to_llvm(ret_type, 1))
+            preamble = "  " + sret_reg + " = alloca " + ret_data_str + ", align " + align.to_string() + "\n"
+
+            // Build argument string with sret as first param
+            var args_str: Str = "ptr sret(" + ret_data_str + ") align " + align.to_string() + " " + sret_reg
+            let ac: I64 = arg_values.len() as I64
+            for i in 0 to ac {
+                args_str = args_str + ", "
+                args_str = args_str + emit_arg(arg_values.get(i), arg_types.get(i), win64)
+            }
+
+            call_line = "  call " + cc + " void @" + callee + "(" + args_str + ")\n"
+            // Load result from sret slot
+            postamble = "  " + reg(result) + " = load " + ret_data_str + ", ptr " + sret_reg + ", align " + align.to_string() + "\n"
+        },
+        _ => {
+            // Non-sret: regular call
+            var args_str: Str = ""
+            let ac: I64 = arg_values.len() as I64
+            for i in 0 to ac {
+                if i > 0 { args_str = args_str + ", " }
+                args_str = args_str + emit_arg(arg_values.get(i), arg_types.get(i), win64)
+            }
+
+            if ret_ty_str == "void" {
+                call_line = "  call " + cc + " void @" + callee + "(" + args_str + ")\n"
+            } else {
+                call_line = "  " + reg(result) + " = call " + cc + " " + ret_data_str + " @" + callee + "(" + args_str + ")\n"
+            }
+        }
+    }
+
+    return preamble + call_line + postamble
+}
+
+/// Format a single argument with proper ABI annotation.
+func emit_arg(value_id: I64, arg_type: MirType, is_win64: I64) -> Str {
+    let ty_str: Str = emit_type_for_data(arg_type)
+    let cls: AbiClass = abi_class(arg_type, is_win64)
+    when cls {
+        Memory => {
+            // Pass by pointer — the caller must have already stored the value
+            return "ptr " + reg(value_id)
+        },
+        _ => return ty_str + " " + reg(value_id)
+    }
+}
+
+// ============================================================================
+// Outcome ? operator (item 5.2)
+// ============================================================================
+
+/// Emit the `?` operator pattern for Outcome[T,E].
+///
+/// ```llvm
+/// %disc = extractvalue %struct.Outcome %val, 0
+/// %is_err = icmp eq i32 %disc, 1
+/// br i1 %is_err, label %err_bb, label %ok_bb
+/// err_bb:
+///   %err_val = extractvalue %struct.Outcome %val, 1
+///   ; propagate error...
+/// ok_bb:
+///   %ok_val = extractvalue %struct.Outcome %val, 1
+/// ```
+pub func emit_try_operator(
+    result: I64,
+    outcome_val: I64,
+    outcome_ty_str: Str,
+    ok_bb: Str,
+    err_bb: Str
+) -> Str {
+    let disc_reg: Str = reg(result)
+    let is_err_reg: Str = reg(result as I64 + 1)
+
+    var s: Str = ""
+    s = s + "  " + disc_reg + " = extractvalue " + outcome_ty_str + " " + reg(outcome_val) + ", 0\n"
+    s = s + "  " + is_err_reg + " = icmp eq i32 " + disc_reg + ", 1\n"
+    s = s + "  br i1 " + is_err_reg + ", label %" + err_bb + ", label %" + ok_bb + "\n"
+    return s
+}

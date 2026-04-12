@@ -1,0 +1,169 @@
+//! Unit tests for call emission, ABI classification, and method dispatch.
+//! Phase 16c — items 7.1–7.2.
+
+use test::assert
+use test::assert_eq
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::codegen::emit_call::AbiClass
+use compiler::codegen::emit_call::abi_class
+use compiler::codegen::emit_call::abi_return_class
+use compiler::codegen::emit_call::cc_for_func
+use compiler::codegen::emit_call::is_win64_triple
+use compiler::codegen::emit_call::emit_try_operator
+use compiler::codegen::emit_method::mangle_type_name
+use compiler::codegen::emit_method::mangle_inherent
+use compiler::codegen::emit_method::mangle_behavior
+use compiler::codegen::emit_method::emit_inherent_call
+use compiler::codegen::emit_generic::mangle_generic_func
+use compiler::codegen::emit_generic::mir_type_to_mangle
+use compiler::codegen::emit_generic::GenericInstantiator
+use compiler::codegen::emit_generic::instantiator_new
+use compiler::codegen::emit_generic::is_instantiated
+use compiler::codegen::emit_generic::mark_instantiated
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// ABI classification
+// ============================================================================
+
+@test func test_abi_i64_register() {
+    let cls = abi_class(MirType::Primitive(MirPrimitive::I64), 0)
+    when cls { Register => assert(true), _ => assert(false) }
+}
+
+@test func test_abi_f64_sse() {
+    let cls = abi_class(MirType::Primitive(MirPrimitive::F64), 0)
+    when cls { Sse => assert(true), _ => assert(false) }
+}
+
+@test func test_abi_small_struct_register() {
+    let fields = List[Heap[MirType]]::new(1)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let ty = MirType::Struct(MirStructType { name: "Small", fields: fields })
+    let cls = abi_class(ty, 0)
+    when cls { Register => assert(true), _ => assert(false) }
+}
+
+@test func test_abi_large_struct_memory() {
+    let fields = List[Heap[MirType]]::new(3)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let ty = MirType::Struct(MirStructType { name: "Big", fields: fields })
+    let cls = abi_class(ty, 1)  // Win64
+    when cls { Memory => assert(true), _ => assert(false) }
+}
+
+@test func test_abi_return_sret() {
+    let fields = List[Heap[MirType]]::new(3)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let ty = MirType::Struct(MirStructType { name: "Big", fields: fields })
+    let cls = abi_return_class(ty, 1)  // Win64
+    when cls { Sret => assert(true), _ => assert(false) }
+}
+
+// ============================================================================
+// Calling convention
+// ============================================================================
+
+@test func test_cc_extern() {
+    assert_eq(cc_for_func(1), "ccc")
+}
+
+@test func test_cc_internal() {
+    assert_eq(cc_for_func(0), "fastcc")
+}
+
+// ============================================================================
+// Win64 detection
+// ============================================================================
+
+@test func test_win64_detect() {
+    assert_eq(is_win64_triple("x86_64-pc-windows-msvc") as I32, 1)
+}
+
+@test func test_sysv_detect() {
+    assert_eq(is_win64_triple("x86_64-unknown-linux-gnu") as I32, 0)
+}
+
+// ============================================================================
+// Name mangling
+// ============================================================================
+
+@test func test_mangle_simple() {
+    assert_eq(mangle_type_name("Point"), "Point")
+}
+
+@test func test_mangle_generic() {
+    assert_eq(mangle_type_name("List[I32]"), "List_I32")
+}
+
+@test func test_mangle_inherent() {
+    assert_eq(mangle_inherent("Point", "distance"), "Point__distance")
+}
+
+@test func test_mangle_behavior() {
+    assert_eq(mangle_behavior("I32", "Add", "add"), "I32__Add__add")
+}
+
+@test func test_mangle_generic_func() {
+    let type_args = List[Str]::new(1)
+    type_args.push("I64")
+    assert_eq(mangle_generic_func("sort", type_args), "sort_I64")
+}
+
+// ============================================================================
+// MIR type mangling
+// ============================================================================
+
+@test func test_mir_mangle_i64() {
+    assert_eq(mir_type_to_mangle(MirType::Primitive(MirPrimitive::I64)), "I64")
+}
+
+@test func test_mir_mangle_str() {
+    assert_eq(mir_type_to_mangle(MirType::Primitive(MirPrimitive::Str)), "Str")
+}
+
+// ============================================================================
+// Generic instantiation tracking
+// ============================================================================
+
+@test func test_instantiation_tracking() {
+    let gi: GenericInstantiator = instantiator_new()
+    assert_eq(is_instantiated(gi, "List_I64__push") as I32, 0)
+    mark_instantiated(gi, "List_I64__push")
+    assert_eq(is_instantiated(gi, "List_I64__push") as I32, 1)
+}
+
+// ============================================================================
+// Method dispatch
+// ============================================================================
+
+@test func test_inherent_call() {
+    let args = List[I64]::new(1)
+    args.push(5)
+    let ir: Str = emit_inherent_call(10, "i64", "Point", "distance", 3, args, "fastcc")
+    assert(ir.contains("@Point__distance"))
+    assert(ir.contains("ptr %3"))
+    assert(ir.contains("i64 %5"))
+}
+
+// ============================================================================
+// Try operator
+// ============================================================================
+
+@test func test_try_operator() {
+    let ir: Str = emit_try_operator(20, 15, "%struct.Outcome", "ok_bb", "err_bb")
+    assert(ir.contains("extractvalue %struct.Outcome %15, 0"))
+    assert(ir.contains("icmp eq i32 %20, 1"))
+    assert(ir.contains("br i1 %21"))
+    assert(ir.contains("label %ok_bb"))
+    assert(ir.contains("label %err_bb"))
+}

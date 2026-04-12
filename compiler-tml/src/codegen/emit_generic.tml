@@ -1,0 +1,126 @@
+//! Generic instantiation — on-demand emission of concrete generic functions.
+//!
+//! When a call to `List[I64]::push` is encountered for the first time,
+//! `GenericInstantiator` emits the full concrete function body for that
+//! instantiation. Subsequent calls reuse the already-defined function.
+//!
+//! ## Mangling
+//!
+//! Generic instantiations are mangled by replacing type parameters with
+//! their concrete type names, separated by underscores:
+//! - `List[I64]::push` → `@List_I64__push`
+//! - `HashMap[Str, Bool]::get` → `@HashMap_Str_Bool__get`
+//! - `sort[I64]` → `@sort_I64`
+//!
+//! Phase 16c — items 4.1–4.4.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_method::mangle_type_name
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// GenericInstantiator (item 4.1)
+// ============================================================================
+
+/// Tracks which generic instantiations have been emitted.
+pub type GenericInstantiator {
+    /// Set of already-emitted mangled names.
+    emitted: HashMap[Str, I64],
+    /// Buffer of emitted generic function definitions.
+    output: Str
+}
+
+/// Create a new empty GenericInstantiator.
+pub func instantiator_new() -> GenericInstantiator {
+    return GenericInstantiator {
+        emitted: HashMap[Str, I64]::new(64),
+        output: ""
+    }
+}
+
+/// Check if a generic instantiation has already been emitted.
+pub func is_instantiated(gi: GenericInstantiator, mangled_name: Str) -> I64 {
+    if gi.emitted.has(mangled_name) { return 1 }
+    return 0
+}
+
+/// Mark a generic instantiation as emitted.
+pub func mark_instantiated(gi: GenericInstantiator, mangled_name: Str) {
+    gi.emitted.set(mangled_name, 1)
+}
+
+// ============================================================================
+// Type parameter substitution (items 4.2–4.3)
+// ============================================================================
+
+/// Mangle a generic function name with concrete type arguments.
+/// `func_name`: "sort", `type_args`: [I64] → "sort_I64"
+/// `func_name`: "List::push", `type_args`: [I64] → "List_I64__push"
+pub func mangle_generic_func(func_name: Str, type_args: List[Str]) -> Str {
+    // If func_name contains "::", split into type part and method part
+    var type_part: Str = func_name
+    var method_part: Str = ""
+    let n: I64 = func_name.len() as I64
+
+    // Find last "::" separator
+    var sep_pos: I64 = -1 as I64
+    let limit: I64 = n - 1
+    for i in 0 to limit {
+        if func_name.char_at(i) == 58 and func_name.char_at(i + 1) == 58 {
+            sep_pos = i
+        }
+    }
+
+    if sep_pos >= 0 {
+        type_part = func_name.slice(0, sep_pos)
+        method_part = func_name.slice(sep_pos + 2, n)
+    }
+
+    // Append type args to the type part
+    var result: Str = mangle_type_name(type_part)
+    let tac: I64 = type_args.len() as I64
+    for i in 0 to tac {
+        result = result + "_" + mangle_type_name(type_args.get(i))
+    }
+
+    if method_part != "" {
+        result = result + "__" + method_part
+    }
+
+    return result
+}
+
+/// Convert a MirType to its mangled string for use in generic instantiation names.
+pub func mir_type_to_mangle(ty: MirType) -> Str {
+    when ty {
+        Primitive(p) => {
+            when p {
+                Unit => return "Unit",
+                Bool => return "Bool",
+                I8 => return "I8",
+                I16 => return "I16",
+                I32 => return "I32",
+                I64 => return "I64",
+                I128 => return "I128",
+                U8 => return "U8",
+                U16 => return "U16",
+                U32 => return "U32",
+                U64 => return "U64",
+                U128 => return "U128",
+                F32 => return "F32",
+                F64 => return "F64",
+                Char => return "Char",
+                Str => return "Str",
+                RawPtr => return "RawPtr"
+            }
+        },
+        Pointer(_) => return "Ptr",
+        Struct(s) => return mangle_type_name(s.name),
+        Enum(e) => return mangle_type_name(e.name),
+        _ => return "Unknown"
+    }
+}

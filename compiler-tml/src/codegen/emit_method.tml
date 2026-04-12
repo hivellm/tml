@@ -1,0 +1,163 @@
+//! Method dispatch emission — inherent, behavior, auto-deref, vtable.
+//!
+//! Resolves `obj.method(args)` to the correct mangled function name and
+//! dispatch strategy, then emits the appropriate call instruction.
+//!
+//! ## Dispatch Priority (matches C++ `method.cpp`)
+//!
+//! 1. **Inherent**: `Type::method` → `@TypeName__method` direct call
+//! 2. **Behavior**: `Behavior::method` → `@TypeName__BehaviorName__method` direct call
+//! 3. **Auto-deref**: `ref_to_obj.method` → load + dispatch as inherent
+//! 4. **Virtual**: `dyn Behavior.method` → vtable GEP + indirect call
+//!
+//! Phase 16c — items 3.1–3.5.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MethodCallInst
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::config::CodegenConfig
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::emit_inst::reg
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+use core::fmt::helpers::char_to_str
+
+// ============================================================================
+// Name mangling
+// ============================================================================
+
+/// Mangle a type name for use in LLVM symbol names.
+/// `List[I32]` → `List_I32`, `HashMap[Str, Bool]` → `HashMap_Str_Bool`.
+pub func mangle_type_name(name: Str) -> Str {
+    var result: Str = ""
+    let n: I64 = name.len() as I64
+    for i in 0 to n {
+        let ch: I64 = name.char_at(i)
+        if ch == 91 {        // '['
+            result = result + "_"
+        } else if ch == 93 { // ']'
+            // skip
+        } else if ch == 44 { // ','
+            result = result + "_"
+        } else if ch == 32 { // ' '
+            // skip
+        } else if ch == 58 { // ':'
+            result = result + "_"
+        } else {
+            // Append character as single-char string
+            // Use the I32 code point to build it
+            if ch >= 32 and ch < 127 {
+                // Safe ASCII — we reconstruct the character
+                // by doing a substring on a known string
+                result = result + char_to_str(ch)
+            }
+        }
+    }
+    return result
+}
+
+/// Mangle an inherent method: `TypeName__method`.
+pub func mangle_inherent(type_name: Str, method_name: Str) -> Str {
+    return mangle_type_name(type_name) + "__" + method_name
+}
+
+/// Mangle a behavior method: `TypeName__BehaviorName__method`.
+pub func mangle_behavior(type_name: Str, behavior_name: Str, method_name: Str) -> Str {
+    return mangle_type_name(type_name) + "__" + mangle_type_name(behavior_name) + "__" + method_name
+}
+
+// ============================================================================
+// Method dispatch (items 3.2–3.5)
+// ============================================================================
+
+/// Emit an inherent method call: `obj.method(args)` → `@TypeName__method(obj, args)`.
+pub func emit_inherent_call(
+    result: I64,
+    ret_ty_str: Str,
+    type_name: Str,
+    method_name: Str,
+    receiver: I64,
+    args: List[I64],
+    cc: Str
+) -> Str {
+    let mangled: Str = mangle_inherent(type_name, method_name)
+    var args_str: Str = "ptr " + reg(receiver)
+    let ac: I64 = args.len() as I64
+    for i in 0 to ac {
+        args_str = args_str + ", i64 " + reg(args.get(i))
+    }
+    if ret_ty_str == "void" {
+        return "  call " + cc + " void @" + mangled + "(" + args_str + ")\n"
+    }
+    return "  " + reg(result) + " = call " + cc + " " + ret_ty_str + " @" + mangled + "(" + args_str + ")\n"
+}
+
+/// Emit a behavior (trait) method call.
+pub func emit_behavior_call(
+    result: I64,
+    ret_ty_str: Str,
+    type_name: Str,
+    behavior_name: Str,
+    method_name: Str,
+    receiver: I64,
+    args: List[I64],
+    cc: Str
+) -> Str {
+    let mangled: Str = mangle_behavior(type_name, behavior_name, method_name)
+    var args_str: Str = "ptr " + reg(receiver)
+    let ac: I64 = args.len() as I64
+    for i in 0 to ac {
+        args_str = args_str + ", i64 " + reg(args.get(i))
+    }
+    if ret_ty_str == "void" {
+        return "  call " + cc + " void @" + mangled + "(" + args_str + ")\n"
+    }
+    return "  " + reg(result) + " = call " + cc + " " + ret_ty_str + " @" + mangled + "(" + args_str + ")\n"
+}
+
+/// Emit a virtual dispatch call via vtable.
+///
+/// ```llvm
+/// %vtable = extractvalue { ptr, ptr } %dyn_obj, 1
+/// %fn_slot = getelementptr inbounds ptr, ptr %vtable, i32 <slot>
+/// %fn_ptr = load ptr, ptr %fn_slot
+/// %result = call <cc> <ret_ty> %fn_ptr(ptr %data, ...)
+/// ```
+pub func emit_vtable_call(
+    result: I64,
+    ret_ty_str: Str,
+    dyn_obj: I64,
+    vtable_slot: I64,
+    args: List[I64],
+    cc: Str
+) -> Str {
+    let data_reg: Str = reg(result as I64 - 3)
+    let vtable_reg: Str = reg(result as I64 - 2)
+    let fn_ptr_reg: Str = reg(result as I64 - 1)
+
+    var s: Str = ""
+    // Extract data pointer and vtable pointer from fat pointer
+    s = s + "  " + data_reg + " = extractvalue { ptr, ptr } " + reg(dyn_obj) + ", 0\n"
+    s = s + "  " + vtable_reg + " = extractvalue { ptr, ptr } " + reg(dyn_obj) + ", 1\n"
+    // Load function pointer from vtable slot
+    s = s + "  " + fn_ptr_reg + " = getelementptr inbounds ptr, ptr " + vtable_reg + ", i32 " + vtable_slot.to_string() + "\n"
+    // Build args: data pointer first, then remaining args
+    var args_str: Str = "ptr " + data_reg
+    let ac: I64 = args.len() as I64
+    for i in 0 to ac {
+        args_str = args_str + ", i64 " + reg(args.get(i))
+    }
+
+    if ret_ty_str == "void" {
+        s = s + "  call " + cc + " void " + fn_ptr_reg + "(" + args_str + ")\n"
+    } else {
+        s = s + "  " + reg(result) + " = call " + cc + " " + ret_ty_str + " " + fn_ptr_reg + "(" + args_str + ")\n"
+    }
+    return s
+}
