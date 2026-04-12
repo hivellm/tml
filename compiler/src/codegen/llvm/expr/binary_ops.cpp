@@ -1136,15 +1136,39 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
         }
         last_expr_type_ = "i1";
         break;
-    // Logical operators work on i1
-    case parser::BinaryOp::And:
-        emit_line("  " + result + " = and i1 " + left + ", " + right);
+    // Logical operators work on i1 — coerce non-i1 operands (K001 fix).
+    // TML's `and`/`or` keywords expect boolean operands, but when a field
+    // like `is_mut: I64` is used directly in `a and b`, the operand is i64.
+    case parser::BinaryOp::And: {
+        std::string lhs = left;
+        std::string rhs = right;
+        if (left_type != "i1") {
+            lhs = fresh_reg();
+            emit_line("  " + lhs + " = icmp ne " + left_type + " " + left + ", 0");
+        }
+        if (right_type != "i1") {
+            rhs = fresh_reg();
+            emit_line("  " + rhs + " = icmp ne " + right_type + " " + right + ", 0");
+        }
+        emit_line("  " + result + " = and i1 " + lhs + ", " + rhs);
         last_expr_type_ = "i1";
         break;
-    case parser::BinaryOp::Or:
-        emit_line("  " + result + " = or i1 " + left + ", " + right);
+    }
+    case parser::BinaryOp::Or: {
+        std::string lhs = left;
+        std::string rhs = right;
+        if (left_type != "i1") {
+            lhs = fresh_reg();
+            emit_line("  " + lhs + " = icmp ne " + left_type + " " + left + ", 0");
+        }
+        if (right_type != "i1") {
+            rhs = fresh_reg();
+            emit_line("  " + rhs + " = icmp ne " + right_type + " " + right + ", 0");
+        }
+        emit_line("  " + result + " = or i1 " + lhs + ", " + rhs);
         last_expr_type_ = "i1";
         break;
+    }
     // Bitwise operators work on same type
     case parser::BinaryOp::BitAnd:
         emit_operator_coverage("BitAnd", "bitand");

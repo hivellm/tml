@@ -269,6 +269,16 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
         }
         struct_types_[e.name] = type_name;
 
+        // Register field 0 (discriminant = i32) in struct_fields_ so that
+        // cast.cpp can look up the correct field type when doing `i64 as EnumType`.
+        // Without this, the `as V` cast from i64 to an enum skips the necessary
+        // i64→i32 truncation and produces invalid insertvalue IR (K001 bug).
+        if (struct_fields_.find(e.name) == struct_fields_.end()) {
+            std::vector<FieldInfo> fields;
+            fields.push_back({"tag", 0, "i32", nullptr});
+            struct_fields_[e.name] = std::move(fields);
+        }
+
         // Register variant values
         int tag = 0;
         for (const auto& variant : e.variants) {
@@ -541,6 +551,13 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
             enum_payload_type_[type_name] = "";
         }
         struct_types_[mangled] = type_name;
+
+        // Register field 0 (discriminant = i32) for generic enums too (K001 fix).
+        if (struct_fields_.find(mangled) == struct_fields_.end()) {
+            std::vector<FieldInfo> fields;
+            fields.push_back({"tag", 0, "i32", nullptr});
+            struct_fields_[mangled] = std::move(fields);
+        }
 
         int tag = 0;
         for (const auto& variant : decl.variants) {

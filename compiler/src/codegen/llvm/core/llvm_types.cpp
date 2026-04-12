@@ -597,6 +597,26 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "%struct." + mangled;
         }
 
+        // Resolve non-generic type aliases (e.g., `pub type ValueId = I64`).
+        // The generic alias path above (line 576) only fires when alias_generics
+        // is non-empty. Simple aliases have empty generics and fall through here.
+        // Without this, `ValueId` would be emitted as `%struct.ValueId` (undefined).
+        {
+            auto alias_type = env_.lookup_type_alias(named.name);
+            if (alias_type) {
+                return llvm_type_from_semantic(*alias_type, for_data);
+            }
+            // Also search module registry for aliases from imported modules
+            if (!alias_type && env_.module_registry()) {
+                for (const auto& [mod_name, mod] : env_.module_registry()->get_all_modules()) {
+                    auto ta_it = mod.type_aliases.find(named.name);
+                    if (ta_it != mod.type_aliases.end()) {
+                        return llvm_type_from_semantic(ta_it->second, for_data);
+                    }
+                }
+            }
+        }
+
         // For non-generic structs, ensure the type is defined before use
         // This handles structs from imported modules
         if (struct_types_.find(named.name) == struct_types_.end()) {
@@ -807,6 +827,10 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                                 }
                                 type_defs_buffer_ << ed << "\n";
                                 struct_types_[named.name] = tn;
+                                // Register field 0 (discriminant = i32) for cast support (K001 fix)
+                                if (struct_fields_.find(named.name) == struct_fields_.end()) {
+                                    struct_fields_[named.name] = {{"tag", 0, "i32", nullptr}};
+                                }
                                 int tag = 0;
                                 for (const auto& [vn, vts] : edef.variants)
                                     enum_variants_[named.name + "::" + vn] = tag++;
