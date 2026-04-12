@@ -160,16 +160,8 @@ impl Relation {
     /// Example: `r.with_cascade(true, false, true)` cascades inserts and deletes.
     pub func with_cascade(this, insert: Bool, update: Bool, delete: Bool) -> Relation {
         return Relation {
-            name: this.name,
-            rel_type: this.rel_type,
-            foreign_table: this.foreign_table,
-            foreign_key: this.foreign_key,
-            local_key: this.local_key,
             cascade: CascadeOptions { on_insert: insert, on_update: update, on_delete: delete },
-            join_table_cfg: this.join_table_cfg,
-            has_join_table: this.has_join_table,
-            inverse_field: this.inverse_field,
-            has_inverse: this.has_inverse
+            ..this
         }
     }
 
@@ -179,16 +171,9 @@ impl Relation {
     /// `foreign_col` — column pointing to the target.
     pub func join_table(this, pivot: Str, local_col: Str, foreign_col: Str) -> Relation {
         return Relation {
-            name: this.name,
-            rel_type: this.rel_type,
-            foreign_table: this.foreign_table,
-            foreign_key: this.foreign_key,
-            local_key: this.local_key,
-            cascade: this.cascade,
             join_table_cfg: JoinTableConfig { pivot_table: pivot, local_col: local_col, foreign_col: foreign_col },
             has_join_table: true,
-            inverse_field: this.inverse_field,
-            has_inverse: this.has_inverse
+            ..this
         }
     }
 
@@ -197,16 +182,9 @@ impl Relation {
     /// This mirrors TypeORM's `inverseSide` option, e.g. `r.inverse_side("user")`.
     pub func inverse_side(this, field_name: Str) -> Relation {
         return Relation {
-            name: this.name,
-            rel_type: this.rel_type,
-            foreign_table: this.foreign_table,
-            foreign_key: this.foreign_key,
-            local_key: this.local_key,
-            cascade: this.cascade,
-            join_table_cfg: this.join_table_cfg,
-            has_join_table: this.has_join_table,
             inverse_field: field_name,
-            has_inverse: true
+            has_inverse: true,
+            ..this
         }
     }
 
