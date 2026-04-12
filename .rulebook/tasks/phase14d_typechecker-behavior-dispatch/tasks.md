@@ -50,6 +50,6 @@
 - [x] 6.2 Self-hosting validation: behavior_dispatch.test.tml imports all behavior system APIs and verifies type consistency
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
-- [x] 1.1 Documentation: module-level doc comments on all files, phase14d proposal covers architecture
-- [x] 1.2 Tests: behavior_dispatch.test.tml (8 tests: reserved behaviors, coercion finding, pipeline result API)
-- [x] 1.3 Tests pass: 24/24 modules type-check successfully via check_inference_modules.sh
+- [x] 1.1 Update or create documentation covering the implementation — module-level doc comments on all files, phase14d proposal covers architecture
+- [x] 1.2 Write tests covering the new behavior — behavior_dispatch.test.tml (8 tests: reserved behaviors, coercion finding, pipeline result API)
+- [x] 1.3 Run tests and confirm they pass — 24/24 modules type-check successfully via check_inference_modules.sh
