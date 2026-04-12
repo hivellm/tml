@@ -62,7 +62,19 @@ check_module "compiler-tml/src/types/pipeline.tml"
 check_module "compiler-tml/src/types/module.tml"
 check_module "compiler-tml/src/types/imports.tml"
 
+# HIR (phase 15a)
+check_module "compiler-tml/src/hir/common.tml"
+check_module "compiler-tml/src/hir/pattern.tml"
+check_module "compiler-tml/src/hir/stmt.tml"
+check_module "compiler-tml/src/hir/expr.tml"
+check_module "compiler-tml/src/hir/module.tml"
+check_module "compiler-tml/src/hir/builder.tml"
+check_module "compiler-tml/src/hir/lower_expr.tml"
+check_module "compiler-tml/src/hir/monomorph.tml"
+check_module "compiler-tml/src/hir/printer.tml"
+
 # Test files
+check_module "compiler-tml/tests/hir/hir_types.test.tml"
 check_module "compiler-tml/tests/types/unify_basic.test.tml"
 check_module "compiler-tml/tests/types/unify_primitives.test.tml"
 check_module "compiler-tml/tests/types/infer_differential.test.tml"

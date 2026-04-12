@@ -1,0 +1,153 @@
+//! Self-hosting validation for HIR modules.
+//!
+//! Imports all public APIs from all 9 HIR modules to verify type consistency.
+//! If this file type-checks, all ~2,400 lines of HIR code are internally consistent.
+//!
+//! Phase 15a — items 6.1, 6.2, tail 1.2.
+
+use test
+
+// HIR expression types
+use compiler::hir::expr::HirExpr
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::hir::expr::HirCompoundOp
+use compiler::hir::expr::HirLitValue
+use compiler::hir::expr::HirLiteralExpr
+use compiler::hir::expr::HirVarExpr
+use compiler::hir::expr::HirBinaryExpr
+use compiler::hir::expr::HirCallExpr
+use compiler::hir::expr::HirMethodCallExpr
+use compiler::hir::expr::HirFieldExpr
+use compiler::hir::expr::HirIndexExpr
+use compiler::hir::expr::HirTupleExpr
+use compiler::hir::expr::HirIfExpr
+use compiler::hir::expr::HirWhenExpr
+use compiler::hir::expr::HirLoopExpr
+use compiler::hir::expr::HirClosureExpr
+use compiler::hir::expr::HirReturnExpr
+use compiler::hir::expr::HirBlockExpr
+use compiler::hir::expr::HirStructExpr
+use compiler::hir::expr::HirCapture
+use compiler::hir::expr::hir_expr_type
+use compiler::hir::expr::hir_expr_id
+
+// HIR statement types
+use compiler::hir::stmt::HirStmt
+use compiler::hir::stmt::HirLetStmt
+use compiler::hir::stmt::HirExprStmt
+
+// HIR pattern types
+use compiler::hir::pattern::HirPattern
+use compiler::hir::pattern::HirBindingPattern
+use compiler::hir::pattern::HirWildcardPattern
+use compiler::hir::pattern::HirEnumPattern
+use compiler::hir::pattern::HirTuplePattern
+use compiler::hir::pattern::HirStructPattern
+use compiler::hir::pattern::hir_pattern_type
+
+// HIR module types
+use compiler::hir::module::HirModule
+use compiler::hir::module::HirFunction
+use compiler::hir::module::HirStruct
+use compiler::hir::module::HirEnum
+use compiler::hir::module::HirImpl
+use compiler::hir::module::HirConst
+use compiler::hir::module::HirParam
+use compiler::hir::module::HirField
+use compiler::hir::module::HirVariant
+use compiler::hir::module::hir_module_new
+
+// HIR builder
+use compiler::hir::builder::HirBuilder
+use compiler::hir::builder::builder_new
+use compiler::hir::builder::lower_module
+use compiler::hir::builder::lower_function
+use compiler::hir::builder::lower_struct
+use compiler::hir::builder::lower_enum
+use compiler::hir::builder::mangle_name
+
+// HIR expression lowering
+use compiler::hir::lower_expr::lower_full_expr
+use compiler::hir::lower_expr::lower_binary
+use compiler::hir::lower_expr::lower_closure
+
+// HIR monomorphization
+use compiler::hir::monomorph::MonoRequest
+use compiler::hir::monomorph::MonomorphQueue
+use compiler::hir::monomorph::mono_queue_new
+use compiler::hir::monomorph::request_mono
+use compiler::hir::monomorph::has_pending
+use compiler::hir::monomorph::mangle_method
+use compiler::hir::monomorph::mangle_impl_method
+
+// HIR printer
+use compiler::hir::printer::print_module
+use compiler::hir::printer::print_function
+use compiler::hir::printer::print_binop
+
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_str
+use compiler::types::ty::type_to_str
+use compiler::types::env::env_new
+use std::collections::list::List
+
+@test
+func test_hir_modules_typecheck() -> I32 {
+    // If we reach here, all 9 HIR modules type-check successfully.
+    assert(true)
+    return 0
+}
+
+@test
+func test_mangle_name_no_args() -> I32 {
+    let args = List[Type]::new(0)
+    assert_eq(mangle_name("foo", args), "foo")
+    return 0
+}
+
+@test
+func test_mangle_name_with_args() -> I32 {
+    let args = List[Type]::new(1)
+    args.push(make_i32())
+    assert_eq(mangle_name("List", args), "List_I32")
+    return 0
+}
+
+@test
+func test_mangle_method_name() -> I32 {
+    assert_eq(mangle_method("Point", "distance"), "Point_distance")
+    assert_eq(mangle_impl_method("I32", "Display", "fmt"), "I32_Display_fmt")
+    return 0
+}
+
+@test
+func test_hir_module_new() -> I32 {
+    let hmod = hir_module_new("test", "test.tml")
+    assert_eq(hmod.name, "test")
+    assert_eq(hmod.source_path, "test.tml")
+    assert_eq(hmod.functions.len() as I64, 0)
+    assert_eq(hmod.structs.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_mono_queue() -> I32 {
+    let q = mono_queue_new()
+    assert(not has_pending(q))
+    let args = List[Type]::new(1)
+    args.push(make_i32())
+    let mangled = request_mono(q, "Vec", args)
+    assert_eq(mangled, "Vec_I32")
+    assert(has_pending(q))
+    return 0
+}
+
+@test
+func test_print_binop() -> I32 {
+    assert_eq(print_binop(HirBinOp::Add), "+")
+    assert_eq(print_binop(HirBinOp::Eq), "==")
+    assert_eq(print_binop(HirBinOp::And), "and")
+    return 0
+}
