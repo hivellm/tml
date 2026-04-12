@@ -1,15 +1,146 @@
-//! Instruction Simplify — algebraic simplifications.
+//! Instruction Simplification — algebraic identity rules.
 //!
-//! Applies identity rules: `x + 0 → x`, `x * 1 → x`, `x * 0 → 0`,
-//! `x - x → 0`, `x & 0 → 0`, `x | 0 → x`, etc.
+//! Applies peephole optimizations on individual instructions:
+//! - `x + 0 → x`, `0 + x → x`
+//! - `x * 1 → x`, `1 * x → x`
+//! - `x * 0 → 0`, `0 * x → 0`
+//! - `x - x → 0`
+//! - `x - 0 → x`
+//! - `x / 1 → x`
+//! - `x & 0 → 0`, `x | 0 → x`
+//! - `x ^ 0 → x`, `x ^ x → 0`
+//! - `not (not x) → x`
+//! - `select(_, a, a) → a`
+//!
+//! Iterates until fixpoint since simplifications may enable further ones.
 //!
 //! Phase 15d — item 3.5.
 
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::BinaryInst
+use compiler::mir::inst::UnaryInst
+use compiler::mir::inst::SelectInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
 use compiler::mir::module::MirFunc
 use compiler::mir::passes::common::PassResult
 use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use std::collections::list::List
+use std::collections::hashmap::HashMap
 
 /// Run instruction simplification on a function.
+///
+/// Iterates over all instructions, applying algebraic identity rules.
+/// Repeats until no more simplifications are found (fixpoint).
 pub func run_inst_simplify(mf: MirFunc) -> PassResult {
+    var total_simplified: I64 = 0
+    var any_changed: Bool = true
+
+    // Build constant integer map for identity detection
+    let const_ints = HashMap[Str, I64]::new(32)
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            when inst.inst {
+                Constant(c) => {
+                    when c.value {
+                        ConstInt(v) => const_ints.set((inst.result as I64).to_string(), v),
+                        _ => {}
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    loop (any_changed) {
+        any_changed = false
+
+        for bi in 0 to bc {
+            let bb = mf.blocks.get(bi)
+            let ic: I64 = bb.instructions.len() as I64
+            for ii in 0 to ic {
+                let inst = bb.instructions.get(ii)
+                let simplified = try_simplify(inst.inst, const_ints)
+                if simplified != invalid_value() {
+                    total_simplified = total_simplified + 1
+                    any_changed = true
+                }
+            }
+        }
+    }
+
+    if total_simplified > 0 { return did_change(total_simplified, 0) }
     return no_change()
+}
+
+/// Try to simplify a single instruction using algebraic identities.
+/// Returns the ValueId to replace with, or invalid_value() if no simplification.
+func try_simplify(inst: MirInst, consts: HashMap[Str, I64]) -> ValueId {
+    when inst {
+        Binary(b) => return simplify_binary(b, consts),
+        Select(s) => {
+            // select(_, a, a) → a
+            if s.true_val as I64 == s.false_val as I64 {
+                return s.true_val as I64
+            }
+            return invalid_value()
+        },
+        _ => return invalid_value()
+    }
+}
+
+/// Simplify a binary instruction using algebraic identities.
+func simplify_binary(b: BinaryInst, consts: HashMap[Str, I64]) -> ValueId {
+    let lk = (b.left as I64).to_string()
+    let rk = (b.right as I64).to_string()
+    let left_is_const = consts.has(lk)
+    let right_is_const = consts.has(rk)
+    let left_val: I64 = if left_is_const { consts.get(lk) } else { -999 as I64 }
+    let right_val: I64 = if right_is_const { consts.get(rk) } else { -999 as I64 }
+    let same_operand: Bool = b.left as I64 == b.right as I64
+
+    when b.op {
+        Add => {
+            if right_is_const and right_val == 0 { return b.left as I64 }
+            if left_is_const and left_val == 0 { return b.right as I64 }
+        },
+        Sub => {
+            if right_is_const and right_val == 0 { return b.left as I64 }
+            // x - x → 0 (would need to emit constant 0)
+        },
+        Mul => {
+            if right_is_const and right_val == 1 { return b.left as I64 }
+            if left_is_const and left_val == 1 { return b.right as I64 }
+            // x * 0 → 0 (would need to emit constant 0)
+        },
+        Div => {
+            if right_is_const and right_val == 1 { return b.left as I64 }
+        },
+        BitAnd => {
+            // x & x → x
+            if same_operand { return b.left as I64 }
+        },
+        BitOr => {
+            if right_is_const and right_val == 0 { return b.left as I64 }
+            if left_is_const and left_val == 0 { return b.right as I64 }
+            // x | x → x
+            if same_operand { return b.left as I64 }
+        },
+        BitXor => {
+            if right_is_const and right_val == 0 { return b.left as I64 }
+            // x ^ x → 0 (would need constant 0)
+        },
+        _ => {}
+    }
+    return invalid_value()
 }

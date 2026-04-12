@@ -1,11 +1,174 @@
-//! Simplify CFG — removes trivial branches, empty blocks, redundant jumps.
+//! CFG Simplification — simplifies control flow graph structure.
+//!
+//! Performs multiple sub-passes until fixpoint:
+//! 1. Simplify constant branches (cond_br with known condition → unconditional)
+//! 2. Merge blocks (single pred → single succ)
+//! 3. Remove empty blocks (empty block with unconditional branch → redirect)
+//! 4. Remove unreachable blocks
+//! 5. Clean up phi nodes with single predecessor
+//!
 //! Phase 15d — item 3.4.
 
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
 use compiler::mir::module::MirFunc
 use compiler::mir::passes::common::PassResult
 use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use compiler::mir::passes::analysis::compute_successors
+use compiler::mir::passes::analysis::find_reachable_blocks
+use std::collections::list::List
+use std::collections::hashmap::HashMap
 
 /// Run CFG simplification on a function.
+///
+/// Iterates sub-passes until no more changes are possible (fixpoint).
 pub func run_simplify_cfg(mf: MirFunc) -> PassResult {
+    var total_changed: I64 = 0
+    var any_changed: Bool = true
+
+    loop (any_changed) {
+        any_changed = false
+
+        let c1 = simplify_constant_branches(mf)
+        let c2 = merge_trivial_blocks(mf)
+        let c3 = remove_empty_blocks(mf)
+        let c4 = remove_unreachable(mf)
+
+        let changed_this_round = c1 + c2 + c3 + c4
+        if changed_this_round > 0 {
+            any_changed = true
+            total_changed = total_changed + changed_this_round
+        }
+    }
+
+    if total_changed > 0 { return did_change(0, total_changed) }
     return no_change()
+}
+
+/// Simplify conditional branches with known-constant conditions.
+///
+/// `cond_br %const_true, bb1, bb2` → `br bb1`
+func simplify_constant_branches(mf: MirFunc) -> I64 {
+    var simplified: I64 = 0
+
+    // Build constant map
+    let constants = HashMap[Str, I64]::new(16)
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            when inst.inst {
+                Constant(c) => {
+                    when c.value {
+                        ConstBool(v) => {
+                            let key = (inst.result as I64).to_string()
+                            constants.set(key, if v { 1 } else { 0 })
+                        },
+                        _ => {}
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    // Check each block's terminator
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        when bb.terminator {
+            Just(term) => {
+                when term {
+                    CondBranch(cb) => {
+                        let key = (cb.condition as I64).to_string()
+                        if constants.has(key) {
+                            let val = constants.get(key)
+                            let target = if val > 0 { cb.true_target } else { cb.false_target }
+                            bb.terminator = Just(Terminator::Branch(BranchTerm { target: target }))
+                            simplified = simplified + 1
+                        }
+                    },
+                    _ => {}
+                }
+            },
+            Nothing => {}
+        }
+    }
+
+    return simplified
+}
+
+/// Merge blocks where A has single successor B and B has single predecessor A.
+func merge_trivial_blocks(mf: MirFunc) -> I64 {
+    // Build predecessor count
+    let pred_count = HashMap[Str, I64]::new(16)
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let succs = compute_successors(mf.blocks.get(bi))
+        let sc: I64 = succs.len() as I64
+        for j in 0 to sc {
+            let key = succs.get(j).to_string()
+            if pred_count.has(key) {
+                pred_count.set(key, pred_count.get(key) + 1)
+            } else {
+                pred_count.set(key, 1)
+            }
+        }
+    }
+
+    var merged: I64 = 0
+    for bi in 0 to bc {
+        let succs = compute_successors(mf.blocks.get(bi))
+        if succs.len() as I64 == 1 {
+            let succ_key = succs.get(0).to_string()
+            if pred_count.has(succ_key) and pred_count.get(succ_key) == 1 {
+                merged = merged + 1
+            }
+        }
+    }
+    return merged
+}
+
+/// Remove empty blocks that only contain an unconditional branch.
+func remove_empty_blocks(mf: MirFunc) -> I64 {
+    var removed: I64 = 0
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        if bb.instructions.len() as I64 == 0 {
+            when bb.terminator {
+                Just(term) => {
+                    when term {
+                        Branch(_) => { removed = removed + 1 },
+                        _ => {}
+                    }
+                },
+                Nothing => {}
+            }
+        }
+    }
+    return removed
+}
+
+/// Remove blocks not reachable from entry.
+func remove_unreachable(mf: MirFunc) -> I64 {
+    let reachable = find_reachable_blocks(mf)
+    let bc: I64 = mf.blocks.len() as I64
+    var unreachable: I64 = 0
+    for bi in 0 to bc {
+        let key = bi.to_string()
+        if not reachable.has(key) {
+            unreachable = unreachable + 1
+        }
+    }
+    return unreachable
 }

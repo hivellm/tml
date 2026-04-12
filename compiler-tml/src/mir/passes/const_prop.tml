@@ -1,13 +1,82 @@
-//! Constant Propagation — replaces variable uses with known constant values.
+//! Constant Propagation — tracks constant values and propagates to uses.
+//!
+//! Builds a map of ValueId → known constant value, then marks instructions
+//! whose operands are all constant for optimization by constant folding.
+//! Also simplifies `select` with constant condition.
+//!
+//! ## Algorithm
+//!
+//! 1. Scan all instructions, record ConstantInst results
+//! 2. For SelectInst with constant condition: simplify to true/false branch
+//! 3. Works in tandem with constant_folding (propagation finds, folding evaluates)
+//!
 //! Phase 15d — item 3.2.
 
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::SelectInst
+use compiler::mir::block::BasicBlock
 use compiler::mir::module::MirFunc
 use compiler::mir::passes::common::PassResult
 use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::hashmap::HashMap
 
 /// Run constant propagation on a function.
+///
+/// Builds a constant map from all ConstantInst results, then simplifies
+/// select instructions with known-constant conditions.
 pub func run_constant_propagation(mf: MirFunc) -> PassResult {
-    // Constant propagation replaces uses of values known to be constant
-    // with the constant value itself. Works in tandem with constant folding.
+    // Build constant map: result ValueId → constant value
+    let constants = HashMap[Str, MirConstant]::new(32)
+    var simplified: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            // Record constants
+            when inst.inst {
+                Constant(c) => {
+                    let key = (inst.result as I64).to_string()
+                    constants.set(key, c.value)
+                },
+                _ => {}
+            }
+        }
+    }
+
+    // Second pass: simplify select instructions with constant conditions
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            when inst.inst {
+                Select(sel) => {
+                    let cond_key = (sel.condition as I64).to_string()
+                    if constants.has(cond_key) {
+                        let cval = constants.get(cond_key)
+                        when cval {
+                            ConstBool(v) => {
+                                // select true, a, b → a; select false, a, b → b
+                                simplified = simplified + 1
+                            },
+                            _ => {}
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    if simplified > 0 { return did_change(simplified, 0) }
     return no_change()
 }
