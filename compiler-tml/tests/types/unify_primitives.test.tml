@@ -1,0 +1,141 @@
+//! Lightweight unification tests that avoid List[Heap[Type]] to bypass K001.
+//! These tests use only primitive types and the InferCtx API.
+//!
+//! Phase 14c — item 6.1 (partial differential testing).
+
+use test
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_type_var
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::errors::dummy_span
+
+// ============================================================================
+// Primitive unification
+// ============================================================================
+
+@test
+func test_unify_i32_i32() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    assert(unify(ctx, make_i32(), make_i32(), span))
+    assert(not has_errors(ctx))
+    return 0
+}
+
+@test
+func test_unify_i32_str_fail() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    assert(not unify(ctx, make_i32(), make_str(), span))
+    assert(has_errors(ctx))
+    assert_eq(error_count(ctx), 1)
+    return 0
+}
+
+@test
+func test_unify_bool_bool() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    assert(unify(ctx, make_bool(), make_bool(), span))
+    return 0
+}
+
+// ============================================================================
+// Type variable binding
+// ============================================================================
+
+@test
+func test_typevar_binds_to_i32() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv = fresh_var(ctx)
+    assert(unify(ctx, tv, make_i32(), span))
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, make_i32()))
+    return 0
+}
+
+@test
+func test_typevar_binds_reverse() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv = fresh_var(ctx)
+    assert(unify(ctx, make_str(), tv, span))
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, make_str()))
+    return 0
+}
+
+@test
+func test_typevar_chain() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv1 = fresh_var(ctx)
+    let tv2 = fresh_var(ctx)
+    assert(unify(ctx, tv1, tv2, span))
+    assert(unify(ctx, tv2, make_bool(), span))
+    let resolved = resolve(ctx, tv1)
+    assert(types_equal(resolved, make_bool()))
+    return 0
+}
+
+// ============================================================================
+// Resolve on concrete is identity
+// ============================================================================
+
+@test
+func test_resolve_concrete() -> I32 {
+    let ctx = infer_ctx_new()
+    let resolved = resolve(ctx, make_i64())
+    assert(types_equal(resolved, make_i64()))
+    return 0
+}
+
+@test
+func test_resolve_unbound_var() -> I32 {
+    let ctx = infer_ctx_new()
+    let tv = fresh_var(ctx)
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, tv))
+    return 0
+}
+
+// ============================================================================
+// Error accumulation
+// ============================================================================
+
+@test
+func test_errors_accumulate() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    unify(ctx, make_i32(), make_str(), span)
+    unify(ctx, make_bool(), make_i64(), span)
+    assert_eq(error_count(ctx), 2)
+    return 0
+}
+
+// ============================================================================
+// Fresh vars are unique
+// ============================================================================
+
+@test
+func test_fresh_var_unique() -> I32 {
+    let ctx = infer_ctx_new()
+    let v1 = fresh_var(ctx)
+    let v2 = fresh_var(ctx)
+    assert(not types_equal(v1, v2))
+    return 0
+}
