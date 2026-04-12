@@ -34,6 +34,36 @@ Remaining: items 6.1, 6.2 — requires K001 fix or full C++ backend for differen
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-12
+## phase0_codegen-blockers-k001 — COMPLETE (18/18)
+
+### Accomplished
+
+**K001b runtime crash fix** (this session):
+- Changed `InferCtx.next_var_id: I64` → `var_counter: List[I64]` (one-element list acts as boxed mutable counter shared across value copies of InferCtx)
+- Fixed `unify_resolved` Primitive arm: added `ctx.errors.push(Heap::new(type_mismatch(...)))` before `return false` on kind mismatch — previously the missing error caused `assert(has_errors(ctx))` to fail, which called noreturn `assert_tml_loc`, corrupting RBP to 0xAB (Windows debug heap fill), causing ACCESS_VIOLATION at 0x8
+- Result: unify_basic (15 tests) and unify_primitives now pass → **27/28 compiler-tml tests pass**
+
+**Phase 3 (parser)**: `List[Heap[T]]::new(4)` syntax already worked — verified with test_generic_static.test.tml. No C++ changes needed.
+
+**`tml cv` in-process fix**:
+- Root cause: `_popen("tml.exe check ...")` spawns Windows cmd.exe subprocess; compiler DLLs in Bash PATH but not cmd.exe PATH → all 91 files returned exit 2
+- Fix: removed `get_tml_exe()` + `_popen` subprocess from `cmd_coverage.cpp`; replaced `type_check_file()` with inline lexer→parser→type-checker call; `preload_all_meta_caches()` called once before batch
+- Result: **84/91 sources pass, 30/30 test files pass** (was 0/91)
+
+**Docs/tail**:
+- Created `docs/patches/v0.3.2.md` and updated CHANGELOG.md
+- Task archived via rulebook
+
+### Commits
+- f337da05: fix(phase0): complete K001 codegen blockers — 27/28 tests, tml cv in-process
+- 286d5f38: chore(tasks): fix tail item phrasing for rulebook archive validation
+
+### Next Steps
+- No active tasks. Ready for next feature work on feat/self-hosting-compiler branch.
+- 7 compiler-tml source files still fail type-check (pre-existing, unrelated to K001)
+- mir_passes test still times out (pre-existing X002 timeout)
+
 ### 2026-04-12 (session 5)
 ## phase0_codegen-blockers-k001 — 3 K001 Fixes, 20/27 pass
 
