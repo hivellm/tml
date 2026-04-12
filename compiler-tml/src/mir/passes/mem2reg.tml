@@ -88,26 +88,24 @@ func find_allocas(bb: BasicBlock) -> List[ValueId] {
 }
 
 /// Check if an alloca can be promoted (only simple load/store, no address escape).
-func is_promotable(bb: BasicBlock, alloca_vid: ValueId) -> Bool {
+func is_promotable(bb: BasicBlock, alloca_vid: I64) -> Bool {
     let ic: I64 = bb.instructions.len() as I64
     for i in 0 to ic {
         let inst = bb.instructions.get(i)
         when inst.inst {
             Store(s) => {
-                if s.ptr == alloca_vid { continue }
+                if s.ptr as I64 == alloca_vid { continue }
             },
             Load(l) => {
-                if l.ptr == alloca_vid { continue }
+                if l.ptr as I64 == alloca_vid { continue }
             },
             GEP(g) => {
-                // Address taken — not promotable
-                if g.base_ptr == alloca_vid { return false }
+                if g.base_ptr as I64 == alloca_vid { return false }
             },
             Call(c) => {
-                // Check if alloca is passed to a call (address escapes)
                 let ac: I64 = c.args.len() as I64
                 for j in 0 to ac {
-                    if c.args.get(j) == alloca_vid { return false }
+                    if c.args.get(j) as I64 == alloca_vid { return false }
                 }
             },
             _ => {}
@@ -117,9 +115,9 @@ func is_promotable(bb: BasicBlock, alloca_vid: ValueId) -> Bool {
 }
 
 /// Promote a single alloca to SSA: replace loads with stored values.
-func promote_alloca(bb: BasicBlock, alloca_vid: ValueId) {
+func promote_alloca(bb: BasicBlock, alloca_vid: I64) {
     // Track the most recent stored value for this alloca
-    var current_value: ValueId = invalid_value()
+    var current_value: I64 = invalid_value()
     let to_remove = List[I64]::new(8)
 
     let ic: I64 = bb.instructions.len() as I64
@@ -127,18 +125,18 @@ func promote_alloca(bb: BasicBlock, alloca_vid: ValueId) {
         let inst = bb.instructions.get(i)
         when inst.inst {
             Alloca(a) => {
-                if inst.result == alloca_vid {
+                if inst.result as I64 == alloca_vid {
                     to_remove.push(i)
                 }
             },
             Store(s) => {
-                if s.ptr == alloca_vid {
-                    current_value = s.value
+                if s.ptr as I64 == alloca_vid {
+                    current_value = s.value as I64
                     to_remove.push(i)
                 }
             },
             Load(l) => {
-                if l.ptr == alloca_vid and current_value != invalid_value() {
+                if l.ptr as I64 == alloca_vid and current_value != invalid_value() {
                     // Replace this load's result with the stored value
                     // by rewriting it as a no-op (the downstream pass will clean it up)
                     to_remove.push(i)

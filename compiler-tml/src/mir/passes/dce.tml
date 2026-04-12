@@ -30,7 +30,7 @@ pub func run_dead_code_elimination(mf: MirFunc) -> PassResult {
         for ii in 0 to ic {
             let inst = bb.instructions.get(ii)
             // Skip void instructions (stores, calls with side effects)
-            if inst.result == invalid_value() { continue }
+            if inst.result as I64 == invalid_value() { continue }
             if has_side_effects(inst.inst) { continue }
 
             // Check if the result is used anywhere
