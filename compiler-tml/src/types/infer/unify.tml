@@ -37,18 +37,18 @@ use core::alloc::heap::Heap
 /// The substitutions map TypeVar IDs (I64) to resolved Type indices in the
 /// type_store list. Uses index-based storage to avoid HashMap[I64, Type] issues.
 pub type InferCtx {
-    type_store: List[Type],
+    type_store: List[Heap[Type]],
     subs_index: HashMap[Str, I64],
-    errors: List[TypeError],
+    errors: List[Heap[TypeError]],
     next_var_id: I64
 }
 
 /// Create a new inference context.
 pub func infer_ctx_new() -> InferCtx {
     return InferCtx {
-        type_store: List[Type]::new(32 as I64),
+        type_store: List[Heap[Type]]::new(32 as I64),
         subs_index: HashMap[Str, I64]::new(32 as I64),
-        errors: List[TypeError]::new(8 as I64),
+        errors: List[Heap[TypeError]]::new(8 as I64),
         next_var_id: 0
     }
 }
@@ -68,7 +68,7 @@ pub func fresh_var(ctx: InferCtx) -> Type {
 func set_sub(ctx: InferCtx, var_id: I64, ty: Type) {
     let key: Str = var_id.to_string()
     let idx: I64 = ctx.type_store.len() as I64
-    ctx.type_store.push(ty)
+    ctx.type_store.push(Heap::new(ty))
     ctx.subs_index.set(key, idx)
 }
 
@@ -77,7 +77,7 @@ func get_sub(ctx: InferCtx, var_id: I64) -> Maybe[Type] {
     let key: Str = var_id.to_string()
     if ctx.subs_index.has(key) {
         let idx: I64 = ctx.subs_index.get(key)
-        return Just(ctx.type_store.get(idx))
+        return Just(ctx.type_store.get(idx).get())
     }
     return Nothing
 }
@@ -147,7 +147,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
             when b {
                 Primitive(pb) => return prim_kind_eq(pa.kind, pb.kind),
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -156,14 +156,14 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
             when b {
                 Named(nb) => {
                     if na.name != nb.name {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     // Check type args match
                     let ac: I64 = na.type_args.len() as I64
                     let bc: I64 = nb.type_args.len() as I64
                     if ac != bc {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     for i in 0 to ac {
@@ -174,7 +174,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                     return true
                 },
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -183,13 +183,13 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
             when b {
                 Ref(rb) => {
                     if ra.is_mut != rb.is_mut {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     return unify(ctx, ra.inner.get(), rb.inner.get(), span)
                 },
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -198,13 +198,13 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
             when b {
                 Ptr(pb) => {
                     if pa.is_mut != pb.is_mut {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     return unify(ctx, pa.inner.get(), pb.inner.get(), span)
                 },
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -215,7 +215,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                     let tc: I64 = ta.elements.len() as I64
                     let td: I64 = tb.elements.len() as I64
                     if tc != td {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     for i in 0 to tc {
@@ -226,7 +226,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                     return true
                 },
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -240,7 +240,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                     let pc: I64 = fa.params.len() as I64
                     let pd: I64 = fb.params.len() as I64
                     if pc != pd {
-                        ctx.errors.push(type_mismatch(a, b, span))
+                        ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                         return false
                     }
                     for i in 0 to pc {
@@ -251,7 +251,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                     return true
                 },
                 _ => {
-                    ctx.errors.push(type_mismatch(a, b, span))
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false
                 }
             }
@@ -262,7 +262,7 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
             if types_equal(a, b) {
                 return true
             }
-            ctx.errors.push(type_mismatch(a, b, span))
+            ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
             return false
         }
     }
