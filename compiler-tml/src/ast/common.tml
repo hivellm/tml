@@ -5,6 +5,7 @@
 //! blocks referenced by every other ast/*.tml module.
 
 /// Declaration visibility. Mirrors `Visibility` in `ast_decls.hpp`.
+@repr(U8)
 enum Visibility {
     Private,
     Public,
@@ -12,6 +13,7 @@ enum Visibility {
 }
 
 /// Binding mutability. Used by patterns and let statements.
+@repr(U8)
 enum Mutability {
     Immutable,
     Mutable
@@ -31,6 +33,7 @@ pub func ast_id_new(value: I64) -> AstId {
 
 /// Literal value carried by `LiteralExpr` and `LiteralPattern`. Mirrors
 /// the payload variants of `LiteralExpr` in `ast_exprs.hpp`.
+@repr(U8)
 enum LiteralKind {
     LitInt(I64),
     LitFloat(I64),     // raw F64 bit pattern

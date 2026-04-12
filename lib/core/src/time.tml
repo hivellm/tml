@@ -96,6 +96,7 @@ pub const MICROS_PER_SEC: I64 = 1_000_000
 ///
 /// Internally, a `Duration` stores seconds and nanoseconds separately.
 /// The nanoseconds component is always less than 1 second (1 billion nanos).
+@auto(duplicate, equal)
 pub type Duration {
     secs: I64,
     nanos: I32
@@ -388,12 +389,6 @@ impl Duration {
 // Trait Implementations
 // ============================================================================
 
-impl PartialEq for Duration {
-    pub func eq(this, other: ref Duration) -> Bool {
-        return this.secs == other.secs and this.nanos == other.nanos
-    }
-}
-
 impl Eq for Duration {}
 
 impl PartialOrd for Duration {
@@ -462,12 +457,6 @@ impl Div[I32] for Duration {
 impl Default for Duration {
     pub func default() -> Duration {
         return Duration { secs: 0, nanos: 0 }
-    }
-}
-
-impl Duplicate for Duration {
-    pub func duplicate(this) -> Duration {
-        return Duration { secs: this.secs, nanos: this.nanos }
     }
 }
 

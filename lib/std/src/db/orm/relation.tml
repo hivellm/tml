@@ -8,6 +8,7 @@
 use std::db::query::join::{JoinClause, JoinType}
 
 /// Relationship types between entities.
+@repr(U8)
 pub enum RelationType {
     HasOne,
     HasMany,

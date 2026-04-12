@@ -47,6 +47,7 @@ use core::traits::hash::Hash
 /// assert(localhost.is_loopback())
 /// assert(broadcast.is_broadcast())
 /// ```
+@auto(duplicate, equal)
 pub type Ipv4Addr {
     o0: U8,
     o1: U8,
@@ -241,21 +242,6 @@ impl Ipv4Addr {
 
 // Behavior implementations for Ipv4Addr
 impl Copy for Ipv4Addr {}
-impl Duplicate for Ipv4Addr {
-    func duplicate(this) -> Ipv4Addr {
-        Ipv4Addr { o0: this.o0, o1: this.o1, o2: this.o2, o3: this.o3 }
-    }
-}
-
-impl PartialEq for Ipv4Addr {
-    func eq(this, other: ref Ipv4Addr) -> Bool {
-        if this.o0 != other.o0 { return false }
-        if this.o1 != other.o1 { return false }
-        if this.o2 != other.o2 { return false }
-        if this.o3 != other.o3 { return false }
-        true
-    }
-}
 
 impl Eq for Ipv4Addr {}
 
@@ -315,6 +301,7 @@ impl Debug for Ipv4Addr {
 ///
 /// assert(localhost.is_loopback())
 /// ```
+@auto(duplicate, equal)
 pub type Ipv6Addr {
     s0: U16,
     s1: U16,
@@ -451,21 +438,6 @@ impl Ipv6Addr {
 
 // Behavior implementations for Ipv6Addr
 impl Copy for Ipv6Addr {}
-impl Duplicate for Ipv6Addr {
-    func duplicate(this) -> Ipv6Addr {
-        Ipv6Addr {
-            s0: this.s0, s1: this.s1, s2: this.s2, s3: this.s3,
-            s4: this.s4, s5: this.s5, s6: this.s6, s7: this.s7
-        }
-    }
-}
-
-impl PartialEq for Ipv6Addr {
-    func eq(this, other: ref Ipv6Addr) -> Bool {
-        this.s0 == other.s0 and this.s1 == other.s1 and this.s2 == other.s2 and this.s3 == other.s3 and
-        this.s4 == other.s4 and this.s5 == other.s5 and this.s6 == other.s6 and this.s7 == other.s7
-    }
-}
 
 impl Eq for Ipv6Addr {}
 
@@ -546,6 +518,7 @@ impl Ipv4Addr {
 /// assert(v4.is_loopback())
 /// assert(v6.is_loopback())
 /// ```
+@auto(duplicate, equal)
 pub type IpAddr = V4(Ipv4Addr) | V6(Ipv6Addr)
 
 impl IpAddr {
@@ -597,35 +570,6 @@ impl IpAddr {
 
 // Behavior implementations for IpAddr
 impl Copy for IpAddr {}
-impl Duplicate for IpAddr {
-    func duplicate(this) -> IpAddr {
-        when this {
-            V4(addr) => IpAddr::V4(addr.duplicate()),
-            V6(addr) => IpAddr::V6(addr.duplicate()),
-        }
-    }
-}
-
-impl PartialEq for IpAddr {
-    func eq(this, other: ref IpAddr) -> Bool {
-        // Check if both are same variant and compare
-        let this_v4: Bool = this.is_ipv4()
-        let other_v4: Bool = other.is_ipv4()
-        if this_v4 != other_v4 {
-            return false
-        }
-        when this {
-            V4(a) => when *other {
-                V4(b) => a == b,
-                V6(_) => false,
-            },
-            V6(a) => when *other {
-                V4(_) => false,
-                V6(b) => a == b,
-            },
-        }
-    }
-}
 
 impl Eq for IpAddr {}
 

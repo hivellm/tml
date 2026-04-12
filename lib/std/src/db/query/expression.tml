@@ -1,6 +1,7 @@
 //! SQL expression types for building queries.
 
 /// Binary comparison operators.
+@repr(U8)
 pub enum CompareOp {
     Eq,
     Ne,
@@ -27,6 +28,7 @@ impl CompareOp {
 }
 
 /// Logical operators for combining conditions.
+@repr(U8)
 pub enum LogicOp {
     And,
     Or
@@ -43,6 +45,7 @@ impl LogicOp {
 }
 
 /// Sort direction for ORDER BY clauses.
+@repr(U8)
 pub enum SortDir {
     Asc,
     Desc

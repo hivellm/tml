@@ -72,6 +72,7 @@
 ///
 /// - C++11 memory model: <https://en.cppreference.com/w/cpp/atomic/memory_order>
 /// - LLVM atomics: <https://llvm.org/docs/Atomics.html>
+@repr(U8)
 pub enum Ordering {
     /// No synchronization or ordering constraints, only atomicity.
     ///

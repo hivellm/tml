@@ -43,6 +43,7 @@ func wall_clock_nanos() -> I64
 /// A universally unique identifier (128 bits stored as two I64 values).
 ///
 /// The `hi` field contains bits 127-64 and `lo` contains bits 63-0.
+@auto(duplicate, equal)
 pub type Uuid {
     hi: I64,
     lo: I64
@@ -528,12 +529,6 @@ impl Uuid {
 impl Hash for Uuid {
     pub func hash(this) -> I64 {
         return this.hi * 31 + this.lo
-    }
-}
-
-impl PartialEq for Uuid {
-    pub func eq(this, other: ref Uuid) -> Bool {
-        return this.hi == other.hi and this.lo == other.lo
     }
 }
 
