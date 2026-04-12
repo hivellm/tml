@@ -1,0 +1,90 @@
+//! Unit tests for instruction emission.
+//! Phase 16b — item 7.1.
+
+use test::assert
+use test::assert_eq
+use compiler::codegen::emit_inst::reg
+use compiler::codegen::emit_inst::block_label
+use compiler::codegen::emit_inst::emit_block_header
+use compiler::codegen::emit_inst::emit_terminator
+use compiler::mir::block::Terminator
+use compiler::mir::block::ReturnTerm
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
+use compiler::mir::block::SwitchTerm
+use compiler::mir::block::SwitchArm
+use compiler::mir::block::UnreachableTerm
+use std::collections::list::List
+
+// ============================================================================
+// Register & label naming
+// ============================================================================
+
+@test func test_reg_0() {
+    assert_eq(reg(0), "%0")
+}
+
+@test func test_reg_42() {
+    assert_eq(reg(42), "%42")
+}
+
+@test func test_block_label_entry() {
+    assert_eq(block_label(0), "entry")
+}
+
+@test func test_block_label_1() {
+    assert_eq(block_label(1), "bb_1")
+}
+
+@test func test_block_label_10() {
+    assert_eq(block_label(10), "bb_10")
+}
+
+@test func test_emit_block_header() {
+    assert_eq(emit_block_header("entry"), "entry:\n")
+}
+
+@test func test_emit_block_header_bb() {
+    assert_eq(emit_block_header("bb_3"), "bb_3:\n")
+}
+
+// ============================================================================
+// Terminators
+// ============================================================================
+
+@test func test_ret_void() {
+    let t = Terminator::Return(ReturnTerm { value: Nothing })
+    assert_eq(emit_terminator(t), "  ret void\n")
+}
+
+@test func test_ret_value() {
+    let t = Terminator::Return(ReturnTerm { value: Just(5) })
+    assert_eq(emit_terminator(t), "  ret i64 %5\n")
+}
+
+@test func test_br() {
+    let t = Terminator::Branch(BranchTerm { target: 2 })
+    assert_eq(emit_terminator(t), "  br label %bb_2\n")
+}
+
+@test func test_cond_br() {
+    let t = Terminator::CondBranch(CondBranchTerm { condition: 3, true_target: 1, false_target: 2 })
+    assert_eq(emit_terminator(t), "  br i1 %3, label %bb_1, label %bb_2\n")
+}
+
+@test func test_unreachable() {
+    let t = Terminator::Unreachable(UnreachableTerm {})
+    assert_eq(emit_terminator(t), "  unreachable\n")
+}
+
+@test func test_switch() {
+    let arms = List[SwitchArm]::new(2)
+    arms.push(SwitchArm { value: 0, target: 1 })
+    arms.push(SwitchArm { value: 1, target: 2 })
+    let t = Terminator::Switch(SwitchTerm { discriminant: 10, arms: arms, default_target: 3 })
+    let ir: Str = emit_terminator(t)
+    assert(ir.contains("switch i64 %10"))
+    assert(ir.contains("label %bb_3"))
+    assert(ir.contains("i64 0, label %bb_1"))
+    assert(ir.contains("i64 1, label %bb_2"))
+}

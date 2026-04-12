@@ -67,6 +67,13 @@ pub use compiler::codegen::emit_func::emit_extern_decl
 pub use compiler::codegen::emit_func::calling_convention
 pub use compiler::codegen::emit_func::emit_attribute_group
 
+// --- Instruction emission ---
+pub use compiler::codegen::emit_inst::emit_instruction
+pub use compiler::codegen::emit_inst::emit_terminator
+pub use compiler::codegen::emit_inst::emit_block_header
+pub use compiler::codegen::emit_inst::reg
+pub use compiler::codegen::emit_inst::block_label
+
 // --- Module emission ---
 pub use compiler::codegen::emit_module::emit_module
 pub use compiler::codegen::emit_module::emit_string_global

@@ -1,0 +1,506 @@
+//! Instruction emission — MIR instructions → LLVM IR text.
+//!
+//! Each MIR instruction maps to 1–3 LLVM IR text lines. The `emit_instruction`
+//! function dispatches on the `MirInst` variant and returns the complete IR text
+//! for that instruction (with leading 2-space indent and trailing newline).
+//!
+//! ## Register Naming
+//!
+//! MIR uses `ValueId` (I64) as SSA register names. These map directly to
+//! LLVM IR registers: `ValueId 5` → `%5`.
+//!
+//! Phase 16b — items 1.1–6.2.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::BinaryInst
+use compiler::mir::inst::UnaryInst
+use compiler::mir::inst::LoadInst
+use compiler::mir::inst::StoreInst
+use compiler::mir::inst::AllocaInst
+use compiler::mir::inst::GetElementPtrInst
+use compiler::mir::inst::ExtractValueInst
+use compiler::mir::inst::InsertValueInst
+use compiler::mir::inst::CallInst
+use compiler::mir::inst::CastInst
+use compiler::mir::inst::PhiInst
+use compiler::mir::inst::PhiEntry
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::SelectInst
+use compiler::mir::inst::StructInitInst
+use compiler::mir::inst::EnumInitInst
+use compiler::mir::inst::TupleInitInst
+use compiler::mir::inst::ArrayInitInst
+use compiler::mir::inst::ClosureInitInst
+use compiler::mir::inst::AtomicLoadInst
+use compiler::mir::inst::AtomicStoreInst
+use compiler::mir::inst::AtomicRMWInst
+use compiler::mir::inst::AtomicCmpXchgInst
+use compiler::mir::inst::FenceInst
+use compiler::mir::inst::AtomicOrdering
+use compiler::mir::inst::AtomicRMWOp
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::ReturnTerm
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
+use compiler::mir::block::SwitchTerm
+use compiler::mir::block::SwitchArm
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::emit_type::llvm_type_byte_size
+use compiler::codegen::emit_type::llvm_type_alignment
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Register & label helpers (Phase 1 — items 1.2, 1.3)
+// ============================================================================
+
+/// Format a ValueId as an LLVM register: `%N`.
+pub func reg(v: ValueId) -> Str {
+    return "%" + (v as I64).to_string()
+}
+
+/// Format a basic block label: `bb_N`.
+pub func block_label(block_id: I64) -> Str {
+    if block_id == 0 { return "entry" }
+    return "bb_" + block_id.to_string()
+}
+
+/// Emit a basic block header: `label:\n`.
+pub func emit_block_header(name: Str) -> Str {
+    return name + ":\n"
+}
+
+// ============================================================================
+// Main dispatch (Phase 1 — item 1.1)
+// ============================================================================
+
+/// Emit a single instruction. Returns the full IR line(s) with 2-space indent.
+pub func emit_instruction(data: InstructionData) -> Str {
+    let result: I64 = data.result as I64
+    let ty: MirType = data.result_type
+    let ty_str: Str = emit_type_for_data(ty)
+
+    when data.inst {
+        Binary(b) => return emit_binary(result, ty_str, ty, b),
+        Unary(u) => return emit_unary(result, ty_str, u),
+        Load(l) => return emit_load(result, ty_str, ty, l),
+        Store(s) => return emit_store(ty_str, ty, s),
+        Alloca(a) => return emit_alloca(result, a),
+        GEP(g) => return emit_gep(result, ty_str, g),
+        ExtractValue(e) => return emit_extractvalue(result, ty_str, e),
+        InsertValue(iv) => return emit_insertvalue(result, ty_str, iv),
+        Call(c) => return emit_call(result, ty_str, c),
+        MethodCall(_) => return "  ; method call (phase 16c)\n",
+        Cast(c) => return emit_cast(result, ty_str, ty, c),
+        Phi(p) => return emit_phi(result, ty_str, p),
+        Constant(c) => return emit_constant(result, ty_str, c),
+        Select(s) => return emit_select(result, ty_str, s),
+        StructInit(si) => return emit_struct_init(result, si),
+        EnumInit(ei) => return emit_enum_init(result, ei),
+        TupleInit(ti) => return emit_tuple_init(result, ty_str, ti),
+        ArrayInit(ai) => return emit_array_init(result, ai),
+        ClosureInit(ci) => return emit_closure_init(result, ci),
+        Await(_) => return "  ; await (phase 16c)\n",
+        AtomicLoad(al) => return emit_atomic_load(result, ty_str, al),
+        AtomicStore(as_inst) => return emit_atomic_store(ty_str, as_inst),
+        AtomicRMW(ar) => return emit_atomic_rmw(result, ty_str, ar),
+        AtomicCmpXchg(ac) => return emit_atomic_cmpxchg(result, ty_str, ac),
+        Fence(f) => return emit_fence(f),
+        VectorLoad(_) => return "  ; vector load\n",
+        VectorStore(_) => return "  ; vector store\n",
+        VectorBinary(_) => return "  ; vector binary\n",
+        VectorReduction(_) => return "  ; vector reduction\n",
+        VectorSplat(_) => return "  ; vector splat\n",
+        VectorExtract(_) => return "  ; vector extract\n",
+        VectorInsert(_) => return "  ; vector insert\n",
+        MakeDynObject(_) => return "  ; make dyn object\n"
+    }
+}
+
+/// Emit a terminator instruction.
+pub func emit_terminator(term: Terminator) -> Str {
+    when term {
+        Return(r) => {
+            when r.value {
+                Just(v) => return "  ret i64 " + reg(v) + "\n",
+                _ => return "  ret void\n"
+            }
+        },
+        Branch(b) => return "  br label %" + block_label(b.target) + "\n",
+        CondBranch(cb) => {
+            return "  br i1 " + reg(cb.condition) + ", label %" + block_label(cb.true_target) + ", label %" + block_label(cb.false_target) + "\n"
+        },
+        Switch(sw) => {
+            var s: Str = "  switch i64 " + reg(sw.discriminant) + ", label %" + block_label(sw.default_target) + " [\n"
+            let ac: I64 = sw.arms.len() as I64
+            for i in 0 to ac {
+                let arm: SwitchArm = sw.arms.get(i)
+                s = s + "    i64 " + arm.value.to_string() + ", label %" + block_label(arm.target) + "\n"
+            }
+            s = s + "  ]\n"
+            return s
+        },
+        Unreachable(_) => return "  unreachable\n"
+    }
+}
+
+// ============================================================================
+// Phase 2: Arithmetic Instructions
+// ============================================================================
+
+func emit_binary(result: ValueId, ty_str: Str, ty: MirType, b: BinaryInst) -> Str {
+    let r: Str = reg(result)
+    let lhs: Str = reg(b.left)
+    let rhs: Str = reg(b.right)
+    let is_float: I64 = is_float_type(ty)
+
+    when b.op {
+        Add => {
+            if is_float > 0 { return "  " + r + " = fadd " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = add nsw " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Sub => {
+            if is_float > 0 { return "  " + r + " = fsub " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = sub nsw " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Mul => {
+            if is_float > 0 { return "  " + r + " = fmul " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = mul nsw " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Div => {
+            if is_float > 0 { return "  " + r + " = fdiv " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = sdiv " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Mod => {
+            if is_float > 0 { return "  " + r + " = frem " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = srem " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Eq => {
+            if is_float > 0 { return "  " + r + " = fcmp oeq " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp eq " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Ne => {
+            if is_float > 0 { return "  " + r + " = fcmp one " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp ne " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Lt => {
+            if is_float > 0 { return "  " + r + " = fcmp olt " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp slt " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Le => {
+            if is_float > 0 { return "  " + r + " = fcmp ole " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp sle " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Gt => {
+            if is_float > 0 { return "  " + r + " = fcmp ogt " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp sgt " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        Ge => {
+            if is_float > 0 { return "  " + r + " = fcmp oge " + ty_str + " " + lhs + ", " + rhs + "\n" }
+            return "  " + r + " = icmp sge " + ty_str + " " + lhs + ", " + rhs + "\n"
+        },
+        And => return "  " + r + " = and " + ty_str + " " + lhs + ", " + rhs + "\n",
+        Or => return "  " + r + " = or " + ty_str + " " + lhs + ", " + rhs + "\n",
+        BitAnd => return "  " + r + " = and " + ty_str + " " + lhs + ", " + rhs + "\n",
+        BitOr => return "  " + r + " = or " + ty_str + " " + lhs + ", " + rhs + "\n",
+        BitXor => return "  " + r + " = xor " + ty_str + " " + lhs + ", " + rhs + "\n",
+        Shl => return "  " + r + " = shl " + ty_str + " " + lhs + ", " + rhs + "\n",
+        Shr => return "  " + r + " = ashr " + ty_str + " " + lhs + ", " + rhs + "\n"
+    }
+}
+
+func emit_unary(result: ValueId, ty_str: Str, u: UnaryInst) -> Str {
+    let r: Str = reg(result)
+    let op: Str = reg(u.operand)
+    when u.op {
+        Neg => return "  " + r + " = sub nsw " + ty_str + " 0, " + op + "\n",
+        Not => return "  " + r + " = xor i1 " + op + ", true\n",
+        BitNot => return "  " + r + " = xor " + ty_str + " " + op + ", -1\n",
+        Ref => return "  ; ref (no-op in IR)\n",
+        RefMut => return "  ; ref mut (no-op in IR)\n",
+        Deref => return "  " + r + " = load " + ty_str + ", ptr " + op + "\n"
+    }
+}
+
+// ============================================================================
+// Phase 3: Memory Instructions
+// ============================================================================
+
+func emit_alloca(result: ValueId, a: AllocaInst) -> Str {
+    let ty_str: Str = emit_type_for_data(a.alloc_type)
+    let llvm_ty: LlvmType = mir_to_llvm(a.alloc_type, 1)
+    let align: I64 = llvm_type_alignment(llvm_ty)
+    return "  " + reg(result) + " = alloca " + ty_str + ", align " + align.to_string() + "\n"
+}
+
+func emit_load(result: ValueId, ty_str: Str, ty: MirType, l: LoadInst) -> Str {
+    let llvm_ty: LlvmType = mir_to_llvm(ty, 1)
+    let align: I64 = llvm_type_alignment(llvm_ty)
+    return "  " + reg(result) + " = load " + ty_str + ", ptr " + reg(l.ptr) + ", align " + align.to_string() + "\n"
+}
+
+func emit_store(ty_str: Str, ty: MirType, s: StoreInst) -> Str {
+    let llvm_ty: LlvmType = mir_to_llvm(ty, 1)
+    let align: I64 = llvm_type_alignment(llvm_ty)
+    return "  store " + ty_str + " " + reg(s.value) + ", ptr " + reg(s.ptr) + ", align " + align.to_string() + "\n"
+}
+
+func emit_gep(result: ValueId, ty_str: Str, g: GetElementPtrInst) -> Str {
+    var s: Str = "  " + reg(result) + " = getelementptr inbounds " + ty_str + ", ptr " + reg(g.base_ptr)
+    let ic: I64 = g.indices.len() as I64
+    for i in 0 to ic {
+        s = s + ", i32 " + g.indices.get(i).to_string()
+    }
+    s = s + "\n"
+    return s
+}
+
+// ============================================================================
+// Phase 4: Control Flow — handled by emit_terminator above
+// ============================================================================
+
+// ============================================================================
+// Phase 5: Aggregate Instructions
+// ============================================================================
+
+func emit_extractvalue(result: ValueId, ty_str: Str, e: ExtractValueInst) -> Str {
+    return "  " + reg(result) + " = extractvalue " + ty_str + " " + reg(e.aggregate) + ", " + e.index.to_string() + "\n"
+}
+
+func emit_insertvalue(result: ValueId, ty_str: Str, iv: InsertValueInst) -> Str {
+    return "  " + reg(result) + " = insertvalue " + ty_str + " " + reg(iv.aggregate) + ", " + ty_str + " " + reg(iv.value) + ", " + iv.index.to_string() + "\n"
+}
+
+func emit_phi(result: ValueId, ty_str: Str, p: PhiInst) -> Str {
+    var s: Str = "  " + reg(result) + " = phi " + ty_str + " "
+    let ic: I64 = p.incoming.len() as I64
+    for i in 0 to ic {
+        if i > 0 { s = s + ", " }
+        let entry: PhiEntry = p.incoming.get(i)
+        s = s + "[ " + reg(entry.value) + ", %" + block_label(entry.block_id) + " ]"
+    }
+    s = s + "\n"
+    return s
+}
+
+func emit_select(result: ValueId, ty_str: Str, s: SelectInst) -> Str {
+    return "  " + reg(result) + " = select i1 " + reg(s.condition) + ", " + ty_str + " " + reg(s.true_val) + ", " + ty_str + " " + reg(s.false_val) + "\n"
+}
+
+// ============================================================================
+// Phase 6: Cast & Conversion Instructions
+// ============================================================================
+
+func emit_cast(result: ValueId, ty_str: Str, target_ty: MirType, c: CastInst) -> Str {
+    let src_ty_str: Str = emit_type_for_data(c.target_type)
+    let r: Str = reg(result)
+    let v: Str = reg(c.value)
+
+    let src_size: I64 = llvm_type_byte_size(mir_to_llvm(c.target_type, 1))
+    let dst_size: I64 = llvm_type_byte_size(mir_to_llvm(target_ty, 1))
+
+    // Pointer casts
+    if src_ty_str == "ptr" and ty_str != "ptr" {
+        return "  " + r + " = ptrtoint ptr " + v + " to " + ty_str + "\n"
+    }
+    if src_ty_str != "ptr" and ty_str == "ptr" {
+        return "  " + r + " = inttoptr " + src_ty_str + " " + v + " to ptr\n"
+    }
+
+    // Float ↔ Int conversions
+    let src_float: I64 = is_float_str(src_ty_str)
+    let dst_float: I64 = is_float_str(ty_str)
+    if src_float > 0 and dst_float == 0 {
+        return "  " + r + " = fptosi " + src_ty_str + " " + v + " to " + ty_str + "\n"
+    }
+    if src_float == 0 and dst_float > 0 {
+        return "  " + r + " = sitofp " + src_ty_str + " " + v + " to " + ty_str + "\n"
+    }
+    if src_float > 0 and dst_float > 0 {
+        if dst_size > src_size {
+            return "  " + r + " = fpext " + src_ty_str + " " + v + " to " + ty_str + "\n"
+        }
+        return "  " + r + " = fptrunc " + src_ty_str + " " + v + " to " + ty_str + "\n"
+    }
+
+    // Integer widening/narrowing
+    if dst_size > src_size {
+        return "  " + r + " = sext " + src_ty_str + " " + v + " to " + ty_str + "\n"
+    }
+    if dst_size < src_size {
+        return "  " + r + " = trunc " + src_ty_str + " " + v + " to " + ty_str + "\n"
+    }
+
+    // Same size — bitcast
+    return "  " + r + " = bitcast " + src_ty_str + " " + v + " to " + ty_str + "\n"
+}
+
+// ============================================================================
+// Call instruction
+// ============================================================================
+
+func emit_call(result: ValueId, ty_str: Str, c: CallInst) -> Str {
+    var args_str: Str = ""
+    let ac: I64 = c.args.len() as I64
+    for i in 0 to ac {
+        if i > 0 { args_str = args_str + ", " }
+        args_str = args_str + "i64 " + reg(c.args.get(i))
+    }
+
+    if ty_str == "void" {
+        return "  call void @" + c.callee + "(" + args_str + ")\n"
+    }
+    return "  " + reg(result) + " = call " + ty_str + " @" + c.callee + "(" + args_str + ")\n"
+}
+
+// ============================================================================
+// Constant emission
+// ============================================================================
+
+func emit_constant(result: ValueId, ty_str: Str, c: ConstantInst) -> Str {
+    let r: Str = reg(result)
+    when c.value {
+        ConstInt(v) => return "  " + r + " = add " + ty_str + " 0, " + v.to_string() + "\n",
+        ConstFloat(v) => return "  " + r + " = fadd " + ty_str + " 0.0, " + v.to_string() + "\n",
+        ConstBool(v) => {
+            if v { return "  " + r + " = add i1 0, 1\n" }
+            return "  " + r + " = add i1 0, 0\n"
+        },
+        ConstStr(v) => return "  " + r + " = getelementptr inbounds [0 x i8], ptr @str.0, i32 0, i32 0\n",
+        ConstUnit => return "  ; unit constant\n"
+    }
+}
+
+// ============================================================================
+// Composite init instructions
+// ============================================================================
+
+func emit_struct_init(result: ValueId, si: StructInitInst) -> Str {
+    let struct_ty: Str = "%struct." + si.struct_name
+    var s: Str = ""
+    var current: Str = "undef"
+    let fc: I64 = si.fields.len() as I64
+    for i in 0 to fc {
+        let tmp: Str = reg(result as I64 + i)
+        s = s + "  " + tmp + " = insertvalue " + struct_ty + " " + current + ", i64 " + reg(si.fields.get(i)) + ", " + i.to_string() + "\n"
+        current = tmp
+    }
+    return s
+}
+
+func emit_enum_init(result: ValueId, ei: EnumInitInst) -> Str {
+    let struct_ty: Str = "%struct." + ei.enum_name
+    let r: Str = reg(result)
+    return "  " + r + " = insertvalue " + struct_ty + " undef, i32 " + ei.variant_index.to_string() + ", 0\n"
+}
+
+func emit_tuple_init(result: ValueId, ty_str: Str, ti: TupleInitInst) -> Str {
+    var s: Str = ""
+    var current: Str = "undef"
+    let ec: I64 = ti.elements.len() as I64
+    for i in 0 to ec {
+        let tmp: Str = reg(result as I64 + i)
+        s = s + "  " + tmp + " = insertvalue " + ty_str + " " + current + ", i64 " + reg(ti.elements.get(i)) + ", " + i.to_string() + "\n"
+        current = tmp
+    }
+    return s
+}
+
+func emit_array_init(result: ValueId, ai: ArrayInitInst) -> Str {
+    let elem_ty: Str = emit_type_for_data(ai.element_type)
+    let n: I64 = ai.elements.len() as I64
+    let arr_ty: Str = "[" + n.to_string() + " x " + elem_ty + "]"
+    var s: Str = ""
+    var current: Str = "undef"
+    for i in 0 to n {
+        let tmp: Str = reg(result as I64 + i)
+        s = s + "  " + tmp + " = insertvalue " + arr_ty + " " + current + ", " + elem_ty + " " + reg(ai.elements.get(i)) + ", " + i.to_string() + "\n"
+        current = tmp
+    }
+    return s
+}
+
+func emit_closure_init(result: ValueId, ci: ClosureInitInst) -> Str {
+    let r: Str = reg(result)
+    return "  " + r + " = insertvalue { ptr, ptr } undef, ptr @" + ci.func_name + ", 0\n"
+}
+
+// ============================================================================
+// Atomic instructions
+// ============================================================================
+
+func ordering_str(ord: AtomicOrdering) -> Str {
+    when ord {
+        Relaxed => return "monotonic",
+        Acquire => return "acquire",
+        Release => return "release",
+        AcqRel => return "acq_rel",
+        SeqCst => return "seq_cst"
+    }
+}
+
+func emit_atomic_load(result: ValueId, ty_str: Str, al: AtomicLoadInst) -> Str {
+    return "  " + reg(result) + " = load atomic " + ty_str + ", ptr " + reg(al.ptr) + " " + ordering_str(al.ordering) + ", align 8\n"
+}
+
+func emit_atomic_store(ty_str: Str, as_inst: AtomicStoreInst) -> Str {
+    return "  store atomic " + ty_str + " " + reg(as_inst.value) + ", ptr " + reg(as_inst.ptr) + " " + ordering_str(as_inst.ordering) + ", align 8\n"
+}
+
+func emit_atomic_rmw(result: ValueId, ty_str: Str, ar: AtomicRMWInst) -> Str {
+    var op_str: Str = "add"
+    when ar.op {
+        Add => { op_str = "add" },
+        Sub => { op_str = "sub" },
+        And => { op_str = "and" },
+        Or => { op_str = "or" },
+        Xor => { op_str = "xor" },
+        Min => { op_str = "min" },
+        Max => { op_str = "max" },
+        Exchange => { op_str = "xchg" }
+    }
+    return "  " + reg(result) + " = atomicrmw " + op_str + " ptr " + reg(ar.ptr) + ", " + ty_str + " " + reg(ar.value) + " " + ordering_str(ar.ordering) + "\n"
+}
+
+func emit_atomic_cmpxchg(result: ValueId, ty_str: Str, ac: AtomicCmpXchgInst) -> Str {
+    return "  " + reg(result) + " = cmpxchg ptr " + reg(ac.ptr) + ", " + ty_str + " " + reg(ac.expected) + ", " + ty_str + " " + reg(ac.desired) + " " + ordering_str(ac.success_ord) + " " + ordering_str(ac.failure_ord) + "\n"
+}
+
+func emit_fence(f: FenceInst) -> Str {
+    return "  fence " + ordering_str(f.ordering) + "\n"
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func is_float_type(ty: MirType) -> I64 {
+    when ty {
+        Primitive(p) => {
+            when p {
+                F32 => return 1,
+                F64 => return 1,
+                _ => return 0
+            }
+        },
+        _ => return 0
+    }
+}
+
+func is_float_str(s: Str) -> I64 {
+    if s == "float" { return 1 }
+    if s == "double" { return 1 }
+    return 0
+}
