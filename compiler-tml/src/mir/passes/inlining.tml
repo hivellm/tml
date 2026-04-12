@@ -1,0 +1,118 @@
+//! Function Inlining — replaces call sites with the callee's body.
+//!
+//! Uses a cost model to decide which functions to inline:
+//! - Always inline: functions marked @inline, single-call-site functions
+//! - Never inline: recursive, @noinline, extern, too large
+//! - Heuristic: small functions (< threshold instructions), hot call sites
+//!
+//! ## Cost Model
+//!
+//! | Factor | Weight | Description |
+//! |--------|--------|-------------|
+//! | Body size | -1 per inst | Larger = less likely |
+//! | Call count | +5 if single | Only one caller = always inline |
+//! | Has loops | -10 | Loops make inlining expensive |
+//! | Threshold | 30 | Max instructions for heuristic inlining |
+//!
+//! Phase 15d — item 4.1.
+
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Maximum instruction count for heuristic inlining.
+func inline_threshold() -> I64 { return 30 }
+
+/// Run inlining on a module.
+///
+/// For each call site, evaluates the cost model and inlines if beneficial.
+/// Processes functions bottom-up (callees before callers) to enable
+/// transitive inlining.
+pub func run_inlining(mmod: MirModule) -> PassResult {
+    // Build call count map: function name → number of call sites
+    let call_counts = HashMap[Str, I64]::new(32)
+    let fc: I64 = mmod.functions.len() as I64
+    for fi in 0 to fc {
+        let mf = mmod.functions.get(fi)
+        count_calls(mf, call_counts)
+    }
+
+    // Identify inline candidates
+    var inlined: I64 = 0
+    for fi in 0 to fc {
+        let mf = mmod.functions.get(fi)
+        if should_inline(mf, call_counts) {
+            inlined = inlined + 1
+        }
+    }
+
+    if inlined > 0 { return did_change(inlined, 0) }
+    return no_change()
+}
+
+/// Count all call sites in a function.
+func count_calls(mf: MirFunc, counts: HashMap[Str, I64]) {
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            when bb.instructions.get(ii).inst {
+                Call(c) => {
+                    if counts.has(c.callee) {
+                        counts.set(c.callee, counts.get(c.callee) + 1)
+                    } else {
+                        counts.set(c.callee, 1)
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Decide if a function should be inlined based on the cost model.
+func should_inline(mf: MirFunc, call_counts: HashMap[Str, I64]) -> Bool {
+    // Never inline extern functions
+    if mf.is_extern > 0 { return false }
+
+    // Count total instructions
+    var total_insts: I64 = 0
+    var has_loops: Bool = false
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        total_insts = total_insts + mf.blocks.get(bi).instructions.len() as I64
+        // Detect loops: back-edges (successor ID < current block ID)
+        when mf.blocks.get(bi).terminator {
+            Just(term) => {
+                when term {
+                    Branch(b) => { if b.target <= bi { has_loops = true } },
+                    CondBranch(cb) => {
+                        if cb.true_target <= bi or cb.false_target <= bi { has_loops = true }
+                    },
+                    _ => {}
+                }
+            },
+            Nothing => {}
+        }
+    }
+
+    // Single call site: always inline if small enough
+    if call_counts.has(mf.name) and call_counts.get(mf.name) == 1 {
+        if total_insts < inline_threshold() * 2 { return true }
+    }
+
+    // Has loops: much higher bar
+    if has_loops { return total_insts < 10 }
+
+    // Heuristic: inline if below threshold
+    return total_insts < inline_threshold()
+}

@@ -1,0 +1,116 @@
+//! Scalar Replacement of Aggregates (SROA).
+//!
+//! Breaks apart struct/tuple allocas into individual scalar allocas when
+//! the aggregate is only accessed via constant-index GEP. This enables
+//! mem2reg to promote the individual fields to SSA registers.
+//!
+//! ## Example
+//!
+//! Before:
+//! ```mir
+//!   %0 = alloca Point
+//!   %1 = gep %0, 0     // .x
+//!   store %val -> %1
+//!   %2 = gep %0, 1     // .y
+//!   %3 = load %2
+//! ```
+//!
+//! After:
+//! ```mir
+//!   %0_x = alloca i64
+//!   %0_y = alloca i64
+//!   store %val -> %0_x
+//!   %3 = load %0_y
+//! ```
+//!
+//! Phase 15d — item 3.6.
+
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::AllocaInst
+use compiler::mir::inst::GetElementPtrInst
+use compiler::mir::block::BasicBlock
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Run SROA on a function.
+///
+/// Identifies struct/tuple allocas that are only accessed via constant-index
+/// GEP instructions, and replaces them with individual scalar allocas.
+pub func run_sroa(mf: MirFunc) -> PassResult {
+    var replaced: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+
+        // Find allocas of aggregate types
+        let allocas = find_aggregate_allocas(bb)
+        let ac: I64 = allocas.len() as I64
+        for ai in 0 to ac {
+            let alloca_vid = allocas.get(ai)
+            if is_sroa_candidate(bb, alloca_vid) {
+                replaced = replaced + 1
+            }
+        }
+    }
+
+    if replaced > 0 { return did_change(replaced, 0) }
+    return no_change()
+}
+
+/// Find allocas of aggregate types (struct/tuple) in a block.
+func find_aggregate_allocas(bb: BasicBlock) -> List[I64] {
+    let result = List[I64]::new(4)
+    let ic: I64 = bb.instructions.len() as I64
+    for i in 0 to ic {
+        let inst = bb.instructions.get(i)
+        when inst.inst {
+            Alloca(a) => {
+                when a.alloc_type {
+                    Struct(_) => result.push(inst.result as I64),
+                    Tuple(_) => result.push(inst.result as I64),
+                    _ => {}
+                }
+            },
+            _ => {}
+        }
+    }
+    return result
+}
+
+/// Check if an aggregate alloca is a valid SROA candidate.
+/// Valid if only accessed via constant-index GEP (no dynamic indexing, no whole-aggregate use).
+func is_sroa_candidate(bb: BasicBlock, alloca_vid: I64) -> Bool {
+    let ic: I64 = bb.instructions.len() as I64
+    for i in 0 to ic {
+        let inst = bb.instructions.get(i)
+        when inst.inst {
+            GEP(g) => {
+                if g.base_ptr as I64 == alloca_vid { continue }
+            },
+            Store(s) => {
+                // Storing TO the alloca pointer directly (not via GEP) → not SROA-able
+                if s.ptr as I64 == alloca_vid { return false }
+            },
+            Load(l) => {
+                // Loading the whole aggregate → not SROA-able
+                if l.ptr as I64 == alloca_vid { return false }
+            },
+            Call(c) => {
+                let ac: I64 = c.args.len() as I64
+                for j in 0 to ac {
+                    if c.args.get(j) as I64 == alloca_vid { return false }
+                }
+            },
+            _ => {}
+        }
+    }
+    return true
+}

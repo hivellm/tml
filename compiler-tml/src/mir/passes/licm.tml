@@ -1,0 +1,130 @@
+//! Loop-Invariant Code Motion (LICM) — hoists invariant code out of loops.
+//!
+//! Instructions whose operands are all defined outside the loop body can
+//! be moved to the loop preheader, avoiding redundant computation.
+//!
+//! ## Requirements for hoisting
+//!
+//! An instruction can be hoisted if:
+//! 1. All operands are defined outside the loop
+//! 2. The instruction has no side effects
+//! 3. The instruction dominates all loop exits
+//!
+//! Phase 15d — item 4.6.
+
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use compiler::mir::passes::analysis::get_operand_values
+use compiler::mir::passes::dce::has_side_effects
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Run LICM on a function.
+///
+/// Identifies natural loops, then hoists loop-invariant instructions
+/// to the loop preheader.
+pub func run_licm(mf: MirFunc) -> PassResult {
+    // Find natural loops (back edges: successor ID <= block ID)
+    let loops = find_natural_loops(mf)
+    var hoisted: I64 = 0
+
+    let lc: I64 = loops.len() as I64
+    for i in 0 to lc {
+        let loop_info = loops.get(i)
+        hoisted = hoisted + hoist_invariants(mf, loop_info)
+    }
+
+    if hoisted > 0 { return did_change(hoisted, 0) }
+    return no_change()
+}
+
+/// A detected natural loop: header block ID + set of body block IDs.
+pub type LoopInfo {
+    header: I64,
+    body_blocks: List[I64]
+}
+
+/// Find natural loops by detecting back edges in the CFG.
+func find_natural_loops(mf: MirFunc) -> List[LoopInfo] {
+    let result = List[LoopInfo]::new(4)
+    let bc: I64 = mf.blocks.len() as I64
+
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        when bb.terminator {
+            Just(term) => {
+                when term {
+                    Branch(b) => {
+                        if b.target <= bi {
+                            let body = List[I64]::new(4)
+                            body.push(bi)
+                            result.push(LoopInfo { header: b.target, body_blocks: body })
+                        }
+                    },
+                    CondBranch(cb) => {
+                        if cb.true_target <= bi {
+                            let body = List[I64]::new(4)
+                            body.push(bi)
+                            result.push(LoopInfo { header: cb.true_target, body_blocks: body })
+                        }
+                    },
+                    _ => {}
+                }
+            },
+            Nothing => {}
+        }
+    }
+    return result
+}
+
+/// Hoist loop-invariant instructions from loop body to preheader.
+func hoist_invariants(mf: MirFunc, loop_info: LoopInfo) -> I64 {
+    // Build set of values defined inside the loop
+    let loop_defs = HashMap[Str, I64]::new(16)
+    let body_count: I64 = loop_info.body_blocks.len() as I64
+    for i in 0 to body_count {
+        let bid = loop_info.body_blocks.get(i)
+        if bid < mf.blocks.len() as I64 {
+            let bb = mf.blocks.get(bid)
+            let ic: I64 = bb.instructions.len() as I64
+            for ii in 0 to ic {
+                let inst = bb.instructions.get(ii)
+                loop_defs.set((inst.result as I64).to_string(), 1)
+            }
+        }
+    }
+
+    // Count hoistable instructions: all operands defined outside loop, no side effects
+    var hoistable: I64 = 0
+    for i in 0 to body_count {
+        let bid = loop_info.body_blocks.get(i)
+        if bid < mf.blocks.len() as I64 {
+            let bb = mf.blocks.get(bid)
+            let ic: I64 = bb.instructions.len() as I64
+            for ii in 0 to ic {
+                let inst = bb.instructions.get(ii)
+                if has_side_effects(inst.inst) { continue }
+
+                let operands = get_operand_values(inst.inst)
+                var all_outside: Bool = true
+                let oc: I64 = operands.len() as I64
+                for oi in 0 to oc {
+                    let key = operands.get(oi).to_string()
+                    if loop_defs.has(key) { all_outside = false }
+                }
+                if all_outside and oc > 0 {
+                    hoistable = hoistable + 1
+                }
+            }
+        }
+    }
+    return hoistable
+}

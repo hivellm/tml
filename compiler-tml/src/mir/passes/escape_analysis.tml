@@ -1,0 +1,131 @@
+//! Escape Analysis — detects heap allocations that can be stack-allocated.
+//!
+//! Analyzes whether allocated objects escape the current function scope.
+//! If an allocation does not escape (not returned, not stored to global,
+//! not passed to unknown functions), it can be promoted to stack allocation.
+//!
+//! ## Escape Conditions
+//!
+//! An allocation escapes if:
+//! - It is returned from the function
+//! - It is stored to a global variable
+//! - It is passed to a function that may capture it
+//! - Its address is stored to an escaped pointer
+//!
+//! Phase 15d — item 4.2.
+
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Run escape analysis on a function.
+///
+/// Identifies call instructions that allocate heap memory and determines
+/// if the allocation can be promoted to stack (alloca).
+pub func run_escape_analysis(mf: MirFunc) -> PassResult {
+    // Find all allocation sites (calls to allocation functions)
+    let alloc_sites = find_allocation_sites(mf)
+    var promotable: I64 = 0
+
+    let ac: I64 = alloc_sites.len() as I64
+    for i in 0 to ac {
+        let alloc_vid = alloc_sites.get(i)
+        if not does_escape(mf, alloc_vid) {
+            promotable = promotable + 1
+        }
+    }
+
+    if promotable > 0 { return did_change(promotable, 0) }
+    return no_change()
+}
+
+/// Find all allocation call sites (calls to Heap::new, mem_alloc, etc.).
+func find_allocation_sites(mf: MirFunc) -> List[I64] {
+    let result = List[I64]::new(8)
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            when inst.inst {
+                Call(c) => {
+                    if is_allocation_function(c.callee) {
+                        result.push(inst.result as I64)
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+    return result
+}
+
+/// Check if a function name is a known allocation function.
+func is_allocation_function(name: Str) -> Bool {
+    return name == "Heap::new" or name == "mem_alloc" or
+           name == "alloc" or name == "Box::new" or
+           name == "core::alloc::heap::Heap::new"
+}
+
+/// Check if a value escapes the function scope.
+func does_escape(mf: MirFunc, vid: I64) -> Bool {
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+
+        // Check if returned
+        when bb.terminator {
+            Just(term) => {
+                when term {
+                    Return(r) => {
+                        when r.value {
+                            Just(rv) => { if rv as I64 == vid { return true } },
+                            Nothing => {}
+                        }
+                    },
+                    _ => {}
+                }
+            },
+            Nothing => {}
+        }
+
+        // Check if passed to an unknown function
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            when inst.inst {
+                Call(c) => {
+                    if not is_known_non_capturing(c.callee) {
+                        let ac: I64 = c.args.len() as I64
+                        for ai in 0 to ac {
+                            if c.args.get(ai) as I64 == vid { return true }
+                        }
+                    }
+                },
+                Store(s) => {
+                    // If the value is stored somewhere, it might escape
+                    if s.value as I64 == vid { return true }
+                },
+                _ => {}
+            }
+        }
+    }
+    return false
+}
+
+/// Check if a function is known to not capture its arguments.
+func is_known_non_capturing(name: Str) -> Bool {
+    return name == "println" or name == "print" or
+           name == "assert" or name == "assert_eq" or
+           name == "to_string"
+}

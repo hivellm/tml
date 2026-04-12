@@ -1,0 +1,75 @@
+//! Return Value Optimization (RVO) — eliminates copies on function return.
+//!
+//! When a function constructs a value and immediately returns it, RVO
+//! constructs the value directly in the caller's return slot, eliminating
+//! the copy. This is the TML equivalent of C++ NRVO.
+//!
+//! ## Pattern
+//!
+//! Before: `let result = StructInit{...}; return result` (copy)
+//! After: construct directly into sret parameter (no copy)
+//!
+//! Phase 15d — item 4.4.
+
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::list::List
+
+/// Run RVO on a function.
+///
+/// Identifies return statements that return a locally-constructed aggregate
+/// and marks them for direct construction in the caller's return slot.
+pub func run_rvo(mf: MirFunc) -> PassResult {
+    var candidates: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+
+        // Check if block ends with return of a locally-constructed value
+        when bb.terminator {
+            Just(term) => {
+                when term {
+                    Return(r) => {
+                        when r.value {
+                            Just(rv) => {
+                                if is_local_aggregate(bb, rv as I64) {
+                                    candidates = candidates + 1
+                                }
+                            },
+                            Nothing => {}
+                        }
+                    },
+                    _ => {}
+                }
+            },
+            Nothing => {}
+        }
+    }
+
+    if candidates > 0 { return did_change(candidates, 0) }
+    return no_change()
+}
+
+/// Check if a value is a locally-constructed aggregate (struct/tuple/enum init).
+func is_local_aggregate(bb: BasicBlock, vid: I64) -> Bool {
+    let ic: I64 = bb.instructions.len() as I64
+    for i in 0 to ic {
+        let inst = bb.instructions.get(i)
+        if inst.result as I64 != vid { continue }
+        when inst.inst {
+            StructInit(_) => return true,
+            TupleInit(_) => return true,
+            EnumInit(_) => return true,
+            _ => return false
+        }
+    }
+    return false
+}

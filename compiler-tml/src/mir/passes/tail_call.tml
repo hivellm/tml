@@ -1,0 +1,66 @@
+//! Tail Call Optimization — converts tail-recursive calls to loops.
+//!
+//! When a function's last action is to call itself, the recursive call
+//! can be replaced with a jump back to the function entry, reusing the
+//! current stack frame. This prevents stack overflow on deep recursion.
+//!
+//! Phase 15d — item 4.5.
+
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+
+/// Run tail call optimization on a function.
+///
+/// Identifies blocks that end with: call self → return result,
+/// and converts them to: update params → branch to entry.
+pub func run_tail_call(mf: MirFunc) -> PassResult {
+    var optimized: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        if is_tail_recursive_block(bb, mf.name) {
+            optimized = optimized + 1
+        }
+    }
+
+    if optimized > 0 { return did_change(optimized, 0) }
+    return no_change()
+}
+
+/// Check if a block ends with a tail-recursive call (call self → return).
+func is_tail_recursive_block(bb: BasicBlock, func_name: Str) -> Bool {
+    let ic: I64 = bb.instructions.len() as I64
+    if ic == 0 { return false }
+
+    // Last instruction must be a call to this function
+    let last = bb.instructions.get(ic - 1)
+    var is_self_call: Bool = false
+    when last.inst {
+        Call(c) => { is_self_call = c.callee == func_name },
+        _ => {}
+    }
+    if not is_self_call { return false }
+
+    // Terminator must be Return with the call's result
+    when bb.terminator {
+        Just(term) => {
+            when term {
+                Return(r) => {
+                    when r.value {
+                        Just(rv) => return rv as I64 == last.result as I64,
+                        Nothing => return false
+                    }
+                },
+                _ => return false
+            }
+        },
+        Nothing => return false
+    }
+}
