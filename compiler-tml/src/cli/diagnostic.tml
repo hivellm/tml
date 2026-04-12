@@ -1,0 +1,139 @@
+//! Diagnostic rendering — error/warning formatting with source spans.
+//!
+//! Renders compiler diagnostics in the standard format:
+//! ```
+//! error[T001]: Type mismatch: expected I64, found Str
+//!   --> src/main.tml:42:10
+//!      |
+//!   42 |     let x: I64 = "hello"
+//!      |                   ^^^^^
+//!      |
+//! ```
+//!
+//! Phase 17b — items 2.1–2.4.
+
+use compiler::source::SourceSpan
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// ANSI color codes (item 2.4)
+// ============================================================================
+
+func ANSI_RESET() -> Str { return "\x1b[0m" }
+func ANSI_RED() -> Str { return "\x1b[31m" }
+func ANSI_YELLOW() -> Str { return "\x1b[33m" }
+func ANSI_BLUE() -> Str { return "\x1b[34m" }
+func ANSI_BOLD() -> Str { return "\x1b[1m" }
+func ANSI_DIM() -> Str { return "\x1b[2m" }
+
+// ============================================================================
+// Diagnostic types (item 2.1)
+// ============================================================================
+
+/// Diagnostic severity level.
+@repr(U8)
+pub enum DiagLevel {
+    Error,
+    Warning,
+    Note,
+    Help
+}
+
+/// A compiler diagnostic message.
+pub type Diagnostic {
+    level: DiagLevel,
+    code: Str,
+    message: Str,
+    file_path: Str,
+    line: I64,
+    column: I64,
+    source_line: Str,
+    span_len: I64
+}
+
+// ============================================================================
+// Formatting (items 2.2–2.3)
+// ============================================================================
+
+/// Format a diagnostic with ANSI colors.
+pub func format_diagnostic(diag: Diagnostic) -> Str {
+    let level_str: Str = format_level(diag.level)
+    let code_str: Str = if diag.code != "" { "[" + diag.code + "]" } else { "" }
+
+    var s: Str = ""
+    // Level + code + message
+    s = s + level_str + code_str + ": " + diag.message + ANSI_RESET() + "\n"
+
+    // File location
+    if diag.file_path != "" {
+        s = s + "  " + ANSI_BLUE() + "-->" + ANSI_RESET() + " " + diag.file_path
+        if diag.line > 0 {
+            s = s + ":" + diag.line.to_string() + ":" + diag.column.to_string()
+        }
+        s = s + "\n"
+    }
+
+    // Source line with underline
+    if diag.source_line != "" {
+        let line_num: Str = diag.line.to_string()
+        let padding: Str = spaces(line_num.len() as I64 + 1)
+        s = s + padding + ANSI_DIM() + "|" + ANSI_RESET() + "\n"
+        s = s + "  " + line_num + " " + ANSI_DIM() + "|" + ANSI_RESET() + " " + diag.source_line + "\n"
+        s = s + padding + ANSI_DIM() + "|" + ANSI_RESET() + " " + spaces(diag.column) + carets(diag.span_len, diag.level) + "\n"
+        s = s + padding + ANSI_DIM() + "|" + ANSI_RESET() + "\n"
+    }
+
+    return s
+}
+
+/// Render just the source span portion (for embedding in larger output).
+pub func render_source_span(file: Str, line: I64, col: I64, source_line: Str, span_len: I64) -> Str {
+    var s: Str = ""
+    let line_str: Str = line.to_string()
+    let pad: Str = spaces(line_str.len() as I64 + 1)
+    s = s + "  " + ANSI_BLUE() + "-->" + ANSI_RESET() + " " + file + ":" + line_str + ":" + col.to_string() + "\n"
+    s = s + pad + ANSI_DIM() + "|" + ANSI_RESET() + "\n"
+    s = s + "  " + line_str + " " + ANSI_DIM() + "|" + ANSI_RESET() + " " + source_line + "\n"
+    s = s + pad + ANSI_DIM() + "|" + ANSI_RESET() + " " + spaces(col) + ANSI_RED() + carets_raw(span_len) + ANSI_RESET() + "\n"
+    return s
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func format_level(level: DiagLevel) -> Str {
+    when level {
+        Error => return ANSI_BOLD() + ANSI_RED() + "error",
+        Warning => return ANSI_BOLD() + ANSI_YELLOW() + "warning",
+        Note => return ANSI_BOLD() + ANSI_BLUE() + "note",
+        Help => return ANSI_BOLD() + ANSI_BLUE() + "help"
+    }
+}
+
+func spaces(n: I64) -> Str {
+    var s: Str = ""
+    for i in 0 to n { s = s + " " }
+    return s
+}
+
+func carets(n: I64, level: DiagLevel) -> Str {
+    var color: Str = ANSI_RED()
+    when level {
+        Warning => { color = ANSI_YELLOW() },
+        Note => { color = ANSI_BLUE() },
+        Help => { color = ANSI_BLUE() },
+        _ => {}
+    }
+    var s: Str = color
+    for i in 0 to n { s = s + "^" }
+    s = s + ANSI_RESET()
+    return s
+}
+
+func carets_raw(n: I64) -> Str {
+    var s: Str = ""
+    for i in 0 to n { s = s + "^" }
+    return s
+}

@@ -1,0 +1,38 @@
+//! Unit tests for CLI, diagnostics, formatter, and test system.
+//! Phase 17b — item 6.1.
+
+use test::assert
+use test::assert_eq
+use compiler::cli::dispatcher::help_text
+use compiler::format::common::indent
+use compiler::format::common::format_use
+use compiler::format::common::default_format_config
+use compiler::format::common::is_formatted
+
+@test func test_help_text() {
+    let h: Str = help_text()
+    assert(h.contains("build"))
+    assert(h.contains("check"))
+    assert(h.contains("test"))
+    assert(h.contains("fmt"))
+}
+
+@test func test_indent_0() {
+    assert_eq(indent(0, 4), "")
+}
+
+@test func test_indent_1() {
+    assert_eq(indent(1, 4), "    ")
+}
+
+@test func test_indent_2() {
+    assert_eq(indent(2, 4), "        ")
+}
+
+@test func test_is_formatted_same() {
+    assert_eq(is_formatted("hello", "hello") as I32, 1)
+}
+
+@test func test_is_formatted_diff() {
+    assert_eq(is_formatted("hello", "Hello") as I32, 0)
+}
