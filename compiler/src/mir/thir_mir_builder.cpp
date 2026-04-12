@@ -313,6 +313,13 @@ auto ThirMirBuilder::convert_type(const thir::ThirType& type) -> MirTypePtr {
 
     if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
+
+        // Check if it's a type alias — resolve to underlying type
+        auto alias = env_.lookup_type_alias(named.name);
+        if (alias) {
+            return convert_type(*alias);
+        }
+
         std::vector<mir::MirTypePtr> type_args;
         for (const auto& arg : named.type_args) {
             type_args.push_back(convert_type(arg));

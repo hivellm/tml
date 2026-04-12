@@ -72,6 +72,12 @@ auto MirBuilder::convert_type(const parser::Type& type) -> MirTypePtr {
                     }
                 }
 
+                // Check if it's a type alias — resolve to underlying type
+                auto alias = env_.lookup_type_alias(name);
+                if (alias) {
+                    return convert_type(*alias);
+                }
+
                 // Check if it's an enum or struct
                 if (env_.lookup_enum(name).has_value()) {
                     return make_enum_type(name, std::move(type_args));
