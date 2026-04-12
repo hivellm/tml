@@ -33,7 +33,8 @@ pub func ast_id_new(value: I64) -> AstId {
 
 /// Literal value carried by `LiteralExpr` and `LiteralPattern`. Mirrors
 /// the payload variants of `LiteralExpr` in `ast_exprs.hpp`.
-@repr(U8)
+/// Note: no @repr(U8) — payload variants require i64 discriminant for
+/// correct struct layout in the AST codegen path.
 enum LiteralKind {
     LitInt(I64),
     LitFloat(I64),     // raw F64 bit pattern

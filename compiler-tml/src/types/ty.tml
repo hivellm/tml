@@ -17,7 +17,6 @@ use core::alloc::heap::Heap
 // ============================================================================
 
 /// Mirrors `PrimitiveKind` in `type.hpp`.
-@repr(U8)
 pub enum PrimitiveKind {
     KindI8,
     KindI16,
@@ -212,7 +211,8 @@ pub func make_named(name: Str, module_path: Str, type_args: List[Heap[Type]]) ->
 
 /// Create a named type with no generic args.
 pub func make_named_simple(name: Str, module_path: Str) -> Type {
-    return make_named(name, module_path, List[Heap[Type]]::new(0 as I64))
+    let empty_args: List[Heap[Type]] = List::new(0)
+    return make_named(name, module_path, empty_args)
 }
 
 /// Create a reference type.
@@ -262,7 +262,8 @@ pub func make_generic(name: Str, bounds: List[Heap[Type]]) -> Type {
 
 /// Create a generic type parameter with no bounds.
 pub func make_generic_simple(name: Str) -> Type {
-    return make_generic(name, List[Heap[Type]]::new(0 as I64))
+    let empty_bounds: List[Heap[Type]] = List::new(0)
+    return make_generic(name, empty_bounds)
 }
 
 /// Create a const generic type.

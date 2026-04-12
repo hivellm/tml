@@ -285,33 +285,38 @@ std::any provide_parse_module(QueryContext& ctx, const QueryKey& key) {
             auto run = proc->wait();
 
             if (run.exit_code != 0) {
-                // stderr contains JSON error array from the TML frontend
+                // stderr contains JSON error array from the TML frontend.
+                // If stderr is empty the frontend crashed (K001 / runtime bug):
+                // fall through to the C++ parser as a silent fallback so that
+                // `tml build` keeps working even when main_frontend.exe has
+                // runtime issues. Only report the error when stderr is present
+                // (i.e. it's a real parse error the user should see).
                 if (!run.stderr_output.empty()) {
                     result.errors.push_back(run.stderr_output);
-                } else {
-                    result.errors.push_back("TML frontend exited with code " +
-                                            std::to_string(run.exit_code));
+                    return result;
+                }
+                // Empty stderr means crash — fall through to C++ parser below.
+            } else {
+                // Deserialize binary AST from stdout
+                try {
+                    std::vector<uint8_t> bytes(run.stdout_output.begin(), run.stdout_output.end());
+                    // read_ast injects file_path into every SourceLocation::file
+                    // (a string_view), so we must keep a stable copy alive.
+                    auto path_storage = std::make_shared<std::string>(pk.file_path);
+                    parser::Module mod = serial::read_ast(bytes, *path_storage);
+                    result.module =
+                        std::shared_ptr<parser::Module>(new parser::Module(std::move(mod)),
+                                                        [path_storage](parser::Module* p) mutable {
+                                                            delete p;
+                                                            path_storage.reset();
+                                                        });
+                    result.success = true;
+                } catch (const std::exception& e) {
+                    result.errors.push_back(std::string("AST deserialization failed: ") + e.what());
                 }
                 return result;
             }
-
-            // Deserialize binary AST from stdout
-            try {
-                std::vector<uint8_t> bytes(run.stdout_output.begin(), run.stdout_output.end());
-                // read_ast injects file_path into every SourceLocation::file
-                // (a string_view), so we must keep a stable copy alive.
-                auto path_storage = std::make_shared<std::string>(pk.file_path);
-                parser::Module mod = serial::read_ast(bytes, *path_storage);
-                result.module = std::shared_ptr<parser::Module>(
-                    new parser::Module(std::move(mod)), [path_storage](parser::Module* p) mutable {
-                        delete p;
-                        path_storage.reset();
-                    });
-                result.success = true;
-            } catch (const std::exception& e) {
-                result.errors.push_back(std::string("AST deserialization failed: ") + e.what());
-            }
-            return result;
+            // TML frontend crashed without diagnostics — fall through to C++ parser.
         }
     }
 

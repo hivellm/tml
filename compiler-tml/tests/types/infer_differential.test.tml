@@ -50,7 +50,7 @@ use compiler::types::infer::unify::resolve
 use compiler::types::infer::unify::has_errors
 use compiler::types::infer::unify::error_count
 use compiler::types::checker::errors::dummy_span
-use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::apply_type_subs
 use compiler::types::checker::check_call::extract_type_params
 use compiler::types::checker::check_call::get_type_name
 use compiler::types::checker::check_call::operator_behavior_name
@@ -70,7 +70,7 @@ func test_substitute_bare_type_param() -> I32 {
     subs.set("T", make_i32())
     // Generic("T") is mapped via Named("T", "", []) — bare name match
     let input = make_named_simple("T", "")
-    let result = substitute_type(input, subs)
+    let result = apply_type_subs(input, subs)
     assert(types_equal(result, make_i32()))
     return 0
 }
@@ -83,7 +83,7 @@ func test_substitute_nested_type_args() -> I32 {
     let t_arg = List[Heap[Type]]::new(1)
     t_arg.push(Heap::new(make_named_simple("T", "")))
     let input = make_named("List", "", t_arg)
-    let result = substitute_type(input, subs)
+    let result = apply_type_subs(input, subs)
     // Result should be List[I64]
     assert_eq(type_to_str(result), "List[I64]")
     return 0

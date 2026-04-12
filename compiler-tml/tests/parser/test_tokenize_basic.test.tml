@@ -1,0 +1,12 @@
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::token::Token
+use std::collections::list::List
+
+@test
+func test_tokenize_basic() -> I32 {
+    let source: Str = "func main() {}"
+    let tokens: List[Token] = tokenize(source, "test.tml")
+    assert(tokens.len() as I64 > 0)
+    return 0
+}

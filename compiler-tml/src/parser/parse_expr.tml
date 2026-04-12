@@ -70,6 +70,7 @@ use compiler::parser::common::p_consume_if
 use compiler::parser::common::p_expect
 use compiler::parser::common::p_expect_ident
 use compiler::parser::common::tok_kind_eq
+use compiler::parser::common::tok_is_name
 use compiler::parser::common::parse_err
 use compiler::parser::common::get_prec
 use compiler::parser::common::is_right_assoc
@@ -612,6 +613,32 @@ pub func parse_ident_or_path_expr(tokens: List[Token], pos: I64) -> Outcome[Pars
             let generic_args: Maybe[List[Heap[TypeExpr]]] = if args_r.tes.len() > 0 { Just(args_r.tes) } else { Nothing }
             return parse_struct_expr(tokens, p, path, generic_args, start_span)
         }
+    }
+
+    // Static method call: Path[TypeArgs]::method(args)
+    // e.g. List[Heap[Type]]::new(32) or HashMap[K,V]::new()
+    if p_check(tokens, p, TokenKind::ColonColon) and tok_is_name(p_peek_next(tokens, p).kind) {
+        p = p + 1  // consume '::'
+        let method_tok: Token = p_peek(tokens, p)
+        let method_name: Str = method_tok.value
+        let method_span: SourceSpan = method_tok.span
+        p = p + 1  // consume method name
+        path.segments.push(method_name)
+        let generic_args_m: Maybe[List[Heap[TypeExpr]]] = if args_r.tes.len() > 0 { Just(args_r.tes) } else { Nothing }
+        let callee_span: SourceSpan = span_merge(start_span, method_span)
+        let callee: Heap[Expr] = Heap::new(Expr::Path(PathExpr { path: path, type_args: generic_args_m, span: callee_span }))
+        if p_check(tokens, p, TokenKind::LParen) {
+            p = p + 1  // consume '('
+            let args_r2: ParsedExprs = parse_call_args(tokens, p)!
+            p = args_r2.pos
+            if not p_check(tokens, p, TokenKind::RParen) {
+                return Err(parse_err("Expected ')' after call arguments", p_peek(tokens, p).span))
+            }
+            p = p + 1  // consume ')'
+            let call_span: SourceSpan = span_merge(start_span, p_prev(tokens, p).span)
+            return Ok(ParsedExpr { expr: Heap::new(Expr::Call(CallExpr { callee: callee, args: args_r2.exprs, span: call_span })), pos: p })
+        }
+        return Ok(ParsedExpr { expr: callee, pos: p })
     }
 
     let end_span: SourceSpan = p_prev(tokens, p).span

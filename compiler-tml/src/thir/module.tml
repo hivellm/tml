@@ -39,12 +39,9 @@ pub type ThirModule {
 }
 
 pub func thir_module_new(name: Str, source_path: Str) -> ThirModule {
-    return ThirModule {
-        name: name,
-        source_path: source_path,
-        structs: List[ThirStruct]::new(16),
-        enums: List[ThirEnum]::new(8),
-        functions: List[ThirFunction]::new(32),
-        impls: List[ThirImpl]::new(16)
-    }
+    let structs: List[ThirStruct] = List::new(16)
+    let enums: List[ThirEnum] = List::new(8)
+    let functions: List[ThirFunction] = List::new(32)
+    let impls: List[ThirImpl] = List::new(16)
+    return ThirModule { name: name, source_path: source_path, structs: structs, enums: enums, functions: functions, impls: impls }
 }

@@ -86,7 +86,8 @@ pub type ThirLower {
 }
 
 pub func thir_lower_new(env: TypeEnv, bhv_reg: BehaviorRegistry) -> ThirLower {
-    return ThirLower { env: env, bhv_reg: bhv_reg, next_id: 1, errors: List[Str]::new(8) }
+    let errors: List[Str] = List::new(8)
+    return ThirLower { env: env, bhv_reg: bhv_reg, next_id: 1, errors: errors }
 }
 
 func fresh_id(tl: ThirLower) -> I64 {
@@ -113,7 +114,7 @@ pub func lower_hir_to_thir(tl: ThirLower, hmod: HirModule) -> ThirModule {
     let sc: I64 = hmod.structs.len() as I64
     for i in 0 to sc {
         let hs = hmod.structs.get(i)
-        let fields = List[ThirField]::new(hs.fields.len() as I64)
+        let fields: List[ThirField] = List::new(hs.fields.len() as I64)
         let ffc: I64 = hs.fields.len() as I64
         for j in 0 to ffc {
             let hf = hs.fields.get(j)
@@ -129,7 +130,7 @@ pub func lower_hir_to_thir(tl: ThirLower, hmod: HirModule) -> ThirModule {
     let ec: I64 = hmod.enums.len() as I64
     for i in 0 to ec {
         let he = hmod.enums.get(i)
-        let variants = List[ThirVariant]::new(he.variants.len() as I64)
+        let variants: List[ThirVariant] = List::new(he.variants.len() as I64)
         let vc: I64 = he.variants.len() as I64
         for j in 0 to vc {
             let hv = he.variants.get(j)
@@ -146,7 +147,7 @@ pub func lower_hir_to_thir(tl: ThirLower, hmod: HirModule) -> ThirModule {
 
 /// Lower a HirFunction to ThirFunction.
 func lower_thir_function(tl: ThirLower, hf: HirFunction) -> ThirFunction {
-    let params = List[ThirParam]::new(hf.params.len() as I64)
+    let params: List[ThirParam] = List::new(hf.params.len() as I64)
     let pc: I64 = hf.params.len() as I64
     for i in 0 to pc {
         let hp = hf.params.get(i)
@@ -192,7 +193,7 @@ pub func lower_thir_expr(tl: ThirLower, he: HirExpr) -> ThirExpr {
             })
         },
         Call(call) => {
-            let args = List[Heap[ThirExpr]]::new(call.args.len() as I64)
+            let args: List[Heap[ThirExpr]] = List::new(call.args.len() as I64)
             let ac: I64 = call.args.len() as I64
             for i in 0 to ac {
                 args.push(Heap::new(lower_thir_expr(tl, call.args.get(i).get())))
@@ -204,7 +205,7 @@ pub func lower_thir_expr(tl: ThirLower, he: HirExpr) -> ThirExpr {
         },
         MethodCall(mc) => {
             let recv = lower_thir_expr(tl, mc.receiver.get())
-            let args = List[Heap[ThirExpr]]::new(mc.args.len() as I64)
+            let args: List[Heap[ThirExpr]] = List::new(mc.args.len() as I64)
             let ac: I64 = mc.args.len() as I64
             for i in 0 to ac {
                 args.push(Heap::new(lower_thir_expr(tl, mc.args.get(i).get())))
@@ -239,7 +240,7 @@ pub func lower_thir_expr(tl: ThirLower, he: HirExpr) -> ThirExpr {
             })
         },
         Block(blk) => {
-            let stmts = List[Heap[ThirStmt]]::new(blk.stmts.len() as I64)
+            let stmts: List[Heap[ThirStmt]] = List::new(blk.stmts.len() as I64)
             let stc: I64 = blk.stmts.len() as I64
             for i in 0 to stc {
                 stmts.push(Heap::new(lower_thir_stmt(tl, blk.stmts.get(i).get())))

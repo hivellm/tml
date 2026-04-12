@@ -1,31 +1,29 @@
 ---
 name: coverage
-description: Run tests with coverage and show coverage report. Use when the user says "coverage", "cobertura", or wants to see test coverage data.
+description: Run project-scoped test coverage report. Use when the user says "coverage", "cobertura", "cv", or wants to see test coverage for a specific project.
 user-invocable: true
-argument-hint: "[optional module filter e.g. core::str, std::json]"
+argument-hint: "[project-path]"
 ---
 
-**Delegation**: Use the Agent tool to dispatch a `test-coverage-guardian` agent with `model: sonnet` for this task.
+## Run Coverage Report
 
-## Coverage Workflow
+Run the `tml cv` command to generate a project-scoped coverage report.
 
-### 1. Run Tests with Coverage
+Parse `$ARGUMENTS`:
+- **path**: Project path (optional, defaults to `compiler-tml`)
 
-Use `mcp__tml__test` with:
-- `coverage: true`
-- `verbose: true`
-- `no_cache: true` (coverage requires fresh compilation)
+### Steps
 
-### 2. Show Coverage Report
+1. Determine the project path from arguments or default to `compiler-tml`
 
-After tests complete, use `mcp__tml__project_coverage` with:
-- `module`: `$ARGUMENTS` if a specific module was requested
-- `sort`: "lowest" to show modules needing the most coverage work
-- `refresh`: false (we just ran tests above)
+2. Run the coverage command via Bash:
+   ```
+   ./build/debug/bin/tml.exe cv <path> 2>&1
+   ```
 
-### 3. Report
+3. Report the results: total modules, test files, @test functions, coverage %, untested modules.
 
-Show coverage summary:
-- Overall coverage percentage
-- Modules with lowest coverage (opportunities for improvement)
-- If a specific module was requested, show detailed breakdown for that module
+### Options
+
+- `--quick` — skip module-to-test mapping, only count files
+- `--verbose` — show per-file results

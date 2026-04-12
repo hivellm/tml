@@ -19,6 +19,12 @@ TML_MODULE("compiler")
 #include "cmd_coverage.hpp"
 
 #include "../builder/build_config.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/checker.hpp"
+#include "types/module.hpp"
+#include "types/module_binary.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -134,57 +140,43 @@ static bool test_references_module(const fs::path& test_file, const std::string&
 // Type-Check Runner
 // ============================================================================
 
-/// Type-check a single file via the TML compiler query system.
+/// Type-check a single file in-process without emitting diagnostics.
 /// Returns true if the file passes type-check with zero errors.
-/// Get the path to the current tml.exe binary.
-static fs::path get_tml_exe() {
-    // Try common locations
-    auto candidates = {
-        fs::path("build/debug/bin/tml.exe"),
-        fs::path("build/release/bin/tml.exe"),
-        fs::path("tml.exe"),
-    };
-    for (const auto& c : candidates) {
-        if (fs::exists(c)) {
-            return fs::absolute(c);
-        }
-    }
-    return fs::path("tml.exe"); // fallback
-}
-
 static bool type_check_file(const fs::path& file) {
-    static fs::path tml_exe = get_tml_exe();
-    std::string cmd =
-        "\"" + tml_exe.string() + "\" check \"" + fs::absolute(file).string() + "\" 2>&1";
+    using namespace tml;
 
-#ifdef _WIN32
-    FILE* pipe = _popen(cmd.c_str(), "r");
-#else
-    FILE* pipe = popen(cmd.c_str(), "r");
-#endif
-    if (pipe == nullptr) {
+    // Read source
+    std::string source_code;
+    {
+        std::ifstream f(file);
+        if (!f.is_open())
+            return false;
+        source_code.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+
+    // Lex
+    auto source = lexer::Source::from_string(source_code, file.string());
+    lexer::Lexer lex(source);
+    auto tokens = lex.tokenize();
+    if (lex.has_errors())
         return false;
-    }
 
-    char buffer[256];
-    std::string output;
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        output += buffer;
-    }
-
-#ifdef _WIN32
-    int status = _pclose(pipe);
-#else
-    int status = pclose(pipe);
-#endif
-
-    if (status != 0) {
+    // Parse
+    parser::Parser p(std::move(tokens));
+    auto module_name = file.stem().string();
+    auto parse_result = p.parse_module(module_name);
+    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result))
         return false;
-    }
-    if (output.find("error[") != std::string::npos) {
-        return false;
-    }
-    return true;
+
+    const auto& module = std::get<parser::Module>(parse_result);
+
+    // Type-check (preload_all_meta_caches() called once before batch in run_coverage)
+    auto registry = std::make_shared<types::ModuleRegistry>();
+    types::TypeChecker checker;
+    checker.set_module_registry(registry);
+    auto check_result = checker.check_module(module);
+
+    return std::holds_alternative<types::TypeEnv>(check_result);
 }
 
 // ============================================================================
@@ -341,6 +333,9 @@ int run_coverage(int argc, char* argv[], bool verbose) {
         std::cout << cv::cyan << "Tests:   " << cv::reset << test_files.size() << " files in "
                   << test_dir << "\n\n";
     }
+
+    // Preload library module meta-caches once so imports resolve during in-process type-check
+    tml::types::preload_all_meta_caches();
 
     // Phase 1: Type-check source files
     int src_pass = 0, src_fail = 0;

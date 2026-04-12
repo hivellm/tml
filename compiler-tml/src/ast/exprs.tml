@@ -14,7 +14,6 @@ use compiler::ast::stmts::Stmt
 use std::collections::list::List
 use core::alloc::heap::Heap
 
-@repr(U8)
 pub enum UnaryOp {
     OpNeg,
     OpNot,
@@ -26,7 +25,6 @@ pub enum UnaryOp {
     OpDec
 }
 
-@repr(U8)
 pub enum BinaryOp {
     OpAdd,
     OpSub,

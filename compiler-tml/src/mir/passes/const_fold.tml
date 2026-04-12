@@ -33,18 +33,18 @@ pub func run_constant_folding(mf: MirFunc) -> PassResult {
             when inst.inst {
                 Constant(c) => {
                     when c.value {
-                        ConstInt(v) => constants.set(inst.result.to_string(), v),
+                        ConstInt(v) => constants.set((inst.result as I64).to_string(), v),
                         _ => {}
                     }
                 },
                 Binary(b) => {
-                    let lk = b.left.to_string()
-                    let rk = b.right.to_string()
+                    let lk = (b.left as I64).to_string()
+                    let rk = (b.right as I64).to_string()
                     if constants.has(lk) and constants.has(rk) {
                         let lv = constants.get(lk)
                         let rv = constants.get(rk)
                         let result = fold_binary(b.op, lv, rv)
-                        constants.set(inst.result.to_string(), result)
+                        constants.set((inst.result as I64).to_string(), result)
                         folded = folded + 1
                     }
                 },

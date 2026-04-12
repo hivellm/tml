@@ -13,21 +13,20 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-Phase 30 (30a-30j) and Phase 31 (31a-31f) fully complete and archived.
-phase13d_frontend-integration archived.
-Active task: phase14c_typechecker-inference — Phases 1-5 complete + extended expr coverage, Phase 6 blocked by K001.
-Total code: ~4,500 lines across 8 TML files (infer/, checker/).
-23/26 task items done. 2 remaining items (6.1, 6.2) blocked by K001 codegen bug.
-All 35 Expr enum variants now have type inference handlers (only Base, New, Throw fall through to fresh_var).
+Active task: phase0_codegen-blockers-k001 — in-progress (9/18).
+Fixed 3 K001 bugs in AST codegen: enum discriminant struct_fields_, type alias resolution, boolean coercion.
+20/27 compiler-tml tests pass (was 18/27). +2 tests: behavior_dispatch, mir_types.
+7 remaining failures: 2 runtime crashes (unify tests), 2 timeouts, 1 overload resolution, 1 path resolution, 1 runtime timeout.
+InferCtx changed to use List[Heap[Type]] to avoid memory corruption from oversized List entries.
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase14c_typechecker-inference — in-progress (22/25)
-Port Hindley-Milner type inference from C++ to TML (~7,229 LOC).
-Phases 1-5 complete. Phase 6 (differential testing) blocked by K001 codegen bug.
-Files created this session: infer/common.tml, checker/check_call.tml (677 lines), checker/check_stmt.tml (172 lines), checker/check_pattern.tml (453 lines).
+phase0_codegen-blockers-k001 — in-progress (9/18)
+Phase 1: K001 enum discriminant — DONE (7/7). Root cause: AST codegen used for generics, enums not in struct_fields_.
+Phase 2: K001b runtime crashes — 1/3 done. unify tests still crash (exit code 127), likely deeper ABI/codegen issue.
+Phase 3-5: Build parser, tml cv, validation — not started.
 Tests: unify_basic.test.tml (15 tests), infer_differential.test.tml (10 tests). All type-check; runtime blocked by K001.
 Remaining: items 6.1, 6.2 — requires K001 fix or full C++ backend for differential comparison.
 <!-- PLANS:TASK:END -->
@@ -35,6 +34,24 @@ Remaining: items 6.1, 6.2 — requires K001 fix or full C++ backend for differen
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-12 (session 5)
+## phase0_codegen-blockers-k001 — 3 K001 Fixes, 20/27 pass
+
+### Accomplished
+- Fixed 3 K001 bugs in AST legacy codegen: enum discriminant struct_fields_ (enum.cpp, llvm_types.cpp), non-generic type alias resolution (llvm_types.cpp), boolean i64→i1 coercion (binary_ops.cpp)
+- Changed InferCtx to use List[Heap[Type]] and List[Heap[TypeError]] to avoid memory corruption
+- 20/27 compiler-tml tests pass (+2: behavior_dispatch, mir_types)
+- No regressions in 223 main compiler tests
+
+### Key Discoveries
+- Tests with generics use AST codegen fallback (has_local_generics at query_core.cpp:926)
+- HashMap/List store values in 8-byte slots — must use Heap[T] for types > 8 bytes
+- unify tests still crash at runtime (exit 127) — needs deeper ABI investigation
+
+### Commits
+- 65cf35a0: fix(codegen): resolve 3 K001 bugs in AST codegen
+- a12f1de2: fix(compiler-tml): use List[Heap[Type]] in InferCtx
+
 ### 2026-04-12 (session 4)
 ## phase14c Type Inference — Phases 1-5 Complete
 

@@ -36,27 +36,34 @@ use core::alloc::heap::Heap
 /// Inference context holding type variable substitutions and error accumulation.
 /// The substitutions map TypeVar IDs (I64) to resolved Type indices in the
 /// type_store list. Uses index-based storage to avoid HashMap[I64, Type] issues.
+///
+/// NOTE: All collection fields (type_store, subs_index, errors, var_counter) use
+/// List/HashMap which store a single `handle: *Unit` pointer. When InferCtx is
+/// passed by value, all copies share the same heap-allocated state via these
+/// handles. The `var_counter` (List[I64] with one element) replaces the old
+/// `next_var_id: I64` scalar field, which was NOT shared across copies and caused
+/// fresh_var() to always return id=0 in the caller after a callee incremented it.
 pub type InferCtx {
     type_store: List[Heap[Type]],
     subs_index: HashMap[Str, I64],
     errors: List[Heap[TypeError]],
-    next_var_id: I64
+    var_counter: List[I64]
 }
 
 /// Create a new inference context.
 pub func infer_ctx_new() -> InferCtx {
-    return InferCtx {
-        type_store: List[Heap[Type]]::new(32 as I64),
-        subs_index: HashMap[Str, I64]::new(32 as I64),
-        errors: List[Heap[TypeError]]::new(8 as I64),
-        next_var_id: 0
-    }
+    let type_store: List[Heap[Type]] = List::new(32)
+    let subs_index: HashMap[Str, I64] = HashMap::new(32)
+    let errors: List[Heap[TypeError]] = List::new(8)
+    let var_counter: List[I64] = List::new(4)
+    var_counter.push(0)
+    return InferCtx { type_store: type_store, subs_index: subs_index, errors: errors, var_counter: var_counter }
 }
 
 /// Generate a fresh type variable.
 pub func fresh_var(ctx: InferCtx) -> Type {
-    let id: I64 = ctx.next_var_id
-    ctx.next_var_id = id + 1
+    let id: I64 = ctx.var_counter.get(0)
+    ctx.var_counter.set(0, id + 1)
     return make_type_var(id)
 }
 
@@ -145,7 +152,13 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
     when a {
         Primitive(pa) => {
             when b {
-                Primitive(pb) => return prim_kind_eq(pa.kind, pb.kind),
+                Primitive(pb) => {
+                    if prim_kind_eq(pa.kind, pb.kind) {
+                        return true
+                    }
+                    ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
+                    return false
+                },
                 _ => {
                     ctx.errors.push(Heap::new(type_mismatch(a, b, span)))
                     return false

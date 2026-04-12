@@ -1,0 +1,21 @@
+use test
+use compiler::lexer::lexer::tokenize
+use compiler::token::Token
+use compiler::parser::parse_module::parse_module
+use compiler::parser::common::ParseFailure
+use compiler::ast::nodes::Module
+use std::collections::list::List
+
+@test
+func test_parse_simple() -> I32 {
+    let source: Str = "func main() {}"
+    let tokens: List[Token] = tokenize(source, "test.tml")
+    let result = parse_module(tokens, "test")
+    when result {
+        Ok(_) => return 0,
+        Err(e) => {
+            assert_eq("", e.message)
+            return 1
+        }
+    }
+}

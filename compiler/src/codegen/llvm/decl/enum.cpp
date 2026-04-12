@@ -269,13 +269,28 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
         }
         struct_types_[e.name] = type_name;
 
-        // Register field 0 (discriminant = i32) in struct_fields_ so that
-        // cast.cpp can look up the correct field type when doing `i64 as EnumType`.
-        // Without this, the `as V` cast from i64 to an enum skips the necessary
-        // i64→i32 truncation and produces invalid insertvalue IR (K001 bug).
+        // Register the full enum layout in struct_fields_ so that calc_type_size
+        // (in both gen_enum_decl and gen_enum_instantiation) correctly computes the
+        // byte size of this enum when it appears as a payload in another generic enum
+        // (e.g., Maybe[Type]).  Only the discriminant was previously registered here,
+        // causing calc_type_size to return 4 (i32 tag only) instead of the real size.
+        // The layout must match the emitted LLVM type above:
+        //   max_size==0  → { i32 }            (4 bytes, tag only)
+        //   max_size<=4  → { i32, i32 }       (8 bytes)
+        //   max_size<=8  → { i32, i64 }       (16 bytes)
+        //   max_size>8   → { i32, [N x i64] } (8 + N*8 bytes)
         if (struct_fields_.find(e.name) == struct_fields_.end()) {
             std::vector<FieldInfo> fields;
             fields.push_back({"tag", 0, "i32", nullptr});
+            if (max_size > 8) {
+                size_t num_i64 = (max_size + 7) / 8;
+                fields.push_back(
+                    {"payload", 1, "[" + std::to_string(num_i64) + " x i64]", nullptr});
+            } else if (max_size > 4) {
+                fields.push_back({"payload", 1, "i64", nullptr});
+            } else if (max_size > 0) {
+                fields.push_back({"payload", 1, "i32", nullptr});
+            }
             struct_fields_[e.name] = std::move(fields);
         }
 

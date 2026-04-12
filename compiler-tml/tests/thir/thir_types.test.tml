@@ -25,6 +25,8 @@ use compiler::thir::exhaustiveness::format_exhaustiveness_error
 use compiler::thir::exhaustiveness::format_unreachable_warnings
 use compiler::types::ty::make_i32
 use compiler::types::ty::make_str
+use std::collections::list::List
+use std::collections::hashmap::HashMap
 
 @test
 func test_thir_modules_typecheck() -> I32 {
@@ -42,10 +44,10 @@ func test_thir_module_new() -> I32 {
 
 @test
 func test_exhaustiveness_format() -> I32 {
-    let missing = std::collections::list::List[Str]::new(2)
+    let missing: List[Str] = List::new(2)
     missing.push("Just")
     missing.push("Nothing")
-    let unreachable = std::collections::list::List[I64]::new(0)
+    let unreachable: List[I64] = List::new(0)
     let result = ExhaustivenessResult {
         is_exhaustive: 0,
         missing_patterns: missing,

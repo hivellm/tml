@@ -37,7 +37,7 @@ pub func build_use_def(mf: MirFunc) -> HashMap[Str, List[ValueUse]] {
             let operands = get_operand_values(inst.inst)
             let oc: I64 = operands.len() as I64
             for oi in 0 to oc {
-                let key = operands.get(oi).to_string()
+                let key = (operands.get(oi) as I64).to_string()
                 if uses.has(key) {
                     uses.get(key).push(ValueUse { block_id: bi, inst_index: ii })
                 } else {

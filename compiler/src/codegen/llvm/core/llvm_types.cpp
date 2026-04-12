@@ -827,9 +827,29 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                                 }
                                 type_defs_buffer_ << ed << "\n";
                                 struct_types_[named.name] = tn;
-                                // Register field 0 (discriminant = i32) for cast support (K001 fix)
+                                // Register the full enum layout in struct_fields_ so that
+                                // calc_type_size (in gen_enum_instantiation) can compute the
+                                // correct byte size when this enum appears as a payload in
+                                // another generic enum (e.g., Maybe[Type]).
+                                // The layout mirrors the emitted LLVM type above:
+                                //   max_payload==0  → { i32 }                  (4 bytes)
+                                //   max_payload<=4  → { i32, i32 }             (8 bytes)
+                                //   max_payload<=8  → { i32, i64 }             (16 bytes)
+                                //   max_payload>8   → { i32, [N x i64] }       (8 + N*8 bytes)
                                 if (struct_fields_.find(named.name) == struct_fields_.end()) {
-                                    struct_fields_[named.name] = {{"tag", 0, "i32", nullptr}};
+                                    std::vector<FieldInfo> layout;
+                                    layout.push_back({"tag", 0, "i32", nullptr});
+                                    if (max_payload > 8) {
+                                        size_t num_i64 = (max_payload + 7) / 8;
+                                        layout.push_back({"payload", 1,
+                                                          "[" + std::to_string(num_i64) + " x i64]",
+                                                          nullptr});
+                                    } else if (max_payload > 4) {
+                                        layout.push_back({"payload", 1, "i64", nullptr});
+                                    } else if (max_payload > 0) {
+                                        layout.push_back({"payload", 1, "i32", nullptr});
+                                    }
+                                    struct_fields_[named.name] = layout;
                                 }
                                 int tag = 0;
                                 for (const auto& [vn, vts] : edef.variants)

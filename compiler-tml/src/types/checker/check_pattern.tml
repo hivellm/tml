@@ -46,7 +46,7 @@ use compiler::types::infer::unify::unify
 use compiler::types::infer::unify::resolve
 use compiler::types::checker::errors::TypeError
 use compiler::types::checker::errors::type_error
-use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::apply_type_subs
 use compiler::types::checker::check_call::extract_type_params
 use compiler::ast::common::LiteralKind
 use compiler::ast::nodes::Pattern
@@ -296,7 +296,7 @@ func check_enum_pat(
 
             // Check each sub-pattern with the substituted payload type
             for i in 0 to arg_count {
-                let payload_ty = substitute_type(variant.payload_types.get(i).get(), subs)
+                let payload_ty = apply_type_subs(variant.payload_types.get(i).get(), subs)
                 let _ = check_pattern(ctx, env, ep.args.get(i).get(), payload_ty, span)
             }
             return true

@@ -43,8 +43,8 @@ pub func check_when_exhaustiveness(
     scrutinee_ty: Type,
     arms: List[ThirWhenArm]
 ) -> ExhaustivenessResult {
-    let missing = List[Str]::new(4)
-    let unreachable = List[I64]::new(4)
+    let missing: List[Str] = List::new(4)
+    let unreachable: List[I64] = List::new(4)
 
     let arm_count: I64 = arms.len() as I64
 
@@ -70,7 +70,7 @@ pub func check_when_exhaustiveness(
         let enum_r = env_lookup_enum(env, type_name)
         when enum_r {
             Just(edef) => {
-                let covered = HashMap[Str, I64]::new(8)
+                let covered: HashMap[Str, I64] = HashMap::new(8)
                 for i in 0 to arm_count {
                     let vname = extract_thir_variant_name(arms.get(i).pattern.get())
                     if vname != "" {
@@ -142,7 +142,7 @@ pub func format_exhaustiveness_error(result: ExhaustivenessResult) -> Str {
 
 /// Format unreachable arm warnings.
 pub func format_unreachable_warnings(result: ExhaustivenessResult) -> List[Str] {
-    let warnings = List[Str]::new(result.unreachable_arms.len() as I64)
+    let warnings: List[Str] = List::new(result.unreachable_arms.len() as I64)
     let uc: I64 = result.unreachable_arms.len() as I64
     for i in 0 to uc {
         let arm_idx = result.unreachable_arms.get(i)

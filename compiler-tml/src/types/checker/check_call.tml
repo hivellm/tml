@@ -84,7 +84,7 @@ use compiler::types::checker::check_expr::infer_expr
 /// Substitute type parameters in `ty` according to `subs` map.
 /// For example, if subs = {"T" → I32} and ty = Named("List", [Generic("T")]),
 /// result = Named("List", [I32]).
-pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
+pub func apply_type_subs(ty: Type, subs: HashMap[Str, Type]) -> Type {
     when ty {
         Generic(g) => {
             if subs.has(g.name) {
@@ -105,12 +105,12 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
             let count: I64 = nt.type_args.len() as I64
             for i in 0 to count {
                 let arg: Type = nt.type_args.get(i).get()
-                new_args.push(Heap::new(substitute_type(arg, subs)))
+                new_args.push(Heap::new(apply_type_subs(arg, subs)))
             }
             return make_named(nt.name, nt.module_path, new_args)
         },
         Ref(r) => {
-            let inner = substitute_type(r.inner.get(), subs)
+            let inner = apply_type_subs(r.inner.get(), subs)
             return Type::Ref(compiler::types::ty::RefType {
                 is_mut: r.is_mut,
                 inner: Heap::new(inner),
@@ -121,7 +121,7 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
             let new_elems = List[Heap[Type]]::new(t.elements.len() as I64)
             let count: I64 = t.elements.len() as I64
             for i in 0 to count {
-                new_elems.push(Heap::new(substitute_type(t.elements.get(i).get(), subs)))
+                new_elems.push(Heap::new(apply_type_subs(t.elements.get(i).get(), subs)))
             }
             return Type::Tuple(compiler::types::ty::TupleType { elements: new_elems })
         },
@@ -129,9 +129,9 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
             let new_params = List[Heap[Type]]::new(f.params.len() as I64)
             let pcount: I64 = f.params.len() as I64
             for i in 0 to pcount {
-                new_params.push(Heap::new(substitute_type(f.params.get(i).get(), subs)))
+                new_params.push(Heap::new(apply_type_subs(f.params.get(i).get(), subs)))
             }
-            let new_ret = substitute_type(f.return_type.get(), subs)
+            let new_ret = apply_type_subs(f.return_type.get(), subs)
             return Type::Func(compiler::types::ty::FuncType {
                 params: new_params,
                 return_type: Heap::new(new_ret),
@@ -139,7 +139,7 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
             })
         },
         Array(a) => {
-            let new_elem = substitute_type(a.element.get(), subs)
+            let new_elem = apply_type_subs(a.element.get(), subs)
             return Type::Array(compiler::types::ty::ArrayType {
                 element: Heap::new(new_elem),
                 size: a.size,
@@ -147,7 +147,7 @@ pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
             })
         },
         Slice(s) => {
-            let new_elem = substitute_type(s.element.get(), subs)
+            let new_elem = apply_type_subs(s.element.get(), subs)
             return Type::Slice(compiler::types::ty::SliceType { element: Heap::new(new_elem) })
         },
         _ => return ty
@@ -448,7 +448,7 @@ func check_call_with_sig(ctx: InferCtx, env: TypeEnv, call: CallExpr, sig: FuncS
     }
 
     // Substitute into return type
-    return substitute_type(sig.return_type.get(), subs)
+    return apply_type_subs(sig.return_type.get(), subs)
 }
 
 // ============================================================================
@@ -556,7 +556,7 @@ func check_method_with_sig(
             i = i + 1
         }
 
-        return substitute_type(sig.return_type.get(), subs)
+        return apply_type_subs(sig.return_type.get(), subs)
     }
 
     // Non-generic: just return the declared return type
@@ -849,7 +849,7 @@ func try_behavior_method(
                         },
                         _ => {}
                     }
-                    return Just(substitute_type(msig.return_type.get(), subs))
+                    return Just(apply_type_subs(msig.return_type.get(), subs))
                 }
                 return Just(msig.return_type.get())
             }
@@ -927,7 +927,7 @@ pub func desugar_operator(
                 let subs = HashMap[Str, Type]::new(4)
                 // Self → left_ty
                 subs.set("Self", left_ty)
-                return Just(substitute_type(msig.return_type.get(), subs))
+                return Just(apply_type_subs(msig.return_type.get(), subs))
             }
             return Just(msig.return_type.get())
         }
