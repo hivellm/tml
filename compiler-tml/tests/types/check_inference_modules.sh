@@ -1,7 +1,7 @@
 #!/bin/bash
-# Differential test: verify all inference modules type-check without errors.
+# Differential test: verify all type system modules type-check without errors.
 # This runs `tml check` on each module and verifies zero errors.
-# Phase 14c — item 6.1 (type-check level differential testing).
+# Phase 14c/14d — diagnostic-level differential testing.
 
 set -e
 
@@ -20,10 +20,10 @@ check_module() {
     fi
 }
 
-echo "=== Phase 14c Differential Check: Inference Modules ==="
+echo "=== Phase 14c+14d Differential Check: Type System Modules ==="
 echo ""
 
-# Core inference engine
+# Core inference engine (phase 14c)
 check_module "compiler-tml/src/types/infer/common.tml"
 check_module "compiler-tml/src/types/infer/unify.tml"
 
@@ -48,11 +48,26 @@ check_module "compiler-tml/src/types/env.tml"
 check_module "compiler-tml/src/types/builtins.tml"
 check_module "compiler-tml/src/types/register.tml"
 
+# Behavior dispatch (phase 14d)
+check_module "compiler-tml/src/types/behaviors/common.tml"
+check_module "compiler-tml/src/types/behaviors/registry.tml"
+check_module "compiler-tml/src/types/behaviors/solver.tml"
+check_module "compiler-tml/src/types/behaviors/dispatch.tml"
+check_module "compiler-tml/src/types/coercion.tml"
+
+# Pipeline integration
+check_module "compiler-tml/src/types/pipeline.tml"
+
+# Module system (phase 14b)
+check_module "compiler-tml/src/types/module.tml"
+check_module "compiler-tml/src/types/imports.tml"
+
 # Test files
 check_module "compiler-tml/tests/types/unify_basic.test.tml"
 check_module "compiler-tml/tests/types/unify_primitives.test.tml"
 check_module "compiler-tml/tests/types/infer_differential.test.tml"
 check_module "compiler-tml/tests/types/differential_check.test.tml"
+check_module "compiler-tml/tests/types/behavior_dispatch.test.tml"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

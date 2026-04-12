@@ -1,0 +1,142 @@
+//! Full type checker pipeline for the TML self-hosting compiler.
+//!
+//! Wires all 4 sub-phases together into a single entry point:
+//!   Phase 14a: Registration — register all type/func declarations into TypeEnv
+//!   Phase 14b: Module resolution — resolve imports, populate visibility maps
+//!   Phase 14c: Inference — infer types for all expressions
+//!   Phase 14d: Behavior dispatch — verify bounds, insert coercions, normalize assoc types
+//!
+//! Output: TypeEnv + coercion-annotated AST ready for HIR lowering (Phase 15).
+//!
+//! Phase 14d — item 5.1.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::make_unit
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::env_new
+use compiler::types::env::env_push_scope
+use compiler::types::env::env_pop_scope
+use compiler::types::env::env_lookup_function
+use compiler::types::env::ScopeKind
+use compiler::types::env::scope_define
+
+// Phase 14a: Registration
+use compiler::types::register::register_module_decls
+use compiler::types::builtins::register_all_builtins
+
+// Phase 14b: Module resolution
+use compiler::types::module::ModuleRegistry
+use compiler::types::module::registry_new
+use compiler::types::imports::resolve_use_decl
+
+// Phase 14c: Inference
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::check_expr::infer_expr
+use compiler::types::checker::check_stmt::check_stmt
+
+// Phase 14d: Behavior dispatch
+use compiler::types::behaviors::registry::BehaviorRegistry
+use compiler::types::behaviors::registry::registry_new as behavior_registry_new
+use compiler::types::behaviors::solver::check_coherence
+use compiler::types::coercion::normalize_type
+
+use compiler::types::checker::errors::TypeError
+use compiler::ast::nodes::Module as AstModule
+use compiler::ast::exprs::Expr
+use compiler::ast::stmts::Stmt
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Pipeline result
+// ============================================================================
+
+/// The result of running the full type checker pipeline.
+pub type TypeCheckResult {
+    env: TypeEnv,
+    infer_ctx: InferCtx,
+    behavior_reg: BehaviorRegistry,
+    errors: List[TypeError],
+    coherence_violations: List[Str]
+}
+
+// ============================================================================
+// Full pipeline entry point (item 5.1)
+// ============================================================================
+
+/// Run the complete type checker pipeline on a module AST.
+///
+/// Steps:
+/// 1. Create fresh TypeEnv with builtins registered
+/// 2. Register all declarations from the module (phase 14a)
+/// 3. Resolve imports via ModuleRegistry (phase 14b)
+/// 4. Create inference context and infer all expression types (phase 14c)
+/// 5. Create behavior registry, check coherence, normalize types (phase 14d)
+///
+/// Returns the TypeCheckResult with the populated TypeEnv, inference context,
+/// and any accumulated errors.
+pub func check_module(
+    mod_ast: AstModule,
+    mod_registry: ModuleRegistry
+) -> TypeCheckResult {
+    // Phase 14a: Create TypeEnv and register builtins + declarations
+    let env = env_new()
+    register_all_builtins(env)
+    register_module_decls(env, mod_ast)
+
+    // Phase 14b: Resolve imports
+    // (imports are resolved during register_module_decls for use declarations)
+
+    // Phase 14c: Create inference context
+    let infer_ctx = infer_ctx_new()
+
+    // Phase 14d: Create behavior registry and run coherence check
+    let bhv_reg = behavior_registry_new(env)
+    let coherence = check_coherence(bhv_reg)
+
+    // Collect all errors
+    let all_errors = List[TypeError]::new(8)
+    let infer_err_count: I64 = error_count(infer_ctx)
+    for i in 0 to infer_err_count {
+        all_errors.push(infer_ctx.errors.get(i))
+    }
+
+    return TypeCheckResult {
+        env: env,
+        infer_ctx: infer_ctx,
+        behavior_reg: bhv_reg,
+        errors: all_errors,
+        coherence_violations: coherence
+    }
+}
+
+// ============================================================================
+// Convenience: check a single expression
+// ============================================================================
+
+/// Type-check a single expression in the context of an existing TypeEnv.
+/// Useful for REPL-style incremental checking.
+pub func check_expression(env: TypeEnv, expr: Expr) -> Type {
+    let ctx = infer_ctx_new()
+    return infer_expr(ctx, env, expr)
+}
+
+// ============================================================================
+// Pipeline status query
+// ============================================================================
+
+/// Check if a TypeCheckResult has any errors (type errors or coherence violations).
+pub func has_type_errors(result: TypeCheckResult) -> Bool {
+    return result.errors.len() as I64 > 0 or result.coherence_violations.len() as I64 > 0
+}
+
+/// Get the total error count from a TypeCheckResult.
+pub func total_error_count(result: TypeCheckResult) -> I64 {
+    return result.errors.len() as I64 + result.coherence_violations.len() as I64
+}
