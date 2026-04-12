@@ -1767,6 +1767,8 @@ add_library(tml_cli STATIC
     src/cli/builder/native_lib_resolver.cpp
     # Test system
     src/cli/commands/cmd_test.cpp
+    # Coverage
+    src/cli/commands/cmd_coverage.cpp
     src/testing/testing_process.cpp
     src/testing/testing_protocol.cpp
     src/testing/testing_dispatcher_gen.cpp

@@ -49,6 +49,7 @@ TML_MODULE("compiler")
 #include "builder/parallel_build.hpp"
 #include "commands/cmd_build.hpp"
 #include "commands/cmd_cache.hpp"
+#include "commands/cmd_coverage.hpp"
 #include "commands/cmd_debug.hpp"
 #include "commands/cmd_doc.hpp"
 #include "commands/cmd_explain.hpp"
@@ -876,6 +877,10 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "publish") {
         return run_publish(argc, argv);
+    }
+
+    if (command == "cv" || command == "coverage") {
+        return run_coverage(argc, argv, verbose);
     }
 
     if (command == "profile") {
