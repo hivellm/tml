@@ -1,0 +1,152 @@
+//! Query cache — in-memory memoization with fingerprint validation.
+//!
+//! Each query result is stored with its input fingerprint. On cache lookup,
+//! the fingerprint is compared to determine if the cached result is still valid.
+//!
+//! Phase 17a — items 1.3–1.5.
+
+use compiler::query::key::QueryKey
+use compiler::query::key::query_cache_key
+use std::collections::hashmap::HashMap
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Fingerprint (content hash)
+// ============================================================================
+
+/// A content fingerprint — hash of source file or intermediate result.
+pub type Fingerprint { value: I64 }
+
+/// Compute a simple FNV-1a hash fingerprint of a string.
+pub func fingerprint(content: Str) -> Fingerprint {
+    var hash: I64 = 14695981039346656037 as I64
+    let n: I64 = content.len() as I64
+    for i in 0 to n {
+        let byte: I64 = content.char_at(i) as I64
+        hash = hash ^ byte
+        hash = hash * 1099511628211 as I64
+    }
+    return Fingerprint { value: hash }
+}
+
+/// Empty fingerprint (for cache entries with no input).
+pub func empty_fingerprint() -> Fingerprint {
+    return Fingerprint { value: 0 }
+}
+
+/// Compare two fingerprints.
+pub func fingerprints_equal(a: Fingerprint, b: Fingerprint) -> I64 {
+    if a.value == b.value { return 1 }
+    return 0
+}
+
+// ============================================================================
+// Cache entry
+// ============================================================================
+
+/// A cached query result with metadata.
+pub type CacheEntry {
+    /// The cached result as an opaque I64 (pointer or value).
+    result: I64,
+    /// Input fingerprint at time of computation.
+    input_fp: Fingerprint,
+    /// Output fingerprint of the result.
+    output_fp: Fingerprint,
+    /// Query keys this entry depends on.
+    dependencies: List[Str],
+    /// RED/GREEN coloring: 0 = unknown, 1 = GREEN (valid), 2 = RED (stale).
+    color: I64
+}
+
+// Color constants
+const COLOR_UNKNOWN: I64 = 0
+const COLOR_GREEN: I64 = 1
+const COLOR_RED: I64 = 2
+
+// ============================================================================
+// QueryCache
+// ============================================================================
+
+/// In-memory query result cache backed by HashMap.
+pub type QueryCache {
+    entries: HashMap[Str, CacheEntry],
+    hit_count: I64,
+    miss_count: I64
+}
+
+/// Create a new empty query cache.
+pub func cache_new() -> QueryCache {
+    return QueryCache {
+        entries: HashMap[Str, CacheEntry]::new(128),
+        hit_count: 0,
+        miss_count: 0
+    }
+}
+
+/// Look up a cached result by query key.
+/// Returns the result I64 if found and fingerprint matches, or -1 if miss.
+pub func cache_get(cache: QueryCache, key: QueryKey, current_fp: Fingerprint) -> I64 {
+    let ck: Str = query_cache_key(key)
+    if not cache.entries.has(ck) {
+        cache.miss_count = cache.miss_count + 1
+        return -1 as I64
+    }
+    let entry: CacheEntry = cache.entries.get(ck)
+    if fingerprints_equal(entry.input_fp, current_fp) == 0 {
+        // Fingerprint mismatch — stale cache
+        cache.miss_count = cache.miss_count + 1
+        return -1 as I64
+    }
+    cache.hit_count = cache.hit_count + 1
+    return entry.result
+}
+
+/// Store a query result in the cache.
+pub func cache_store(
+    cache: QueryCache,
+    key: QueryKey,
+    result: I64,
+    input_fp: Fingerprint,
+    output_fp: Fingerprint,
+    deps: List[Str]
+) {
+    let ck: Str = query_cache_key(key)
+    cache.entries.set(ck, CacheEntry {
+        result: result,
+        input_fp: input_fp,
+        output_fp: output_fp,
+        dependencies: deps,
+        color: COLOR_GREEN
+    })
+}
+
+/// Check if a cache entry exists and is GREEN.
+pub func cache_is_green(cache: QueryCache, key: QueryKey) -> I64 {
+    let ck: Str = query_cache_key(key)
+    if not cache.entries.has(ck) { return 0 }
+    let entry: CacheEntry = cache.entries.get(ck)
+    if entry.color == COLOR_GREEN { return 1 }
+    return 0
+}
+
+/// Mark a cache entry as RED (stale).
+pub func cache_mark_red(cache: QueryCache, key: QueryKey) {
+    let ck: Str = query_cache_key(key)
+    if cache.entries.has(ck) {
+        let entry: CacheEntry = cache.entries.get(ck)
+        cache.entries.set(ck, CacheEntry {
+            result: entry.result,
+            input_fp: entry.input_fp,
+            output_fp: entry.output_fp,
+            dependencies: entry.dependencies,
+            color: COLOR_RED
+        })
+    }
+}
+
+/// Invalidate a cache entry and all its dependents.
+pub func cache_invalidate(cache: QueryCache, key: QueryKey) {
+    let ck: Str = query_cache_key(key)
+    cache_mark_red(cache, key)
+}

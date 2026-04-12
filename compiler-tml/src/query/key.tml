@@ -1,0 +1,136 @@
+//! Query key types — identifies each compilation stage computation.
+//!
+//! Each query is keyed by a file path (and optionally module name, opt level).
+//! The `QueryKey` enum is the union of all key types. Unlike the C++ variant
+//! (which uses `std::variant<...>`), the TML version is a proper enum with
+//! pattern matching support.
+//!
+//! Phase 17a — item 1.2.
+
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Query Key Types
+// ============================================================================
+
+/// Source file read key.
+pub type ReadSourceKey { file_path: Str }
+
+/// Tokenization key.
+pub type TokenizeKey { file_path: Str }
+
+/// Parse module key.
+pub type ParseModuleKey { file_path: Str, module_name: Str }
+
+/// Type-check module key.
+pub type TypecheckModuleKey { file_path: Str, module_name: Str }
+
+/// Borrow-check module key.
+pub type BorrowcheckModuleKey { file_path: Str, module_name: Str }
+
+/// HIR lowering key.
+pub type HirLowerKey { file_path: Str, module_name: Str }
+
+/// THIR lowering key.
+pub type ThirLowerKey { file_path: Str, module_name: Str }
+
+/// MIR build key.
+pub type MirBuildKey { file_path: Str, module_name: Str }
+
+/// Codegen unit key.
+pub type CodegenUnitKey {
+    file_path: Str,
+    module_name: Str,
+    optimization_level: I64,
+    debug_info: I64,
+    test_entry_index: I64,
+    library_decls_only: I64
+}
+
+/// Union of all query keys.
+pub enum QueryKey {
+    ReadSource(ReadSourceKey),
+    Tokenize(TokenizeKey),
+    ParseModule(ParseModuleKey),
+    TypecheckModule(TypecheckModuleKey),
+    BorrowcheckModule(BorrowcheckModuleKey),
+    HirLower(HirLowerKey),
+    ThirLower(ThirLowerKey),
+    MirBuild(MirBuildKey),
+    CodegenUnit(CodegenUnitKey)
+}
+
+/// Tag enum for fast discrimination.
+@repr(U8)
+pub enum QueryKind {
+    ReadSource,
+    Tokenize,
+    ParseModule,
+    TypecheckModule,
+    BorrowcheckModule,
+    HirLower,
+    ThirLower,
+    MirBuild,
+    CodegenUnit
+}
+
+/// Extract the QueryKind from a QueryKey.
+pub func query_kind(key: QueryKey) -> QueryKind {
+    when key {
+        ReadSource(_) => return QueryKind::ReadSource,
+        Tokenize(_) => return QueryKind::Tokenize,
+        ParseModule(_) => return QueryKind::ParseModule,
+        TypecheckModule(_) => return QueryKind::TypecheckModule,
+        BorrowcheckModule(_) => return QueryKind::BorrowcheckModule,
+        HirLower(_) => return QueryKind::HirLower,
+        ThirLower(_) => return QueryKind::ThirLower,
+        MirBuild(_) => return QueryKind::MirBuild,
+        CodegenUnit(_) => return QueryKind::CodegenUnit
+    }
+}
+
+/// Get the file path from any query key.
+pub func query_file_path(key: QueryKey) -> Str {
+    when key {
+        ReadSource(k) => return k.file_path,
+        Tokenize(k) => return k.file_path,
+        ParseModule(k) => return k.file_path,
+        TypecheckModule(k) => return k.file_path,
+        BorrowcheckModule(k) => return k.file_path,
+        HirLower(k) => return k.file_path,
+        ThirLower(k) => return k.file_path,
+        MirBuild(k) => return k.file_path,
+        CodegenUnit(k) => return k.file_path
+    }
+}
+
+/// Get a human-readable name for a query kind.
+pub func query_kind_name(kind: QueryKind) -> Str {
+    when kind {
+        ReadSource => return "ReadSource",
+        Tokenize => return "Tokenize",
+        ParseModule => return "ParseModule",
+        TypecheckModule => return "TypecheckModule",
+        BorrowcheckModule => return "BorrowcheckModule",
+        HirLower => return "HirLower",
+        ThirLower => return "ThirLower",
+        MirBuild => return "MirBuild",
+        CodegenUnit => return "CodegenUnit"
+    }
+}
+
+/// Generate a unique cache key string for a QueryKey.
+pub func query_cache_key(key: QueryKey) -> Str {
+    when key {
+        ReadSource(k) => return "rs:" + k.file_path,
+        Tokenize(k) => return "tok:" + k.file_path,
+        ParseModule(k) => return "parse:" + k.file_path + ":" + k.module_name,
+        TypecheckModule(k) => return "tc:" + k.file_path + ":" + k.module_name,
+        BorrowcheckModule(k) => return "bc:" + k.file_path + ":" + k.module_name,
+        HirLower(k) => return "hir:" + k.file_path + ":" + k.module_name,
+        ThirLower(k) => return "thir:" + k.file_path + ":" + k.module_name,
+        MirBuild(k) => return "mir:" + k.file_path + ":" + k.module_name,
+        CodegenUnit(k) => return "cg:" + k.file_path + ":" + k.module_name + ":" + k.optimization_level.to_string()
+    }
+}

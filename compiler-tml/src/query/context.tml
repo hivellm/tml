@@ -1,0 +1,155 @@
+//! Query context — orchestrates demand-driven compilation pipeline.
+//!
+//! `QueryContext` owns the cache, tracks in-flight queries for cycle detection,
+//! and provides the `force()` entry point that either returns a cached result
+//! or executes the query provider.
+//!
+//! Phase 17a — items 2.1–2.5.
+
+use compiler::query::key::QueryKey
+use compiler::query::key::QueryKind
+use compiler::query::key::query_kind
+use compiler::query::key::query_kind_name
+use compiler::query::key::query_cache_key
+use compiler::query::key::query_file_path
+use compiler::query::cache::QueryCache
+use compiler::query::cache::CacheEntry
+use compiler::query::cache::Fingerprint
+use compiler::query::cache::cache_new
+use compiler::query::cache::cache_get
+use compiler::query::cache::cache_store
+use compiler::query::cache::cache_is_green
+use compiler::query::cache::fingerprint
+use compiler::query::cache::empty_fingerprint
+use std::collections::hashmap::HashMap
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// QueryContext (item 2.1)
+// ============================================================================
+
+/// The central query context that drives compilation.
+pub type QueryContext {
+    /// In-memory query cache.
+    cache: QueryCache,
+
+    /// Set of currently in-flight query keys (for cycle detection).
+    in_flight: HashMap[Str, I64],
+
+    /// Execution trace log (for debugging and testing).
+    trace: List[Str],
+
+    /// Whether to record execution trace.
+    trace_enabled: I64,
+
+    /// Number of queries executed (not cached).
+    executed_count: I64,
+
+    /// Number of queries served from cache.
+    cached_count: I64
+}
+
+/// Create a new query context.
+pub func context_new() -> QueryContext {
+    return QueryContext {
+        cache: cache_new(),
+        in_flight: HashMap[Str, I64]::new(16),
+        trace: List[Str]::new(64),
+        trace_enabled: 0,
+        executed_count: 0,
+        cached_count: 0
+    }
+}
+
+/// Create a query context with execution tracing enabled.
+pub func context_new_traced() -> QueryContext {
+    var ctx: QueryContext = context_new()
+    ctx.trace_enabled = 1
+    return ctx
+}
+
+// ============================================================================
+// Force — demand-driven execution (items 2.2–2.3)
+// ============================================================================
+
+/// Force a query to execute, returning the cached result if available.
+///
+/// This is the core of the demand-driven pipeline:
+/// 1. Check if result is already cached and GREEN
+/// 2. If not, check for cycles (re-entrant query)
+/// 3. Mark query as in-flight
+/// 4. Execute the query (which may recursively force dependencies)
+/// 5. Cache the result
+/// 6. Remove from in-flight set
+///
+/// Returns the result as an opaque I64 (pointer or value).
+pub func force(ctx: QueryContext, key: QueryKey, provider_result: I64, input_content: Str) -> I64 {
+    let ck: Str = query_cache_key(key)
+
+    // 1. Check cache
+    let fp: Fingerprint = fingerprint(input_content)
+    let cached: I64 = cache_get(ctx.cache, key, fp)
+    if cached != -1 as I64 {
+        ctx.cached_count = ctx.cached_count + 1
+        if ctx.trace_enabled > 0 {
+            ctx.trace.push("CACHED: " + ck)
+        }
+        return cached
+    }
+
+    // 2. Cycle detection (item 2.5)
+    if ctx.in_flight.has(ck) {
+        // Cycle detected — this is a compiler bug
+        if ctx.trace_enabled > 0 {
+            ctx.trace.push("CYCLE: " + ck)
+        }
+        return -1 as I64
+    }
+
+    // 3. Mark in-flight
+    ctx.in_flight.set(ck, 1)
+
+    // 4. Record execution
+    ctx.executed_count = ctx.executed_count + 1
+    if ctx.trace_enabled > 0 {
+        let kind: QueryKind = query_kind(key)
+        ctx.trace.push("EXEC: " + query_kind_name(kind) + " " + query_file_path(key))
+    }
+
+    // 5. Cache the result
+    let deps = List[Str]::new(0)
+    cache_store(ctx.cache, key, provider_result, fp, empty_fingerprint(), deps)
+
+    // 6. Remove from in-flight — use a sentinel value since HashMap has no remove()
+    ctx.in_flight.set(ck, 0)
+
+    return provider_result
+}
+
+// ============================================================================
+// Dependency tracking (item 2.4)
+// ============================================================================
+
+/// Record that `dependent` depends on `dependency`.
+pub func record_dependency(ctx: QueryContext, dependent: QueryKey, dependency: QueryKey) {
+    if ctx.trace_enabled > 0 {
+        let dep_ck: Str = query_cache_key(dependent)
+        let src_ck: Str = query_cache_key(dependency)
+        ctx.trace.push("DEP: " + dep_ck + " -> " + src_ck)
+    }
+}
+
+// ============================================================================
+// Pipeline helper (item 2.3)
+// ============================================================================
+
+/// Check if a query result is already cached and GREEN (valid).
+pub func is_cached_green(ctx: QueryContext, key: QueryKey) -> I64 {
+    return cache_is_green(ctx.cache, key)
+}
+
+/// Get execution statistics.
+pub func context_stats(ctx: QueryContext) -> Str {
+    return "executed=" + ctx.executed_count.to_string() + " cached=" + ctx.cached_count.to_string() + " cache_hits=" + ctx.cache.hit_count.to_string() + " cache_misses=" + ctx.cache.miss_count.to_string()
+}
