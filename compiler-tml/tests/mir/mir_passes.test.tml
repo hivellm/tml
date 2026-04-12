@@ -1,0 +1,369 @@
+//! Unit tests for MIR optimization passes.
+//!
+//! Tests the actual logic of each pass — not just type-checking.
+
+use test
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::BinaryInst
+use compiler::mir::inst::UnaryInst
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::AllocaInst
+use compiler::mir::inst::LoadInst
+use compiler::mir::inst::StoreInst
+use compiler::mir::inst::CallInst
+use compiler::mir::inst::SelectInst
+use compiler::mir::inst::PhiInst
+use compiler::mir::inst::PhiEntry
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::ReturnTerm
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
+use compiler::mir::block::block_new
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirFuncParam
+use compiler::mir::module::mir_func_new
+use compiler::mir::module::mir_module_new
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::pass_manager_new
+use compiler::mir::passes::analysis::find_reachable_blocks
+use compiler::mir::passes::analysis::compute_successors
+use compiler::mir::passes::analysis::is_value_used
+use compiler::mir::passes::dce::run_dead_code_elimination
+use compiler::mir::passes::dfe::run_dead_function_elimination
+use compiler::mir::passes::uce::run_unreachable_code_elimination
+use compiler::mir::passes::block_merge::run_block_merge
+use compiler::mir::passes::const_fold::run_constant_folding
+use compiler::mir::passes::mem2reg::run_mem2reg
+use compiler::hir::expr::HirBinOp
+use compiler::source::loc_new
+use compiler::source::span_new
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Helper: create a dummy span
+// ============================================================================
+
+func test_span() -> compiler::source::SourceSpan {
+    let loc = loc_new("<test>", 0, 0, 0, 0)
+    return span_new(loc, loc)
+}
+
+/// Helper: emit an instruction into a block.
+func emit(bb: BasicBlock, result: I64, ty: MirType, inst: MirInst) {
+    bb.instructions.push(InstructionData {
+        result: result as ValueId,
+        result_type: ty,
+        inst: inst,
+        span: test_span()
+    })
+}
+
+func i64_type() -> MirType { return MirType::Primitive(MirPrimitive::I64) }
+
+// ============================================================================
+// Analysis tests
+// ============================================================================
+
+@test
+func test_reachable_blocks_linear() -> I32 {
+    // entry → bb1 → bb2 (all reachable)
+    let mf = mir_func_new("f", i64_type())
+    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    mf.blocks.push(block_new(1, "bb1"))
+    mf.blocks.get(1).terminator = Just(Terminator::Branch(BranchTerm { target: 2 }))
+    mf.blocks.push(block_new(2, "bb2"))
+    mf.blocks.get(2).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let reachable = find_reachable_blocks(mf)
+    assert(reachable.has("0"))
+    assert(reachable.has("1"))
+    assert(reachable.has("2"))
+    return 0
+}
+
+@test
+func test_reachable_blocks_with_unreachable() -> I32 {
+    // entry → bb1, bb2 is unreachable
+    let mf = mir_func_new("f", i64_type())
+    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    mf.blocks.push(block_new(1, "bb1"))
+    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    mf.blocks.push(block_new(2, "bb2_unreachable"))
+    mf.blocks.get(2).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let reachable = find_reachable_blocks(mf)
+    assert(reachable.has("0"))
+    assert(reachable.has("1"))
+    assert(not reachable.has("2"))
+    return 0
+}
+
+@test
+func test_compute_successors_branch() -> I32 {
+    let bb = block_new(0, "entry")
+    bb.terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    let succs = compute_successors(bb)
+    assert_eq(succs.len() as I64, 1)
+    assert_eq(succs.get(0), 1)
+    return 0
+}
+
+@test
+func test_compute_successors_cond_branch() -> I32 {
+    let bb = block_new(0, "entry")
+    bb.terminator = Just(Terminator::CondBranch(CondBranchTerm {
+        condition: 0 as ValueId, true_target: 1, false_target: 2
+    }))
+    let succs = compute_successors(bb)
+    assert_eq(succs.len() as I64, 2)
+    assert_eq(succs.get(0), 1)
+    assert_eq(succs.get(1), 2)
+    return 0
+}
+
+@test
+func test_compute_successors_return() -> I32 {
+    let bb = block_new(0, "entry")
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    let succs = compute_successors(bb)
+    assert_eq(succs.len() as I64, 0)
+    return 0
+}
+
+// ============================================================================
+// DCE tests
+// ============================================================================
+
+@test
+func test_dce_finds_unused() -> I32 {
+    // %0 = const 42 (unused)
+    // %1 = const 10
+    // ret %1
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(42) }))
+    emit(bb, 1, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(10) }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Just(1 as ValueId) }))
+
+    let result = run_dead_code_elimination(mf)
+    // %0 is unused, so DCE should find 1 removable instruction
+    assert(result.changed > 0)
+    assert_eq(result.instructions_removed, 1)
+    return 0
+}
+
+@test
+func test_dce_keeps_side_effects() -> I32 {
+    // %0 = call "print" (side effect — should NOT be removed)
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Call(CallInst {
+        callee: "print", args: List[ValueId]::new(0), type_args: List[MirType]::new(0)
+    }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let result = run_dead_code_elimination(mf)
+    assert_eq(result.changed, 0)
+    return 0
+}
+
+// ============================================================================
+// DFE tests
+// ============================================================================
+
+@test
+func test_dfe_removes_uncalled() -> I32 {
+    let mmod = mir_module_new("test")
+    // main calls "helper", but "unused_func" is never called
+    let main_fn = mir_func_new("main", i64_type())
+    main_fn.is_public = 1
+    let bb = main_fn.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Call(CallInst {
+        callee: "helper", args: List[ValueId]::new(0), type_args: List[MirType]::new(0)
+    }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    mmod.functions.push(main_fn)
+
+    let helper = mir_func_new("helper", i64_type())
+    helper.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    mmod.functions.push(helper)
+
+    let unused = mir_func_new("unused_func", i64_type())
+    unused.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    mmod.functions.push(unused)
+
+    let result = run_dead_function_elimination(mmod)
+    assert(result.changed > 0)
+    assert_eq(result.blocks_removed, 1)  // 1 function removable
+    return 0
+}
+
+// ============================================================================
+// UCE tests
+// ============================================================================
+
+@test
+func test_uce_finds_unreachable() -> I32 {
+    let mf = mir_func_new("f", i64_type())
+    mf.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    // bb1 is unreachable (no edge from entry)
+    mf.blocks.push(block_new(1, "dead"))
+    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let result = run_unreachable_code_elimination(mf)
+    assert(result.changed > 0)
+    assert_eq(result.blocks_removed, 1)
+    return 0
+}
+
+// ============================================================================
+// Block merge tests
+// ============================================================================
+
+@test
+func test_block_merge_finds_candidates() -> I32 {
+    // entry → bb1 (single pred/succ) — mergeable
+    let mf = mir_func_new("f", i64_type())
+    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    mf.blocks.push(block_new(1, "bb1"))
+    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let result = run_block_merge(mf)
+    assert(result.changed > 0)
+    return 0
+}
+
+@test
+func test_block_merge_no_merge_multi_pred() -> I32 {
+    // entry → bb1, entry → bb1 (cond branch) — bb1 has 2 preds, not mergeable
+    let mf = mir_func_new("f", i64_type())
+    emit(mf.blocks.get(0), 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstBool(true) }))
+    mf.blocks.get(0).terminator = Just(Terminator::CondBranch(CondBranchTerm {
+        condition: 0 as ValueId, true_target: 1, false_target: 1
+    }))
+    mf.blocks.push(block_new(1, "bb1"))
+    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    let result = run_block_merge(mf)
+    // bb1 has 2 predecessors (both from entry), should NOT merge
+    assert_eq(result.changed, 0)
+    return 0
+}
+
+// ============================================================================
+// Constant folding tests
+// ============================================================================
+
+@test
+func test_const_fold_add() -> I32 {
+    // %0 = const 3
+    // %1 = const 4
+    // %2 = add %0, %1  →  should fold to 7
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(3) }))
+    emit(bb, 1, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(4) }))
+    emit(bb, 2, i64_type(), MirInst::Binary(BinaryInst {
+        op: HirBinOp::Add, left: 0 as ValueId, right: 1 as ValueId
+    }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Just(2 as ValueId) }))
+
+    let result = run_constant_folding(mf)
+    assert(result.changed > 0)
+    assert_eq(result.instructions_removed, 1)
+    return 0
+}
+
+@test
+func test_const_fold_no_fold_variable() -> I32 {
+    // %0 = const 3
+    // %1 = param (not constant)
+    // %2 = add %0, %1  →  should NOT fold
+    let mf = mir_func_new("f", i64_type())
+    mf.params.push(MirFuncParam { name: "x", param_type: i64_type(), value_id: 1 as ValueId })
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(3) }))
+    emit(bb, 2, i64_type(), MirInst::Binary(BinaryInst {
+        op: HirBinOp::Add, left: 0 as ValueId, right: 1 as ValueId
+    }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Just(2 as ValueId) }))
+
+    let result = run_constant_folding(mf)
+    assert_eq(result.changed, 0)
+    return 0
+}
+
+// ============================================================================
+// Mem2reg tests
+// ============================================================================
+
+@test
+func test_mem2reg_finds_promotable() -> I32 {
+    // %0 = alloca "x"
+    // store %1 → %0
+    // %2 = load %0
+    // ret %2
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Alloca(AllocaInst { alloc_type: i64_type(), name: "x" }))
+    emit(bb, -1 as I64, i64_type(), MirInst::Store(StoreInst { ptr: 0 as ValueId, value: 99 as ValueId }))
+    emit(bb, 2, i64_type(), MirInst::Load(LoadInst { ptr: 0 as ValueId }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Just(2 as ValueId) }))
+
+    let result = run_mem2reg(mf)
+    assert(result.changed > 0)
+    return 0
+}
+
+// ============================================================================
+// is_value_used tests
+// ============================================================================
+
+@test
+func test_is_value_used_true() -> I32 {
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(1) }))
+    emit(bb, 1, i64_type(), MirInst::Binary(BinaryInst {
+        op: HirBinOp::Add, left: 0 as ValueId, right: 0 as ValueId
+    }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    assert(is_value_used(mf, 0 as ValueId))
+    return 0
+}
+
+@test
+func test_is_value_used_false() -> I32 {
+    let mf = mir_func_new("f", i64_type())
+    let bb = mf.blocks.get(0)
+    emit(bb, 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(1) }))
+    bb.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+
+    // %0 is not used by any instruction
+    assert(not is_value_used(mf, 0 as ValueId))
+    return 0
+}
+
+// ============================================================================
+// Pass manager
+// ============================================================================
+
+@test
+func test_pass_manager_new() -> I32 {
+    let pm = pass_manager_new()
+    assert_eq(pm.enable_tier0, 1)
+    assert_eq(pm.enable_tier1, 1)
+    assert_eq(pm.max_iterations, 3)
+    assert_eq(pm.stats.passes_run, 0)
+    return 0
+}
