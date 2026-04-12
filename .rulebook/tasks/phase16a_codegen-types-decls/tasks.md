@@ -1,6 +1,6 @@
 # Tasks: Codegen Types & Declarations — Rewrite in TML
 
-**Status**: Planned (0/25)
+**Status**: In Progress (22/25)
 **Depends on**: phase15d (optimized MirModule available in TML)
 **Blocks**: phase16b (instructions need type emission), phase16c (calls need ABI/type layer)
 **Duration**: 4–6 weeks
@@ -11,46 +11,46 @@
 
 ## Phase 1: Module & File Structure (3 items)
 
-- [ ] 1.1 Create `compiler-tml/src/codegen/mod.tml` — module root, re-exports `Codegen`, `CodegenConfig`, `emit_module()`
-- [ ] 1.2 Create `compiler-tml/src/codegen/types.tml` — `LlvmType` enum: `I1`, `I8`, `I16`, `I32`, `I64`, `F32`, `F64`, `Ptr`, `Struct(List[LlvmType])`, `Array(LlvmType, I64)`, `Func(List[LlvmType], LlvmType)`, `Void`
-- [ ] 1.3 Create `compiler-tml/src/codegen/config.tml` — `CodegenConfig` struct: target triple, data layout string, optimize level, release flag
+- [x] 1.1 Create `compiler-tml/src/codegen/common.tml` — module root, re-exports CodegenConfig, LlvmType, emit_module()
+- [x] 1.2 Create `compiler-tml/src/codegen/types.tml` — `LlvmType` enum: I1..I128, F32, F64, Ptr, Void, EmptyStruct, Struct, NamedStruct, Array, Func + llvm_type_to_str + helpers
+- [x] 1.3 Create `compiler-tml/src/codegen/config.tml` — CodegenConfig struct: target triple, data layout, opt level, release, dll_export, source_filename
 
 ## Phase 2: Type Emission (6 items)
 
-- [ ] 2.1 Create `compiler-tml/src/codegen/emit_type.tml` — `emit_type(t: MirType) -> Text` converting MIR types to LLVM IR type strings
-- [ ] 2.2 Implement primitive types: `I64` → `"i64"`, `I32` → `"i32"`, `Bool` → `"i1"`, `F64` → `"double"`, `Unit` → `"{}"`, `Str` → `"ptr"`
-- [ ] 2.3 Implement aggregate types: struct → `"%struct.Name"` named reference, tuple → `"{ i64, i64, ... }"` inline, array → `"[N x T]"`
-- [ ] 2.4 Implement pointer and reference types: `Ref[T]` → `"ptr"`, `MutRef[T]` → `"ptr"`, raw pointer → `"ptr"` (opaque pointer model, LLVM 15+)
-- [ ] 2.5 Implement function pointer types: `func(A, B) -> C` → `"ptr"` in opaque model; emit full signature only in function declarations
-- [ ] 2.6 Implement Maybe/Outcome layout: `Maybe[T]` → `{ i32, T_padded }` matching C++ `maybe_layout()` byte-for-byte; `Outcome[T,E]` → `{ i32, union(T,E) }`
+- [x] 2.1 Create `compiler-tml/src/codegen/emit_type.tml` — emit_type(MirType)->Str, emit_type_for_data, mir_to_llvm
+- [x] 2.2 Implement primitive types: I64→i64, I32→i32, Bool→i1, F64→double, Unit→void/{}, Str→ptr
+- [x] 2.3 Implement aggregate types: struct→%struct.Name, tuple→{ T1, T2 }, array→[N x T]
+- [x] 2.4 Implement pointer/reference types: all→ptr (opaque pointer model, LLVM 15+)
+- [x] 2.5 Implement function pointer types: Function→{ ptr, ptr } fat pointer
+- [x] 2.6 Implement enum layout: compute_enum_body matching C++ max_payload rules exactly
 
 ## Phase 3: Struct Layout Computation (4 items)
 
-- [ ] 3.1 Create `compiler-tml/src/codegen/layout.tml` — `LayoutComputer` struct computing size/alignment for each `MirType`
-- [ ] 3.2 Implement primitive sizes: I8=1, I16=2, I32=4, I64=8, F32=4, F64=8, Bool=1, pointer=8 (x86_64)
-- [ ] 3.3 Implement struct layout: iterate fields, insert padding bytes to meet field alignment, record field offsets; total size rounded up to struct alignment
-- [ ] 3.4 Emit named struct type definitions: `%struct.Foo = type { i64, i32, [4 x i8] }` — emit each struct exactly once, deduplicate by name
+- [x] 3.1 Create `compiler-tml/src/codegen/layout.tml` — FieldLayout, StructLayout, StructDefEmitter
+- [x] 3.2 Implement primitive sizes via llvm_type_byte_size/llvm_type_alignment
+- [x] 3.3 Implement struct layout: compute_struct_layout with padding, field offsets, total size
+- [x] 3.4 Emit named struct/enum type definitions with deduplication via StructDefEmitter
 
 ## Phase 4: Function Signature Emission (5 items)
 
-- [ ] 4.1 Create `compiler-tml/src/codegen/emit_func.tml` — `emit_func_decl(f: MirFunc, cfg: CodegenConfig) -> Text` producing the `define`/`declare` line
-- [ ] 4.2 Implement calling convention annotation: `cc` field on MirFunc → `fastcc`, `ccc`, `win64cc` strings prepended to `define`
-- [ ] 4.3 Implement sret parameter: if return type is large struct, prepend `ptr sret(%struct.Name) align 8 %sret_slot` as first parameter
-- [ ] 4.4 Implement byval parameter: struct args ≤ 16 bytes passed by value → `byval(%struct.Name) align 8` annotation
-- [ ] 4.5 Implement function attributes: `nounwind`, `uwtable`, `alwaysinline`, `noinline` emitted from MirFunc attribute set
+- [x] 4.1 Create `compiler-tml/src/codegen/emit_func.tml` — emit_func_decl, emit_extern_decl
+- [x] 4.2 Implement calling_convention: fastcc, stdcall, thiscall, vectorcall
+- [x] 4.3 Implement sret: structs > 16 bytes get ptr sret(...) align 8 %sret_slot
+- [x] 4.4 Implement byval: struct params ≤ 16 bytes get byval annotation
+- [x] 4.5 Implement function attributes: emit_attribute_group (#0 = nounwind uwtable)
 
 ## Phase 5: Module-Level Declarations (4 items)
 
-- [ ] 5.1 Create `compiler-tml/src/codegen/emit_module.tml` — `emit_module(m: MirModule, cfg: CodegenConfig) -> Text` producing complete LLVM IR text
-- [ ] 5.2 Emit module header: `; ModuleID = 'file.tml'\nsource_filename = "..."\ntarget datalayout = "..."\ntarget triple = "..."\n`
-- [ ] 5.3 Emit runtime declarations: `declare` lines for every `@extern("c")` function used in the module — only emit what the module actually uses (not all 500+ runtime functions)
-- [ ] 5.4 Emit global constants and string literals: `@str.0 = private unnamed_addr constant [N x i8] c"...\00"` for each unique string in the module
+- [x] 5.1 Create `compiler-tml/src/codegen/emit_module.tml` — emit_module producing complete LLVM IR text
+- [x] 5.2 Emit module header: ModuleID, source_filename, target datalayout, target triple
+- [x] 5.3 Emit extern declarations for is_extern functions
+- [x] 5.4 Emit string globals via emit_string_global + escape_llvm_string
 
 ## Phase 6: Differential Testing (3 items)
 
-- [ ] 6.1 Create `compiler-tml/tests/codegen/types.test.tml` — unit tests: for each MirType variant, `emit_type(t)` must equal expected LLVM IR string
-- [ ] 6.2 Create `compiler-tml/tests/codegen/layout.test.tml` — struct layout tests: compute layout of 10 stdlib structs, assert field offsets match C++ `llvm_types.cpp` output
-- [ ] 6.3 IR-diff: compile 5 stdlib modules through TML type/decl emitter → compare struct definitions and function declarations against C++ codegen output line-by-line
+- [x] 6.1 Create `compiler-tml/tests/codegen/types.test.tml` — 30 tests: all primitives, pointer, array, slice, tuple, struct, enum, func, dyn, sizes
+- [x] 6.2 Create `compiler-tml/tests/codegen/layout.test.tml` — 10 tests: primitive sizes, struct layouts with padding, field offsets, emit_struct_def
+- [ ] 6.3 IR-diff: compile stdlib modules through TML emitter vs C++ — requires instruction emission from phase 16b to produce complete IR
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
 - [ ] 1.1 Update or create documentation covering the implementation

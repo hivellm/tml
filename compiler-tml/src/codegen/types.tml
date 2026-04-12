@@ -1,0 +1,134 @@
+//! LLVM IR type representations for codegen.
+//!
+//! `LlvmType` models the LLVM type system at the IR text level.
+//! These are the types that appear in emitted `.ll` files — not the
+//! TML semantic types or MIR types, but the final LLVM IR strings.
+//!
+//! Phase 16a — item 1.2.
+
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+/// LLVM IR type — mirrors LLVM's type system at the textual level.
+///
+/// Each variant maps to a specific LLVM IR type string:
+/// - `I1` → `"i1"`, `I8` → `"i8"`, ..., `I128` → `"i128"`
+/// - `F32` → `"float"`, `F64` → `"double"`
+/// - `Ptr` → `"ptr"` (opaque pointer, LLVM 15+)
+/// - `Void` → `"void"` (only valid as function return type)
+/// - `Struct` → `"{ i64, i32, ... }"` (anonymous inline struct)
+/// - `NamedStruct` → `"%struct.Foo"` (reference to named type)
+/// - `Array` → `"[N x T]"`
+/// - `Func` → function signature (used in `declare`/`define`, not as data)
+pub enum LlvmType {
+    I1,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    F32,
+    F64,
+    Ptr,
+    Void,
+    EmptyStruct,
+    Struct(LlvmStructType),
+    NamedStruct(LlvmNamedStructType),
+    Array(LlvmArrayType),
+    Func(LlvmFuncType)
+}
+
+/// Anonymous inline struct: `{ i64, i32, ptr }`.
+pub type LlvmStructType { fields: List[Heap[LlvmType]] }
+
+/// Reference to a named struct type: `%struct.Foo`.
+pub type LlvmNamedStructType { name: Str }
+
+/// Fixed-size array: `[N x T]`.
+pub type LlvmArrayType { element: Heap[LlvmType], size: I64 }
+
+/// Function signature: `i64 (ptr, i32)`.
+pub type LlvmFuncType { params: List[Heap[LlvmType]], return_type: Heap[LlvmType] }
+
+// ============================================================================
+// Display / string conversion
+// ============================================================================
+
+/// Convert an `LlvmType` to its LLVM IR text representation.
+pub func llvm_type_to_str(ty: LlvmType) -> Str {
+    when ty {
+        I1 => return "i1",
+        I8 => return "i8",
+        I16 => return "i16",
+        I32 => return "i32",
+        I64 => return "i64",
+        I128 => return "i128",
+        F32 => return "float",
+        F64 => return "double",
+        Ptr => return "ptr",
+        Void => return "void",
+        EmptyStruct => return "{}",
+        Struct(s) => {
+            let n: I64 = s.fields.len() as I64
+            if n == 0 { return "{}" }
+            var result: Str = "{ "
+            for i in 0 to n {
+                if i > 0 { result = result + ", " }
+                result = result + llvm_type_to_str(s.fields.get(i).get())
+            }
+            result = result + " }"
+            return result
+        },
+        NamedStruct(ns) => return ns.name,
+        Array(a) => {
+            let elem_str: Str = llvm_type_to_str(a.element.get())
+            return "[" + a.size.to_string() + " x " + elem_str + "]"
+        },
+        Func(f) => {
+            let ret_str: Str = llvm_type_to_str(f.return_type.get())
+            var result: Str = ret_str + " ("
+            let n: I64 = f.params.len() as I64
+            for i in 0 to n {
+                if i > 0 { result = result + ", " }
+                result = result + llvm_type_to_str(f.params.get(i).get())
+            }
+            result = result + ")"
+            return result
+        }
+    }
+}
+
+// ============================================================================
+// Helper constructors
+// ============================================================================
+
+/// Create an anonymous struct type from a list of field types.
+pub func make_llvm_struct(fields: List[Heap[LlvmType]]) -> LlvmType {
+    return LlvmType::Struct(LlvmStructType { fields: fields })
+}
+
+/// Create a named struct reference: `%struct.Name`.
+pub func make_llvm_named_struct(name: Str) -> LlvmType {
+    return LlvmType::NamedStruct(LlvmNamedStructType { name: name })
+}
+
+/// Create a fixed-size array type: `[N x T]`.
+pub func make_llvm_array(element: LlvmType, size: I64) -> LlvmType {
+    return LlvmType::Array(LlvmArrayType { element: Heap::new(element), size: size })
+}
+
+/// Create a fat pointer type `{ ptr, ptr }` for closures / dyn dispatch.
+pub func make_fat_ptr() -> LlvmType {
+    let fields = List[Heap[LlvmType]]::new(2)
+    fields.push(Heap::new(LlvmType::Ptr))
+    fields.push(Heap::new(LlvmType::Ptr))
+    return make_llvm_struct(fields)
+}
+
+/// Create a slice type `{ ptr, i64 }`.
+pub func make_slice_type() -> LlvmType {
+    let fields = List[Heap[LlvmType]]::new(2)
+    fields.push(Heap::new(LlvmType::Ptr))
+    fields.push(Heap::new(LlvmType::I64))
+    return make_llvm_struct(fields)
+}

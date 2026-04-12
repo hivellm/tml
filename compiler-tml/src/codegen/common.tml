@@ -1,0 +1,73 @@
+//! Codegen module root — re-exports for the TML LLVM IR emitter.
+//!
+//! This module provides the TML implementation of the LLVM IR text emitter,
+//! replacing the C++ codegen in `compiler/src/codegen/`. It takes a `MirModule`
+//! (produced by the MIR builder in compiler-tml/src/mir/) and emits LLVM IR
+//! text that can be compiled to native code by LLVM.
+//!
+//! ## Architecture
+//!
+//! ```
+//! codegen/
+//!   common.tml     — this file, module root and re-exports
+//!   config.tml     — CodegenConfig: target triple, data layout, opt level
+//!   types.tml      — LlvmType enum: I1..I128, F32/F64, Ptr, Struct, Array, Func, Void
+//!   emit_type.tml  — emit_type(MirType) -> Str: MIR type → LLVM IR type string
+//!   layout.tml     — LayoutComputer: size/alignment/field-offsets per MirType
+//!   emit_func.tml  — emit_func_decl(MirFunc) -> Str: define/declare line + sret/byval
+//!   emit_module.tml — emit_module(MirModule) -> Str: complete LLVM IR file
+//! ```
+//!
+//! Phase 16a — item 1.1.
+
+// --- Configuration ---
+pub use compiler::codegen::config::CodegenConfig
+pub use compiler::codegen::config::OptLevel
+pub use compiler::codegen::config::default_config
+pub use compiler::codegen::config::linux_config
+
+// --- LLVM type representation ---
+pub use compiler::codegen::types::LlvmType
+pub use compiler::codegen::types::LlvmStructType
+pub use compiler::codegen::types::LlvmNamedStructType
+pub use compiler::codegen::types::LlvmArrayType
+pub use compiler::codegen::types::LlvmFuncType
+pub use compiler::codegen::types::llvm_type_to_str
+pub use compiler::codegen::types::make_llvm_struct
+pub use compiler::codegen::types::make_llvm_named_struct
+pub use compiler::codegen::types::make_llvm_array
+pub use compiler::codegen::types::make_fat_ptr
+pub use compiler::codegen::types::make_slice_type
+
+// --- Type emission (MIR → LLVM IR strings) ---
+pub use compiler::codegen::emit_type::emit_type
+pub use compiler::codegen::emit_type::emit_type_for_data
+pub use compiler::codegen::emit_type::mir_to_llvm
+pub use compiler::codegen::emit_type::compute_enum_body
+pub use compiler::codegen::emit_type::emit_struct_typedef
+pub use compiler::codegen::emit_type::emit_enum_typedef
+pub use compiler::codegen::emit_type::llvm_type_byte_size
+pub use compiler::codegen::emit_type::llvm_type_alignment
+
+// --- Layout computation ---
+pub use compiler::codegen::layout::FieldLayout
+pub use compiler::codegen::layout::StructLayout
+pub use compiler::codegen::layout::compute_size
+pub use compiler::codegen::layout::compute_alignment
+pub use compiler::codegen::layout::compute_struct_layout
+pub use compiler::codegen::layout::emit_struct_def
+pub use compiler::codegen::layout::StructDefEmitter
+pub use compiler::codegen::layout::emitter_new
+pub use compiler::codegen::layout::emitter_emit_struct
+pub use compiler::codegen::layout::emitter_emit_enum
+
+// --- Function signature emission ---
+pub use compiler::codegen::emit_func::emit_func_decl
+pub use compiler::codegen::emit_func::emit_extern_decl
+pub use compiler::codegen::emit_func::calling_convention
+pub use compiler::codegen::emit_func::emit_attribute_group
+
+// --- Module emission ---
+pub use compiler::codegen::emit_module::emit_module
+pub use compiler::codegen::emit_module::emit_string_global
+pub use compiler::codegen::emit_module::escape_llvm_string

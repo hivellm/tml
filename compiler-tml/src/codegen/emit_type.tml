@@ -1,0 +1,317 @@
+//! MIR type → LLVM IR type string conversion.
+//!
+//! `emit_type` converts a `MirType` to its LLVM IR textual representation.
+//! This is the foundational function for all codegen — every instruction
+//! emission calls it to get the type string for operands and results.
+//!
+//! ## Conversion Table
+//!
+//! | MIR Type            | LLVM IR           | Notes                              |
+//! |---------------------|-------------------|------------------------------------|
+//! | Primitive(I8/U8)    | `"i8"`            | Signed/unsigned unified            |
+//! | Primitive(I32/U32)  | `"i32"`           |                                    |
+//! | Primitive(I64/U64)  | `"i64"`           |                                    |
+//! | Primitive(F32)      | `"float"`         |                                    |
+//! | Primitive(F64)      | `"double"`        |                                    |
+//! | Primitive(Bool)     | `"i1"`            |                                    |
+//! | Primitive(Char)     | `"i32"`           |                                    |
+//! | Primitive(Str)      | `"ptr"`           | String = pointer to heap struct    |
+//! | Primitive(RawPtr)   | `"ptr"`           |                                    |
+//! | Primitive(Unit)     | `"void"` or `"{}"` | void for returns, {} for data     |
+//! | Pointer(_)          | `"ptr"`           | Opaque pointer (LLVM 15+)          |
+//! | Array(T, N)         | `"[N x T]"`       |                                    |
+//! | Slice(T)            | `"{ ptr, i64 }"`  | Fat pointer: data + length         |
+//! | Tuple(T1,T2,...)    | `"{ T1, T2, ... }"` | Anonymous inline struct          |
+//! | Struct(Name, ...)   | `"%struct.Name"`  | Named struct reference             |
+//! | Enum(Name, ...)     | `"%struct.Name"`  | Enums use struct layout            |
+//! | Function(...)       | `"{ ptr, ptr }"`  | Fat pointer: fn_ptr + env_ptr      |
+//! | Vector(T, W)        | `"<W x T>"`       | SIMD vector                        |
+//! | Dyn(Name)           | `"%dyn.Name"`     | Trait object: data_ptr + vtable    |
+//!
+//! Phase 16a — items 2.1–2.6.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::mir::types::MirArrayType
+use compiler::mir::types::MirTupleType
+use compiler::mir::types::MirFunctionType
+use compiler::mir::types::MirPointerType
+use compiler::mir::types::MirSliceType
+use compiler::mir::types::MirVectorType
+use compiler::mir::types::MirDynType
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::LlvmStructType
+use compiler::codegen::types::LlvmArrayType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::types::make_llvm_struct
+use compiler::codegen::types::make_llvm_named_struct
+use compiler::codegen::types::make_llvm_array
+use compiler::codegen::types::make_fat_ptr
+use compiler::codegen::types::make_slice_type
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Convert a MIR type to its LLVM IR string representation.
+/// Unit → `"void"` (appropriate for function return types).
+/// Use `emit_type_for_data` when the type appears in a data context (struct field, alloca).
+pub func emit_type(mir_type: MirType) -> Str {
+    return llvm_type_to_str(mir_to_llvm(mir_type, 0))
+}
+
+/// Convert a MIR type to its LLVM IR string for data contexts.
+/// Unit → `"{}"` (empty struct, not void — valid as struct field or alloca type).
+pub func emit_type_for_data(mir_type: MirType) -> Str {
+    return llvm_type_to_str(mir_to_llvm(mir_type, 1))
+}
+
+/// Convert a MIR type to the corresponding `LlvmType`.
+/// `for_data`: 0 = return-type context (Unit→Void), 1 = data context (Unit→EmptyStruct).
+pub func mir_to_llvm(mir_type: MirType, for_data: I64) -> LlvmType {
+    when mir_type {
+        Primitive(p) => return emit_primitive(p, for_data),
+        Pointer(_) => return LlvmType::Ptr,
+        Array(a) => {
+            let elem: LlvmType = mir_to_llvm(a.element.get(), 1)
+            return make_llvm_array(elem, a.size)
+        },
+        Slice(_) => return make_slice_type(),
+        Tuple(t) => return emit_tuple(t),
+        Struct(s) => return emit_struct_ref(s),
+        Enum(e) => return emit_enum_ref(e),
+        Function(_) => return make_fat_ptr(),
+        Vector(v) => return emit_vector(v),
+        Dyn(d) => return emit_dyn(d)
+    }
+}
+
+// ============================================================================
+// Primitive emission (item 2.2)
+// ============================================================================
+
+func emit_primitive(p: MirPrimitive, for_data: I64) -> LlvmType {
+    when p {
+        Unit => {
+            if for_data > 0 { return LlvmType::EmptyStruct }
+            return LlvmType::Void
+        },
+        Bool => return LlvmType::I1,
+        I8 => return LlvmType::I8,
+        I16 => return LlvmType::I16,
+        I32 => return LlvmType::I32,
+        I64 => return LlvmType::I64,
+        I128 => return LlvmType::I128,
+        U8 => return LlvmType::I8,
+        U16 => return LlvmType::I16,
+        U32 => return LlvmType::I32,
+        U64 => return LlvmType::I64,
+        U128 => return LlvmType::I128,
+        F32 => return LlvmType::F32,
+        F64 => return LlvmType::F64,
+        Char => return LlvmType::I32,
+        Str => return LlvmType::Ptr,
+        RawPtr => return LlvmType::Ptr
+    }
+}
+
+// ============================================================================
+// Aggregate emission (item 2.3)
+// ============================================================================
+
+/// Tuple → anonymous inline struct `{ T1, T2, ... }`.
+func emit_tuple(t: MirTupleType) -> LlvmType {
+    let n: I64 = t.elements.len() as I64
+    if n == 0 { return LlvmType::EmptyStruct }
+    let fields = List[Heap[LlvmType]]::new(n)
+    for i in 0 to n {
+        fields.push(Heap::new(mir_to_llvm(t.elements.get(i).get(), 1)))
+    }
+    return make_llvm_struct(fields)
+}
+
+/// Named struct → `%struct.Name` reference.
+func emit_struct_ref(s: MirStructType) -> LlvmType {
+    return make_llvm_named_struct("%struct." + s.name)
+}
+
+/// Enum → `%struct.Name` reference (enums use struct layout in LLVM IR).
+func emit_enum_ref(e: MirEnumType) -> LlvmType {
+    return make_llvm_named_struct("%struct." + e.name)
+}
+
+// ============================================================================
+// Pointer and reference emission (item 2.4)
+// ============================================================================
+
+// All pointer/reference types → `ptr` (opaque pointer model, LLVM 15+).
+// Handled directly in mir_to_llvm: Pointer(_) => LlvmType::Ptr
+
+// ============================================================================
+// Function pointer emission (item 2.5)
+// ============================================================================
+
+// Function types → `{ ptr, ptr }` (fat pointer: fn_ptr + env_ptr for closures).
+// Handled directly in mir_to_llvm: Function(_) => make_fat_ptr()
+
+// ============================================================================
+// Vector emission
+// ============================================================================
+
+/// SIMD vector → `<W x T>` as a named struct reference.
+/// LLVM vectors are emitted inline; we use the string form directly.
+func emit_vector(v: MirVectorType) -> LlvmType {
+    // LLVM vector syntax is `<4 x i32>` — we model this as a named struct
+    // whose name is the literal LLVM vector syntax. This is a simplification;
+    // a proper LlvmType::Vector variant would be cleaner but the textual
+    // output is identical.
+    let elem_str: Str = llvm_type_to_str(mir_to_llvm(v.element.get(), 1))
+    let name: Str = "<" + v.width.to_string() + " x " + elem_str + ">"
+    return make_llvm_named_struct(name)
+}
+
+/// Dyn trait object → `%dyn.BehaviorName`.
+func emit_dyn(d: MirDynType) -> LlvmType {
+    return make_llvm_named_struct("%dyn." + d.behavior_name)
+}
+
+// ============================================================================
+// Enum layout computation (item 2.6)
+// ============================================================================
+
+/// Compute the LLVM struct body for a non-generic enum.
+///
+/// Layout rules (matching C++ `llvm_types.cpp` exactly):
+///   - No payload variants  → `{ i32 }` (discriminant only)
+///   - max_payload ≤ 4 bytes → `{ i32, i32 }`
+///   - max_payload ≤ 8 bytes → `{ i32, i64 }`
+///   - max_payload > 8 bytes → `{ i32, [N x i64] }` where N = ceil(max_payload / 8)
+pub func compute_enum_body(e: MirEnumType) -> LlvmType {
+    var max_payload: I64 = 0
+    let vc: I64 = e.variants.len() as I64
+    for vi in 0 to vc {
+        let variant: MirEnumVariantType = e.variants.get(vi)
+        var vsz: I64 = 0
+        let pc: I64 = variant.payload_types.len() as I64
+        for pi in 0 to pc {
+            let field_type: LlvmType = mir_to_llvm(variant.payload_types.get(pi).get(), 1)
+            let field_align: I64 = llvm_type_alignment(field_type)
+            // Align current offset to field alignment
+            vsz = (vsz + field_align - 1) / field_align * field_align
+            vsz = vsz + llvm_type_byte_size(field_type)
+        }
+        if vsz > max_payload { max_payload = vsz }
+    }
+
+    // Build the enum struct body
+    let fields = List[Heap[LlvmType]]::new(2)
+    fields.push(Heap::new(LlvmType::I32))  // discriminant tag
+
+    if max_payload == 0 {
+        // No payload — discriminant only
+    } else if max_payload <= 4 {
+        fields.push(Heap::new(LlvmType::I32))
+    } else if max_payload <= 8 {
+        fields.push(Heap::new(LlvmType::I64))
+    } else {
+        let num_i64: I64 = (max_payload + 7) / 8
+        fields.push(Heap::new(make_llvm_array(LlvmType::I64, num_i64)))
+    }
+
+    return make_llvm_struct(fields)
+}
+
+/// Emit the named struct definition line for an enum.
+/// Returns e.g. `%struct.Color = type { i32 }\n`.
+pub func emit_enum_typedef(e: MirEnumType) -> Str {
+    let body: LlvmType = compute_enum_body(e)
+    let body_str: Str = llvm_type_to_str(body)
+    return "%struct." + e.name + " = type " + body_str + "\n"
+}
+
+/// Emit the named struct definition line for a struct.
+/// Returns e.g. `%struct.Point = type { i64, i64 }\n`.
+pub func emit_struct_typedef(s: MirStructType) -> Str {
+    let n: I64 = s.fields.len() as I64
+    let fields = List[Heap[LlvmType]]::new(n)
+    for i in 0 to n {
+        fields.push(Heap::new(mir_to_llvm(s.fields.get(i).get(), 1)))
+    }
+    let body: LlvmType = make_llvm_struct(fields)
+    let body_str: Str = llvm_type_to_str(body)
+    return "%struct." + s.name + " = type " + body_str + "\n"
+}
+
+// ============================================================================
+// Type size helpers (used by enum layout and sret decisions)
+// ============================================================================
+
+/// Byte size of an LlvmType (for layout computation).
+pub func llvm_type_byte_size(ty: LlvmType) -> I64 {
+    when ty {
+        I1 => return 1,
+        I8 => return 1,
+        I16 => return 2,
+        I32 => return 4,
+        I64 => return 8,
+        I128 => return 16,
+        F32 => return 4,
+        F64 => return 8,
+        Ptr => return 8,
+        Void => return 0,
+        EmptyStruct => return 0,
+        Struct(s) => {
+            var size: I64 = 0
+            var max_align: I64 = 1
+            let n: I64 = s.fields.len() as I64
+            for i in 0 to n {
+                let field_ty: LlvmType = s.fields.get(i).get()
+                let fa: I64 = llvm_type_alignment(field_ty)
+                if fa > max_align { max_align = fa }
+                // Pad to field alignment
+                size = (size + fa - 1) / fa * fa
+                size = size + llvm_type_byte_size(field_ty)
+            }
+            // Pad to struct alignment
+            size = (size + max_align - 1) / max_align * max_align
+            return size
+        },
+        NamedStruct(_) => return 8,
+        Array(a) => return a.size * llvm_type_byte_size(a.element.get()),
+        Func(_) => return 16
+    }
+}
+
+/// Alignment of an LlvmType in bytes.
+pub func llvm_type_alignment(ty: LlvmType) -> I64 {
+    when ty {
+        I1 => return 1,
+        I8 => return 1,
+        I16 => return 2,
+        I32 => return 4,
+        I64 => return 8,
+        I128 => return 16,
+        F32 => return 4,
+        F64 => return 8,
+        Ptr => return 8,
+        Void => return 1,
+        EmptyStruct => return 1,
+        Struct(s) => {
+            var max_align: I64 = 1
+            let n: I64 = s.fields.len() as I64
+            for i in 0 to n {
+                let fa: I64 = llvm_type_alignment(s.fields.get(i).get())
+                if fa > max_align { max_align = fa }
+            }
+            return max_align
+        },
+        NamedStruct(_) => return 8,
+        Array(a) => return llvm_type_alignment(a.element.get()),
+        Func(_) => return 8
+    }
+}

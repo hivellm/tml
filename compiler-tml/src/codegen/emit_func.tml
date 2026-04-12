@@ -1,0 +1,196 @@
+//! Function signature emission — `define`/`declare` lines for LLVM IR.
+//!
+//! Produces the function header line including:
+//! - Linkage (`internal` for private functions)
+//! - DLL export annotation (`dllexport` for public functions in DLL builds)
+//! - Calling convention (`fastcc`, `ccc`, `win64cc`)
+//! - Return type (or `void` with `sret` for large struct returns)
+//! - Parameter list with `byval`/`sret` annotations
+//! - Function attributes (`nounwind`, `uwtable`)
+//!
+//! ## sret Convention
+//!
+//! Structs > 16 bytes are returned via an `sret` pointer: the caller
+//! allocates a stack slot and passes its address as the first parameter.
+//! The callee writes the result there and returns `void`.
+//!
+//! ## byval Convention
+//!
+//! Struct parameters ≤ 16 bytes are passed by value with `byval` annotation
+//! so LLVM knows the struct is passed in registers, not by reference.
+//!
+//! Phase 16a — items 4.1–4.5.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirFunctionType
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirFuncParam
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::config::CodegenConfig
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::emit_type::llvm_type_byte_size
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Threshold for sret: return types larger than this use sret convention.
+const SRET_THRESHOLD: I64 = 16
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Emit a `define` line for a MIR function.
+///
+/// Returns the complete function header, e.g.:
+/// `define internal i64 @my_func(ptr %a, i32 %b) #0 {`
+pub func emit_func_decl(f: MirFunc, cfg: CodegenConfig) -> Str {
+    let ret_llvm: LlvmType = mir_to_llvm(f.return_type, 0)
+    let ret_size: I64 = llvm_type_byte_size(mir_to_llvm(f.return_type, 1))
+    let use_sret: I64 = needs_sret(f.return_type, ret_size)
+
+    // Linkage
+    var linkage: Str = ""
+    if f.is_public == 0 { linkage = "internal " }
+
+    // DLL export
+    var dll: Str = ""
+    if cfg.dll_export > 0 and f.is_public > 0 { dll = "dllexport " }
+
+    // Return type
+    var ret_str: Str = ""
+    if use_sret > 0 {
+        ret_str = "void"
+    } else {
+        ret_str = llvm_type_to_str(ret_llvm)
+    }
+
+    // Parameters
+    let params_str: Str = emit_params(f, use_sret)
+
+    // Attributes
+    let attrs: Str = " #0"
+
+    return "define " + dll + linkage + ret_str + " @" + f.name + "(" + params_str + ")" + attrs + " {"
+}
+
+/// Emit a `declare` line for an extern function.
+///
+/// Returns e.g.: `declare dso_local ptr @malloc(i64)`
+pub func emit_extern_decl(f: MirFunc) -> Str {
+    let ret_str: Str = emit_type(f.return_type)
+
+    var params_str: Str = ""
+    let pc: I64 = f.params.len() as I64
+    for i in 0 to pc {
+        if i > 0 { params_str = params_str + ", " }
+        let p: MirFuncParam = f.params.get(i)
+        params_str = params_str + emit_type_for_data(p.param_type)
+    }
+
+    return "declare dso_local " + ret_str + " @" + f.name + "(" + params_str + ")"
+}
+
+// ============================================================================
+// sret / byval decisions (items 4.3, 4.4)
+// ============================================================================
+
+/// Check if a return type needs sret (stack-allocated return slot).
+/// Returns 1 if sret is needed, 0 otherwise.
+func needs_sret(ret_type: MirType, ret_size: I64) -> I64 {
+    when ret_type {
+        Struct(_) => {
+            if ret_size > SRET_THRESHOLD { return 1 }
+            return 0
+        },
+        Enum(_) => {
+            if ret_size > SRET_THRESHOLD { return 1 }
+            return 0
+        },
+        Tuple(_) => {
+            if ret_size > SRET_THRESHOLD { return 1 }
+            return 0
+        },
+        _ => return 0
+    }
+}
+
+/// Check if a parameter type should use byval annotation.
+/// Struct params ≤ 16 bytes get `byval(%struct.Name) align 8`.
+func needs_byval(param_type: MirType) -> I64 {
+    when param_type {
+        Struct(_) => return 1,
+        Enum(_) => return 1,
+        _ => return 0
+    }
+}
+
+// ============================================================================
+// Parameter emission
+// ============================================================================
+
+/// Emit the parameter list string for a function.
+func emit_params(f: MirFunc, use_sret: I64) -> Str {
+    var result: Str = ""
+    var idx: I64 = 0
+
+    // If using sret, prepend the sret slot as first parameter
+    if use_sret > 0 {
+        let ret_data_str: Str = emit_type_for_data(f.return_type)
+        result = "ptr sret(" + ret_data_str + ") align 8 %sret_slot"
+        idx = 1
+    }
+
+    let pc: I64 = f.params.len() as I64
+    for i in 0 to pc {
+        if idx > 0 { result = result + ", " }
+        let p: MirFuncParam = f.params.get(i)
+        let ty_str: Str = emit_type_for_data(p.param_type)
+
+        // byval annotation for struct params
+        if needs_byval(p.param_type) > 0 {
+            let param_size: I64 = llvm_type_byte_size(mir_to_llvm(p.param_type, 1))
+            if param_size <= SRET_THRESHOLD {
+                result = result + ty_str + " byval(" + ty_str + ") align 8 %" + p.name
+            } else {
+                result = result + "ptr %" + p.name
+            }
+        } else {
+            result = result + ty_str + " %" + p.name
+        }
+        idx = idx + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// Calling convention annotation (item 4.2)
+// ============================================================================
+
+/// Get the calling convention prefix string for an ABI name.
+/// Returns empty string for default C calling convention.
+pub func calling_convention(abi: Str) -> Str {
+    if abi == "fastcall" { return "x86_fastcallcc " }
+    if abi == "stdcall" { return "x86_stdcallcc " }
+    if abi == "thiscall" { return "x86_thiscallcc " }
+    if abi == "vectorcall" { return "x86_vectorcallcc " }
+    return ""
+}
+
+// ============================================================================
+// Function attributes (item 4.5)
+// ============================================================================
+
+/// Emit function attribute group `#0`.
+/// This appears once at the end of the module.
+pub func emit_attribute_group() -> Str {
+    return "attributes #0 = { nounwind uwtable }"
+}

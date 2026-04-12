@@ -1,0 +1,161 @@
+//! Unit tests for struct layout computation.
+//! Phase 16a — item 6.2.
+
+use test::assert
+use test::assert_eq
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::codegen::layout::StructLayout
+use compiler::codegen::layout::FieldLayout
+use compiler::codegen::layout::compute_struct_layout
+use compiler::codegen::layout::compute_size
+use compiler::codegen::layout::compute_alignment
+use compiler::codegen::layout::emit_struct_def
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Primitive sizes
+// ============================================================================
+
+@test func test_size_i8() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::I8)) as I32, 1)
+}
+
+@test func test_size_i16() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::I16)) as I32, 2)
+}
+
+@test func test_size_i32() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::I32)) as I32, 4)
+}
+
+@test func test_size_i64() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::I64)) as I32, 8)
+}
+
+@test func test_size_f32() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::F32)) as I32, 4)
+}
+
+@test func test_size_f64() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::F64)) as I32, 8)
+}
+
+@test func test_size_bool() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::Bool)) as I32, 1)
+}
+
+@test func test_size_ptr() {
+    assert_eq(compute_size(MirType::Primitive(MirPrimitive::Str)) as I32, 8)
+}
+
+// ============================================================================
+// Struct layout: two I64 fields (no padding)
+// ============================================================================
+
+@test func test_layout_point() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let st = MirStructType { name: "Point", fields: fields }
+    let names = List[Str]::new(2)
+    names.push("x")
+    names.push("y")
+    let layout: StructLayout = compute_struct_layout(st, names)
+
+    assert_eq(layout.total_size as I32, 16)
+    assert_eq(layout.alignment as I32, 8)
+    assert_eq(layout.fields.len() as I32, 2)
+
+    let f0: FieldLayout = layout.fields.get(0)
+    assert_eq(f0.offset as I32, 0)
+    assert_eq(f0.name, "x")
+
+    let f1: FieldLayout = layout.fields.get(1)
+    assert_eq(f1.offset as I32, 8)
+    assert_eq(f1.name, "y")
+}
+
+// ============================================================================
+// Struct layout with padding: I8, I64 → 16 bytes (7 padding after I8)
+// ============================================================================
+
+@test func test_layout_padding() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I8)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let st = MirStructType { name: "Padded", fields: fields }
+    let names = List[Str]::new(0)
+    let layout: StructLayout = compute_struct_layout(st, names)
+
+    assert_eq(layout.total_size as I32, 16)
+    assert_eq(layout.alignment as I32, 8)
+
+    let f0: FieldLayout = layout.fields.get(0)
+    assert_eq(f0.offset as I32, 0)
+    assert_eq(f0.size as I32, 1)
+
+    let f1: FieldLayout = layout.fields.get(1)
+    assert_eq(f1.offset as I32, 8)  // padded from 1 to 8
+    assert_eq(f1.size as I32, 8)
+}
+
+// ============================================================================
+// Struct layout: I32, I32 → 8 bytes (no padding)
+// ============================================================================
+
+@test func test_layout_two_i32() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let st = MirStructType { name: "TwoI32", fields: fields }
+    let names = List[Str]::new(0)
+    let layout: StructLayout = compute_struct_layout(st, names)
+
+    assert_eq(layout.total_size as I32, 8)
+    assert_eq(layout.alignment as I32, 4)
+}
+
+// ============================================================================
+// Struct layout: I32, I64, I8 → 24 bytes
+// ============================================================================
+
+@test func test_layout_mixed() {
+    let fields = List[Heap[MirType]]::new(3)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I8)))
+    let st = MirStructType { name: "Mixed", fields: fields }
+    let names = List[Str]::new(0)
+    let layout: StructLayout = compute_struct_layout(st, names)
+
+    // I32 at 0 (4 bytes), pad 4, I64 at 8 (8 bytes), I8 at 16 (1 byte)
+    // total = 17, rounded to alignment 8 → 24
+    assert_eq(layout.total_size as I32, 24)
+    assert_eq(layout.alignment as I32, 8)
+
+    let f0: FieldLayout = layout.fields.get(0)
+    assert_eq(f0.offset as I32, 0)
+
+    let f1: FieldLayout = layout.fields.get(1)
+    assert_eq(f1.offset as I32, 8)
+
+    let f2: FieldLayout = layout.fields.get(2)
+    assert_eq(f2.offset as I32, 16)
+}
+
+// ============================================================================
+// emit_struct_def
+// ============================================================================
+
+@test func test_emit_struct_def() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let st = MirStructType { name: "Pair", fields: fields }
+    let names = List[Str]::new(0)
+    let layout: StructLayout = compute_struct_layout(st, names)
+    assert_eq(emit_struct_def(layout), "%struct.Pair = type { i64, i32 }")
+}

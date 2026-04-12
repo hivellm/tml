@@ -1,0 +1,182 @@
+//! Struct layout computation — sizes, alignment, field offsets, padding.
+//!
+//! `LayoutComputer` replicates the exact field-padding rules from the C++
+//! codegen in `llvm_types.cpp`. Type layouts must be byte-for-byte identical
+//! to C++ — any divergence corrupts sret slot sizes, GEP indices, and
+//! struct constructor IR.
+//!
+//! ## Layout Rules (x86_64)
+//!
+//! - Each field is placed at the next offset that is a multiple of its alignment
+//! - Padding bytes are inserted between fields as needed
+//! - Total struct size is rounded up to the struct's overall alignment
+//! - Struct alignment = max(field alignments)
+//!
+//! Phase 16a — items 3.1–3.4.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::types::make_llvm_struct
+use compiler::codegen::types::make_llvm_named_struct
+use compiler::codegen::types::make_llvm_array
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::emit_type::llvm_type_byte_size
+use compiler::codegen::emit_type::llvm_type_alignment
+use compiler::codegen::emit_type::compute_enum_body
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Field offset tracking
+// ============================================================================
+
+/// A single field in a computed struct layout.
+pub type FieldLayout {
+    name: Str,
+    index: I64,
+    offset: I64,
+    llvm_type: LlvmType,
+    llvm_type_str: Str,
+    size: I64,
+    alignment: I64
+}
+
+/// Complete layout of a struct.
+pub type StructLayout {
+    name: Str,
+    fields: List[FieldLayout],
+    total_size: I64,
+    alignment: I64,
+    llvm_body: LlvmType
+}
+
+// ============================================================================
+// Primitive size/alignment (item 3.2)
+// ============================================================================
+
+/// Compute the byte size of a MIR type.
+pub func compute_size(mir_type: MirType) -> I64 {
+    return llvm_type_byte_size(mir_to_llvm(mir_type, 1))
+}
+
+/// Compute the alignment of a MIR type in bytes.
+pub func compute_alignment(mir_type: MirType) -> I64 {
+    return llvm_type_alignment(mir_to_llvm(mir_type, 1))
+}
+
+// ============================================================================
+// Struct layout computation (item 3.3)
+// ============================================================================
+
+/// Compute the full layout of a struct: field offsets, padding, total size.
+///
+/// `field_names` is parallel to `s.fields` — provides human-readable names
+/// for each field (used in GEP comments and debug output). If empty, fields
+/// are named `"field_0"`, `"field_1"`, etc.
+pub func compute_struct_layout(s: MirStructType, field_names: List[Str]) -> StructLayout {
+    let n: I64 = s.fields.len() as I64
+    let field_layouts = List[FieldLayout]::new(n)
+    let llvm_fields = List[Heap[LlvmType]]::new(n)
+    var offset: I64 = 0
+    var max_align: I64 = 1
+
+    for i in 0 to n {
+        let mir_field: MirType = s.fields.get(i).get()
+        let llvm_ty: LlvmType = mir_to_llvm(mir_field, 1)
+        let fa: I64 = llvm_type_alignment(llvm_ty)
+        let fs: I64 = llvm_type_byte_size(llvm_ty)
+
+        if fa > max_align { max_align = fa }
+
+        // Pad to field alignment
+        let padded_offset: I64 = (offset + fa - 1) / fa * fa
+
+        // Determine field name
+        var fname: Str = "field_" + i.to_string()
+        if field_names.len() as I64 > i {
+            fname = field_names.get(i)
+        }
+
+        field_layouts.push(FieldLayout {
+            name: fname,
+            index: i,
+            offset: padded_offset,
+            llvm_type: llvm_ty,
+            llvm_type_str: llvm_type_to_str(llvm_ty),
+            size: fs,
+            alignment: fa
+        })
+        llvm_fields.push(Heap::new(llvm_ty))
+        offset = padded_offset + fs
+    }
+
+    // Round total size up to struct alignment
+    let total: I64 = (offset + max_align - 1) / max_align * max_align
+
+    return StructLayout {
+        name: s.name,
+        fields: field_layouts,
+        total_size: total,
+        alignment: max_align,
+        llvm_body: make_llvm_struct(llvm_fields)
+    }
+}
+
+// ============================================================================
+// Named struct type definition emission (item 3.4)
+// ============================================================================
+
+/// Emit the named struct definition line for a StructLayout.
+/// Returns e.g. `%struct.Point = type { i64, i64 }`.
+pub func emit_struct_def(layout: StructLayout) -> Str {
+    let body_str: Str = llvm_type_to_str(layout.llvm_body)
+    return "%struct." + layout.name + " = type " + body_str
+}
+
+// ============================================================================
+// StructDefEmitter — deduplicates struct/enum type definitions
+// ============================================================================
+
+/// Tracks which struct/enum types have been emitted to avoid duplicates.
+/// LLVM IR forbids duplicate named type definitions.
+pub type StructDefEmitter {
+    emitted: HashMap[Str, I64],
+    output: Str
+}
+
+/// Create a new empty StructDefEmitter.
+pub func emitter_new() -> StructDefEmitter {
+    return StructDefEmitter {
+        emitted: HashMap[Str, I64]::new(32),
+        output: ""
+    }
+}
+
+/// Emit a struct definition if not already emitted.
+/// Returns true if the definition was new, false if already emitted.
+pub func emitter_emit_struct(em: StructDefEmitter, s: MirStructType) -> I64 {
+    if em.emitted.has(s.name) { return 0 }
+    let field_names = List[Str]::new(0)
+    let layout: StructLayout = compute_struct_layout(s, field_names)
+    let def: Str = emit_struct_def(layout) + "\n"
+    em.output = em.output + def
+    em.emitted.set(s.name, 1)
+    return 1
+}
+
+/// Emit an enum definition if not already emitted.
+pub func emitter_emit_enum(em: StructDefEmitter, e: MirEnumType) -> I64 {
+    if em.emitted.has(e.name) { return 0 }
+    let body: LlvmType = compute_enum_body(e)
+    let body_str: Str = llvm_type_to_str(body)
+    let def: Str = "%struct." + e.name + " = type " + body_str + "\n"
+    em.output = em.output + def
+    em.emitted.set(e.name, 1)
+    return 1
+}

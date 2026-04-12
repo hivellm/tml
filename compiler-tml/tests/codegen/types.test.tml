@@ -1,0 +1,265 @@
+//! Unit tests for codegen type emission.
+//! Phase 16a — item 6.1.
+
+use test::assert
+use test::assert_eq
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::mir::types::MirArrayType
+use compiler::mir::types::MirTupleType
+use compiler::mir::types::MirFunctionType
+use compiler::mir::types::MirPointerType
+use compiler::mir::types::MirSliceType
+use compiler::mir::types::MirVectorType
+use compiler::mir::types::MirDynType
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::emit_struct_typedef
+use compiler::codegen::emit_type::emit_enum_typedef
+use compiler::codegen::emit_type::compute_enum_body
+use compiler::codegen::emit_type::llvm_type_byte_size
+use compiler::codegen::emit_type::llvm_type_alignment
+use compiler::codegen::emit_type::mir_to_llvm
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Primitive type emission
+// ============================================================================
+
+@test func test_emit_i8() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::I8)), "i8")
+}
+
+@test func test_emit_i16() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::I16)), "i16")
+}
+
+@test func test_emit_i32() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::I32)), "i32")
+}
+
+@test func test_emit_i64() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::I64)), "i64")
+}
+
+@test func test_emit_i128() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::I128)), "i128")
+}
+
+@test func test_emit_u8() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::U8)), "i8")
+}
+
+@test func test_emit_u32() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::U32)), "i32")
+}
+
+@test func test_emit_u64() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::U64)), "i64")
+}
+
+@test func test_emit_f32() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::F32)), "float")
+}
+
+@test func test_emit_f64() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::F64)), "double")
+}
+
+@test func test_emit_bool() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::Bool)), "i1")
+}
+
+@test func test_emit_char() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::Char)), "i32")
+}
+
+@test func test_emit_str() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::Str)), "ptr")
+}
+
+@test func test_emit_rawptr() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::RawPtr)), "ptr")
+}
+
+// Unit: void as return, {} as data
+@test func test_emit_unit_return() {
+    assert_eq(emit_type(MirType::Primitive(MirPrimitive::Unit)), "void")
+}
+
+@test func test_emit_unit_data() {
+    assert_eq(emit_type_for_data(MirType::Primitive(MirPrimitive::Unit)), "{}")
+}
+
+// ============================================================================
+// Pointer types
+// ============================================================================
+
+@test func test_emit_pointer() {
+    let pt = MirType::Pointer(MirPointerType {
+        pointee: Heap::new(MirType::Primitive(MirPrimitive::I32)),
+        is_mutable: 0
+    })
+    assert_eq(emit_type(pt), "ptr")
+}
+
+// ============================================================================
+// Array types
+// ============================================================================
+
+@test func test_emit_array() {
+    let at = MirType::Array(MirArrayType {
+        element: Heap::new(MirType::Primitive(MirPrimitive::I32)),
+        size: 10
+    })
+    assert_eq(emit_type(at), "[10 x i32]")
+}
+
+// ============================================================================
+// Slice types
+// ============================================================================
+
+@test func test_emit_slice() {
+    let st = MirType::Slice(MirSliceType {
+        element: Heap::new(MirType::Primitive(MirPrimitive::I64))
+    })
+    assert_eq(emit_type(st), "{ ptr, i64 }")
+}
+
+// ============================================================================
+// Tuple types
+// ============================================================================
+
+@test func test_emit_tuple_empty() {
+    let elems = List[Heap[MirType]]::new(0)
+    let tt = MirType::Tuple(MirTupleType { elements: elems })
+    assert_eq(emit_type(tt), "{}")
+}
+
+@test func test_emit_tuple_2() {
+    let elems = List[Heap[MirType]]::new(2)
+    elems.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    elems.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let tt = MirType::Tuple(MirTupleType { elements: elems })
+    assert_eq(emit_type(tt), "{ i64, i32 }")
+}
+
+// ============================================================================
+// Struct types
+// ============================================================================
+
+@test func test_emit_struct_ref() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let st = MirType::Struct(MirStructType { name: "Point", fields: fields })
+    assert_eq(emit_type(st), "%struct.Point")
+}
+
+@test func test_emit_struct_typedef() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let st = MirStructType { name: "Foo", fields: fields }
+    assert_eq(emit_struct_typedef(st), "%struct.Foo = type { i64, i32 }\n")
+}
+
+// ============================================================================
+// Enum types
+// ============================================================================
+
+@test func test_emit_enum_no_payload() {
+    let v1 = MirEnumVariantType { name: "Red", payload_types: List[Heap[MirType]]::new(0), discriminant: 0 }
+    let v2 = MirEnumVariantType { name: "Green", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 }
+    let v3 = MirEnumVariantType { name: "Blue", payload_types: List[Heap[MirType]]::new(0), discriminant: 2 }
+    let variants = List[MirEnumVariantType]::new(3)
+    variants.push(v1)
+    variants.push(v2)
+    variants.push(v3)
+    let et = MirEnumType { name: "Color", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Color = type { i32 }\n")
+}
+
+@test func test_emit_enum_small_payload() {
+    // Enum with I32 payload → { i32, i32 }
+    let p1 = List[Heap[MirType]]::new(1)
+    p1.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let v1 = MirEnumVariantType { name: "Just", payload_types: p1, discriminant: 0 }
+    let v2 = MirEnumVariantType { name: "Nothing", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 }
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(v1)
+    variants.push(v2)
+    let et = MirEnumType { name: "MaybeI32", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.MaybeI32 = type { i32, i32 }\n")
+}
+
+@test func test_emit_enum_i64_payload() {
+    // Enum with I64 payload → { i32, i64 }
+    let p1 = List[Heap[MirType]]::new(1)
+    p1.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let v1 = MirEnumVariantType { name: "Just", payload_types: p1, discriminant: 0 }
+    let v2 = MirEnumVariantType { name: "Nothing", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 }
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(v1)
+    variants.push(v2)
+    let et = MirEnumType { name: "MaybeI64", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.MaybeI64 = type { i32, i64 }\n")
+}
+
+// ============================================================================
+// Function types
+// ============================================================================
+
+@test func test_emit_func_type() {
+    let params = List[Heap[MirType]]::new(1)
+    params.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let ft = MirType::Function(MirFunctionType {
+        params: params,
+        return_type: Heap::new(MirType::Primitive(MirPrimitive::I64))
+    })
+    // Function types → fat pointer { ptr, ptr }
+    assert_eq(emit_type(ft), "{ ptr, ptr }")
+}
+
+// ============================================================================
+// Dyn types
+// ============================================================================
+
+@test func test_emit_dyn() {
+    let dt = MirType::Dyn(MirDynType { behavior_name: "Iterator" })
+    assert_eq(emit_type(dt), "%dyn.Iterator")
+}
+
+// ============================================================================
+// Type sizes
+// ============================================================================
+
+@test func test_size_i8() {
+    assert_eq(llvm_type_byte_size(LlvmType::I8) as I32, 1)
+}
+
+@test func test_size_i32() {
+    assert_eq(llvm_type_byte_size(LlvmType::I32) as I32, 4)
+}
+
+@test func test_size_i64() {
+    assert_eq(llvm_type_byte_size(LlvmType::I64) as I32, 8)
+}
+
+@test func test_size_ptr() {
+    assert_eq(llvm_type_byte_size(LlvmType::Ptr) as I32, 8)
+}
+
+@test func test_alignment_i32() {
+    assert_eq(llvm_type_alignment(LlvmType::I32) as I32, 4)
+}
+
+@test func test_alignment_i64() {
+    assert_eq(llvm_type_alignment(LlvmType::I64) as I32, 8)
+}

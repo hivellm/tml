@@ -1,0 +1,180 @@
+//! Module-level LLVM IR emission — produces a complete `.ll` file.
+//!
+//! `emit_module` takes a `MirModule` and a `CodegenConfig` and produces
+//! the full LLVM IR text: module header, type definitions, function
+//! declarations, string constants, function bodies (headers only in
+//! this phase — instruction emission is phase 16b), and attribute groups.
+//!
+//! Phase 16a — items 5.1–5.4.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirStructDef
+use compiler::mir::module::MirEnumDef
+use compiler::mir::module::MirEnumVariantDef
+use compiler::codegen::config::CodegenConfig
+use compiler::codegen::emit_func::emit_func_decl
+use compiler::codegen::emit_func::emit_extern_decl
+use compiler::codegen::emit_func::emit_attribute_group
+use compiler::codegen::layout::StructDefEmitter
+use compiler::codegen::layout::emitter_new
+use compiler::codegen::layout::emitter_emit_struct
+use compiler::codegen::layout::emitter_emit_enum
+use core::fmt::helpers::char_to_str
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Emit a complete LLVM IR module from a MirModule.
+pub func emit_module(m: MirModule, cfg: CodegenConfig) -> Str {
+    var output: Str = ""
+    output = output + emit_header(m, cfg)
+    output = output + emit_type_defs(m)
+    output = output + emit_extern_decls(m)
+    output = output + emit_functions(m, cfg)
+    output = output + "\n" + emit_attribute_group() + "\n"
+    return output
+}
+
+// ============================================================================
+// Module header (item 5.2)
+// ============================================================================
+
+func emit_header(m: MirModule, cfg: CodegenConfig) -> Str {
+    var h: Str = ""
+    h = h + "; ModuleID = '" + m.name + "'\n"
+    h = h + "source_filename = \"" + cfg.source_filename + "\"\n"
+    h = h + "target datalayout = \"" + cfg.data_layout + "\"\n"
+    h = h + "target triple = \"" + cfg.target_triple + "\"\n"
+    h = h + "\n"
+    return h
+}
+
+// ============================================================================
+// Type definitions
+// ============================================================================
+
+func emit_type_defs(m: MirModule) -> Str {
+    let em: StructDefEmitter = emitter_new()
+
+    let sc: I64 = m.structs.len() as I64
+    for i in 0 to sc {
+        let sdef: MirStructDef = m.structs.get(i)
+        let st = MirStructType { name: sdef.name, fields: wrap_field_types(sdef.fields) }
+        emitter_emit_struct(em, st)
+    }
+
+    let ec: I64 = m.enums.len() as I64
+    for i in 0 to ec {
+        let edef: MirEnumDef = m.enums.get(i)
+        let et = MirEnumType { name: edef.name, variants: wrap_enum_variants(edef) }
+        emitter_emit_enum(em, et)
+    }
+
+    if em.output == "" { return "" }
+    return em.output + "\n"
+}
+
+func wrap_field_types(fields: List[MirType]) -> List[Heap[MirType]] {
+    let n: I64 = fields.len() as I64
+    let result = List[Heap[MirType]]::new(n)
+    for i in 0 to n {
+        result.push(Heap::new(fields.get(i)))
+    }
+    return result
+}
+
+func wrap_enum_variants(edef: MirEnumDef) -> List[MirEnumVariantType] {
+    let vc: I64 = edef.variants.len() as I64
+    let result = List[MirEnumVariantType]::new(vc)
+    for i in 0 to vc {
+        let v: MirEnumVariantDef = edef.variants.get(i)
+        let wrapped_payloads: List[Heap[MirType]] = wrap_field_types(v.payload_types)
+        result.push(MirEnumVariantType {
+            name: v.name,
+            payload_types: wrapped_payloads,
+            discriminant: v.discriminant
+        })
+    }
+    return result
+}
+
+// ============================================================================
+// String literal emission (item 5.4)
+// ============================================================================
+
+/// Emit a string literal global: `@str.N = private unnamed_addr constant [M x i8] c"...\00"`.
+pub func emit_string_global(index: I64, value: Str) -> Str {
+    let slen: I64 = value.len() as I64 + 1
+    let escaped: Str = escape_llvm_string(value)
+    return "@str." + index.to_string() + " = private unnamed_addr constant [" + slen.to_string() + " x i8] c\"" + escaped + "\\00\""
+}
+
+/// Escape a string for LLVM IR string literal syntax.
+/// Backslash → `\\`, newline → `\0A`, tab → `\09`, null → `\00`, quote → `\22`.
+pub func escape_llvm_string(s: Str) -> Str {
+    var result: Str = ""
+    let n: I64 = s.len() as I64
+    for i in 0 to n {
+        let ch: I64 = s.char_at(i)
+        if ch == 92 {         // backslash
+            result = result + "\\\\"
+        } else if ch == 10 {  // newline
+            result = result + "\\0A"
+        } else if ch == 13 {  // carriage return
+            result = result + "\\0D"
+        } else if ch == 9 {   // tab
+            result = result + "\\09"
+        } else if ch == 0 {   // null
+            result = result + "\\00"
+        } else if ch == 34 {  // double quote
+            result = result + "\\22"
+        } else {
+            result = result + char_to_str(ch)
+        }
+    }
+    return result
+}
+
+// ============================================================================
+// Extern declarations (item 5.3)
+// ============================================================================
+
+/// Emit `declare` lines for a list of extern functions.
+func emit_extern_decls(m: MirModule) -> Str {
+    var output: Str = ""
+    let fc: I64 = m.functions.len() as I64
+    for i in 0 to fc {
+        let fn_def: MirFunc = m.functions.get(i)
+        if fn_def.is_extern > 0 {
+            output = output + emit_extern_decl(fn_def) + "\n"
+        }
+    }
+    if output == "" { return "" }
+    return output + "\n"
+}
+
+// ============================================================================
+// Function definitions
+// ============================================================================
+
+/// Emit function definitions (headers only — bodies are phase 16b).
+func emit_functions(m: MirModule, cfg: CodegenConfig) -> Str {
+    var output: Str = ""
+    let fc: I64 = m.functions.len() as I64
+    for i in 0 to fc {
+        let fn_def: MirFunc = m.functions.get(i)
+        if fn_def.is_extern > 0 { continue }
+        let header: Str = emit_func_decl(fn_def, cfg)
+        output = output + header + "\nentry:\n  ret void\n}\n\n"
+    }
+    return output
+}
