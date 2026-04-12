@@ -695,23 +695,23 @@ impl[T] Drop for Weak[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::traits::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync, ThreadSafe}
 
 /// Arc[T] is Send if T is Send + Sync.
 /// The Arc can be sent to another thread if the data it contains
 /// can be accessed from multiple threads safely.
-impl[T: Send + Sync] Send for Arc[T] {}
+impl[T: ThreadSafe] Send for Arc[T] {}
 
 /// Arc[T] is Sync if T is Send + Sync.
 /// Multiple threads can have references to the Arc if the data
 /// supports shared access across threads.
-impl[T: Send + Sync] Sync for Arc[T] {}
+impl[T: ThreadSafe] Sync for Arc[T] {}
 
 /// Weak[T] is Send if T is Send + Sync.
-impl[T: Send + Sync] Send for Weak[T] {}
+impl[T: ThreadSafe] Send for Weak[T] {}
 
 /// Weak[T] is Sync if T is Send + Sync.
-impl[T: Send + Sync] Sync for Weak[T] {}
+impl[T: ThreadSafe] Sync for Weak[T] {}
 
 // ============================================================================
 // Fence import for memory synchronization

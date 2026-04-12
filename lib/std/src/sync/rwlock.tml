@@ -337,7 +337,7 @@ impl[T] Drop for RwLockWriteGuard[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::traits::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync, ThreadSafe}
 
 /// RwLock[T] is Send if T is Send.
 /// The lock can be transferred to another thread if its contents can be.
@@ -347,7 +347,7 @@ impl[T: Send] Send for RwLock[T] {}
 /// Unlike Mutex, RwLock allows multiple simultaneous readers, so T must be
 /// Sync to ensure safe shared access. T must also be Send because the lock
 /// itself might be used to transfer ownership when exclusively locked.
-impl[T: Send + Sync] Sync for RwLock[T] {}
+impl[T: ThreadSafe] Sync for RwLock[T] {}
 
 /// RwLockReadGuard is NOT Send.
 /// Guards must be released on the same thread that acquired them.

@@ -393,7 +393,7 @@ impl[T] OnceLock[T] {
 // Send/Sync implementations
 // ============================================================================
 
-use core::traits::marker::{Send, Sync}
+use core::traits::marker::{Send, Sync, ThreadSafe}
 
 /// Once is Send.
 /// Once can be safely transferred between threads.
@@ -412,4 +412,4 @@ impl[T: Send] Send for OnceLock[T] {}
 /// OnceLock provides synchronized access for initialization, but once
 /// initialized, multiple threads may read the value simultaneously,
 /// so T needs to be Sync.
-impl[T: Send + Sync] Sync for OnceLock[T] {}
+impl[T: ThreadSafe] Sync for OnceLock[T] {}

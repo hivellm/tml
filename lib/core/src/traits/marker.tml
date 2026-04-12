@@ -175,6 +175,23 @@ pub behavior Sized {
 pub use core::runtime::pin::Unpin
 
 // ============================================================================
+// ThreadSafe behavior alias
+// ============================================================================
+
+/// Alias for `Send + Sync` — types that can be both sent to and shared across threads.
+///
+/// Use `T: ThreadSafe` as shorthand for `T: Send + Sync` in generic bounds.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::marker::ThreadSafe
+///
+/// impl[T: ThreadSafe] Sync for Arc[T] {}
+/// ```
+pub behavior ThreadSafe = Send + Sync
+
+// ============================================================================
 // Send implementations for primitives
 // ============================================================================
 

@@ -84,8 +84,10 @@ impl Sync for AtomicUsize {}
 impl Send for AtomicIsize {}
 impl Sync for AtomicIsize {}
 
+use core::traits::marker::{Send, Sync, ThreadSafe}
+
 // AtomicPtr is Send and Sync only if T is Send and Sync
 // This matches Rust's semantics: the pointer operations are atomic,
 // but the safety of the pointed-to data depends on T's thread safety.
 impl[T: Send] Send for AtomicPtr[T] {}
-impl[T: Send + Sync] Sync for AtomicPtr[T] {}
+impl[T: ThreadSafe] Sync for AtomicPtr[T] {}
