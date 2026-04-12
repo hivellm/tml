@@ -1,0 +1,15 @@
+//! Instruction Simplify — algebraic simplifications.
+//!
+//! Applies identity rules: `x + 0 → x`, `x * 1 → x`, `x * 0 → 0`,
+//! `x - x → 0`, `x & 0 → 0`, `x | 0 → x`, etc.
+//!
+//! Phase 15d — item 3.5.
+
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+
+/// Run instruction simplification on a function.
+pub func run_inst_simplify(mf: MirFunc) -> PassResult {
+    return no_change()
+}

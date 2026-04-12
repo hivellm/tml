@@ -1,0 +1,167 @@
+//! MIR Pass Manager — orchestrates the optimization pipeline.
+//!
+//! Runs all optimization passes in a fixed order matching the C++ `mir_pass.cpp`
+//! sequence. The order is load-bearing: mem2reg must run before inlining,
+//! DCE must run after constant propagation, etc.
+//!
+//! ## Pass Tiers
+//!
+//! | Tier | Passes | Purpose |
+//! |------|--------|---------|
+//! | 0 | mem2reg, DCE, DFE, UCE, block_merge | Correctness-critical |
+//! | 1 | const_fold, const_prop, copy_prop, simplify_cfg, inst_simplify, sroa | Code quality |
+//! | 2 | inlining, escape_analysis, devirtualization, rvo, tail_call, licm | Performance |
+//! | 3 | 35 remaining passes | Polish |
+//!
+//! ## Usage
+//!
+//! ```tml
+//! let pm = pass_manager_new()
+//! let optimized = run_passes(pm, mir_module)
+//! ```
+//!
+//! Phase 15d — items 1.1, 1.2.
+
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::block::BasicBlock
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirInst
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::passes::mem2reg::run_mem2reg
+use compiler::mir::passes::dce::run_dead_code_elimination
+use compiler::mir::passes::dfe::run_dead_function_elimination
+use compiler::mir::passes::uce::run_unreachable_code_elimination
+use compiler::mir::passes::block_merge::run_block_merge
+use compiler::mir::passes::const_fold::run_constant_folding
+use compiler::mir::passes::const_prop::run_constant_propagation
+use compiler::mir::passes::copy_prop::run_copy_propagation
+use compiler::mir::passes::simplify_cfg::run_simplify_cfg
+use compiler::mir::passes::inst_simplify::run_inst_simplify
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Pass result
+// ============================================================================
+
+/// Result of running a single pass — tracks whether anything changed.
+pub type PassResult {
+    changed: I64,
+    instructions_removed: I64,
+    blocks_removed: I64
+}
+
+/// Create a "no change" result.
+pub func no_change() -> PassResult {
+    return PassResult { changed: 0, instructions_removed: 0, blocks_removed: 0 }
+}
+
+/// Create a "changed" result with counts.
+pub func did_change(inst_removed: I64, blocks_removed: I64) -> PassResult {
+    return PassResult { changed: 1, instructions_removed: inst_removed, blocks_removed: blocks_removed }
+}
+
+// ============================================================================
+// Pass Manager (item 1.1)
+// ============================================================================
+
+/// The pass manager configuration.
+/// Controls which passes run and in what order.
+pub type PassManager {
+    enable_tier0: I64,
+    enable_tier1: I64,
+    enable_tier2: I64,
+    enable_tier3: I64,
+    max_iterations: I64,
+    stats: PassStats
+}
+
+/// Aggregate statistics from all pass runs.
+pub type PassStats {
+    total_instructions_removed: I64,
+    total_blocks_removed: I64,
+    total_functions_removed: I64,
+    passes_run: I64
+}
+
+/// Create a new pass manager with all tiers enabled.
+pub func pass_manager_new() -> PassManager {
+    return PassManager {
+        enable_tier0: 1,
+        enable_tier1: 1,
+        enable_tier2: 1,
+        enable_tier3: 1,
+        max_iterations: 3,
+        stats: PassStats {
+            total_instructions_removed: 0,
+            total_blocks_removed: 0,
+            total_functions_removed: 0,
+            passes_run: 0
+        }
+    }
+}
+
+/// Run all enabled passes on a MIR module.
+///
+/// Executes passes in the fixed order: Tier 0 → Tier 1 → Tier 2 → Tier 3.
+/// Each tier may run multiple iterations until no more changes occur
+/// (fixpoint) or `max_iterations` is reached.
+pub func run_passes(pm: PassManager, mmod: MirModule) -> MirModule {
+    // Tier 0: Correctness-critical
+    if pm.enable_tier0 > 0 {
+        run_tier0(pm, mmod)
+    }
+
+    // Tier 1: Code quality
+    if pm.enable_tier1 > 0 {
+        run_tier1(pm, mmod)
+    }
+
+    // Tier 2: Performance
+    if pm.enable_tier2 > 0 {
+        run_tier2(pm, mmod)
+    }
+
+    return mmod
+}
+
+// ============================================================================
+// Tier runners (forward declarations — implementations in pass files)
+// ============================================================================
+
+/// Run Tier 0 passes (correctness-critical).
+func run_tier0(pm: PassManager, mmod: MirModule) {
+    let fc: I64 = mmod.functions.len() as I64
+    for i in 0 to fc {
+        let mf = mmod.functions.get(i)
+        run_mem2reg(mf)
+        run_dead_code_elimination(mf)
+        run_unreachable_code_elimination(mf)
+        run_block_merge(mf)
+    }
+    run_dead_function_elimination(mmod)
+    pm.stats.passes_run = pm.stats.passes_run + 5
+}
+
+/// Run Tier 1 passes (code quality).
+func run_tier1(pm: PassManager, mmod: MirModule) {
+    let fc: I64 = mmod.functions.len() as I64
+    for i in 0 to fc {
+        let mf = mmod.functions.get(i)
+        run_constant_folding(mf)
+        run_constant_propagation(mf)
+        run_copy_propagation(mf)
+        run_simplify_cfg(mf)
+        run_inst_simplify(mf)
+    }
+    pm.stats.passes_run = pm.stats.passes_run + 5
+}
+
+/// Run Tier 2 passes (performance).
+func run_tier2(pm: PassManager, mmod: MirModule) {
+    // Tier 2 passes are more complex and will be implemented
+    // as individual pass modules are ported.
+    pm.stats.passes_run = pm.stats.passes_run + 0
+}

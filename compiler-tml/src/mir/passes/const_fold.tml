@@ -1,0 +1,84 @@
+//! Constant Folding — evaluates constant expressions at compile time.
+//!
+//! Replaces instructions where all operands are constants with a single
+//! constant result. For example: `%2 = add 3, 4` → `%2 = const 7`.
+//!
+//! Phase 15d — item 3.1.
+
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use compiler::hir::expr::HirBinOp
+use std::collections::hashmap::HashMap
+
+/// Run constant folding on a function.
+pub func run_constant_folding(mf: MirFunc) -> PassResult {
+    // Build constant value map: ValueId → known constant
+    let constants = HashMap[Str, I64]::new(32)
+    var folded: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            // Record constants
+            when inst.inst {
+                Constant(c) => {
+                    when c.value {
+                        ConstInt(v) => constants.set(inst.result.to_string(), v),
+                        _ => {}
+                    }
+                },
+                Binary(b) => {
+                    let lk = b.left.to_string()
+                    let rk = b.right.to_string()
+                    if constants.has(lk) and constants.has(rk) {
+                        let lv = constants.get(lk)
+                        let rv = constants.get(rk)
+                        let result = fold_binary(b.op, lv, rv)
+                        constants.set(inst.result.to_string(), result)
+                        folded = folded + 1
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    if folded > 0 { return did_change(folded, 0) }
+    return no_change()
+}
+
+/// Evaluate a binary operation on two constant integers.
+func fold_binary(op: HirBinOp, left: I64, right: I64) -> I64 {
+    when op {
+        Add => return left + right,
+        Sub => return left - right,
+        Mul => return left * right,
+        Div => {
+            if right != 0 { return left / right }
+            return 0
+        },
+        Mod => {
+            if right != 0 { return left % right }
+            return 0
+        },
+        Eq => return if left == right { 1 } else { 0 },
+        Ne => return if left != right { 1 } else { 0 },
+        Lt => return if left < right { 1 } else { 0 },
+        Le => return if left <= right { 1 } else { 0 },
+        Gt => return if left > right { 1 } else { 0 },
+        Ge => return if left >= right { 1 } else { 0 },
+        BitAnd => return left % right,
+        BitOr => return left + right,
+        _ => return 0
+    }
+}

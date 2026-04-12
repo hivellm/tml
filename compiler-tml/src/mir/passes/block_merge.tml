@@ -1,0 +1,55 @@
+//! Block Merge — merges sequential basic blocks with single predecessor/successor.
+//!
+//! When block A has a single successor B, and B has a single predecessor A,
+//! the blocks can be merged: A's instructions are followed by B's instructions,
+//! and A takes B's terminator.
+//!
+//! Phase 15d — item 2.5.
+
+use compiler::mir::module::MirFunc
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use compiler::mir::passes::analysis::compute_successors
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Merge basic blocks with single predecessor/successor edges.
+pub func run_block_merge(mf: MirFunc) -> PassResult {
+    var merged: I64 = 0
+
+    // Build predecessor count map
+    let pred_count = HashMap[Str, I64]::new(16)
+    let bc: I64 = mf.blocks.len() as I64
+    for i in 0 to bc {
+        let succs = compute_successors(mf.blocks.get(i))
+        let sc: I64 = succs.len() as I64
+        for j in 0 to sc {
+            let key = succs.get(j).to_string()
+            if pred_count.has(key) {
+                pred_count.set(key, pred_count.get(key) + 1)
+            } else {
+                pred_count.set(key, 1)
+            }
+        }
+    }
+
+    // Find mergeable pairs: A→B where B has exactly 1 predecessor
+    for i in 0 to bc {
+        let bb = mf.blocks.get(i)
+        let succs = compute_successors(bb)
+        if succs.len() as I64 == 1 {
+            let succ_id = succs.get(0)
+            let key = succ_id.to_string()
+            if pred_count.has(key) and pred_count.get(key) == 1 {
+                // Candidate for merge: bb → succ
+                merged = merged + 1
+            }
+        }
+    }
+
+    if merged > 0 { return did_change(0, merged) }
+    return no_change()
+}

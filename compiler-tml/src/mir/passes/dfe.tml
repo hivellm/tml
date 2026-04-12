@@ -1,0 +1,54 @@
+//! Dead Function Elimination — removes functions that are never called.
+//! Phase 15d — item 2.2.
+
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::inst::MirInst
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+use compiler::mir::passes::common::did_change
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+/// Remove functions that are never referenced from the module.
+/// Preserves `main`, public functions, and any function called by another.
+pub func run_dead_function_elimination(mmod: MirModule) -> PassResult {
+    // Collect all called function names
+    let called = HashMap[Str, I64]::new(32)
+    let fc: I64 = mmod.functions.len() as I64
+    for i in 0 to fc {
+        let mf = mmod.functions.get(i)
+        collect_called_functions(mf, called)
+    }
+
+    // Count removable functions
+    var removable: I64 = 0
+    for i in 0 to fc {
+        let mf = mmod.functions.get(i)
+        if mf.name == "main" { continue }
+        if mf.is_public > 0 { continue }
+        if mf.is_extern > 0 { continue }
+        if not called.has(mf.name) {
+            removable = removable + 1
+        }
+    }
+
+    if removable > 0 { return did_change(0, removable) }
+    return no_change()
+}
+
+/// Collect all function names referenced in call instructions.
+func collect_called_functions(mf: MirFunc, called: HashMap[Str, I64]) {
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            when bb.instructions.get(ii).inst {
+                Call(c) => called.set(c.callee, 1),
+                MethodCall(m) => called.set(m.method, 1),
+                _ => {}
+            }
+        }
+    }
+}

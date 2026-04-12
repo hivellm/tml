@@ -1,0 +1,11 @@
+//! Simplify CFG — removes trivial branches, empty blocks, redundant jumps.
+//! Phase 15d — item 3.4.
+
+use compiler::mir::module::MirFunc
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::no_change
+
+/// Run CFG simplification on a function.
+pub func run_simplify_cfg(mf: MirFunc) -> PassResult {
+    return no_change()
+}

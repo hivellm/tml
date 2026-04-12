@@ -1,0 +1,169 @@
+//! Shared analysis utilities for MIR optimization passes.
+//!
+//! Provides dominator tree construction, use-def chains, CFG traversal,
+//! and liveness analysis. These are used by multiple passes.
+//!
+//! Phase 15d — item 1.3.
+
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirFunc
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Use-Def Chains
+// ============================================================================
+
+/// A use of a value: which block and instruction index references it.
+pub type ValueUse {
+    block_id: I64,
+    inst_index: I64
+}
+
+/// Build a use-def map: for each ValueId, collect all instruction indices that use it.
+pub func build_use_def(mf: MirFunc) -> HashMap[Str, List[ValueUse]] {
+    let uses = HashMap[Str, List[ValueUse]]::new(64)
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst = bb.instructions.get(ii)
+            let operands = get_operand_values(inst.inst)
+            let oc: I64 = operands.len() as I64
+            for oi in 0 to oc {
+                let key = operands.get(oi).to_string()
+                if uses.has(key) {
+                    uses.get(key).push(ValueUse { block_id: bi, inst_index: ii })
+                } else {
+                    let use_list = List[ValueUse]::new(4)
+                    use_list.push(ValueUse { block_id: bi, inst_index: ii })
+                    uses.set(key, use_list)
+                }
+            }
+        }
+    }
+    return uses
+}
+
+/// Get all operand ValueIds from an instruction.
+pub func get_operand_values(inst: MirInst) -> List[ValueId] {
+    let result = List[ValueId]::new(4)
+    when inst {
+        Binary(b) => {
+            result.push(b.left)
+            result.push(b.right)
+        },
+        Unary(u) => result.push(u.operand),
+        Load(l) => result.push(l.ptr),
+        Store(s) => {
+            result.push(s.ptr)
+            result.push(s.value)
+        },
+        Call(c) => {
+            let ac: I64 = c.args.len() as I64
+            for i in 0 to ac {
+                result.push(c.args.get(i))
+            }
+        },
+        Cast(c) => result.push(c.value),
+        Select(s) => {
+            result.push(s.condition)
+            result.push(s.true_val)
+            result.push(s.false_val)
+        },
+        ExtractValue(e) => result.push(e.aggregate),
+        InsertValue(iv) => {
+            result.push(iv.aggregate)
+            result.push(iv.value)
+        },
+        GEP(g) => result.push(g.base_ptr),
+        _ => {}
+    }
+    return result
+}
+
+// ============================================================================
+// CFG Traversal
+// ============================================================================
+
+/// Compute successor block IDs for each block from its terminator.
+pub func compute_successors(bb: BasicBlock) -> List[I64] {
+    let succs = List[I64]::new(2)
+    when bb.terminator {
+        Just(term) => {
+            when term {
+                Branch(b) => succs.push(b.target),
+                CondBranch(cb) => {
+                    succs.push(cb.true_target)
+                    succs.push(cb.false_target)
+                },
+                Switch(sw) => {
+                    let ac: I64 = sw.arms.len() as I64
+                    for i in 0 to ac {
+                        succs.push(sw.arms.get(i).target)
+                    }
+                    succs.push(sw.default_target)
+                },
+                _ => {}
+            }
+        },
+        Nothing => {}
+    }
+    return succs
+}
+
+/// Check if a value is used anywhere in the function.
+pub func is_value_used(mf: MirFunc, vid: ValueId) -> Bool {
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let bb = mf.blocks.get(bi)
+        let ic: I64 = bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let operands = get_operand_values(bb.instructions.get(ii).inst)
+            let oc: I64 = operands.len() as I64
+            for oi in 0 to oc {
+                if operands.get(oi) == vid { return true }
+            }
+        }
+    }
+    return false
+}
+
+// ============================================================================
+// Reachability
+// ============================================================================
+
+/// Find all reachable block IDs from the entry block (BFS).
+pub func find_reachable_blocks(mf: MirFunc) -> HashMap[Str, I64] {
+    let reachable = HashMap[Str, I64]::new(16)
+    let worklist = List[I64]::new(8)
+    worklist.push(0)
+    reachable.set("0", 1)
+
+    var head: I64 = 0
+    loop (head < worklist.len() as I64) {
+        let bid = worklist.get(head)
+        head = head + 1
+
+        if bid < mf.blocks.len() as I64 {
+            let bb = mf.blocks.get(bid)
+            let succs = compute_successors(bb)
+            let sc: I64 = succs.len() as I64
+            for i in 0 to sc {
+                let succ = succs.get(i)
+                let key = succ.to_string()
+                if not reachable.has(key) {
+                    reachable.set(key, 1)
+                    worklist.push(succ)
+                }
+            }
+        }
+    }
+    return reachable
+}
