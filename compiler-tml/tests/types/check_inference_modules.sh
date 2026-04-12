@@ -82,9 +82,19 @@ check_module "compiler-tml/src/thir/module.tml"
 check_module "compiler-tml/src/thir/lower.tml"
 check_module "compiler-tml/src/thir/exhaustiveness.tml"
 
+# MIR (phase 15c)
+check_module "compiler-tml/src/mir/common.tml"
+check_module "compiler-tml/src/mir/types.tml"
+check_module "compiler-tml/src/mir/inst.tml"
+check_module "compiler-tml/src/mir/block.tml"
+check_module "compiler-tml/src/mir/module.tml"
+check_module "compiler-tml/src/mir/builder/core.tml"
+check_module "compiler-tml/src/mir/printer.tml"
+
 # Test files
 check_module "compiler-tml/tests/thir/thir_types.test.tml"
 check_module "compiler-tml/tests/hir/hir_types.test.tml"
+check_module "compiler-tml/tests/mir/mir_types.test.tml"
 check_module "compiler-tml/tests/types/unify_basic.test.tml"
 check_module "compiler-tml/tests/types/unify_primitives.test.tml"
 check_module "compiler-tml/tests/types/infer_differential.test.tml"

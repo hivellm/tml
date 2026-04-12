@@ -1,4 +1,25 @@
 //! MIR Builder core — transforms THIR to MIR basic blocks.
+//!
+//! The MIR builder is the central transformation stage: it converts typed THIR
+//! expressions into SSA-form basic blocks with typed instructions. The output
+//! `MirModule` is consumed by optimization passes (phase 15d) and LLVM codegen.
+//!
+//! ## Strategy
+//!
+//! - **Alloca-first**: local variables are emitted as `alloca` + `store`;
+//!   the `mem2reg` pass (phase 15d) promotes them to SSA registers.
+//! - **Value numbering**: a monotonic counter assigns `%0, %1, ...` to
+//!   instruction results, matching the C++ `thir_mir_builder`.
+//! - **CFG construction**: `if/else` creates then/else/join basic blocks
+//!   with conditional branches; loops create header/body/exit blocks.
+//!
+//! ## Entry Point
+//!
+//! ```tml
+//! let b = builder_new()
+//! let mir = build_mir(b, thir_module)
+//! ```
+//!
 //! Phase 15c — items 2.1–2.6.
 
 use compiler::source::SourceSpan
@@ -48,6 +69,17 @@ use core::alloc::heap::Heap
 // MirBuilder state (item 2.1)
 // ============================================================================
 
+/// The MIR builder state.
+///
+/// Tracks SSA value numbering, current basic block, local variable bindings,
+/// and accumulated errors. A new `MirBuilder` is created per compilation unit.
+///
+/// ## Fields
+///
+/// - `next_value` — monotonic counter for SSA register names (%0, %1, ...)
+/// - `next_block` — counter for basic block IDs (entry block is always 0)
+/// - `current_block_id` — the block currently being emitted into
+/// - `locals` — maps variable names to their SSA ValueId
 pub type MirBuilder {
     next_value: I64,
     next_block: I64,
@@ -57,6 +89,7 @@ pub type MirBuilder {
     errors: List[Str]
 }
 
+/// Create a new MIR builder with all counters at zero.
 pub func builder_new() -> MirBuilder {
     return MirBuilder {
         next_value: 0,
@@ -68,7 +101,10 @@ pub func builder_new() -> MirBuilder {
     }
 }
 
-/// Allocate a fresh SSA value ID (item 2.4).
+/// Allocate a fresh SSA value ID.
+///
+/// Returns a monotonically increasing integer used as the register name
+/// in the MIR text format (`%0`, `%1`, `%2`, ...).
 pub func fresh_value(b: MirBuilder) -> ValueId {
     let v = b.next_value
     b.next_value = v + 1
@@ -86,7 +122,19 @@ pub func new_block_id(b: MirBuilder) -> I64 {
 // Module building entry point (item 2.2)
 // ============================================================================
 
-/// Build MIR from a ThirModule.
+/// Build a complete MIR module from a THIR module.
+///
+/// Iterates over all functions in the THIR module, lowering each to a
+/// `MirFunc` with basic blocks, SSA instructions, and terminators.
+///
+/// ## Parameters
+///
+/// - `b` — the builder state (mutated during lowering)
+/// - `tmod` — the input THIR module from phase 15b
+///
+/// ## Returns
+///
+/// A `MirModule` ready for optimization passes and codegen.
 pub func build_mir(b: MirBuilder, tmod: ThirModule) -> MirModule {
     let mmod = mir_module_new(tmod.name)
 
@@ -104,7 +152,16 @@ pub func build_mir(b: MirBuilder, tmod: ThirModule) -> MirModule {
 // Function building (item 2.3)
 // ============================================================================
 
-/// Build a MIR function from a ThirFunction.
+/// Build a MIR function from a THIR function declaration.
+///
+/// Creates an entry basic block, lowers parameters into local bindings,
+/// lowers the function body into MIR instructions, and adds a return
+/// terminator to the final block.
+///
+/// ## Alloca Strategy
+///
+/// Parameters and local variables are initially stored via `alloca` + `store`.
+/// The `mem2reg` optimization pass (phase 15d) promotes them to SSA registers.
 pub func build_function(b: MirBuilder, tf: ThirFunction) -> MirFunc {
     // Reset builder state for new function
     b.next_value = 0
@@ -150,7 +207,21 @@ pub func build_function(b: MirBuilder, tf: ThirFunction) -> MirFunc {
 // Expression lowering to MIR (items 3.1–3.5 preview)
 // ============================================================================
 
-/// Lower a ThirExpr to MIR instructions, returning the result ValueId.
+/// Lower a THIR expression to MIR instructions.
+///
+/// Recursively lowers the expression tree, emitting instructions into the
+/// current basic block of `mf`. Returns the `ValueId` of the result.
+///
+/// ## Supported Expressions
+///
+/// - `Literal` → `ConstantInst`
+/// - `Var` → local lookup
+/// - `Binary` → `BinaryInst`
+/// - `Unary` → `UnaryInst`
+/// - `Call` → `CallInst`
+/// - `Block` → sequential statement lowering + trailing expression
+/// - `Return` → `ReturnTerm` on current block
+/// - `If` → `CondBranch` to then/else/join blocks
 pub func lower_thir_to_mir(b: MirBuilder, mf: MirFunc, expr: ThirExpr) -> ValueId {
     let loc = loc_new("<mir>", 0, 0, 0, 0)
     let span = span_new(loc, loc)
