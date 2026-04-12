@@ -99,6 +99,32 @@ pub use compiler::codegen::emit_inst::emit_block_header
 pub use compiler::codegen::emit_inst::reg
 pub use compiler::codegen::emit_inst::block_label
 
+// --- Intrinsics ---
+pub use compiler::codegen::emit_intrinsic::emit_malloc
+pub use compiler::codegen::emit_intrinsic::emit_free
+pub use compiler::codegen::emit_intrinsic::emit_memcpy
+pub use compiler::codegen::emit_intrinsic::emit_sqrt
+pub use compiler::codegen::emit_intrinsic::emit_intrinsic_decls
+
+// --- Drop glue ---
+pub use compiler::codegen::emit_drop::emit_drop_noop
+pub use compiler::codegen::emit_drop::emit_drop_struct
+pub use compiler::codegen::emit_drop::emit_drop_enum
+
+// --- Derived impls ---
+pub use compiler::codegen::emit_derive::emit_derive_duplicate
+pub use compiler::codegen::emit_derive::emit_derive_eq
+pub use compiler::codegen::emit_derive::emit_derive_hash
+
+// --- Let patterns ---
+pub use compiler::codegen::emit_let::emit_tuple_destruct
+pub use compiler::codegen::emit_let::emit_struct_destruct
+pub use compiler::codegen::emit_let::emit_let_else
+pub use compiler::codegen::emit_let::emit_let_else_payload
+
+// --- Runtime declarations ---
+pub use compiler::codegen::runtime_decls::emit_runtime_decls
+
 // --- Module emission ---
 pub use compiler::codegen::emit_module::emit_module
 pub use compiler::codegen::emit_module::emit_string_global

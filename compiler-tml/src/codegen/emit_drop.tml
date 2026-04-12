@@ -1,0 +1,103 @@
+//! Destructor emission — drop glue for types that implement Drop.
+//!
+//! Generates `drop_glue_TypeName()` functions that call field destructors
+//! in reverse declaration order, then the type's own `drop()` method.
+//!
+//! Phase 16d — items 3.1–3.4.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_inst::reg
+use compiler::codegen::emit_method::mangle_inherent
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Drop glue emission (items 3.1–3.4)
+// ============================================================================
+
+/// Emit a no-op drop function for primitive types (item 3.2).
+/// `define void @drop_glue_I64(ptr %p) { ret void }`
+pub func emit_drop_noop(type_name: Str) -> Str {
+    return "define void @drop_glue_" + type_name + "(ptr %p) #0 {\nentry:\n  ret void\n}\n"
+}
+
+/// Emit drop glue for a struct (item 3.3).
+/// Drops fields in reverse order, then calls the type's drop() if present.
+pub func emit_drop_struct(
+    type_name: Str,
+    field_names: List[Str],
+    field_types: List[Str],
+    has_drop_impl: I64
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    var s: Str = "define void @drop_glue_" + type_name + "(ptr %p) #0 {\nentry:\n"
+
+    // Drop fields in reverse order
+    let fc: I64 = field_names.len() as I64
+    var reg_id: I64 = 0
+    let last: I64 = fc - 1
+    for ri in 0 to fc {
+        let i: I64 = last - ri
+        let field_ty: Str = field_types.get(i)
+        // GEP to field
+        let gep_reg: Str = "%gep_" + reg_id.to_string()
+        s = s + "  " + gep_reg + " = getelementptr inbounds " + struct_ty + ", ptr %p, i32 0, i32 " + i.to_string() + "\n"
+        // Call drop_glue for non-primitive fields
+        if field_ty != "i1" and field_ty != "i8" and field_ty != "i16" and field_ty != "i32" and field_ty != "i64" and field_ty != "i128" and field_ty != "float" and field_ty != "double" {
+            s = s + "  call void @drop_glue_" + field_names.get(i) + "(ptr " + gep_reg + ")\n"
+        }
+        reg_id = reg_id + 1
+    }
+
+    // Call the type's own drop() method if present
+    if has_drop_impl > 0 {
+        let drop_func: Str = mangle_inherent(type_name, "drop")
+        s = s + "  call void @" + drop_func + "(ptr %p)\n"
+    }
+
+    s = s + "  ret void\n}\n"
+    return s
+}
+
+/// Emit drop glue for an enum (item 3.4).
+/// Checks discriminant, switches to per-variant drop blocks.
+pub func emit_drop_enum(
+    type_name: Str,
+    variant_names: List[Str],
+    has_drop_impl: I64
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    var s: Str = "define void @drop_glue_" + type_name + "(ptr %p) #0 {\nentry:\n"
+
+    // Extract discriminant
+    s = s + "  %tag_ptr = getelementptr inbounds " + struct_ty + ", ptr %p, i32 0, i32 0\n"
+    s = s + "  %tag = load i32, ptr %tag_ptr, align 4\n"
+
+    // Switch on discriminant
+    let vc: I64 = variant_names.len() as I64
+    s = s + "  switch i32 %tag, label %drop_exit [\n"
+    for i in 0 to vc {
+        s = s + "    i32 " + i.to_string() + ", label %drop_variant_" + i.to_string() + "\n"
+    }
+    s = s + "  ]\n"
+
+    // Per-variant drop blocks (payload drop would go here)
+    for i in 0 to vc {
+        s = s + "drop_variant_" + i.to_string() + ":\n"
+        s = s + "  br label %drop_exit\n"
+    }
+
+    // Exit block
+    s = s + "drop_exit:\n"
+    if has_drop_impl > 0 {
+        let drop_func: Str = mangle_inherent(type_name, "drop")
+        s = s + "  call void @" + drop_func + "(ptr %p)\n"
+    }
+    s = s + "  ret void\n}\n"
+    return s
+}

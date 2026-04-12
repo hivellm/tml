@@ -1,0 +1,93 @@
+//! Let statement codegen — destructuring let and let-else patterns.
+//!
+//! Handles `let` statement forms that are lowered to MIR but require
+//! specific codegen patterns:
+//! - `let (a, b) = pair` → GEP to tuple elements
+//! - `let Foo { x, y } = val` → GEP to named fields
+//! - `let Just(x) = expr else { ... }` → discriminant check + conditional branch
+//!
+//! Phase 16d — items 5.1–5.3.
+
+use compiler::codegen::emit_inst::reg
+use compiler::codegen::emit_inst::block_label
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Destructuring let (item 5.2)
+// ============================================================================
+
+/// Emit tuple destructuring: `let (a, b) = pair`.
+/// Generates extractvalue for each element.
+pub func emit_tuple_destruct(
+    result_base: I64,
+    tuple_val: I64,
+    tuple_ty: Str,
+    element_count: I64
+) -> Str {
+    var s: Str = ""
+    for i in 0 to element_count {
+        let r: Str = reg(result_base + i)
+        s = s + "  " + r + " = extractvalue " + tuple_ty + " " + reg(tuple_val) + ", " + i.to_string() + "\n"
+    }
+    return s
+}
+
+/// Emit struct field destructuring: `let Foo { x, y } = val`.
+/// Loads each named field from the struct pointer.
+pub func emit_struct_destruct(
+    result_base: I64,
+    struct_ptr: I64,
+    struct_ty: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    var s: Str = ""
+    for i in 0 to field_count {
+        let gep_reg: Str = reg(result_base + i * 2)
+        let load_reg: Str = reg(result_base + i * 2 + 1)
+        let ft: Str = field_types.get(i)
+        s = s + "  " + gep_reg + " = getelementptr inbounds " + struct_ty + ", ptr " + reg(struct_ptr) + ", i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + load_reg + " = load " + ft + ", ptr " + gep_reg + "\n"
+    }
+    return s
+}
+
+// ============================================================================
+// Let-else (item 5.3)
+// ============================================================================
+
+/// Emit let-else pattern: `let Just(x) = expr else { ... }`.
+///
+/// ```llvm
+/// %disc = extractvalue %struct.Maybe %val, 0
+/// %is_nothing = icmp eq i32 %disc, 1  ; Nothing variant
+/// br i1 %is_nothing, label %else_bb, label %ok_bb
+/// ok_bb:
+///   %payload = extractvalue %struct.Maybe %val, 1
+///   ; ... continue with x = payload
+/// else_bb:
+///   ; ... else block
+/// ```
+pub func emit_let_else(
+    result_base: I64,
+    enum_val: I64,
+    enum_ty: Str,
+    expected_variant: I64,
+    ok_bb: Str,
+    else_bb: Str
+) -> Str {
+    let disc_reg: Str = reg(result_base)
+    let cmp_reg: Str = reg(result_base + 1)
+
+    var s: Str = ""
+    s = s + "  " + disc_reg + " = extractvalue " + enum_ty + " " + reg(enum_val) + ", 0\n"
+    s = s + "  " + cmp_reg + " = icmp ne i32 " + disc_reg + ", " + expected_variant.to_string() + "\n"
+    s = s + "  br i1 " + cmp_reg + ", label %" + else_bb + ", label %" + ok_bb + "\n"
+    return s
+}
+
+/// Emit payload extraction after let-else succeeds.
+pub func emit_let_else_payload(result: I64, enum_val: I64, enum_ty: Str) -> Str {
+    return "  " + reg(result) + " = extractvalue " + enum_ty + " " + reg(enum_val) + ", 1\n"
+}

@@ -1,0 +1,180 @@
+//! Runtime function declarations — selective emission for C runtime functions.
+//!
+//! Instead of emitting all 500+ runtime function declarations in every module,
+//! this emitter tracks which functions are actually called and emits only those
+//! `declare` lines. This reduces IR file size and LLVM parse time.
+//!
+//! Phase 16d — items 6.1–6.3.
+
+use std::collections::hashmap::HashMap
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Runtime function signatures (item 6.1)
+// ============================================================================
+
+/// A runtime function signature.
+pub type RuntimeFunc {
+    name: Str,
+    return_type: Str,
+    param_types: Str,
+    is_vararg: I64
+}
+
+/// Build the complete runtime function registry.
+pub func build_runtime_registry() -> HashMap[Str, RuntimeFunc] {
+    let reg = HashMap[Str, RuntimeFunc]::new(128)
+
+    // Memory
+    add_rt(reg, "malloc", "ptr", "i64", 0)
+    add_rt(reg, "free", "void", "ptr", 0)
+    add_rt(reg, "realloc", "ptr", "ptr, i64", 0)
+    add_rt(reg, "calloc", "ptr", "i64, i64", 0)
+
+    // String
+    add_rt(reg, "strlen", "i64", "ptr", 0)
+    add_rt(reg, "strcmp", "i32", "ptr, ptr", 0)
+    add_rt(reg, "strcpy", "ptr", "ptr, ptr", 0)
+    add_rt(reg, "strncpy", "ptr", "ptr, ptr, i64", 0)
+    add_rt(reg, "strcat", "ptr", "ptr, ptr", 0)
+    add_rt(reg, "memcpy", "ptr", "ptr, ptr, i64", 0)
+    add_rt(reg, "memset", "ptr", "ptr, i32, i64", 0)
+    add_rt(reg, "memmove", "ptr", "ptr, ptr, i64", 0)
+
+    // I/O
+    add_rt(reg, "printf", "i32", "ptr", 1)
+    add_rt(reg, "puts", "i32", "ptr", 0)
+    add_rt(reg, "fopen", "ptr", "ptr, ptr", 0)
+    add_rt(reg, "fclose", "i32", "ptr", 0)
+    add_rt(reg, "fread", "i64", "ptr, i64, i64, ptr", 0)
+    add_rt(reg, "fwrite", "i64", "ptr, i64, i64, ptr", 0)
+    add_rt(reg, "fflush", "i32", "ptr", 0)
+
+    // Math (C stdlib)
+    add_rt(reg, "sin", "double", "double", 0)
+    add_rt(reg, "cos", "double", "double", 0)
+    add_rt(reg, "sqrt", "double", "double", 0)
+    add_rt(reg, "pow", "double", "double, double", 0)
+    add_rt(reg, "log", "double", "double", 0)
+    add_rt(reg, "exp", "double", "double", 0)
+    add_rt(reg, "floor", "double", "double", 0)
+    add_rt(reg, "ceil", "double", "double", 0)
+    add_rt(reg, "fabs", "double", "double", 0)
+
+    // Process
+    add_rt(reg, "exit", "void", "i32", 0)
+    add_rt(reg, "abort", "void", "", 0)
+
+    // TML runtime
+    add_rt(reg, "tml_assert_fail", "void", "ptr, ptr, i64", 0)
+    add_rt(reg, "tml_panic", "void", "ptr", 0)
+    add_rt(reg, "tml_str_new", "ptr", "ptr, i64", 0)
+    add_rt(reg, "tml_str_concat", "ptr", "ptr, ptr", 0)
+    add_rt(reg, "tml_str_len", "i64", "ptr", 0)
+    add_rt(reg, "tml_str_eq", "i1", "ptr, ptr", 0)
+    add_rt(reg, "tml_print", "void", "ptr", 0)
+    add_rt(reg, "tml_println", "void", "ptr", 0)
+    add_rt(reg, "tml_list_new", "ptr", "i64", 0)
+    add_rt(reg, "tml_list_push", "void", "ptr, i64", 0)
+    add_rt(reg, "tml_list_get", "i64", "ptr, i64", 0)
+    add_rt(reg, "tml_list_len", "i64", "ptr", 0)
+    add_rt(reg, "tml_hashmap_new", "ptr", "i64", 0)
+    add_rt(reg, "tml_hashmap_set", "void", "ptr, ptr, i64", 0)
+    add_rt(reg, "tml_hashmap_get", "i64", "ptr, ptr", 0)
+    add_rt(reg, "tml_hashmap_has", "i1", "ptr, ptr", 0)
+    add_rt(reg, "tml_heap_new", "ptr", "i64", 0)
+    add_rt(reg, "tml_heap_get", "i64", "ptr", 0)
+
+    return reg
+}
+
+func add_rt(reg: HashMap[Str, RuntimeFunc], name: Str, ret: Str, params: Str, vararg: I64) {
+    reg.set(name, RuntimeFunc { name: name, return_type: ret, param_types: params, is_vararg: vararg })
+}
+
+// ============================================================================
+// Selective declaration emission (item 6.2)
+// ============================================================================
+
+/// Emit `declare` lines for only the runtime functions in `used`.
+pub func emit_runtime_decls(used: HashMap[Str, I64]) -> Str {
+    let registry: HashMap[Str, RuntimeFunc] = build_runtime_registry()
+    var output: Str = ""
+
+    // We must iterate the registry — but HashMap has no iterator.
+    // Instead, we check each known function name against the used set.
+    let known_funcs = known_runtime_names()
+    let kc: I64 = known_funcs.len() as I64
+    for i in 0 to kc {
+        let name: Str = known_funcs.get(i)
+        if used.has(name) {
+            let rf: RuntimeFunc = registry.get(name)
+            if rf.name != "" {
+                var decl: Str = "declare "
+                decl = decl + rf.return_type + " @" + rf.name + "(" + rf.param_types
+                if rf.is_vararg > 0 {
+                    decl = decl + ", ..."
+                }
+                decl = decl + ")\n"
+                output = output + decl
+            }
+        }
+    }
+
+    return output
+}
+
+/// List all known runtime function names (for iterating the registry).
+func known_runtime_names() -> List[Str] {
+    let names = List[Str]::new(64)
+    names.push("malloc")
+    names.push("free")
+    names.push("realloc")
+    names.push("calloc")
+    names.push("strlen")
+    names.push("strcmp")
+    names.push("strcpy")
+    names.push("strncpy")
+    names.push("strcat")
+    names.push("memcpy")
+    names.push("memset")
+    names.push("memmove")
+    names.push("printf")
+    names.push("puts")
+    names.push("fopen")
+    names.push("fclose")
+    names.push("fread")
+    names.push("fwrite")
+    names.push("fflush")
+    names.push("sin")
+    names.push("cos")
+    names.push("sqrt")
+    names.push("pow")
+    names.push("log")
+    names.push("exp")
+    names.push("floor")
+    names.push("ceil")
+    names.push("fabs")
+    names.push("exit")
+    names.push("abort")
+    names.push("tml_assert_fail")
+    names.push("tml_panic")
+    names.push("tml_str_new")
+    names.push("tml_str_concat")
+    names.push("tml_str_len")
+    names.push("tml_str_eq")
+    names.push("tml_print")
+    names.push("tml_println")
+    names.push("tml_list_new")
+    names.push("tml_list_push")
+    names.push("tml_list_get")
+    names.push("tml_list_len")
+    names.push("tml_hashmap_new")
+    names.push("tml_hashmap_set")
+    names.push("tml_hashmap_get")
+    names.push("tml_hashmap_has")
+    names.push("tml_heap_new")
+    names.push("tml_heap_get")
+    return names
+}

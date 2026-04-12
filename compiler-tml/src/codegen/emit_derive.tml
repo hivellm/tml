@@ -1,0 +1,135 @@
+//! Auto-derived impl emission — Clone, Eq, Hash, Ord.
+//!
+//! Generates IR for `@derive(Duplicate)`, `@derive(PartialEq)`, etc.
+//! Each derived impl is a function that operates field-by-field on the struct.
+//!
+//! Phase 16d — items 4.1–4.3.
+
+use compiler::codegen::emit_inst::reg
+use compiler::codegen::emit_method::mangle_behavior
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Derived Duplicate (Clone) — item 4.2
+// ============================================================================
+
+/// Emit derived `duplicate` for a struct: field-by-field copy.
+/// `define void @TypeName__Duplicate__duplicate(ptr sret(%struct.T) %out, ptr %self) #0 {`
+pub func emit_derive_duplicate(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Duplicate", "duplicate")
+    var s: Str = "define void @" + mangled + "(ptr sret(" + struct_ty + ") align 8 %out, ptr %self) #0 {\nentry:\n"
+
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let src_gep: Str = "%src_" + i.to_string()
+        let dst_gep: Str = "%dst_" + i.to_string()
+        let val_reg: Str = "%val_" + i.to_string()
+
+        s = s + "  " + src_gep + " = getelementptr inbounds " + struct_ty + ", ptr %self, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + val_reg + " = load " + ft + ", ptr " + src_gep + "\n"
+        s = s + "  " + dst_gep + " = getelementptr inbounds " + struct_ty + ", ptr %out, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  store " + ft + " " + val_reg + ", ptr " + dst_gep + "\n"
+    }
+
+    s = s + "  ret void\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived PartialEq — item 4.3
+// ============================================================================
+
+/// Emit derived `eq` for a struct: field-by-field compare with early false.
+pub func emit_derive_eq(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "PartialEq", "eq")
+    var s: Str = "define i1 @" + mangled + "(ptr %a, ptr %b) #0 {\nentry:\n"
+
+    if field_count == 0 {
+        s = s + "  ret i1 true\n}\n"
+        return s
+    }
+
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let a_gep: Str = "%a_" + i.to_string()
+        let b_gep: Str = "%b_" + i.to_string()
+        let a_val: Str = "%av_" + i.to_string()
+        let b_val: Str = "%bv_" + i.to_string()
+        let cmp_reg: Str = "%cmp_" + i.to_string()
+
+        s = s + "  " + a_gep + " = getelementptr inbounds " + struct_ty + ", ptr %a, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + a_val + " = load " + ft + ", ptr " + a_gep + "\n"
+        s = s + "  " + b_gep + " = getelementptr inbounds " + struct_ty + ", ptr %b, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + b_val + " = load " + ft + ", ptr " + b_gep + "\n"
+        s = s + "  " + cmp_reg + " = icmp eq " + ft + " " + a_val + ", " + b_val + "\n"
+
+        if i < field_count - 1 {
+            let next_bb: Str = "cmp_" + (i + 1).to_string()
+            s = s + "  br i1 " + cmp_reg + ", label %" + next_bb + ", label %neq\n"
+            s = s + next_bb + ":\n"
+        } else {
+            s = s + "  br i1 " + cmp_reg + ", label %eq, label %neq\n"
+        }
+    }
+
+    s = s + "eq:\n  ret i1 true\n"
+    s = s + "neq:\n  ret i1 false\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Hash — item 4.3
+// ============================================================================
+
+/// Emit derived `hash` for a struct: FNV-1a hash of each field.
+pub func emit_derive_hash(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Hash", "hash")
+    var s: Str = "define i64 @" + mangled + "(ptr %self) #0 {\nentry:\n"
+
+    // FNV-1a offset basis
+    s = s + "  %h0 = add i64 0, 14695981039346656037\n"
+
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let gep_reg: Str = "%hgep_" + i.to_string()
+        let val_reg: Str = "%hval_" + i.to_string()
+        let xor_reg: Str = "%hxor_" + i.to_string()
+        let mul_reg: Str = "%hmul_" + i.to_string()
+        let prev_hash: Str = if i == 0 { "%h0" } else { "%hmul_" + (i - 1).to_string() }
+
+        s = s + "  " + gep_reg + " = getelementptr inbounds " + struct_ty + ", ptr %self, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + val_reg + " = load " + ft + ", ptr " + gep_reg + "\n"
+
+        // XOR with current hash, then multiply by FNV prime
+        let val_as_i64: Str = if ft == "i64" { val_reg } else { "%hext_" + i.to_string() }
+        if ft != "i64" {
+            s = s + "  " + val_as_i64 + " = sext " + ft + " " + val_reg + " to i64\n"
+        }
+        s = s + "  " + xor_reg + " = xor i64 " + prev_hash + ", " + val_as_i64 + "\n"
+        s = s + "  " + mul_reg + " = mul i64 " + xor_reg + ", 1099511628211\n"
+    }
+
+    if field_count == 0 {
+        s = s + "  ret i64 %h0\n"
+    } else {
+        s = s + "  ret i64 %hmul_" + (field_count - 1).to_string() + "\n"
+    }
+    s = s + "}\n"
+    return s
+}

@@ -1,0 +1,196 @@
+//! Builtin and LLVM intrinsic call emission.
+//!
+//! Maps TML builtin function calls to their corresponding LLVM intrinsic
+//! or C runtime function calls. This covers memory operations, math
+//! functions, I/O, string operations, atomic ops, and assertions.
+//!
+//! Phase 16d — items 2.1–2.4.
+
+use compiler::codegen::emit_inst::reg
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Memory intrinsics (item 2.2)
+// ============================================================================
+
+/// Emit `malloc(n)` → `call ptr @malloc(i64 %n)`.
+pub func emit_malloc(result: I64, size_val: I64) -> Str {
+    return "  " + reg(result) + " = call ptr @malloc(i64 " + reg(size_val) + ")\n"
+}
+
+/// Emit `free(p)` → `call void @free(ptr %p)`.
+pub func emit_free(ptr_val: I64) -> Str {
+    return "  call void @free(ptr " + reg(ptr_val) + ")\n"
+}
+
+/// Emit `memcpy(dst, src, n)` → `@llvm.memcpy.p0.p0.i64`.
+pub func emit_memcpy(dst: I64, src: I64, size: I64) -> Str {
+    return "  call void @llvm.memcpy.p0.p0.i64(ptr " + reg(dst) + ", ptr " + reg(src) + ", i64 " + reg(size) + ", i1 false)\n"
+}
+
+/// Emit `memmove(dst, src, n)` → `@llvm.memmove.p0.p0.i64`.
+pub func emit_memmove(dst: I64, src: I64, size: I64) -> Str {
+    return "  call void @llvm.memmove.p0.p0.i64(ptr " + reg(dst) + ", ptr " + reg(src) + ", i64 " + reg(size) + ", i1 false)\n"
+}
+
+/// Emit `memset(dst, val, n)` → `@llvm.memset.p0.i64`.
+pub func emit_memset(dst: I64, val: I64, size: I64) -> Str {
+    return "  call void @llvm.memset.p0.i64(ptr " + reg(dst) + ", i8 " + reg(val) + ", i64 " + reg(size) + ", i1 false)\n"
+}
+
+/// Emit `realloc(p, n)` → `call ptr @realloc(ptr %p, i64 %n)`.
+pub func emit_realloc(result: I64, ptr_val: I64, size_val: I64) -> Str {
+    return "  " + reg(result) + " = call ptr @realloc(ptr " + reg(ptr_val) + ", i64 " + reg(size_val) + ")\n"
+}
+
+/// Emit `calloc(count, size)`.
+pub func emit_calloc(result: I64, count: I64, size: I64) -> Str {
+    return "  " + reg(result) + " = call ptr @calloc(i64 " + reg(count) + ", i64 " + reg(size) + ")\n"
+}
+
+// ============================================================================
+// Math intrinsics (item 2.3)
+// ============================================================================
+
+/// Emit a unary f64 math intrinsic: `@llvm.<name>.f64(double %x)`.
+pub func emit_math_f64(result: I64, intrinsic: Str, arg: I64) -> Str {
+    return "  " + reg(result) + " = call double @llvm." + intrinsic + ".f64(double " + reg(arg) + ")\n"
+}
+
+/// Emit a binary f64 math intrinsic: `@llvm.<name>.f64(double %x, double %y)`.
+pub func emit_math_f64_binary(result: I64, intrinsic: Str, a: I64, b: I64) -> Str {
+    return "  " + reg(result) + " = call double @llvm." + intrinsic + ".f64(double " + reg(a) + ", double " + reg(b) + ")\n"
+}
+
+/// Emit sqrt: `@llvm.sqrt.f64`.
+pub func emit_sqrt(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "sqrt", arg)
+}
+
+/// Emit fabs: `@llvm.fabs.f64`.
+pub func emit_fabs(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "fabs", arg)
+}
+
+/// Emit floor: `@llvm.floor.f64`.
+pub func emit_floor(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "floor", arg)
+}
+
+/// Emit ceil: `@llvm.ceil.f64`.
+pub func emit_ceil(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "ceil", arg)
+}
+
+/// Emit pow: `@llvm.pow.f64`.
+pub func emit_pow(result: I64, base_val: I64, exp_val: I64) -> Str {
+    return emit_math_f64_binary(result, "pow", base_val, exp_val)
+}
+
+/// Emit log: `@llvm.log.f64`.
+pub func emit_log(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "log", arg)
+}
+
+/// Emit exp: `@llvm.exp.f64`.
+pub func emit_exp(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "exp", arg)
+}
+
+/// Emit sin: `@llvm.sin.f64`.
+pub func emit_sin(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "sin", arg)
+}
+
+/// Emit cos: `@llvm.cos.f64`.
+pub func emit_cos(result: I64, arg: I64) -> Str {
+    return emit_math_f64(result, "cos", arg)
+}
+
+// ============================================================================
+// Overflow-checked arithmetic (item 2.4)
+// ============================================================================
+
+/// Emit `@llvm.sadd.with.overflow.i64(a, b)` → `{ i64, i1 }`.
+pub func emit_add_overflow(result: I64, a: I64, b: I64) -> Str {
+    return "  " + reg(result) + " = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 " + reg(a) + ", i64 " + reg(b) + ")\n"
+}
+
+/// Emit `@llvm.ssub.with.overflow.i64(a, b)`.
+pub func emit_sub_overflow(result: I64, a: I64, b: I64) -> Str {
+    return "  " + reg(result) + " = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 " + reg(a) + ", i64 " + reg(b) + ")\n"
+}
+
+/// Emit `@llvm.smul.with.overflow.i64(a, b)`.
+pub func emit_mul_overflow(result: I64, a: I64, b: I64) -> Str {
+    return "  " + reg(result) + " = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 " + reg(a) + ", i64 " + reg(b) + ")\n"
+}
+
+// ============================================================================
+// I/O intrinsics
+// ============================================================================
+
+/// Emit `printf(fmt, ...)`.
+pub func emit_printf(result: I64, fmt: I64, args: List[I64]) -> Str {
+    var args_str: Str = "ptr " + reg(fmt)
+    let ac: I64 = args.len() as I64
+    for i in 0 to ac {
+        args_str = args_str + ", i64 " + reg(args.get(i))
+    }
+    return "  " + reg(result) + " = call i32 @printf(" + args_str + ")\n"
+}
+
+/// Emit `puts(s)`.
+pub func emit_puts(result: I64, str_ptr: I64) -> Str {
+    return "  " + reg(result) + " = call i32 @puts(ptr " + reg(str_ptr) + ")\n"
+}
+
+// ============================================================================
+// Assert intrinsic
+// ============================================================================
+
+/// Emit assert check: if condition is false, call `@tml_assert_fail(msg, file, line)`.
+pub func emit_assert(cond: I64, msg_ptr: I64, file_ptr: I64, line: I64, fail_bb: Str, ok_bb: Str) -> Str {
+    var s: Str = ""
+    s = s + "  br i1 " + reg(cond) + ", label %" + ok_bb + ", label %" + fail_bb + "\n"
+    return s
+}
+
+/// Emit the assert failure call in the failure block.
+pub func emit_assert_fail(msg_ptr: I64, file_ptr: I64, line: I64) -> Str {
+    return "  call void @tml_assert_fail(ptr " + reg(msg_ptr) + ", ptr " + reg(file_ptr) + ", i64 " + reg(line) + ")\n  unreachable\n"
+}
+
+// ============================================================================
+// Intrinsic declarations (for module header)
+// ============================================================================
+
+/// Emit all LLVM intrinsic declarations used by the module.
+pub func emit_intrinsic_decls() -> Str {
+    var s: Str = ""
+    s = s + "declare ptr @malloc(i64)\n"
+    s = s + "declare void @free(ptr)\n"
+    s = s + "declare ptr @realloc(ptr, i64)\n"
+    s = s + "declare ptr @calloc(i64, i64)\n"
+    s = s + "declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)\n"
+    s = s + "declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)\n"
+    s = s + "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)\n"
+    s = s + "declare double @llvm.sqrt.f64(double)\n"
+    s = s + "declare double @llvm.fabs.f64(double)\n"
+    s = s + "declare double @llvm.floor.f64(double)\n"
+    s = s + "declare double @llvm.ceil.f64(double)\n"
+    s = s + "declare double @llvm.pow.f64(double, double)\n"
+    s = s + "declare double @llvm.log.f64(double)\n"
+    s = s + "declare double @llvm.exp.f64(double)\n"
+    s = s + "declare double @llvm.sin.f64(double)\n"
+    s = s + "declare double @llvm.cos.f64(double)\n"
+    s = s + "declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64)\n"
+    s = s + "declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64)\n"
+    s = s + "declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64)\n"
+    s = s + "declare i32 @printf(ptr, ...)\n"
+    s = s + "declare i32 @puts(ptr)\n"
+    s = s + "declare void @tml_assert_fail(ptr, ptr, i64)\n"
+    return s
+}
