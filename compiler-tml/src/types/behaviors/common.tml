@@ -1,0 +1,29 @@
+//! Behavior system module root for the TML self-hosting type checker.
+//!
+//! Re-exports the core behavior types and functions.
+//! Named `common.tml` because `mod` is a reserved keyword in TML.
+//! Directory named `behaviors` (plural) because `behavior` is also reserved.
+//!
+//! Phase 14d — item 1.1.
+
+pub use compiler::types::behaviors::registry::BehaviorRegistry
+pub use compiler::types::behaviors::registry::ImplBlock
+pub use compiler::types::behaviors::registry::registry_new
+pub use compiler::types::behaviors::registry::register_behavior
+pub use compiler::types::behaviors::registry::register_impl_block
+pub use compiler::types::behaviors::registry::get_impl_blocks
+pub use compiler::types::behaviors::registry::find_impl
+pub use compiler::types::behaviors::registry::find_method_in_impls
+pub use compiler::types::behaviors::solver::resolve_behavior
+pub use compiler::types::behaviors::solver::check_bounds
+pub use compiler::types::behaviors::solver::check_super_behaviors
+pub use compiler::types::behaviors::solver::resolve_associated_type
+pub use compiler::types::behaviors::solver::check_coherence
+pub use compiler::types::behaviors::dispatch::MethodResolution
+pub use compiler::types::behaviors::dispatch::MethodSource
+pub use compiler::types::behaviors::dispatch::dispatch_method
+pub use compiler::types::coercion::CoercionKind
+pub use compiler::types::coercion::Coercion
+pub use compiler::types::coercion::find_coercion
+pub use compiler::types::coercion::desugar_op_final
+pub use compiler::types::coercion::normalize_type

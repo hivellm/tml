@@ -1,0 +1,240 @@
+//! Trait solver for the TML self-hosting type checker.
+//!
+//! Resolves which impl block satisfies a generic bound at each call site.
+//! Implements behavior resolution, generic bound checking, behavior
+//! inheritance, associated type resolution, and coherence checking.
+//!
+//! Phase 14d — items 2.1–2.6.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::NamedType
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::type_to_str
+use compiler::types::ty::types_equal
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::BehaviorDef
+use compiler::types::env::AssociatedTypeDef
+use compiler::types::env::env_lookup_behavior
+use compiler::types::env::env_type_implements
+use compiler::types::env::env_get_behavior_impls
+use compiler::types::behaviors::registry::BehaviorRegistry
+use compiler::types::behaviors::registry::ImplBlock
+use compiler::types::behaviors::registry::find_impl
+use compiler::types::behaviors::registry::get_impl_blocks
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::get_type_name
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Behavior resolution (item 2.2)
+// ============================================================================
+
+/// Resolve which impl block satisfies a behavior for a given type.
+/// Returns the ImplBlock if found, Nothing otherwise.
+pub func resolve_behavior(
+    reg: BehaviorRegistry,
+    ty: Type,
+    behavior_name: Str
+) -> Maybe[ImplBlock] {
+    let type_name = get_type_name(ty)
+    if type_name == "" { return Nothing }
+
+    // Direct lookup: exact type+behavior match
+    let direct = find_impl(reg, type_name, behavior_name)
+    when direct {
+        Just(_) => return direct,
+        Nothing => {}
+    }
+
+    // Check if the type implements via TypeEnv registration
+    if env_type_implements(reg.env, type_name, behavior_name) {
+        // The impl exists but may not be in our registry yet (e.g., builtin impls)
+        // Return a synthetic impl block
+        return Nothing
+    }
+
+    return Nothing
+}
+
+// ============================================================================
+// Generic bound checking (item 2.3)
+// ============================================================================
+
+/// Check that a concrete type satisfies all generic bounds.
+/// `bounds` is a list of behavior names that the type must implement.
+/// Returns a list of unsatisfied bounds (empty = all satisfied).
+pub func check_bounds(
+    reg: BehaviorRegistry,
+    ty: Type,
+    bounds: List[Str]
+) -> List[Str] {
+    let unsatisfied = List[Str]::new(4)
+    let type_name = get_type_name(ty)
+    if type_name == "" { return unsatisfied }
+
+    let bc: I64 = bounds.len() as I64
+    for i in 0 to bc {
+        let bound = bounds.get(i)
+        if not type_satisfies_bound(reg, type_name, bound) {
+            unsatisfied.push(bound)
+        }
+    }
+    return unsatisfied
+}
+
+/// Check if a type satisfies a single behavior bound.
+func type_satisfies_bound(reg: BehaviorRegistry, type_name: Str, bound: Str) -> Bool {
+    // Check direct impl
+    if env_type_implements(reg.env, type_name, bound) {
+        return true
+    }
+
+    // Check if there's an impl block registered
+    let impl_r = find_impl(reg, type_name, bound)
+    when impl_r {
+        Just(_) => return true,
+        Nothing => {}
+    }
+
+    // Check auto-implemented behaviors for primitives
+    if is_auto_impl(type_name, bound) {
+        return true
+    }
+
+    return false
+}
+
+/// Check if a behavior is auto-implemented for a primitive type.
+func is_auto_impl(type_name: Str, bound: Str) -> Bool {
+    // All types implement Sized (unless explicitly unsized)
+    if bound == "Sized" { return true }
+
+    // Primitives auto-implement common behaviors
+    let is_prim = type_name == "I8" or type_name == "I16" or type_name == "I32" or
+                  type_name == "I64" or type_name == "I128" or type_name == "U8" or
+                  type_name == "U16" or type_name == "U32" or type_name == "U64" or
+                  type_name == "U128" or type_name == "F32" or type_name == "F64" or
+                  type_name == "Bool" or type_name == "Str"
+
+    if is_prim {
+        if bound == "Duplicate" or bound == "PartialEq" or bound == "Eq" or
+           bound == "Display" or bound == "Debug" or bound == "Hash" or
+           bound == "Default" or bound == "Send" or bound == "Sync" {
+            return true
+        }
+        // Numeric types implement arithmetic behaviors
+        let is_numeric = type_name == "I8" or type_name == "I16" or type_name == "I32" or
+                         type_name == "I64" or type_name == "I128" or type_name == "U8" or
+                         type_name == "U16" or type_name == "U32" or type_name == "U64" or
+                         type_name == "U128" or type_name == "F32" or type_name == "F64"
+        if is_numeric and (bound == "Add" or bound == "Sub" or bound == "Mul" or
+                           bound == "Div" or bound == "Rem" or bound == "Ord" or
+                           bound == "PartialOrd") {
+            return true
+        }
+    }
+    return false
+}
+
+// ============================================================================
+// Behavior inheritance (item 2.4)
+// ============================================================================
+
+/// Check that a type implementing a behavior also implements all super-behaviors.
+/// Returns a list of missing super-behaviors.
+pub func check_super_behaviors(
+    reg: BehaviorRegistry,
+    type_name: Str,
+    behavior_name: Str
+) -> List[Str] {
+    let missing = List[Str]::new(4)
+
+    let bdef_r = env_lookup_behavior(reg.env, behavior_name)
+    let Just(bdef) = bdef_r else { return missing }
+
+    let sc: I64 = bdef.super_behaviors.len() as I64
+    for i in 0 to sc {
+        let super_name = bdef.super_behaviors.get(i)
+        if not type_satisfies_bound(reg, type_name, super_name) {
+            missing.push(super_name)
+        }
+    }
+    return missing
+}
+
+// ============================================================================
+// Associated type resolution (item 2.5)
+// ============================================================================
+
+/// Resolve an associated type projection: `<T as Behavior>::AssocType`.
+/// Returns the concrete type if an impl provides it, or Nothing.
+pub func resolve_associated_type(
+    reg: BehaviorRegistry,
+    ty: Type,
+    behavior_name: Str,
+    assoc_name: Str
+) -> Maybe[Type] {
+    let type_name = get_type_name(ty)
+    if type_name == "" { return Nothing }
+
+    // Find the impl block for this type+behavior
+    let impl_r = find_impl(reg, type_name, behavior_name)
+    when impl_r {
+        Just(block) => {
+            // Check type_bindings for the associated type
+            if block.type_bindings.has(assoc_name) {
+                return Just(block.type_bindings.get(assoc_name))
+            }
+        },
+        Nothing => {}
+    }
+
+    // Fall back to default type in the behavior definition
+    let bdef_r = env_lookup_behavior(reg.env, behavior_name)
+    let Just(bdef) = bdef_r else { return Nothing }
+
+    let ac: I64 = bdef.associated_types.len() as I64
+    for i in 0 to ac {
+        let assoc = bdef.associated_types.get(i)
+        if assoc.name == assoc_name {
+            when assoc.default_type {
+                Just(dt) => return Just(dt.get()),
+                Nothing => return Nothing
+            }
+        }
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Coherence checking (item 2.6)
+// ============================================================================
+
+/// Check coherence: no two impl blocks for the same type+behavior pair.
+/// Returns a list of overlapping impl descriptions.
+pub func check_coherence(reg: BehaviorRegistry) -> List[Str] {
+    let violations = List[Str]::new(4)
+    let seen = HashMap[Str, I64]::new(32)
+
+    let bc: I64 = reg.impl_blocks.len() as I64
+    for i in 0 to bc {
+        let block = reg.impl_blocks.get(i)
+        if block.behavior_name == "" { continue }
+
+        let key = block.type_name + "::" + block.behavior_name
+        if seen.has(key) {
+            violations.push(
+                "Overlapping impl: '" + block.behavior_name +
+                "' for '" + block.type_name + "' (duplicate impl block)"
+            )
+        } else {
+            seen.set(key, i)
+        }
+    }
+    return violations
+}

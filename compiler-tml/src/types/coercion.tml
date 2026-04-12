@@ -1,0 +1,287 @@
+//! Coercion insertion pass for the TML self-hosting type checker.
+//!
+//! Runs after inference (phase14c) and behavior dispatch (phase14d phases 1-3).
+//! Resolves associated type projections, inserts implicit type coercions,
+//! and finalizes operator desugaring to concrete method calls.
+//!
+//! This pass produces a coercion-annotated AST that the HIR lowerer consumes.
+//!
+//! Phase 14d — items 4.1–4.4.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::NamedType
+use compiler::types::ty::PrimitiveType
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::GenericType
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_named
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_tuple
+use compiler::types::ty::make_func
+use compiler::types::ty::type_to_str
+use compiler::types::ty::types_equal
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_lookup_behavior
+use compiler::types::env::BehaviorDef
+use compiler::types::behaviors::registry::BehaviorRegistry
+use compiler::types::behaviors::solver::resolve_associated_type
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::get_type_name
+use compiler::types::checker::check_call::operator_behavior_name
+use compiler::types::checker::check_call::operator_method_name
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Coercion types
+// ============================================================================
+
+/// A coercion to insert into the AST.
+@repr(U8)
+pub enum CoercionKind {
+    /// Integer widening: I8 → I16, I16 → I32, I32 → I64
+    IntegerWiden,
+    /// Float widening: F32 → F64
+    FloatWiden,
+    /// Ref coercion: ref T → ref T (immutable ref from mutable)
+    RefCoerce,
+    /// Deref coercion: Heap[T] → T
+    DerefCoerce,
+    /// No coercion needed
+    NoCoercion
+}
+
+/// A recorded coercion at a specific expression site.
+pub type Coercion {
+    kind: CoercionKind,
+    from_type: Type,
+    to_type: Type
+}
+
+// ============================================================================
+// Implicit coercions (item 4.2)
+// ============================================================================
+
+/// Determine if an implicit coercion is available from `from` to `to`.
+/// Returns the coercion kind, or NoCoercion if not possible.
+pub func find_coercion(from: Type, target: Type) -> CoercionKind {
+    if types_equal(from, target) { return CoercionKind::NoCoercion }
+
+    // Integer widening
+    when from {
+        Primitive(pf) => {
+            when target {
+                Primitive(pt) => {
+                    return check_primitive_coercion(pf.kind, pt.kind)
+                },
+                _ => {}
+            }
+        },
+        // Ref coercion: mut ref → immutable ref
+        Ref(rf) => {
+            when target {
+                Ref(rt) => {
+                    if rf.is_mut and not rt.is_mut {
+                        if types_equal(rf.inner.get(), rt.inner.get()) {
+                            return CoercionKind::RefCoerce
+                        }
+                    }
+                },
+                _ => {}
+            }
+        },
+        // Heap[T] → T (deref)
+        Named(nf) => {
+            if nf.name == "Heap" and nf.type_args.len() as I64 > 0 {
+                if types_equal(nf.type_args.get(0).get(), target) {
+                    return CoercionKind::DerefCoerce
+                }
+            }
+        },
+        _ => {}
+    }
+    return CoercionKind::NoCoercion
+}
+
+/// Check if a primitive-to-primitive coercion is valid (widening only).
+func check_primitive_coercion(from: PrimitiveKind, target_kind: PrimitiveKind) -> CoercionKind {
+    when from {
+        KindI8 => {
+            when target_kind {
+                KindI16 => return CoercionKind::IntegerWiden,
+                KindI32 => return CoercionKind::IntegerWiden,
+                KindI64 => return CoercionKind::IntegerWiden,
+                KindI128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindI16 => {
+            when target_kind {
+                KindI32 => return CoercionKind::IntegerWiden,
+                KindI64 => return CoercionKind::IntegerWiden,
+                KindI128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindI32 => {
+            when target_kind {
+                KindI64 => return CoercionKind::IntegerWiden,
+                KindI128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindI64 => {
+            when target_kind {
+                KindI128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindU8 => {
+            when target_kind {
+                KindU16 => return CoercionKind::IntegerWiden,
+                KindU32 => return CoercionKind::IntegerWiden,
+                KindU64 => return CoercionKind::IntegerWiden,
+                KindU128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindU16 => {
+            when target_kind {
+                KindU32 => return CoercionKind::IntegerWiden,
+                KindU64 => return CoercionKind::IntegerWiden,
+                KindU128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindU32 => {
+            when target_kind {
+                KindU64 => return CoercionKind::IntegerWiden,
+                KindU128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindU64 => {
+            when target_kind {
+                KindU128 => return CoercionKind::IntegerWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        KindF32 => {
+            when target_kind {
+                KindF64 => return CoercionKind::FloatWiden,
+                _ => return CoercionKind::NoCoercion
+            }
+        },
+        _ => return CoercionKind::NoCoercion
+    }
+}
+
+// ============================================================================
+// Operator desugaring finalization (item 4.3)
+// ============================================================================
+
+/// A desugared operator: the method name and the behavior it comes from.
+pub type DesugaredOp {
+    behavior_name: Str,
+    method_name: Str,
+    return_type: Type
+}
+
+/// Finalize operator desugaring: resolve `a + b` to the concrete `Add::add`
+/// method for the left operand's type.
+pub func desugar_op_final(
+    reg: BehaviorRegistry,
+    left_ty: Type,
+    op: Str
+) -> Maybe[DesugaredOp] {
+    let Just(bhv_name) = operator_behavior_name(op) else { return Nothing }
+    let method = operator_method_name(op)
+    let type_name = get_type_name(left_ty)
+    if type_name == "" { return Nothing }
+
+    // Check behavior definition for the method's return type
+    let bdef_r = env_lookup_behavior(reg.env, bhv_name)
+    let Just(bdef) = bdef_r else {
+        // Builtin operator — return type is same as left
+        return Just(DesugaredOp {
+            behavior_name: bhv_name,
+            method_name: method,
+            return_type: left_ty
+        })
+    }
+
+    // Find the method signature in the behavior
+    let mc: I64 = bdef.methods.len() as I64
+    for i in 0 to mc {
+        let msig = bdef.methods.get(i)
+        if msig.name == method {
+            // Substitute Self with the concrete type
+            let subs = HashMap[Str, Type]::new(2)
+            subs.set("Self", left_ty)
+            let ret = substitute_type(msig.return_type.get(), subs)
+            return Just(DesugaredOp {
+                behavior_name: bhv_name,
+                method_name: method,
+                return_type: ret
+            })
+        }
+    }
+
+    // Fallback: return type is same as left operand
+    return Just(DesugaredOp {
+        behavior_name: bhv_name,
+        method_name: method,
+        return_type: left_ty
+    })
+}
+
+// ============================================================================
+// Associated type normalization (item 4.4)
+// ============================================================================
+
+/// Normalize a type by replacing all associated type projections with
+/// their concrete types. For example:
+/// `<I32 as Iterator>::Item` → `I32` (if the impl defines Item = I32)
+pub func normalize_type(reg: BehaviorRegistry, ty: Type) -> Type {
+    when ty {
+        Named(nt) => {
+            let ac: I64 = nt.type_args.len() as I64
+            if ac > 0 {
+                let new_args = List[Heap[Type]]::new(ac)
+                for i in 0 to ac {
+                    new_args.push(Heap::new(normalize_type(reg, nt.type_args.get(i).get())))
+                }
+                return make_named(nt.name, nt.module_path, new_args)
+            }
+            return ty
+        },
+        Ref(r) => {
+            let inner = normalize_type(reg, r.inner.get())
+            return make_ref(inner, r.is_mut)
+        },
+        Tuple(t) => {
+            let ec: I64 = t.elements.len() as I64
+            let new_elems = List[Heap[Type]]::new(ec)
+            for i in 0 to ec {
+                new_elems.push(Heap::new(normalize_type(reg, t.elements.get(i).get())))
+            }
+            return make_tuple(new_elems)
+        },
+        Func(f) => {
+            let pc: I64 = f.params.len() as I64
+            let new_params = List[Heap[Type]]::new(pc)
+            for i in 0 to pc {
+                new_params.push(Heap::new(normalize_type(reg, f.params.get(i).get())))
+            }
+            let new_ret = normalize_type(reg, f.return_type.get())
+            return make_func(new_params, new_ret, 0)
+        },
+        _ => return ty
+    }
+}

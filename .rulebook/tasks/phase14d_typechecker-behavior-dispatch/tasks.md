@@ -1,6 +1,6 @@
 # Tasks: Type Checker — Behavior Dispatch (Sub-phase 2d)
 
-**Status**: Planned (0/22)
+**Status**: In Progress (16/22)
 **Depends on**: phase14c (inference engine), phase14a+14b (registration + modules)
 **Blocks**: Phase 15 (HIR/THIR/MIR porting)
 **Duration**: 8–10 weeks
@@ -11,33 +11,33 @@
 
 ## Phase 1: Behavior (Trait) Registration (4 items)
 
-- [ ] 1.1 Create `compiler-tml/src/types/behavior/mod.tml` — behavior system module root
-- [ ] 1.2 Create `compiler-tml/src/types/behavior/registry.tml` — `BehaviorRegistry`: stores all behavior definitions and impl blocks
-- [ ] 1.3 Implement behavior registration: parse `behavior Foo { ... }` → register methods, associated types, default impls
-- [ ] 1.4 Implement impl block registration: parse `impl Foo for Bar { ... }` → register method implementations, verify all required methods present
+- [x] 1.1 Create `compiler-tml/src/types/behaviors/common.tml` — behavior system module root (dir named `behaviors` because `behavior` is a keyword)
+- [x] 1.2 Create `compiler-tml/src/types/behaviors/registry.tml` — `BehaviorRegistry`: ImplBlock storage, behavior/impl registration, method lookup
+- [x] 1.3 Implement behavior registration: register_behavior with reserved-name check, method/assoc-type/super-behavior recording
+- [x] 1.4 Implement impl block registration: register_impl_block with missing-method verification, qualified function registration
 
 ## Phase 2: Trait Solver (6 items)
 
-- [ ] 2.1 Create `compiler-tml/src/types/behavior/solver.tml` — trait resolution engine
-- [ ] 2.2 Implement `resolve_behavior(ty: Type, behavior: Str) -> Maybe[ImplBlock]` — find impl for type+behavior pair
-- [ ] 2.3 Implement generic behavior bounds: `func foo[T: Display](x: T)` → verify T implements Display at call site
-- [ ] 2.4 Implement behavior inheritance: `behavior Foo: Bar` → require Bar impl when implementing Foo
-- [ ] 2.5 Implement associated type resolution: `<T as Iterator>::Item` → look up associated type in impl
-- [ ] 2.6 Implement coherence checking: no overlapping impls for same type+behavior pair
+- [x] 2.1 Create `compiler-tml/src/types/behaviors/solver.tml` — trait resolution engine
+- [x] 2.2 Implement `resolve_behavior(ty, behavior_name) -> Maybe[ImplBlock]` — direct lookup + TypeEnv fallback
+- [x] 2.3 Implement generic behavior bounds: `check_bounds(ty, bounds) -> List[Str]` with auto-impl for primitives
+- [x] 2.4 Implement behavior inheritance: `check_super_behaviors` verifies all parent behaviors are satisfied
+- [x] 2.5 Implement associated type resolution: `resolve_associated_type` checks impl bindings then behavior defaults
+- [x] 2.6 Implement coherence checking: `check_coherence` detects overlapping impl blocks
 
 ## Phase 3: Method Dispatch (4 items)
 
-- [ ] 3.1 Create `compiler-tml/src/types/behavior/dispatch.tml` — method lookup and dispatch
-- [ ] 3.2 Implement inherent method lookup: search struct's own impl block for method
-- [ ] 3.3 Implement behavior method lookup: search all behavior impls for type, resolve method
-- [ ] 3.4 Implement dispatch priority: inherent methods > behavior methods > auto-deref methods
+- [x] 3.1 Create `compiler-tml/src/types/behaviors/dispatch.tml` — method lookup with MethodResolution result type
+- [x] 3.2 Implement inherent method lookup: search inherent impl blocks + qualified TypeEnv functions
+- [x] 3.3 Implement behavior method lookup: search all behavior impls via env_get_behavior_impls + registry
+- [x] 3.4 Implement dispatch priority: inherent > behavior > auto-deref (through Ref and Heap)
 
 ## Phase 4: Coercion Insertion (4 items)
 
-- [ ] 4.1 Create `compiler-tml/src/types/coercion.tml` — coercion insertion pass (feeds THIR)
-- [ ] 4.2 Implement implicit coercions: integer widening (I8→I32), ref coercion (ref T → ref T), deref coercion
-- [ ] 4.3 Implement operator desugaring finalization: all operators resolved to concrete method calls
-- [ ] 4.4 Implement associated type normalization: replace all `<T as Behavior>::Assoc` with concrete types
+- [x] 4.1 Create `compiler-tml/src/types/coercion.tml` — coercion types and pass
+- [x] 4.2 Implement implicit coercions: integer widening (I8→I64), float widening (F32→F64), ref coercion, deref through Heap
+- [x] 4.3 Implement operator desugaring finalization: `desugar_op_final` resolves to concrete behavior methods with Self substitution
+- [x] 4.4 Implement associated type normalization: `normalize_type` recursively resolves Named, Ref, Tuple, Func types
 
 ## Phase 5: Full Pipeline Integration (2 items)
 

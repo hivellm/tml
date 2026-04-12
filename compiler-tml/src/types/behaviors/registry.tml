@@ -1,0 +1,283 @@
+//! Behavior (trait) registry for the TML self-hosting type checker.
+//!
+//! Stores all behavior definitions and their impl blocks. The registry is
+//! populated during phase 3 (impl processing) and read-only during phase 4
+//! (body checking). Mirrors the behavior-related parts of C++
+//! `checker/core.cpp` and `types/env_lookups.cpp`.
+//!
+//! Phase 14d — items 1.2, 1.3, 1.4.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::type_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::BehaviorDef
+use compiler::types::env::AssociatedTypeDef
+use compiler::types::env::ConstGenericParam
+use compiler::types::env::env_lookup_behavior
+use compiler::types::env::env_register_behavior
+use compiler::types::env::env_register_impl
+use compiler::types::env::env_register_function
+use compiler::types::env::env_type_implements
+use compiler::types::env::env_get_behavior_impls
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// ImplBlock — records one `impl Behavior for Type` block
+// ============================================================================
+
+/// An impl block binding a type to a behavior.
+pub type ImplBlock {
+    type_name: Str,
+    behavior_name: Str,
+    methods: List[FuncSig],
+    type_bindings: HashMap[Str, Type],
+    type_params: List[Str],
+    span: SourceSpan
+}
+
+// ============================================================================
+// BehaviorRegistry — central store for behaviors + impls
+// ============================================================================
+
+/// The behavior registry stores all behavior definitions and their impl blocks.
+/// It wraps a TypeEnv and adds impl-block-specific storage.
+pub type BehaviorRegistry {
+    env: TypeEnv,
+    impl_blocks: List[ImplBlock],
+    impl_index: HashMap[Str, List[I64]],
+    errors: List[Str]
+}
+
+/// Create a new behavior registry wrapping a TypeEnv.
+pub func registry_new(env: TypeEnv) -> BehaviorRegistry {
+    return BehaviorRegistry {
+        env: env,
+        impl_blocks: List[ImplBlock]::new(32),
+        impl_index: HashMap[Str, List[I64]]::new(32),
+        errors: List[Str]::new(8)
+    }
+}
+
+// ============================================================================
+// Behavior registration (item 1.3)
+// ============================================================================
+
+/// Reserved behavior names that cannot be redefined by user code.
+pub func is_reserved_behavior(name: Str) -> Bool {
+    return name == "Eq" or name == "Ord" or name == "PartialEq" or
+           name == "PartialOrd" or name == "Hash" or name == "Display" or
+           name == "Debug" or name == "Duplicate" or name == "Default" or
+           name == "Iterator" or name == "Into" or name == "From" or
+           name == "Add" or name == "Sub" or name == "Mul" or name == "Div" or
+           name == "Rem" or name == "Neg" or name == "Not" or
+           name == "BitAnd" or name == "BitOr" or name == "BitXor" or
+           name == "Shl" or name == "Shr" or
+           name == "Index" or name == "IndexMut" or
+           name == "Fn" or name == "FnMut" or name == "FnOnce" or
+           name == "Drop" or name == "Send" or name == "Sync" or
+           name == "Sized"
+}
+
+/// Register a behavior definition into the registry.
+/// Returns false if the behavior name is reserved or already registered.
+pub func register_behavior(
+    reg: BehaviorRegistry,
+    name: Str,
+    type_params: List[Str],
+    const_params: List[ConstGenericParam],
+    associated_types: List[AssociatedTypeDef],
+    methods: List[FuncSig],
+    super_behaviors: List[Str],
+    methods_with_defaults: List[Str],
+    span: SourceSpan
+) -> Bool {
+    if is_reserved_behavior(name) {
+        reg.errors.push("Cannot redefine builtin behavior '" + name + "'")
+        return false
+    }
+
+    let def = BehaviorDef {
+        name: name,
+        type_params: type_params,
+        const_params: const_params,
+        associated_types: associated_types,
+        methods: methods,
+        super_behaviors: super_behaviors,
+        methods_with_defaults: methods_with_defaults,
+        span: span
+    }
+    return env_register_behavior(reg.env, name, def)
+}
+
+// ============================================================================
+// Impl block registration (item 1.4)
+// ============================================================================
+
+/// Register an impl block: `impl Behavior for Type { methods... }`.
+/// Verifies all required methods are present and registers the mapping.
+pub func register_impl_block(
+    reg: BehaviorRegistry,
+    type_name: Str,
+    behavior_name: Str,
+    methods: List[FuncSig],
+    type_bindings: HashMap[Str, Type],
+    type_params: List[Str],
+    span: SourceSpan
+) -> Bool {
+    // Check that the behavior exists
+    let bdef_r = env_lookup_behavior(reg.env, behavior_name)
+    when bdef_r {
+        Just(bdef) => {
+            // Verify all required methods are present
+            let missing = find_missing_methods(bdef, methods)
+            if missing.len() as I64 > 0 {
+                let mc: I64 = missing.len() as I64
+                for i in 0 to mc {
+                    reg.errors.push(
+                        "Impl of '" + behavior_name + "' for '" + type_name +
+                        "' is missing required method: " + missing.get(i)
+                    )
+                }
+            }
+        },
+        Nothing => {
+            // Inherent impl (no behavior) — always allowed
+        }
+    }
+
+    // Create and store the impl block
+    let block = ImplBlock {
+        type_name: type_name,
+        behavior_name: behavior_name,
+        methods: methods,
+        type_bindings: type_bindings,
+        type_params: type_params,
+        span: span
+    }
+    let idx: I64 = reg.impl_blocks.len() as I64
+    reg.impl_blocks.push(block)
+
+    // Index by type_name for fast lookup
+    let key = type_name
+    if reg.impl_index.has(key) {
+        let indices: List[I64] = reg.impl_index.get(key)
+        indices.push(idx)
+    } else {
+        let indices = List[I64]::new(4)
+        indices.push(idx)
+        reg.impl_index.set(key, indices)
+    }
+
+    // Register each method as a qualified function: TypeName::method
+    let mc: I64 = methods.len() as I64
+    for i in 0 to mc {
+        let msig = methods.get(i)
+        let qualified = type_name + "::" + msig.name
+        env_register_function(reg.env, qualified, msig)
+    }
+
+    // Record the impl relationship in TypeEnv
+    if behavior_name != "" {
+        env_register_impl(reg.env, type_name, behavior_name)
+    }
+
+    return true
+}
+
+/// Find required methods from a behavior that are missing in an impl.
+func find_missing_methods(bdef: BehaviorDef, impl_methods: List[FuncSig]) -> List[Str] {
+    let missing = List[Str]::new(4)
+    let required_count: I64 = bdef.methods.len() as I64
+    let defaults_count: I64 = bdef.methods_with_defaults.len() as I64
+
+    for i in 0 to required_count {
+        let required_name = bdef.methods.get(i).name
+
+        // Skip if has a default implementation
+        var has_default: Bool = false
+        for d in 0 to defaults_count {
+            if bdef.methods_with_defaults.get(d) == required_name {
+                has_default = true
+            }
+        }
+        if has_default { continue }
+
+        // Check if impl provides this method
+        var found: Bool = false
+        let impl_count: I64 = impl_methods.len() as I64
+        for j in 0 to impl_count {
+            if impl_methods.get(j).name == required_name {
+                found = true
+            }
+        }
+        if not found {
+            missing.push(required_name)
+        }
+    }
+    return missing
+}
+
+// ============================================================================
+// Impl block lookup
+// ============================================================================
+
+/// Find all impl blocks for a given type name.
+pub func get_impl_blocks(reg: BehaviorRegistry, type_name: Str) -> List[ImplBlock] {
+    let result = List[ImplBlock]::new(4)
+    if not reg.impl_index.has(type_name) { return result }
+
+    let indices: List[I64] = reg.impl_index.get(type_name)
+    let ic: I64 = indices.len() as I64
+    for i in 0 to ic {
+        let idx = indices.get(i)
+        result.push(reg.impl_blocks.get(idx))
+    }
+    return result
+}
+
+/// Find the impl block for a specific type+behavior pair.
+pub func find_impl(reg: BehaviorRegistry, type_name: Str, behavior_name: Str) -> Maybe[ImplBlock] {
+    if not reg.impl_index.has(type_name) { return Nothing }
+
+    let indices: List[I64] = reg.impl_index.get(type_name)
+    let ic: I64 = indices.len() as I64
+    for i in 0 to ic {
+        let idx = indices.get(i)
+        let block = reg.impl_blocks.get(idx)
+        if block.behavior_name == behavior_name {
+            return Just(block)
+        }
+    }
+    return Nothing
+}
+
+/// Find a method in the impl blocks for a type.
+/// Returns the method signature and which impl block it came from.
+pub func find_method_in_impls(
+    reg: BehaviorRegistry,
+    type_name: Str,
+    method_name: Str
+) -> Maybe[FuncSig] {
+    if not reg.impl_index.has(type_name) { return Nothing }
+
+    let indices: List[I64] = reg.impl_index.get(type_name)
+    let ic: I64 = indices.len() as I64
+    for i in 0 to ic {
+        let idx = indices.get(i)
+        let block = reg.impl_blocks.get(idx)
+        let mc: I64 = block.methods.len() as I64
+        for j in 0 to mc {
+            let msig = block.methods.get(j)
+            if msig.name == method_name {
+                return Just(msig)
+            }
+        }
+    }
+    return Nothing
+}
