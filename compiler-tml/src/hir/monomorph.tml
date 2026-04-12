@@ -1,0 +1,134 @@
+//! Monomorphization engine for the HIR builder.
+//!
+//! When a generic function or type is used with concrete type arguments,
+//! the monomorphizer generates a specialized version. Uses a worklist
+//! algorithm with cycle detection to handle recursive generics.
+//!
+//! Phase 15a — items 4.1–4.3.
+
+use compiler::types::ty::Type
+use compiler::types::ty::type_to_str
+use compiler::hir::module::HirModule
+use compiler::hir::module::HirFunction
+use compiler::hir::module::HirStruct
+use compiler::hir::module::HirEnum
+use compiler::hir::builder::HirBuilder
+use compiler::hir::builder::mangle_name
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Monomorphization request
+// ============================================================================
+
+/// A pending monomorphization request.
+pub type MonoRequest {
+    base_name: Str,
+    type_args: List[Type],
+    mangled: Str
+}
+
+// ============================================================================
+// MonomorphQueue — worklist for generic instantiations (item 4.3)
+// ============================================================================
+
+/// The monomorphization queue. Collects instantiation requests and
+/// processes them iteratively until no new requests are generated.
+pub type MonomorphQueue {
+    pending: List[MonoRequest],
+    processed: HashMap[Str, I64],
+    max_depth: I64
+}
+
+/// Create a new monomorphization queue.
+pub func mono_queue_new() -> MonomorphQueue {
+    return MonomorphQueue {
+        pending: List[MonoRequest]::new(32),
+        processed: HashMap[Str, I64]::new(64),
+        max_depth: 64
+    }
+}
+
+/// Request monomorphization of a generic function/type.
+/// Returns the mangled name. Does nothing if already processed or pending.
+pub func request_mono(q: MonomorphQueue, base_name: Str, type_args: List[Type]) -> Str {
+    let mangled = mangle_name(base_name, type_args)
+
+    // Skip if already processed or pending
+    if q.processed.has(mangled) { return mangled }
+
+    q.processed.set(mangled, 1)
+    q.pending.push(MonoRequest {
+        base_name: base_name,
+        type_args: type_args,
+        mangled: mangled
+    })
+    return mangled
+}
+
+/// Check if the queue has pending requests.
+pub func has_pending(q: MonomorphQueue) -> Bool {
+    return q.pending.len() as I64 > 0
+}
+
+/// Take all pending requests (drains the queue).
+pub func drain_pending(q: MonomorphQueue) -> List[MonoRequest] {
+    let result = q.pending
+    q.pending = List[MonoRequest]::new(16)
+    return result
+}
+
+// ============================================================================
+// Monomorphization processing (item 4.2)
+// ============================================================================
+
+/// Process all pending monomorphization requests for a module.
+/// Iterates until fixpoint — new requests generated during processing
+/// are added to the queue and processed in subsequent iterations.
+pub func process_monomorphizations(
+    b: HirBuilder,
+    hmod: HirModule,
+    queue: MonomorphQueue
+) {
+    var depth: I64 = 0
+    loop (has_pending(queue) and depth < queue.max_depth) {
+        let batch = drain_pending(queue)
+        let bc: I64 = batch.len() as I64
+
+        for i in 0 to bc {
+            let req = batch.get(i)
+            // For each request, look up the generic definition and
+            // generate a specialized version with substituted types.
+            // The specialized function/struct/enum gets the mangled name.
+
+            // Note: Full implementation requires looking up the original
+            // generic AST declaration and re-lowering it with type substitutions.
+            // This is deferred until the full pipeline integration connects
+            // the AST storage with the monomorphizer.
+        }
+
+        depth = depth + 1
+    }
+}
+
+// ============================================================================
+// Name mangling utilities (item 4.4 — extended)
+// ============================================================================
+
+/// Sanitize a mangled name: replace invalid characters with underscores.
+pub func sanitize_mangled_name(name: Str) -> Str {
+    // For now, return as-is. Full sanitization (replacing [, ], <, >, etc.)
+    // will be implemented when the codegen needs clean symbol names.
+    return name
+}
+
+/// Build a mangled name for a method: `Type_method` or `Type_Behavior_method`.
+pub func mangle_method(type_name: Str, method_name: Str) -> Str {
+    return type_name + "_" + method_name
+}
+
+/// Build a mangled name for a behavior impl method.
+pub func mangle_impl_method(type_name: Str, bhv_name: Str, method_name: Str) -> Str {
+    return type_name + "_" + bhv_name + "_" + method_name
+}

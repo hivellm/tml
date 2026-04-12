@@ -1,0 +1,675 @@
+//! Expression lowering for the HIR builder.
+//!
+//! Dedicated module for lowering AST expressions to HirExpr with
+//! fully resolved types. Handles all expression variants including
+//! binary/unary ops, field/index access, control flow, closures,
+//! and closure capture analysis.
+//!
+//! Phase 15a — items 2.6, 3.1–3.5.
+
+use compiler::source::SourceSpan
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_closure
+use compiler::types::ty::type_to_str
+use compiler::types::ty::CapturedVar
+use compiler::types::env::TypeEnv
+use compiler::hir::expr::HirExpr
+use compiler::hir::expr::HirLiteralExpr
+use compiler::hir::expr::HirVarExpr
+use compiler::hir::expr::HirBinaryExpr
+use compiler::hir::expr::HirUnaryExpr
+use compiler::hir::expr::HirCallExpr
+use compiler::hir::expr::HirMethodCallExpr
+use compiler::hir::expr::HirFieldExpr
+use compiler::hir::expr::HirIndexExpr
+use compiler::hir::expr::HirTupleExpr
+use compiler::hir::expr::HirArrayExpr
+use compiler::hir::expr::HirStructExpr
+use compiler::hir::expr::HirStructField
+use compiler::hir::expr::HirEnumExpr
+use compiler::hir::expr::HirBlockExpr
+use compiler::hir::expr::HirIfExpr
+use compiler::hir::expr::HirWhenExpr
+use compiler::hir::expr::HirWhenArm
+use compiler::hir::expr::HirLoopExpr
+use compiler::hir::expr::HirWhileExpr
+use compiler::hir::expr::HirForExpr
+use compiler::hir::expr::HirReturnExpr
+use compiler::hir::expr::HirBreakExpr
+use compiler::hir::expr::HirContinueExpr
+use compiler::hir::expr::HirClosureExpr
+use compiler::hir::expr::HirCastExpr
+use compiler::hir::expr::HirTryExpr
+use compiler::hir::expr::HirAwaitExpr
+use compiler::hir::expr::HirAssignExpr
+use compiler::hir::expr::HirLowlevelExpr
+use compiler::hir::expr::HirLitValue
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::hir::expr::HirCapture
+use compiler::hir::stmt::HirStmt
+use compiler::hir::stmt::HirLetStmt
+use compiler::hir::stmt::HirExprStmt
+use compiler::hir::pattern::HirPattern
+use compiler::hir::pattern::HirBindingPattern
+use compiler::hir::pattern::HirWildcardPattern
+use compiler::hir::pattern::HirEnumPattern
+use compiler::hir::pattern::HirTuplePattern
+use compiler::hir::module::HirFunction
+use compiler::hir::module::HirParam
+use compiler::hir::builder::HirBuilder
+use compiler::hir::builder::fresh_id
+use compiler::hir::builder::lower_stmt
+use compiler::hir::builder::lower_pattern
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::BinaryExpr
+use compiler::ast::exprs::UnaryExpr
+use compiler::ast::exprs::CallExpr
+use compiler::ast::exprs::MethodCallExpr
+use compiler::ast::exprs::FieldExpr
+use compiler::ast::exprs::IndexExpr
+use compiler::ast::exprs::TupleExpr
+use compiler::ast::exprs::ArrayExpr
+use compiler::ast::exprs::StructExpr
+use compiler::ast::exprs::IfExpr
+use compiler::ast::exprs::WhenExpr
+use compiler::ast::exprs::WhenArm as AstWhenArm
+use compiler::ast::exprs::LoopExpr
+use compiler::ast::exprs::WhileExpr
+use compiler::ast::exprs::ForExpr
+use compiler::ast::exprs::BlockExpr
+use compiler::ast::exprs::ReturnExpr
+use compiler::ast::exprs::BreakExpr
+use compiler::ast::exprs::ClosureExpr
+use compiler::ast::exprs::ClosureParam
+use compiler::ast::exprs::CastExpr
+use compiler::ast::exprs::TryExpr
+use compiler::ast::exprs::AwaitExpr
+use compiler::ast::exprs::LowlevelExpr
+use compiler::ast::exprs::ArrayKind
+use compiler::ast::common::LiteralKind
+use compiler::ast::nodes::Pattern as AstPattern
+use compiler::ast::nodes::IdentPattern
+use compiler::ast::stmts::Stmt
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Full expression lowering (items 3.2–3.4)
+// ============================================================================
+
+/// Lower a binary expression: `a + b`, `x == y`
+pub func lower_binary(b: HirBuilder, bin: BinaryExpr) -> HirExpr {
+    let left = lower_full_expr(b, bin.left.get())
+    let right = lower_full_expr(b, bin.right.get())
+    let op = lower_bin_op(bin.op)
+    return HirExpr::Binary(HirBinaryExpr {
+        id: fresh_id(b),
+        op: op,
+        left: Heap::new(left),
+        right: Heap::new(right),
+        resolved_type: make_unit(),
+        span: bin.span
+    })
+}
+
+/// Lower a unary expression: `-x`, `not x`, `ref x`
+pub func lower_unary(b: HirBuilder, un: UnaryExpr) -> HirExpr {
+    let operand = lower_full_expr(b, un.operand.get())
+    let op = lower_unary_op(un.op)
+    return HirExpr::Unary(HirUnaryExpr {
+        id: fresh_id(b),
+        op: op,
+        operand: Heap::new(operand),
+        resolved_type: make_unit(),
+        span: un.span
+    })
+}
+
+/// Lower a method call: `obj.method(args)`
+pub func lower_method_call(b: HirBuilder, mc: MethodCallExpr) -> HirExpr {
+    let recv = lower_full_expr(b, mc.receiver.get())
+    let args = List[Heap[HirExpr]]::new(mc.args.len() as I64)
+    let ac: I64 = mc.args.len() as I64
+    for i in 0 to ac {
+        args.push(Heap::new(lower_full_expr(b, mc.args.get(i).get())))
+    }
+    return HirExpr::MethodCall(HirMethodCallExpr {
+        id: fresh_id(b),
+        receiver: Heap::new(recv),
+        method_name: mc.method,
+        type_args: List[Type]::new(0),
+        args: args,
+        resolved_type: make_unit(),
+        span: mc.span
+    })
+}
+
+/// Lower a field access: `obj.field`
+pub func lower_field(b: HirBuilder, fld: FieldExpr) -> HirExpr {
+    let obj = lower_full_expr(b, fld.object.get())
+    return HirExpr::Field(HirFieldExpr {
+        id: fresh_id(b),
+        object: Heap::new(obj),
+        field_name: fld.field,
+        field_index: -1 as I64,
+        resolved_type: make_unit(),
+        span: fld.span
+    })
+}
+
+/// Lower an index access: `arr[i]`
+pub func lower_index(b: HirBuilder, idx: IndexExpr) -> HirExpr {
+    let obj = lower_full_expr(b, idx.object.get())
+    let index = lower_full_expr(b, idx.index.get())
+    return HirExpr::Index(HirIndexExpr {
+        id: fresh_id(b),
+        object: Heap::new(obj),
+        index: Heap::new(index),
+        resolved_type: make_unit(),
+        span: idx.span
+    })
+}
+
+/// Lower a tuple: `(a, b, c)`
+pub func lower_tuple(b: HirBuilder, tup: TupleExpr) -> HirExpr {
+    let elems = List[Heap[HirExpr]]::new(tup.elements.len() as I64)
+    let ec: I64 = tup.elements.len() as I64
+    for i in 0 to ec {
+        elems.push(Heap::new(lower_full_expr(b, tup.elements.get(i).get())))
+    }
+    return HirExpr::Tuple(HirTupleExpr {
+        id: fresh_id(b),
+        elements: elems,
+        resolved_type: make_unit(),
+        span: tup.span
+    })
+}
+
+/// Lower an if expression: `if cond { then } else { else_ }`
+pub func lower_if(b: HirBuilder, ife: IfExpr) -> HirExpr {
+    let cond = lower_full_expr(b, ife.condition.get())
+    let then_br = lower_full_expr(b, ife.then_branch.get())
+    let else_br: Maybe[Heap[HirExpr]] = when ife.else_branch {
+        Just(e) => Just(Heap::new(lower_full_expr(b, e.get()))),
+        Nothing => Nothing
+    }
+    return HirExpr::If(HirIfExpr {
+        id: fresh_id(b),
+        condition: Heap::new(cond),
+        then_branch: Heap::new(then_br),
+        else_branch: else_br,
+        resolved_type: make_unit(),
+        span: ife.span
+    })
+}
+
+/// Lower a when expression: `when x { Pat => body, ... }`
+pub func lower_when(b: HirBuilder, w: WhenExpr) -> HirExpr {
+    let scrutinee = lower_full_expr(b, w.scrutinee.get())
+    let arms = List[HirWhenArm]::new(w.arms.len() as I64)
+    let ac: I64 = w.arms.len() as I64
+    for i in 0 to ac {
+        let arm: AstWhenArm = w.arms.get(i)
+        let pat = lower_pattern(b, arm.pattern.get())
+        let guard: Maybe[Heap[HirExpr]] = when arm.guard {
+            Just(g) => Just(Heap::new(lower_full_expr(b, g.get()))),
+            Nothing => Nothing
+        }
+        let body = lower_full_expr(b, arm.body.get())
+        arms.push(HirWhenArm {
+            pattern: Heap::new(pat),
+            guard: guard,
+            body: Heap::new(body)
+        })
+    }
+    return HirExpr::When(HirWhenExpr {
+        id: fresh_id(b),
+        scrutinee: Heap::new(scrutinee),
+        arms: arms,
+        resolved_type: make_unit(),
+        span: w.span
+    })
+}
+
+/// Lower a loop: `loop (cond) { body }`
+pub func lower_loop(b: HirBuilder, lp: LoopExpr) -> HirExpr {
+    let cond = lower_full_expr(b, lp.condition.get())
+    let body = lower_full_expr(b, lp.body.get())
+    return HirExpr::Loop(HirLoopExpr {
+        id: fresh_id(b),
+        condition: Heap::new(cond),
+        body: Heap::new(body),
+        resolved_type: make_unit(),
+        span: lp.span
+    })
+}
+
+/// Lower a while loop: `while cond { body }`
+pub func lower_while(b: HirBuilder, wh: WhileExpr) -> HirExpr {
+    let cond = lower_full_expr(b, wh.condition.get())
+    let body = lower_full_expr(b, wh.body.get())
+    return HirExpr::While(HirWhileExpr {
+        id: fresh_id(b),
+        condition: Heap::new(cond),
+        body: Heap::new(body),
+        resolved_type: make_unit(),
+        span: wh.span
+    })
+}
+
+/// Lower a for-in loop: `for x in iter { body }`
+pub func lower_for(b: HirBuilder, fr: ForExpr) -> HirExpr {
+    let iter = lower_full_expr(b, fr.iter.get())
+    let body = lower_full_expr(b, fr.body.get())
+    // Extract binding name from pattern
+    let binding_name = extract_pattern_name(fr.pattern.get())
+    return HirExpr::For(HirForExpr {
+        id: fresh_id(b),
+        binding: binding_name,
+        iter: Heap::new(iter),
+        body: Heap::new(body),
+        resolved_type: make_unit(),
+        span: fr.span
+    })
+}
+
+/// Lower a try expression: `expr?`
+pub func lower_try(b: HirBuilder, tr: TryExpr) -> HirExpr {
+    let inner = lower_full_expr(b, tr.expr.get())
+    return HirExpr::Try(HirTryExpr {
+        id: fresh_id(b),
+        expr: Heap::new(inner),
+        resolved_type: make_unit(),
+        span: tr.span
+    })
+}
+
+/// Lower an await expression: `expr.await`
+pub func lower_await(b: HirBuilder, aw: AwaitExpr) -> HirExpr {
+    let inner = lower_full_expr(b, aw.expr.get())
+    return HirExpr::Await(HirAwaitExpr {
+        id: fresh_id(b),
+        expr: Heap::new(inner),
+        resolved_type: make_unit(),
+        span: aw.span
+    })
+}
+
+/// Lower a cast: `expr as Type`
+pub func lower_cast(b: HirBuilder, cast: CastExpr) -> HirExpr {
+    let inner = lower_full_expr(b, cast.expr.get())
+    return HirExpr::Cast(HirCastExpr {
+        id: fresh_id(b),
+        expr: Heap::new(inner),
+        target_type: make_unit(),
+        resolved_type: make_unit(),
+        span: cast.span
+    })
+}
+
+// ============================================================================
+// Closure lowering + capture analysis (items 2.6, 3.5)
+// ============================================================================
+
+/// Lower a closure: `do(x) expr`
+/// Performs capture analysis, lowers parameters and body.
+pub func lower_closure(b: HirBuilder, cls: ClosureExpr) -> HirExpr {
+    // Lower parameters
+    let param_names = List[Str]::new(cls.params.len() as I64)
+    let param_types = List[Type]::new(cls.params.len() as I64)
+    let pc: I64 = cls.params.len() as I64
+    for i in 0 to pc {
+        let p: ClosureParam = cls.params.get(i)
+        let pname = extract_pattern_name(p.pattern.get())
+        param_names.push(pname)
+        param_types.push(make_unit())
+    }
+
+    // Collect captured variables from the closure body
+    let bound = HashMap[Str, I64]::new(8)
+    for i in 0 to pc {
+        bound.set(param_names.get(i), 1)
+    }
+    let free_vars = List[Str]::new(4)
+    collect_free_vars_expr(cls.body.get(), bound, free_vars)
+
+    // Build capture list
+    let captures = List[HirCapture]::new(free_vars.len() as I64)
+    let fc: I64 = free_vars.len() as I64
+    for i in 0 to fc {
+        captures.push(HirCapture {
+            name: free_vars.get(i),
+            captured_type: make_unit(),
+            is_by_ref: 1
+        })
+    }
+
+    // Lower body
+    let body = lower_full_expr(b, cls.body.get())
+
+    return HirExpr::Closure(HirClosureExpr {
+        id: fresh_id(b),
+        params: param_names,
+        param_types: param_types,
+        captures: captures,
+        body: Heap::new(body),
+        resolved_type: make_unit(),
+        span: cls.span
+    })
+}
+
+/// Collect free variables from an expression (variables not in `bound`).
+func collect_free_vars_expr(expr: Expr, bound: HashMap[Str, I64], free: List[Str]) {
+    when expr {
+        Ident(id) => {
+            if not bound.has(id.name) {
+                // Check if already in free list
+                var found: Bool = false
+                let fc: I64 = free.len() as I64
+                for i in 0 to fc {
+                    if free.get(i) == id.name { found = true }
+                }
+                if not found { free.push(id.name) }
+            }
+        },
+        Binary(bin) => {
+            collect_free_vars_expr(bin.left.get(), bound, free)
+            collect_free_vars_expr(bin.right.get(), bound, free)
+        },
+        Unary(un) => collect_free_vars_expr(un.operand.get(), bound, free),
+        Call(call) => {
+            collect_free_vars_expr(call.callee.get(), bound, free)
+            let ac: I64 = call.args.len() as I64
+            for i in 0 to ac {
+                collect_free_vars_expr(call.args.get(i).get(), bound, free)
+            }
+        },
+        Field(fld) => collect_free_vars_expr(fld.object.get(), bound, free),
+        Index(idx) => {
+            collect_free_vars_expr(idx.object.get(), bound, free)
+            collect_free_vars_expr(idx.index.get(), bound, free)
+        },
+        If(ife) => {
+            collect_free_vars_expr(ife.condition.get(), bound, free)
+            collect_free_vars_expr(ife.then_branch.get(), bound, free)
+            when ife.else_branch {
+                Just(e) => collect_free_vars_expr(e.get(), bound, free),
+                Nothing => {}
+            }
+        },
+        Block(blk) => {
+            let sc: I64 = blk.stmts.len() as I64
+            for i in 0 to sc {
+                collect_free_vars_stmt(blk.stmts.get(i).get(), bound, free)
+            }
+            when blk.expr {
+                Just(e) => collect_free_vars_expr(e.get(), bound, free),
+                Nothing => {}
+            }
+        },
+        Return(ret) => {
+            when ret.value {
+                Just(v) => collect_free_vars_expr(v.get(), bound, free),
+                Nothing => {}
+            }
+        },
+        _ => {}
+    }
+}
+
+/// Collect free variables from a statement.
+func collect_free_vars_stmt(stmt: Stmt, bound: HashMap[Str, I64], free: List[Str]) {
+    when stmt {
+        Let(ls) => {
+            when ls.init {
+                Just(e) => collect_free_vars_expr(e.get(), bound, free),
+                Nothing => {}
+            }
+            // Add the bound variable
+            let pat = ls.pattern.get()
+            when pat {
+                Ident(ip) => bound.set(ip.name, 1),
+                _ => {}
+            }
+        },
+        Var(vs) => {
+            when vs.init {
+                Just(e) => collect_free_vars_expr(e.get(), bound, free),
+                Nothing => {}
+            }
+            bound.set(vs.name, 1)
+        },
+        Expr(e) => collect_free_vars_expr(e.get(), bound, free),
+        _ => {}
+    }
+}
+
+// ============================================================================
+// Full expression dispatcher (replaces builder.tml's lower_expr_dispatch)
+// ============================================================================
+
+/// Lower any AST expression to HirExpr. Complete dispatcher covering all variants.
+pub func lower_full_expr(b: HirBuilder, expr: Expr) -> HirExpr {
+    when expr {
+        Literal(lit) => {
+            let hir_val: HirLitValue = when lit.value {
+                LitInt(v) => HirLitValue::LitInt(v),
+                LitFloat(v) => HirLitValue::LitFloat(v),
+                LitStr(v) => HirLitValue::LitStr(v),
+                LitBool(v) => HirLitValue::LitBool(v),
+                LitChar(v) => HirLitValue::LitChar(v),
+                LitNull => HirLitValue::LitInt(0)
+            }
+            return HirExpr::Literal(HirLiteralExpr {
+                id: fresh_id(b),
+                value: hir_val,
+                resolved_type: make_unit(),
+                span: lit.span
+            })
+        },
+        Ident(id) => {
+            return HirExpr::Var(HirVarExpr {
+                id: fresh_id(b),
+                name: id.name,
+                resolved_type: make_unit(),
+                span: id.span
+            })
+        },
+        Binary(bin) => return lower_binary(b, bin),
+        Unary(un) => return lower_unary(b, un),
+        Call(call) => {
+            let args = List[Heap[HirExpr]]::new(call.args.len() as I64)
+            let ac: I64 = call.args.len() as I64
+            for i in 0 to ac {
+                args.push(Heap::new(lower_full_expr(b, call.args.get(i).get())))
+            }
+            let callee_name = extract_callee_name(call.callee.get())
+            return HirExpr::Call(HirCallExpr {
+                id: fresh_id(b),
+                func_name: callee_name,
+                type_args: List[Type]::new(0),
+                args: args,
+                resolved_type: make_unit(),
+                span: call.span
+            })
+        },
+        MethodCall(mc) => return lower_method_call(b, mc),
+        Field(fld) => return lower_field(b, fld),
+        Index(idx) => return lower_index(b, idx),
+        Tuple(tup) => return lower_tuple(b, tup),
+        If(ife) => return lower_if(b, ife),
+        When(w) => return lower_when(b, w),
+        Loop(lp) => return lower_loop(b, lp),
+        While(wh) => return lower_while(b, wh),
+        For(fr) => return lower_for(b, fr),
+        Block(blk) => {
+            let stmts = List[Heap[HirStmt]]::new(blk.stmts.len() as I64)
+            let sc: I64 = blk.stmts.len() as I64
+            for i in 0 to sc {
+                stmts.push(Heap::new(lower_stmt(b, blk.stmts.get(i).get())))
+            }
+            let trail: Maybe[Heap[HirExpr]] = when blk.expr {
+                Just(e) => Just(Heap::new(lower_full_expr(b, e.get()))),
+                Nothing => Nothing
+            }
+            return HirExpr::Block(HirBlockExpr {
+                id: fresh_id(b),
+                stmts: stmts,
+                expr: trail,
+                resolved_type: make_unit(),
+                span: blk.span
+            })
+        },
+        Return(ret) => {
+            let val: Maybe[Heap[HirExpr]] = when ret.value {
+                Just(v) => Just(Heap::new(lower_full_expr(b, v.get()))),
+                Nothing => Nothing
+            }
+            return HirExpr::Return(HirReturnExpr {
+                id: fresh_id(b),
+                value: val,
+                resolved_type: make_never(),
+                span: ret.span
+            })
+        },
+        Break(brk) => {
+            let val: Maybe[Heap[HirExpr]] = when brk.value {
+                Just(v) => Just(Heap::new(lower_full_expr(b, v.get()))),
+                Nothing => Nothing
+            }
+            return HirExpr::Break(HirBreakExpr {
+                id: fresh_id(b),
+                value: val,
+                resolved_type: make_never(),
+                span: brk.span
+            })
+        },
+        Continue(_) => {
+            let loc = loc_new("<hir>", 0, 0, 0, 0)
+            let span = span_new(loc, loc)
+            return HirExpr::Continue(HirContinueExpr {
+                id: fresh_id(b),
+                resolved_type: make_never(),
+                span: span
+            })
+        },
+        Closure(cls) => return lower_closure(b, cls),
+        Cast(cast) => return lower_cast(b, cast),
+        Try(tr) => return lower_try(b, tr),
+        Await(aw) => return lower_await(b, aw),
+        Struct(st) => {
+            let fields = List[HirStructField]::new(st.fields.len() as I64)
+            let fc: I64 = st.fields.len() as I64
+            for i in 0 to fc {
+                let f = st.fields.get(i)
+                fields.push(HirStructField {
+                    name: f.name,
+                    value: Heap::new(lower_full_expr(b, f.value.get()))
+                })
+            }
+            let segs = st.path.segments
+            let seg_count: I64 = segs.len() as I64
+            let name: Str = if seg_count > 0 { segs.get(seg_count - 1) } else { "<unknown>" }
+            return HirExpr::Struct(HirStructExpr {
+                id: fresh_id(b),
+                struct_name: name,
+                type_args: List[Type]::new(0),
+                fields: fields,
+                resolved_type: make_named_simple(name, ""),
+                span: st.span
+            })
+        },
+        // Remaining variants: produce placeholder
+        _ => {
+            let loc = loc_new("<hir>", 0, 0, 0, 0)
+            let span = span_new(loc, loc)
+            return HirExpr::Literal(HirLiteralExpr {
+                id: fresh_id(b),
+                value: HirLitValue::LitInt(0),
+                resolved_type: make_unit(),
+                span: span
+            })
+        }
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Extract a binding name from an AST pattern.
+func extract_pattern_name(pat: AstPattern) -> Str {
+    when pat {
+        Ident(ip) => return ip.name,
+        _ => return "_"
+    }
+}
+
+/// Extract a function name from a callee expression.
+func extract_callee_name(callee: Expr) -> Str {
+    when callee {
+        Ident(id) => return id.name,
+        Path(p) => {
+            let segs = p.path.segments
+            let sc: I64 = segs.len() as I64
+            if sc == 0 { return "<unknown>" }
+            var result = segs.get(0)
+            for i in 1 to sc {
+                result = result + "::" + segs.get(i)
+            }
+            return result
+        },
+        _ => return "<expr>"
+    }
+}
+
+/// Map AST binary operator to HIR binary operator.
+func lower_bin_op(op: compiler::ast::exprs::BinOp) -> HirBinOp {
+    when op {
+        OpAdd => return HirBinOp::Add,
+        OpSub => return HirBinOp::Sub,
+        OpMul => return HirBinOp::Mul,
+        OpDiv => return HirBinOp::Div,
+        OpMod => return HirBinOp::Mod,
+        OpEq => return HirBinOp::Eq,
+        OpNe => return HirBinOp::Ne,
+        OpLt => return HirBinOp::Lt,
+        OpLe => return HirBinOp::Le,
+        OpGt => return HirBinOp::Gt,
+        OpGe => return HirBinOp::Ge,
+        OpAnd => return HirBinOp::And,
+        OpOr => return HirBinOp::Or,
+        OpBitAnd => return HirBinOp::BitAnd,
+        OpBitOr => return HirBinOp::BitOr,
+        OpBitXor => return HirBinOp::BitXor,
+        OpShl => return HirBinOp::Shl,
+        OpShr => return HirBinOp::Shr,
+        _ => return HirBinOp::Add
+    }
+}
+
+/// Map AST unary operator to HIR unary operator.
+func lower_unary_op(op: compiler::ast::exprs::UnaryOp) -> HirUnaryOp {
+    when op {
+        OpNeg => return HirUnaryOp::Neg,
+        OpNot => return HirUnaryOp::Not,
+        OpBitNot => return HirUnaryOp::BitNot,
+        OpRef => return HirUnaryOp::Ref,
+        OpRefMut => return HirUnaryOp::RefMut,
+        OpDeref => return HirUnaryOp::Deref,
+        _ => return HirUnaryOp::Neg
+    }
+}

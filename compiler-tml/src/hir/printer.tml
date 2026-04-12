@@ -1,0 +1,257 @@
+//! HIR pretty-printer for debugging.
+//!
+//! Produces a human-readable text representation of HirModule,
+//! HirFunction, HirExpr, etc. Used for debugging the HIR builder
+//! and for differential testing (comparing output with C++ printer).
+//!
+//! Phase 15a — item 5.1.
+
+use compiler::types::ty::Type
+use compiler::types::ty::type_to_str
+use compiler::hir::expr::HirExpr
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::hir::expr::HirLitValue
+use compiler::hir::expr::hir_expr_type
+use compiler::hir::stmt::HirStmt
+use compiler::hir::pattern::HirPattern
+use compiler::hir::module::HirModule
+use compiler::hir::module::HirFunction
+use compiler::hir::module::HirStruct
+use compiler::hir::module::HirEnum
+use compiler::hir::module::HirImpl
+use compiler::hir::module::HirConst
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Module printing
+// ============================================================================
+
+/// Pretty-print an entire HirModule.
+pub func print_module(hmod: HirModule) -> Str {
+    var out = "HIR Module: " + hmod.name + "\n"
+
+    let sc: I64 = hmod.structs.len() as I64
+    for i in 0 to sc {
+        out = out + print_struct(hmod.structs.get(i))
+    }
+
+    let ec: I64 = hmod.enums.len() as I64
+    for i in 0 to ec {
+        out = out + print_enum(hmod.enums.get(i))
+    }
+
+    let fc: I64 = hmod.functions.len() as I64
+    for i in 0 to fc {
+        out = out + print_function(hmod.functions.get(i))
+    }
+
+    let ic: I64 = hmod.impls.len() as I64
+    for i in 0 to ic {
+        out = out + print_impl(hmod.impls.get(i))
+    }
+
+    return out
+}
+
+// ============================================================================
+// Declaration printing
+// ============================================================================
+
+/// Print a function declaration.
+pub func print_function(f: HirFunction) -> Str {
+    var out = "  func " + f.mangled_name + "("
+    let pc: I64 = f.params.len() as I64
+    for i in 0 to pc {
+        if i > 0 { out = out + ", " }
+        let p = f.params.get(i)
+        out = out + p.name + ": " + type_to_str(p.param_type)
+    }
+    out = out + ") -> " + type_to_str(f.return_type)
+
+    when f.body {
+        Just(body) => {
+            out = out + " {\n"
+            out = out + print_expr_indent(body.get(), 2)
+            out = out + "  }\n"
+        },
+        Nothing => { out = out + " [extern]\n" }
+    }
+    return out
+}
+
+/// Print a struct declaration.
+pub func print_struct(s: HirStruct) -> Str {
+    var out = "  type " + s.mangled_name + " {\n"
+    let fc: I64 = s.fields.len() as I64
+    for i in 0 to fc {
+        let f = s.fields.get(i)
+        out = out + "    " + f.name + ": " + type_to_str(f.field_type) + "\n"
+    }
+    out = out + "  }\n"
+    return out
+}
+
+/// Print an enum declaration.
+pub func print_enum(e: HirEnum) -> Str {
+    var out = "  enum " + e.mangled_name + " {\n"
+    let vc: I64 = e.variants.len() as I64
+    for i in 0 to vc {
+        let v = e.variants.get(i)
+        out = out + "    " + v.name
+        let pc: I64 = v.payload_types.len() as I64
+        if pc > 0 {
+            out = out + "("
+            for j in 0 to pc {
+                if j > 0 { out = out + ", " }
+                out = out + type_to_str(v.payload_types.get(j))
+            }
+            out = out + ")"
+        }
+        out = out + "\n"
+    }
+    out = out + "  }\n"
+    return out
+}
+
+/// Print an impl block.
+pub func print_impl(im: HirImpl) -> Str {
+    var out = "  impl"
+    if im.behavior_name != "" {
+        out = out + " " + im.behavior_name + " for"
+    }
+    out = out + " " + im.type_name + " {\n"
+    let mc: I64 = im.methods.len() as I64
+    for i in 0 to mc {
+        out = out + "  " + print_function(im.methods.get(i))
+    }
+    out = out + "  }\n"
+    return out
+}
+
+// ============================================================================
+// Expression printing
+// ============================================================================
+
+/// Print an expression with indentation.
+pub func print_expr_indent(e: HirExpr, indent: I64) -> Str {
+    let pad = make_indent(indent)
+    when e {
+        Literal(lit) => {
+            let val_str: Str = when lit.value {
+                LitInt(v) => v.to_string(),
+                LitUInt(v) => v.to_string(),
+                LitFloat(v) => v.to_string(),
+                LitBool(v) => if v { "true" } else { "false" },
+                LitChar(v) => "'" + v.to_string() + "'",
+                LitStr(v) => "\"" + v + "\""
+            }
+            return pad + val_str + " : " + type_to_str(lit.resolved_type) + "\n"
+        },
+        Var(v) => return pad + v.name + " : " + type_to_str(v.resolved_type) + "\n",
+        Binary(bin) => {
+            return pad + "(" + print_binop(bin.op) + " : " + type_to_str(bin.resolved_type) + ")\n" +
+                   print_expr_indent(bin.left.get(), indent + 1) +
+                   print_expr_indent(bin.right.get(), indent + 1)
+        },
+        Call(call) => {
+            var out = pad + "call " + call.func_name + " : " + type_to_str(call.resolved_type) + "\n"
+            let ac: I64 = call.args.len() as I64
+            for i in 0 to ac {
+                out = out + print_expr_indent(call.args.get(i).get(), indent + 1)
+            }
+            return out
+        },
+        Block(blk) => {
+            var out = pad + "block : " + type_to_str(blk.resolved_type) + "\n"
+            let sc: I64 = blk.stmts.len() as I64
+            for i in 0 to sc {
+                out = out + print_stmt_indent(blk.stmts.get(i).get(), indent + 1)
+            }
+            when blk.expr {
+                Just(trail) => { out = out + print_expr_indent(trail.get(), indent + 1) },
+                Nothing => {}
+            }
+            return out
+        },
+        Return(ret) => {
+            var out = pad + "return\n"
+            when ret.value {
+                Just(rv) => { out = out + print_expr_indent(rv.get(), indent + 1) },
+                Nothing => {}
+            }
+            return out
+        },
+        If(ife) => {
+            var out = pad + "if : " + type_to_str(ife.resolved_type) + "\n"
+            out = out + print_expr_indent(ife.condition.get(), indent + 1)
+            out = out + print_expr_indent(ife.then_branch.get(), indent + 1)
+            when ife.else_branch {
+                Just(eb) => { out = out + print_expr_indent(eb.get(), indent + 1) },
+                Nothing => {}
+            }
+            return out
+        },
+        _ => return pad + "<expr> : " + type_to_str(hir_expr_type(e)) + "\n"
+    }
+}
+
+// ============================================================================
+// Statement printing
+// ============================================================================
+
+/// Print a statement with indentation.
+pub func print_stmt_indent(s: HirStmt, indent: I64) -> Str {
+    let pad = make_indent(indent)
+    when s {
+        Let(ls) => {
+            var out = pad + "let"
+            if ls.is_mutable > 0 { out = out + " mut" }
+            out = out + " : " + type_to_str(ls.declared_type) + "\n"
+            when ls.init {
+                Just(e) => { out = out + print_expr_indent(e.get(), indent + 1) },
+                Nothing => {}
+            }
+            return out
+        },
+        Expr(es) => return print_expr_indent(es.expr.get(), indent)
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Create an indentation string (2 spaces per level).
+func make_indent(level: I64) -> Str {
+    var out = ""
+    for i in 0 to level {
+        out = out + "  "
+    }
+    return out
+}
+
+/// Print a binary operator as a string.
+pub func print_binop(op: HirBinOp) -> Str {
+    when op {
+        Add => return "+",
+        Sub => return "-",
+        Mul => return "*",
+        Div => return "/",
+        Mod => return "%",
+        Eq => return "==",
+        Ne => return "!=",
+        Lt => return "<",
+        Le => return "<=",
+        Gt => return ">",
+        Ge => return ">=",
+        And => return "and",
+        Or => return "or",
+        BitAnd => return "&",
+        BitOr => return "|",
+        BitXor => return "^",
+        Shl => return "<<",
+        Shr => return ">>"
+    }
+}
