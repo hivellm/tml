@@ -1,0 +1,236 @@
+//! IR-diff tests: compare TML codegen type/declaration output against
+//! expected strings derived from the C++ codegen in llvm_types.cpp.
+//!
+//! These tests construct MirModule values matching stdlib types and verify
+//! that the TML emitter produces identical struct definitions and function
+//! declarations to what the C++ codegen emits.
+//!
+//! Phase 16a — item 6.3.
+
+use test::assert
+use test::assert_eq
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirEnumVariantType
+use compiler::mir::types::MirFunctionType
+use compiler::mir::types::MirPointerType
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirFuncParam
+use compiler::mir::module::MirStructDef
+use compiler::mir::module::MirEnumDef
+use compiler::mir::module::MirEnumVariantDef
+use compiler::mir::module::mir_module_new
+use compiler::mir::module::mir_func_new
+use compiler::codegen::config::CodegenConfig
+use compiler::codegen::config::OptLevel
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_type::emit_type_for_data
+use compiler::codegen::emit_type::emit_struct_typedef
+use compiler::codegen::emit_type::emit_enum_typedef
+use compiler::codegen::emit_func::emit_func_decl
+use compiler::codegen::emit_func::emit_extern_decl
+use compiler::codegen::emit_module::emit_module
+use compiler::codegen::layout::compute_struct_layout
+use compiler::codegen::layout::StructLayout
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Struct definition IR-diff: match C++ llvm_types.cpp output exactly
+// ============================================================================
+
+// C++ emits: %struct.Point = type { i64, i64 }
+@test func test_irdiff_struct_point() {
+    let fields = List[Heap[MirType]]::new(2)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let st = MirStructType { name: "Point", fields: fields }
+    assert_eq(emit_struct_typedef(st), "%struct.Point = type { i64, i64 }\n")
+}
+
+// SourceSpan: { ptr, i64, i64 } (file: Str=ptr, start: I64, end: I64)
+// C++ emits: %struct.SourceSpan = type { ptr, i64, i64 }
+@test func test_irdiff_struct_sourcespan() {
+    let fields = List[Heap[MirType]]::new(3)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::Str)))  // file: Str = ptr
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))  // start
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))  // end
+    let st = MirStructType { name: "SourceSpan", fields: fields }
+    assert_eq(emit_struct_typedef(st), "%struct.SourceSpan = type { ptr, i64, i64 }\n")
+}
+
+// Token: { i32, ptr, %struct.SourceSpan } but SourceSpan is 3*8=24 bytes inline
+// For LLVM IR, struct fields are just their types — no flattening of named structs.
+// C++ reference: Token uses i32 (kind enum), ptr (value: Str), ptr/i64/i64 (span fields)
+@test func test_irdiff_struct_token() {
+    let fields = List[Heap[MirType]]::new(3)
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))  // kind: I32
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::Str)))  // value: Str = ptr
+    fields.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))  // span_start
+    let st = MirStructType { name: "Token", fields: fields }
+    assert_eq(emit_struct_typedef(st), "%struct.Token = type { i32, ptr, i64 }\n")
+}
+
+// ============================================================================
+// Enum definition IR-diff: match C++ enum layout rules
+// ============================================================================
+
+// Simple enum (no payload): { i32 }
+// C++ emits: %struct.Color = type { i32 }
+@test func test_irdiff_enum_simple() {
+    let variants = List[MirEnumVariantType]::new(3)
+    variants.push(MirEnumVariantType { name: "Red", payload_types: List[Heap[MirType]]::new(0), discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Green", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 })
+    variants.push(MirEnumVariantType { name: "Blue", payload_types: List[Heap[MirType]]::new(0), discriminant: 2 })
+    let et = MirEnumType { name: "Color", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Color = type { i32 }\n")
+}
+
+// Maybe[I32]: max_payload = 4 → { i32, i32 }
+// C++ emits: %struct.Maybe__I32 = type { i32, i32 }
+@test func test_irdiff_enum_maybe_i32() {
+    let p = List[Heap[MirType]]::new(1)
+    p.push(Heap::new(MirType::Primitive(MirPrimitive::I32)))
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(MirEnumVariantType { name: "Just", payload_types: p, discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Nothing", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 })
+    let et = MirEnumType { name: "Maybe__I32", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Maybe__I32 = type { i32, i32 }\n")
+}
+
+// Maybe[I64]: max_payload = 8 → { i32, i64 }
+// C++ emits: %struct.Maybe__I64 = type { i32, i64 }
+@test func test_irdiff_enum_maybe_i64() {
+    let p = List[Heap[MirType]]::new(1)
+    p.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(MirEnumVariantType { name: "Just", payload_types: p, discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Nothing", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 })
+    let et = MirEnumType { name: "Maybe__I64", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Maybe__I64 = type { i32, i64 }\n")
+}
+
+// Maybe[Str]: max_payload = 8 (ptr) → { i32, i64 }
+// C++ emits: %struct.Maybe__Str = type { i32, i64 }
+@test func test_irdiff_enum_maybe_str() {
+    let p = List[Heap[MirType]]::new(1)
+    p.push(Heap::new(MirType::Primitive(MirPrimitive::Str)))
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(MirEnumVariantType { name: "Just", payload_types: p, discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Nothing", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 })
+    let et = MirEnumType { name: "Maybe__Str", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Maybe__Str = type { i32, i64 }\n")
+}
+
+// Outcome[I64, Str]: max_payload = max(8, 8) = 8 → { i32, i64 }
+@test func test_irdiff_enum_outcome() {
+    let p_ok = List[Heap[MirType]]::new(1)
+    p_ok.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let p_err = List[Heap[MirType]]::new(1)
+    p_err.push(Heap::new(MirType::Primitive(MirPrimitive::Str)))
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(MirEnumVariantType { name: "Ok", payload_types: p_ok, discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Err", payload_types: p_err, discriminant: 1 })
+    let et = MirEnumType { name: "Outcome__I64__Str", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.Outcome__I64__Str = type { i32, i64 }\n")
+}
+
+// Enum with large payload (two I64 fields = 16 bytes > 8) → { i32, [2 x i64] }
+@test func test_irdiff_enum_large_payload() {
+    let p = List[Heap[MirType]]::new(2)
+    p.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    p.push(Heap::new(MirType::Primitive(MirPrimitive::I64)))
+    let variants = List[MirEnumVariantType]::new(2)
+    variants.push(MirEnumVariantType { name: "Data", payload_types: p, discriminant: 0 })
+    variants.push(MirEnumVariantType { name: "Empty", payload_types: List[Heap[MirType]]::new(0), discriminant: 1 })
+    let et = MirEnumType { name: "BigEnum", variants: variants }
+    assert_eq(emit_enum_typedef(et), "%struct.BigEnum = type { i32, [2 x i64] }\n")
+}
+
+// ============================================================================
+// Function declaration IR-diff
+// ============================================================================
+
+// Simple function: define internal i64 @add(i64 %a, i64 %b) #0 {
+@test func test_irdiff_func_simple() {
+    var f: MirFunc = mir_func_new("add", MirType::Primitive(MirPrimitive::I64))
+    f.params.push(MirFuncParam { name: "a", param_type: MirType::Primitive(MirPrimitive::I64), value_id: 0 })
+    f.params.push(MirFuncParam { name: "b", param_type: MirType::Primitive(MirPrimitive::I64), value_id: 1 })
+    let cfg: CodegenConfig = CodegenConfig { target_triple: "x86_64-pc-windows-msvc", data_layout: "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", opt_level: OptLevel::O0, is_release: 0, dll_export: 0, source_filename: "test.tml" }
+    let decl: Str = emit_func_decl(f, cfg)
+    assert_eq(decl, "define internal i64 @add(i64 %a, i64 %b) #0 {")
+}
+
+// Public function: no "internal" linkage
+@test func test_irdiff_func_public() {
+    var f: MirFunc = mir_func_new("main", MirType::Primitive(MirPrimitive::I32))
+    f.is_public = 1
+    let cfg: CodegenConfig = CodegenConfig { target_triple: "x86_64-pc-windows-msvc", data_layout: "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", opt_level: OptLevel::O0, is_release: 0, dll_export: 0, source_filename: "test.tml" }
+    let decl: Str = emit_func_decl(f, cfg)
+    assert_eq(decl, "define i32 @main() #0 {")
+}
+
+// Void return
+@test func test_irdiff_func_void() {
+    var f: MirFunc = mir_func_new("noop", MirType::Primitive(MirPrimitive::Unit))
+    let cfg: CodegenConfig = CodegenConfig { target_triple: "x86_64-pc-windows-msvc", data_layout: "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", opt_level: OptLevel::O0, is_release: 0, dll_export: 0, source_filename: "test.tml" }
+    let decl: Str = emit_func_decl(f, cfg)
+    assert_eq(decl, "define internal void @noop() #0 {")
+}
+
+// Extern declaration
+@test func test_irdiff_extern_decl() {
+    var f: MirFunc = mir_func_new("malloc", MirType::Primitive(MirPrimitive::RawPtr))
+    f.params.push(MirFuncParam { name: "size", param_type: MirType::Primitive(MirPrimitive::I64), value_id: 0 })
+    f.is_extern = 1
+    let decl: Str = emit_extern_decl(f)
+    assert_eq(decl, "declare dso_local ptr @malloc(i64)")
+}
+
+// ============================================================================
+// Module header IR-diff
+// ============================================================================
+
+@test func test_irdiff_module_header() {
+    let m: MirModule = mir_module_new("test_module")
+    let cfg: CodegenConfig = CodegenConfig { target_triple: "x86_64-pc-windows-msvc", data_layout: "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", opt_level: OptLevel::O0, is_release: 0, dll_export: 0, source_filename: "test.tml" }
+    let ir: Str = emit_module(m, cfg)
+    // Must contain target triple and datalayout
+    assert(ir.contains("target triple = \"x86_64-pc-windows-msvc\""))
+    assert(ir.contains("target datalayout = \"e-m:w-"))
+    assert(ir.contains("; ModuleID = 'test_module'"))
+    assert(ir.contains("source_filename = \"test.tml\""))
+}
+
+// ============================================================================
+// Full module with struct + func
+// ============================================================================
+
+@test func test_irdiff_full_module() {
+    var m: MirModule = mir_module_new("ir_diff_test")
+
+    // Add a struct definition
+    let point_fields = List[MirType]::new(2)
+    point_fields.push(MirType::Primitive(MirPrimitive::I64))
+    point_fields.push(MirType::Primitive(MirPrimitive::I64))
+    m.structs.push(MirStructDef { name: "Point", fields: point_fields })
+
+    // Add a simple function
+    var f: MirFunc = mir_func_new("get_x", MirType::Primitive(MirPrimitive::I64))
+    f.params.push(MirFuncParam { name: "p", param_type: MirType::Primitive(MirPrimitive::I64), value_id: 0 })
+    m.functions.push(f)
+
+    let cfg: CodegenConfig = CodegenConfig { target_triple: "x86_64-pc-windows-msvc", data_layout: "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", opt_level: OptLevel::O0, is_release: 0, dll_export: 0, source_filename: "test.tml" }
+    let ir: Str = emit_module(m, cfg)
+
+    // Struct definition must appear
+    assert(ir.contains("%struct.Point = type { i64, i64 }"))
+    // Function definition must appear
+    assert(ir.contains("define internal i64 @get_x(i64 %p) #0 {"))
+    // Attribute group must appear
+    assert(ir.contains("attributes #0 = { nounwind uwtable }"))
+}
