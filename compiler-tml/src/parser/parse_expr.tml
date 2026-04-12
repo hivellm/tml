@@ -196,10 +196,9 @@ pub func parse_expr_with_prec(tokens: List[Token], pos: I64, min_prec: I64) -> O
                 Expr::Call(call) => {
                     var new_args: List[Heap[Expr]] = List::new(call.args.len() as I64 + 1)
                     new_args.push(left)
-                    var i: I64 = 0
-                    loop (i < call.args.len() as I64) {
+                    let arg_count: I64 = call.args.len() as I64
+                    for i in 0 to arg_count {
                         new_args.push(call.args.get(i))
-                        i = i + 1
                     }
                     let ce: CallExpr = CallExpr { callee: call.callee, args: new_args, span: span }
                     left = Heap::new(Expr::Call(ce))

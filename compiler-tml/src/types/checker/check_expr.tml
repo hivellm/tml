@@ -235,10 +235,8 @@ func infer_call(ctx: InferCtx, env: TypeEnv, call: CallExpr) -> Type {
         _ => {
             // Not a function type — infer arguments anyway
             let ac: I64 = call.args.len() as I64
-            var i: I64 = 0
-            loop (i < ac) {
+            for i in 0 to ac {
                 infer_expr(ctx, env, call.args.get(i).get())
-                i = i + 1
             }
             return fresh_var(ctx)
         }
@@ -262,13 +260,11 @@ func infer_field(ctx: InferCtx, env: TypeEnv, fld: FieldExpr) -> Type {
                 Just(def) => {
                     // Find field by name
                     let fc: I64 = def.fields.len() as I64
-                    var i: I64 = 0
-                    loop (i < fc) {
+                    for i in 0 to fc {
                         let f: StructFieldDef = def.fields.get(i)
                         if f.name == fld.field {
                             return f.ty.get()
                         }
-                        i = i + 1
                     }
                     ctx.errors.push(unknown_field(nt.name, fld.field, fld.span))
                     return fresh_var(ctx)
@@ -290,11 +286,9 @@ func infer_field(ctx: InferCtx, env: TypeEnv, fld: FieldExpr) -> Type {
 func infer_tuple(ctx: InferCtx, env: TypeEnv, tup: TupleExpr) -> Type {
     let count: I64 = tup.elements.len() as I64
     let elements: List[Heap[Type]] = List[Heap[Type]]::new(count)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let elem_ty: Type = infer_expr(ctx, env, tup.elements.get(i).get())
         elements.push(Heap::new(elem_ty))
-        i = i + 1
     }
     return make_tuple(elements)
 }
@@ -309,11 +303,9 @@ func infer_array(ctx: InferCtx, env: TypeEnv, arr: ArrayExpr) -> Type {
             let count: I64 = elems.len() as I64
             if count == 0 { return fresh_var(ctx) }
             let first: Type = infer_expr(ctx, env, elems.get(0).get())
-            var i: I64 = 1
-            loop (i < count) {
+            for i in 1 to count {
                 let elem_ty: Type = infer_expr(ctx, env, elems.get(i).get())
                 unify(ctx, first, elem_ty, arr.span)
-                i = i + 1
             }
             return resolve(ctx, first)
         },
@@ -358,10 +350,8 @@ func infer_if(ctx: InferCtx, env: TypeEnv, ife: IfExpr) -> Type {
 func infer_block(ctx: InferCtx, env: TypeEnv, blk: BlockExpr) -> Type {
     env_push_scope(env, ScopeKind::BlockScope)
     let count: I64 = blk.stmts.len() as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         check_stmt_inline(ctx, env, blk.stmts.get(i).get())
-        i = i + 1
     }
     // Block type is the type of the trailing expression if present
     let result: Type = when blk.expr {
@@ -398,11 +388,9 @@ func infer_struct(ctx: InferCtx, env: TypeEnv, st: StructExpr) -> Type {
         Just(def) => {
             // Check each field in the literal
             let fc: I64 = st.fields.len() as I64
-            var i: I64 = 0
-            loop (i < fc) {
+            for i in 0 to fc {
                 let field_expr = st.fields.get(i)
                 let _ = infer_expr(ctx, env, field_expr.value.get())
-                i = i + 1
             }
             return make_named_simple(name, "")
         },

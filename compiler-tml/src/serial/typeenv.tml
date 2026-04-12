@@ -494,10 +494,8 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
             w.write_str(n.name)
             w.write_str(n.module_path)
             w.write_varint(n.type_args.len() as I64)
-            var i: I64 = 0
-            loop (i < n.type_args.len() as I64) {
+            for i in 0 to n.type_args.len() as I64 {
                 write_sem_type(w, n.type_args.get(i as I32))
-                i = i + 1
             }
         },
         Ref(r) => {
@@ -524,19 +522,15 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
         Tuple(tup) => {
             w.write_u8(TAG_TUPLE)
             w.write_varint(tup.elements.len() as I64)
-            var i: I64 = 0
-            loop (i < tup.elements.len() as I64) {
+            for i in 0 to tup.elements.len() as I64 {
                 write_sem_type(w, tup.elements.get(i as I32))
-                i = i + 1
             }
         },
         Func(f) => {
             w.write_u8(TAG_FUNC)
             w.write_varint(f.params.len() as I64)
-            var i: I64 = 0
-            loop (i < f.params.len() as I64) {
+            for i in 0 to f.params.len() as I64 {
                 write_sem_type(w, f.params.get(i as I32))
-                i = i + 1
             }
             write_sem_type(w, f.return_type)
             w.write_bool(f.is_async)
@@ -544,30 +538,24 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
         Closure(c) => {
             w.write_u8(TAG_CLOSURE)
             w.write_varint(c.params.len() as I64)
-            var i: I64 = 0
-            loop (i < c.params.len() as I64) {
+            for i in 0 to c.params.len() as I64 {
                 write_sem_type(w, c.params.get(i as I32))
-                i = i + 1
             }
             write_sem_type(w, c.return_type)
             w.write_varint(c.captures.len() as I64)
-            var j: I64 = 0
-            loop (j < c.captures.len() as I64) {
+            for j in 0 to c.captures.len() as I64 {
                 let cap: SemCapturedVar = c.captures.get(j as I32)
                 w.write_str(cap.name)
                 write_sem_type(w, cap.captured_type)
                 w.write_bool(cap.is_mut)
-                j = j + 1
             }
         },
         Generic(g) => {
             w.write_u8(TAG_GENERIC)
             w.write_str(g.name)
             w.write_varint(g.bounds.len() as I64)
-            var i: I64 = 0
-            loop (i < g.bounds.len() as I64) {
+            for i in 0 to g.bounds.len() as I64 {
                 write_sem_type(w, g.bounds.get(i as I32))
-                i = i + 1
             }
         },
         ConstGeneric(cg) => {
@@ -588,10 +576,8 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
             w.write_u8(TAG_DYN_BEHAVIOR)
             w.write_str(d.behavior_name)
             w.write_varint(d.type_args.len() as I64)
-            var i: I64 = 0
-            loop (i < d.type_args.len() as I64) {
+            for i in 0 to d.type_args.len() as I64 {
                 write_sem_type(w, d.type_args.get(i as I32))
-                i = i + 1
             }
             w.write_bool(d.is_mut)
         },
@@ -599,10 +585,8 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
             w.write_u8(TAG_IMPL_BEHAVIOR)
             w.write_str(ib.behavior_name)
             w.write_varint(ib.type_args.len() as I64)
-            var i: I64 = 0
-            loop (i < ib.type_args.len() as I64) {
+            for i in 0 to ib.type_args.len() as I64 {
                 write_sem_type(w, ib.type_args.get(i as I32))
-                i = i + 1
             }
         },
         ClassType(ct) => {
@@ -610,10 +594,8 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
             w.write_str(ct.name)
             w.write_str(ct.module_path)
             w.write_varint(ct.type_args.len() as I64)
-            var i: I64 = 0
-            loop (i < ct.type_args.len() as I64) {
+            for i in 0 to ct.type_args.len() as I64 {
                 write_sem_type(w, ct.type_args.get(i as I32))
-                i = i + 1
             }
         },
         InterfaceType(it) => {
@@ -621,10 +603,8 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
             w.write_str(it.name)
             w.write_str(it.module_path)
             w.write_varint(it.type_args.len() as I64)
-            var i: I64 = 0
-            loop (i < it.type_args.len() as I64) {
+            for i in 0 to it.type_args.len() as I64 {
                 write_sem_type(w, it.type_args.get(i as I32))
-                i = i + 1
             }
         },
         TypeVar(tv) => {
@@ -643,19 +623,15 @@ pub func write_sem_type(w: BinaryWriter, t: SemType) {
 
 func write_str_list(w: BinaryWriter, items: List[Str]) {
     w.write_varint(items.len() as I64)
-    var i: I64 = 0
-    loop (i < items.len() as I64) {
+    for i in 0 to items.len() as I64 {
         w.write_str(items.get(i as I32))
-        i = i + 1
     }
 }
 
 func write_sem_type_list(w: BinaryWriter, items: List[SemType]) {
     w.write_varint(items.len() as I64)
-    var i: I64 = 0
-    loop (i < items.len() as I64) {
+    for i in 0 to items.len() as I64 {
         write_sem_type(w, items.get(i as I32))
-        i = i + 1
     }
 }
 
@@ -670,10 +646,8 @@ func write_const_generic_param(w: BinaryWriter, p: TmlConstGenericParam) {
 
 func write_const_generic_param_list(w: BinaryWriter, items: List[TmlConstGenericParam]) {
     w.write_varint(items.len() as I64)
-    var i: I64 = 0
-    loop (i < items.len() as I64) {
+    for i in 0 to items.len() as I64 {
         write_const_generic_param(w, items.get(i as I32))
-        i = i + 1
     }
 }
 
@@ -697,17 +671,13 @@ func write_where_constraint(w: BinaryWriter, wc: TmlWhereConstraint) {
     write_str_list(w, wc.required_behaviors)
     // Parameterized bounds
     w.write_varint(wc.parameterized_bounds.len() as I64)
-    var i: I64 = 0
-    loop (i < wc.parameterized_bounds.len() as I64) {
+    for i in 0 to wc.parameterized_bounds.len() as I64 {
         write_bound_constraint(w, wc.parameterized_bounds.get(i as I32))
-        i = i + 1
     }
     // Higher-ranked bounds
     w.write_varint(wc.higher_ranked_bounds.len() as I64)
-    var j: I64 = 0
-    loop (j < wc.higher_ranked_bounds.len() as I64) {
+    for j in 0 to wc.higher_ranked_bounds.len() as I64 {
         write_higher_ranked_bound(w, wc.higher_ranked_bounds.get(j as I32))
-        j = j + 1
     }
 }
 
@@ -726,10 +696,8 @@ pub func write_func_sig(w: BinaryWriter, sig: TmlFuncSig) {
     w.write_str(sig.since_version)
     // Where constraints
     w.write_varint(sig.where_constraints.len() as I64)
-    var i: I64 = 0
-    loop (i < sig.where_constraints.len() as I64) {
+    for i in 0 to sig.where_constraints.len() as I64 {
         write_where_constraint(w, sig.where_constraints.get(i as I32))
-        i = i + 1
     }
     w.write_bool(sig.is_lowlevel)
     w.write_bool(sig.is_intrinsic)
@@ -756,10 +724,8 @@ pub func write_struct_def(w: BinaryWriter, s: TmlStructDef) {
     write_const_generic_param_list(w, s.const_params)
     // Fields
     w.write_varint(s.fields.len() as I64)
-    var i: I64 = 0
-    loop (i < s.fields.len() as I64) {
+    for i in 0 to s.fields.len() as I64 {
         write_struct_field(w, s.fields.get(i as I32))
-        i = i + 1
     }
     w.write_bool(s.is_interior_mutable)
     w.write_bool(s.is_union)
@@ -781,19 +747,15 @@ pub func write_enum_def(w: BinaryWriter, e: TmlEnumDef) {
     write_const_generic_param_list(w, e.const_params)
     // Variants
     w.write_varint(e.variants.len() as I64)
-    var i: I64 = 0
-    loop (i < e.variants.len() as I64) {
+    for i in 0 to e.variants.len() as I64 {
         write_enum_variant(w, e.variants.get(i as I32))
-        i = i + 1
     }
     w.write_bool(e.is_flags)
     w.write_str(e.flags_underlying_type)
     // Discriminant values
     w.write_varint(e.discriminant_values.len() as I64)
-    var j: I64 = 0
-    loop (j < e.discriminant_values.len() as I64) {
+    for j in 0 to e.discriminant_values.len() as I64 {
         w.write_u64(e.discriminant_values.get(j as I32))
-        j = j + 1
     }
 }
 
@@ -822,17 +784,13 @@ pub func write_behavior_def(w: BinaryWriter, b: TmlBehaviorDef) {
     write_const_generic_param_list(w, b.const_params)
     // Associated types
     w.write_varint(b.associated_types.len() as I64)
-    var i: I64 = 0
-    loop (i < b.associated_types.len() as I64) {
+    for i in 0 to b.associated_types.len() as I64 {
         write_associated_type(w, b.associated_types.get(i as I32))
-        i = i + 1
     }
     // Methods
     w.write_varint(b.methods.len() as I64)
-    var j: I64 = 0
-    loop (j < b.methods.len() as I64) {
+    for j in 0 to b.methods.len() as I64 {
         write_func_sig(w, b.methods.get(j as I32))
-        j = j + 1
     }
     write_str_list(w, b.super_behaviors)
     write_str_list(w, b.methods_with_defaults)
@@ -883,31 +841,23 @@ pub func write_class_def(w: BinaryWriter, c: TmlClassDef) {
     write_str_list(w, c.interfaces)
     // Fields
     w.write_varint(c.fields.len() as I64)
-    var i: I64 = 0
-    loop (i < c.fields.len() as I64) {
+    for i in 0 to c.fields.len() as I64 {
         write_class_field(w, c.fields.get(i as I32))
-        i = i + 1
     }
     // Methods
     w.write_varint(c.methods.len() as I64)
-    var j: I64 = 0
-    loop (j < c.methods.len() as I64) {
+    for j in 0 to c.methods.len() as I64 {
         write_class_method(w, c.methods.get(j as I32))
-        j = j + 1
     }
     // Properties
     w.write_varint(c.properties.len() as I64)
-    var k: I64 = 0
-    loop (k < c.properties.len() as I64) {
+    for k in 0 to c.properties.len() as I64 {
         write_property(w, c.properties.get(k as I32))
-        k = k + 1
     }
     // Constructors
     w.write_varint(c.constructors.len() as I64)
-    var m: I64 = 0
-    loop (m < c.constructors.len() as I64) {
+    for m in 0 to c.constructors.len() as I64 {
         write_constructor(w, c.constructors.get(m as I32))
-        m = m + 1
     }
     w.write_bool(c.is_abstract)
     w.write_bool(c.is_sealed)
@@ -935,10 +885,8 @@ pub func write_interface_def(w: BinaryWriter, iface: TmlInterfaceDef) {
     write_str_list(w, iface.extends_list)
     // Methods
     w.write_varint(iface.methods.len() as I64)
-    var i: I64 = 0
-    loop (i < iface.methods.len() as I64) {
+    for i in 0 to iface.methods.len() as I64 {
         write_interface_method(w, iface.methods.get(i as I32))
-        i = i + 1
     }
 }
 
@@ -958,93 +906,71 @@ pub func write_typeenv(w: BinaryWriter, env: TmlTypeEnv) {
 
     // -- Structs --
     w.write_varint(env.structs.len() as I64)
-    var i: I64 = 0
-    loop (i < env.structs.len() as I64) {
+    for i in 0 to env.structs.len() as I64 {
         write_struct_def(w, env.structs.get(i as I32))
-        i = i + 1
     }
 
     // -- Enums --
     w.write_varint(env.enums.len() as I64)
-    i = 0
-    loop (i < env.enums.len() as I64) {
+    for i in 0 to env.enums.len() as I64 {
         write_enum_def(w, env.enums.get(i as I32))
-        i = i + 1
     }
 
     // -- Behaviors --
     w.write_varint(env.behaviors.len() as I64)
-    i = 0
-    loop (i < env.behaviors.len() as I64) {
+    for i in 0 to env.behaviors.len() as I64 {
         write_behavior_def(w, env.behaviors.get(i as I32))
-        i = i + 1
     }
 
     // -- Functions (grouped by name with overloads) --
     w.write_varint(env.func_names.len() as I64)
-    i = 0
-    loop (i < env.func_names.len() as I64) {
+    for i in 0 to env.func_names.len() as I64 {
         w.write_str(env.func_names.get(i as I32))
         let overloads: List[TmlFuncSig] = env.func_overloads.get(i as I32)
         w.write_varint(overloads.len() as I64)
-        var j: I64 = 0
-        loop (j < overloads.len() as I64) {
+        for j in 0 to overloads.len() as I64 {
             write_func_sig(w, overloads.get(j as I32))
-            j = j + 1
         }
-        i = i + 1
     }
 
     // -- Behavior impls --
     w.write_varint(env.impl_type_names.len() as I64)
-    i = 0
-    loop (i < env.impl_type_names.len() as I64) {
+    for i in 0 to env.impl_type_names.len() as I64 {
         w.write_str(env.impl_type_names.get(i as I32))
         write_str_list(w, env.impl_behaviors.get(i as I32))
-        i = i + 1
     }
 
     // -- Type aliases --
     w.write_varint(env.alias_names.len() as I64)
-    i = 0
-    loop (i < env.alias_names.len() as I64) {
+    for i in 0 to env.alias_names.len() as I64 {
         w.write_str(env.alias_names.get(i as I32))
         write_sem_type(w, env.alias_types.get(i as I32))
         write_str_list(w, env.alias_generics.get(i as I32))
-        i = i + 1
     }
 
     // -- Classes --
     w.write_varint(env.classes.len() as I64)
-    i = 0
-    loop (i < env.classes.len() as I64) {
+    for i in 0 to env.classes.len() as I64 {
         write_class_def(w, env.classes.get(i as I32))
-        i = i + 1
     }
 
     // -- Interfaces --
     w.write_varint(env.interfaces.len() as I64)
-    i = 0
-    loop (i < env.interfaces.len() as I64) {
+    for i in 0 to env.interfaces.len() as I64 {
         write_interface_def(w, env.interfaces.get(i as I32))
-        i = i + 1
     }
 
     // -- Class-interface impls --
     w.write_varint(env.class_iface_names.len() as I64)
-    i = 0
-    loop (i < env.class_iface_names.len() as I64) {
+    for i in 0 to env.class_iface_names.len() as I64 {
         w.write_str(env.class_iface_names.get(i as I32))
         write_str_list(w, env.class_iface_lists.get(i as I32))
-        i = i + 1
     }
 
     // -- Builtins --
     w.write_varint(env.builtin_names.len() as I64)
-    i = 0
-    loop (i < env.builtin_names.len() as I64) {
+    for i in 0 to env.builtin_names.len() as I64 {
         w.write_str(env.builtin_names.get(i as I32))
         write_sem_type(w, env.builtin_types.get(i as I32))
-        i = i + 1
     }
 }

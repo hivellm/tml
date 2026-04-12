@@ -64,12 +64,10 @@ pub func source_from_string(filename: Str, content: Str) -> Source {
     var offsets: List[I64] = List::new(16)
     offsets.push(0 as I64)
     let n: I64 = basic::len(content)
-    var i: I64 = 0
-    loop (i < n) {
+    for i in 0 to n {
         if basic::char_at(content, i) == 10 {
             offsets.push(i + 1)
         }
-        i = i + 1
     }
     return Source {
         filename: filename,

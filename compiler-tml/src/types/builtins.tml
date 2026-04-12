@@ -252,15 +252,11 @@ pub func register_primitive_impls(env: TypeEnv) {
 
     let it_count: I64 = int_types.len() as I64
     let ib_count: I64 = int_behaviors.len() as I64
-    var i: I64 = 0
-    loop (i < it_count) {
+    for i in 0 to it_count {
         let tn: Str = int_types.get(i)
-        var j: I64 = 0
-        loop (j < ib_count) {
+        for j in 0 to ib_count {
             env_register_impl(env, tn, int_behaviors.get(j))
-            j = j + 1
         }
-        i = i + 1
     }
 
     // Float types: same as integers

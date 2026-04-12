@@ -840,10 +840,8 @@ pub func write_visibility(w: BinaryWriter, vis: TmlVisibility) {
 /// Write a TypePath: varint segment count + each segment string + span.
 pub func write_type_path(w: BinaryWriter, path: TmlTypePath) {
     w.write_varint(path.segments.len())
-    var i: I64 = 0
-    loop (i < path.segments.len()) {
+    for i in 0 to path.segments.len() {
         w.write_str(path.segments.get(i))
-        i = i + 1
     }
     write_source_span(w, path.span)
 }
@@ -923,10 +921,8 @@ func write_opt_heap_expr(w: BinaryWriter, me: Maybe[Heap[TmlExpr]], depth: I64) 
 
 func write_heap_type_list(w: BinaryWriter, types: List[Heap[TmlType]]) {
     w.write_varint(types.len())
-    var i: I64 = 0
-    loop (i < types.len()) {
+    for i in 0 to types.len() {
         write_type(w, types.get(i).get())
-        i = i + 1
     }
 }
 
@@ -992,20 +988,16 @@ pub func write_type(w: BinaryWriter, ty: TmlType) {
         Dyn(d) => {
             w.write_u8(8)
             w.write_varint(d.bounds.len())
-            var i: I64 = 0
-            loop (i < d.bounds.len()) {
+            for i in 0 to d.bounds.len() {
                 write_type_path(w, d.bounds.get(i))
-                i = i + 1
             }
             write_source_span(w, d.span)
         },
         ImplBehavior(ib) => {
             w.write_u8(9)
             w.write_varint(ib.bounds.len())
-            var i: I64 = 0
-            loop (i < ib.bounds.len()) {
+            for i in 0 to ib.bounds.len() {
                 write_type_path(w, ib.bounds.get(i))
-                i = i + 1
             }
             write_source_span(w, ib.span)
         },
@@ -1040,10 +1032,8 @@ pub func write_pattern(w: BinaryWriter, pat: TmlPattern) {
         Tuple(tp) => {
             w.write_u8(3)
             w.write_varint(tp.patterns.len())
-            var i: I64 = 0
-            loop (i < tp.patterns.len()) {
+            for i in 0 to tp.patterns.len() {
                 write_pattern(w, tp.patterns.get(i).get())
-                i = i + 1
             }
             write_source_span(w, tp.span)
         },
@@ -1051,13 +1041,11 @@ pub func write_pattern(w: BinaryWriter, pat: TmlPattern) {
             w.write_u8(4)
             write_type_path(w, sp.path)
             w.write_varint(sp.fields.len())
-            var i: I64 = 0
-            loop (i < sp.fields.len()) {
+            for i in 0 to sp.fields.len() {
                 let f = sp.fields.get(i)
                 w.write_str(f.name)
                 write_pattern(w, f.pat.get())
                 write_source_span(w, f.span)
-                i = i + 1
             }
             write_source_span(w, sp.span)
         },
@@ -1065,20 +1053,16 @@ pub func write_pattern(w: BinaryWriter, pat: TmlPattern) {
             w.write_u8(5)
             write_type_path(w, ep.path)
             w.write_varint(ep.args.len())
-            var i: I64 = 0
-            loop (i < ep.args.len()) {
+            for i in 0 to ep.args.len() {
                 write_pattern(w, ep.args.get(i).get())
-                i = i + 1
             }
             write_source_span(w, ep.span)
         },
         Or(op) => {
             w.write_u8(6)
             w.write_varint(op.alternatives.len())
-            var i: I64 = 0
-            loop (i < op.alternatives.len()) {
+            for i in 0 to op.alternatives.len() {
                 write_pattern(w, op.alternatives.get(i).get())
-                i = i + 1
             }
             write_source_span(w, op.span)
         },
@@ -1092,10 +1076,8 @@ pub func write_pattern(w: BinaryWriter, pat: TmlPattern) {
         Array(ap) => {
             w.write_u8(8)
             w.write_varint(ap.patterns.len())
-            var i: I64 = 0
-            loop (i < ap.patterns.len()) {
+            for i in 0 to ap.patterns.len() {
                 write_pattern(w, ap.patterns.get(i).get())
-                i = i + 1
             }
             write_source_span(w, ap.span)
         },
@@ -1139,10 +1121,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
             w.write_u8(4)
             write_expr(w, ce.callee.get(), depth + 1)
             w.write_varint(ce.args.len())
-            var i: I64 = 0
-            loop (i < ce.args.len()) {
+            for i in 0 to ce.args.len() {
                 write_expr(w, ce.args.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_source_span(w, ce.span)
         },
@@ -1152,10 +1132,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
             w.write_str(mc.method)
             write_heap_type_list(w, mc.type_args)
             w.write_varint(mc.args.len())
-            var i: I64 = 0
-            loop (i < mc.args.len()) {
+            for i in 0 to mc.args.len() {
                 write_expr(w, mc.args.get(i).get(), depth + 1)
-                i = i + 1
             }
             w.write_bool(mc.optional_chain)
             write_source_span(w, mc.span)
@@ -1176,10 +1154,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
         Tuple(te) => {
             w.write_u8(8)
             w.write_varint(te.elements.len())
-            var i: I64 = 0
-            loop (i < te.elements.len()) {
+            for i in 0 to te.elements.len() {
                 write_expr(w, te.elements.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_source_span(w, te.span)
         },
@@ -1189,10 +1165,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
                 Elements(elems) => {
                     w.write_u8(0)
                     w.write_varint(elems.len())
-                    var i: I64 = 0
-                    loop (i < elems.len()) {
+                    for i in 0 to elems.len() {
                         write_expr(w, elems.get(i).get(), depth + 1)
-                        i = i + 1
                     }
                 },
                 Repeat(val, cnt) => {
@@ -1211,12 +1185,10 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
                 Nothing     => w.write_u8(0),
             }
             w.write_varint(se.fields.len())
-            var i: I64 = 0
-            loop (i < se.fields.len()) {
+            for i in 0 to se.fields.len() {
                 let f = se.fields.get(i)
                 w.write_str(f.name)
                 write_expr(w, f.value.get(), depth + 1)
-                i = i + 1
             }
             write_opt_heap_expr(w, se.base_expr, depth + 1)
             write_source_span(w, se.span)
@@ -1247,8 +1219,7 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
             w.write_u8(14)
             write_expr(w, we.scrutinee.get(), depth + 1)
             w.write_varint(we.arms.len())
-            var i: I64 = 0
-            loop (i < we.arms.len()) {
+            for i in 0 to we.arms.len() {
                 let arm = we.arms.get(i)
                 write_pattern(w, arm.pattern.get())
                 when arm.guard {
@@ -1257,7 +1228,6 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
                 }
                 write_expr(w, arm.body.get(), depth + 1)
                 write_source_span(w, arm.span)
-                i = i + 1
             }
             write_source_span(w, we.span)
         },
@@ -1295,10 +1265,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
         Block(be) => {
             w.write_u8(18)
             w.write_varint(be.stmts.len())
-            var i: I64 = 0
-            loop (i < be.stmts.len()) {
+            for i in 0 to be.stmts.len() {
                 write_stmt(w, be.stmts.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_opt_heap_expr(w, be.expr, depth + 1)
             write_source_span(w, be.span)
@@ -1322,12 +1290,10 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
         Closure(cle) => {
             w.write_u8(22)
             w.write_varint(cle.params.len())
-            var i: I64 = 0
-            loop (i < cle.params.len()) {
+            for i in 0 to cle.params.len() {
                 let p = cle.params.get(i)
                 write_pattern(w, p.pattern.get())
                 write_opt_heap_type(w, p.ty)
-                i = i + 1
             }
             write_opt_heap_type(w, cle.return_type)
             write_expr(w, cle.body.get(), depth + 1)
@@ -1380,10 +1346,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
         Lowlevel(lle) => {
             w.write_u8(30)
             w.write_varint(lle.stmts.len())
-            var i: I64 = 0
-            loop (i < lle.stmts.len()) {
+            for i in 0 to lle.stmts.len() {
                 write_stmt(w, lle.stmts.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_opt_heap_expr(w, lle.expr, depth + 1)
             write_source_span(w, lle.span)
@@ -1391,20 +1355,16 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
         InterpolatedString(ise) => {
             w.write_u8(31)
             w.write_varint(ise.segments.len())
-            var i: I64 = 0
-            loop (i < ise.segments.len()) {
+            for i in 0 to ise.segments.len() {
                 write_interpolated_segment(w, ise.segments.get(i), depth)
-                i = i + 1
             }
             write_source_span(w, ise.span)
         },
         TemplateLiteral(tle) => {
             w.write_u8(32)
             w.write_varint(tle.segments.len())
-            var i: I64 = 0
-            loop (i < tle.segments.len()) {
+            for i in 0 to tle.segments.len() {
                 write_interpolated_segment(w, tle.segments.get(i), depth)
-                i = i + 1
             }
             write_source_span(w, tle.span)
         },
@@ -1413,10 +1373,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
             w.write_str(be.member)
             write_heap_type_list(w, be.type_args)
             w.write_varint(be.args.len())
-            var i: I64 = 0
-            loop (i < be.args.len()) {
+            for i in 0 to be.args.len() {
                 write_expr(w, be.args.get(i).get(), depth + 1)
-                i = i + 1
             }
             w.write_bool(be.is_method_call)
             write_source_span(w, be.span)
@@ -1429,10 +1387,8 @@ pub func write_expr(w: BinaryWriter, expr: TmlExpr, depth: I64) {
                 Nothing     => w.write_u8(0),
             }
             w.write_varint(ne.args.len())
-            var i: I64 = 0
-            loop (i < ne.args.len()) {
+            for i in 0 to ne.args.len() {
                 write_expr(w, ne.args.get(i).get(), depth + 1)
-                i = i + 1
             }
             write_source_span(w, ne.span)
         },
@@ -1485,20 +1441,16 @@ pub func write_stmt(w: BinaryWriter, stmt: TmlStmt, depth: I64) {
 func write_generic_param(w: BinaryWriter, gp: TmlGenericParam) {
     w.write_str(gp.name)
     w.write_varint(gp.bounds.len())
-    var i: I64 = 0
-    loop (i < gp.bounds.len()) {
+    for i in 0 to gp.bounds.len() {
         write_type_path(w, gp.bounds.get(i))
-        i = i + 1
     }
     write_source_span(w, gp.span)
 }
 
 func write_generic_params(w: BinaryWriter, generics: List[TmlGenericParam]) {
     w.write_varint(generics.len())
-    var i: I64 = 0
-    loop (i < generics.len()) {
+    for i in 0 to generics.len() {
         write_generic_param(w, generics.get(i))
-        i = i + 1
     }
 }
 
@@ -1523,10 +1475,8 @@ pub func write_func_decl(w: BinaryWriter, fd: TmlFuncDecl) {
     write_visibility(w, fd.visibility)
     write_generic_params(w, fd.generics)
     w.write_varint(fd.params.len())
-    var i: I64 = 0
-    loop (i < fd.params.len()) {
+    for i in 0 to fd.params.len() {
         write_func_param(w, fd.params.get(i))
-        i = i + 1
     }
     write_opt_heap_type(w, fd.return_type)
     when fd.body {
@@ -1555,10 +1505,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             write_visibility(w, sd.visibility)
             write_generic_params(w, sd.generics)
             w.write_varint(sd.fields.len())
-            var i: I64 = 0
-            loop (i < sd.fields.len()) {
+            for i in 0 to sd.fields.len() {
                 write_struct_field(w, sd.fields.get(i))
-                i = i + 1
             }
             write_source_span(w, sd.span)
         },
@@ -1568,10 +1516,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             write_visibility(w, ud.visibility)
             write_generic_params(w, ud.generics)
             w.write_varint(ud.fields.len())
-            var i: I64 = 0
-            loop (i < ud.fields.len()) {
+            for i in 0 to ud.fields.len() {
                 write_struct_field(w, ud.fields.get(i))
-                i = i + 1
             }
             write_source_span(w, ud.span)
         },
@@ -1581,13 +1527,11 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             write_visibility(w, ed.visibility)
             write_generic_params(w, ed.generics)
             w.write_varint(ed.variants.len())
-            var i: I64 = 0
-            loop (i < ed.variants.len()) {
+            for i in 0 to ed.variants.len() {
                 let v = ed.variants.get(i)
                 w.write_str(v.name)
                 write_heap_type_list(w, v.fields)
                 write_source_span(w, v.span)
-                i = i + 1
             }
             write_source_span(w, ed.span)
         },
@@ -1597,16 +1541,12 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             write_visibility(w, td.visibility)
             write_generic_params(w, td.generics)
             w.write_varint(td.supertraits.len())
-            var i: I64 = 0
-            loop (i < td.supertraits.len()) {
+            for i in 0 to td.supertraits.len() {
                 write_type_path(w, td.supertraits.get(i))
-                i = i + 1
             }
             w.write_varint(td.methods.len())
-            i = 0
-            loop (i < td.methods.len()) {
+            for i in 0 to td.methods.len() {
                 write_func_decl(w, td.methods.get(i))
-                i = i + 1
             }
             write_source_span(w, td.span)
         },
@@ -1619,10 +1559,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             }
             write_generic_params(w, id.generics)
             w.write_varint(id.methods.len())
-            var i: I64 = 0
-            loop (i < id.methods.len()) {
+            for i in 0 to id.methods.len() {
                 write_func_decl(w, id.methods.get(i))
-                i = i + 1
             }
             write_source_span(w, id.span)
         },
@@ -1645,10 +1583,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
         Use(ud) => {
             w.write_u8(8)
             w.write_varint(ud.path.segments.len())
-            var i: I64 = 0
-            loop (i < ud.path.segments.len()) {
+            for i in 0 to ud.path.segments.len() {
                 w.write_str(ud.path.segments.get(i))
-                i = i + 1
             }
             w.write_opt_str(ud.path.alias)
             write_visibility(w, ud.visibility)
@@ -1659,10 +1595,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             w.write_str(md.name)
             write_visibility(w, md.visibility)
             w.write_varint(md.items.len())
-            var i: I64 = 0
-            loop (i < md.items.len()) {
+            for i in 0 to md.items.len() {
                 write_decl(w, md.items.get(i).get())
-                i = i + 1
             }
             write_source_span(w, md.span)
         },
@@ -1676,26 +1610,20 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
                 Nothing => w.write_u8(0),
             }
             w.write_varint(cd.interfaces.len())
-            var i: I64 = 0
-            loop (i < cd.interfaces.len()) {
+            for i in 0 to cd.interfaces.len() {
                 write_type_path(w, cd.interfaces.get(i))
-                i = i + 1
             }
             w.write_varint(cd.fields.len())
-            i = 0
-            loop (i < cd.fields.len()) {
+            for i in 0 to cd.fields.len() {
                 let f = cd.fields.get(i)
                 w.write_str(f.name)
                 write_type(w, f.ty.get())
                 write_visibility(w, f.visibility)
                 write_source_span(w, f.span)
-                i = i + 1
             }
             w.write_varint(cd.methods.len())
-            i = 0
-            loop (i < cd.methods.len()) {
+            for i in 0 to cd.methods.len() {
                 write_func_decl(w, cd.methods.get(i))
-                i = i + 1
             }
             write_source_span(w, cd.span)
         },
@@ -1705,10 +1633,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             write_visibility(w, ifd.visibility)
             write_generic_params(w, ifd.generics)
             w.write_varint(ifd.methods.len())
-            var i: I64 = 0
-            loop (i < ifd.methods.len()) {
+            for i in 0 to ifd.methods.len() {
                 write_func_decl(w, ifd.methods.get(i))
-                i = i + 1
             }
             write_source_span(w, ifd.span)
         },
@@ -1717,10 +1643,8 @@ pub func write_decl(w: BinaryWriter, decl: TmlDecl) {
             w.write_str(nd.name)
             write_visibility(w, nd.visibility)
             w.write_varint(nd.items.len())
-            var i: I64 = 0
-            loop (i < nd.items.len()) {
+            for i in 0 to nd.items.len() {
                 write_decl(w, nd.items.get(i).get())
-                i = i + 1
             }
             write_source_span(w, nd.span)
         },
@@ -1749,16 +1673,12 @@ pub func write_module(w: BinaryWriter, module: TmlModule) {
     write_ast_header(w)
     w.write_str(module.name)
     w.write_varint(module.docs.len())
-    var i: I64 = 0
-    loop (i < module.docs.len()) {
+    for i in 0 to module.docs.len() {
         w.write_str(module.docs.get(i))
-        i = i + 1
     }
     write_source_span(w, module.span)
     w.write_varint(module.decls.len())
-    i = 0
-    loop (i < module.decls.len()) {
+    for i in 0 to module.decls.len() {
         write_decl(w, module.decls.get(i).get())
-        i = i + 1
     }
 }

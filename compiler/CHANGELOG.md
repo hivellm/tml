@@ -5,6 +5,11 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-04-12
+
+### Changed
+- **for-in loop migration** — replaced 80 manual index loops with `for i in 0 to N` in compiler-tml across serial/ast.tml, serial/typeenv.tml, types/checker, types/infer, types/builtins, serial/mod, serial/reader, source, parser/parse_expr
+
 ## [0.3.0] — 2026-04-11
 
 ### Added

@@ -131,12 +131,10 @@ impl BinaryReader {
             return Err(UnexpectedEof)
         }
         let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             let byte: I32 = this.buf.read_byte()
             let dst: *I8 = (ptr as I64 + i) as *I8
             lowlevel { ptr_write[I8](dst, byte as I8) }
-            i = i + 1
         }
         let null_p: *I8 = (ptr as I64 + n) as *I8
         lowlevel { ptr_write[I8](null_p, 0 as I8) }
@@ -155,12 +153,10 @@ impl BinaryReader {
             return Err(UnexpectedEof)
         }
         let ptr: *Unit = lowlevel { mem_alloc(n + 1) }
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             let byte: I32 = this.buf.read_byte()
             let dst: *I8 = (ptr as I64 + i) as *I8
             lowlevel { ptr_write[I8](dst, byte as I8) }
-            i = i + 1
         }
         let null_p: *I8 = (ptr as I64 + n) as *I8
         lowlevel { ptr_write[I8](null_p, 0 as I8) }

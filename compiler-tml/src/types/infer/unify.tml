@@ -166,12 +166,10 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                         ctx.errors.push(type_mismatch(a, b, span))
                         return false
                     }
-                    var i: I64 = 0
-                    loop (i < ac) {
+                    for i in 0 to ac {
                         if not unify(ctx, na.type_args.get(i).get(), nb.type_args.get(i).get(), span) {
                             return false
                         }
-                        i = i + 1
                     }
                     return true
                 },
@@ -220,12 +218,10 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                         ctx.errors.push(type_mismatch(a, b, span))
                         return false
                     }
-                    var i: I64 = 0
-                    loop (i < tc) {
+                    for i in 0 to tc {
                         if not unify(ctx, ta.elements.get(i).get(), tb.elements.get(i).get(), span) {
                             return false
                         }
-                        i = i + 1
                     }
                     return true
                 },
@@ -247,12 +243,10 @@ func unify_resolved(ctx: InferCtx, a: Type, b: Type, span: SourceSpan) -> Bool {
                         ctx.errors.push(type_mismatch(a, b, span))
                         return false
                     }
-                    var i: I64 = 0
-                    loop (i < pc) {
+                    for i in 0 to pc {
                         if not unify(ctx, fa.params.get(i).get(), fb.params.get(i).get(), span) {
                             return false
                         }
-                        i = i + 1
                     }
                     return true
                 },
