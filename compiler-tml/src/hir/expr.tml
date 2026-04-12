@@ -1,0 +1,450 @@
+//! HIR Expression types for the TML self-hosting compiler.
+//!
+//! Every HirExpr variant carries a fully-resolved Type — no type inference
+//! happens after HIR lowering. Mirrors `compiler/include/hir/hir_expr.hpp`.
+//!
+//! Phase 15a — item 1.2.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Binary and Unary operations
+// ============================================================================
+
+/// Binary operation kinds (arithmetic, comparison, logical, bitwise).
+@repr(U8)
+pub enum HirBinOp {
+    Add, Sub, Mul, Div, Mod,
+    Eq, Ne, Lt, Le, Gt, Ge,
+    And, Or,
+    BitAnd, BitOr, BitXor, Shl, Shr
+}
+
+/// Unary operation kinds.
+@repr(U8)
+pub enum HirUnaryOp {
+    Neg, Not, BitNot, Ref, RefMut, Deref
+}
+
+/// Compound assignment operation kinds (+=, -=, etc.).
+@repr(U8)
+pub enum HirCompoundOp {
+    Add, Sub, Mul, Div, Mod,
+    BitAnd, BitOr, BitXor, Shl, Shr
+}
+
+// ============================================================================
+// Literal value
+// ============================================================================
+
+/// Literal value types stored in HirLiteralExpr.
+pub enum HirLitValue {
+    LitInt(I64),
+    LitUInt(I64),
+    LitFloat(F64),
+    LitBool(Bool),
+    LitChar(I32),
+    LitStr(Str)
+}
+
+// ============================================================================
+// Expression sub-structures (payloads for HirExpr variants)
+// ============================================================================
+
+/// Literal: `42`, `3.14`, `"hello"`, `true`
+pub type HirLiteralExpr {
+    id: I64,
+    value: HirLitValue,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Variable reference: `x`
+pub type HirVarExpr {
+    id: I64,
+    name: Str,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Binary operation: `a + b`, `x == y`
+pub type HirBinaryExpr {
+    id: I64,
+    op: HirBinOp,
+    left: Heap[HirExpr],
+    right: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Unary operation: `-x`, `not x`, `ref x`
+pub type HirUnaryExpr {
+    id: I64,
+    op: HirUnaryOp,
+    operand: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Function call: `foo(a, b)`
+pub type HirCallExpr {
+    id: I64,
+    func_name: Str,
+    type_args: List[Type],
+    args: List[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Method call: `obj.method(a, b)`
+pub type HirMethodCallExpr {
+    id: I64,
+    receiver: Heap[HirExpr],
+    method_name: Str,
+    type_args: List[Type],
+    args: List[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Field access: `obj.field`
+pub type HirFieldExpr {
+    id: I64,
+    object: Heap[HirExpr],
+    field_name: Str,
+    field_index: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Index access: `arr[i]`
+pub type HirIndexExpr {
+    id: I64,
+    object: Heap[HirExpr],
+    index: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Tuple construction: `(a, b, c)`
+pub type HirTupleExpr {
+    id: I64,
+    elements: List[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Array construction: `[a, b, c]`
+pub type HirArrayExpr {
+    id: I64,
+    elements: List[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Array repeat: `[0; 100]`
+pub type HirArrayRepeatExpr {
+    id: I64,
+    value: Heap[HirExpr],
+    count: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Struct field in a struct literal.
+pub type HirStructField {
+    name: Str,
+    value: Heap[HirExpr]
+}
+
+/// Struct literal: `Point { x: 1, y: 2 }`
+pub type HirStructExpr {
+    id: I64,
+    struct_name: Str,
+    type_args: List[Type],
+    fields: List[HirStructField],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Enum variant construction: `Just(42)`, `Nothing`
+pub type HirEnumExpr {
+    id: I64,
+    enum_name: Str,
+    variant_name: Str,
+    type_args: List[Type],
+    args: List[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Block expression: `{ stmts; expr }`
+pub type HirBlockExpr {
+    id: I64,
+    stmts: List[Heap[HirStmt]],
+    expr: Maybe[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// If expression: `if cond { then } else { else_ }`
+pub type HirIfExpr {
+    id: I64,
+    condition: Heap[HirExpr],
+    then_branch: Heap[HirExpr],
+    else_branch: Maybe[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// When arm (pattern match branch).
+pub type HirWhenArm {
+    pattern: Heap[HirPattern],
+    guard: Maybe[Heap[HirExpr]],
+    body: Heap[HirExpr]
+}
+
+/// When expression: `when x { Pat => body, ... }`
+pub type HirWhenExpr {
+    id: I64,
+    scrutinee: Heap[HirExpr],
+    arms: List[HirWhenArm],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Loop expression: `loop (cond) { body }`
+pub type HirLoopExpr {
+    id: I64,
+    condition: Heap[HirExpr],
+    body: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// While expression (desugared to loop in some paths).
+pub type HirWhileExpr {
+    id: I64,
+    condition: Heap[HirExpr],
+    body: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// For-in expression: `for x in iter { body }`
+pub type HirForExpr {
+    id: I64,
+    binding: Str,
+    iter: Heap[HirExpr],
+    body: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Return expression: `return expr`
+pub type HirReturnExpr {
+    id: I64,
+    value: Maybe[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Break expression: `break` or `break expr`
+pub type HirBreakExpr {
+    id: I64,
+    value: Maybe[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Continue expression: `continue`
+pub type HirContinueExpr {
+    id: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Captured variable in a closure.
+pub type HirCapture {
+    name: Str,
+    captured_type: Type,
+    is_by_ref: I64
+}
+
+/// Closure expression: `do(x) expr`
+pub type HirClosureExpr {
+    id: I64,
+    params: List[Str],
+    param_types: List[Type],
+    captures: List[HirCapture],
+    body: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Cast expression: `expr as Type`
+pub type HirCastExpr {
+    id: I64,
+    expr: Heap[HirExpr],
+    target_type: Type,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Try expression: `expr?`
+pub type HirTryExpr {
+    id: I64,
+    expr: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Await expression: `expr.await`
+pub type HirAwaitExpr {
+    id: I64,
+    expr: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Assignment: `x = expr`
+pub type HirAssignExpr {
+    id: I64,
+    target: Heap[HirExpr],
+    value: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Compound assignment: `x += expr`
+pub type HirCompoundAssignExpr {
+    id: I64,
+    op: HirCompoundOp,
+    target: Heap[HirExpr],
+    value: Heap[HirExpr],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Lowlevel block: `lowlevel { ... }`
+pub type HirLowlevelExpr {
+    id: I64,
+    stmts: List[Heap[HirStmt]],
+    expr: Maybe[Heap[HirExpr]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+// ============================================================================
+// HirExpr — the unified expression enum (29 variants)
+// ============================================================================
+
+// Forward declarations for mutual recursion
+use compiler::hir::stmt::HirStmt
+use compiler::hir::pattern::HirPattern
+
+/// All HIR expression variants. Every variant carries a fully-resolved Type.
+pub enum HirExpr {
+    Literal(HirLiteralExpr),
+    Var(HirVarExpr),
+    Binary(HirBinaryExpr),
+    Unary(HirUnaryExpr),
+    Call(HirCallExpr),
+    MethodCall(HirMethodCallExpr),
+    Field(HirFieldExpr),
+    Index(HirIndexExpr),
+    Tuple(HirTupleExpr),
+    Array(HirArrayExpr),
+    ArrayRepeat(HirArrayRepeatExpr),
+    Struct(HirStructExpr),
+    Enum(HirEnumExpr),
+    Block(HirBlockExpr),
+    If(HirIfExpr),
+    When(HirWhenExpr),
+    Loop(HirLoopExpr),
+    While(HirWhileExpr),
+    For(HirForExpr),
+    Return(HirReturnExpr),
+    Break(HirBreakExpr),
+    Continue(HirContinueExpr),
+    Closure(HirClosureExpr),
+    Cast(HirCastExpr),
+    Try(HirTryExpr),
+    Await(HirAwaitExpr),
+    Assign(HirAssignExpr),
+    CompoundAssign(HirCompoundAssignExpr),
+    Lowlevel(HirLowlevelExpr)
+}
+
+/// Get the resolved type from any HirExpr variant.
+pub func hir_expr_type(e: HirExpr) -> Type {
+    when e {
+        Literal(x) => return x.resolved_type,
+        Var(x) => return x.resolved_type,
+        Binary(x) => return x.resolved_type,
+        Unary(x) => return x.resolved_type,
+        Call(x) => return x.resolved_type,
+        MethodCall(x) => return x.resolved_type,
+        Field(x) => return x.resolved_type,
+        Index(x) => return x.resolved_type,
+        Tuple(x) => return x.resolved_type,
+        Array(x) => return x.resolved_type,
+        ArrayRepeat(x) => return x.resolved_type,
+        Struct(x) => return x.resolved_type,
+        Enum(x) => return x.resolved_type,
+        Block(x) => return x.resolved_type,
+        If(x) => return x.resolved_type,
+        When(x) => return x.resolved_type,
+        Loop(x) => return x.resolved_type,
+        While(x) => return x.resolved_type,
+        For(x) => return x.resolved_type,
+        Return(x) => return x.resolved_type,
+        Break(x) => return x.resolved_type,
+        Continue(x) => return x.resolved_type,
+        Closure(x) => return x.resolved_type,
+        Cast(x) => return x.resolved_type,
+        Try(x) => return x.resolved_type,
+        Await(x) => return x.resolved_type,
+        Assign(x) => return x.resolved_type,
+        CompoundAssign(x) => return x.resolved_type,
+        Lowlevel(x) => return x.resolved_type
+    }
+}
+
+/// Get the HirId from any HirExpr variant.
+pub func hir_expr_id(e: HirExpr) -> I64 {
+    when e {
+        Literal(x) => return x.id,
+        Var(x) => return x.id,
+        Binary(x) => return x.id,
+        Unary(x) => return x.id,
+        Call(x) => return x.id,
+        MethodCall(x) => return x.id,
+        Field(x) => return x.id,
+        Index(x) => return x.id,
+        Tuple(x) => return x.id,
+        Array(x) => return x.id,
+        ArrayRepeat(x) => return x.id,
+        Struct(x) => return x.id,
+        Enum(x) => return x.id,
+        Block(x) => return x.id,
+        If(x) => return x.id,
+        When(x) => return x.id,
+        Loop(x) => return x.id,
+        While(x) => return x.id,
+        For(x) => return x.id,
+        Return(x) => return x.id,
+        Break(x) => return x.id,
+        Continue(x) => return x.id,
+        Closure(x) => return x.id,
+        Cast(x) => return x.id,
+        Try(x) => return x.id,
+        Await(x) => return x.id,
+        Assign(x) => return x.id,
+        CompoundAssign(x) => return x.id,
+        Lowlevel(x) => return x.id
+    }
+}

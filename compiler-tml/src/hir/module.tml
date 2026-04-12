@@ -1,0 +1,142 @@
+//! HIR Module and declaration types for the TML self-hosting compiler.
+//!
+//! Mirrors `compiler/include/hir/hir_decl.hpp` and `hir_module.hpp`.
+//! A HirModule is the output of the HIR builder — it contains all
+//! monomorphized functions, structs, enums, and impls with fully-resolved types.
+//!
+//! Phase 15a — item 1.4.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::hir::expr::HirExpr
+use compiler::hir::stmt::HirStmt
+use compiler::hir::pattern::HirPattern
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Function declarations
+// ============================================================================
+
+/// A function parameter.
+pub type HirParam {
+    name: Str,
+    param_type: Type,
+    is_mutable: I64,
+    span: SourceSpan
+}
+
+/// A function declaration (regular, method, or extern).
+pub type HirFunction {
+    id: I64,
+    name: Str,
+    mangled_name: Str,
+    params: List[HirParam],
+    return_type: Type,
+    body: Maybe[Heap[HirExpr]],
+    is_public: I64,
+    is_async: I64,
+    is_extern: I64,
+    extern_abi: Maybe[Str],
+    span: SourceSpan
+}
+
+// ============================================================================
+// Struct declarations
+// ============================================================================
+
+/// A struct field.
+pub type HirField {
+    name: Str,
+    field_type: Type,
+    index: I64,
+    has_default: I64
+}
+
+/// A struct declaration (monomorphized).
+pub type HirStruct {
+    id: I64,
+    name: Str,
+    mangled_name: Str,
+    fields: List[HirField],
+    is_public: I64,
+    is_union: I64,
+    span: SourceSpan
+}
+
+// ============================================================================
+// Enum declarations
+// ============================================================================
+
+/// An enum variant.
+pub type HirVariant {
+    name: Str,
+    payload_types: List[Type],
+    discriminant: I64
+}
+
+/// An enum declaration (monomorphized).
+pub type HirEnum {
+    id: I64,
+    name: Str,
+    mangled_name: Str,
+    variants: List[HirVariant],
+    is_public: I64,
+    span: SourceSpan
+}
+
+// ============================================================================
+// Impl declarations
+// ============================================================================
+
+/// An impl block: `impl Behavior for Type { methods... }`
+pub type HirImpl {
+    id: I64,
+    type_name: Str,
+    behavior_name: Str,
+    methods: List[HirFunction],
+    span: SourceSpan
+}
+
+// ============================================================================
+// Const declarations
+// ============================================================================
+
+/// A constant: `const PI: F64 = 3.14`
+pub type HirConst {
+    id: I64,
+    name: Str,
+    const_type: Type,
+    value: Heap[HirExpr],
+    is_public: I64,
+    span: SourceSpan
+}
+
+// ============================================================================
+// HirModule — the complete lowered module
+// ============================================================================
+
+/// A fully-lowered, monomorphized module. This is the output of the HIR
+/// builder and the input to THIR/MIR lowering.
+pub type HirModule {
+    name: Str,
+    source_path: Str,
+    structs: List[HirStruct],
+    enums: List[HirEnum],
+    functions: List[HirFunction],
+    impls: List[HirImpl],
+    constants: List[HirConst]
+}
+
+/// Create an empty HirModule.
+pub func hir_module_new(name: Str, source_path: Str) -> HirModule {
+    return HirModule {
+        name: name,
+        source_path: source_path,
+        structs: List[HirStruct]::new(16),
+        enums: List[HirEnum]::new(8),
+        functions: List[HirFunction]::new(32),
+        impls: List[HirImpl]::new(16),
+        constants: List[HirConst]::new(8)
+    }
+}

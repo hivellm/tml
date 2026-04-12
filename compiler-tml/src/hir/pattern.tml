@@ -1,0 +1,132 @@
+//! HIR Pattern types for the TML self-hosting compiler.
+//!
+//! Patterns appear in let bindings, when arms, and for loops.
+//! Every pattern carries its resolved type.
+//!
+//! Phase 15a — item 1.3.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Pattern sub-structures
+// ============================================================================
+
+/// Wildcard pattern: `_`
+pub type HirWildcardPattern {
+    id: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Binding pattern: `x` or `mut x`
+pub type HirBindingPattern {
+    id: I64,
+    name: Str,
+    is_mutable: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Literal pattern: `42`, `true`, `"hello"`
+pub type HirLiteralPattern {
+    id: I64,
+    value: Str,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Tuple pattern: `(a, b, c)`
+pub type HirTuplePattern {
+    id: I64,
+    elements: List[Heap[HirPattern]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Struct field in a struct pattern.
+pub type HirPatternField {
+    name: Str,
+    pattern: Heap[HirPattern]
+}
+
+/// Struct pattern: `Point { x, y }`
+pub type HirStructPattern {
+    id: I64,
+    struct_name: Str,
+    fields: List[HirPatternField],
+    has_rest: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Enum pattern: `Just(x)`, `Nothing`
+pub type HirEnumPattern {
+    id: I64,
+    enum_name: Str,
+    variant_name: Str,
+    args: List[Heap[HirPattern]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Or pattern: `a | b | c`
+pub type HirOrPattern {
+    id: I64,
+    alternatives: List[Heap[HirPattern]],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Range pattern: `0 to 10`, `'a' through 'z'`
+pub type HirRangePattern {
+    id: I64,
+    start: Str,
+    end: Str,
+    inclusive: I64,
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+/// Array pattern: `[a, b, ..rest]`
+pub type HirArrayPattern {
+    id: I64,
+    elements: List[Heap[HirPattern]],
+    rest: Maybe[Str],
+    resolved_type: Type,
+    span: SourceSpan
+}
+
+// ============================================================================
+// HirPattern — the unified pattern enum (9 variants)
+// ============================================================================
+
+/// All HIR pattern variants.
+pub enum HirPattern {
+    Wildcard(HirWildcardPattern),
+    Binding(HirBindingPattern),
+    Literal(HirLiteralPattern),
+    Tuple(HirTuplePattern),
+    Struct(HirStructPattern),
+    Enum(HirEnumPattern),
+    Or(HirOrPattern),
+    Range(HirRangePattern),
+    Array(HirArrayPattern)
+}
+
+/// Get the resolved type from any HirPattern variant.
+pub func hir_pattern_type(p: HirPattern) -> Type {
+    when p {
+        Wildcard(x) => return x.resolved_type,
+        Binding(x) => return x.resolved_type,
+        Literal(x) => return x.resolved_type,
+        Tuple(x) => return x.resolved_type,
+        Struct(x) => return x.resolved_type,
+        Enum(x) => return x.resolved_type,
+        Or(x) => return x.resolved_type,
+        Range(x) => return x.resolved_type,
+        Array(x) => return x.resolved_type
+    }
+}

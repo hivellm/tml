@@ -1,0 +1,43 @@
+//! HIR Statement types for the TML self-hosting compiler.
+//!
+//! HIR has a minimal statement set: Let and Expr. All other statement
+//! forms (var, assignment) are desugared during HIR lowering.
+//!
+//! Phase 15a — item 1.3.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::hir::expr::HirExpr
+use compiler::hir::pattern::HirPattern
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Statement sub-structures
+// ============================================================================
+
+/// Let statement: `let x = expr` or `let x: T = expr`
+pub type HirLetStmt {
+    id: I64,
+    pattern: Heap[HirPattern],
+    declared_type: Type,
+    init: Maybe[Heap[HirExpr]],
+    is_mutable: I64,
+    span: SourceSpan
+}
+
+/// Expression statement: `expr;` (value discarded)
+pub type HirExprStmt {
+    id: I64,
+    expr: Heap[HirExpr],
+    span: SourceSpan
+}
+
+// ============================================================================
+// HirStmt — the unified statement enum
+// ============================================================================
+
+/// All HIR statement variants.
+pub enum HirStmt {
+    Let(HirLetStmt),
+    Expr(HirExprStmt)
+}
