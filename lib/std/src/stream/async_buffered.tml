@@ -109,10 +109,8 @@ impl AsyncBufReader {
     func compact(mut this) {
         if this.pos > 0 {
             let remaining: I64 = this.filled - this.pos
-            var i: I64 = 0
-            loop (i < remaining) {
+            for i in 0 to remaining {
                 abuf_write_byte(this.buf_data, i, abuf_read_byte(this.buf_data, this.pos + i))
-                i = i + 1
             }
             this.pos = 0
             this.filled = remaining
@@ -158,10 +156,8 @@ impl AsyncBufReader {
                         if actual > space {
                             actual = space
                         }
-                        var i: I64 = 0
-                        loop (i < actual) {
+                        for i in 0 to actual {
                             abuf_write_byte(this.buf_data, this.filled + i, temp[i])
-                            i = i + 1
                         }
                         this.filled = this.filled + actual
                         return Poll::Ready(Ok(actual))
@@ -182,14 +178,12 @@ impl AsyncBufReader {
     pub func poll_read_line[R: AsyncRead](mut this, source: mut ref R, cx: mut ref Context[Unit]) -> Poll[Outcome[Str, IoError]] {
         // First, check if we already have a complete line in the buffer
         var newline_at: I64 = 0 - 1
-        var scan: I64 = this.pos
-        loop (scan < this.filled) {
+        for scan in this.pos to this.filled {
             let bval: I64 = abuf_read_byte(this.buf_data, scan) as I64
             if bval == 10 {
                 newline_at = scan
                 break
             }
-            scan = scan + 1
         }
 
         if newline_at >= 0 {
@@ -220,13 +214,13 @@ impl AsyncBufReader {
                             scan2 = this.pos
                         }
                         var newline_at2: I64 = 0 - 1
-                        loop (scan2 < this.filled) {
+                        let scan2_start: I64 = scan2
+                        for scan2 in scan2_start to this.filled {
                             let bval: I64 = abuf_read_byte(this.buf_data, scan2) as I64
                             if bval == 10 {
                                 newline_at2 = scan2
                                 break
                             }
-                            scan2 = scan2 + 1
                         }
 
                         if newline_at2 >= 0 {
@@ -249,23 +243,19 @@ impl AsyncBufReader {
     pub func poll_read_until[R: AsyncRead](mut this, source: mut ref R, cx: mut ref Context[Unit], delimiter: U8) -> Poll[Outcome[Str, IoError]] {
         // Check if delimiter is already in buffer
         var delim_at: I64 = 0 - 1
-        var scan: I64 = this.pos
-        loop (scan < this.filled) {
+        for scan in this.pos to this.filled {
             if abuf_read_byte(this.buf_data, scan) == delimiter {
                 delim_at = scan
                 break
             }
-            scan = scan + 1
         }
 
         if delim_at >= 0 {
             // Found delimiter, extract up to it
             let len: I64 = delim_at - this.pos
             let result: *Unit = abuf_alloc(len + 1)
-            var i: I64 = 0
-            loop (i < len) {
+            for i in 0 to len {
                 abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
-                i = i + 1
             }
             abuf_write_byte(result, len, 0 as U8)
             this.pos = delim_at + 1  // Skip past delimiter
@@ -295,21 +285,19 @@ impl AsyncBufReader {
                             scan2 = this.pos
                         }
                         var delim_at2: I64 = 0 - 1
-                        loop (scan2 < this.filled) {
+                        let scan2_start: I64 = scan2
+                        for scan2 in scan2_start to this.filled {
                             if abuf_read_byte(this.buf_data, scan2) == delimiter {
                                 delim_at2 = scan2
                                 break
                             }
-                            scan2 = scan2 + 1
                         }
 
                         if delim_at2 >= 0 {
                             let len: I64 = delim_at2 - this.pos
                             let result: *Unit = abuf_alloc(len + 1)
-                            var i: I64 = 0
-                            loop (i < len) {
+                            for i in 0 to len {
                                 abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
-                                i = i + 1
                             }
                             abuf_write_byte(result, len, 0 as U8)
                             this.pos = delim_at2 + 1
@@ -337,10 +325,8 @@ impl AsyncBufReader {
 
         let line_len: I64 = end - this.pos
         let result: *Unit = abuf_alloc(line_len + 1)
-        var k: I64 = 0
-        loop (k < line_len) {
+        for k in 0 to line_len {
             abuf_write_byte(result, k, abuf_read_byte(this.buf_data, this.pos + k))
-            k = k + 1
         }
         abuf_write_byte(result, line_len, 0 as U8)
 
@@ -354,10 +340,8 @@ impl AsyncBufReader {
     func extract_remaining(mut this) -> Str {
         let remaining: I64 = this.filled - this.pos
         let result: *Unit = abuf_alloc(remaining + 1)
-        var i: I64 = 0
-        loop (i < remaining) {
+        for i in 0 to remaining {
             abuf_write_byte(result, i, abuf_read_byte(this.buf_data, this.pos + i))
-            i = i + 1
         }
         abuf_write_byte(result, remaining, 0 as U8)
         this.pos = this.filled
@@ -435,10 +419,8 @@ impl AsyncBufWriter {
 
         if data_len <= space {
             // Data fits in buffer — copy it in
-            var i: I64 = 0
-            loop (i < data_len) {
+            for i in 0 to data_len {
                 abuf_write_byte(this.buf_data, this.len + i, data[i])
-                i = i + 1
             }
             this.len = this.len + data_len
             return Poll::Ready(Ok(data_len))
@@ -457,10 +439,8 @@ impl AsyncBufWriter {
                             return sink.poll_write(cx, data)
                         }
                         // Otherwise buffer it
-                        var i: I64 = 0
-                        loop (i < data_len) {
+                        for i in 0 to data_len {
                             abuf_write_byte(this.buf_data, this.len + i, data[i])
-                            i = i + 1
                         }
                         this.len = this.len + data_len
                         return Poll::Ready(Ok(data_len))
@@ -492,10 +472,8 @@ impl AsyncBufWriter {
         }
 
         // Copy from our buffer to temp
-        var i: I64 = 0
-        loop (i < to_write) {
+        for i in 0 to to_write {
             temp[i] = abuf_read_byte(this.buf_data, i)
-            i = i + 1
         }
 
         let poll_result: Poll[Outcome[I64, IoError]] = sink.poll_write(cx, ref temp)
@@ -506,11 +484,9 @@ impl AsyncBufWriter {
                     Err(e) => return Poll::Ready(Err(e)),
                     Ok(n) => {
                         // Shift remaining data forward
-                        var j: I64 = 0
                         let remaining: I64 = this.len - n
-                        loop (j < remaining) {
+                        for j in 0 to remaining {
                             abuf_write_byte(this.buf_data, j, abuf_read_byte(this.buf_data, n + j))
-                            j = j + 1
                         }
                         this.len = remaining
 

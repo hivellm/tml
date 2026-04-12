@@ -48,7 +48,7 @@ func config_parse_i64(s: Str) -> I64 {
         return 0
     }
     var result: I64 = 0
-    loop (i < s_len) {
+    for i in i to s_len {
         let p: *U8 = (src + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         let ch: I32 = b as I32
@@ -56,7 +56,6 @@ func config_parse_i64(s: Str) -> I64 {
             return 0
         }
         result = result * 10 + (ch - 48) as I64
-        i = i + 1
     }
     if negative {
         result = 0 - result

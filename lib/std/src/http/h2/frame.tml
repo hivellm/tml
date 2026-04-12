@@ -331,10 +331,8 @@ pub func h2_encode_frame_raw(frame_type: I32, flags: I32, stream_id: I64, payloa
     buf.write_u32_be(sid, 5)
 
     // Copy payload bytes
-    var i: I64 = 0
-    loop (i < payload_len) {
+    for i in 0 to payload_len {
         buf.write_u8(payload.get(i), 9 + i)
-        i = i + 1
     }
 
     buf
@@ -394,10 +392,8 @@ pub func h2_decode_frame(data: Buffer) -> Outcome[(H2Frame, I64), H2Error] {
 
     // Extract payload
     let payload = Buffer::new(payload_len)
-    var i: I64 = 0
-    loop (i < payload_len) {
+    for i in 0 to payload_len {
         payload.write_u8(data.get(9 + i), i)
-        i = i + 1
     }
 
     let frame = H2Frame {

@@ -114,11 +114,9 @@ impl TimerWheel {
         let l1: I64 = mem_alloc(slot_bytes) as I64
 
         // Initialize all slots to -1 (empty)
-        var i: I64 = 0
-        loop (i < SLOTS) {
+        for i in 0 to SLOTS {
             slot_set(l0, i, EMPTY)
             slot_set(l1, i, EMPTY)
-            i = i + 1
         }
 
         // Allocate entry pool
@@ -126,11 +124,9 @@ impl TimerWheel {
         let entries: I64 = mem_alloc(entry_bytes) as I64
 
         // Build free list: each entry's `next` field (offset 24) points to next index
-        var j: I64 = 0
-        loop (j < INIT_CAPACITY) {
+        for j in 0 to INIT_CAPACITY {
             let next_val: I64 = if j + 1 < INIT_CAPACITY { j + 1 } else { -1 }
             timer_set(entries + j * ENTRY_SIZE, 24, next_val)
-            j = j + 1
         }
 
         TimerWheel {
@@ -226,8 +222,7 @@ impl TimerWheel {
         var min_deadline: I64 = 9223372036854775807 // I64 max
 
         // Scan level 0
-        var i: I64 = 0
-        loop (i < SLOTS) {
+        for i in 0 to SLOTS {
             var idx: I64 = slot_get(this.level0, i)
             loop (idx >= 0) {
                 let ea: I64 = this.entries + idx * ENTRY_SIZE
@@ -238,12 +233,10 @@ impl TimerWheel {
                 }
                 idx = timer_get(ea, 24)
             }
-            i = i + 1
         }
 
         // Scan level 1
-        i = 0
-        loop (i < SLOTS) {
+        for i in 0 to SLOTS {
             var idx: I64 = slot_get(this.level1, i)
             loop (idx >= 0) {
                 let ea: I64 = this.entries + idx * ENTRY_SIZE
@@ -254,7 +247,6 @@ impl TimerWheel {
                 }
                 idx = timer_get(ea, 24)
             }
-            i = i + 1
         }
 
         // Scan overflow
@@ -324,11 +316,9 @@ impl TimerWheel {
         }
 
         // Build free list for new entries
-        var i: I64 = this.capacity
-        loop (i < new_cap) {
+        for i in this.capacity to new_cap {
             let next_val: I64 = if i + 1 < new_cap { i + 1 } else { -1 }
             timer_set(new_entries + i * ENTRY_SIZE, 24, next_val)
-            i = i + 1
         }
 
         this.free_head = this.capacity

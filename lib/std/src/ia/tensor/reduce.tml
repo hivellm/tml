@@ -19,25 +19,19 @@ func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
     let rank = shape.rank()
     let mut indices = List[I64]::new(rank)
     // Pre-fill with zeros so set() works.
-    let mut k = 0
-    loop (k < rank) {
+    for k in 0 to rank {
         indices.push(0)
-        k = k + 1
     }
     let mut remaining = flat
-    let mut j = 0
-    loop (j < rank) {
+    for j in 0 to rank {
         // Stride for dimension j = product of all dims to the right.
         let mut stride = 1
-        let mut s = j + 1
-        loop (s < rank) {
+        for s in (j + 1) to rank {
             stride = stride * shape.dim(s)
-            s = s + 1
         }
         let idx = remaining / stride
         indices.set(j, idx)
         remaining = remaining - idx * stride
-        j = j + 1
     }
     indices
 }
@@ -61,15 +55,13 @@ func indices_to_flat(indices: ref List[I64], shape: ref Shape) -> I64 {
 func build_input_indices(out_indices: ref List[I64], dim_val: I64, dim: I64, in_rank: I64) -> List[I64] {
     let mut in_indices = List[I64]::new(in_rank)
     let mut out_i = 0
-    let mut i = 0
-    loop (i < in_rank) {
+    for i in 0 to in_rank {
         if i == dim {
             in_indices.push(dim_val)
         } else {
             in_indices.push(out_indices.get(out_i))
             out_i = out_i + 1
         }
-        i = i + 1
     }
     in_indices
 }
@@ -78,12 +70,10 @@ func build_input_indices(out_indices: ref List[I64], dim_val: I64, dim: I64, in_
 func output_shape_dims(a: ref Tensor, dim: I64) -> List[I64] {
     let rank = a.rank()
     let mut dims = List[I64]::new(rank - 1)
-    let mut i = 0
-    loop (i < rank) {
+    for i in 0 to rank {
         if i != dim {
             dims.push(a.dim(i))
         }
-        i = i + 1
     }
     dims
 }
@@ -96,10 +86,8 @@ func output_shape_dims(a: ref Tensor, dim: I64) -> List[I64] {
 pub func sum(a: ref Tensor) -> F64 {
     let n: I64 = a.numel()
     let mut total: F64 = 0.0
-    let mut i: I64 = 0
-    loop (i < n) {
+    for i in 0 to n {
         total = total + a.get_f64(i)
-        i = i + 1
     }
     total
 }
@@ -122,13 +110,11 @@ pub func max_val(a: ref Tensor) -> F64 {
         return 0.0
     }
     let mut best: F64 = a.get_f64(0)
-    let mut i: I64 = 1
-    loop (i < n) {
+    for i in 1 to n {
         let v: F64 = a.get_f64(i)
         if v > best {
             best = v
         }
-        i = i + 1
     }
     best
 }
@@ -142,13 +128,11 @@ pub func min_val(a: ref Tensor) -> F64 {
         return 0.0
     }
     let mut best: F64 = a.get_f64(0)
-    let mut i: I64 = 1
-    loop (i < n) {
+    for i in 1 to n {
         let v: F64 = a.get_f64(i)
         if v < best {
             best = v
         }
-        i = i + 1
     }
     best
 }
@@ -163,14 +147,12 @@ pub func argmax(a: ref Tensor) -> I64 {
     }
     let mut best_val = a.get_f64(0)
     let mut best_idx = 0
-    let mut i = 1
-    loop (i < n) {
+    for i in 1 to n {
         let v = a.get_f64(i)
         if v > best_val {
             best_val = v
             best_idx = i
         }
-        i = i + 1
     }
     best_idx
 }
@@ -185,14 +167,12 @@ pub func argmin(a: ref Tensor) -> I64 {
     }
     let mut best_val = a.get_f64(0)
     let mut best_idx = 0
-    let mut i = 1
-    loop (i < n) {
+    for i in 1 to n {
         let v = a.get_f64(i)
         if v < best_val {
             best_val = v
             best_idx = i
         }
-        i = i + 1
     }
     best_idx
 }
@@ -216,19 +196,15 @@ pub func sum_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
     let out_numel = result.numel()
     let dim_size = a.dim(dim)
 
-    let mut out_idx = 0
-    loop (out_idx < out_numel) {
+    for out_idx in 0 to out_numel {
         let out_indices = flat_to_indices(out_idx, result.shape())
         let mut acc = 0.0
-        let mut d = 0
-        loop (d < dim_size) {
+        for d in 0 to dim_size {
             let in_indices = build_input_indices(ref out_indices, d, dim, rank)
             let in_flat = indices_to_flat(ref in_indices, a.shape())
             acc = acc + a.get_f64(in_flat)
-            d = d + 1
         }
         result.set_f64(out_idx, acc)
-        out_idx = out_idx + 1
     }
 
     Ok(result)
@@ -250,10 +226,8 @@ pub func mean_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
         Ok(mut s) => {
             let n = s.numel()
             let divisor = dim_size as F64
-            let mut i = 0
-            loop (i < n) {
+            for i in 0 to n {
                 s.set_f64(i, s.get_f64(i) / divisor)
-                i = i + 1
             }
             Ok(s)
         },
@@ -274,25 +248,21 @@ pub func max_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
     let out_numel = result.numel()
     let dim_size = a.dim(dim)
 
-    let mut out_idx = 0
-    loop (out_idx < out_numel) {
+    for out_idx in 0 to out_numel {
         let out_indices = flat_to_indices(out_idx, result.shape())
         // Initialise with the first element along the reduced dimension.
         let first_in = build_input_indices(ref out_indices, 0, dim, rank)
         let first_flat = indices_to_flat(ref first_in, a.shape())
         let mut best = a.get_f64(first_flat)
-        let mut d = 1
-        loop (d < dim_size) {
+        for d in 1 to dim_size {
             let in_indices = build_input_indices(ref out_indices, d, dim, rank)
             let in_flat = indices_to_flat(ref in_indices, a.shape())
             let v = a.get_f64(in_flat)
             if v > best {
                 best = v
             }
-            d = d + 1
         }
         result.set_f64(out_idx, best)
-        out_idx = out_idx + 1
     }
 
     Ok(result)
@@ -312,25 +282,21 @@ pub func min_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
     let out_numel = result.numel()
     let dim_size = a.dim(dim)
 
-    let mut out_idx = 0
-    loop (out_idx < out_numel) {
+    for out_idx in 0 to out_numel {
         let out_indices = flat_to_indices(out_idx, result.shape())
         // Initialise with the first element along the reduced dimension.
         let first_in = build_input_indices(ref out_indices, 0, dim, rank)
         let first_flat = indices_to_flat(ref first_in, a.shape())
         let mut best = a.get_f64(first_flat)
-        let mut d = 1
-        loop (d < dim_size) {
+        for d in 1 to dim_size {
             let in_indices = build_input_indices(ref out_indices, d, dim, rank)
             let in_flat = indices_to_flat(ref in_indices, a.shape())
             let v = a.get_f64(in_flat)
             if v < best {
                 best = v
             }
-            d = d + 1
         }
         result.set_f64(out_idx, best)
-        out_idx = out_idx + 1
     }
 
     Ok(result)
@@ -351,16 +317,14 @@ pub func argmax_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
     let out_numel = result.numel()
     let dim_size = a.dim(dim)
 
-    let mut out_idx = 0
-    loop (out_idx < out_numel) {
+    for out_idx in 0 to out_numel {
         let out_indices = flat_to_indices(out_idx, result.shape())
         // Initialise with first element.
         let first_in = build_input_indices(ref out_indices, 0, dim, rank)
         let first_flat = indices_to_flat(ref first_in, a.shape())
         let mut best_val = a.get_f64(first_flat)
         let mut best_d = 0
-        let mut d = 1
-        loop (d < dim_size) {
+        for d in 1 to dim_size {
             let in_indices = build_input_indices(ref out_indices, d, dim, rank)
             let in_flat = indices_to_flat(ref in_indices, a.shape())
             let v = a.get_f64(in_flat)
@@ -368,10 +332,8 @@ pub func argmax_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
                 best_val = v
                 best_d = d
             }
-            d = d + 1
         }
         result.set_f64(out_idx, best_d as F64)
-        out_idx = out_idx + 1
     }
 
     Ok(result)
@@ -392,16 +354,14 @@ pub func argmin_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
     let out_numel = result.numel()
     let dim_size = a.dim(dim)
 
-    let mut out_idx = 0
-    loop (out_idx < out_numel) {
+    for out_idx in 0 to out_numel {
         let out_indices = flat_to_indices(out_idx, result.shape())
         // Initialise with first element.
         let first_in = build_input_indices(ref out_indices, 0, dim, rank)
         let first_flat = indices_to_flat(ref first_in, a.shape())
         let mut best_val = a.get_f64(first_flat)
         let mut best_d = 0
-        let mut d = 1
-        loop (d < dim_size) {
+        for d in 1 to dim_size {
             let in_indices = build_input_indices(ref out_indices, d, dim, rank)
             let in_flat = indices_to_flat(ref in_indices, a.shape())
             let v = a.get_f64(in_flat)
@@ -409,10 +369,8 @@ pub func argmin_dim(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
                 best_val = v
                 best_d = d
             }
-            d = d + 1
         }
         result.set_f64(out_idx, best_d as F64)
-        out_idx = out_idx + 1
     }
 
     Ok(result)

@@ -50,8 +50,7 @@ func hex_to_i64(hex: Str) -> I64 {
     let hex_len: I64 = str::len(hex)
     if hex_len == 0 { return -1 as I64 }
     var result: I64 = 0
-    var i: I64 = 0
-    loop (i < hex_len) {
+    for i in 0 to hex_len {
         let c: I32 = str::char_at(hex, i)
         var digit: I64 = 0
         if c >= 48 and c <= 57 {          // '0'-'9'
@@ -64,7 +63,6 @@ func hex_to_i64(hex: Str) -> I64 {
             return -1 as I64  // invalid hex character
         }
         result = result * 16 + digit
-        i = i + 1
     }
     return result
 }

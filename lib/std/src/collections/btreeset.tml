@@ -92,15 +92,11 @@ impl[T: Ord] BTreeSet[T] {
     /// Returns a new set with all elements from both sets.
     pub func union_with(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
         var result: BTreeSet[T] = BTreeSet[T]::new()
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             result.insert(this.map.key_at(i))
-            i = i + 1
         }
-        var j: I64 = 0
-        loop (j < other.len()) {
+        for j in 0 to other.len() {
             result.insert(other.map.key_at(j))
-            j = j + 1
         }
         return result
     }
@@ -108,13 +104,11 @@ impl[T: Ord] BTreeSet[T] {
     /// Returns a new set with elements common to both sets.
     pub func intersection(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
         var result: BTreeSet[T] = BTreeSet[T]::new()
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             let val: T = this.map.key_at(i)
             if other.contains(val) {
                 result.insert(val)
             }
-            i = i + 1
         }
         return result
     }
@@ -122,13 +116,11 @@ impl[T: Ord] BTreeSet[T] {
     /// Returns a new set with elements in this but not in other.
     pub func difference(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
         var result: BTreeSet[T] = BTreeSet[T]::new()
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             let val: T = this.map.key_at(i)
             if not other.contains(val) {
                 result.insert(val)
             }
-            i = i + 1
         }
         return result
     }
@@ -136,33 +128,27 @@ impl[T: Ord] BTreeSet[T] {
     /// Returns a new set with elements in either but not both.
     pub func symmetric_difference(this, other: ref BTreeSet[T]) -> BTreeSet[T] {
         var result: BTreeSet[T] = BTreeSet[T]::new()
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             let val: T = this.map.key_at(i)
             if not other.contains(val) {
                 result.insert(val)
             }
-            i = i + 1
         }
-        var j: I64 = 0
-        loop (j < other.len()) {
+        for j in 0 to other.len() {
             let val: T = other.map.key_at(j)
             if not this.contains(val) {
                 result.insert(val)
             }
-            j = j + 1
         }
         return result
     }
 
     /// Returns true if all elements of this set are in other.
     pub func is_subset(this, other: ref BTreeSet[T]) -> Bool {
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             if not other.contains(this.map.key_at(i)) {
                 return false
             }
-            i = i + 1
         }
         return true
     }
@@ -174,12 +160,10 @@ impl[T: Ord] BTreeSet[T] {
 
     /// Returns true if this set and other share no elements.
     pub func is_disjoint(this, other: ref BTreeSet[T]) -> Bool {
-        var i: I64 = 0
-        loop (i < this.len()) {
+        for i in 0 to this.len() {
             if other.contains(this.map.key_at(i)) {
                 return false
             }
-            i = i + 1
         }
         return true
     }

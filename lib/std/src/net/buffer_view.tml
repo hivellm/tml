@@ -183,13 +183,11 @@ impl BufferView {
     ///
     /// Returns the index of the first occurrence, or -1 if not found.
     pub func find_byte(this, needle: U8) -> I64 {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             let addr: I64 = this.data as I64 + this.offset + i
             if rd_byte(addr) == needle {
                 return i
             }
-            i = i + 1
         }
         return 0 - 1
     }
@@ -200,13 +198,11 @@ impl BufferView {
         if prefix_len > this.length {
             return false
         }
-        var i: I64 = 0
-        loop (i < prefix_len) {
+        for i in 0 to prefix_len {
             let addr: I64 = this.data as I64 + this.offset + i
             if rd_byte(addr) != prefix[i] {
                 return false
             }
-            i = i + 1
         }
         return true
     }
@@ -245,14 +241,12 @@ impl BufferView {
         if this.length != other.length {
             return false
         }
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             let a_addr: I64 = this.data as I64 + this.offset + i
             let b_addr: I64 = other.data as I64 + other.offset + i
             if rd_byte(a_addr) != rd_byte(b_addr) {
                 return false
             }
-            i = i + 1
         }
         return true
     }

@@ -124,10 +124,8 @@ impl[T] BinaryHeap[T] {
     /// Pass the items as a List and they'll be pushed one by one.
     pub func from_items(items: ref List[T]) -> BinaryHeap[T] {
         var heap = BinaryHeap[T]::new()
-        var i: I64 = 0
-        loop (i < items.len()) {
+        for i in 0 to items.len() {
             heap.push(items.get(i))
-            i = i + 1
         }
         return heap
     }
@@ -137,13 +135,11 @@ impl[T] BinaryHeap[T] {
         var result = List[T].new(this.length)
         var count: I64 = this.length
         // Pop all elements (max first) → collect in reverse order
-        var i: I64 = 0
-        loop (i < count) {
+        for i in 0 to count {
             when this.pop() {
                 Just(val) => result.push(val),
                 Nothing => {},
             }
-            i = i + 1
         }
         // Result is in descending order, reverse it
         var lo: I64 = 0
@@ -160,22 +156,18 @@ impl[T] BinaryHeap[T] {
 
     /// Check if the heap contains a value. O(n) linear scan.
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return true
             }
-            i = i + 1
         }
         return false
     }
 
     /// Push multiple elements from a list. Each push is O(log n).
     pub func extend(mut this, items: ref List[T]) {
-        var i: I64 = 0
-        loop (i < items.len()) {
+        for i in 0 to items.len() {
             this.push(items.get(i))
-            i = i + 1
         }
     }
 
@@ -215,10 +207,8 @@ impl[T] BinaryHeap[T] {
     /// To iterate in sorted order, use `into_sorted()`.
     pub func iter(this) -> HeapIter[T] {
         var snapshot = List[T].new(this.length)
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             snapshot.push(this.data.get(i))
-            i = i + 1
         }
         let snap_len: I64 = this.length
         return HeapIter { snapshot: snapshot, length: snap_len, index: 0 }
@@ -230,13 +220,11 @@ impl[T] BinaryHeap[T] {
     pub func drain(mut this) -> List[T] {
         var result = List[T].new(this.length)
         var count: I64 = this.length
-        var i: I64 = 0
-        loop (i < count) {
+        for i in 0 to count {
             when this.pop() {
                 Just(val) => result.push(val),
                 Nothing => {},
             }
-            i = i + 1
         }
         // result is in descending order (max-heap pops max first), reverse it
         var lo: I64 = 0
@@ -253,10 +241,8 @@ impl[T] BinaryHeap[T] {
 
     /// Merges all elements from `other` into this heap. `other` is cleared after the call.
     pub func append(mut this, other: mut ref BinaryHeap[T]) {
-        var i: I64 = 0
-        loop (i < other.length) {
+        for i in 0 to other.length {
             this.push(other.data.get(i))
-            i = i + 1
         }
         other.clear()
     }
@@ -264,14 +250,12 @@ impl[T] BinaryHeap[T] {
     /// Retains only elements for which `pred` returns true, then restores the heap invariant.
     pub func retain(mut this, pred: func(ref T) -> Bool) {
         var write: I64 = 0
-        var read: I64 = 0
-        loop (read < this.length) {
+        for read in 0 to this.length {
             let val: T = this.data.get(read)
             if pred(ref val) {
                 this.data.set(write, val)
                 write = write + 1
             }
-            read = read + 1
         }
         this.length = write
         // Re-heapify from last non-leaf down to root
@@ -371,10 +355,8 @@ impl[T] MinHeap[T] {
     pub func clear(mut this) { this.length = 0 }
 
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item { return true }
-            i = i + 1
         }
         return false
     }

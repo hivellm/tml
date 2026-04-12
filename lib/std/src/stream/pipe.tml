@@ -30,10 +30,8 @@ use std::stream::byte_stream::ByteStream
 
 // Internal: copy `count` bytes from `src_data` at `src_offset` into `dst_data` at `dst_offset`.
 func copy_bytes_raw(src_data: *Unit, src_offset: I64, dst_data: *Unit, dst_offset: I64, count: I64) {
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         buf_write_byte_at(dst_data, dst_offset + i, buf_read_byte_at(src_data, src_offset + i))
-        i = i + 1
     }
 }
 

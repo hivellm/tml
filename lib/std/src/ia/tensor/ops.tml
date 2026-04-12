@@ -24,10 +24,8 @@ func _ops_v2() -> I64 { 2 }
 func shape_dims(t: ref Tensor) -> List[I64] {
     let rank = t.rank()
     let mut dims = List[I64]::new(rank)
-    let mut i = 0
-    loop (i < rank) {
+    for i in 0 to rank {
         dims.push(t.dim(i))
-        i = i + 1
     }
     dims
 }
@@ -36,10 +34,8 @@ func shape_dims(t: ref Tensor) -> List[I64] {
 func shape_to_dims(s: ref Shape) -> List[I64] {
     let rank = s.rank()
     let mut dims = List[I64]::new(rank)
-    let mut i = 0
-    loop (i < rank) {
+    for i in 0 to rank {
         dims.push(s.dim(i))
-        i = i + 1
     }
     dims
 }
@@ -50,25 +46,19 @@ func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
     let rank = shape.rank()
     let mut indices = List[I64]::new(rank)
     // Pre-fill with zeros so we can use set() below.
-    let mut k: I64 = 0
-    loop (k < rank) {
+    for k in 0 to rank {
         indices.push(0 as I64)
-        k = k + 1
     }
     let mut remaining: I64 = flat
-    let mut j: I64 = 0
-    loop (j < rank) {
+    for j in 0 to rank {
         // Compute stride for dimension j (product of all dims to the right).
         let mut stride: I64 = 1
-        let mut s: I64 = j + 1
-        loop (s < rank) {
+        for s in (j + 1) to rank {
             stride = stride * shape.dim(s)
-            s = s + 1
         }
         let idx: I64 = remaining / stride
         indices.set(j, idx)
         remaining = remaining - idx * stride
-        j = j + 1
     }
     indices
 }
@@ -108,10 +98,8 @@ pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
         let dims = shape_dims(a)
         let mut result = zeros(dims, a.dtype())
         let n: I64 = a.numel()
-        let mut i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result.set_f64(i, a.get_f64(i) + b.get_f64(i))
-            i = i + 1
         }
         return Ok(result)
     }
@@ -124,13 +112,11 @@ pub func add(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i: I64 = 0
-            loop (i < n) {
+            for i in 0 to n {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
                 let b_idx = broadcast_flat_index(ref indices, b.shape())
                 result.set_f64(i, a.get_f64(a_idx) + b.get_f64(b_idx))
-                i = i + 1
             }
             Ok(result)
         },
@@ -144,10 +130,8 @@ pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
         let dims = shape_dims(a)
         let mut result = zeros(dims, a.dtype())
         let n: I64 = a.numel()
-        let mut i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result.set_f64(i, a.get_f64(i) - b.get_f64(i))
-            i = i + 1
         }
         return Ok(result)
     }
@@ -160,13 +144,11 @@ pub func sub(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i: I64 = 0
-            loop (i < n) {
+            for i in 0 to n {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
                 let b_idx = broadcast_flat_index(ref indices, b.shape())
                 result.set_f64(i, a.get_f64(a_idx) - b.get_f64(b_idx))
-                i = i + 1
             }
             Ok(result)
         },
@@ -180,10 +162,8 @@ pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
         let dims = shape_dims(a)
         let mut result = zeros(dims, a.dtype())
         let n: I64 = a.numel()
-        let mut i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result.set_f64(i, a.get_f64(i) * b.get_f64(i))
-            i = i + 1
         }
         return Ok(result)
     }
@@ -196,13 +176,11 @@ pub func mul(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i: I64 = 0
-            loop (i < n) {
+            for i in 0 to n {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
                 let b_idx = broadcast_flat_index(ref indices, b.shape())
                 result.set_f64(i, a.get_f64(a_idx) * b.get_f64(b_idx))
-                i = i + 1
             }
             Ok(result)
         },
@@ -216,10 +194,8 @@ pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
         let dims = shape_dims(a)
         let mut result = zeros(dims, a.dtype())
         let n: I64 = a.numel()
-        let mut i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result.set_f64(i, a.get_f64(i) / b.get_f64(i))
-            i = i + 1
         }
         return Ok(result)
     }
@@ -232,13 +208,11 @@ pub func div(a: ref Tensor, b: ref Tensor) -> IaResult[Tensor] {
             let out_dims = shape_to_dims(ref out_shape)
             let mut result = zeros(out_dims, a.dtype())
             let n = out_shape.numel()
-            let mut i: I64 = 0
-            loop (i < n) {
+            for i in 0 to n {
                 let indices = flat_to_indices(i, ref out_shape)
                 let a_idx = broadcast_flat_index(ref indices, a.shape())
                 let b_idx = broadcast_flat_index(ref indices, b.shape())
                 result.set_f64(i, a.get_f64(a_idx) / b.get_f64(b_idx))
-                i = i + 1
             }
             Ok(result)
         },
@@ -254,10 +228,8 @@ pub func neg(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n: I64 = a.numel()
-    let mut i: I64 = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, 0.0 - a.get_f64(i))
-        i = i + 1
     }
     result
 }
@@ -268,11 +240,9 @@ pub func abs_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         let v = a.get_f64(i)
         result.set_f64(i, v < 0.0 ? (0.0 - v) : v)
-        i = i + 1
     }
     result
 }
@@ -282,10 +252,8 @@ pub func exp_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, exp(a.get_f64(i)))
-        i = i + 1
     }
     result
 }
@@ -295,10 +263,8 @@ pub func log_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, ln(a.get_f64(i)))
-        i = i + 1
     }
     result
 }
@@ -308,10 +274,8 @@ pub func sqrt_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, sqrt(a.get_f64(i)))
-        i = i + 1
     }
     result
 }
@@ -321,10 +285,8 @@ pub func pow_tensor(a: ref Tensor, exponent: F64) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, pow(a.get_f64(i), exponent))
-        i = i + 1
     }
     result
 }
@@ -334,10 +296,8 @@ pub func floor_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, floor(a.get_f64(i)))
-        i = i + 1
     }
     result
 }
@@ -347,10 +307,8 @@ pub func ceil_tensor(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, ceil(a.get_f64(i)))
-        i = i + 1
     }
     result
 }
@@ -364,12 +322,10 @@ pub func clamp(a: ref Tensor, min_val: F64, max_val: F64) -> Tensor {
     let dims = shape_dims(a)
     let mut result = zeros(dims, a.dtype())
     let n = a.numel()
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         let v = a.get_f64(i)
         let clamped = v < min_val ? min_val : (v > max_val ? max_val : v)
         result.set_f64(i, clamped)
-        i = i + 1
     }
     result
 }

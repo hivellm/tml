@@ -276,8 +276,7 @@ impl[T] List[T] {
 
         // Two-pointer compaction: write_idx tracks where to write next
         var write_idx: I64 = 0
-        var read_idx: I64 = 0
-        loop (read_idx < cur_len) {
+        for read_idx in 0 to cur_len {
             let elem_ptr: *T = (data_addr + read_idx * stride) as *T
             let elem: T = lowlevel { ptr_read[T](elem_ptr) }
             if pred(ref elem) {
@@ -288,7 +287,6 @@ impl[T] List[T] {
                 }
                 write_idx = write_idx + 1
             }
-            read_idx = read_idx + 1
         }
 
         // Update length
@@ -327,12 +325,10 @@ impl[T] List[T] {
 
         // Create result list with the drained elements
         let result: List[T] = List[T].new(drain_count)
-        var i: I64 = 0
-        loop (i < drain_count) {
+        for i in 0 to drain_count {
             let src_ptr: *T = (data_addr + (start + i) * stride) as *T
             let elem: T = lowlevel { ptr_read[T](src_ptr) }
             result.push(elem)
-            i = i + 1
         }
 
         // Shift remaining elements left to fill the gap
@@ -358,12 +354,10 @@ impl[T] List[T] {
     /// Returns `true` if the list contains an element equal to `value`.
     pub func contains(this, value: T) -> Bool {
         let n: I64 = this.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             if this.get(i) == value {
                 return true
             }
-            i = i + 1
         }
         false
     }
@@ -371,12 +365,10 @@ impl[T] List[T] {
     /// Returns the index of the first element equal to `value`, or `Nothing` if not found.
     pub func index_of(this, value: T) -> Maybe[I64] {
         let n: I64 = this.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             if this.get(i) == value {
                 return Just(i)
             }
-            i = i + 1
         }
         Nothing
     }
@@ -449,10 +441,8 @@ impl[T] List[T] {
         let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
 
         let removed: T = this.get(index)
-        var i: I64 = index
-        loop (i < cur_len - 1) {
+        for i in index to (cur_len - 1) {
             this.set(i, this.get(i + 1))
-            i = i + 1
         }
         lowlevel { ptr_write[I64](p_len, cur_len - 1) }
         removed
@@ -476,10 +466,8 @@ impl[T] List[T] {
     /// Appends all elements from another list.
     pub func extend(this, other: ref List[T]) {
         let n: I64 = other.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             this.push(other.get(i))
-            i = i + 1
         }
     }
 
@@ -540,15 +528,13 @@ impl[T] List[T] {
             return
         }
         var write_idx: I64 = 1
-        var read_idx: I64 = 1
-        loop (read_idx < n) {
+        for read_idx in 1 to n {
             if this.get(read_idx) != this.get(write_idx - 1) {
                 if write_idx != read_idx {
                     this.set(write_idx, this.get(read_idx))
                 }
                 write_idx = write_idx + 1
             }
-            read_idx = read_idx + 1
         }
         this.truncate(write_idx)
     }
@@ -556,10 +542,8 @@ impl[T] List[T] {
     /// Sets all elements in the list to `value`.
     pub func fill(this, value: T) {
         let n: I64 = this.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             this.set(i, value)
-            i = i + 1
         }
     }
 
@@ -586,14 +570,11 @@ impl[T] List[T] {
         let n: I64 = this.len()
         let left: List[T] = List[T].new(mid)
         let right: List[T] = List[T].new(n - mid)
-        var i: I64 = 0
-        loop (i < mid) {
+        for i in 0 to mid {
             left.push(this.get(i))
-            i = i + 1
         }
-        loop (i < n) {
+        for i in mid to n {
             right.push(this.get(i))
-            i = i + 1
         }
         this.clear()
         (left, right)
@@ -627,14 +608,12 @@ impl[T] List[T] {
         if lo < hi {
             let pivot_val: T = this.get(hi)
             var i: I64 = lo
-            var j: I64 = lo
-            loop (j < hi) {
+            for j in lo to hi {
                 let cur: T = this.get(j)
                 if cmp(ref cur, ref pivot_val) <= 0 {
                     this.swap(i, j)
                     i = i + 1
                 }
-                j = j + 1
             }
             this.swap(i, hi)
             if i > 0 {
@@ -649,13 +628,11 @@ impl[T] List[T] {
         if lo < hi {
             let pivot_val: T = this.get(hi)
             var i: I64 = lo
-            var j: I64 = lo
-            loop (j < hi) {
+            for j in lo to hi {
                 if this.get(j) <= pivot_val {
                     this.swap(i, j)
                     i = i + 1
                 }
-                j = j + 1
             }
             this.swap(i, hi)
             if i > 0 {

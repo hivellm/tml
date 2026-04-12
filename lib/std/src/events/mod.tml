@@ -287,11 +287,9 @@ impl EventEmitter {
         la_destroy(once_list)
 
         let num_calls: I64 = la_len(snapshot)
-        var k: I64 = 0
-        loop (k < num_calls) {
+        for k in 0 to num_calls {
             let f: func(I64) = la_get(snapshot, k) as func(I64)
             f(data)
-            k = k + 1
         }
 
         la_destroy(snapshot)
@@ -396,8 +394,7 @@ impl EventEmitter {
         let entries_addr: I64 = rd(hdr)
         let ctrl_addr: I64 = rd(hdr + 8)
         let cap: I64 = rd(hdr + 24)
-        var i: I64 = 0
-        loop (i < cap) {
+        for i in 0 to cap {
             if rd_i8(ctrl_addr + i) >= (0 as I8) {
                 // Occupied slot — key is at offset 0, value is at offset 8
                 let key: I64 = rd(entries_addr + i * 16)
@@ -407,7 +404,6 @@ impl EventEmitter {
                     result.push(key as Str)
                 }
             }
-            i = i + 1
         }
         return result
     }
@@ -451,11 +447,9 @@ impl EventEmitter {
 
         // Post each callback to the pending queue
         let num_calls: I64 = la_len(snapshot)
-        var k: I64 = 0
-        loop (k < num_calls) {
+        for k in 0 to num_calls {
             let f: I64 = la_get(snapshot, k)
             el.post(f, data)
-            k = k + 1
         }
 
         la_destroy(snapshot)
@@ -501,11 +495,9 @@ impl EventEmitter {
 
         // Post each callback to the next_tick queue
         let num_calls: I64 = la_len(snapshot)
-        var k: I64 = 0
-        loop (k < num_calls) {
+        for k in 0 to num_calls {
             let f: I64 = la_get(snapshot, k)
             el.post_next_tick(f, data)
-            k = k + 1
         }
 
         la_destroy(snapshot)
@@ -523,14 +515,12 @@ impl EventEmitter {
             let entries_addr: I64 = rd(hdr)
             let ctrl_addr: I64 = rd(hdr + 8)
             let cap: I64 = rd(hdr + 24)
-            var i: I64 = 0
-            loop (i < cap) {
+            for i in 0 to cap {
                 if rd_i8(ctrl_addr + i) >= (0 as I8) {
                     // Occupied slot — value is a la_* array handle
                     let val: I64 = rd(entries_addr + i * 16 + 8)
                     la_destroy(val)
                 }
-                i = i + 1
             }
         }
         this.events.destroy()

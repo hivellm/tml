@@ -252,12 +252,10 @@ impl[T, const N: I64] Array[T, N] {
     /// ```
     pub func map[U](this, f: func(T) -> U) -> Array[U, N] {
         let result: Array[U, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let elem: T = lowlevel { array_get(this.data, i) }
             let mapped: U = f(elem)
             lowlevel { array_set(result.data, i, mapped) }
-            i = i + 1
         }
         return result
     }
@@ -281,8 +279,7 @@ impl[T, const N: I64] Array[T, N] {
     /// ```
     pub func try_map[U, E](this, f: func(T) -> Outcome[U, E]) -> Outcome[Array[U, N], E] {
         let result: Array[U, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let elem: T = lowlevel { array_get(this.data, i) }
             when f(elem) {
                 Ok(mapped) => {
@@ -290,7 +287,6 @@ impl[T, const N: I64] Array[T, N] {
                 },
                 Err(e) => return Err(e)
             }
-            i = i + 1
         }
         return Ok(result)
     }
@@ -339,11 +335,9 @@ impl[T, const N: I64] Array[T, N] {
     /// ```
     pub func each_ref(this) -> Array[ref T, N] {
         let result: Array[ref T, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let r: ref T = lowlevel { array_get_ref(this.data, i) }
             lowlevel { array_set(result.data, i, r) }
-            i = i + 1
         }
         return result
     }
@@ -361,11 +355,9 @@ impl[T, const N: I64] Array[T, N] {
     /// ```
     pub func each_mut(mut this) -> Array[mut ref T, N] {
         let result: Array[mut ref T, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let r: mut ref T = lowlevel { array_get_mut(this.data, i) }
             lowlevel { array_set(result.data, i, r) }
-            i = i + 1
         }
         return result
     }
@@ -408,12 +400,10 @@ impl[T, const N: I64] Array[T, N] {
     /// ```
     pub func zip[U](this, other: Array[U, N]) -> Array[(T, U), N] {
         let result: Array[(T, U), N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let a: T = lowlevel { array_get(this.data, i) }
             let b: U = lowlevel { array_get(other.data, i) }
             lowlevel { array_set(result.data, i, (a, b)) }
-            i = i + 1
         }
         return result
     }
@@ -442,11 +432,9 @@ impl[T, const N: I64] Array[T, N] {
 /// ```
 pub func from_fn[T, const N: I64](f: func(I64) -> T) -> Array[T, N] {
     let result: Array[T, N] = lowlevel { array_uninit() }
-    let mut i: I64 = 0
-    loop (i < N) {
+    for i in 0 to N {
         let elem: T = f(i)
         lowlevel { array_set(result.data, i, elem) }
-        i = i + 1
     }
     return result
 }
@@ -468,13 +456,11 @@ pub func from_fn[T, const N: I64](f: func(I64) -> T) -> Array[T, N] {
 /// ```
 pub func try_from_fn[T, E, const N: I64](f: func(I64) -> Outcome[T, E]) -> Outcome[Array[T, N], E] {
     let result: Array[T, N] = lowlevel { array_uninit() }
-    let mut i: I64 = 0
-    loop (i < N) {
+    for i in 0 to N {
         when f(i) {
             Ok(elem) => lowlevel { array_set(result.data, i, elem) },
             Err(e) => return Err(e)
         }
-        i = i + 1
     }
     return Ok(result)
 }
@@ -489,10 +475,8 @@ pub func try_from_fn[T, E, const N: I64](f: func(I64) -> Outcome[T, E]) -> Outco
 /// ```
 pub func repeat[T: Duplicate, const N: I64](value: T) -> Array[T, N] {
     let result: Array[T, N] = lowlevel { array_uninit() }
-    let mut i: I64 = 0
-    loop (i < N) {
+    for i in 0 to N {
         lowlevel { array_set(result.data, i, value.duplicate()) }
-        i = i + 1
     }
     return result
 }
@@ -569,14 +553,12 @@ impl Debug for TryFromSliceError {
 
 impl[T: PartialEq, const N: I64] PartialEq for Array[T, N] {
     pub func eq(this, other: ref Array[T, N]) -> Bool {
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let a: ref T = lowlevel { array_get_ref(this.data, i) }
             let b: ref T = lowlevel { array_get_ref(other.data, i) }
             if a.ne(b) {
                 return false
             }
-            i = i + 1
         }
         return true
     }
@@ -588,8 +570,7 @@ impl[T: Eq, const N: I64] Eq for Array[T, N] {}
 
 impl[T: PartialOrd, const N: I64] PartialOrd for Array[T, N] {
     pub func partial_cmp(this, other: ref Array[T, N]) -> Maybe[Ordering] {
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let a: ref T = lowlevel { array_get_ref(this.data, i) }
             let b: ref T = lowlevel { array_get_ref(other.data, i) }
             when a.partial_cmp(b) {
@@ -598,7 +579,6 @@ impl[T: PartialOrd, const N: I64] PartialOrd for Array[T, N] {
                 Just(Equal) => {},
                 Nothing => return Nothing
             }
-            i = i + 1
         }
         return Just(Equal)
     }
@@ -606,8 +586,7 @@ impl[T: PartialOrd, const N: I64] PartialOrd for Array[T, N] {
 
 impl[T: Ord, const N: I64] Ord for Array[T, N] {
     pub func cmp(this, other: ref Array[T, N]) -> Ordering {
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let a: ref T = lowlevel { array_get_ref(this.data, i) }
             let b: ref T = lowlevel { array_get_ref(other.data, i) }
             when a.cmp(b) {
@@ -615,7 +594,6 @@ impl[T: Ord, const N: I64] Ord for Array[T, N] {
                 Greater => return Greater,
                 Equal => {}
             }
-            i = i + 1
         }
         return Equal
     }
@@ -626,11 +604,9 @@ impl[T: Ord, const N: I64] Ord for Array[T, N] {
 impl[T: Duplicate, const N: I64] Duplicate for Array[T, N] {
     pub func duplicate(this) -> Array[T, N] {
         let result: Array[T, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let elem: T = lowlevel { array_get(this.data, i) }
             lowlevel { array_set(result.data, i, elem.duplicate()) }
-            i = i + 1
         }
         return result
     }
@@ -643,11 +619,9 @@ impl[T: Copy, const N: I64] Copy for Array[T, N] {}
 impl[T: Hash, const N: I64] Hash for Array[T, N] {
     pub func hash(this) -> I64 {
         let mut h: I64 = 0
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let elem: ref T = lowlevel { array_get_ref(this.data, i) }
             h = combine_hashes(h, elem.hash())
-            i = i + 1
         }
         return h
     }
@@ -666,14 +640,12 @@ impl[T: Default, const N: I64] Default for Array[T, N] {
 impl[T: Display, const N: I64] Display for Array[T, N] {
     pub func to_string(this) -> Str {
         let mut result: Str = "["
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             if i > 0 {
                 result = result + ", "
             }
             let elem: ref T = lowlevel { array_get_ref(this.data, i) }
             result = result + elem.to_string()
-            i = i + 1
         }
         return result + "]"
     }
@@ -682,14 +654,12 @@ impl[T: Display, const N: I64] Display for Array[T, N] {
 impl[T: Debug, const N: I64] Debug for Array[T, N] {
     pub func debug_string(this) -> Str {
         let mut result: Str = "["
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             if i > 0 {
                 result = result + ", "
             }
             let elem: ref T = lowlevel { array_get_ref(this.data, i) }
             result = result + elem.debug_string()
-            i = i + 1
         }
         return result + "]"
     }
@@ -722,11 +692,9 @@ impl[T: Copy, const N: I64] TryFrom[Slice[T]] for Array[T, N] {
             })
         }
         let result: Array[T, N] = lowlevel { array_uninit() }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let elem: T = *slice.get(i).unwrap()
             lowlevel { array_set(result.data, i, elem) }
-            i = i + 1
         }
         return Ok(result)
     }
@@ -806,8 +774,7 @@ impl[T: PartialEq, const N: I64] Array[T, N] {
         if other.len() != N {
             return false
         }
-        let mut i: I64 = 0
-        loop (i < N) {
+        for i in 0 to N {
             let a: ref T = lowlevel { array_get_ref(this.data, i) }
             when other.get(i) {
                 Just(b) => {
@@ -817,7 +784,6 @@ impl[T: PartialEq, const N: I64] Array[T, N] {
                 },
                 Nothing => return false
             }
-            i = i + 1
         }
         return true
     }

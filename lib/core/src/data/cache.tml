@@ -354,14 +354,12 @@ impl SoaVec {
             return Nothing
         }
 
-        var i: I64 = 0
-        loop (i < this.columns.len()) {
+        for i in 0 to this.columns.len() {
             let col: SoaColumn = this.columns.get(i)
             if col.name == col_name {
                 let ptr = col.data + (row * col.elem_size)
                 return Just(lowlevel { *(ptr as Ptr[T]) })
             }
-            i = i + 1
         }
 
         Nothing
@@ -373,27 +371,23 @@ impl SoaVec {
             return
         }
 
-        var i: I64 = 0
-        loop (i < this.columns.len()) {
+        for i in 0 to this.columns.len() {
             let col: SoaColumn = this.columns.get(i)
             if col.name == col_name {
                 let ptr = col.data + (row * col.elem_size)
                 lowlevel { *(ptr as Ptr[T]) = value }
                 return
             }
-            i = i + 1
         }
     }
 
     /// Gets a raw pointer to column data for efficient iteration.
     pub func column_ptr(this, col_name: Str) -> I64 {
-        var i: I64 = 0
-        loop (i < this.columns.len()) {
+        for i in 0 to this.columns.len() {
             let col: SoaColumn = this.columns.get(i)
             if col.name == col_name {
                 return col.data
             }
-            i = i + 1
         }
         0
     }
@@ -407,10 +401,8 @@ impl SoaVec {
         let new_capacity = max_i64(n, this.capacity * 2)
 
         // Grow each column
-        var i: I64 = 0
-        loop (i < this.columns.len()) {
+        for i in 0 to this.columns.len() {
             this.grow_column(i, new_capacity)
-            i = i + 1
         }
 
         this.capacity = new_capacity
@@ -427,12 +419,10 @@ impl SoaVec {
 
         // Copy existing data
         if col.data != 0 and this.row_count > 0 {
-            var j: I64 = 0
-            loop (j < this.row_count) {
+            for j in 0 to this.row_count {
                 let src = col.data + (j * col.elem_size)
                 let dst = new_data + (j * col.elem_size)
                 lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
-                j = j + 1
             }
             mem_free(col.data as *Unit)
         }
@@ -454,13 +444,11 @@ impl SoaVec {
 
     /// Frees all memory.
     pub func destroy(mut this) {
-        var i: I64 = 0
-        loop (i < this.columns.len()) {
+        for i in 0 to this.columns.len() {
             let col: SoaColumn = this.columns.get(i)
             if col.data != 0 {
                 mem_free(col.data as *Unit)
             }
-            i = i + 1
         }
         this.columns.destroy()
         this.row_count = 0

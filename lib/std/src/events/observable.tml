@@ -96,10 +96,8 @@ pub func obs_subscribe_i32(obs: ObservableI32, observer: Observer[I32]) -> Subsc
         },
         FromList(list) => {
             let len: I64 = list.len()
-            var i: I64 = 0
-            loop (i < len) {
+            for i in 0 to len {
                 (observer.on_next)(list.get(i))
-                i = i + 1
             }
             (observer.on_complete)()
             return Subscription { active: false, id: 0 }
@@ -178,10 +176,8 @@ pub func obs_collect_i32(obs: ObservableI32) -> List[I32] {
         },
         FromList(list) => {
             let len: I64 = list.len()
-            var i: I64 = 0
-            loop (i < len) {
+            for i in 0 to len {
                 results.push(list.get(i))
-                i = i + 1
             }
         },
         Empty => {},
@@ -201,10 +197,8 @@ pub func observable_map_i32(source: ObservableI32, f: func(I32) -> I32) -> Obser
     let values: List[I32] = obs_collect_i32(source)
     var results: List[I32] = List::new(values.len())
     let len: I64 = values.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         results.push(f(values.get(i)))
-        i = i + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -214,13 +208,11 @@ pub func observable_filter_i32(source: ObservableI32, predicate: func(I32) -> Bo
     let values: List[I32] = obs_collect_i32(source)
     var results: List[I32] = List::new(values.len())
     let len: I64 = values.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let v: I32 = values.get(i)
         if predicate(v) {
             results.push(v)
         }
-        i = i + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -243,10 +235,8 @@ pub func observable_skip_i32(source: ObservableI32, count: I64) -> ObservableI32
     let values: List[I32] = obs_collect_i32(source)
     var results: List[I32] = List::new(8)
     let len: I64 = values.len()
-    var i: I64 = count
-    loop (i < len) {
+    for i in count to len {
         results.push(values.get(i))
-        i = i + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -257,11 +247,9 @@ pub func observable_scan_i32(source: ObservableI32, seed: I32, reducer: func(I32
     var results: List[I32] = List::new(values.len())
     var acc: I32 = seed
     let len: I64 = values.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         acc = reducer(acc, values.get(i))
         results.push(acc)
-        i = i + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -273,15 +261,13 @@ pub func observable_distinct_i32(source: ObservableI32) -> ObservableI32 {
     var has_prev: Bool = false
     var prev: I32 = 0
     let len: I64 = values.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let v: I32 = values.get(i)
         if not has_prev or prev != v {
             has_prev = true
             prev = v
             results.push(v)
         }
-        i = i + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -291,15 +277,11 @@ pub func observable_merge_i32(a: ObservableI32, b: ObservableI32) -> ObservableI
     let va: List[I32] = obs_collect_i32(a)
     let vb: List[I32] = obs_collect_i32(b)
     var results: List[I32] = List::new(va.len() + vb.len())
-    var i: I64 = 0
-    loop (i < va.len()) {
+    for i in 0 to va.len() {
         results.push(va.get(i))
-        i = i + 1
     }
-    var j: I64 = 0
-    loop (j < vb.len()) {
+    for j in 0 to vb.len() {
         results.push(vb.get(j))
-        j = j + 1
     }
     return ObservableI32 { source: ObsSourceI32::FromList(results) }
 }
@@ -419,10 +401,8 @@ pub func replay_subject_new_i32(buffer_size: I64) -> List[I64] {
     state.push(1)             // [2] = next_id
     state.push(buffer_size)   // [3] = buffer_size
     state.push(0)             // [4] = value_count
-    var i: I64 = 0
-    loop (i < buffer_size) {
+    for i in 0 to buffer_size {
         state.push(0)
-        i = i + 1
     }
     return state
 }
@@ -438,10 +418,8 @@ pub func replay_subject_push_i32(rs: List[I64], value: I32) {
         rs.set(4, value_count + 1)
     } else {
         // Shift left, dropping oldest
-        var i: I64 = 0
-        loop (i < buffer_size - 1) {
+        for i in 0 to buffer_size - 1 {
             rs.set(5 + i, rs.get(5 + i + 1))
-            i = i + 1
         }
         rs.set(5 + buffer_size - 1, val_i64)
     }

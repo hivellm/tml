@@ -49,10 +49,8 @@ impl[V] Trie[V] {
         var has_val = List[I64]::new(16)
         var val_idx = List[I64]::new(16)
         // Initialize root node (256 children slots, all -1)
-        var i: I64 = 0
-        loop (i < 256) {
+        for i in 0 to 256 {
             children.push(-1)
-            i = i + 1
         }
         has_val.push(0)
         val_idx.push(-1)
@@ -71,10 +69,8 @@ impl[V] Trie[V] {
     pub func alloc_node(mut this) -> I64 {
         let idx: I64 = this.node_count
         // Add 256 child slots
-        var i: I64 = 0
-        loop (i < 256) {
+        for i in 0 to 256 {
             this.children.push(-1)
-            i = i + 1
         }
         this.has_val.push(0)
         this.val_idx.push(-1)
@@ -95,8 +91,7 @@ impl[V] Trie[V] {
     /// Insert a key-value pair. Overwrites if key already exists.
     pub func insert(mut this, key: Str, value: V) {
         var node: I64 = 0
-        var i: I64 = 0
-        loop (i < key.len()) {
+        for i in 0 to key.len() {
             let byte: I64 = lowlevel { ptr_read[U8](ptr_offset[U8](key as *U8, i)) } as I64
             var child: I64 = this.get_child(node, byte)
             if child < 0 {
@@ -104,7 +99,6 @@ impl[V] Trie[V] {
                 this.set_child(node, byte, child)
             }
             node = child
-            i = i + 1
         }
         if this.has_val.get(node) == 1 {
             // Overwrite existing value
@@ -222,15 +216,13 @@ impl[V] Trie[V] {
     /// Find the node index for a given key/prefix. Returns -1 if path doesn't exist.
     pub func find_node(this, key: Str) -> I64 {
         var node: I64 = 0
-        var i: I64 = 0
-        loop (i < key.len()) {
+        for i in 0 to key.len() {
             let byte: I64 = lowlevel { ptr_read[U8](ptr_offset[U8](key as *U8, i)) } as I64
             let child: I64 = this.get_child(node, byte)
             if child < 0 {
                 return -1
             }
             node = child
-            i = i + 1
         }
         return node
     }
@@ -242,13 +234,11 @@ impl[V] Trie[V] {
             let k: Str = this.keys.get(vi)
             result.push(k)
         }
-        var byte_val: I64 = 0
-        loop (byte_val < 256) {
+        for byte_val in 0 to 256 {
             let child: I64 = this.get_child(node, byte_val)
             if child >= 0 {
                 this.collect_keys(child, result)
             }
-            byte_val = byte_val + 1
         }
     }
 

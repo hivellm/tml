@@ -71,14 +71,12 @@ pub func h2_validate_preface(data: Buffer) -> Outcome[I64, H2Error] {
         return Err(H2Error::protocol_error("connection preface too short"))
     }
 
-    var i: I64 = 0
-    loop (i < H2_CONNECTION_PREFACE_LEN) {
+    for i in 0 to H2_CONNECTION_PREFACE_LEN {
         let expected: I32 = str::char_at(H2_CONNECTION_PREFACE, i)
         let actual: I32 = data.get(i)
         if actual != expected {
             return Err(H2Error::protocol_error("invalid connection preface"))
         }
-        i = i + 1
     }
 
     Ok(H2_CONNECTION_PREFACE_LEN)
@@ -93,8 +91,7 @@ pub func h2_extract_request(stream_id: I64, headers: List[HpackEntry], end_strea
     var req = H2Request::new(stream_id)
     req.end_stream = end_stream
 
-    var i: I64 = 0
-    loop (i < headers.len()) {
+    for i in 0 to headers.len() {
         let entry: HpackEntry = headers.get(i)
         if entry.name == ":method" {
             req.method = entry.value
@@ -108,7 +105,6 @@ pub func h2_extract_request(stream_id: I64, headers: List[HpackEntry], end_strea
             // Parse content-length (simple numeric parse)
             req.content_length = h2_parse_i64(entry.value)
         }
-        i = i + 1
     }
 
     req
@@ -118,13 +114,11 @@ pub func h2_extract_request(stream_id: I64, headers: List[HpackEntry], end_strea
 func h2_parse_i64(s: Str) -> I64 {
     let slen: I64 = str::len(s)
     var result: I64 = 0
-    var i: I64 = 0
-    loop (i < slen) {
+    for i in 0 to slen {
         let c: I32 = str::char_at(s, i)
         if c >= 48 and c <= 57 {
             result = result * 10 + (c - 48) as I64
         }
-        i = i + 1
     }
     result
 }
@@ -160,10 +154,8 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
     // Encode DATA frame if there's a body
     if has_body == 1 {
         let body_buf = Buffer::new(body_len)
-        var i: I64 = 0
-        loop (i < body_len) {
+        for i in 0 to body_len {
             body_buf.write_byte(str::char_at(body, i))
-            i = i + 1
         }
         let data_frame = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, stream_id, body_buf)
         h2_buf_append(result, data_frame)
@@ -176,9 +168,7 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
 /// Append src buffer bytes to dst buffer.
 func h2_buf_append(dst: Buffer, src: Buffer) {
     let slen: I64 = src.len()
-    var i: I64 = 0
-    loop (i < slen) {
+    for i in 0 to slen {
         dst.write_byte(src.get(i))
-        i = i + 1
     }
 }

@@ -229,10 +229,8 @@ pub func parse_f64(s: Str) -> Maybe[F64] {
                 }
             }
             var multiplier: F64 = 1.0
-            var ei: I64 = 0
-            loop (ei < exp_val) {
+            for ei in 0 to exp_val {
                 multiplier = multiplier * 10.0
-                ei = ei + 1
             }
             if exp_negative {
                 result = result / multiplier

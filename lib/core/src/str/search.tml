@@ -44,12 +44,10 @@ pub func contains(s: Str, pattern: Str) -> Bool {
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
-    var i: I64 = 0
-    loop (i <= limit) {
+    for i in 0 through limit {
         if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return true
         }
-        i = i + 1
     }
     return false
 }
@@ -123,12 +121,10 @@ pub func find(s: Str, pattern: Str) -> Maybe[I64] {
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
-    var i: I64 = 0
-    loop (i <= limit) {
+    for i in 0 through limit {
         if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return Just(i)
         }
-        i = i + 1
     }
     return Nothing
 }
@@ -189,14 +185,12 @@ pub func is_ascii(s: Str) -> Bool {
     }
     // Scalar path for short strings
     let src: I64 = s as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (src + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         if (b as I32) >= 128 {
             return false
         }
-        i = i + 1
     }
     return true
 }

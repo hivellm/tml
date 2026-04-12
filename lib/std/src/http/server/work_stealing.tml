@@ -54,13 +54,11 @@ impl LocalQueue {
     pub func steal_half(mut this, dest: I64) -> I64 {
         let to_steal: I64 = this.len / 2
         if to_steal == 0 { return 0 }
-        var i: I64 = 0
-        loop (i < to_steal) {
+        for i in 0 to to_steal {
             let fd: I64 = lowlevel { ptr_read[I64]((this.data + this.tail * 8) as *I64) }
             lowlevel { ptr_write[I64]((dest + i * 8) as *I64, fd) }
             this.tail = (this.tail + 1) % LOCAL_QUEUE_CAP
             this.len = this.len - 1
-            i = i + 1
         }
         return to_steal
     }
@@ -91,8 +89,7 @@ impl WorkStealingScheduler {
     pub func new(num_workers: I64) -> WorkStealingScheduler {
         let n: I64 = when num_workers > MAX_WORKERS { true => MAX_WORKERS, false => num_workers }
         let queues: I64 = lowlevel { mem_alloc(n * 8) } as I64
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             let lq: LocalQueue = LocalQueue::new()
             // Store the LocalQueue's data ptr (we access fields via offsets)
             let lq_ptr: I64 = lowlevel { mem_alloc(32) } as I64  // 4 I64 fields
@@ -101,7 +98,6 @@ impl WorkStealingScheduler {
             lowlevel { ptr_write[I64]((lq_ptr + 16) as *I64, lq.tail) }
             lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, lq.len) }
             lowlevel { ptr_write[I64]((queues + i * 8) as *I64, lq_ptr) }
-            i = i + 1
         }
         let steal_buf: I64 = lowlevel { mem_alloc(LOCAL_QUEUE_CAP * 8) } as I64
         WorkStealingScheduler {
@@ -142,8 +138,7 @@ impl WorkStealingScheduler {
     /// Try to steal from another worker. Returns stolen fd or -1.
     pub func try_steal(this, worker_id: I64) -> I64 {
         // Round-robin: try stealing from worker_id+1, +2, etc.
-        var offset: I64 = 1
-        loop (offset < this.num_workers) {
+        for offset in 1 to this.num_workers {
             let victim: I64 = (worker_id + offset) % this.num_workers
             let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + victim * 8) as *I64) }
             let victim_len: I64 = lowlevel { ptr_read[I64]((lq_ptr + 24) as *I64) }
@@ -156,19 +151,16 @@ impl WorkStealingScheduler {
                 lowlevel { ptr_write[I64]((lq_ptr + 24) as *I64, victim_len - 1) }
                 return fd
             }
-            offset = offset + 1
         }
         return -1 as I64
     }
 
     pub func destroy(this) {
-        var i: I64 = 0
-        loop (i < this.num_workers) {
+        for i in 0 to this.num_workers {
             let lq_ptr: I64 = lowlevel { ptr_read[I64]((this.local_queues + i * 8) as *I64) }
             let data: I64 = lowlevel { ptr_read[I64]((lq_ptr + 0) as *I64) }
             lowlevel { mem_free(data as *Unit) }
             lowlevel { mem_free(lq_ptr as *Unit) }
-            i = i + 1
         }
         lowlevel { mem_free(this.local_queues as *Unit) }
         lowlevel { mem_free(this.steal_buf as *Unit) }

@@ -5,6 +5,11 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] — 2026-04-12
+
+### Changed
+- **for-in loop migration** — replaced ~360 manual index loops with `for i in 0 to N` syntax across 60+ files in collections, text, regex, json, bigint, http, tensor, stream, sync, aio, events, net, search, debug, di, db, intern modules
+
 ## [0.2.5] — 2026-04-06
 
 ### Added

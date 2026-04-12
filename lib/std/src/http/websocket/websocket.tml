@@ -249,11 +249,9 @@ impl WsFrame {
         payload.write_u16_be(code.raw(), 0)
         // Write reason string bytes after the 2-byte code
         let reason_len = str::len(reason)
-        var i: I64 = 0
-        loop (i < reason_len) {
+        for i in 0 to reason_len {
             let byte = str::char_at(reason, i)
             payload.write_byte(byte)
-            i = i + 1
         }
         // Fix: write_byte appends, but we already wrote the 2-byte code via write_u16_be
         // which sets len to 2. Then write_byte appends after that. So payload is correct:
@@ -454,8 +452,7 @@ pub func ws_validate_upgrade(headers: ref Headers) -> Outcome[Str, WsError] {
 /// function is used for both masking and unmasking.
 pub func ws_apply_mask(buf: ref Buffer, mask_key_0: I32, mask_key_1: I32, mask_key_2: I32, mask_key_3: I32) {
     let data_len = buf.len()
-    var i: I64 = 0
-    loop (i < data_len) {
+    for i in 0 to data_len {
         let original = buf.get(i)
         let mod4 = i % 4
         var mask_byte: I32 = mask_key_0
@@ -464,7 +461,6 @@ pub func ws_apply_mask(buf: ref Buffer, mask_key_0: I32, mask_key_1: I32, mask_k
         if mod4 == 3 { mask_byte = mask_key_3 }
         let masked = original ^ mask_byte
         buf.set(i, masked)
-        i = i + 1
     }
 }
 
@@ -569,8 +565,7 @@ pub func ws_encode_frame(frame: ref WsFrame) -> Buffer {
     }
 
     // Payload data
-    var i: I64 = 0
-    loop (i < payload_len) {
+    for i in 0 to payload_len {
         let byte = frame.payload.get(i)
         if frame.masked != 0 {
             let mod4 = i % 4
@@ -582,7 +577,6 @@ pub func ws_encode_frame(frame: ref WsFrame) -> Buffer {
         } else {
             result.write_byte(byte)
         }
-        i = i + 1
     }
 
     return result
@@ -705,8 +699,7 @@ pub func ws_decode_frame(data: ref Buffer) -> Outcome[(WsFrame, I64), WsError] {
 
     // Read payload
     let payload = Buffer.new(payload_len)
-    var i: I64 = 0
-    loop (i < payload_len) {
+    for i in 0 to payload_len {
         let byte = data.get(offset + i)
         if is_masked != 0 {
             let mod4 = i % 4
@@ -718,7 +711,6 @@ pub func ws_decode_frame(data: ref Buffer) -> Outcome[(WsFrame, I64), WsError] {
         } else {
             payload.write_byte(byte)
         }
-        i = i + 1
     }
 
     let frame = WsFrame {
@@ -760,10 +752,8 @@ pub func ws_assemble_message(first_frame: ref WsFrame) -> Outcome[WsMessage, WsE
         // Binary message — copy the payload
         let payload_len = first_frame.payload.len()
         let copy = Buffer.new(payload_len)
-        var i: I64 = 0
-        loop (i < payload_len) {
+        for i in 0 to payload_len {
             copy.write_byte(first_frame.payload.get(i))
-            i = i + 1
         }
         return Ok(WsMessage.binary(copy))
     }
@@ -790,10 +780,8 @@ pub func ws_assemble_message(first_frame: ref WsFrame) -> Outcome[WsMessage, WsE
         // Ping
         let payload_len = first_frame.payload.len()
         let copy = Buffer.new(payload_len)
-        var i: I64 = 0
-        loop (i < payload_len) {
+        for i in 0 to payload_len {
             copy.write_byte(first_frame.payload.get(i))
-            i = i + 1
         }
         return Ok(WsMessage.ping(copy))
     }
@@ -801,10 +789,8 @@ pub func ws_assemble_message(first_frame: ref WsFrame) -> Outcome[WsMessage, WsE
         // Pong
         let payload_len = first_frame.payload.len()
         let copy = Buffer.new(payload_len)
-        var i: I64 = 0
-        loop (i < payload_len) {
+        for i in 0 to payload_len {
             copy.write_byte(first_frame.payload.get(i))
-            i = i + 1
         }
         return Ok(WsMessage.pong(copy))
     }

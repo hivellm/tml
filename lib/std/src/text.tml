@@ -554,10 +554,8 @@ impl Text {
         let cur_len: I64 = text_get_len(this.handle)
         text_ensure_cap(this.handle, cur_len + count)
         let data: *U8 = text_get_data(this.handle)
-        var i: I64 = 0
-        loop (i < count) {
+        for i in 0 to count {
             text_set_byte(data, cur_len + i, byte as U8)
-            i = i + 1
         }
         let new_len: I64 = cur_len + count
         text_set_len(this.handle, new_len)
@@ -721,13 +719,11 @@ impl Text {
         if plen == 0 { return true }
         let data: *U8 = text_get_data(this.handle)
         let prefix_addr: I64 = prefix as I64
-        var i: I64 = 0
-        loop (i < plen) {
+        for i in 0 to plen {
             let a: U8 = text_byte_at_raw(data, i)
             let bp: *U8 = (prefix_addr + i) as *U8
             let b: U8 = lowlevel { ptr_read[U8](bp) }
             if a != b { return false }
-            i = i + 1
         }
         true
     }
@@ -741,13 +737,11 @@ impl Text {
         let data: *U8 = text_get_data(this.handle)
         let suffix_addr: I64 = suffix as I64
         let start: I64 = slen - suflen
-        var i: I64 = 0
-        loop (i < suflen) {
+        for i in 0 to suflen {
             let a: U8 = text_byte_at_raw(data, start + i)
             let bp: *U8 = (suffix_addr + i) as *U8
             let b: U8 = lowlevel { ptr_read[U8](bp) }
             if a != b { return false }
-            i = i + 1
         }
         true
     }
@@ -772,8 +766,7 @@ impl Text {
         let result: *Unit = text_alloc_with_cap(slen)
         let src: *U8 = text_get_data(this.handle)
         let dst: *U8 = text_get_data(result)
-        var i: I64 = 0
-        loop (i < slen) {
+        for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, i)
             let v: I32 = b as I32
             if v >= 97 and v <= 122 {
@@ -781,7 +774,6 @@ impl Text {
             } else {
                 text_set_byte(dst, i, b)
             }
-            i = i + 1
         }
         text_set_len(result, slen)
         text_set_byte(dst, slen, 0 as U8)
@@ -794,8 +786,7 @@ impl Text {
         let result: *Unit = text_alloc_with_cap(slen)
         let src: *U8 = text_get_data(this.handle)
         let dst: *U8 = text_get_data(result)
-        var i: I64 = 0
-        loop (i < slen) {
+        for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, i)
             let v: I32 = b as I32
             if v >= 65 and v <= 90 {
@@ -803,7 +794,6 @@ impl Text {
             } else {
                 text_set_byte(dst, i, b)
             }
-            i = i + 1
         }
         text_set_len(result, slen)
         text_set_byte(dst, slen, 0 as U8)
@@ -914,10 +904,8 @@ impl Text {
         let result: *Unit = text_alloc_with_cap(total)
         let src: *U8 = text_get_data(this.handle)
         let dst: *U8 = text_get_data(result)
-        var i: I64 = 0
-        loop (i < count) {
+        for i in 0 to count {
             text_copy_bytes(dst, i * slen, src, 0, slen)
-            i = i + 1
         }
         text_set_len(result, total)
         text_set_byte(dst, total, 0 as U8)
@@ -941,12 +929,10 @@ impl Text {
         text_copy_bytes(dst, 0, src, 0, pos)
         // Copy replacement
         let repl_addr: I64 = replacement as I64
-        var i: I64 = 0
-        loop (i < repl_len) {
+        for i in 0 to repl_len {
             let rp: *U8 = (repl_addr + i) as *U8
             let b: U8 = lowlevel { ptr_read[U8](rp) }
             text_set_byte(dst, pos + i, b)
-            i = i + 1
         }
         // Copy after match
         let after: I64 = pos + search_len
@@ -989,8 +975,7 @@ impl Text {
             }
             if matched {
                 // Push replacement
-                var k: I64 = 0
-                loop (k < repl_len) {
+                for k in 0 to repl_len {
                     let rp: *U8 = (repl_addr + k) as *U8
                     let b: U8 = lowlevel { ptr_read[U8](rp) }
                     let cur_len: I64 = text_get_len(result)
@@ -998,7 +983,6 @@ impl Text {
                     let dst: *U8 = text_get_data(result)
                     text_set_byte(dst, cur_len, b)
                     text_set_len(result, cur_len + 1)
-                    k = k + 1
                 }
                 i = i + search_len
             } else {
@@ -1025,11 +1009,9 @@ impl Text {
         let result: *Unit = text_alloc_with_cap(slen)
         let src: *U8 = text_get_data(this.handle)
         let dst: *U8 = text_get_data(result)
-        var i: I64 = 0
-        loop (i < slen) {
+        for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, slen - 1 - i)
             text_set_byte(dst, i, b)
-            i = i + 1
         }
         text_set_len(result, slen)
         text_set_byte(dst, slen, 0 as U8)
@@ -1044,10 +1026,8 @@ impl Text {
         let result: *Unit = text_alloc_with_cap(target_len)
         let dst: *U8 = text_get_data(result)
         // Fill pad chars
-        var i: I64 = 0
-        loop (i < pad_count) {
+        for i in 0 to pad_count {
             text_set_byte(dst, i, pad_char as U8)
-            i = i + 1
         }
         // Copy original
         let src: *U8 = text_get_data(this.handle)
@@ -1068,10 +1048,8 @@ impl Text {
         // Copy original
         text_copy_bytes(dst, 0, src, 0, slen)
         // Fill pad chars
-        var i: I64 = 0
-        loop (i < pad_count) {
+        for i in 0 to pad_count {
             text_set_byte(dst, slen + i, pad_char as U8)
-            i = i + 1
         }
         text_set_len(result, target_len)
         text_set_byte(dst, target_len, 0 as U8)
@@ -1125,13 +1103,11 @@ impl Text {
         let data2: *U8 = text_get_data(other.handle)
         var min_len: I64 = len1
         if len2 < len1 { min_len = len2 }
-        var i: I64 = 0
-        loop (i < min_len) {
+        for i in 0 to min_len {
             let a: U8 = text_byte_at_raw(data1, i)
             let b: U8 = text_byte_at_raw(data2, i)
             if (a as I32) < (b as I32) { return -1 }
             if (a as I32) > (b as I32) { return 1 }
-            i = i + 1
         }
         if len1 < len2 { return -1 }
         if len1 > len2 { return 1 }
@@ -1145,12 +1121,10 @@ impl Text {
         if len1 != len2 { return false }
         let data1: *U8 = text_get_data(this.handle)
         let data2: *U8 = text_get_data(other.handle)
-        var i: I64 = 0
-        loop (i < len1) {
+        for i in 0 to len1 {
             let a: U8 = text_byte_at_raw(data1, i)
             let b: U8 = text_byte_at_raw(data2, i)
             if a != b { return false }
-            i = i + 1
         }
         true
     }

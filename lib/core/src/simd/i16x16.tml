@@ -142,10 +142,8 @@ impl I16x16 {
     /// Sum all 16 lanes.
     pub func sum(this) -> I32 {
         var total: I32 = 0
-        var i = 0
-        loop (i < 16) {
+        for i in 0 to 16 {
             total = total + this.get(i) as I32
-            i = i + 1
         }
         return total
     }

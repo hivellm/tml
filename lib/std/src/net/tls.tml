@@ -559,8 +559,7 @@ pub func encode_alpn_wire_format(protocols: ref [Str]) -> Outcome[AlpnWireData, 
 
     // First pass: compute total wire format size and validate
     var total: I64 = 0
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let proto: Str = protocols[i]
         let plen: I64 = proto.len() as I64
         if plen == 0 {
@@ -570,7 +569,6 @@ pub func encode_alpn_wire_format(protocols: ref [Str]) -> Outcome[AlpnWireData, 
             return Err("ALPN protocol name exceeds 255 bytes")
         }
         total = total + 1 + plen
-        i = i + 1
     }
 
     if total == 0 {
@@ -585,8 +583,7 @@ pub func encode_alpn_wire_format(protocols: ref [Str]) -> Outcome[AlpnWireData, 
 
     // Second pass: write wire format
     var offset: I64 = 0
-    var j: I64 = 0
-    loop (j < count) {
+    for j in 0 to count {
         let proto: Str = protocols[j]
         let plen: I64 = proto.len() as I64
         // Write 1-byte length prefix
@@ -598,7 +595,6 @@ pub func encode_alpn_wire_format(protocols: ref [Str]) -> Outcome[AlpnWireData, 
         let src_addr: I64 = proto as I64
         lowlevel { copy_nonoverlapping(src_addr as *Unit, dst_addr as *Unit, plen as U64) }
         offset = offset + plen
-        j = j + 1
     }
 
     Ok(AlpnWireData { data: buf as *U8, length: total })

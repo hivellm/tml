@@ -128,20 +128,16 @@ impl[T] ArrayList[T] {
         }
 
         // Shift elements left
-        var i: I64 = index
-        loop (i < this.length - 1) {
+        for i in index to this.length - 1 {
             this.data.set(i, this.data.get(i + 1))
-            i = i + 1
         }
         this.length = this.length - 1
     }
 
     /// Adds all elements from another list.
     pub func add_range(mut this, items: ref ArrayList[T]) {
-        var i: I64 = 0
-        loop (i < items.length) {
+        for i in 0 to items.length {
             this.add(items.get(i))
-            i = i + 1
         }
     }
 
@@ -164,37 +160,31 @@ impl[T: PartialEq] ArrayList[T] {
     /// Removes the first occurrence of an element.
     /// Returns true if the element was found and removed.
     pub func remove(mut this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 this.remove_at(i)
                 return true
             }
-            i = i + 1
         }
         return false
     }
 
     /// Returns true if the list contains the element.
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return true
             }
-            i = i + 1
         }
         return false
     }
 
     /// Returns the index of the item, or -1 if not found.
     pub func index_of(this, item: T) -> I64 {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return i
             }
-            i = i + 1
         }
         return -1
     }
@@ -353,12 +343,10 @@ impl[T: PartialEq] HashSet[T] {
     /// Returns true if the element was added.
     pub func add(mut this, item: T) -> Bool {
         // Check if already present
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return false
             }
-            i = i + 1
         }
         this.data.push(item)
         this.length = this.length + 1
@@ -368,27 +356,23 @@ impl[T: PartialEq] HashSet[T] {
     /// Removes an element from the set.
     /// Returns true if the element was found and removed.
     pub func remove(mut this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 // Swap with last and remove
                 this.data.set(i, this.data.get(this.length - 1))
                 this.length = this.length - 1
                 return true
             }
-            i = i + 1
         }
         return false
     }
 
     /// Returns true if the set contains the element.
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return true
             }
-            i = i + 1
         }
         return false
     }
@@ -399,17 +383,13 @@ impl[T: PartialEq] HashSet[T] {
         let mut result: HashSet[T] = HashSet::create[T]()
 
         // Add all elements from this set
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             result.add(this.data.get(i))
-            i = i + 1
         }
 
         // Add all elements from other set
-        var j: I64 = 0
-        loop (j < other.length) {
+        for j in 0 to other.length {
             result.add(other.data.get(j))
-            j = j + 1
         }
 
         return result
@@ -420,13 +400,11 @@ impl[T: PartialEq] HashSet[T] {
     pub func intersection(this, other: ref HashSet[T]) -> HashSet[T] {
         let mut result: HashSet[T] = HashSet::create[T]()
 
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             let item: T = this.data.get(i)
             if other.contains(item) {
                 result.add(item)
             }
-            i = i + 1
         }
 
         return result
@@ -437,13 +415,11 @@ impl[T: PartialEq] HashSet[T] {
     pub func difference(this, other: ref HashSet[T]) -> HashSet[T] {
         let mut result: HashSet[T] = HashSet::create[T]()
 
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             let item: T = this.data.get(i)
             if not other.contains(item) {
                 result.add(item)
             }
-            i = i + 1
         }
 
         return result
@@ -455,23 +431,19 @@ impl[T: PartialEq] HashSet[T] {
         let mut result: HashSet[T] = HashSet::create[T]()
 
         // Add elements from this set that are not in other
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             let item: T = this.data.get(i)
             if not other.contains(item) {
                 result.add(item)
             }
-            i = i + 1
         }
 
         // Add elements from other that are not in this
-        var j: I64 = 0
-        loop (j < other.length) {
+        for j in 0 to other.length {
             let item: T = other.data.get(j)
             if not this.contains(item) {
                 result.add(item)
             }
-            j = j + 1
         }
 
         return result
@@ -480,12 +452,10 @@ impl[T: PartialEq] HashSet[T] {
     /// Returns true if this set is a subset of another set.
     /// A set is a subset if all its elements are in the other set.
     pub func is_subset(this, other: ref HashSet[T]) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if not other.contains(this.data.get(i)) {
                 return false
             }
-            i = i + 1
         }
         return true
     }
@@ -493,24 +463,20 @@ impl[T: PartialEq] HashSet[T] {
     /// Returns true if this set is a superset of another set.
     /// A set is a superset if it contains all elements of the other set.
     pub func is_superset(this, other: ref HashSet[T]) -> Bool {
-        var i: I64 = 0
-        loop (i < other.length) {
+        for i in 0 to other.length {
             if not this.contains(other.data.get(i)) {
                 return false
             }
-            i = i + 1
         }
         return true
     }
 
     /// Returns true if this set and another set have no elements in common.
     pub func is_disjoint(this, other: ref HashSet[T]) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if other.contains(this.data.get(i)) {
                 return false
             }
-            i = i + 1
         }
         return true
     }
@@ -808,31 +774,25 @@ impl[T: PartialEq] Stack[T] {
     /// Removes the first occurrence of an element.
     /// Returns true if the element was found and removed.
     pub func remove(mut this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 // Shift elements down
-                var j: I64 = i
-                loop (j < this.length - 1) {
+                for j in i to this.length - 1 {
                     this.data.set(j, this.data.get(j + 1))
-                    j = j + 1
                 }
                 this.length = this.length - 1
                 return true
             }
-            i = i + 1
         }
         return false
     }
 
     /// Returns true if the stack contains the element.
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return true
             }
-            i = i + 1
         }
         return false
     }
@@ -1183,12 +1143,10 @@ impl[T] Vec[T] {
 impl[T: PartialEq] Vec[T] {
     /// Returns true if the Vec contains the element.
     pub func contains(this, item: T) -> Bool {
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             if this.data.get(i) == item {
                 return true
             }
-            i = i + 1
         }
         return false
     }
@@ -1200,15 +1158,13 @@ impl[T: PartialEq] Vec[T] {
         }
 
         var write_idx: I64 = 1
-        var read_idx: I64 = 1
-        loop (read_idx < this.length) {
+        for read_idx in 1 to this.length {
             let current: T = this.data.get(read_idx)
             let prev: T = this.data.get(write_idx - 1)
             if current != prev {
                 this.data.set(write_idx, current)
                 write_idx = write_idx + 1
             }
-            read_idx = read_idx + 1
         }
         this.length = write_idx
     }
@@ -1216,14 +1172,12 @@ impl[T: PartialEq] Vec[T] {
     /// Removes all occurrences of the specified value.
     pub func remove_all(mut this, item: T) {
         var write_idx: I64 = 0
-        var read_idx: I64 = 0
-        loop (read_idx < this.length) {
+        for read_idx in 0 to this.length {
             let current: T = this.data.get(read_idx)
             if current != item {
                 this.data.set(write_idx, current)
                 write_idx = write_idx + 1
             }
-            read_idx = read_idx + 1
         }
         this.length = write_idx
     }
@@ -1234,19 +1188,15 @@ impl[T: PartialOrd] Vec[T] {
     /// Sorts the Vec in ascending order.
     pub func sort(mut this) {
         // Simple bubble sort for now
-        var i: I64 = 0
-        loop (i < this.length) {
-            var j: I64 = 0
-            loop (j < this.length - i - 1) {
+        for i in 0 to this.length {
+            for j in 0 to this.length - i - 1 {
                 let a: T = this.data.get(j)
                 let b: T = this.data.get(j + 1)
                 if a > b {
                     this.data.set(j, b)
                     this.data.set(j + 1, a)
                 }
-                j = j + 1
             }
-            i = i + 1
         }
     }
 }
@@ -1254,19 +1204,15 @@ impl[T: PartialOrd] Vec[T] {
 impl[T] Vec[T] {
     /// Extends the Vec by appending elements from another Vec.
     pub func extend(mut this, other: ref Vec[T]) {
-        var i: I64 = 0
-        loop (i < other.length) {
+        for i in 0 to other.length {
             this.push(other.get(i))
-            i = i + 1
         }
     }
 
     /// Appends all elements from another Vec, consuming it.
     pub func append(mut this, mut other: Vec[T]) {
-        var i: I64 = 0
-        loop (i < other.length) {
+        for i in 0 to other.length {
             this.push(other.data.get(i))
-            i = i + 1
         }
         other.length = 0
     }

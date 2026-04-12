@@ -86,13 +86,11 @@ pub func str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64] {
     loop (pos <= hlen - nlen) {
         // Load 16 bytes from haystack at current position
         var hay_vec = I8x16::zero()
-        var hi: I64 = 0
         let remaining = hlen - pos
         let load_len = if remaining < 16 { remaining } else { 16 }
-        loop (hi < load_len) {
+        for hi in 0 to load_len {
             let b = haystack.get(pos + hi) as I8
             hay_vec = hay_vec.set(hi as I32, b)
-            hi = hi + 1
         }
 
         // PCMPISTRI returns index of first match (0-15) or 16 if no match

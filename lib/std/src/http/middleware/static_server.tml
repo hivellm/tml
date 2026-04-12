@@ -211,13 +211,11 @@ pub func is_dot_file(path: Str) -> Bool {
     // Check if starts with dot
     if str::char_at(path, 0) == 46 { return true }  // '.'
     // Check for /. or \. sequences
-    var i: I64 = 0
-    loop (i < path_len - 1) {
+    for i in 0 to path_len - 1 {
         let c: I32 = str::char_at(path, i)
         if (c == 47 or c == 92) and str::char_at(path, i + 1) == 46 {
             return true
         }
-        i = i + 1
     }
     return false
 }

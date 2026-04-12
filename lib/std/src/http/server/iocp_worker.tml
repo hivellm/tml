@@ -162,10 +162,8 @@ func iocp_conn_set(conns: I64, idx: I64, field: I64, val: I64) {
 /// Find a free connection slot (CONN_SOCKET == 0 means free).
 /// Returns slot index, or -1 if no slots available.
 func find_free_slot(conns: I64, max_conns: I64) -> I64 {
-    var i: I64 = 0
-    loop (i < max_conns) {
+    for i in 0 to max_conns {
         if iocp_conn_get(conns, i, CONN_SOCKET) == 0 { return i }
-        i = i + 1
     }
     return -1
 }
@@ -229,10 +227,8 @@ func issue_accept(iocp: I64, listen_socket: I64) {
 
 /// Pre-issue N AcceptEx operations to keep the accept pipeline full.
 func fill_accept_pool(iocp: I64, listen_socket: I64, count: I64) {
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         issue_accept(iocp, listen_socket)
-        i = i + 1
     }
 }
 
@@ -463,8 +459,7 @@ pub func app_iocp_worker(arg: *Unit) {
                 // Pipelined requests — batch dispatch, concatenate responses
                 let resp_buf: I64 = lowlevel { mem_alloc(BUF_SIZE) } as I64
                 var batch_pos: I64 = 0
-                var req_idx: I64 = 0
-                loop (req_idx < num_pipelined) {
+                for req_idx in 0 to num_pipelined {
                     let req_start: I64 = app_request_offset(recv_buf, new_used, req_idx)
                     if req_start < 0 { break }
                     var req_end: I64 = new_used
@@ -479,7 +474,6 @@ pub func app_iocp_worker(arg: *Unit) {
                         lowlevel { copy_nonoverlapping(response as *Unit, (resp_buf + batch_pos) as *Unit, resp_len) }
                         batch_pos = batch_pos + resp_len
                     }
-                    req_idx = req_idx + 1
                 }
                 if batch_pos > 0 {
                     let send_op: I64 = iocp_conn_get(conns, conn_token, CONN_SEND_OP)
@@ -591,13 +585,11 @@ pub func app_listen_iocp(
             " onError=" + on_error_count.to_string())
     println("")
 
-    var i: I64 = 0
-    loop (i < total_count) {
+    for i in 0 to total_count {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
         println("  " + m + "\t" + p)
-        i = i + 1
     }
     println("")
 
@@ -629,10 +621,8 @@ pub func app_listen_iocp(
 
     // ── Allocate dispatch shared state (same layout as worker.tml) ──
     let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    var z: I64 = 0
-    loop (z < SHARED_SIZE) {
+    for z in 0 to SHARED_SIZE {
         lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
-        z = z + 1
     }
 
     lowlevel { ptr_write[I64]((shared + OFF_TABLE) as *I64, table) }
@@ -661,10 +651,8 @@ pub func app_listen_iocp(
     let conns_size: I64 = INITIAL_CONNS * CONN_SIZE
     let conns: I64 = lowlevel { mem_alloc(conns_size) } as I64
     // Zero all slots (CONN_SOCKET == 0 means free)
-    var cz: I64 = 0
-    loop (cz < conns_size) {
+    for cz in 0 to conns_size {
         lowlevel { ptr_write[U8]((conns + cz) as *U8, 0 as U8) }
-        cz = cz + 1
     }
 
     // ── Build IOCP shared state block ────────────────────────────
@@ -684,13 +672,11 @@ pub func app_listen_iocp(
     fill_accept_pool(iocp, listener, ACCEPT_POOL_SIZE)
 
     // ── Spawn worker threads ─────────────────────────────────────
-    var w: I64 = 0
-    loop (w < num_workers) {
+    for w in 0 to num_workers {
         let h: U64 = raw_thread_spawn(app_iocp_worker as *Unit, iocp_shared as *Unit, 0 as U64)
         if h != 0 as U64 {
             raw_thread_detach(h)
         }
-        w = w + 1
     }
 
     // ── Main thread blocks (IOCP workers handle everything) ──────

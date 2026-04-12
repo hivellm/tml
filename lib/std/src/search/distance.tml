@@ -38,14 +38,12 @@ use core::runtime::intrinsics
 /// @returns Sum of element-wise products
 pub func dot_product(a: *F64, b: *F64, dim: I64) -> F64 {
     var sum: F64 = 0.0
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
         let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
         let va: F64 = lowlevel { ptr_read[F64](pa) }
         let vb: F64 = lowlevel { ptr_read[F64](pb) }
         sum = sum + va * vb
-        i = i + 1
     }
     return sum
 }
@@ -63,8 +61,7 @@ pub func cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64 {
     var dot: F64 = 0.0
     var norm_a: F64 = 0.0
     var norm_b: F64 = 0.0
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
         let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
         let va: F64 = lowlevel { ptr_read[F64](pa) }
@@ -72,7 +69,6 @@ pub func cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64 {
         dot = dot + va * vb
         norm_a = norm_a + va * va
         norm_b = norm_b + vb * vb
-        i = i + 1
     }
     let denom: F64 = intrinsics::sqrt[F64](norm_a) * intrinsics::sqrt[F64](norm_b)
     if denom < 1e-12 {
@@ -89,15 +85,13 @@ pub func cosine_similarity(a: *F64, b: *F64, dim: I64) -> F64 {
 /// @returns L2 distance (always >= 0)
 pub func euclidean_distance(a: *F64, b: *F64, dim: I64) -> F64 {
     var sum: F64 = 0.0
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F64 = lowlevel { ptr_offset[F64](a, i) }
         let pb: *F64 = lowlevel { ptr_offset[F64](b, i) }
         let va: F64 = lowlevel { ptr_read[F64](pa) }
         let vb: F64 = lowlevel { ptr_read[F64](pb) }
         let diff: F64 = va - vb
         sum = sum + diff * diff
-        i = i + 1
     }
     return intrinsics::sqrt[F64](sum)
 }
@@ -109,12 +103,10 @@ pub func euclidean_distance(a: *F64, b: *F64, dim: I64) -> F64 {
 /// @returns L2 norm (always >= 0)
 pub func norm(v: *F64, dim: I64) -> F64 {
     var sum: F64 = 0.0
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let p: *F64 = lowlevel { ptr_offset[F64](v, i) }
         let val: F64 = lowlevel { ptr_read[F64](p) }
         sum = sum + val * val
-        i = i + 1
     }
     return intrinsics::sqrt[F64](sum)
 }
@@ -130,12 +122,10 @@ pub func normalize(v: *F64, dim: I64) -> Unit {
     let mag: F64 = norm(v, dim)
     if mag >= 1e-12 {
         let inv: F64 = 1.0 / mag
-        var i: I64 = 0
-        loop (i < dim) {
+        for i in 0 to dim {
             let p: *F64 = lowlevel { ptr_offset[F64](v, i) }
             let val: F64 = lowlevel { ptr_read[F64](p) }
             lowlevel { ptr_write[F64](p, val * inv) }
-            i = i + 1
         }
     }
 }
@@ -155,14 +145,12 @@ pub func normalize(v: *F64, dim: I64) -> Unit {
 /// @returns Sum of element-wise products
 pub func dot_product_f32(a: *F32, b: *F32, dim: I64) -> F32 {
     var sum: F32 = 0.0 as F32
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
         let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
         let va: F32 = lowlevel { ptr_read[F32](pa) }
         let vb: F32 = lowlevel { ptr_read[F32](pb) }
         sum = sum + va * vb
-        i = i + 1
     }
     return sum
 }
@@ -180,8 +168,7 @@ pub func cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32 {
     var dot: F32 = 0.0 as F32
     var norm_a: F32 = 0.0 as F32
     var norm_b: F32 = 0.0 as F32
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
         let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
         let va: F32 = lowlevel { ptr_read[F32](pa) }
@@ -189,7 +176,6 @@ pub func cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32 {
         dot = dot + va * vb
         norm_a = norm_a + va * va
         norm_b = norm_b + vb * vb
-        i = i + 1
     }
     let denom: F32 = intrinsics::sqrt[F32](norm_a) * intrinsics::sqrt[F32](norm_b)
     if denom < (1e-12 as F32) {
@@ -206,15 +192,13 @@ pub func cosine_similarity_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @returns L2 distance (always >= 0)
 pub func euclidean_distance_f32(a: *F32, b: *F32, dim: I64) -> F32 {
     var sum: F32 = 0.0 as F32
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
         let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
         let va: F32 = lowlevel { ptr_read[F32](pa) }
         let vb: F32 = lowlevel { ptr_read[F32](pb) }
         let diff: F32 = va - vb
         sum = sum + diff * diff
-        i = i + 1
     }
     return intrinsics::sqrt[F32](sum)
 }
@@ -230,15 +214,13 @@ pub func euclidean_distance_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @returns Squared L2 distance (always >= 0)
 pub func l2_squared_f32(a: *F32, b: *F32, dim: I64) -> F32 {
     var sum: F32 = 0.0 as F32
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let pa: *F32 = lowlevel { ptr_offset[F32](a, i) }
         let pb: *F32 = lowlevel { ptr_offset[F32](b, i) }
         let va: F32 = lowlevel { ptr_read[F32](pa) }
         let vb: F32 = lowlevel { ptr_read[F32](pb) }
         let diff: F32 = va - vb
         sum = sum + diff * diff
-        i = i + 1
     }
     return sum
 }
@@ -250,12 +232,10 @@ pub func l2_squared_f32(a: *F32, b: *F32, dim: I64) -> F32 {
 /// @returns L2 norm (always >= 0)
 pub func norm_f32(v: *F32, dim: I64) -> F32 {
     var sum: F32 = 0.0 as F32
-    var i: I64 = 0
-    loop (i < dim) {
+    for i in 0 to dim {
         let p: *F32 = lowlevel { ptr_offset[F32](v, i) }
         let val: F32 = lowlevel { ptr_read[F32](p) }
         sum = sum + val * val
-        i = i + 1
     }
     return intrinsics::sqrt[F32](sum)
 }
@@ -271,12 +251,10 @@ pub func normalize_f32(v: *F32, dim: I64) -> Unit {
     let mag: F32 = norm_f32(v, dim)
     if mag >= (1e-12 as F32) {
         let inv: F32 = (1.0 as F32) / mag
-        var i: I64 = 0
-        loop (i < dim) {
+        for i in 0 to dim {
             let p: *F32 = lowlevel { ptr_offset[F32](v, i) }
             let val: F32 = lowlevel { ptr_read[F32](p) }
             lowlevel { ptr_write[F32](p, val * inv) }
-            i = i + 1
         }
     }
 }

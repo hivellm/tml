@@ -167,10 +167,8 @@ func rbuf_read(h: I64, size: I64) -> Str {
     rs_wr_u8(str_buf as I64 + n, 0 as U8) // null terminator
     // Shift remaining bytes left (overlapping — byte loop needed)
     let remaining: I64 = len - n
-    var j: I64 = 0
-    loop (j < remaining) {
+    for j in 0 to remaining {
         rs_wr_u8(data + j, rs_rd_u8(data + n + j))
-        j = j + 1
     }
     rs_wr(h + 8, remaining)
     str_buf as Str

@@ -413,8 +413,7 @@ pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
     var results: List[I32] = List::new(len)
     var has_pending: Bool = false
 
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let p: Promise[I32] = promises.get(i)
         when p.state() {
             Fulfilled(v) => {
@@ -429,7 +428,6 @@ pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
                 results.push(0)  // placeholder
             }
         }
-        i = i + 1
     }
 
     if has_pending {
@@ -456,15 +454,13 @@ pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
 /// ```
 pub func promise_race_i32(promises: List[Promise[I32]]) -> Promise[I32] {
     let len: I64 = promises.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let p: Promise[I32] = promises.get(i)
         when p.state() {
             Fulfilled(v) => return make_fulfilled_i32(v),
             Rejected(e) => return make_rejected_i32(e),
             Pending => {}
         }
-        i = i + 1
     }
     // All pending
     return make_pending_i32()
@@ -481,8 +477,7 @@ pub func promise_any_i32(promises: List[Promise[I32]]) -> Promise[I32] {
     var all_rejected: Bool = true
     var has_pending: Bool = false
 
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let p: Promise[I32] = promises.get(i)
         when p.state() {
             Fulfilled(v) => return make_fulfilled_i32(v),
@@ -492,7 +487,6 @@ pub func promise_any_i32(promises: List[Promise[I32]]) -> Promise[I32] {
                 has_pending = true
             }
         }
-        i = i + 1
     }
 
     if all_rejected and not has_pending {
@@ -511,8 +505,7 @@ pub func promise_all_settled_i32(promises: List[Promise[I32]]) -> Promise[List[P
     var results: List[PromiseState[I32]] = List::new(len)
     var has_pending: Bool = false
 
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let p: Promise[I32] = promises.get(i)
         let s: PromiseState[I32] = p.state()
         when s {
@@ -527,7 +520,6 @@ pub func promise_all_settled_i32(promises: List[Promise[I32]]) -> Promise[List[P
                 results.push(PromiseState::Rejected(e))
             }
         }
-        i = i + 1
     }
 
     if has_pending {

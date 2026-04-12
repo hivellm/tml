@@ -18,10 +18,8 @@ use std::ia::tensor::init::zeros
 func shape_dims(t: ref Tensor) -> List[I64] {
     let rank = t.rank()
     let mut dims = List[I64]::new(rank)
-    let mut i = 0
-    loop (i < rank) {
+    for i in 0 to rank {
         dims.push(t.dim(i))
-        i = i + 1
     }
     dims
 }
@@ -30,24 +28,18 @@ func shape_dims(t: ref Tensor) -> List[I64] {
 func flat_to_indices(flat: I64, shape: ref Shape) -> List[I64] {
     let rank = shape.rank()
     let mut indices = List[I64]::new(rank)
-    let mut k = 0
-    loop (k < rank) {
+    for k in 0 to rank {
         indices.push(0)
-        k = k + 1
     }
     let mut remaining = flat
-    let mut j = 0
-    loop (j < rank) {
+    for j in 0 to rank {
         let mut stride = 1
-        let mut s = j + 1
-        loop (s < rank) {
+        for s in (j + 1) to rank {
             stride = stride * shape.dim(s)
-            s = s + 1
         }
         let idx = remaining / stride
         indices.set(j, idx)
         remaining = remaining - idx * stride
-        j = j + 1
     }
     indices
 }
@@ -89,16 +81,12 @@ pub func reshape(a: ref Tensor, new_dims: List[I64]) -> IaResult[Tensor] {
     // into the Shape above.
     let new_rank = new_shape.rank()
     let mut out_dims = List[I64]::new(new_rank)
-    let mut k = 0
-    loop (k < new_rank) {
+    for k in 0 to new_rank {
         out_dims.push(new_shape.dim(k))
-        k = k + 1
     }
     let mut result = zeros(out_dims, a.dtype())
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, a.get_f64(i))
-        i = i + 1
     }
     Ok(result)
 }
@@ -123,16 +111,12 @@ pub func transpose(a: ref Tensor) -> IaResult[Tensor] {
     out_dims.push(n)
     out_dims.push(m)
     let mut result = zeros(out_dims, a.dtype())
-    let mut i = 0
-    loop (i < m) {
-        let mut j = 0
-        loop (j < n) {
+    for i in 0 to m {
+        for j in 0 to n {
             // Source: row-major index i*n + j
             // Dest:   row-major index j*m + i
             result.set_f64(j * m + i, a.get_f64(i * n + j))
-            j = j + 1
         }
-        i = i + 1
     }
     Ok(result)
 }
@@ -160,65 +144,49 @@ pub func permute(a: ref Tensor, axes: List[I64]) -> IaResult[Tensor] {
     // Validate that axes is a permutation: each value must appear exactly once
     // in the range [0, rank).
     let mut seen = List[I64]::new(rank)
-    let mut k = 0
-    loop (k < rank) {
+    for k in 0 to rank {
         seen.push(0)
-        k = k + 1
     }
-    let mut v = 0
-    loop (v < rank) {
+    for v in 0 to rank {
         let ax = axes.get(v)
         if ax < 0 or ax >= rank {
             return Err(IaError::InvalidAxis("permute: axis value out of range"))
         }
         seen.set(ax, seen.get(ax) + 1)
-        v = v + 1
     }
-    let mut u = 0
-    loop (u < rank) {
+    for u in 0 to rank {
         if seen.get(u) != 1 {
             return Err(IaError::InvalidAxis("permute: axes must be a valid permutation"))
         }
-        u = u + 1
     }
     // Build output shape: out_shape[i] = a.dim(axes[i])
     let mut out_dims = List[I64]::new(rank)
-    let mut d = 0
-    loop (d < rank) {
+    for d in 0 to rank {
         out_dims.push(a.dim(axes.get(d)))
-        d = d + 1
     }
     let out_shape = Shape::new(out_dims)
     let n = out_shape.numel()
     // Build a second dims list for zeros() since out_shape owns the first.
     let mut zeros_dims = List[I64]::new(rank)
-    let mut zk = 0
-    loop (zk < rank) {
+    for zk in 0 to rank {
         zeros_dims.push(out_shape.dim(zk))
-        zk = zk + 1
     }
     let mut result = zeros(zeros_dims, a.dtype())
     // For each output flat index, find the corresponding input flat index.
-    let mut out_flat = 0
-    loop (out_flat < n) {
+    for out_flat in 0 to n {
         // Convert output flat index → output multi-dim indices.
         let out_indices = flat_to_indices(out_flat, ref out_shape)
         // Build input multi-dim indices: in_indices[axes[i]] = out_indices[i]
         let mut in_indices = List[I64]::new(rank)
-        let mut ki = 0
-        loop (ki < rank) {
+        for ki in 0 to rank {
             in_indices.push(0)
-            ki = ki + 1
         }
-        let mut oi = 0
-        loop (oi < rank) {
+        for oi in 0 to rank {
             let src_dim = axes.get(oi)
             in_indices.set(src_dim, out_indices.get(oi))
-            oi = oi + 1
         }
         let in_flat = indices_to_flat(ref in_indices, a.shape())
         result.set_f64(out_flat, a.get_f64(in_flat))
-        out_flat = out_flat + 1
     }
     Ok(result)
 }
@@ -236,12 +204,10 @@ pub func permute(a: ref Tensor, axes: List[I64]) -> IaResult[Tensor] {
 pub func squeeze(a: ref Tensor) -> Tensor {
     let rank = a.rank()
     let mut new_dims = List[I64]::new(rank)
-    let mut i = 0
-    loop (i < rank) {
+    for i in 0 to rank {
         if a.dim(i) != 1 {
             new_dims.push(a.dim(i))
         }
-        i = i + 1
     }
     // If all dims were 1, keep a scalar-like rank-1 tensor with dim 1.
     if new_dims.len() == 0 {
@@ -250,10 +216,8 @@ pub func squeeze(a: ref Tensor) -> Tensor {
     // Copy data (flat order is unchanged).
     let n = a.numel()
     let mut result = zeros(new_dims, a.dtype())
-    let mut j = 0
-    loop (j < n) {
+    for j in 0 to n {
         result.set_f64(j, a.get_f64(j))
-        j = j + 1
     }
     result
 }
@@ -274,23 +238,19 @@ pub func unsqueeze(a: ref Tensor, dim: I64) -> IaResult[Tensor] {
         return Err(IaError::InvalidAxis("unsqueeze: dim out of range [0, rank]"))
     }
     let mut new_dims = List[I64]::new(rank + 1)
-    let mut i = 0
-    loop (i <= rank) {
+    for i in 0 through rank {
         if i == dim {
             new_dims.push(1)
         }
         if i < rank {
             new_dims.push(a.dim(i))
         }
-        i = i + 1
     }
     // Copy data (flat order unchanged).
     let n = a.numel()
     let mut result = zeros(new_dims, a.dtype())
-    let mut j = 0
-    loop (j < n) {
+    for j in 0 to n {
         result.set_f64(j, a.get_f64(j))
-        j = j + 1
     }
     Ok(result)
 }
@@ -314,40 +274,32 @@ pub func expand(a: ref Tensor, new_dims: List[I64]) -> IaResult[Tensor] {
         return Err(IaError::ShapeMismatch("expand: new_dims length must equal tensor rank"))
     }
     // Validate: each dim must match or the source dim must be 1.
-    let mut v = 0
-    loop (v < rank) {
+    for v in 0 to rank {
         let src_d = a.dim(v)
         let dst_d = new_dims.get(v)
         if src_d != 1 and src_d != dst_d {
             return Err(IaError::ShapeMismatch("expand: can only expand dimensions of size 1"))
         }
-        v = v + 1
     }
     let out_shape = Shape::new(new_dims)
     let n = out_shape.numel()
     let mut zeros_dims = List[I64]::new(rank)
-    let mut zk = 0
-    loop (zk < rank) {
+    for zk in 0 to rank {
         zeros_dims.push(out_shape.dim(zk))
-        zk = zk + 1
     }
     let mut result = zeros(zeros_dims, a.dtype())
     // For each output element, find the source element using broadcasting.
-    let mut out_flat = 0
-    loop (out_flat < n) {
+    for out_flat in 0 to n {
         let out_indices = flat_to_indices(out_flat, ref out_shape)
         // Build source indices: clamp to 0 when source dim is 1.
         let mut src_indices = List[I64]::new(rank)
-        let mut i = 0
-        loop (i < rank) {
+        for i in 0 to rank {
             let src_d = a.dim(i)
             let idx = src_d == 1 ? 0 : out_indices.get(i)
             src_indices.push(idx)
-            i = i + 1
         }
         let src_flat = indices_to_flat(ref src_indices, a.shape())
         result.set_f64(out_flat, a.get_f64(src_flat))
-        out_flat = out_flat + 1
     }
     Ok(result)
 }
@@ -365,10 +317,8 @@ pub func contiguous(a: ref Tensor) -> Tensor {
     let dims = shape_dims(a)
     let n = a.numel()
     let mut result = zeros(dims, a.dtype())
-    let mut i = 0
-    loop (i < n) {
+    for i in 0 to n {
         result.set_f64(i, a.get_f64(i))
-        i = i + 1
     }
     result
 }

@@ -107,8 +107,7 @@ impl AsyncSemaphore {
             }
 
             // Spin phase: wait briefly with pause hints
-            var spins: I64 = 0
-            loop (spins < ASYNC_SEM_SPIN_LIMIT) {
+            for spins in 0 to ASYNC_SEM_SPIN_LIMIT {
                 spin_loop_hint()
                 let c = this.permits.load(Ordering::Relaxed)
                 if c > 0 {
@@ -121,7 +120,6 @@ impl AsyncSemaphore {
                         Err(_) => {},
                     }
                 }
-                spins = spins + 1
             }
 
             // Yield phase: give other tasks a chance to run

@@ -114,8 +114,7 @@ func hpack_static_find_result(name: Str, value: Str) -> HpackFindResult {
     var name_match_index: I64 = 0
 
     // Search static table entries 1..61
-    var i: I64 = 1
-    loop (i <= 61) {
+    for i in 1 through 61 {
         let entry: Maybe[HpackEntry] = hpack_static_table_entry(i)
         if entry.is_just() {
             let e: HpackEntry = entry.unwrap()
@@ -130,7 +129,6 @@ func hpack_static_find_result(name: Str, value: Str) -> HpackFindResult {
                 }
             }
         }
-        i = i + 1
     }
 
     if name_match_index > 0 {
@@ -221,10 +219,8 @@ impl HpackDynamicTable {
         // No — simpler: create new list, push new entry, copy old entries
         var new_list: List[HpackEntry] = List::new(this.entries.len() + 1)
         new_list.push(new_entry)
-        var i: I64 = 0
-        loop (i < this.entries.len()) {
+        for i in 0 to this.entries.len() {
             new_list.push(this.entries.get(i))
-            i = i + 1
         }
         this.entries = new_list
         this.size = this.size + entry_size
@@ -261,8 +257,7 @@ impl HpackDynamicTable {
     /// Returns HpackFindResult where index < 0 means no match.
     pub func find_result(this, name: Str, value: Str) -> HpackFindResult {
         var name_match_index: I64 = -1
-        var i: I64 = 0
-        loop (i < this.entries.len()) {
+        for i in 0 to this.entries.len() {
             let e: HpackEntry = this.entries.get(i)
             if e.name == name {
                 if e.value == value {
@@ -272,7 +267,6 @@ impl HpackDynamicTable {
                     name_match_index = i
                 }
             }
-            i = i + 1
         }
         if name_match_index >= 0 {
             return HpackFindResult { index: name_match_index, name_only: true }
@@ -429,8 +423,7 @@ pub func hpack_encode_string(s: Str) -> Buffer {
     // Encode length with 7-bit prefix (H=0, so high bit of first byte is 0)
     let len_encoded = hpack_encode_integer(slen, 7)
     // First byte: H=0 (bit 7), rest is the integer
-    var i: I64 = 0
-    loop (i < len_encoded.len()) {
+    for i in 0 to len_encoded.len() {
         let b: I32 = len_encoded.get(i)
         if i == 0 {
             // Ensure H bit is 0 (it should be since we used 7-bit prefix)
@@ -438,14 +431,11 @@ pub func hpack_encode_string(s: Str) -> Buffer {
         } else {
             buf.write_byte(b)
         }
-        i = i + 1
     }
 
     // Write string octets
-    var j: I64 = 0
-    loop (j < slen) {
+    for j in 0 to slen {
         buf.write_byte(str::char_at(s, j))
-        j = j + 1
     }
 
     buf
@@ -480,10 +470,8 @@ pub func hpack_decode_string(data: Buffer, offset: I64) -> Outcome[HpackStrResul
 
     // Build the string from buffer bytes
     let str_buf = Buffer::new(slen)
-    var i: I64 = 0
-    loop (i < slen) {
+    for i in 0 to slen {
         str_buf.write_byte(data.get(str_start + i))
-        i = i + 1
     }
     let result: Str = str_buf.to_string()
     Ok(HpackStrResult { value: result, consumed: len_bytes + slen })
@@ -502,8 +490,7 @@ pub func hpack_decode_string(data: Buffer, offset: I64) -> Outcome[HpackStrResul
 pub func hpack_encode_headers(ctx: mut ref HpackContext, headers: List[HpackEntry]) -> Buffer {
     let buf = Buffer::new(256)
 
-    var i: I64 = 0
-    loop (i < headers.len()) {
+    for i in 0 to headers.len() {
         let header: HpackEntry = headers.get(i)
         let name: Str = header.name
         let value: Str = header.value
@@ -518,29 +505,25 @@ pub func hpack_encode_headers(ctx: mut ref HpackContext, headers: List[HpackEntr
             // Exact match in static table — use indexed header field (Section 6.1)
             // Format: 1xxxxxxx (7-bit prefix, high bit = 1)
             let encoded = hpack_encode_integer(static_result.index, 7)
-            var j: I64 = 0
-            loop (j < encoded.len()) {
+            for j in 0 to encoded.len() {
                 let b: I32 = encoded.get(j)
                 if j == 0 {
                     buf.write_byte(b | 0x80)  // Set high bit
                 } else {
                     buf.write_byte(b)
                 }
-                j = j + 1
             }
         } else if dyn_result.index >= 0 and not dyn_result.name_only {
             // Exact match in dynamic table — use indexed header field
             let hpack_index: I64 = dyn_result.index + 62
             let encoded = hpack_encode_integer(hpack_index, 7)
-            var j: I64 = 0
-            loop (j < encoded.len()) {
+            for j in 0 to encoded.len() {
                 let b: I32 = encoded.get(j)
                 if j == 0 {
                     buf.write_byte(b | 0x80)
                 } else {
                     buf.write_byte(b)
                 }
-                j = j + 1
             }
         } else {
             // No exact match — use literal with incremental indexing (Section 6.2.1)
@@ -555,40 +538,32 @@ pub func hpack_encode_headers(ctx: mut ref HpackContext, headers: List[HpackEntr
             if name_index > 0 {
                 // Literal with name index
                 let encoded = hpack_encode_integer(name_index, 6)
-                var j: I64 = 0
-                loop (j < encoded.len()) {
+                for j in 0 to encoded.len() {
                     let b: I32 = encoded.get(j)
                     if j == 0 {
                         buf.write_byte((b & 0x3F) | 0x40)  // 01 prefix
                     } else {
                         buf.write_byte(b)
                     }
-                    j = j + 1
                 }
             } else {
                 // Literal with new name (name_index = 0)
                 buf.write_byte(0x40)  // 01000000
                 let name_encoded = hpack_encode_string(name)
-                var j: I64 = 0
-                loop (j < name_encoded.len()) {
+                for j in 0 to name_encoded.len() {
                     buf.write_byte(name_encoded.get(j))
-                    j = j + 1
                 }
             }
 
             // Encode the value
             let val_encoded = hpack_encode_string(value)
-            var k: I64 = 0
-            loop (k < val_encoded.len()) {
+            for k in 0 to val_encoded.len() {
                 buf.write_byte(val_encoded.get(k))
-                k = k + 1
             }
 
             // Add to dynamic table
             ctx.dynamic_table.add(name, value)
         }
-
-        i = i + 1
     }
 
     buf

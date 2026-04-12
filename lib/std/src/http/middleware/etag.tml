@@ -15,13 +15,11 @@ func fnv1a_hex(content: Str) -> Str {
     // FNV-1a 64-bit: offset basis and prime (unsigned per spec)
     var hash: U64 = 14695981039346656037 as U64  // 0xCBF29CE484222325
     let prime: U64 = 1099511628211 as U64         // 0x100000001B3
-    var i: I64 = 0
-    loop (i < content_len) {
+    for i in 0 to content_len {
         let byte: U64 = str::char_at(content, i) as U64
         // XOR with byte, then multiply by prime (wrapping — FNV-1a requires modular arithmetic)
         hash = hash ^ byte
         hash = hash.wrapping_mul(prime)
-        i = i + 1
     }
     // Convert to hex string
     let hex_chars: Str = "0123456789abcdef"

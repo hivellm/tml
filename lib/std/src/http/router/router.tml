@@ -230,12 +230,10 @@ func children_find(node: I64, byte_key: I32) -> I64 {
         return 0
     }
     let key_i64: I64 = byte_key as I64
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         if child_key(arr, i) == key_i64 {
             return child_ptr(arr, i)
         }
-        i = i + 1
     }
     return 0
 }
@@ -248,13 +246,11 @@ func children_set(node: I64, byte_key: I32, child_addr: I64) {
     let key_i64: I64 = byte_key as I64
 
     // Check if key already exists — replace
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         if child_key(arr, i) == key_i64 {
             child_set_ptr(arr, i, child_addr)
             return
         }
-        i = i + 1
     }
 
     // Grow if needed
@@ -281,10 +277,8 @@ func node_destroy(addr: I64) {
     // Destroy static children
     let arr: I64 = node_get_children_ptr(addr)
     let count: I64 = node_get_children_count(addr)
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         node_destroy(child_ptr(arr, i))
-        i = i + 1
     }
     if arr != 0 {
         lowlevel { mem_free(arr as *Unit) }
@@ -308,12 +302,10 @@ func longest_common_prefix(a: Str, b: Str) -> I64 {
     let b_len: I64 = str::len(b)
     var min_len: I64 = a_len
     if b_len < min_len { min_len = b_len }
-    var i: I64 = 0
-    loop (i < min_len) {
+    for i in 0 to min_len {
         if str::char_at(a, i) != str::char_at(b, i) {
             return i
         }
-        i = i + 1
     }
     return min_len
 }
@@ -323,27 +315,23 @@ func longest_common_prefix(a: Str, b: Str) -> I64 {
 func match_prefix_at(path: Str, pos: I64, prefix: Str) -> I64 {
     let path_len: I64 = str::len(path)
     let prefix_len: I64 = str::len(prefix)
-    var i: I64 = 0
-    loop (i < prefix_len) {
+    for i in 0 to prefix_len {
         if pos + i >= path_len {
             return i
         }
         if str::char_at(path, pos + i) != str::char_at(prefix, i) {
             return i
         }
-        i = i + 1
     }
     return prefix_len
 }
 
 /// Find the next '/' in path starting from `from`. Returns path_len if not found.
 func find_slash(path: Str, from: I64, path_len: I64) -> I64 {
-    var i: I64 = from
-    loop (i < path_len) {
+    for i in from to path_len {
         if str::char_at(path, i) == 47 {
             return i
         }
-        i = i + 1
     }
     return path_len
 }
@@ -787,14 +775,12 @@ pub func find_in_tree(root: I64, path: Str) -> RouteMatch {
 impl RouteMatch {
     /// Get a parameter value by name. Returns "" if not found.
     pub func get_param(this, name: Str) -> Str {
-        var i: I64 = 0
         let count: I64 = this.param_names.len()
-        loop (i < count) {
+        for i in 0 to count {
             let n: Str = this.param_names.get(i)
             if n == name {
                 return this.param_values.get(i)
             }
-            i = i + 1
         }
         return ""
     }

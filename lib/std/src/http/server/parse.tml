@@ -415,8 +415,7 @@ pub func app_parse_headers(buf: I64, len: I64, headers_buf: I64) -> I64 {
 
         // Store header entry: [name_ptr, name_len, value_ptr, value_len]
         var entry_off: I64 = 0
-        var k: I64 = 0
-        loop (k < count) { entry_off = entry_off + HEADER_ENTRY_SIZE; k = k + 1 }
+        for k in 0 to count { entry_off = entry_off + HEADER_ENTRY_SIZE }
         lowlevel { ptr_write[I64]((headers_buf + entry_off) as *I64, buf + name_start) }
         lowlevel { ptr_write[I64]((headers_buf + entry_off + 8) as *I64, name_len) }
         lowlevel { ptr_write[I64]((headers_buf + entry_off + 16) as *I64, buf + val_start) }
@@ -445,15 +444,13 @@ pub func app_get_header(headers_buf: I64, header_count: I64, name: Str) -> Str {
         if h_name_len == name_len {
             // Case-insensitive comparison
             var match: Bool = true
-            var j: I64 = 0
-            loop (j < name_len) {
+            for j in 0 to name_len {
                 var a: I32 = rd(h_name_ptr, j)
                 var b: I32 = rd(name as I64, j)
                 // Lowercase: if A-Z (65-90), add 32
                 if a >= 65 and a <= 90 { a = a + 32 }
                 if b >= 65 and b <= 90 { b = b + 32 }
                 if a != b { match = false; break }
-                j = j + 1
             }
             if match {
                 // Return a null-terminated copy of the value
@@ -475,13 +472,11 @@ pub func app_get_content_length(headers_buf: I64, header_count: I64) -> I64 {
     if str::len(cl_str) == 0 { return -1 }
     // Parse integer from string
     var result: I64 = 0
-    var i: I64 = 0
     let slen: I64 = str::len(cl_str)
-    loop (i < slen) {
+    for i in 0 to slen {
         let c: I32 = str::char_at(cl_str, i)
         if c < 48 or c > 57 { return -1 }  // not a digit
         result = result * 10 + (c - 48) as I64
-        i = i + 1
     }
     return result
 }
@@ -508,13 +503,11 @@ pub func app_has_chunked_encoding(headers_buf: I64, header_count: I64) -> Bool {
 /// Does NOT modify the input — returns a new allocated string.
 pub func app_extract_query(url: Str) -> Str {
     let len: I64 = str::len(url)
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         if str::char_at(url, i) == 63 {  // '?'
             if len - i - 1 <= 0 { return "" }
             return str::substring_from(url, i + 1)
         }
-        i = i + 1
     }
     return ""
 }
@@ -522,13 +515,11 @@ pub func app_extract_query(url: Str) -> Str {
 /// Extract path from a URL (everything before '?'). Allocating copy.
 pub func app_extract_path_from_url(url: Str) -> Str {
     let len: I64 = str::len(url)
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         if str::char_at(url, i) == 63 {  // '?'
             if i == 0 { return "/" }
             return str::substring_to(url, i)
         }
-        i = i + 1
     }
     return url  // no query string
 }
@@ -540,10 +531,8 @@ pub func app_extract_path_from_url(url: Str) -> Str {
 /// Check if a route pattern contains ':' (parametric segment).
 func app_pattern_has_param(pattern: Str) -> Bool {
     let len: I64 = str::len(pattern)
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         if str::char_at(pattern, i) == 58 { return true }  // ':'
-        i = i + 1
     }
     return false
 }
@@ -553,8 +542,7 @@ func app_pattern_has_param(pattern: Str) -> Bool {
 pub func app_store_param(params_buf: I64, index: I64, name: Str, value: Str) {
     // Offset = index * 16. Use loop addition to avoid i32 multiplication codegen bug.
     var off: I64 = 0
-    var j: I64 = 0
-    loop (j < index) { off = off + 16; j = j + 1 }
+    for j in 0 to index { off = off + 16 }
     lowlevel { ptr_write[I64]((params_buf + off) as *I64, name as I64) }
     lowlevel { ptr_write[I64]((params_buf + off + 8) as *I64, value as I64) }
 }

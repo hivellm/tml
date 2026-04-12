@@ -428,10 +428,8 @@ impl WritableStream {
             wbuf_append_bytes(buf, src_data, blen)
         } else {
             let str_buf: *Unit = ws_alloc(blen + 1)
-            var i: I64 = 0
-            loop (i < blen) {
+            for i in 0 to blen {
                 ws_wr_u8(str_buf as I64 + i, ws_rd_u8(src_data + i))
-                i = i + 1
             }
             ws_wr_u8(str_buf as I64 + blen, 0 as U8)
             this.do_write(str_buf as Str)

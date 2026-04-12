@@ -114,10 +114,8 @@ impl U8x32 {
     /// Sum all 32 lanes into a U32.
     pub func sum(this) -> U32 {
         var total: U32 = 0
-        var i = 0
-        loop (i < 32) {
+        for i in 0 to 32 {
             total = total + this.get(i) as U32
-            i = i + 1
         }
         return total
     }

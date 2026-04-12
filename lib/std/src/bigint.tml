@@ -187,10 +187,8 @@ impl BigInt {
     /// Clone the digits list.
     pub func clone_digits(this) -> List[I64] {
         var d = List[I64]::new(this.digits.len())
-        var i: I64 = 0
-        loop (i < this.digits.len()) {
+        for i in 0 to this.digits.len() {
             d.push(this.digits.get(i))
-            i = i + 1
         }
         return d
     }
@@ -222,8 +220,7 @@ impl BigInt {
         if blen > longer { longer = blen }
         var result = List[I64]::new(longer + 1)
         var carry: I64 = 0
-        var i: I64 = 0
-        loop (i < longer) {
+        for i in 0 to longer {
             var av: I64 = 0
             if i < alen { av = a.get(i) }
             var bv: I64 = 0
@@ -231,7 +228,6 @@ impl BigInt {
             let sum: I64 = av + bv + carry
             result.push(sum % BIGINT_BASE)
             carry = sum / BIGINT_BASE
-            i = i + 1
         }
         if carry > 0 {
             result.push(carry)
@@ -245,8 +241,7 @@ impl BigInt {
         let blen: I64 = b.len()
         var result = List[I64]::new(alen)
         var borrow: I64 = 0
-        var i: I64 = 0
-        loop (i < alen) {
+        for i in 0 to alen {
             let av: I64 = a.get(i)
             var bv: I64 = 0
             if i < blen { bv = b.get(i) }
@@ -258,7 +253,6 @@ impl BigInt {
                 borrow = 0
             }
             result.push(diff)
-            i = i + 1
         }
         return result
     }
@@ -310,28 +304,22 @@ impl BigInt {
         let alen: I64 = this.digits.len()
         let blen: I64 = other.digits.len()
         var result = List[I64]::new(alen + blen)
-        var k: I64 = 0
-        loop (k < alen + blen) {
+        for k in 0 to alen + blen {
             result.push(0)
-            k = k + 1
         }
-        var i: I64 = 0
-        loop (i < alen) {
+        for i in 0 to alen {
             var carry: I64 = 0
             let a_limb: I64 = this.digits.get(i)
-            var j: I64 = 0
-            loop (j < blen) {
+            for j in 0 to blen {
                 let b_limb: I64 = other.digits.get(j)
                 let cur: I64 = result.get(i + j) + a_limb * b_limb + carry
                 result.set(i + j, cur % BIGINT_BASE)
                 carry = cur / BIGINT_BASE
-                j = j + 1
             }
             if carry > 0 {
                 let cur: I64 = result.get(i + blen)
                 result.set(i + blen, cur + carry)
             }
-            i = i + 1
         }
         var r = BigInt { negative: this.negative != other.negative, digits: result }
         r.normalize()
@@ -345,10 +333,8 @@ impl BigInt {
     /// Divide |this| by a single I64 limb. Returns (quotient_digits, remainder).
     pub func div_single(digits: ref List[I64], divisor: I64) -> (List[I64], I64) {
         var q = List[I64]::new(digits.len())
-        var k: I64 = 0
-        loop (k < digits.len()) {
+        for k in 0 to digits.len() {
             q.push(0)
-            k = k + 1
         }
         var rem: I64 = 0
         var i: I64 = digits.len() - 1
@@ -412,15 +398,11 @@ impl BigInt {
         loop (shift >= 0) {
             // shifted_divisor = divisor * BASE^shift
             var shifted = List[I64]::new(divisor.digits.len() + shift)
-            var z: I64 = 0
-            loop (z < shift) {
+            for z in 0 to shift {
                 shifted.push(0)
-                z = z + 1
             }
-            z = 0
-            loop (z < divisor.digits.len()) {
+            for z in 0 to divisor.digits.len() {
                 shifted.push(divisor.digits.get(z))
-                z = z + 1
             }
             let shifted_big = BigInt { negative: false, digits: shifted }
             // Binary search for how many times shifted_divisor fits
@@ -432,10 +414,8 @@ impl BigInt {
             // Add count * BASE^shift to quotient
             if count > 0 {
                 var count_digits = List[I64]::new(shift + 1)
-                var z2: I64 = 0
-                loop (z2 < shift) {
+                for z2 in 0 to shift {
                     count_digits.push(0)
-                    z2 = z2 + 1
                 }
                 count_digits.push(count)
                 let count_big = BigInt { negative: false, digits: count_digits }
@@ -505,11 +485,9 @@ impl BigInt {
         if this.digits.len() > 3 { return Nothing }
         var val: I64 = 0
         var mul: I64 = 1
-        var i: I64 = 0
-        loop (i < this.digits.len()) {
+        for i in 0 to this.digits.len() {
             val = val + this.digits.get(i) * mul
             mul = mul * BIGINT_BASE
-            i = i + 1
         }
         // Check overflow for 3-limb values
         if val < 0 { return Nothing }
@@ -708,10 +686,8 @@ impl BigInt {
         }
         var result = BigInt { negative: this.negative, digits: this.clone_digits() }
         let two = BigInt::from_i64(2)
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result = result.mul(two)
-            i = i + 1
         }
         return result
     }
@@ -724,10 +700,8 @@ impl BigInt {
         }
         var result = BigInt { negative: this.negative, digits: this.clone_digits() }
         let two = BigInt::from_i64(2)
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             result = result.div(two)
-            i = i + 1
         }
         return result
     }
@@ -835,13 +809,11 @@ impl BigInt {
         var result = BigInt::zero()
         var power = BigInt::one()
         let two = BigInt::from_i64(2)
-        var i: I64 = 0
-        loop (i < bits.len()) {
+        for i in 0 to bits.len() {
             if bits.get(i) == 1 {
                 result = result.add(power)
             }
             power = power.mul(two)
-            i = i + 1
         }
         result.negative = negative
         if result.is_zero() { result.negative = false }
@@ -855,14 +827,12 @@ impl BigInt {
         var min_len: I64 = a_bits.len()
         if b_bits.len() < min_len { min_len = b_bits.len() }
         var result_bits = List[I64]::new(min_len)
-        var i: I64 = 0
-        loop (i < min_len) {
+        for i in 0 to min_len {
             if a_bits.get(i) == 1 and b_bits.get(i) == 1 {
                 result_bits.push(1)
             } else {
                 result_bits.push(0)
             }
-            i = i + 1
         }
         return BigInt::from_bits(ref result_bits, false)
     }
@@ -874,8 +844,7 @@ impl BigInt {
         var max_len: I64 = a_bits.len()
         if b_bits.len() > max_len { max_len = b_bits.len() }
         var result_bits = List[I64]::new(max_len)
-        var i: I64 = 0
-        loop (i < max_len) {
+        for i in 0 to max_len {
             var a: I64 = 0
             if i < a_bits.len() { a = a_bits.get(i) }
             var b: I64 = 0
@@ -885,7 +854,6 @@ impl BigInt {
             } else {
                 result_bits.push(0)
             }
-            i = i + 1
         }
         return BigInt::from_bits(ref result_bits, false)
     }
@@ -897,8 +865,7 @@ impl BigInt {
         var max_len: I64 = a_bits.len()
         if b_bits.len() > max_len { max_len = b_bits.len() }
         var result_bits = List[I64]::new(max_len)
-        var i: I64 = 0
-        loop (i < max_len) {
+        for i in 0 to max_len {
             var a: I64 = 0
             if i < a_bits.len() { a = a_bits.get(i) }
             var b: I64 = 0
@@ -908,7 +875,6 @@ impl BigInt {
             } else {
                 result_bits.push(0)
             }
-            i = i + 1
         }
         return BigInt::from_bits(ref result_bits, false)
     }
@@ -927,14 +893,12 @@ impl BigInt {
         var state: I64 = seed
         if state < 0 { state = 1 - state }
         if state == 0 { state = 1 }
-        var i: I64 = 0
-        loop (i < num_limbs) {
+        for i in 0 to num_limbs {
             // Simple LCG: state = (state * 6364136223846793005 + 1) but avoid overflow
             // Use smaller multiplier that fits in I64 safely
             state = (state * 1103515245 + 12345) % BIGINT_BASE
             if state < 0 { state = 0 - state }
             d.push(state)
-            i = i + 1
         }
         if d.len() > 0 and d.get(d.len() - 1) == 0 {
             d.set(d.len() - 1, 1)
@@ -955,10 +919,8 @@ impl PartialEq for BigInt {
     pub func eq(this, other: ref BigInt) -> Bool {
         if this.negative != other.negative { return false }
         if this.digits.len() != other.digits.len() { return false }
-        var i: I64 = 0
-        loop (i < this.digits.len()) {
+        for i in 0 to this.digits.len() {
             if this.digits.get(i) != other.digits.get(i) { return false }
-            i = i + 1
         }
         return true
     }

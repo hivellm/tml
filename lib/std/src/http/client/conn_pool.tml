@@ -56,8 +56,7 @@ impl ConnectionPool {
     /// Try to get an idle connection for the given host:port.
     /// Returns (fd, ssl_ptr, is_tls) or (-1, 0, 0) if none available.
     pub func take(this, key: Str) -> PoolEntry {
-        var i: I64 = 0
-        loop (i < this.count) {
+        for i in 0 to this.count {
             let stored_key: Str = pool_get(this.data, i, FIELD_KEY) as Str
             if stored_key == key {
                 // Found — extract entry
@@ -75,7 +74,6 @@ impl ConnectionPool {
                 this.count = this.count - 1
                 return PoolEntry { fd: fd, ssl_ptr: ssl, is_tls: tls }
             }
-            i = i + 1
         }
         return PoolEntry { fd: -1 as I64, ssl_ptr: 0, is_tls: 0 }
     }

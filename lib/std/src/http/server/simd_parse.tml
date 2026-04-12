@@ -19,44 +19,37 @@ use core::runtime::intrinsics::{ptr_read}
 
 /// Find \r\n in buffer starting at `start`. Returns offset or -1.
 pub func find_crlf(buf: I64, len: I64, start: I64) -> I64 {
-    var i: I64 = start
-    loop (i < len - 1) {
+    for i in start to len - 1 {
         let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
         if b == 13 as U8 {
             let b2: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
             if b2 == 10 as U8 { return i }
         }
-        i = i + 1
     }
     return -1 as I64
 }
 
 /// Find colon in buffer. Returns offset or -1.
 pub func find_colon(buf: I64, len: I64, start: I64) -> I64 {
-    var i: I64 = start
-    loop (i < len) {
+    for i in start to len {
         let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
         if b == 58 as U8 { return i }  // ':'
-        i = i + 1
     }
     return -1 as I64
 }
 
 /// Find space in buffer. Returns offset or -1.
 pub func find_space(buf: I64, len: I64, start: I64) -> I64 {
-    var i: I64 = start
-    loop (i < len) {
+    for i in start to len {
         let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
         if b == 32 as U8 { return i }  // ' '
-        i = i + 1
     }
     return -1 as I64
 }
 
 /// Find double CRLF (\r\n\r\n) — end of headers. Returns offset or -1.
 pub func find_header_end(buf: I64, len: I64) -> I64 {
-    var i: I64 = 0
-    loop (i < len - 3) {
+    for i in 0 to len - 3 {
         let b: U8 = lowlevel { ptr_read[U8]((buf + i) as *U8) }
         if b == 13 as U8 {
             let b1: U8 = lowlevel { ptr_read[U8]((buf + i + 1) as *U8) }
@@ -66,7 +59,6 @@ pub func find_header_end(buf: I64, len: I64) -> I64 {
                 return i
             }
         }
-        i = i + 1
     }
     return -1 as I64
 }

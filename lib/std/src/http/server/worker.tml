@@ -394,8 +394,7 @@ pub func app_worker(arg: *Unit) {
                 if first_is_bodyless {
                     // Batch dispatch: process each pipelined request, batch responses
                     var batch_pos: I64 = 0
-                    var req_idx: I64 = 0
-                    loop (req_idx < num_pipelined) {
+                    for req_idx in 0 to num_pipelined {
                         let req_start: I64 = app_request_offset(buf, total, req_idx)
                         if req_start < 0 { break }
                         var req_end: I64 = total
@@ -424,7 +423,6 @@ pub func app_worker(arg: *Unit) {
                             }
                             tml_sys_send(fd, response as *Unit, resp_len)
                         }
-                        req_idx = req_idx + 1
                     }
                     // Send batched responses
                     if batch_pos > 0 {
@@ -594,13 +592,11 @@ pub func app_listen(
             " onError=" + on_error_count.to_string())
     println("")
 
-    var i: I64 = 0
-    loop (i < total_count) {
+    for i in 0 to total_count {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
         println("  " + m + "\t" + p)
-        i = i + 1
     }
     println("")
 
@@ -613,10 +609,8 @@ pub func app_listen(
 
     // Allocate and zero shared state
     let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    var z: I64 = 0
-    loop (z < SHARED_SIZE) {
+    for z in 0 to SHARED_SIZE {
         lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }
-        z = z + 1
     }
 
     // Write shared state fields
@@ -654,13 +648,11 @@ pub func app_listen(
     tml_condvar_init(condvar_ptr as *Unit)
 
     // Spawn worker threads (pull from shared queue)
-    var w: I64 = 0
-    loop (w < num_workers) {
+    for w in 0 to num_workers {
         let h: U64 = raw_thread_spawn(app_worker as *Unit, shared as *Unit, 0 as U64)
         if h != 0 as U64 {
             raw_thread_detach(h)
         }
-        w = w + 1
     }
 
     // Accept loop — main thread accepts and pushes to queue
@@ -862,15 +854,13 @@ pub func app_evloop_worker(arg: *Unit) {
     }
 
     // Cleanup
-    var ci: I64 = 0
-    loop (ci < conn_count) {
+    for ci in 0 to conn_count {
         let fd: I64 = conn_get(conns, ci, CONN_FD)
         if fd > 0 {
             sys_close(fd)
             let buf: I64 = conn_get(conns, ci, CONN_BUF)
             lowlevel { mem_free(buf as *Unit) }
         }
-        ci = ci + 1
     }
     lowlevel { mem_free(conns as *Unit) }
     lowlevel { mem_free(params_buf as *Unit) }
@@ -911,13 +901,11 @@ pub func app_listen_evloop(
             " onError=" + on_error_count.to_string())
     println("")
 
-    var i: I64 = 0
-    loop (i < total_count) {
+    for i in 0 to total_count {
         let offset: I64 = i * ENTRY_SIZE
         let m: Str = lowlevel { ptr_read[I64]((table + offset) as *I64) } as Str
         let p: Str = lowlevel { ptr_read[I64]((table + offset + 8) as *I64) } as Str
         println("  " + m + "\t" + p)
-        i = i + 1
     }
     println("")
 
@@ -930,8 +918,7 @@ pub func app_listen_evloop(
 
     // Allocate and zero shared state
     let shared: I64 = lowlevel { mem_alloc(SHARED_SIZE) } as I64
-    var z: I64 = 0
-    loop (z < SHARED_SIZE) { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) }; z = z + 1 }
+    for z in 0 to SHARED_SIZE { lowlevel { ptr_write[U8]((shared + z) as *U8, 0 as U8) } }
 
     shared_set(shared, OFF_TABLE, table)
     shared_set(shared, OFF_COUNT, total_count)
@@ -957,11 +944,9 @@ pub func app_listen_evloop(
 
     // Create per-worker state
     let workers: I64 = lowlevel { mem_alloc(num_workers * 8) } as I64
-    var w: I64 = 0
-    loop (w < num_workers) {
+    for w in 0 to num_workers {
         let ws: I64 = lowlevel { mem_alloc(WSTATE_SIZE) } as I64
-        var wz: I64 = 0
-        loop (wz < WSTATE_SIZE) { lowlevel { ptr_write[U8]((ws + wz) as *U8, 0 as U8) }; wz = wz + 1 }
+        for wz in 0 to WSTATE_SIZE { lowlevel { ptr_write[U8]((ws + wz) as *U8, 0 as U8) } }
         let mutex: I64 = lowlevel { mem_alloc(64) } as I64
         tml_mutex_init(mutex as *Unit)
         let new_fds_cap: I64 = 256
@@ -974,7 +959,6 @@ pub func app_listen_evloop(
         lowlevel { ptr_write[I64]((workers + w * 8) as *I64, ws) }
         let h: U64 = raw_thread_spawn(app_evloop_worker as *Unit, ws as *Unit, 0 as U64)
         if h != 0 as U64 { raw_thread_detach(h) }
-        w = w + 1
     }
 
     // Accept loop — round-robin distribute to workers

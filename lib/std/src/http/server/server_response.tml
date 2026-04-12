@@ -415,15 +415,13 @@ impl ServerResponse {
         // Write body chunks
         let chunk_count: I64 = this.body_chunks.len()
         if not is_head and chunk_count > 0 {
-            var i: I64 = 0
-            loop (i < chunk_count) {
+            for i in 0 to chunk_count {
                 let chunk_str: Str = this.body_chunks.get(i)
                 let chunk_len: I64 = str::len(chunk_str)
                 if chunk_len > 0 {
                     lowlevel { copy_nonoverlapping(chunk_str as *Unit, (buf + pos) as *Unit, chunk_len) }
                     pos = pos + chunk_len
                 }
-                i = i + 1
             }
         }
 

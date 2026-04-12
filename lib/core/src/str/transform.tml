@@ -249,8 +249,7 @@ pub func to_uppercase(s: Str) -> Str {
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
     let src: I64 = s as I64
     let dst: I64 = buf as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (src + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         var ch: I32 = b as I32
@@ -260,7 +259,6 @@ pub func to_uppercase(s: Str) -> Str {
         }
         let dp: *U8 = (dst + i) as *U8
         lowlevel { ptr_write[U8](dp, ch as U8) }
-        i = i + 1
     }
     let null_p: *U8 = (dst + s_len) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }
@@ -289,8 +287,7 @@ pub func to_lowercase(s: Str) -> Str {
     let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
     let src: I64 = s as I64
     let dst: I64 = buf as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (src + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         var ch: I32 = b as I32
@@ -300,7 +297,6 @@ pub func to_lowercase(s: Str) -> Str {
         }
         let dp: *U8 = (dst + i) as *U8
         lowlevel { ptr_write[U8](dp, ch as U8) }
-        i = i + 1
     }
     let null_p: *U8 = (dst + s_len) as *U8
     lowlevel { ptr_write[U8](null_p, 0 as U8) }
@@ -330,8 +326,7 @@ pub func eq_ignore_ascii_case(s: Str, other: Str) -> Bool {
     }
     let src: I64 = s as I64
     let orc: I64 = other as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let sp: *U8 = (src + i) as *U8
         let op: *U8 = (orc + i) as *U8
         var sb: I32 = (lowlevel { ptr_read[U8](sp) }) as I32
@@ -346,7 +341,6 @@ pub func eq_ignore_ascii_case(s: Str, other: Str) -> Bool {
         if sb != ob {
             return false
         }
-        i = i + 1
     }
     return true
 }

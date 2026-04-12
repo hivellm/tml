@@ -131,11 +131,9 @@ impl ByteStream {
         let bytes_header: I64 = (ref bytes) as I64
         let bytes_ptr: I64 = lowlevel { ptr_read[I64](bytes_header as *I64) }
         let src_data: I64 = lowlevel { ptr_read[I64](bytes_ptr as *I64) }
-        var i: I64 = 0
-        loop (i < blen) {
+        for i in 0 to blen {
             let src_byte: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
             buf_write_byte_at(data, i, src_byte as I32)
-            i = i + 1
         }
 
         ByteStream { handle: header }
@@ -246,8 +244,7 @@ impl Readable for ByteStream {
         // byte-by-byte into our internal copy of where buf's data lives.
         let src_data: *Unit = buf_get_data(h)
 
-        var i: I64 = 0
-        loop (i < to_read) {
+        for i in 0 to to_read {
             let byte_val: U8 = buf_read_byte_at(src_data, rp + i) as U8
             // Write directly into the destination slice's data area.
             // buf is mut ref [U8] → at IR level, ptr to {data_ptr, len}.
@@ -258,7 +255,6 @@ impl Readable for ByteStream {
             let buf_ptr: I64 = lowlevel { ptr_read[I64](buf_header as *I64) }
             let data_ptr: I64 = lowlevel { ptr_read[I64](buf_ptr as *I64) }
             lowlevel { ptr_write[U8]((data_ptr + i) as *U8, byte_val) }
-            i = i + 1
         }
 
         buf_set_read_pos(h, rp + to_read)
@@ -294,11 +290,9 @@ impl Writable for ByteStream {
         let buf_ptr: I64 = lowlevel { ptr_read[I64](buf_header as *I64) }
         let src_data: I64 = lowlevel { ptr_read[I64](buf_ptr as *I64) }
 
-        var i: I64 = 0
-        loop (i < buf_len) {
+        for i in 0 to buf_len {
             let byte_val: U8 = lowlevel { ptr_read[U8]((src_data + i) as *U8) }
             buf_write_byte_at(dst_data, len + i, byte_val as I32)
-            i = i + 1
         }
 
         buf_set_len(h, len + buf_len)
@@ -324,10 +318,8 @@ pub func read_all(source: mut ref ByteStream) -> Outcome[Buffer, IoError] {
     let result: Buffer = Buffer::new(remaining)
     if remaining > 0 {
         let data: *Unit = buf_get_data(h)
-        var i: I64 = 0
-        loop (i < remaining) {
+        for i in 0 to remaining {
             result.write_byte(buf_read_byte_at(data, rp + i))
-            i = i + 1
         }
         buf_set_read_pos(h, len)
     }
@@ -346,10 +338,8 @@ pub func read_to_string(source: mut ref ByteStream) -> Outcome[Str, IoError] {
     }
     let data: *Unit = buf_get_data(h)
     let str_buf: *Unit = buf_mem_alloc(remaining + 1)
-    var i: I64 = 0
-    loop (i < remaining) {
+    for i in 0 to remaining {
         buf_write_byte_at(str_buf, i, buf_read_byte_at(data, rp + i))
-        i = i + 1
     }
     buf_write_byte_at(str_buf, remaining, 0)
     buf_set_read_pos(h, len)
@@ -373,10 +363,8 @@ pub func write_string(dest: mut ref ByteStream, s: Str) -> Outcome[I64, IoError]
     let len: I64 = buf_get_len(h)
     let dst_data: *Unit = buf_get_data(h)
     let src: *Unit = s as *Unit
-    var i: I64 = 0
-    loop (i < slen) {
+    for i in 0 to slen {
         buf_write_byte_at(dst_data, len + i, buf_read_byte_at(src, i))
-        i = i + 1
     }
     buf_set_len(h, len + slen)
     Ok(slen)

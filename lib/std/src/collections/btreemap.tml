@@ -105,10 +105,8 @@ impl[K: Ord, V] BTreeMap[K, V] {
     /// Returns all keys in sorted order.
     pub func keys(this) -> List[K] {
         var result: List[K] = List[K].new(this.length)
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             result.push(this.keys.get(i))
-            i = i + 1
         }
         return result
     }
@@ -116,10 +114,8 @@ impl[K: Ord, V] BTreeMap[K, V] {
     /// Returns all values in key-sorted order.
     pub func values(this) -> List[V] {
         var result: List[V] = List[V].new(this.length)
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             result.push(this.values.get(i))
-            i = i + 1
         }
         return result
     }
@@ -262,11 +258,9 @@ impl[K: Ord, V] BTreeMap[K, V] {
 
     /// Remove key and value at index, shifting elements left.
     pub func remove_at(mut this, idx: I64) {
-        var i: I64 = idx
-        loop (i < this.length - 1) {
+        for i in idx to this.length - 1 {
             this.keys.set(i, this.keys.get(i + 1))
             this.values.set(i, this.values.get(i + 1))
-            i = i + 1
         }
         let _k: K = this.keys.pop()
         let _v: V = this.values.pop()
@@ -290,11 +284,9 @@ impl[K: Ord, V] BTreeMap[K, V] {
         let count: I64 = if hi > lo { hi - lo } else { 0 }
         var result_keys: List[K] = List[K].new(count)
         var result_vals: List[V] = List[V].new(count)
-        var i: I64 = lo
-        loop (i < hi) {
+        for i in lo to hi {
             result_keys.push(this.keys.get(i))
             result_vals.push(this.values.get(i))
-            i = i + 1
         }
         return BTreeMapIter[K, V] {
             keys: result_keys,
@@ -308,11 +300,9 @@ impl[K: Ord, V] BTreeMap[K, V] {
     pub func iter(this) -> BTreeMapIter[K, V] {
         var result_keys: List[K] = List[K].new(this.length)
         var result_vals: List[V] = List[V].new(this.length)
-        var i: I64 = 0
-        loop (i < this.length) {
+        for i in 0 to this.length {
             result_keys.push(this.keys.get(i))
             result_vals.push(this.values.get(i))
-            i = i + 1
         }
         return BTreeMapIter[K, V] {
             keys: result_keys,

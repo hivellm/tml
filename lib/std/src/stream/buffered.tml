@@ -171,10 +171,8 @@ impl BufferedReader {
         // Compact: move unread data to the beginning
         if pos > 0 {
             let remaining: I64 = filled - pos
-            var i: I64 = 0
-            loop (i < remaining) {
+            for i in 0 to remaining {
                 br_write_byte(buf_data, i, br_read_byte(buf_data, pos + i))
-                i = i + 1
             }
             pos = 0
             filled = remaining
@@ -203,10 +201,8 @@ impl BufferedReader {
         }
 
         let src_data: *Unit = buf_hdr_get(h_src, HDR_DATA) as *Unit
-        var i: I64 = 0
-        loop (i < to_read) {
+        for i in 0 to to_read {
             br_write_byte(buf_data, filled + i, br_read_byte(src_data, src_rp + i))
-            i = i + 1
         }
 
         // Advance source read position
@@ -252,24 +248,20 @@ impl BufferedReader {
 
         // Scan for \n (byte 10) in buffered data
         var newline_at: I64 = 0 - 1
-        var scan: I64 = pos
-        loop (scan < filled) {
+        for scan in pos to filled {
             let bval: I64 = br_read_byte(buf_data, scan) as I64
             if bval == 10 {
                 newline_at = scan
                 break
             }
-            scan = scan + 1
         }
 
         if newline_at < 0 {
             // No newline found — return all buffered data as a line (EOF case)
             let chunk_len: I64 = filled - pos
             let result: *Unit = br_alloc(chunk_len + 1)
-            var i: I64 = 0
-            loop (i < chunk_len) {
+            for i in 0 to chunk_len {
                 br_write_byte(result, i, br_read_byte(buf_data, pos + i))
-                i = i + 1
             }
             br_write_byte(result, chunk_len, 0 as U8)
             this.set_buf_pos(filled)
@@ -288,10 +280,8 @@ impl BufferedReader {
 
         let line_len: I64 = end - pos
         let result: *Unit = br_alloc(line_len + 1)
-        var k: I64 = 0
-        loop (k < line_len) {
+        for k in 0 to line_len {
             br_write_byte(result, k, br_read_byte(buf_data, pos + k))
-            k = k + 1
         }
         br_write_byte(result, line_len, 0 as U8)
 
@@ -324,11 +314,9 @@ impl BufferedReader {
             let out_addr: I64 = (mut ref buf) as I64
             let out_hdr: I64 = buf_hdr_get(out_addr, HDR_DATA)
             let out_data: I64 = buf_hdr_get(out_hdr, HDR_DATA)
-            var i: I64 = 0
-            loop (i < to_copy) {
+            for i in 0 to to_copy {
                 let byte_val: U8 = br_read_byte(buf_data, pos + i)
                 byte_write(out_data, i, byte_val as I32)
-                i = i + 1
             }
             this.set_buf_pos(pos + to_copy)
             return Ok(to_copy)
@@ -359,11 +347,9 @@ impl BufferedReader {
         let out_addr2: I64 = (mut ref buf) as I64
         let out_hdr2: I64 = buf_hdr_get(out_addr2, HDR_DATA)
         let out_data2: I64 = buf_hdr_get(out_hdr2, HDR_DATA)
-        var j: I64 = 0
-        loop (j < to_copy2) {
+        for j in 0 to to_copy2 {
             let bv: U8 = br_read_byte(buf_data2, pos2 + j)
             byte_write(out_data2, j, bv as I32)
-            j = j + 1
         }
         this.set_buf_pos(pos2 + to_copy2)
         return Ok(to_copy2)
@@ -471,11 +457,9 @@ impl BufferedWriter {
             let slice_addr: I64 = (ref data) as I64
             let src_hdr: I64 = buf_hdr_get(slice_addr, HDR_DATA)
             let src_data: I64 = buf_hdr_get(src_hdr, HDR_DATA)
-            var i: I64 = 0
-            loop (i < data_len) {
+            for i in 0 to data_len {
                 let byte_val: U8 = byte_read(src_data, i) as U8
                 br_write_byte(buf_data, buf_len + i, byte_val)
-                i = i + 1
             }
             this.set_buf_len(buf_len + data_len)
             return Ok(data_len)
@@ -497,11 +481,9 @@ impl BufferedWriter {
         let slice_addr: I64 = (ref data) as I64
         let src_hdr2: I64 = buf_hdr_get(slice_addr, HDR_DATA)
         let src_data: I64 = buf_hdr_get(src_hdr2, HDR_DATA)
-        var i: I64 = 0
-        loop (i < data_len) {
+        for i in 0 to data_len {
             let byte_val: U8 = byte_read(src_data, i) as U8
             br_write_byte(buf_data, i, byte_val)
-            i = i + 1
         }
         this.set_buf_len(data_len)
         Ok(data_len)
@@ -534,10 +516,8 @@ impl BufferedWriter {
         }
 
         let dst_data: *Unit = buf_hdr_get(h_dst, HDR_DATA) as *Unit
-        var i: I64 = 0
-        loop (i < buf_len) {
+        for i in 0 to buf_len {
             br_write_byte(dst_data, dst_len + i, br_read_byte(buf_data, i))
-            i = i + 1
         }
         buf_hdr_set(h_dst, HDR_CAP, dst_len + buf_len)
 

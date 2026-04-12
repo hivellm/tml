@@ -320,8 +320,7 @@ func make_invalid() -> Regex {
 func make_empty_captures(ng: I64) -> Captures {
     var starts: List[I64] = List::new(8)
     var ends: List[I64] = List::new(8)
-    var i: I64 = 0
-    loop (i < ng) { starts.push(-1); ends.push(-1); i = i + 1 }
+    for i in 0 to ng { starts.push(-1); ends.push(-1) }
     return Captures { _starts: starts, _ends: ends, _num_groups: ng, _matched: false }
 }
 
@@ -722,10 +721,8 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(bs)
             ns = ns + 1
             let mo: I64 = all_outs.len()
-            var mi: I64 = 0
-            loop (mi < ac) { all_outs.push(all_outs.get(ao + mi)); mi = mi + 1 }
-            mi = 0
-            loop (mi < bc) { all_outs.push(all_outs.get(bo + mi)); mi = mi + 1 }
+            for mi in 0 to ac { all_outs.push(all_outs.get(ao + mi)) }
+            for mi in 0 to bc { all_outs.push(all_outs.get(bo + mi)) }
             fstack.push(split); fstack.push(mo); fstack.push(ac + bc)
             nfa_h = true
         }
@@ -790,8 +787,7 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
             kinds.push(STATE_SPLIT); chars.push(0); next1.push(as_); next2.push(-1)
             ns = ns + 1
             let mo: I64 = all_outs.len()
-            var mi: I64 = 0
-            loop (mi < ac) { all_outs.push(all_outs.get(ao + mi)); mi = mi + 1 }
+            for mi in 0 to ac { all_outs.push(all_outs.get(ao + mi)) }
             all_outs.push(-(split + 1))
             fstack.push(split); fstack.push(mo); fstack.push(ac + 1)
         }
@@ -831,8 +827,7 @@ func build_nfa(postfix: List[I64], class_ranges: List[I64], num_classes: I64, nu
 /// Patch outputs at [offset, offset+count) in all_outs to point to target.
 func patch(next1: List[I64], next2: List[I64], all_outs: List[I64],
            offset: I64, count: I64, target: I64) {
-    var i: I64 = 0
-    loop (i < count) {
+    for i in 0 to count {
         let loc: I64 = all_outs.get(offset + i)
         if loc >= 0 {
             next1.set(loc, target)
@@ -840,7 +835,6 @@ func patch(next1: List[I64], next2: List[I64], all_outs: List[I64],
         if loc < 0 {
             next2.set(-(loc + 1), target)
         }
-        i = i + 1
     }
 }
 
@@ -873,17 +867,14 @@ func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
     var cur: List[I64] = List::new(8)
     var nxt: List[I64] = List::new(8)
     var vis: List[I64] = List::new(8)
-    var i: I64 = 0
-    loop (i < re._num_states) { vis.push(0); i = i + 1 }
+    for i in 0 to re._num_states { vis.push(0) }
     var gen: I64 = 1
 
     add_eps(re, cur, vis, gen, re._start, s, slen, start_pos)
 
     var last_match: I64 = -1
-    i = 0
-    loop (i < cur.len()) {
+    for i in 0 to cur.len() {
         if re._kinds.get(cur.get(i)) == STATE_MATCH { last_match = start_pos }
-        i = i + 1
     }
 
     var pos: I64 = start_pos
@@ -896,8 +887,7 @@ func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
         }
         let ch: I64 = regex_char_code(s, pos)
         gen = gen + 1
-        i = 0
-        loop (i < cur.len()) {
+        for i in 0 to cur.len() {
             let st: I64 = cur.get(i)
             let k: I64 = re._kinds.get(st)
             if k == STATE_CHAR and ch == re._chars.get(st) {
@@ -912,21 +902,16 @@ func nfa_exec(re: ref Regex, s: Str, slen: I64, start_pos: I64) -> I64 {
             if k == STATE_CLASS_NEG and not char_in_class(re._class_ranges, re._chars.get(st), ch) {
                 add_eps(re, nxt, vis, gen, re._next1.get(st), s, slen, pos + 1)
             }
-            i = i + 1
         }
         // Copy nxt→cur and clear nxt (avoids List::new(8) remonomorphization bug)
         cur.clear()
-        var ci: I64 = 0
-        loop (ci < nxt.len()) {
+        for ci in 0 to nxt.len() {
             cur.push(nxt.get(ci))
-            ci = ci + 1
         }
         nxt.clear()
         pos = pos + 1
-        i = 0
-        loop (i < cur.len()) {
+        for i in 0 to cur.len() {
             if re._kinds.get(cur.get(i)) == STATE_MATCH { last_match = pos }
-            i = i + 1
         }
     }
     cur.destroy()
@@ -982,14 +967,12 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
 
     // Visited array for epsilon closure (generation-based)
     var vis: List[I64] = List::new(8)
-    var i: I64 = 0
-    loop (i < re._num_states) { vis.push(0); i = i + 1 }
+    for i in 0 to re._num_states { vis.push(0) }
     var gen: I64 = 1
 
     // Temporary capture buffer for epsilon closure propagation
     var tmp_cap: List[I64] = List::new(8)
-    i = 0
-    loop (i < ng2) { tmp_cap.push(-1); i = i + 1 }
+    for i in 0 to ng2 { tmp_cap.push(-1) }
 
     // Group 0 start = start_pos
     tmp_cap.set(0, start_pos)
@@ -1000,22 +983,18 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
     // Check if any initial state is MATCH
     var best_caps: List[I64] = List::new(8)
     var have_match: Bool = false
-    i = 0
-    loop (i < cur_states.len()) {
+    for i in 0 to cur_states.len() {
         if re._kinds.get(cur_states.get(i)) == STATE_MATCH {
             if not have_match {
                 have_match = true
                 best_caps.clear()
-                var ci: I64 = 0
-                loop (ci < ng2) {
+                for ci in 0 to ng2 {
                     best_caps.push(cur_caps.get(i * ng2 + ci))
-                    ci = ci + 1
                 }
                 // Set group 0 end
                 best_caps.set(1, start_pos)
             }
         }
-        i = i + 1
     }
 
     var pos: I64 = start_pos
@@ -1023,8 +1002,7 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
         if cur_states.len() == 0 { break }
         let ch: I64 = regex_char_code(s, pos)
         gen = gen + 1
-        i = 0
-        loop (i < cur_states.len()) {
+        for i in 0 to cur_states.len() {
             let st: I64 = cur_states.get(i)
             let k: I64 = re._kinds.get(st)
             var advance: Bool = false
@@ -1034,43 +1012,33 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
             if k == STATE_CLASS_NEG and not char_in_class(re._class_ranges, re._chars.get(st), ch) { advance = true }
             if advance {
                 // Copy this thread's captures to tmp_cap
-                var ci: I64 = 0
-                loop (ci < ng2) {
+                for ci in 0 to ng2 {
                     tmp_cap.set(ci, cur_caps.get(i * ng2 + ci))
-                    ci = ci + 1
                 }
                 add_eps_cap(re, nxt_states, nxt_caps, vis, gen, re._next1.get(st), s, slen, pos + 1, tmp_cap, ng, ng2)
             }
-            i = i + 1
         }
         // Swap cur/nxt
         cur_states.clear()
-        var ci: I64 = 0
-        loop (ci < nxt_states.len()) {
+        for ci in 0 to nxt_states.len() {
             cur_states.push(nxt_states.get(ci))
-            ci = ci + 1
         }
         nxt_states.clear()
         cur_caps.clear()
-        ci = 0
-        loop (ci < nxt_caps.len()) {
+        for ci in 0 to nxt_caps.len() {
             cur_caps.push(nxt_caps.get(ci))
-            ci = ci + 1
         }
         nxt_caps.clear()
         pos = pos + 1
 
         // Check for match
-        i = 0
-        loop (i < cur_states.len()) {
+        for i in 0 to cur_states.len() {
             if re._kinds.get(cur_states.get(i)) == STATE_MATCH {
                 if not have_match {
                     have_match = true
                     best_caps.clear()
-                    var bci: I64 = 0
-                    loop (bci < ng2) {
+                    for bci in 0 to ng2 {
                         best_caps.push(cur_caps.get(i * ng2 + bci))
-                        bci = bci + 1
                     }
                     best_caps.set(1, pos)
                 }
@@ -1080,16 +1048,13 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
                     let old_end: I64 = best_caps.get(1)
                     if new_end > old_end {
                         best_caps.clear()
-                        var bci: I64 = 0
-                        loop (bci < ng2) {
+                        for bci in 0 to ng2 {
                             best_caps.push(cur_caps.get(i * ng2 + bci))
-                            bci = bci + 1
                         }
                         best_caps.set(1, new_end)
                     }
                 }
             }
-            i = i + 1
         }
     }
 
@@ -1109,11 +1074,9 @@ func nfa_exec_captures(re: ref Regex, s: Str, slen: I64, start_pos: I64, ng: I64
     // Build Captures from best_caps
     var starts: List[I64] = List::new(8)
     var ends: List[I64] = List::new(8)
-    i = 0
-    loop (i < ng) {
+    for i in 0 to ng {
         starts.push(best_caps.get(i * 2))
         ends.push(best_caps.get(i * 2 + 1))
-        i = i + 1
     }
     best_caps.destroy()
     return Captures { _starts: starts, _ends: ends, _num_groups: ng, _matched: true }
@@ -1167,10 +1130,8 @@ func add_eps_cap(re: ref Regex, list: List[I64], caps: List[I64],
         if not eps_h {
             // Non-epsilon state: add to list with captures
             list.push(st)
-            var ci: I64 = 0
-            loop (ci < ng2) {
+            for ci in 0 to ng2 {
                 caps.push(thread_cap.get(ci))
-                ci = ci + 1
             }
         }
     }

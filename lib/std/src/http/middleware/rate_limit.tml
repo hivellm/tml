@@ -99,8 +99,7 @@ impl RateLimiter {
         let max_req: I64 = this.max_requests
 
         // Search for existing entry
-        var i: I64 = 0
-        loop (i < this.entry_count) {
+        for i in 0 to this.entry_count {
             let entry_key: Str = entry_get(this.entries, i, RL_FIELD_KEY) as Str
             if entry_key == key {
                 let entry_count: I64 = entry_get(this.entries, i, RL_FIELD_COUNT)
@@ -130,7 +129,6 @@ impl RateLimiter {
                     limit: max_req, reset_at: entry_start + this.window_ms,
                 }
             }
-            i = i + 1
         }
 
         // New entry
@@ -147,8 +145,7 @@ impl RateLimiter {
     }
 
     pub func reset(mut this, key: Str) {
-        var i: I64 = 0
-        loop (i < this.entry_count) {
+        for i in 0 to this.entry_count {
             let entry_key: Str = entry_get(this.entries, i, RL_FIELD_KEY) as Str
             if entry_key == key {
                 let last: I64 = this.entry_count - 1
@@ -160,7 +157,6 @@ impl RateLimiter {
                 this.entry_count = last
                 return
             }
-            i = i + 1
         }
     }
 

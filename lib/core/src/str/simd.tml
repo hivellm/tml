@@ -96,14 +96,12 @@ pub func find_byte(s: Str, byte: U8) -> I64 {
 pub func find_byte_scalar(s: Str, byte: U8) -> I64 {
     let s_len: I64 = len(s)
     let s_base: I64 = s as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (s_base + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         if b == byte {
             return i
         }
-        i = i + 1
     }
     return -1
 }
@@ -242,12 +240,10 @@ pub func contains_scalar(s: Str, pattern: Str) -> Bool {
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
-    var i: I64 = 0
-    loop (i <= limit) {
+    for i in 0 through limit {
         if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return true
         }
-        i = i + 1
     }
     return false
 }
@@ -333,12 +329,10 @@ pub func find_substr_scalar(s: Str, pattern: Str) -> I64 {
     let s_base: I64 = s as I64
     let p_ptr: *U8 = pattern as *U8
     let limit: I64 = s_len - p_len
-    var i: I64 = 0
-    loop (i <= limit) {
+    for i in 0 through limit {
         if c_memcmp((s_base + i) as *U8, p_ptr, p_len) == 0 {
             return i
         }
-        i = i + 1
     }
     return -1
 }
@@ -489,14 +483,12 @@ pub func count_byte_scalar(s: Str, byte: U8) -> I64 {
     let s_len: I64 = len(s)
     let s_base: I64 = s as I64
     var count: I64 = 0
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (s_base + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         if b == byte {
             count = count + 1
         }
-        i = i + 1
     }
     return count
 }
@@ -839,14 +831,12 @@ pub func is_ascii_fast(s: Str) -> Bool {
 pub func is_ascii_scalar(s: Str) -> Bool {
     let s_len: I64 = len(s)
     let s_base: I64 = s as I64
-    var i: I64 = 0
-    loop (i < s_len) {
+    for i in 0 to s_len {
         let p: *U8 = (s_base + i) as *U8
         let b: U8 = lowlevel { ptr_read[U8](p) }
         if (b as I32) >= 128 {
             return false
         }
-        i = i + 1
     }
     return true
 }
@@ -952,14 +942,12 @@ pub func find_all_byte(s: Str, byte: U8) -> List[I64] {
 
     if s_len < 32 {
         // Scalar path for short strings
-        var i: I64 = 0
-        loop (i < s_len) {
+        for i in 0 to s_len {
             let p: *U8 = (s_base + i) as *U8
             let b: U8 = lowlevel { ptr_read[U8](p) }
             if b == byte {
                 positions.push(i)
             }
-            i = i + 1
         }
         return positions
     }
@@ -1040,12 +1028,10 @@ pub func split_by_byte_simd(s: Str, delim_byte: U8) -> List[Str] {
     let positions: List[I64] = find_all_byte(s, delim_byte)
     var result: List[Str] = List[Str]::new(positions.len() + 1)
     var start: I64 = 0
-    var i: I64 = 0
-    loop (i < positions.len()) {
+    for i in 0 to positions.len() {
         let pos: I64 = positions.get(i)
         result.push(substring_raw(s, start, pos))
         start = pos + 1
-        i = i + 1
     }
     // Last segment: from after the final delimiter to end of string
     result.push(substring_raw(s, start, s_len))
@@ -1078,8 +1064,7 @@ pub func split_lines_simd(s: Str) -> List[Str] {
     let nl_positions: List[I64] = find_all_byte(s, 10 as U8)
 
     var start: I64 = 0
-    var i: I64 = 0
-    loop (i < nl_positions.len()) {
+    for i in 0 to nl_positions.len() {
         var end: I64 = nl_positions.get(i)
         // Strip trailing \r if this is a CRLF sequence
         if end > start {
@@ -1091,7 +1076,6 @@ pub func split_lines_simd(s: Str) -> List[Str] {
         }
         result.push(substring_raw(s, start, end))
         start = nl_positions.get(i) + 1
-        i = i + 1
     }
     // Trailing content after the last newline (or the whole string if no newlines)
     if start <= s_len {

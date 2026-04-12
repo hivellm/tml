@@ -178,11 +178,9 @@ pub type ControllerFn = func(mut ref App)
 /// ```
 pub func register_controllers(app: mut ref App, controllers: List[func(mut ref App)]) {
     let len: I64 = controllers.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let register_fn: func(mut ref App) = controllers.get(i)
         register_fn(app)
-        i = i + 1
     }
 }
 
@@ -256,10 +254,8 @@ impl ControllerInfo {
 /// ```
 pub func register_all(app: mut ref App, controllers: List[ControllerInfo]) {
     let len: I64 = controllers.len()
-    var i: I64 = 0
-    loop (i < len) {
+    for i in 0 to len {
         let info: ControllerInfo = controllers.get(i)
         info.register(app)
-        i = i + 1
     }
 }

@@ -125,18 +125,15 @@ impl H2StreamTable {
         let size: I64 = MAX_STREAMS * SLOT_SIZE
         let ptr: I64 = lowlevel { mem_alloc(size) } as I64
         // Zero-initialize all slots
-        var i: I64 = 0
-        loop (i < MAX_STREAMS) {
+        for i in 0 to MAX_STREAMS {
             lowlevel { ptr_write[I64]((ptr + i * SLOT_SIZE) as *I64, 0 as I64) }
-            i = i + 1
         }
         H2StreamTable { slots: ptr, count: 0 }
     }
 
     /// Find a stream by ID. Returns the stream pointer (I64) or 0 if not found.
     pub func find(this, stream_id: I64) -> I64 {
-        var i: I64 = 0
-        loop (i < MAX_STREAMS) {
+        for i in 0 to MAX_STREAMS {
             let slot_ptr: I64 = this.slots + i * SLOT_SIZE
             let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
             if stream_ptr != 0 {
@@ -145,15 +142,13 @@ impl H2StreamTable {
                     return stream_ptr
                 }
             }
-            i = i + 1
         }
         return 0
     }
 
     /// Insert a stream into the first empty slot. Returns the slot index or -1 if full.
     pub func insert(this, stream_ptr: I64) -> I64 {
-        var i: I64 = 0
-        loop (i < MAX_STREAMS) {
+        for i in 0 to MAX_STREAMS {
             let slot_ptr: I64 = this.slots + i * SLOT_SIZE
             let existing: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
             if existing == 0 {
@@ -161,15 +156,13 @@ impl H2StreamTable {
                 this.count = this.count + 1
                 return i
             }
-            i = i + 1
         }
         return -1
     }
 
     /// Remove a stream by ID. Returns the removed stream pointer or 0.
     pub func remove(this, stream_id: I64) -> I64 {
-        var i: I64 = 0
-        loop (i < MAX_STREAMS) {
+        for i in 0 to MAX_STREAMS {
             let slot_ptr: I64 = this.slots + i * SLOT_SIZE
             let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
             if stream_ptr != 0 {
@@ -180,7 +173,6 @@ impl H2StreamTable {
                     return stream_ptr
                 }
             }
-            i = i + 1
         }
         return 0
     }
@@ -532,9 +524,8 @@ impl H2Connection {
 
         // Decode and apply settings
         let result: H2SettingsResult = h2_decode_settings(payload)!
-        var i: I64 = 0
         let count: I64 = result.count()
-        loop (i < count) {
+        for i in 0 to count {
             let id: I32 = result.get_id(i)
             let value: I64 = result.get_value(i)
 
@@ -561,7 +552,6 @@ impl H2Connection {
             }
 
             this.remote_settings.apply(id, value)
-            i = i + 1
         }
 
         this.settings_received = 1
@@ -731,8 +721,7 @@ impl H2Connection {
 
     /// Adjust all active streams' send windows by a delta (SETTINGS change).
     pub func adjust_all_stream_send_windows(this, delta: I64) {
-        var i: I64 = 0
-        loop (i < MAX_STREAMS) {
+        for i in 0 to MAX_STREAMS {
             let slot_ptr: I64 = this.streams.slots + i * SLOT_SIZE
             let stream_ptr: I64 = lowlevel { ptr_read[I64](slot_ptr as *I64) }
             if stream_ptr != 0 {
@@ -740,7 +729,6 @@ impl H2Connection {
                 stream.adjust_send_window(delta)
                 lowlevel { ptr_write[H2Stream](stream_ptr as *H2Stream, stream) }
             }
-            i = i + 1
         }
     }
 
@@ -749,10 +737,8 @@ impl H2Connection {
     pub func take_outbound(this) -> Buffer {
         let len: I64 = this.outbound.len()
         let result = Buffer::new(len)
-        var i: I64 = 0
-        loop (i < len) {
+        for i in 0 to len {
             result.write_byte(this.outbound.get(i))
-            i = i + 1
         }
         this.outbound.clear()
         result

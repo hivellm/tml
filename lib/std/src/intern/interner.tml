@@ -42,10 +42,8 @@ impl Interner {
         lowlevel {
             data_ptr = mem_alloc(initial_cap * 8) as I64
             // Zero-fill
-            var j: I64 = 0
-            loop (j < initial_cap * 8) {
+            for j in 0 to initial_cap * 8 {
                 ptr_write[U8]((data_ptr + j) as *U8, 0 as U8)
-                j = j + 1
             }
         }
         return Interner { data: data_ptr, count: 0, cap: initial_cap }
@@ -54,8 +52,7 @@ impl Interner {
     /// Interns a string. Returns existing handle if already interned.
     pub func intern(this, s: Str) -> InternedStr {
         // Linear scan for existing
-        var i: I64 = 0
-        loop (i < this.count) {
+        for i in 0 to this.count {
             var existing: Str = ""
             lowlevel {
                 existing = ptr_read[Str]((this.data + i * 8) as *Unit)
@@ -63,7 +60,6 @@ impl Interner {
             if strcmp(existing, s) == 0 {
                 return InternedStr { index: i }
             }
-            i = i + 1
         }
 
         // Not found — insert
@@ -113,8 +109,7 @@ impl Interner {
 
     /// Returns `true` if the given string has already been interned.
     pub func contains(this, s: Str) -> Bool {
-        var i: I64 = 0
-        loop (i < this.count) {
+        for i in 0 to this.count {
             var existing: Str = ""
             lowlevel {
                 existing = ptr_read[Str]((this.data + i * 8) as *Unit)
@@ -122,7 +117,6 @@ impl Interner {
             if strcmp(existing, s) == 0 {
                 return true
             }
-            i = i + 1
         }
         return false
     }

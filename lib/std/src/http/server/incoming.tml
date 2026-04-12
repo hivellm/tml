@@ -154,12 +154,10 @@ impl IncomingMessage {
     /// Returns just the path component (before '?').
     pub func path(this) -> Str {
         let url_len: I64 = str::len(this.req_url)
-        var qpos: I64 = 0
-        loop (qpos < url_len) {
+        for qpos in 0 to url_len {
             if str::char_at(this.req_url, qpos) == 63 {  // '?'
                 return str::substring(this.req_url, 0, qpos)
             }
-            qpos = qpos + 1
         }
         return this.req_url
     }
@@ -167,12 +165,10 @@ impl IncomingMessage {
     /// Returns the query string (after '?', without the '?').
     pub func query(this) -> Str {
         let url_len: I64 = str::len(this.req_url)
-        var qpos: I64 = 0
-        loop (qpos < url_len) {
+        for qpos in 0 to url_len {
             if str::char_at(this.req_url, qpos) == 63 {  // '?'
                 return str::substring(this.req_url, qpos + 1, url_len)
             }
-            qpos = qpos + 1
         }
         return ""
     }
@@ -185,12 +181,10 @@ impl IncomingMessage {
         let host_len: I64 = str::len(host_val)
         if host_len == 0 { return "" }
         // Strip port if present (e.g., "example.com:3000" → "example.com")
-        var i: I64 = 0
-        loop (i < host_len) {
+        for i in 0 to host_len {
             if str::char_at(host_val, i) == 58 {  // ':'
                 return str::substring(host_val, 0, i)
             }
-            i = i + 1
         }
         return host_val
     }
@@ -202,12 +196,10 @@ impl IncomingMessage {
         if str::len(xff) > 0 {
             // Take first IP: "1.2.3.4, 5.6.7.8" → "1.2.3.4"
             let xff_len: I64 = str::len(xff)
-            var i: I64 = 0
-            loop (i < xff_len) {
+            for i in 0 to xff_len {
                 if str::char_at(xff, i) == 44 {  // ','
                     return str::substring(xff, 0, i)
                 }
-                i = i + 1
             }
             return xff
         }

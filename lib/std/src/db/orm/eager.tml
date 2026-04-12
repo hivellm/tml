@@ -23,11 +23,9 @@ use std::db::error::DbError
 pub func eager_load_sql(table: Str, relations: ref List[Relation]) -> Str {
     var q = SelectQuery::new(table)
     let n = relations.len()
-    var i = 0
-    loop (i < n) {
+    for i in 0 to n {
         let rel = relations.get(i)
         q = q.join(rel.to_join(table))
-        i = i + 1
     }
     return q.to_sql()
 }
@@ -41,11 +39,9 @@ pub func eager_load_sql(table: Str, relations: ref List[Relation]) -> Str {
 pub func load_with[C](conn: ref C, table: Str, pk: I64, relations: ref List[Relation]) -> Outcome[Str, DbError] where C: Connection {
     var q = SelectQuery::new(table)
     let n = relations.len()
-    var i = 0
-    loop (i < n) {
+    for i in 0 to n {
         let rel = relations.get(i)
         q = q.join(rel.to_join(table))
-        i = i + 1
     }
     let pk_cond = table + ".id = " + pk.to_string()
     q = q.where_expr(Expr::raw(pk_cond))

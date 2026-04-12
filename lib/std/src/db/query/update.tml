@@ -54,14 +54,12 @@ impl UpdateQuery {
     pub func to_sql(this) -> Str {
         var sets: Str = ""
         let n = this.assignments.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             let ua = this.assignments.get(i)
             if i > 0 {
                 sets = sets + ", "
             }
             sets = sets + ua.column + " = " + ua.expr.to_sql()
-            i = i + 1
         }
         var sql: Str = "UPDATE " + this.table + " SET " + sets
         if this.has_where {

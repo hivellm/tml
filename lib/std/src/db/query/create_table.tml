@@ -32,12 +32,10 @@ impl CreateTableQuery {
         if this.if_not_exists { sql = sql + "IF NOT EXISTS " }
         sql = sql + this.table_name + " ("
         let n = this.columns.len()
-        var i: I64 = 0
-        loop (i < n) {
+        for i in 0 to n {
             let col = this.columns.get(i)
             if i > 0 { sql = sql + ", " }
             sql = sql + col.to_sql()
-            i = i + 1
         }
         sql = sql + ")"
         return sql

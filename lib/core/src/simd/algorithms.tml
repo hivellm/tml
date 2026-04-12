@@ -27,10 +27,8 @@ pub func memchr_simd(haystack: Slice[U8], byte: U8) -> Maybe[I64] {
     // Process 16 bytes at a time
     loop (pos + 16 <= len) {
         var chunk = I8x16::zero()
-        var ci: I64 = 0
-        loop (ci < 16) {
+        for ci in 0 to 16 {
             chunk = chunk.set(ci as I32, haystack.get(pos + ci) as I8)
-            ci = ci + 1
         }
         let cmp = lowlevel { sse2_cmpeq_epi8(chunk, needle) }
         let mask = lowlevel { sse2_movemask_epi8(cmp) }
@@ -101,9 +99,7 @@ pub func str_find_simd(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64] {
 /// Only affects bytes in the range 'a'-'z' (0x61-0x7A).
 pub func case_upper_simd(data: Slice[U8]) -> Unit {
     let len = data.len()
-    var i: I64 = 0
-
-    loop (i < len) {
+    for i in 0 to len {
         let b = data.get(i)
         if b >= 97 as U8 and b <= 122 as U8 {
             lowlevel {
@@ -111,7 +107,6 @@ pub func case_upper_simd(data: Slice[U8]) -> Unit {
                 ptr_write[U8](p, b - 32 as U8)
             }
         }
-        i = i + 1
     }
 }
 
@@ -120,9 +115,7 @@ pub func case_upper_simd(data: Slice[U8]) -> Unit {
 /// Only affects bytes in the range 'A'-'Z' (0x41-0x5A).
 pub func case_lower_simd(data: Slice[U8]) -> Unit {
     let len = data.len()
-    var i: I64 = 0
-
-    loop (i < len) {
+    for i in 0 to len {
         let b = data.get(i)
         if b >= 65 as U8 and b <= 90 as U8 {
             lowlevel {
@@ -130,7 +123,6 @@ pub func case_lower_simd(data: Slice[U8]) -> Unit {
                 ptr_write[U8](p, b + 32 as U8)
             }
         }
-        i = i + 1
     }
 }
 

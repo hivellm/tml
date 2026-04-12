@@ -321,12 +321,10 @@ impl JsonObject {
     /// }
     /// ```
     pub func for_each_key(this, callback: func(Str)) {
-        var i: I64 = 0
         let obj_len: I64 = json_object_len(this.handle)
-        loop (i < obj_len) {
+        for i in 0 to obj_len {
             let key: Str = json_object_key_at(this.handle, i)
             callback(key)
-            i = i + 1
         }
     }
 

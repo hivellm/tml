@@ -131,8 +131,7 @@ impl[T] AsyncMutex[T] {
             }
 
             // Spin phase: wait briefly with pause hints
-            var spins: I64 = 0
-            loop (spins < SPIN_LIMIT) {
+            for spins in 0 to SPIN_LIMIT {
                 spin_loop_hint()
                 if not this.locked.load(Ordering::Relaxed) {
                     // Lock appears free -- try to acquire
@@ -141,7 +140,6 @@ impl[T] AsyncMutex[T] {
                         Err(_) => {},
                     }
                 }
-                spins = spins + 1
             }
 
             // Yield phase: give other tasks a chance to run
