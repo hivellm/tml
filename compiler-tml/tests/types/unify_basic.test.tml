@@ -1,0 +1,229 @@
+//! Tests for the inference engine: unification, resolve, fresh_var.
+//! Phase 14c — item 1.6.
+
+use test
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_tuple
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_type_var
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::errors::dummy_span
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Basic unification: same types succeed
+// ============================================================================
+
+@test
+func test_unify_same_primitive() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    assert(unify(ctx, make_i32(), make_i32(), span))
+    assert(not has_errors(ctx))
+    return 0
+}
+
+@test
+func test_unify_different_primitives_fail() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    assert(not unify(ctx, make_i32(), make_str(), span))
+    assert(has_errors(ctx))
+    assert_eq(error_count(ctx), 1)
+    return 0
+}
+
+// ============================================================================
+// TypeVar unification
+// ============================================================================
+
+@test
+func test_unify_typevar_to_concrete() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv = fresh_var(ctx)
+    // Unify TypeVar with I32 — should succeed and bind the variable
+    assert(unify(ctx, tv, make_i32(), span))
+    // Resolve should now give I32
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, make_i32()))
+    return 0
+}
+
+@test
+func test_unify_concrete_to_typevar() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv = fresh_var(ctx)
+    // Unify concrete with TypeVar (reversed order)
+    assert(unify(ctx, make_str(), tv, span))
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, make_str()))
+    return 0
+}
+
+@test
+func test_unify_two_typevars() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv1 = fresh_var(ctx)
+    let tv2 = fresh_var(ctx)
+    // Unify two type variables
+    assert(unify(ctx, tv1, tv2, span))
+    // Now bind tv2 to Bool
+    assert(unify(ctx, tv2, make_bool(), span))
+    // tv1 should resolve through tv2 to Bool
+    let resolved = resolve(ctx, tv1)
+    assert(types_equal(resolved, make_bool()))
+    return 0
+}
+
+// ============================================================================
+// Structural unification: named types
+// ============================================================================
+
+@test
+func test_unify_named_same() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let a = make_named_simple("Point", "")
+    let b = make_named_simple("Point", "")
+    assert(unify(ctx, a, b, span))
+    assert(not has_errors(ctx))
+    return 0
+}
+
+@test
+func test_unify_named_different_fail() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let a = make_named_simple("Point", "")
+    let b = make_named_simple("Rect", "")
+    assert(not unify(ctx, a, b, span))
+    assert(has_errors(ctx))
+    return 0
+}
+
+// ============================================================================
+// Structural unification: refs
+// ============================================================================
+
+@test
+func test_unify_refs_same() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let a = make_ref(make_i32(), 0)
+    let b = make_ref(make_i32(), 0)
+    assert(unify(ctx, a, b, span))
+    return 0
+}
+
+@test
+func test_unify_refs_mut_mismatch() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let a = make_ref(make_i32(), 0)
+    let b = make_ref(make_i32(), 1)
+    assert(not unify(ctx, a, b, span))
+    return 0
+}
+
+// ============================================================================
+// Structural unification: tuples
+// ============================================================================
+
+@test
+func test_unify_tuple_same() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let elems_a = List[Heap[Type]]::new(2)
+    elems_a.push(Heap::new(make_i32()))
+    elems_a.push(Heap::new(make_str()))
+    let elems_b = List[Heap[Type]]::new(2)
+    elems_b.push(Heap::new(make_i32()))
+    elems_b.push(Heap::new(make_str()))
+    assert(unify(ctx, make_tuple(elems_a), make_tuple(elems_b), span))
+    return 0
+}
+
+@test
+func test_unify_tuple_length_mismatch() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let elems_a = List[Heap[Type]]::new(2)
+    elems_a.push(Heap::new(make_i32()))
+    elems_a.push(Heap::new(make_str()))
+    let elems_b = List[Heap[Type]]::new(1)
+    elems_b.push(Heap::new(make_i32()))
+    assert(not unify(ctx, make_tuple(elems_a), make_tuple(elems_b), span))
+    return 0
+}
+
+// ============================================================================
+// fresh_var generates unique IDs
+// ============================================================================
+
+@test
+func test_fresh_var_unique() -> I32 {
+    let ctx = infer_ctx_new()
+    let v1 = fresh_var(ctx)
+    let v2 = fresh_var(ctx)
+    let v3 = fresh_var(ctx)
+    // Each should be a distinct type variable
+    assert(not types_equal(v1, v2))
+    assert(not types_equal(v2, v3))
+    return 0
+}
+
+// ============================================================================
+// Resolve on non-TypeVar is identity
+// ============================================================================
+
+@test
+func test_resolve_concrete_unchanged() -> I32 {
+    let ctx = infer_ctx_new()
+    let t = make_i64()
+    let resolved = resolve(ctx, t)
+    assert(types_equal(resolved, make_i64()))
+    return 0
+}
+
+@test
+func test_resolve_unbound_typevar() -> I32 {
+    let ctx = infer_ctx_new()
+    let tv = fresh_var(ctx)
+    // Unbound TypeVar resolves to itself
+    let resolved = resolve(ctx, tv)
+    assert(types_equal(resolved, tv))
+    return 0
+}
+
+// ============================================================================
+// Error accumulation
+// ============================================================================
+
+@test
+func test_multiple_errors_accumulated() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    // Multiple failed unifications accumulate errors
+    unify(ctx, make_i32(), make_str(), span)
+    unify(ctx, make_bool(), make_i64(), span)
+    assert_eq(error_count(ctx), 2)
+    return 0
+}

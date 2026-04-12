@@ -1,0 +1,17 @@
+//! Inference engine module root for the TML self-hosting type checker.
+//!
+//! Re-exports the core inference types and functions so consumers
+//! can import from `compiler::types::infer::common` instead of
+//! reaching into submodules directly.
+//!
+//! Note: named `common.tml` because `mod` is a reserved keyword in TML.
+//!
+//! Phase 14c — item 1.1.
+
+pub use compiler::types::infer::unify::InferCtx
+pub use compiler::types::infer::unify::infer_ctx_new
+pub use compiler::types::infer::unify::fresh_var
+pub use compiler::types::infer::unify::resolve
+pub use compiler::types::infer::unify::unify
+pub use compiler::types::infer::unify::has_errors
+pub use compiler::types::infer::unify::error_count

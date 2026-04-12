@@ -1,0 +1,250 @@
+//! Differential testing infrastructure for TML type inference.
+//!
+//! Tests that the TML inference engine produces the same types as expected
+//! for representative code patterns. Full differential comparison against
+//! the C++ backend (item 6.2) requires serializing the TypeEnv from both
+//! backends and comparing; this file provides the framework and initial
+//! test cases.
+//!
+//! Phase 14c — items 6.1, 6.2 (infrastructure + initial cases).
+
+use test
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_named
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_tuple
+use compiler::types::ty::make_type_var
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::StructFieldDef
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::BehaviorDef
+use compiler::types::env::env_new
+use compiler::types::env::env_register_struct
+use compiler::types::env::env_register_enum
+use compiler::types::env::env_register_function
+use compiler::types::env::env_register_behavior
+use compiler::types::env::ConstGenericParam
+use compiler::types::env::env_register_impl
+use compiler::types::env::env_push_scope
+use compiler::types::env::env_pop_scope
+use compiler::types::env::ScopeKind
+use compiler::types::env::scope_define
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::errors::dummy_span
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::extract_type_params
+use compiler::types::checker::check_call::get_type_name
+use compiler::types::checker::check_call::operator_behavior_name
+use compiler::types::checker::check_call::operator_method_name
+use compiler::types::checker::check_pattern::check_exhaustiveness
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Substitution tests (generic instantiation)
+// ============================================================================
+
+@test
+func test_substitute_bare_type_param() -> I32 {
+    let subs = HashMap[Str, Type]::new(4)
+    subs.set("T", make_i32())
+    // Generic("T") is mapped via Named("T", "", []) — bare name match
+    let input = make_named_simple("T", "")
+    let result = substitute_type(input, subs)
+    assert(types_equal(result, make_i32()))
+    return 0
+}
+
+@test
+func test_substitute_nested_type_args() -> I32 {
+    let subs = HashMap[Str, Type]::new(4)
+    subs.set("T", make_i64())
+    // List[T] → List[I64]
+    let t_arg = List[Heap[Type]]::new(1)
+    t_arg.push(Heap::new(make_named_simple("T", "")))
+    let input = make_named("List", "", t_arg)
+    let result = substitute_type(input, subs)
+    // Result should be List[I64]
+    assert_eq(type_to_str(result), "List[I64]")
+    return 0
+}
+
+// ============================================================================
+// Type parameter extraction
+// ============================================================================
+
+@test
+func test_extract_type_params_simple() -> I32 {
+    let type_params = List[Str]::new(1)
+    type_params.push("T")
+    let subs = HashMap[Str, Type]::new(4)
+    // Parameter: T (bare name), Argument: I32
+    extract_type_params(make_named_simple("T", ""), make_i32(), type_params, subs)
+    assert(subs.has("T"))
+    assert(types_equal(subs.get("T"), make_i32()))
+    return 0
+}
+
+@test
+func test_extract_type_params_nested() -> I32 {
+    let type_params = List[Str]::new(1)
+    type_params.push("T")
+    let subs = HashMap[Str, Type]::new(4)
+    // Parameter: List[T], Argument: List[Str]
+    let param_args = List[Heap[Type]]::new(1)
+    param_args.push(Heap::new(make_named_simple("T", "")))
+    let param = make_named("List", "", param_args)
+    let arg_args = List[Heap[Type]]::new(1)
+    arg_args.push(Heap::new(make_str()))
+    let arg = make_named("List", "", arg_args)
+    extract_type_params(param, arg, type_params, subs)
+    assert(subs.has("T"))
+    assert(types_equal(subs.get("T"), make_str()))
+    return 0
+}
+
+// ============================================================================
+// Operator desugaring
+// ============================================================================
+
+@test
+func test_operator_behavior_mapping() -> I32 {
+    let Just(add) = operator_behavior_name("+") else { assert(false); return 1 }
+    assert_eq(add, "Add")
+    let Just(sub) = operator_behavior_name("-") else { assert(false); return 1 }
+    assert_eq(sub, "Sub")
+    let Just(mul) = operator_behavior_name("*") else { assert(false); return 1 }
+    assert_eq(mul, "Mul")
+    assert_eq(operator_method_name("+"), "add")
+    assert_eq(operator_method_name("-"), "sub")
+    return 0
+}
+
+// ============================================================================
+// Exhaustiveness checking
+// ============================================================================
+
+@test
+func test_exhaustiveness_with_wildcard() -> I32 {
+    let ctx = infer_ctx_new()
+    let env = env_new()
+    let span = dummy_span()
+
+    // A wildcard pattern always makes the match exhaustive
+    let patterns = List[Pattern]::new(1)
+    patterns.push(Pattern::Wildcard(span))
+    let missing = check_exhaustiveness(ctx, env, make_i32(), patterns, span)
+    assert_eq(missing.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_exhaustiveness_with_ident() -> I32 {
+    let ctx = infer_ctx_new()
+    let env = env_new()
+    let span = dummy_span()
+
+    // An ident pattern is a catch-all
+    let patterns = List[Pattern]::new(1)
+    let ip = compiler::ast::nodes::IdentPattern { name: "x", subpat: Nothing, span: span }
+    patterns.push(Pattern::Ident(ip))
+    let missing = check_exhaustiveness(ctx, env, make_str(), patterns, span)
+    assert_eq(missing.len() as I64, 0)
+    return 0
+}
+
+// ============================================================================
+// get_type_name helper
+// ============================================================================
+
+@test
+func test_get_type_name() -> I32 {
+    assert_eq(get_type_name(make_i32()), "I32")
+    assert_eq(get_type_name(make_str()), "Str")
+    assert_eq(get_type_name(make_named_simple("Point", "")), "Point")
+    assert_eq(get_type_name(make_ref(make_i32(), 0)), "")
+    return 0
+}
+
+// ============================================================================
+// Integration: unify + resolve chain
+// ============================================================================
+
+@test
+func test_infer_chain_resolution() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+
+    // Simulate: let x = 42 (I32), let y = x, then resolve y
+    let tv_x = fresh_var(ctx)
+    let tv_y = fresh_var(ctx)
+    assert(unify(ctx, tv_x, make_i32(), span))
+    assert(unify(ctx, tv_y, tv_x, span))
+    let resolved = resolve(ctx, tv_y)
+    assert(types_equal(resolved, make_i32()))
+    return 0
+}
+
+@test
+func test_generic_enum_instantiation() -> I32 {
+    let ctx = infer_ctx_new()
+    let env = env_new()
+    let span = dummy_span()
+
+    // Register Maybe[T] enum with Just(T) and Nothing variants
+    let type_params = List[Str]::new(1)
+    type_params.push("T")
+    let just_payload = List[Heap[Type]]::new(1)
+    just_payload.push(Heap::new(make_named_simple("T", "")))
+    let just_variant = EnumVariantDef { name: "Just", payload_types: just_payload }
+    let nothing_payload = List[Heap[Type]]::new(0)
+    let nothing_variant = EnumVariantDef { name: "Nothing", payload_types: nothing_payload }
+    let variants = List[EnumVariantDef]::new(2)
+    variants.push(just_variant)
+    variants.push(nothing_variant)
+    let const_params = List[ConstGenericParam]::new(0)
+    let edef = EnumDef {
+        name: "Maybe",
+        type_params: type_params,
+        const_params: const_params,
+        variants: variants,
+        span: span,
+        is_flags: 0
+    }
+    env_register_enum(env, "Maybe", edef)
+
+    // Simulate calling Just(42): extract T=I32 from payload
+    let subs = HashMap[Str, Type]::new(4)
+    let tp = List[Str]::new(1)
+    tp.push("T")
+    extract_type_params(make_named_simple("T", ""), make_i32(), tp, subs)
+    assert(subs.has("T"))
+    assert(types_equal(subs.get("T"), make_i32()))
+
+    // Build Maybe[I32]
+    let type_args = List[Heap[Type]]::new(1)
+    type_args.push(Heap::new(subs.get("T")))
+    let maybe_i32 = make_named("Maybe", "", type_args)
+    assert_eq(type_to_str(maybe_i32), "Maybe[I32]")
+    return 0
+}

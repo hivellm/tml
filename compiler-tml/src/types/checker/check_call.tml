@@ -1,0 +1,951 @@
+//! Call and method call type checking for the TML self-hosting type checker.
+//!
+//! Implements function call resolution, method dispatch, generic instantiation,
+//! and operator desugaring (a + b → Add::add(a, b)).
+//!
+//! ## Call Resolution Order (mirrors C++ `check_call`)
+//!
+//! 1. Polymorphic builtins (print, println)
+//! 2. Compiler intrinsics (type_id, size_of, align_of, type_name)
+//! 3. Named function lookup with overload resolution
+//! 4. Enum constructor lookup
+//! 5. Static method calls on types (Type::method)
+//! 6. Generic function instantiation
+//!
+//! ## Method Resolution Order (mirrors C++ `check_method_call`)
+//!
+//! 1. Primitive type builtin methods (to_string, len, etc.)
+//! 2. Named type methods (struct/enum impl methods)
+//! 3. Behavior method lookup (for types implementing behaviors)
+//!
+//! Phase 14c — items 3.1–3.5.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::NamedType
+use compiler::types::ty::GenericType
+use compiler::types::ty::PrimitiveType
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::RefType
+use compiler::types::ty::TupleType
+use compiler::types::ty::ArrayType
+use compiler::types::ty::SliceType
+use compiler::types::ty::FuncType
+use compiler::types::ty::ClosureType
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_named
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::type_to_str
+use compiler::types::ty::is_never
+use compiler::types::ty::prim_kind_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::FuncSig
+use compiler::types::env::StructDef
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::BehaviorDef
+use compiler::types::env::env_lookup_type
+use compiler::types::env::env_lookup_function
+use compiler::types::env::env_lookup_struct
+use compiler::types::env::env_lookup_enum
+use compiler::types::env::env_lookup_behavior
+use compiler::types::env::env_type_implements
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::errors::undefined_function
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::CallExpr
+use compiler::ast::exprs::MethodCallExpr
+use compiler::ast::exprs::IdentExpr
+use compiler::ast::exprs::PathExpr
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// Forward declaration — infer_expr lives in check_expr.tml.
+// We import it here because call checking needs to recurse into args.
+use compiler::types::checker::check_expr::infer_expr
+
+// ============================================================================
+// Type substitution — replace generic type params with concrete types
+// ============================================================================
+
+/// Substitute type parameters in `ty` according to `subs` map.
+/// For example, if subs = {"T" → I32} and ty = Named("List", [Generic("T")]),
+/// result = Named("List", [I32]).
+pub func substitute_type(ty: Type, subs: HashMap[Str, Type]) -> Type {
+    when ty {
+        Generic(g) => {
+            if subs.has(g.name) {
+                return subs.get(g.name)
+            }
+            return ty
+        },
+        Named(nt) => {
+            if nt.type_args.len() as I64 == 0 {
+                // Check if this bare name is a type parameter
+                if subs.has(nt.name) {
+                    return subs.get(nt.name)
+                }
+                return ty
+            }
+            // Recursively substitute type args
+            let new_args = List[Heap[Type]]::new(nt.type_args.len() as I64)
+            let count: I64 = nt.type_args.len() as I64
+            for i in 0 to count {
+                let arg: Type = nt.type_args.get(i).get()
+                new_args.push(Heap::new(substitute_type(arg, subs)))
+            }
+            return make_named(nt.name, nt.module_path, new_args)
+        },
+        Ref(r) => {
+            let inner = substitute_type(r.inner.get(), subs)
+            return Type::Ref(compiler::types::ty::RefType {
+                is_mut: r.is_mut,
+                inner: Heap::new(inner),
+                lifetime: r.lifetime
+            })
+        },
+        Tuple(t) => {
+            let new_elems = List[Heap[Type]]::new(t.elements.len() as I64)
+            let count: I64 = t.elements.len() as I64
+            for i in 0 to count {
+                new_elems.push(Heap::new(substitute_type(t.elements.get(i).get(), subs)))
+            }
+            return Type::Tuple(compiler::types::ty::TupleType { elements: new_elems })
+        },
+        Func(f) => {
+            let new_params = List[Heap[Type]]::new(f.params.len() as I64)
+            let pcount: I64 = f.params.len() as I64
+            for i in 0 to pcount {
+                new_params.push(Heap::new(substitute_type(f.params.get(i).get(), subs)))
+            }
+            let new_ret = substitute_type(f.return_type.get(), subs)
+            return Type::Func(compiler::types::ty::FuncType {
+                params: new_params,
+                return_type: Heap::new(new_ret),
+                is_async: f.is_async
+            })
+        },
+        Array(a) => {
+            let new_elem = substitute_type(a.element.get(), subs)
+            return Type::Array(compiler::types::ty::ArrayType {
+                element: Heap::new(new_elem),
+                size: a.size,
+                const_generic_param: a.const_generic_param
+            })
+        },
+        Slice(s) => {
+            let new_elem = substitute_type(s.element.get(), subs)
+            return Type::Slice(compiler::types::ty::SliceType { element: Heap::new(new_elem) })
+        },
+        _ => return ty
+    }
+}
+
+// ============================================================================
+// Type parameter extraction from arguments
+// ============================================================================
+
+/// Extract type parameter bindings by matching parameter type against argument type.
+/// For example, matching `List[T]` against `List[I32]` extracts {T → I32}.
+pub func extract_type_params(
+    param_type: Type,
+    arg_type: Type,
+    type_params: List[Str],
+    subs: HashMap[Str, Type]
+) {
+    // If param_type is a Named type that matches a type parameter directly
+    when param_type {
+        Named(pn) => {
+            if pn.type_args.len() as I64 == 0 {
+                // Could be a bare type parameter name (e.g., T)
+                let tp_count: I64 = type_params.len() as I64
+                for i in 0 to tp_count {
+                    if type_params.get(i) == pn.name {
+                        subs.set(pn.name, arg_type)
+                        return
+                    }
+                }
+            }
+            // If both are Named with same name, recursively match type args
+            when arg_type {
+                Named(an) => {
+                    if pn.name == an.name {
+                        let ac: I64 = pn.type_args.len() as I64
+                        let bc: I64 = an.type_args.len() as I64
+                        if ac == bc {
+                            for i in 0 to ac {
+                                extract_type_params(
+                                    pn.type_args.get(i).get(),
+                                    an.type_args.get(i).get(),
+                                    type_params,
+                                    subs
+                                )
+                            }
+                        }
+                    }
+                },
+                _ => {}
+            }
+        },
+        Generic(g) => {
+            // Direct generic parameter match
+            let tp_count: I64 = type_params.len() as I64
+            for i in 0 to tp_count {
+                if type_params.get(i) == g.name {
+                    subs.set(g.name, arg_type)
+                    return
+                }
+            }
+        },
+        Ref(pr) => {
+            when arg_type {
+                Ref(ar) => extract_type_params(pr.inner.get(), ar.inner.get(), type_params, subs),
+                _ => {}
+            }
+        },
+        Tuple(pt) => {
+            when arg_type {
+                Tuple(at) => {
+                    let pc: I64 = pt.elements.len() as I64
+                    let ac: I64 = at.elements.len() as I64
+                    if pc == ac {
+                        for i in 0 to pc {
+                            extract_type_params(
+                                pt.elements.get(i).get(),
+                                at.elements.get(i).get(),
+                                type_params,
+                                subs
+                            )
+                        }
+                    }
+                },
+                _ => {}
+            }
+        },
+        Func(pf) => {
+            when arg_type {
+                Func(af) => {
+                    let pc: I64 = pf.params.len() as I64
+                    let ac: I64 = af.params.len() as I64
+                    if pc == ac {
+                        for i in 0 to pc {
+                            extract_type_params(
+                                pf.params.get(i).get(),
+                                af.params.get(i).get(),
+                                type_params,
+                                subs
+                            )
+                        }
+                    }
+                    extract_type_params(pf.return_type.get(), af.return_type.get(), type_params, subs)
+                },
+                Closure(ac) => {
+                    // Closures are compatible with func types
+                    let pc: I64 = pf.params.len() as I64
+                    let cc: I64 = ac.params.len() as I64
+                    if pc == cc {
+                        for i in 0 to pc {
+                            extract_type_params(
+                                pf.params.get(i).get(),
+                                ac.params.get(i).get(),
+                                type_params,
+                                subs
+                            )
+                        }
+                    }
+                    extract_type_params(pf.return_type.get(), ac.return_type.get(), type_params, subs)
+                },
+                _ => {}
+            }
+        },
+        Array(pa) => {
+            when arg_type {
+                Array(aa) => extract_type_params(pa.element.get(), aa.element.get(), type_params, subs),
+                _ => {}
+            }
+        },
+        Slice(ps) => {
+            when arg_type {
+                Slice(as_) => extract_type_params(ps.element.get(), as_.element.get(), type_params, subs),
+                _ => {}
+            }
+        },
+        _ => {}
+    }
+}
+
+// ============================================================================
+// Function call resolution
+// ============================================================================
+
+/// Check a function call expression. Resolves the callee, infers arguments,
+/// handles generics, and returns the result type.
+pub func check_call(ctx: InferCtx, env: TypeEnv, call: CallExpr) -> Type {
+    // 1. Check for polymorphic builtins (print, println)
+    let callee_expr = call.callee.get()
+    when callee_expr {
+        Ident(id) => {
+            if id.name == "print" or id.name == "println" {
+                let ac: I64 = call.args.len() as I64
+                for i in 0 to ac {
+                    infer_expr(ctx, env, call.args.get(i).get())
+                }
+                return make_unit()
+            }
+
+            // 2. Try named function lookup
+            let func_r = env_lookup_function(env, id.name)
+            when func_r {
+                Just(sig) => {
+                    return check_call_with_sig(ctx, env, call, sig)
+                },
+                Nothing => {}
+            }
+
+            // 3. Try enum constructor lookup
+            let enum_result = try_enum_constructor(ctx, env, id.name, call)
+            when enum_result {
+                Just(t) => return t,
+                Nothing => {}
+            }
+
+            // Not found — error
+            ctx.errors.push(undefined_function(id.name, call.span))
+            return fresh_var(ctx)
+        },
+        Path(path) => {
+            let segs = path.path.segments
+            let seg_count: I64 = segs.len() as I64
+
+            // Single-segment path: treat like ident
+            if seg_count == 1 {
+                let name = segs.get(0)
+
+                // Check compiler intrinsics
+                let intrinsic_r = try_intrinsic(name)
+                when intrinsic_r {
+                    Just(t) => {
+                        let ac: I64 = call.args.len() as I64
+                        for i in 0 to ac {
+                            infer_expr(ctx, env, call.args.get(i).get())
+                        }
+                        return t
+                    },
+                    Nothing => {}
+                }
+
+                let func_r = env_lookup_function(env, name)
+                when func_r {
+                    Just(sig) => return check_call_with_sig(ctx, env, call, sig),
+                    Nothing => {}
+                }
+            }
+
+            // Two-segment path: Type::method() static call
+            if seg_count == 2 {
+                let type_name = segs.get(0)
+                let method_name = segs.get(1)
+                let qualified = type_name + "::" + method_name
+
+                // Check static methods registered as qualified names
+                let func_r = env_lookup_function(env, qualified)
+                when func_r {
+                    Just(sig) => return check_call_with_sig(ctx, env, call, sig),
+                    Nothing => {}
+                }
+
+                // Check primitive type static methods (default, from)
+                let prim_r = try_primitive_static(type_name, method_name, ctx, env, call)
+                when prim_r {
+                    Just(t) => return t,
+                    Nothing => {}
+                }
+            }
+
+            // Fallback: infer all args and return fresh var
+            let ac: I64 = call.args.len() as I64
+            for i in 0 to ac {
+                infer_expr(ctx, env, call.args.get(i).get())
+            }
+            return fresh_var(ctx)
+        },
+        _ => {
+            // Callee is an expression (e.g., function pointer call)
+            let callee_ty = infer_expr(ctx, env, callee_expr)
+            when callee_ty {
+                Func(ft) => {
+                    let expected: I64 = ft.params.len() as I64
+                    let actual: I64 = call.args.len() as I64
+                    var i: I64 = 0
+                    loop (i < actual and i < expected) {
+                        let arg_ty = infer_expr(ctx, env, call.args.get(i).get())
+                        unify(ctx, arg_ty, ft.params.get(i).get(), call.span)
+                        i = i + 1
+                    }
+                    return ft.return_type.get()
+                },
+                Closure(ct) => {
+                    let expected: I64 = ct.params.len() as I64
+                    let actual: I64 = call.args.len() as I64
+                    var i: I64 = 0
+                    loop (i < actual and i < expected) {
+                        let arg_ty = infer_expr(ctx, env, call.args.get(i).get())
+                        unify(ctx, arg_ty, ct.params.get(i).get(), call.span)
+                        i = i + 1
+                    }
+                    return ct.return_type.get()
+                },
+                _ => {
+                    let ac: I64 = call.args.len() as I64
+                    for i in 0 to ac {
+                        infer_expr(ctx, env, call.args.get(i).get())
+                    }
+                    return fresh_var(ctx)
+                }
+            }
+        }
+    }
+}
+
+/// Check a call against a known function signature, handling generics.
+func check_call_with_sig(ctx: InferCtx, env: TypeEnv, call: CallExpr, sig: FuncSig) -> Type {
+    let param_count: I64 = sig.params.len() as I64
+    let arg_count: I64 = call.args.len() as I64
+
+    // Non-generic: check args and return
+    if sig.type_params.len() as I64 == 0 {
+        var i: I64 = 0
+        loop (i < arg_count and i < param_count) {
+            let arg_ty = infer_expr(ctx, env, call.args.get(i).get())
+            unify(ctx, arg_ty, sig.params.get(i).get(), call.span)
+            i = i + 1
+        }
+        return sig.return_type.get()
+    }
+
+    // Generic: infer type parameters from arguments
+    let subs = HashMap[Str, Type]::new(8)
+
+    // Infer each argument and extract type param bindings
+    var i: I64 = 0
+    loop (i < arg_count and i < param_count) {
+        let arg_ty = infer_expr(ctx, env, call.args.get(i).get())
+        extract_type_params(sig.params.get(i).get(), arg_ty, sig.type_params, subs)
+        i = i + 1
+    }
+
+    // Substitute into return type
+    return substitute_type(sig.return_type.get(), subs)
+}
+
+// ============================================================================
+// Method call resolution
+// ============================================================================
+
+/// Check a method call expression: receiver.method(args).
+/// Resolution order: primitive methods → struct/enum methods → behavior methods.
+pub func check_method_call(ctx: InferCtx, env: TypeEnv, mc: MethodCallExpr) -> Type {
+    let recv_ty = infer_expr(ctx, env, mc.receiver.get())
+    let resolved_recv = resolve(ctx, recv_ty)
+
+    // Infer all argument types
+    let arg_count: I64 = mc.args.len() as I64
+    let arg_types = List[Type]::new(arg_count)
+    for i in 0 to arg_count {
+        arg_types.push(infer_expr(ctx, env, mc.args.get(i).get()))
+    }
+
+    // 1. Check primitive builtin methods
+    when resolved_recv {
+        Primitive(p) => {
+            let prim_result = check_primitive_method(p.kind, mc.method)
+            when prim_result {
+                Just(t) => return t,
+                Nothing => {}
+            }
+        },
+        _ => {}
+    }
+
+    // 2. Check named type methods (struct/enum impl blocks)
+    let type_name = get_type_name(resolved_recv)
+    if type_name != "" {
+        // Try qualified method name: TypeName::method
+        let qualified = type_name + "::" + mc.method
+        let func_r = env_lookup_function(env, qualified)
+        when func_r {
+            Just(sig) => {
+                return check_method_with_sig(ctx, env, mc, sig, resolved_recv, arg_types)
+            },
+            Nothing => {}
+        }
+
+        // 3. Check behavior methods
+        let behavior_result = try_behavior_method(ctx, env, type_name, mc.method, resolved_recv, arg_types, mc.span)
+        when behavior_result {
+            Just(t) => return t,
+            Nothing => {}
+        }
+    }
+
+    // 4. Special collection methods (List, HashMap, Buffer)
+    let collection_result = try_collection_method(resolved_recv, mc.method)
+    when collection_result {
+        Just(t) => return t,
+        Nothing => {}
+    }
+
+    // Unknown method — return fresh var (error recovery)
+    return fresh_var(ctx)
+}
+
+/// Check a method call against a known function signature, with self-type substitution.
+func check_method_with_sig(
+    ctx: InferCtx,
+    env: TypeEnv,
+    mc: MethodCallExpr,
+    sig: FuncSig,
+    recv_ty: Type,
+    arg_types: List[Type]
+) -> Type {
+    let param_count: I64 = sig.params.len() as I64
+
+    // For generic methods, extract type params from receiver and args
+    if sig.type_params.len() as I64 > 0 {
+        let subs = HashMap[Str, Type]::new(8)
+
+        // Extract from receiver type (e.g., List[I32].get → T=I32)
+        when recv_ty {
+            Named(nt) => {
+                let tp_count: I64 = sig.type_params.len() as I64
+                let ta_count: I64 = nt.type_args.len() as I64
+                var i: I64 = 0
+                loop (i < tp_count and i < ta_count) {
+                    subs.set(sig.type_params.get(i), nt.type_args.get(i).get())
+                    i = i + 1
+                }
+            },
+            _ => {}
+        }
+
+        // Extract from arguments (skip self param if present)
+        let arg_count: I64 = arg_types.len() as I64
+        // Method params may include self as first param; skip it
+        let param_offset: I64 = if param_count > arg_count { 1 } else { 0 }
+        var i: I64 = 0
+        loop (i < arg_count and (i + param_offset) < param_count) {
+            extract_type_params(
+                sig.params.get(i + param_offset).get(),
+                arg_types.get(i),
+                sig.type_params,
+                subs
+            )
+            i = i + 1
+        }
+
+        return substitute_type(sig.return_type.get(), subs)
+    }
+
+    // Non-generic: just return the declared return type
+    return sig.return_type.get()
+}
+
+// ============================================================================
+// Enum constructor resolution
+// ============================================================================
+
+/// Try to resolve a call as an enum constructor (e.g., Just(42), Ok(value)).
+func try_enum_constructor(ctx: InferCtx, env: TypeEnv, name: Str, call: CallExpr) -> Maybe[Type] {
+    // Search all registered enums for a variant matching `name`
+    // Note: This is O(N*M) but enums are small; matches C++ behavior
+    // We iterate through the enum store linearly
+    let enum_count: I64 = env.enum_store.len() as I64
+    for ei in 0 to enum_count {
+        let edef = env.enum_store.get(ei)
+        let vc: I64 = edef.variants.len() as I64
+        for vi in 0 to vc {
+            let variant = edef.variants.get(vi)
+            if variant.name == name {
+                // Found matching variant
+                let payload_count: I64 = variant.payload_types.len() as I64
+                let arg_count: I64 = call.args.len() as I64
+
+                if arg_count != payload_count {
+                    ctx.errors.push(type_error(
+                        "Enum variant '" + name + "' expects " + payload_count.to_string() +
+                        " arguments, got " + arg_count.to_string(),
+                        call.span
+                    ))
+                    return Just(make_unit())
+                }
+
+                // Infer args and extract type params
+                let subs = HashMap[Str, Type]::new(4)
+                for i in 0 to arg_count {
+                    let arg_ty = infer_expr(ctx, env, call.args.get(i).get())
+                    extract_type_params(
+                        variant.payload_types.get(i).get(),
+                        arg_ty,
+                        edef.type_params,
+                        subs
+                    )
+                }
+
+                // Build concrete type args for the enum type
+                let type_args = List[Heap[Type]]::new(edef.type_params.len() as I64)
+                let tp_count: I64 = edef.type_params.len() as I64
+                for i in 0 to tp_count {
+                    let tp = edef.type_params.get(i)
+                    if subs.has(tp) {
+                        type_args.push(Heap::new(subs.get(tp)))
+                    } else {
+                        type_args.push(Heap::new(fresh_var(ctx)))
+                    }
+                }
+
+                return Just(make_named(edef.name, "", type_args))
+            }
+        }
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Compiler intrinsics
+// ============================================================================
+
+/// Check if a name is a compiler intrinsic and return its type.
+func try_intrinsic(name: Str) -> Maybe[Type] {
+    // Intrinsics returning I64
+    if name == "type_id" or name == "size_of" or name == "align_of" or
+       name == "field_count" or name == "variant_count" or name == "field_type_id" or
+       name == "field_offset" or name == "method_count" {
+        return Just(make_i64())
+    }
+    // Intrinsics returning Str
+    if name == "type_name" or name == "field_name" or name == "method_name" {
+        return Just(make_str())
+    }
+    // Intrinsics returning Bool
+    if name == "is_abstract" or name == "is_sealed" or name == "is_virtual" {
+        return Just(make_bool())
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Primitive type methods
+// ============================================================================
+
+/// Check builtin methods on primitive types.
+func check_primitive_method(kind: PrimitiveKind, method: Str) -> Maybe[Type] {
+    // to_string is available on all primitives
+    if method == "to_string" { return Just(make_str()) }
+
+    when kind {
+        KindStr => {
+            if method == "len" { return Just(make_i64()) }
+            if method == "is_empty" { return Just(make_bool()) }
+            if method == "contains" { return Just(make_bool()) }
+            if method == "starts_with" { return Just(make_bool()) }
+            if method == "ends_with" { return Just(make_bool()) }
+            if method == "trim" { return Just(make_str()) }
+            if method == "to_uppercase" { return Just(make_str()) }
+            if method == "to_lowercase" { return Just(make_str()) }
+            if method == "split" { return Just(make_named_simple("List", "")) }
+            if method == "replace" { return Just(make_str()) }
+            if method == "substring" { return Just(make_str()) }
+            if method == "char_at" { return Just(make_i32()) }
+            if method == "index_of" { return Just(make_i64()) }
+        },
+        KindI32 => {
+            if method == "abs" { return Just(make_i32()) }
+            if method == "min" { return Just(make_i32()) }
+            if method == "max" { return Just(make_i32()) }
+        },
+        KindI64 => {
+            if method == "abs" { return Just(make_i64()) }
+            if method == "min" { return Just(make_i64()) }
+            if method == "max" { return Just(make_i64()) }
+        },
+        KindF64 => {
+            if method == "abs" { return Just(make_f64()) }
+            if method == "floor" { return Just(make_f64()) }
+            if method == "ceil" { return Just(make_f64()) }
+            if method == "round" { return Just(make_f64()) }
+            if method == "sqrt" { return Just(make_f64()) }
+            if method == "min" { return Just(make_f64()) }
+            if method == "max" { return Just(make_f64()) }
+        },
+        _ => {}
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Primitive static methods
+// ============================================================================
+
+/// Try primitive type static method: I32::default(), I64::from(x), etc.
+func try_primitive_static(
+    type_name: Str,
+    method: Str,
+    ctx: InferCtx,
+    env: TypeEnv,
+    call: CallExpr
+) -> Maybe[Type] {
+    let is_prim = type_name == "I8" or type_name == "I16" or type_name == "I32" or
+                  type_name == "I64" or type_name == "I128" or type_name == "U8" or
+                  type_name == "U16" or type_name == "U32" or type_name == "U64" or
+                  type_name == "U128" or type_name == "F32" or type_name == "F64" or
+                  type_name == "Bool" or type_name == "Str"
+
+    if not is_prim { return Nothing }
+
+    let result_ty = name_to_primitive(type_name)
+
+    if method == "default" or method == "from" {
+        // Type check args
+        let ac: I64 = call.args.len() as I64
+        for i in 0 to ac {
+            infer_expr(ctx, env, call.args.get(i).get())
+        }
+        return Just(result_ty)
+    }
+    return Nothing
+}
+
+/// Map primitive type name to Type.
+func name_to_primitive(name: Str) -> Type {
+    if name == "I32" { return make_i32() }
+    if name == "I64" { return make_i64() }
+    if name == "F64" { return make_f64() }
+    if name == "Str" { return make_str() }
+    if name == "Bool" { return make_bool() }
+    // Fallback — use named type for less common primitives
+    return make_named_simple(name, "")
+}
+
+// ============================================================================
+// Collection methods (List, HashMap, Buffer)
+// ============================================================================
+
+/// Try to resolve a method call on a known collection type.
+func try_collection_method(recv_ty: Type, method: Str) -> Maybe[Type] {
+    when recv_ty {
+        Named(nt) => {
+            let has_type_arg: Bool = nt.type_args.len() as I64 > 0
+
+            if nt.name == "List" {
+                if method == "len" { return Just(make_i64()) }
+                if method == "is_empty" { return Just(make_bool()) }
+                if method == "push" { return Just(make_unit()) }
+                if method == "pop" { return Just(make_unit()) }
+                if method == "clear" { return Just(make_unit()) }
+                if method == "get" and has_type_arg {
+                    return Just(nt.type_args.get(0).get())
+                }
+                if method == "set" { return Just(make_unit()) }
+                if method == "contains" { return Just(make_bool()) }
+            }
+
+            if nt.name == "HashMap" {
+                if method == "len" { return Just(make_i64()) }
+                if method == "is_empty" { return Just(make_bool()) }
+                if method == "has" { return Just(make_bool()) }
+                if method == "set" { return Just(make_unit()) }
+                if method == "remove" { return Just(make_unit()) }
+                if method == "clear" { return Just(make_unit()) }
+                if method == "get" and nt.type_args.len() as I64 > 1 {
+                    return Just(nt.type_args.get(1).get())
+                }
+            }
+
+            if nt.name == "Buffer" {
+                if method == "len" { return Just(make_i64()) }
+                if method == "capacity" { return Just(make_i64()) }
+                if method == "is_empty" { return Just(make_bool()) }
+                if method == "push" { return Just(make_unit()) }
+                if method == "clear" { return Just(make_unit()) }
+            }
+
+            if nt.name == "Heap" and has_type_arg {
+                if method == "get" { return Just(nt.type_args.get(0).get()) }
+            }
+
+            if nt.name == "Maybe" and has_type_arg {
+                if method == "unwrap" { return Just(nt.type_args.get(0).get()) }
+                if method == "is_just" { return Just(make_bool()) }
+                if method == "is_nothing" { return Just(make_bool()) }
+            }
+
+            if nt.name == "Outcome" and has_type_arg {
+                if method == "unwrap" { return Just(nt.type_args.get(0).get()) }
+                if method == "is_ok" { return Just(make_bool()) }
+                if method == "is_err" { return Just(make_bool()) }
+            }
+        },
+        _ => {}
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Behavior method lookup
+// ============================================================================
+
+/// Try to find a method via behavior implementations.
+func try_behavior_method(
+    ctx: InferCtx,
+    env: TypeEnv,
+    type_name: Str,
+    method: Str,
+    recv_ty: Type,
+    arg_types: List[Type],
+    span: SourceSpan
+) -> Maybe[Type] {
+    // Get all behaviors this type implements
+    let impls = env.behavior_impls
+    if not impls.has(type_name) { return Nothing }
+
+    let behaviors: List[Str] = impls.get(type_name)
+    let bc: I64 = behaviors.len() as I64
+    for i in 0 to bc {
+        let bname = behaviors.get(i)
+        let bdef_r = env_lookup_behavior(env, bname)
+        let Just(bdef) = bdef_r else { continue }
+
+        // Search methods in this behavior
+        let mc: I64 = bdef.methods.len() as I64
+        for j in 0 to mc {
+            let msig = bdef.methods.get(j)
+            if msig.name == method {
+                // Found! Apply type substitution from receiver
+                if msig.type_params.len() as I64 > 0 {
+                    let subs = HashMap[Str, Type]::new(4)
+                    // Extract type params from receiver
+                    when recv_ty {
+                        Named(nt) => {
+                            let tp_count: I64 = msig.type_params.len() as I64
+                            let ta_count: I64 = nt.type_args.len() as I64
+                            var k: I64 = 0
+                            loop (k < tp_count and k < ta_count) {
+                                subs.set(msig.type_params.get(k), nt.type_args.get(k).get())
+                                k = k + 1
+                            }
+                        },
+                        _ => {}
+                    }
+                    return Just(substitute_type(msig.return_type.get(), subs))
+                }
+                return Just(msig.return_type.get())
+            }
+        }
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Operator desugaring
+// ============================================================================
+
+/// Operator-to-behavior mapping for desugaring `a + b` → `Add::add(a, b)`.
+pub func operator_behavior_name(op_name: Str) -> Maybe[Str] {
+    if op_name == "+" { return Just("Add") }
+    if op_name == "-" { return Just("Sub") }
+    if op_name == "*" { return Just("Mul") }
+    if op_name == "/" { return Just("Div") }
+    if op_name == "%" { return Just("Rem") }
+    if op_name == "&" { return Just("BitAnd") }
+    if op_name == "|" { return Just("BitOr") }
+    if op_name == "^" { return Just("BitXor") }
+    if op_name == "<<" { return Just("Shl") }
+    if op_name == ">>" { return Just("Shr") }
+    return Nothing
+}
+
+/// Operator-to-method mapping.
+pub func operator_method_name(op_name: Str) -> Str {
+    if op_name == "+" { return "add" }
+    if op_name == "-" { return "sub" }
+    if op_name == "*" { return "mul" }
+    if op_name == "/" { return "div" }
+    if op_name == "%" { return "rem" }
+    if op_name == "&" { return "bitand" }
+    if op_name == "|" { return "bitor" }
+    if op_name == "^" { return "bitxor" }
+    if op_name == "<<" { return "shl" }
+    if op_name == ">>" { return "shr" }
+    return "unknown_op"
+}
+
+/// Desugar an operator expression by looking up the behavior method.
+/// Returns the result type of the operator, or Nothing if no impl found.
+pub func desugar_operator(
+    ctx: InferCtx,
+    env: TypeEnv,
+    left_ty: Type,
+    right_ty: Type,
+    op_name: Str,
+    span: SourceSpan
+) -> Maybe[Type] {
+    let Just(bhv_name) = operator_behavior_name(op_name) else { return Nothing }
+    let method = operator_method_name(op_name)
+
+    // Get the type name for the left operand
+    let type_name = get_type_name(left_ty)
+    if type_name == "" { return Nothing }
+
+    // Check if the type implements the operator behavior
+    if not env_type_implements(env, type_name, bhv_name) {
+        return Nothing
+    }
+
+    // Look up the behavior's method signature
+    let bdef_r = env_lookup_behavior(env, bhv_name)
+    let Just(bdef) = bdef_r else { return Nothing }
+
+    let mc: I64 = bdef.methods.len() as I64
+    for i in 0 to mc {
+        let msig = bdef.methods.get(i)
+        if msig.name == method {
+            // Found the method — substitute types if generic
+            if msig.type_params.len() as I64 > 0 {
+                let subs = HashMap[Str, Type]::new(4)
+                // Self → left_ty
+                subs.set("Self", left_ty)
+                return Just(substitute_type(msig.return_type.get(), subs))
+            }
+            return Just(msig.return_type.get())
+        }
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Helper: get type name string from Type
+// ============================================================================
+
+/// Extract the type name string for method/behavior lookup.
+pub func get_type_name(ty: Type) -> Str {
+    when ty {
+        Primitive(p) => return prim_kind_to_str(p.kind),
+        Named(nt) => return nt.name,
+        Class(c) => return c.name,
+        Interface(i) => return i.name,
+        _ => return ""
+    }
+}

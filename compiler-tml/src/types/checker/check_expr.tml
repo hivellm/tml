@@ -17,11 +17,16 @@ use compiler::types::ty::make_str
 use compiler::types::ty::make_bool
 use compiler::types::ty::make_unit
 use compiler::types::ty::make_never
+use compiler::types::ty::make_named
 use compiler::types::ty::make_named_simple
 use compiler::types::ty::make_ref
 use compiler::types::ty::make_tuple
 use compiler::types::ty::type_to_str
 use compiler::types::ty::is_never
+use compiler::types::ty::ArrayType
+use compiler::types::ty::SliceType
+use compiler::types::ty::CapturedVar
+use compiler::types::ty::make_closure
 use compiler::types::env::TypeEnv
 use compiler::types::env::FuncSig
 use compiler::types::env::StructDef
@@ -64,15 +69,37 @@ use compiler::ast::exprs::BlockExpr
 use compiler::ast::exprs::ReturnExpr
 use compiler::ast::exprs::CastExpr
 use compiler::ast::exprs::ClosureExpr
+use compiler::ast::exprs::ClosureParam
+use compiler::ast::exprs::TernaryExpr
+use compiler::ast::exprs::IfLetExpr
+use compiler::ast::exprs::IsExpr
+use compiler::ast::exprs::TryExpr
+use compiler::ast::exprs::AwaitExpr
+use compiler::ast::exprs::PathExpr
+use compiler::ast::exprs::LowlevelExpr
+use compiler::ast::exprs::InterpolatedStringExpr
+use compiler::ast::exprs::InterpolatedSegment
+use compiler::ast::exprs::InterpolatedSegmentKind
+use compiler::ast::exprs::TemplateLiteralExpr
 use compiler::ast::exprs::WhenExpr
 use compiler::ast::exprs::StructExpr
 use compiler::ast::exprs::StructExprField
 use compiler::ast::exprs::ArrayKind
+use compiler::ast::exprs::LoopExpr
+use compiler::ast::exprs::WhileExpr
+use compiler::ast::exprs::ForExpr
+use compiler::ast::exprs::WhenExpr
+use compiler::ast::exprs::WhenArm
+use compiler::ast::exprs::BreakExpr
+use compiler::ast::exprs::ContinueExpr
+use compiler::ast::exprs::RangeExpr
 use compiler::ast::stmts::Stmt
 use compiler::ast::nodes::Pattern
 use compiler::ast::nodes::IdentPattern
 // Note: compiler::ast::nodes::TypeExpr NOT imported to avoid NamedType collision
 // with compiler::types::ty::NamedType
+use compiler::types::checker::check_call::check_call
+use compiler::types::checker::check_call::check_method_call
 use std::collections::list::List
 use core::alloc::heap::Heap
 
@@ -87,16 +114,35 @@ pub func infer_expr(ctx: InferCtx, env: TypeEnv, expr: Expr) -> Type {
         Ident(id) => return infer_ident(ctx, env, id),
         Binary(bin) => return infer_binary(ctx, env, bin),
         Unary(un) => return infer_unary(ctx, env, un),
-        Call(call) => return infer_call(ctx, env, call),
+        Call(call) => return check_call(ctx, env, call),
+        MethodCall(mc) => return check_method_call(ctx, env, mc),
         Field(fld) => return infer_field(ctx, env, fld),
+        Index(idx) => return infer_index(ctx, env, idx),
         Tuple(tup) => return infer_tuple(ctx, env, tup),
         Array(arr) => return infer_array(ctx, env, arr),
         If(ife) => return infer_if(ctx, env, ife),
+        When(w) => return infer_when(ctx, env, w),
+        Loop(lp) => return infer_loop(ctx, env, lp),
+        While(wh) => return infer_while(ctx, env, wh),
+        For(fr) => return infer_for(ctx, env, fr),
         Block(blk) => return infer_block(ctx, env, blk),
         Return(ret) => return infer_return(ctx, env, ret),
-        Cast(cast) => return make_unit(),
+        Break(brk) => return make_never(),
+        Continue(_) => return make_never(),
+        Range(rng) => return infer_range(ctx, env, rng),
+        Ternary(ter) => return infer_ternary(ctx, env, ter),
+        IfLet(ile) => return infer_if_let(ctx, env, ile),
+        Closure(cls) => return infer_closure(ctx, env, cls),
+        Path(path) => return infer_path(ctx, env, path),
+        Cast(cast) => return infer_cast(ctx, env, cast),
+        Is(_) => return make_bool(),
+        Try(tr) => return infer_try(ctx, env, tr),
+        Await(aw) => return infer_expr(ctx, env, aw.expr.get()),
+        Lowlevel(ll) => return infer_lowlevel(ctx, env, ll),
+        InterpolatedString(is_) => return infer_interp_string(ctx, env, is_),
+        TemplateLiteral(tl) => return infer_template_literal(ctx, env, tl),
         Struct(st) => return infer_struct(ctx, env, st),
-        // For variants not yet implemented, return a fresh type variable
+        // Remaining variants: Base, New, Throw — return fresh type variable
         _ => return fresh_var(ctx)
     }
     // Unreachable — all when arms return
@@ -209,42 +255,6 @@ func infer_unary(ctx: InferCtx, env: TypeEnv, un: UnaryExpr) -> Type {
 }
 
 // ============================================================================
-// Function call
-// ============================================================================
-
-/// Resolve the callee, infer arguments, check parameter types.
-func infer_call(ctx: InferCtx, env: TypeEnv, call: CallExpr) -> Type {
-    // Try to resolve callee as a function name
-    let callee: Type = infer_expr(ctx, env, call.callee.get())
-
-    // If callee is a function type, use its return type
-    when callee {
-        Func(ft) => {
-            // Check argument count
-            let expected: I64 = ft.params.len() as I64
-            let actual: I64 = call.args.len() as I64
-            // Infer each argument and unify with parameter types
-            var i: I64 = 0
-            loop (i < actual and i < expected) {
-                let arg_ty: Type = infer_expr(ctx, env, call.args.get(i).get())
-                unify(ctx, arg_ty, ft.params.get(i).get(), call.span)
-                i = i + 1
-            }
-            return ft.return_type.get()
-        },
-        _ => {
-            // Not a function type — infer arguments anyway
-            let ac: I64 = call.args.len() as I64
-            for i in 0 to ac {
-                infer_expr(ctx, env, call.args.get(i).get())
-            }
-            return fresh_var(ctx)
-        }
-    }
-    return fresh_var(ctx)
-}
-
-// ============================================================================
 // Field access
 // ============================================================================
 
@@ -271,6 +281,23 @@ func infer_field(ctx: InferCtx, env: TypeEnv, fld: FieldExpr) -> Type {
         _ => return fresh_var(ctx)
     }
     return fresh_var(ctx)
+}
+
+// ============================================================================
+// Index access
+// ============================================================================
+
+/// Infer type for `obj[index]`. For arrays/slices, returns the element type.
+func infer_index(ctx: InferCtx, env: TypeEnv, idx: IndexExpr) -> Type {
+    let obj_ty: Type = infer_expr(ctx, env, idx.object.get())
+    let _ = infer_expr(ctx, env, idx.index.get())
+    let resolved: Type = resolve(ctx, obj_ty)
+
+    when resolved {
+        Array(arr) => return arr.element.get(),
+        Slice(sl) => return sl.element.get(),
+        _ => return fresh_var(ctx)
+    }
 }
 
 // ============================================================================
@@ -389,6 +416,383 @@ func infer_struct(ctx: InferCtx, env: TypeEnv, st: StructExpr) -> Type {
         }
     }
     return fresh_var(ctx)
+}
+
+// ============================================================================
+// When (pattern match) expression
+// ============================================================================
+
+func infer_when(ctx: InferCtx, env: TypeEnv, w: WhenExpr) -> Type {
+    let scrutinee_ty: Type = infer_expr(ctx, env, w.scrutinee.get())
+    var result_ty: Type = make_unit()
+    var has_result: I64 = 0
+
+    let arm_count: I64 = w.arms.len() as I64
+    for i in 0 to arm_count {
+        let arm: WhenArm = w.arms.get(i)
+        env_push_scope(env, ScopeKind::BlockScope)
+
+        // Bind pattern variables (simplified — full impl in check_pattern)
+        bind_pattern_simple(ctx, env, arm.pattern.get(), scrutinee_ty)
+
+        // Check guard if present
+        when arm.guard {
+            Just(g) => { let _ = infer_expr(ctx, env, g.get()) },
+            Nothing => {}
+        }
+
+        let arm_ty: Type = infer_expr(ctx, env, arm.body.get())
+        env_pop_scope(env)
+
+        // Unify arm types (with Never coercion)
+        if has_result == 0 {
+            result_ty = arm_ty
+            has_result = 1
+        } else if is_never(result_ty) {
+            result_ty = arm_ty
+        } else if not is_never(arm_ty) {
+            unify(ctx, result_ty, arm_ty, w.span)
+        }
+    }
+    return result_ty
+}
+
+/// Simplified pattern binding — binds ident patterns in scope.
+pub func bind_pattern_simple(ctx: InferCtx, env: TypeEnv, pat: Pattern, ty: Type) {
+    let scope_count: I64 = env.scopes.len() as I64
+    if scope_count == 0 { return }
+    let top = env.scopes.get(scope_count - 1)
+    when pat {
+        Ident(ip) => {
+            let span = ip.span
+            scope_define(top, ip.name, ty, 0, span)
+        },
+        Enum(ep) => {
+            // For enum patterns like Just(x), bind inner patterns
+            // with the payload type. Simplified: bind first arg as fresh var.
+            let pc: I64 = ep.args.len() as I64
+            for i in 0 to pc {
+                bind_pattern_simple(ctx, env, ep.args.get(i).get(), fresh_var(ctx))
+            }
+        },
+        Tuple(tp) => {
+            // Bind tuple sub-patterns
+            let pc: I64 = tp.patterns.len() as I64
+            for i in 0 to pc {
+                bind_pattern_simple(ctx, env, tp.patterns.get(i).get(), fresh_var(ctx))
+            }
+        },
+        _ => {}
+    }
+}
+
+// ============================================================================
+// Loop expression
+// ============================================================================
+
+func infer_loop(ctx: InferCtx, env: TypeEnv, lp: LoopExpr) -> Type {
+    env_push_scope(env, ScopeKind::BlockScope)
+    let _ = infer_expr(ctx, env, lp.condition.get())
+    let _ = infer_expr(ctx, env, lp.body.get())
+    env_pop_scope(env)
+    return make_unit()
+}
+
+// ============================================================================
+// While expression
+// ============================================================================
+
+func infer_while(ctx: InferCtx, env: TypeEnv, wh: WhileExpr) -> Type {
+    let cond_ty: Type = infer_expr(ctx, env, wh.condition.get())
+    unify(ctx, cond_ty, make_bool(), wh.span)
+    env_push_scope(env, ScopeKind::BlockScope)
+    let _ = infer_expr(ctx, env, wh.body.get())
+    env_pop_scope(env)
+    return make_unit()
+}
+
+// ============================================================================
+// For-in expression
+// ============================================================================
+
+func infer_for(ctx: InferCtx, env: TypeEnv, fr: ForExpr) -> Type {
+    env_push_scope(env, ScopeKind::BlockScope)
+    let iter_ty: Type = infer_expr(ctx, env, fr.iter.get())
+
+    // Extract element type from the iterator
+    let elem_ty: Type = extract_iterator_element(iter_ty)
+
+    // Bind the loop variable
+    bind_pattern_simple(ctx, env, fr.pattern.get(), elem_ty)
+
+    let _ = infer_expr(ctx, env, fr.body.get())
+    env_pop_scope(env)
+    return make_unit()
+}
+
+/// Extract the element type from an iterator/collection type.
+func extract_iterator_element(ty: Type) -> Type {
+    when ty {
+        Named(nt) => {
+            // Range[T], RangeInclusive[T] → T
+            if (nt.name == "Range" or nt.name == "RangeInclusive") and nt.type_args.len() as I64 > 0 {
+                return nt.type_args.get(0).get()
+            }
+            // Slice[T], List[T], Vec[T], Buffer → element type
+            if (nt.name == "List" or nt.name == "Vec") and nt.type_args.len() as I64 > 0 {
+                return nt.type_args.get(0).get()
+            }
+            return make_i64()
+        },
+        Slice(s) => return s.element.get(),
+        Array(a) => return a.element.get(),
+        Primitive(_) => return ty,
+        _ => return make_i64()
+    }
+}
+
+// ============================================================================
+// Range expression
+// ============================================================================
+
+func infer_range(ctx: InferCtx, env: TypeEnv, rng: RangeExpr) -> Type {
+    var elem_ty: Type = make_i64()
+    when rng.start {
+        Just(s) => { elem_ty = infer_expr(ctx, env, s.get()) },
+        Nothing => {}
+    }
+    let has_end = rng.end
+    when has_end {
+        Just(e) => {
+            let end_ty = infer_expr(ctx, env, e.get())
+            let _ = unify(ctx, elem_ty, end_ty, rng.span)
+        },
+        Nothing => {}
+    }
+    // Return Range[T] or RangeInclusive[T]
+    let args = List[Heap[Type]]::new(1)
+    args.push(Heap::new(resolve(ctx, elem_ty)))
+    let range_name: Str = if rng.inclusive == 1 { "RangeInclusive" } else { "Range" }
+    return make_named(range_name, "", args)
+}
+
+// ============================================================================
+// Ternary expression (condition ? true_val : false_val)
+// ============================================================================
+
+func infer_ternary(ctx: InferCtx, env: TypeEnv, ter: TernaryExpr) -> Type {
+    let cond_ty = infer_expr(ctx, env, ter.condition.get())
+    unify(ctx, cond_ty, make_bool(), ter.span)
+
+    let true_ty = infer_expr(ctx, env, ter.true_value.get())
+    let false_ty = infer_expr(ctx, env, ter.false_value.get())
+
+    if is_never(true_ty) { return false_ty }
+    if is_never(false_ty) { return true_ty }
+
+    unify(ctx, true_ty, false_ty, ter.span)
+    return resolve(ctx, true_ty)
+}
+
+// ============================================================================
+// If-let expression
+// ============================================================================
+
+func infer_if_let(ctx: InferCtx, env: TypeEnv, ile: IfLetExpr) -> Type {
+    let scrutinee_ty = infer_expr(ctx, env, ile.scrutinee.get())
+
+    // Type check then branch with pattern bindings in scope
+    env_push_scope(env, ScopeKind::BlockScope)
+    bind_pattern_simple(ctx, env, ile.pattern.get(), scrutinee_ty)
+    let then_ty = infer_expr(ctx, env, ile.then_branch.get())
+    env_pop_scope(env)
+
+    // Type check else branch if present
+    let Just(else_expr) = ile.else_branch else { return make_unit() }
+    let else_ty = infer_expr(ctx, env, else_expr.get())
+
+    if is_never(then_ty) { return else_ty }
+    if is_never(else_ty) { return then_ty }
+
+    unify(ctx, then_ty, else_ty, ile.span)
+    return resolve(ctx, then_ty)
+}
+
+// ============================================================================
+// Closure expression
+// ============================================================================
+
+func infer_closure(ctx: InferCtx, env: TypeEnv, cls: ClosureExpr) -> Type {
+    env_push_scope(env, ScopeKind::FunctionScope)
+
+    // Define parameters in closure scope
+    let param_types = List[Heap[Type]]::new(cls.params.len() as I64)
+    let pc: I64 = cls.params.len() as I64
+    for i in 0 to pc {
+        let p: ClosureParam = cls.params.get(i)
+        // If type annotation present, use it; otherwise fresh type var
+        let param_ty: Type = fresh_var(ctx)
+        param_types.push(Heap::new(param_ty))
+        // Bind the parameter name in scope
+        bind_pattern_simple(ctx, env, p.pattern.get(), param_ty)
+    }
+
+    // Infer body type
+    let body_ty = infer_expr(ctx, env, cls.body.get())
+    env_pop_scope(env)
+
+    // Build closure type
+    let captures = List[CapturedVar]::new(0)
+    return make_closure(param_types, body_ty, captures)
+}
+
+// ============================================================================
+// Path expression (qualified name lookup)
+// ============================================================================
+
+func infer_path(ctx: InferCtx, env: TypeEnv, path: PathExpr) -> Type {
+    let segs = path.path.segments
+    let seg_count: I64 = segs.len() as I64
+
+    if seg_count == 0 { return fresh_var(ctx) }
+
+    // Single segment: same as ident lookup
+    if seg_count == 1 {
+        let name = segs.get(0)
+        // Check scope chain
+        let scope_count: I64 = env.scopes.len() as I64
+        if scope_count > 0 {
+            let top = env.scopes.get(scope_count - 1)
+            let sym = scope_lookup(top, name)
+            when sym {
+                Just(s) => return s.ty.get(),
+                Nothing => {}
+            }
+        }
+        // Check functions
+        let func_r = env_lookup_function(env, name)
+        when func_r {
+            Just(sig) => return sig.return_type.get(),
+            Nothing => {}
+        }
+        // Check types
+        let type_r = env_lookup_type(env, name)
+        when type_r {
+            Just(t) => return t,
+            Nothing => {}
+        }
+        return fresh_var(ctx)
+    }
+
+    // Multi-segment path: Type::variant, Module::func, etc.
+    if seg_count == 2 {
+        let type_name = segs.get(0)
+        let member = segs.get(1)
+        // Try qualified function lookup
+        let qualified = type_name + "::" + member
+        let func_r = env_lookup_function(env, qualified)
+        when func_r {
+            Just(sig) => return sig.return_type.get(),
+            Nothing => {}
+        }
+        // Try enum variant (no args = unit variant)
+        let enum_r = env_lookup_enum(env, type_name)
+        when enum_r {
+            Just(edef) => {
+                let vc: I64 = edef.variants.len() as I64
+                for i in 0 to vc {
+                    if edef.variants.get(i).name == member {
+                        return make_named_simple(type_name, "")
+                    }
+                }
+            },
+            Nothing => {}
+        }
+    }
+
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Cast expression
+// ============================================================================
+
+func infer_cast(ctx: InferCtx, env: TypeEnv, cast: CastExpr) -> Type {
+    // Type check the inner expression (side effect: unifies type vars)
+    let _ = infer_expr(ctx, env, cast.expr.get())
+    // The result type is the target type, but we can't resolve TypeExpr here
+    // without importing it (name collision). Return Unit as approximation.
+    return make_unit()
+}
+
+// ============================================================================
+// Try expression (expr?)
+// ============================================================================
+
+func infer_try(ctx: InferCtx, env: TypeEnv, tr: TryExpr) -> Type {
+    let inner_ty = infer_expr(ctx, env, tr.expr.get())
+    let resolved = resolve(ctx, inner_ty)
+    // If inner is Outcome[T, E], result is T
+    when resolved {
+        Named(nt) => {
+            if nt.name == "Outcome" and nt.type_args.len() as I64 > 0 {
+                return nt.type_args.get(0).get()
+            }
+            // If inner is Maybe[T], result is T
+            if nt.name == "Maybe" and nt.type_args.len() as I64 > 0 {
+                return nt.type_args.get(0).get()
+            }
+        },
+        _ => {}
+    }
+    return fresh_var(ctx)
+}
+
+// ============================================================================
+// Lowlevel block
+// ============================================================================
+
+func infer_lowlevel(ctx: InferCtx, env: TypeEnv, ll: LowlevelExpr) -> Type {
+    // Type check all statements in the lowlevel block
+    let sc: I64 = ll.stmts.len() as I64
+    for i in 0 to sc {
+        check_stmt_inline(ctx, env, ll.stmts.get(i).get())
+    }
+    // Check trailing expression if present
+    when ll.expr {
+        Just(e) => return infer_expr(ctx, env, e.get()),
+        Nothing => return make_unit()
+    }
+}
+
+// ============================================================================
+// Interpolated string / template literal
+// ============================================================================
+
+func infer_interp_string(ctx: InferCtx, env: TypeEnv, is_: InterpolatedStringExpr) -> Type {
+    // Type check each expression segment
+    let sc: I64 = is_.segments.len() as I64
+    for i in 0 to sc {
+        let seg: InterpolatedSegment = is_.segments.get(i)
+        when seg.kind {
+            SegExpr(e) => { let _ = infer_expr(ctx, env, e.get()) },
+            _ => {}
+        }
+    }
+    return make_str()
+}
+
+func infer_template_literal(ctx: InferCtx, env: TypeEnv, tl: TemplateLiteralExpr) -> Type {
+    let sc: I64 = tl.segments.len() as I64
+    for i in 0 to sc {
+        let seg: InterpolatedSegment = tl.segments.get(i)
+        when seg.kind {
+            SegExpr(e) => { let _ = infer_expr(ctx, env, e.get()) },
+            _ => {}
+        }
+    }
+    // Template literals return Text
+    return make_named_simple("Text", "")
 }
 
 // ============================================================================

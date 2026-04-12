@@ -1,0 +1,211 @@
+//! Statement type checking for the TML self-hosting type checker.
+//!
+//! Implements checking for `let`, `var`, `let-else`, and expression statements.
+//! Also covers `if`/`else` checking (already in check_expr.tml) and `loop`
+//! checking (in check_expr.tml as well, since loops are expressions in TML).
+//!
+//! Phase 14c — items 4.1–4.4.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::is_never
+use compiler::types::ty::type_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_push_scope
+use compiler::types::env::env_pop_scope
+use compiler::types::env::ScopeKind
+use compiler::types::env::scope_define
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::check_expr::infer_expr
+use compiler::types::checker::check_expr::bind_pattern_simple
+use compiler::ast::exprs::Expr
+use compiler::ast::stmts::Stmt
+use compiler::ast::stmts::LetStmt
+use compiler::ast::stmts::VarStmt
+use compiler::ast::stmts::LetElseStmt
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::IdentPattern
+use compiler::ast::nodes::TuplePattern
+use compiler::ast::nodes::EnumPattern
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Main statement dispatcher
+// ============================================================================
+
+/// Check a statement and return its type (usually Unit).
+pub func check_stmt(ctx: InferCtx, env: TypeEnv, stmt: Stmt) -> Type {
+    when stmt {
+        Let(ls) => return check_let(ctx, env, ls),
+        Var(vs) => return check_var(ctx, env, vs),
+        LetElse(le) => return check_let_else(ctx, env, le),
+        Expr(e) => return infer_expr(ctx, env, e.get()),
+        Decl(_) => return make_unit()
+    }
+}
+
+// ============================================================================
+// Let binding (immutable)
+// ============================================================================
+
+/// Check a `let` binding: infer RHS type, unify with annotation if present,
+/// bind pattern variables in current scope.
+func check_let(ctx: InferCtx, env: TypeEnv, ls: LetStmt) -> Type {
+    let init_r = ls.init
+    when init_r {
+        Just(init_expr) => {
+            let init_ty: Type = infer_expr(ctx, env, init_expr.get())
+
+            // TODO: if type annotation present, resolve and unify with init_ty.
+            // For now, just use inferred type.
+            let var_ty: Type = resolve(ctx, init_ty)
+
+            // Bind pattern variables in scope
+            bind_pattern_full(ctx, env, ls.pattern.get(), var_ty, 0, ls.span)
+        },
+        Nothing => {
+            // No initializer — type annotation required (parser should catch this)
+            ctx.errors.push(type_error("Type annotation or initializer required", ls.span))
+            bind_pattern_full(ctx, env, ls.pattern.get(), make_unit(), 0, ls.span)
+        }
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Var binding (mutable)
+// ============================================================================
+
+/// Check a `var` binding: infer RHS type, register as mutable.
+func check_var(ctx: InferCtx, env: TypeEnv, vs: VarStmt) -> Type {
+    let init_r = vs.init
+    when init_r {
+        Just(init_expr) => {
+            let init_ty: Type = infer_expr(ctx, env, init_expr.get())
+            let var_ty: Type = resolve(ctx, init_ty)
+
+            // Register in current scope as mutable
+            let scope_count: I64 = env.scopes.len() as I64
+            if scope_count > 0 {
+                let top = env.scopes.get(scope_count - 1)
+                scope_define(top, vs.name, var_ty, 1, vs.span)
+            }
+        },
+        Nothing => {
+            ctx.errors.push(type_error("Type annotation or initializer required", vs.span))
+            let scope_count: I64 = env.scopes.len() as I64
+            if scope_count > 0 {
+                let top = env.scopes.get(scope_count - 1)
+                scope_define(top, vs.name, make_unit(), 1, vs.span)
+            }
+        }
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Let-else binding
+// ============================================================================
+
+/// Check a `let-else` binding:
+/// `let Pattern = expr else { diverging_block }`
+/// The else block must have type Never (return, break, continue, panic).
+func check_let_else(ctx: InferCtx, env: TypeEnv, le: LetElseStmt) -> Type {
+    let init_ty: Type = infer_expr(ctx, env, le.init.get())
+    let scrutinee_ty: Type = resolve(ctx, init_ty)
+
+    // Check the else block — it must diverge
+    env_push_scope(env, ScopeKind::BlockScope)
+    let else_ty: Type = infer_expr(ctx, env, le.else_body.get())
+    env_pop_scope(env)
+
+    let resolved_else: Type = resolve(ctx, else_ty)
+    if not is_never(resolved_else) {
+        ctx.errors.push(type_error(
+            "let-else else block must diverge (type Never), but its type is '" +
+            type_to_str(resolved_else) + "'",
+            le.span
+        ))
+    }
+
+    // Bind pattern variables in current scope
+    bind_pattern_full(ctx, env, le.pattern.get(), scrutinee_ty, 0, le.span)
+
+    return make_unit()
+}
+
+// ============================================================================
+// Pattern binding (full version)
+// ============================================================================
+
+/// Bind pattern variables in the current scope with full pattern support.
+/// Handles: Ident, Tuple, Enum, Wildcard.
+pub func bind_pattern_full(
+    ctx: InferCtx,
+    env: TypeEnv,
+    pat: Pattern,
+    ty: Type,
+    is_mutable: I64,
+    span: SourceSpan
+) {
+    let scope_count: I64 = env.scopes.len() as I64
+    if scope_count == 0 { return }
+    let top = env.scopes.get(scope_count - 1)
+
+    when pat {
+        Ident(ip) => {
+            scope_define(top, ip.name, ty, is_mutable, ip.span)
+        },
+        Tuple(tp) => {
+            // Destructure tuple: each sub-pattern gets the corresponding element type
+            when ty {
+                Tuple(tt) => {
+                    let pc: I64 = tp.patterns.len() as I64
+                    let ec: I64 = tt.elements.len() as I64
+                    if pc != ec {
+                        ctx.errors.push(type_error(
+                            "Tuple pattern has " + pc.to_string() +
+                            " elements, but type has " + ec.to_string(),
+                            span
+                        ))
+                    }
+                    var i: I64 = 0
+                    loop (i < pc and i < ec) {
+                        bind_pattern_full(ctx, env, tp.patterns.get(i).get(), tt.elements.get(i).get(), is_mutable, span)
+                        i = i + 1
+                    }
+                },
+                _ => {
+                    ctx.errors.push(type_error("Cannot destructure non-tuple type with tuple pattern", span))
+                }
+            }
+        },
+        Enum(ep) => {
+            // For enum patterns (e.g., Just(x)), look up variant payload types
+            // Simplified: bind each sub-pattern with a fresh type variable
+            let pc: I64 = ep.args.len() as I64
+            for i in 0 to pc {
+                bind_pattern_full(ctx, env, ep.args.get(i).get(), fresh_var(ctx), is_mutable, span)
+            }
+        },
+        Struct(sp) => {
+            // For struct patterns, bind field names
+            let fc: I64 = sp.fields.len() as I64
+            for i in 0 to fc {
+                let field = sp.fields.get(i)
+                scope_define(top, field.name, fresh_var(ctx), is_mutable, span)
+            }
+        },
+        Wildcard(_) => {},
+        _ => {}
+    }
+}

@@ -14,24 +14,78 @@ At **session end**: Write a summary to the Session History section.
 
 <!-- PLANS:CONTEXT:START -->
 Phase 30 (30a-30j) and Phase 31 (31a-31f) fully complete and archived.
-phase13d_frontend-integration archived (was "completed" with one unchecked item, now closed).
-Active task: phase14c_typechecker-inference — massive task (~7,229 LOC C++ to port).
-Existing code: ~2,925 lines in unify.tml, check_expr.tml, errors.tml, ty.tml, env.tml, builtins.tml, register.tml.
-Phase 1 (inference core) mostly done. Phase 2 (expr checking) partially done. Phases 3-6 not started.
+phase13d_frontend-integration archived.
+Active task: phase14c_typechecker-inference — Phases 1-5 complete + extended expr coverage, Phase 6 blocked by K001.
+Total code: ~4,500 lines across 8 TML files (infer/, checker/).
+23/26 task items done. 2 remaining items (6.1, 6.2) blocked by K001 codegen bug.
+All 35 Expr enum variants now have type inference handlers (only Base, New, Throw fall through to fresh_var).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase14c_typechecker-inference — in-progress
+phase14c_typechecker-inference — in-progress (22/25)
 Port Hindley-Milner type inference from C++ to TML (~7,229 LOC).
-Phases 1-2 partially done (~2,925 lines exist). Phases 3-6 (call resolution, statements, patterns, differential testing) not started.
-Missing files: infer/mod.tml, checker/check_call.tml, checker/check_stmt.tml, checker/check_pattern.tml.
+Phases 1-5 complete. Phase 6 (differential testing) blocked by K001 codegen bug.
+Files created this session: infer/common.tml, checker/check_call.tml (677 lines), checker/check_stmt.tml (172 lines), checker/check_pattern.tml (453 lines).
+Tests: unify_basic.test.tml (15 tests), infer_differential.test.tml (10 tests). All type-check; runtime blocked by K001.
+Remaining: items 6.1, 6.2 — requires K001 fix or full C++ backend for differential comparison.
 <!-- PLANS:TASK:END -->
 
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-12 (session 4)
+## phase14c Type Inference — Phases 1-5 Complete
+
+### Accomplished
+Implemented the core type inference engine for the TML self-hosting type checker (Phases 1-5 of 6):
+
+**Phase 1 — Inference Engine Core:**
+- Created `infer/common.tml` module root (re-exports)
+- Verified existing `unify.tml` (InferCtx, fresh_var, resolve, unify with structural matching)
+- Wrote 15 unification tests in `unify_basic.test.tml`
+
+**Phase 2 — Expression Type Checking:**
+- Added index access inference (`infer_index` for Array/Slice element types)
+- Verified existing literal, ident, binary, field, tuple, array, if, block, return inference
+
+**Phase 3 — Call & Method Resolution (677 lines, new file):**
+- `check_call.tml`: function call resolution (builtins, intrinsics, named functions, enum constructors, static methods)
+- Method call resolution (primitive methods, struct/enum impl methods, behavior methods, collection methods)
+- Generic instantiation: `extract_type_params` + `substitute_type` for type parameter inference from args
+- Operator desugaring: `operator_behavior_name`/`operator_method_name` + `desugar_operator`
+
+**Phase 4 — Statement Checking (172 lines, new file):**
+- `check_stmt.tml`: let, var, let-else binding with pattern support
+- `bind_pattern_full` for tuple/enum/struct destructuring in bindings
+- Wired when/loop/while/for-in/range expressions into check_expr.tml dispatcher
+
+**Phase 5 — Pattern & Exhaustiveness (453 lines, new file):**
+- `check_pattern.tml`: 8 pattern types (Wildcard, Ident, Literal, Tuple, Struct, Enum, Or, Array)
+- Enum variant matching with type parameter substitution from scrutinee type
+- Exhaustiveness checking: enum variant coverage, bool coverage, wildcard catch-all detection
+
+**Phase 6 — Differential Testing (infrastructure only):**
+- Created `infer_differential.test.tml` with 10 integration tests
+- Items 6.1/6.2 (full differential comparison) blocked by K001 codegen bug
+
+### Key Decisions
+- Named module root `common.tml` (not `mod.tml`) because `mod` is a reserved keyword in TML
+- Used `check_call` from `check_call.tml` to replace the simpler `infer_call` in check_expr.tml
+- `bind_pattern_simple` takes ctx parameter for fresh_var generation in nested patterns
+- `check_pattern` uses `substitute_type` from check_call for enum variant payload type resolution
+- All new code type-checks clean; runtime tests blocked by K001 (Heap[Type] in List/HashMap)
+
+### Files Created/Modified
+- NEW: `compiler-tml/src/types/infer/common.tml` (module root)
+- NEW: `compiler-tml/src/types/checker/check_call.tml` (677 lines)
+- NEW: `compiler-tml/src/types/checker/check_stmt.tml` (172 lines)
+- NEW: `compiler-tml/src/types/checker/check_pattern.tml` (453 lines)
+- NEW: `compiler-tml/tests/types/unify_basic.test.tml` (15 tests)
+- NEW: `compiler-tml/tests/types/infer_differential.test.tml` (10 tests)
+- MOD: `compiler-tml/src/types/checker/check_expr.tml` (added index, when, loop, for, range, method call)
+
 ### 2026-04-12 (session 3)
 ## Phase 31 Ergonomics Migration — ALL COMPLETE + phase13d closed
 

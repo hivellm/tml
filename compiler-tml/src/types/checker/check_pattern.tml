@@ -1,0 +1,478 @@
+//! Pattern type checking and exhaustiveness verification for the TML
+//! self-hosting type checker.
+//!
+//! Implements pattern matching type checking (binding variables from patterns)
+//! and exhaustiveness checking (verifying all enum variants are covered).
+//!
+//! ## Pattern Types
+//!
+//! | Pattern    | Handler             | Binds         |
+//! |------------|---------------------|---------------|
+//! | Wildcard   | (no-op)             | nothing       |
+//! | Ident      | `check_ident_pat`   | name → type   |
+//! | Literal    | `check_literal_pat` | nothing       |
+//! | Tuple      | `check_tuple_pat`   | elements      |
+//! | Struct     | `check_struct_pat`  | field names   |
+//! | Enum       | `check_enum_pat`    | variant args  |
+//! | Or         | `check_or_pat`      | alternatives  |
+//! | Array      | `check_array_pat`   | elements      |
+//! | Range      | `check_range_pat`   | nothing       |
+//!
+//! Phase 14c — items 5.1–5.3.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::types::ty::NamedType
+use compiler::types::ty::TupleType
+use compiler::types::ty::ArrayType
+use compiler::types::ty::SliceType
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_f64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::type_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::EnumDef
+use compiler::types::env::EnumVariantDef
+use compiler::types::env::StructDef
+use compiler::types::env::StructFieldDef
+use compiler::types::env::env_lookup_enum
+use compiler::types::env::env_lookup_struct
+use compiler::types::env::scope_define
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::extract_type_params
+use compiler::ast::common::LiteralKind
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::IdentPattern
+use compiler::ast::nodes::LiteralPattern
+use compiler::ast::nodes::TuplePattern
+use compiler::ast::nodes::StructPattern
+use compiler::ast::nodes::FieldPattern
+use compiler::ast::nodes::EnumPattern
+use compiler::ast::nodes::OrPattern
+use compiler::ast::nodes::ArrayPattern
+use compiler::ast::nodes::RangePattern
+use compiler::ast::nodes::TypePath
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Main pattern checker
+// ============================================================================
+
+/// Type-check a pattern against a scrutinee type, binding variables in scope.
+/// Returns true if the pattern can match the scrutinee type.
+pub func check_pattern(
+    ctx: InferCtx,
+    env: TypeEnv,
+    pat: Pattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    when pat {
+        Wildcard(_) => return true,
+        Ident(ip) => return check_ident_pat(ctx, env, ip, scrutinee_ty),
+        Literal(lp) => return check_literal_pat(ctx, lp, scrutinee_ty, span),
+        Tuple(tp) => return check_tuple_pat(ctx, env, tp, scrutinee_ty, span),
+        Struct(sp) => return check_struct_pat(ctx, env, sp, scrutinee_ty, span),
+        Enum(ep) => return check_enum_pat(ctx, env, ep, scrutinee_ty, span),
+        Or(op) => return check_or_pat(ctx, env, op, scrutinee_ty, span),
+        Array(ap) => return check_array_pat(ctx, env, ap, scrutinee_ty, span),
+        Range(rp) => return true
+    }
+}
+
+// ============================================================================
+// Identifier pattern
+// ============================================================================
+
+/// Bind an identifier pattern to the scrutinee type.
+func check_ident_pat(ctx: InferCtx, env: TypeEnv, ip: IdentPattern, ty: Type) -> Bool {
+    let scope_count: I64 = env.scopes.len() as I64
+    if scope_count > 0 {
+        let top = env.scopes.get(scope_count - 1)
+        scope_define(top, ip.name, ty, 0, ip.span)
+    }
+    return true
+}
+
+// ============================================================================
+// Literal pattern
+// ============================================================================
+
+/// Check that a literal pattern is compatible with the scrutinee type.
+func check_literal_pat(ctx: InferCtx, lp: LiteralPattern, scrutinee_ty: Type, span: SourceSpan) -> Bool {
+    let lit_ty: Type = literal_pattern_type(lp.value)
+    let ok: Bool = unify(ctx, lit_ty, scrutinee_ty, span)
+    return ok
+}
+
+/// Get the type of a literal in a pattern.
+func literal_pattern_type(kind: LiteralKind) -> Type {
+    when kind {
+        LitInt(_) => return make_i32(),
+        LitFloat(_) => return make_f64(),
+        LitStr(_) => return make_str(),
+        LitBool(_) => return make_bool(),
+        LitChar(_) => return make_i32(),
+        LitNull => return make_unit()
+    }
+}
+
+// ============================================================================
+// Tuple pattern
+// ============================================================================
+
+/// Destructure a tuple pattern against a tuple type.
+func check_tuple_pat(
+    ctx: InferCtx,
+    env: TypeEnv,
+    tp: TuplePattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    when scrutinee_ty {
+        Tuple(tt) => {
+            let pc: I64 = tp.patterns.len() as I64
+            let ec: I64 = tt.elements.len() as I64
+            if pc != ec {
+                ctx.errors.push(type_error(
+                    "Tuple pattern has " + pc.to_string() +
+                    " elements, but type has " + ec.to_string(),
+                    span
+                ))
+                return false
+            }
+            var ok: Bool = true
+            for i in 0 to pc {
+                if not check_pattern(ctx, env, tp.patterns.get(i).get(), tt.elements.get(i).get(), span) {
+                    ok = false
+                }
+            }
+            return ok
+        },
+        _ => {
+            ctx.errors.push(type_error("Cannot destructure non-tuple type with tuple pattern", span))
+            return false
+        }
+    }
+}
+
+// ============================================================================
+// Struct pattern
+// ============================================================================
+
+/// Check a struct pattern and bind field names in scope.
+func check_struct_pat(
+    ctx: InferCtx,
+    env: TypeEnv,
+    sp: StructPattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    // Extract struct name from path
+    let segs = sp.path.segments
+    let seg_count: I64 = segs.len() as I64
+    let struct_name: Str = if seg_count > 0 { segs.get(seg_count - 1) } else { "" }
+
+    let struct_r = env_lookup_struct(env, struct_name)
+    let Just(sdef) = struct_r else {
+        ctx.errors.push(type_error("Unknown struct in pattern: " + struct_name, span))
+        return false
+    }
+
+    // Bind each field pattern
+    let scope_count: I64 = env.scopes.len() as I64
+    if scope_count == 0 { return true }
+    let top = env.scopes.get(scope_count - 1)
+
+    let fc: I64 = sp.fields.len() as I64
+    for i in 0 to fc {
+        let fp: FieldPattern = sp.fields.get(i)
+        // Find the field in the struct definition
+        let field_ty: Type = find_struct_field_type(sdef, fp.name)
+        // Check the field's sub-pattern against the field type
+        let _ = check_pattern(ctx, env, fp.pat.get(), field_ty, span)
+    }
+    return true
+}
+
+/// Find a field's type in a struct definition.
+func find_struct_field_type(sdef: StructDef, field_name: Str) -> Type {
+    let fc: I64 = sdef.fields.len() as I64
+    for i in 0 to fc {
+        let f: StructFieldDef = sdef.fields.get(i)
+        if f.name == field_name {
+            return f.ty.get()
+        }
+    }
+    return make_unit()
+}
+
+// ============================================================================
+// Enum pattern
+// ============================================================================
+
+/// Check an enum pattern (e.g., Just(x), Err(msg)) and bind inner patterns.
+func check_enum_pat(
+    ctx: InferCtx,
+    env: TypeEnv,
+    ep: EnumPattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    // Extract the variant name from the pattern's path
+    let segs = ep.path.segments
+    let seg_count: I64 = segs.len() as I64
+    let variant_name: Str = if seg_count > 0 { segs.get(seg_count - 1) } else { "" }
+
+    // Extract enum name from scrutinee type
+    let enum_name: Str = when scrutinee_ty {
+        Named(nt) => nt.name,
+        _ => ""
+    }
+
+    if enum_name == "" {
+        // Can't determine enum from scrutinee — bind args as fresh vars
+        let ac: I64 = ep.args.len() as I64
+        for i in 0 to ac {
+            let _ = check_pattern(ctx, env, ep.args.get(i).get(), fresh_var(ctx), span)
+        }
+        return true
+    }
+
+    // Lookup the enum definition
+    let enum_r = env_lookup_enum(env, enum_name)
+    let Just(edef) = enum_r else {
+        // Try the variant name as the enum name (for unqualified patterns)
+        let ac: I64 = ep.args.len() as I64
+        for i in 0 to ac {
+            let _ = check_pattern(ctx, env, ep.args.get(i).get(), fresh_var(ctx), span)
+        }
+        return true
+    }
+
+    // Find the variant
+    let vc: I64 = edef.variants.len() as I64
+    for vi in 0 to vc {
+        let variant: EnumVariantDef = edef.variants.get(vi)
+        if variant.name == variant_name {
+            // Found — bind inner patterns with payload types
+            let payload_count: I64 = variant.payload_types.len() as I64
+            let arg_count: I64 = ep.args.len() as I64
+
+            if arg_count != payload_count {
+                ctx.errors.push(type_error(
+                    "Enum variant '" + variant_name + "' expects " +
+                    payload_count.to_string() + " fields, pattern has " +
+                    arg_count.to_string(),
+                    span
+                ))
+                return false
+            }
+
+            // Build type substitutions from the scrutinee's type args
+            let subs = HashMap[Str, Type]::new(4)
+            when scrutinee_ty {
+                Named(nt) => {
+                    let tp_count: I64 = edef.type_params.len() as I64
+                    let ta_count: I64 = nt.type_args.len() as I64
+                    var k: I64 = 0
+                    loop (k < tp_count and k < ta_count) {
+                        subs.set(edef.type_params.get(k), nt.type_args.get(k).get())
+                        k = k + 1
+                    }
+                },
+                _ => {}
+            }
+
+            // Check each sub-pattern with the substituted payload type
+            for i in 0 to arg_count {
+                let payload_ty = substitute_type(variant.payload_types.get(i).get(), subs)
+                let _ = check_pattern(ctx, env, ep.args.get(i).get(), payload_ty, span)
+            }
+            return true
+        }
+    }
+
+    // Variant not found — error recovery
+    ctx.errors.push(type_error("Unknown variant '" + variant_name + "' for enum " + enum_name, span))
+    return false
+}
+
+// ============================================================================
+// Or pattern
+// ============================================================================
+
+/// Check an or pattern: each alternative must match the same scrutinee type.
+func check_or_pat(
+    ctx: InferCtx,
+    env: TypeEnv,
+    op: OrPattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    let ac: I64 = op.alternatives.len() as I64
+    var ok: Bool = false
+    for i in 0 to ac {
+        if check_pattern(ctx, env, op.alternatives.get(i).get(), scrutinee_ty, span) {
+            ok = true
+        }
+    }
+    return ok
+}
+
+// ============================================================================
+// Array pattern
+// ============================================================================
+
+/// Check an array pattern against an array/slice type.
+func check_array_pat(
+    ctx: InferCtx,
+    env: TypeEnv,
+    ap: ArrayPattern,
+    scrutinee_ty: Type,
+    span: SourceSpan
+) -> Bool {
+    // Extract element type
+    let elem_ty: Type = when scrutinee_ty {
+        Array(at) => at.element.get(),
+        Slice(st) => st.element.get(),
+        _ => fresh_var(ctx)
+    }
+
+    let pc: I64 = ap.patterns.len() as I64
+    for i in 0 to pc {
+        let _ = check_pattern(ctx, env, ap.patterns.get(i).get(), elem_ty, span)
+    }
+
+    // Handle rest pattern if present
+    when ap.rest {
+        Just(rest_pat) => {
+            let _ = check_pattern(ctx, env, rest_pat.get(), scrutinee_ty, span)
+        },
+        Nothing => {}
+    }
+    return true
+}
+
+// ============================================================================
+// Exhaustiveness checking
+// ============================================================================
+
+/// Check that a set of when arms exhaustively covers all cases of the
+/// scrutinee type. Returns a list of missing patterns (empty = exhaustive).
+///
+/// Strategy:
+/// - For enum types: collect all variant names, check each appears in at least one arm
+/// - For bool: check both true and false
+/// - For wildcard/ident patterns: always exhaustive
+/// - For other types: require a wildcard arm
+pub func check_exhaustiveness(
+    ctx: InferCtx,
+    env: TypeEnv,
+    scrutinee_ty: Type,
+    patterns: List[Pattern],
+    span: SourceSpan
+) -> List[Str] {
+    let missing = List[Str]::new(4)
+
+    // Check for wildcard/ident catch-all
+    let pat_count: I64 = patterns.len() as I64
+    for i in 0 to pat_count {
+        when patterns.get(i) {
+            Wildcard(_) => return missing,
+            Ident(_) => return missing,
+            _ => {}
+        }
+    }
+
+    let resolved = resolve(ctx, scrutinee_ty)
+
+    when resolved {
+        Named(nt) => {
+            // Check if it's an enum type
+            let enum_r = env_lookup_enum(env, nt.name)
+            when enum_r {
+                Just(edef) => {
+                    // Collect covered variants
+                    let covered = HashMap[Str, I64]::new(8)
+                    for i in 0 to pat_count {
+                        let vname = extract_variant_name(patterns.get(i))
+                        if vname != "" {
+                            covered.set(vname, 1)
+                        }
+                    }
+
+                    // Check each variant is covered
+                    let vc: I64 = edef.variants.len() as I64
+                    for i in 0 to vc {
+                        let variant = edef.variants.get(i)
+                        if not covered.has(variant.name) {
+                            missing.push(variant.name)
+                        }
+                    }
+                },
+                Nothing => {
+                    // Not an enum — require wildcard
+                    missing.push("_")
+                }
+            }
+        },
+        Primitive(p) => {
+            when p.kind {
+                KindBool => {
+                    // Check both true and false are covered
+                    var has_true: I64 = 0
+                    var has_false: I64 = 0
+                    for i in 0 to pat_count {
+                        when patterns.get(i) {
+                            Literal(lp) => {
+                                when lp.value {
+                                    LitBool(v) => {
+                                        if v { has_true = 1 } else { has_false = 1 }
+                                    },
+                                    _ => {}
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+                    if has_true == 0 { missing.push("true") }
+                    if has_false == 0 { missing.push("false") }
+                },
+                _ => {
+                    // Numeric/string — require wildcard
+                    missing.push("_")
+                }
+            }
+        },
+        _ => {
+            missing.push("_")
+        }
+    }
+
+    return missing
+}
+
+/// Extract the variant name from a pattern (for exhaustiveness tracking).
+func extract_variant_name(pat: Pattern) -> Str {
+    when pat {
+        Enum(ep) => {
+            let segs = ep.path.segments
+            let sc: I64 = segs.len() as I64
+            if sc > 0 { return segs.get(sc - 1) }
+            return ""
+        },
+        Ident(ip) => return ip.name,
+        _ => return ""
+    }
+}
