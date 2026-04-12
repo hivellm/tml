@@ -1,0 +1,22 @@
+//! MIR module root for the TML self-hosting compiler.
+//! Phase 15c — item 1.1.
+
+pub use compiler::mir::types::MirType
+pub use compiler::mir::types::MirPrimitive
+pub use compiler::mir::types::ValueId
+pub use compiler::mir::types::invalid_value
+pub use compiler::mir::inst::MirInst
+pub use compiler::mir::inst::InstructionData
+pub use compiler::mir::inst::MirConstant
+pub use compiler::mir::block::BasicBlock
+pub use compiler::mir::block::Terminator
+pub use compiler::mir::block::block_new
+pub use compiler::mir::module::MirModule
+pub use compiler::mir::module::MirFunc
+pub use compiler::mir::module::mir_func_new
+pub use compiler::mir::module::mir_module_new
+pub use compiler::mir::builder::core::MirBuilder
+pub use compiler::mir::builder::core::builder_new
+pub use compiler::mir::builder::core::build_mir
+pub use compiler::mir::printer::print_mir_module
+pub use compiler::mir::printer::print_mir_func

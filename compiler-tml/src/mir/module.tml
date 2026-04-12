@@ -1,0 +1,77 @@
+//! MIR Module — top-level container for MIR functions and types.
+//! Phase 15c — item 1.5.
+
+use compiler::source::SourceSpan
+use compiler::mir::types::MirType
+use compiler::mir::types::ValueId
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::block_new
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Function parameters
+// ============================================================================
+
+pub type MirFuncParam { name: Str, param_type: MirType, value_id: ValueId }
+
+// ============================================================================
+// MirFunc — a function in MIR form
+// ============================================================================
+
+pub type MirFunc {
+    name: Str,
+    params: List[MirFuncParam],
+    return_type: MirType,
+    blocks: List[BasicBlock],
+    is_public: I64,
+    is_async: I64,
+    is_extern: I64
+}
+
+/// Create a new MirFunc with an entry block.
+pub func mir_func_new(name: Str, return_type: MirType) -> MirFunc {
+    let blocks = List[BasicBlock]::new(8)
+    blocks.push(block_new(0, "entry"))
+    return MirFunc {
+        name: name,
+        params: List[MirFuncParam]::new(4),
+        return_type: return_type,
+        blocks: blocks,
+        is_public: 0,
+        is_async: 0,
+        is_extern: 0
+    }
+}
+
+// ============================================================================
+// Struct/Enum definitions for MIR
+// ============================================================================
+
+pub type MirStructDef { name: Str, fields: List[MirType] }
+pub type MirEnumDef { name: Str, variants: List[MirEnumVariantDef] }
+pub type MirEnumVariantDef { name: Str, payload_types: List[MirType], discriminant: I64 }
+
+// ============================================================================
+// MirModule — the complete MIR output
+// ============================================================================
+
+pub type MirModule {
+    name: Str,
+    structs: List[MirStructDef],
+    enums: List[MirEnumDef],
+    functions: List[MirFunc],
+    constants: HashMap[Str, I64]
+}
+
+/// Create a new empty MirModule.
+pub func mir_module_new(name: Str) -> MirModule {
+    return MirModule {
+        name: name,
+        structs: List[MirStructDef]::new(16),
+        enums: List[MirEnumDef]::new(8),
+        functions: List[MirFunc]::new(32),
+        constants: HashMap[Str, I64]::new(16)
+    }
+}

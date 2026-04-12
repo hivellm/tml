@@ -1,0 +1,74 @@
+//! Self-hosting validation for MIR modules.
+//! Phase 15c — items 6.1, 6.2, tail.
+
+use test
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::InstructionData
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::block_new
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::mir_func_new
+use compiler::mir::module::mir_module_new
+use compiler::mir::builder::core::MirBuilder
+use compiler::mir::builder::core::builder_new
+use compiler::mir::builder::core::build_mir
+use compiler::mir::builder::core::fresh_value
+use compiler::mir::printer::print_mir_module
+use compiler::mir::printer::print_mir_type
+use compiler::mir::printer::print_mir_func
+
+@test
+func test_mir_modules_typecheck() -> I32 {
+    assert(true)
+    return 0
+}
+
+@test
+func test_mir_module_new() -> I32 {
+    let mmod = mir_module_new("test")
+    assert_eq(mmod.name, "test")
+    assert_eq(mmod.functions.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_mir_func_new() -> I32 {
+    let mf = mir_func_new("main", MirType::Primitive(MirPrimitive::I32))
+    assert_eq(mf.name, "main")
+    assert_eq(mf.blocks.len() as I64, 1)
+    return 0
+}
+
+@test
+func test_block_new() -> I32 {
+    let bb = block_new(0, "entry")
+    assert_eq(bb.name, "entry")
+    assert_eq(bb.instructions.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_fresh_value() -> I32 {
+    let b = builder_new()
+    let v1 = fresh_value(b)
+    let v2 = fresh_value(b)
+    assert_eq(v1, 0)
+    assert_eq(v2, 1)
+    return 0
+}
+
+@test
+func test_print_mir_type() -> I32 {
+    assert_eq(print_mir_type(MirType::Primitive(MirPrimitive::I32)), "i32")
+    assert_eq(print_mir_type(MirType::Primitive(MirPrimitive::I64)), "i64")
+    assert_eq(print_mir_type(MirType::Primitive(MirPrimitive::Bool)), "i1")
+    assert_eq(print_mir_type(MirType::Primitive(MirPrimitive::Unit)), "unit")
+    return 0
+}

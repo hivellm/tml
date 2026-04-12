@@ -1,0 +1,110 @@
+//! MIR pretty-printer — text format for debugging.
+//! Phase 15c — item 5.1.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use std::collections::list::List
+
+/// Print a MirModule in text format.
+pub func print_mir_module(mmod: MirModule) -> Str {
+    var out = "MIR Module: " + mmod.name + "\n"
+    let fc: I64 = mmod.functions.len() as I64
+    for i in 0 to fc {
+        out = out + print_mir_func(mmod.functions.get(i))
+    }
+    return out
+}
+
+/// Print a MirFunc.
+pub func print_mir_func(mf: MirFunc) -> Str {
+    var out = "  func " + mf.name + " -> " + print_mir_type(mf.return_type) + " {\n"
+    let bc: I64 = mf.blocks.len() as I64
+    for i in 0 to bc {
+        out = out + print_mir_block(mf.blocks.get(i))
+    }
+    out = out + "  }\n"
+    return out
+}
+
+/// Print a BasicBlock.
+pub func print_mir_block(bb: BasicBlock) -> Str {
+    var out = "    " + bb.name + ":\n"
+    let ic: I64 = bb.instructions.len() as I64
+    for i in 0 to ic {
+        let inst = bb.instructions.get(i)
+        out = out + "      %" + inst.result.to_string() + " = " + print_mir_inst(inst.inst) + "\n"
+    }
+    when bb.terminator {
+        Just(term) => { out = out + "      " + print_terminator(term) + "\n" },
+        Nothing => { out = out + "      <no terminator>\n" }
+    }
+    return out
+}
+
+/// Print a MIR instruction.
+pub func print_mir_inst(inst: MirInst) -> Str {
+    when inst {
+        Binary(b) => return "binop %" + b.left.to_string() + ", %" + b.right.to_string(),
+        Unary(u) => return "unaryop %" + u.operand.to_string(),
+        Load(l) => return "load %" + l.ptr.to_string(),
+        Store(s) => return "store %" + s.value.to_string() + " -> %" + s.ptr.to_string(),
+        Alloca(a) => return "alloca " + a.name,
+        Call(c) => return "call " + c.callee,
+        Constant(c) => {
+            when c.value {
+                ConstInt(v) => return "const " + v.to_string(),
+                ConstFloat(v) => return "const " + v.to_string(),
+                ConstBool(v) => return if v { "const true" } else { "const false" },
+                ConstStr(v) => return "const \"" + v + "\"",
+                ConstUnit => return "const unit"
+            }
+        },
+        _ => return "<inst>"
+    }
+}
+
+/// Print a terminator.
+pub func print_terminator(term: Terminator) -> Str {
+    when term {
+        Return(r) => {
+            when r.value {
+                Just(v) => return "ret %" + v.to_string(),
+                Nothing => return "ret void"
+            }
+        },
+        Branch(b) => return "br bb" + b.target.to_string(),
+        CondBranch(cb) => return "br %" + cb.condition.to_string() + " bb" + cb.true_target.to_string() + " bb" + cb.false_target.to_string(),
+        Switch(s) => return "switch %" + s.discriminant.to_string(),
+        Unreachable(_) => return "unreachable"
+    }
+}
+
+/// Print a MirType.
+pub func print_mir_type(ty: MirType) -> Str {
+    when ty {
+        Primitive(p) => {
+            when p {
+                Unit => return "unit",
+                Bool => return "i1",
+                I8 => return "i8",
+                I16 => return "i16",
+                I32 => return "i32",
+                I64 => return "i64",
+                I128 => return "i128",
+                F32 => return "f32",
+                F64 => return "f64",
+                _ => return "ptr"
+            }
+        },
+        Pointer(_) => return "ptr",
+        Struct(s) => return "%" + s.name,
+        _ => return "<type>"
+    }
+}

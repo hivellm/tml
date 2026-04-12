@@ -1,0 +1,135 @@
+//! MIR Instructions — 33 instruction kinds for SSA-form MIR.
+//! Mirrors the Instruction variant from `compiler/include/mir/mir.hpp`.
+//! Phase 15c — item 1.3.
+
+use compiler::source::SourceSpan
+use compiler::mir::types::MirType
+use compiler::mir::types::ValueId
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Core instructions
+// ============================================================================
+
+pub type BinaryInst { op: HirBinOp, left: ValueId, right: ValueId }
+pub type UnaryInst { op: HirUnaryOp, operand: ValueId }
+pub type LoadInst { ptr: ValueId }
+pub type StoreInst { ptr: ValueId, value: ValueId }
+pub type AllocaInst { alloc_type: MirType, name: Str }
+pub type GetElementPtrInst { base_ptr: ValueId, indices: List[I64], field_name: Str }
+pub type ExtractValueInst { aggregate: ValueId, index: I64 }
+pub type InsertValueInst { aggregate: ValueId, value: ValueId, index: I64 }
+pub type CallInst { callee: Str, args: List[ValueId], type_args: List[MirType] }
+pub type MethodCallInst { receiver: ValueId, method: Str, args: List[ValueId] }
+pub type CastInst { value: ValueId, target_type: MirType }
+pub type PhiInst { incoming: List[PhiEntry] }
+pub type PhiEntry { value: ValueId, block_id: I64 }
+pub type ConstantInst { value: MirConstant }
+pub type SelectInst { condition: ValueId, true_val: ValueId, false_val: ValueId }
+
+// ============================================================================
+// Composite initialization instructions
+// ============================================================================
+
+pub type StructInitInst { struct_name: Str, fields: List[ValueId] }
+pub type EnumInitInst { enum_name: Str, variant: Str, variant_index: I64, args: List[ValueId] }
+pub type TupleInitInst { elements: List[ValueId] }
+pub type ArrayInitInst { elements: List[ValueId], element_type: MirType }
+pub type ClosureInitInst { func_name: Str, captures: List[ValueId] }
+pub type AwaitInst { future: ValueId }
+
+// ============================================================================
+// Atomic instructions
+// ============================================================================
+
+@repr(U8)
+pub enum AtomicOrdering { Relaxed, Acquire, Release, AcqRel, SeqCst }
+@repr(U8)
+pub enum AtomicRMWOp { Add, Sub, And, Or, Xor, Min, Max, Exchange }
+
+pub type AtomicLoadInst { ptr: ValueId, ordering: AtomicOrdering }
+pub type AtomicStoreInst { ptr: ValueId, value: ValueId, ordering: AtomicOrdering }
+pub type AtomicRMWInst { op: AtomicRMWOp, ptr: ValueId, value: ValueId, ordering: AtomicOrdering }
+pub type AtomicCmpXchgInst { ptr: ValueId, expected: ValueId, desired: ValueId, success_ord: AtomicOrdering, failure_ord: AtomicOrdering }
+pub type FenceInst { ordering: AtomicOrdering }
+
+// ============================================================================
+// SIMD vector instructions
+// ============================================================================
+
+pub type VectorLoadInst { ptr: ValueId, width: I64 }
+pub type VectorStoreInst { ptr: ValueId, value: ValueId }
+pub type VectorBinaryInst { op: HirBinOp, left: ValueId, right: ValueId }
+pub type VectorReductionInst { op: HirBinOp, vector: ValueId }
+pub type VectorSplatInst { scalar: ValueId, width: I64 }
+pub type VectorExtractInst { vector: ValueId, index: I64 }
+pub type VectorInsertInst { vector: ValueId, scalar: ValueId, index: I64 }
+
+// ============================================================================
+// Dynamic dispatch
+// ============================================================================
+
+pub type MakeDynObjectInst { value: ValueId, vtable_name: Str }
+
+// ============================================================================
+// MIR constant values
+// ============================================================================
+
+pub enum MirConstant {
+    ConstInt(I64),
+    ConstFloat(F64),
+    ConstBool(Bool),
+    ConstStr(Str),
+    ConstUnit
+}
+
+// ============================================================================
+// MirInst — the unified instruction enum (33 variants)
+// ============================================================================
+
+pub enum MirInst {
+    Binary(BinaryInst),
+    Unary(UnaryInst),
+    Load(LoadInst),
+    Store(StoreInst),
+    Alloca(AllocaInst),
+    GEP(GetElementPtrInst),
+    ExtractValue(ExtractValueInst),
+    InsertValue(InsertValueInst),
+    Call(CallInst),
+    MethodCall(MethodCallInst),
+    Cast(CastInst),
+    Phi(PhiInst),
+    Constant(ConstantInst),
+    Select(SelectInst),
+    StructInit(StructInitInst),
+    EnumInit(EnumInitInst),
+    TupleInit(TupleInitInst),
+    ArrayInit(ArrayInitInst),
+    ClosureInit(ClosureInitInst),
+    Await(AwaitInst),
+    AtomicLoad(AtomicLoadInst),
+    AtomicStore(AtomicStoreInst),
+    AtomicRMW(AtomicRMWInst),
+    AtomicCmpXchg(AtomicCmpXchgInst),
+    Fence(FenceInst),
+    VectorLoad(VectorLoadInst),
+    VectorStore(VectorStoreInst),
+    VectorBinary(VectorBinaryInst),
+    VectorReduction(VectorReductionInst),
+    VectorSplat(VectorSplatInst),
+    VectorExtract(VectorExtractInst),
+    VectorInsert(VectorInsertInst),
+    MakeDynObject(MakeDynObjectInst)
+}
+
+/// An instruction with its result value ID and type.
+pub type InstructionData {
+    result: ValueId,
+    result_type: MirType,
+    inst: MirInst,
+    span: SourceSpan
+}

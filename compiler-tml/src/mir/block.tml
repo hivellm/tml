@@ -1,0 +1,51 @@
+//! MIR Basic Blocks and Terminators.
+//! Phase 15c — item 1.4.
+
+use compiler::mir::types::ValueId
+use compiler::mir::inst::InstructionData
+use std::collections::list::List
+
+// ============================================================================
+// Terminators — control flow at end of each basic block
+// ============================================================================
+
+pub type ReturnTerm { value: Maybe[ValueId] }
+pub type BranchTerm { target: I64 }
+pub type CondBranchTerm { condition: ValueId, true_target: I64, false_target: I64 }
+pub type SwitchArm { value: I64, target: I64 }
+pub type SwitchTerm { discriminant: ValueId, arms: List[SwitchArm], default_target: I64 }
+pub type UnreachableTerm {}
+
+pub enum Terminator {
+    Return(ReturnTerm),
+    Branch(BranchTerm),
+    CondBranch(CondBranchTerm),
+    Switch(SwitchTerm),
+    Unreachable(UnreachableTerm)
+}
+
+// ============================================================================
+// BasicBlock
+// ============================================================================
+
+/// A basic block: a labeled sequence of instructions ending with a terminator.
+pub type BasicBlock {
+    id: I64,
+    name: Str,
+    instructions: List[InstructionData],
+    terminator: Maybe[Terminator],
+    predecessors: List[I64],
+    successors: List[I64]
+}
+
+/// Create a new empty basic block.
+pub func block_new(id: I64, name: Str) -> BasicBlock {
+    return BasicBlock {
+        id: id,
+        name: name,
+        instructions: List[InstructionData]::new(16),
+        terminator: Nothing,
+        predecessors: List[I64]::new(2),
+        successors: List[I64]::new(2)
+    }
+}

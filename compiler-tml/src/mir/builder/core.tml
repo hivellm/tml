@@ -1,0 +1,309 @@
+//! MIR Builder core — transforms THIR to MIR basic blocks.
+//! Phase 15c — items 2.1–2.6.
+
+use compiler::source::SourceSpan
+use compiler::source::loc_new
+use compiler::source::span_new
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::BinaryInst
+use compiler::mir::inst::UnaryInst
+use compiler::mir::inst::LoadInst
+use compiler::mir::inst::StoreInst
+use compiler::mir::inst::AllocaInst
+use compiler::mir::inst::CallInst
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::StructInitInst
+use compiler::mir::inst::EnumInitInst
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::ReturnTerm
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
+use compiler::mir::block::block_new
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirFuncParam
+use compiler::mir::module::mir_func_new
+use compiler::mir::module::mir_module_new
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::hir::expr::HirLitValue
+use compiler::thir::expr::ThirExpr
+use compiler::thir::expr::thir_expr_type
+use compiler::thir::stmt::ThirStmt
+use compiler::thir::module::ThirModule
+use compiler::thir::module::ThirFunction
+use compiler::thir::module::ThirParam
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// MirBuilder state (item 2.1)
+// ============================================================================
+
+pub type MirBuilder {
+    next_value: I64,
+    next_block: I64,
+    current_block_id: I64,
+    current_func: Maybe[Str],
+    locals: HashMap[Str, ValueId],
+    errors: List[Str]
+}
+
+pub func builder_new() -> MirBuilder {
+    return MirBuilder {
+        next_value: 0,
+        next_block: 1,
+        current_block_id: 0,
+        current_func: Nothing,
+        locals: HashMap[Str, ValueId]::new(32),
+        errors: List[Str]::new(8)
+    }
+}
+
+/// Allocate a fresh SSA value ID (item 2.4).
+pub func fresh_value(b: MirBuilder) -> ValueId {
+    let v = b.next_value
+    b.next_value = v + 1
+    return v
+}
+
+/// Create a new basic block ID (item 2.5).
+pub func new_block_id(b: MirBuilder) -> I64 {
+    let id = b.next_block
+    b.next_block = id + 1
+    return id
+}
+
+// ============================================================================
+// Module building entry point (item 2.2)
+// ============================================================================
+
+/// Build MIR from a ThirModule.
+pub func build_mir(b: MirBuilder, tmod: ThirModule) -> MirModule {
+    let mmod = mir_module_new(tmod.name)
+
+    let fc: I64 = tmod.functions.len() as I64
+    for i in 0 to fc {
+        let tf = tmod.functions.get(i)
+        let mf = build_function(b, tf)
+        mmod.functions.push(mf)
+    }
+
+    return mmod
+}
+
+// ============================================================================
+// Function building (item 2.3)
+// ============================================================================
+
+/// Build a MIR function from a ThirFunction.
+pub func build_function(b: MirBuilder, tf: ThirFunction) -> MirFunc {
+    // Reset builder state for new function
+    b.next_value = 0
+    b.next_block = 1
+    b.current_block_id = 0
+    b.locals = HashMap[Str, ValueId]::new(16)
+    b.current_func = Just(tf.name)
+
+    let ret_type = MirType::Primitive(MirPrimitive::Unit)
+    let mf = mir_func_new(tf.mangled_name, ret_type)
+    mf.is_public = tf.is_public
+    mf.is_async = tf.is_async
+    mf.is_extern = tf.is_extern
+
+    // Lower parameters (item 2.6 — allocas for locals)
+    let pc: I64 = tf.params.len() as I64
+    for i in 0 to pc {
+        let tp = tf.params.get(i)
+        let vid = fresh_value(b)
+        mf.params.push(MirFuncParam {
+            name: tp.name,
+            param_type: MirType::Primitive(MirPrimitive::I64),
+            value_id: vid
+        })
+        b.locals.set(tp.name, vid)
+    }
+
+    // Lower body if present
+    when tf.body {
+        Just(body) => {
+            let result = lower_thir_to_mir(b, mf, body.get())
+            // Add return terminator to current block
+            let entry = mf.blocks.get(b.current_block_id)
+            entry.terminator = Just(Terminator::Return(ReturnTerm { value: Just(result) }))
+        },
+        Nothing => {}
+    }
+
+    return mf
+}
+
+// ============================================================================
+// Expression lowering to MIR (items 3.1–3.5 preview)
+// ============================================================================
+
+/// Lower a ThirExpr to MIR instructions, returning the result ValueId.
+pub func lower_thir_to_mir(b: MirBuilder, mf: MirFunc, expr: ThirExpr) -> ValueId {
+    let loc = loc_new("<mir>", 0, 0, 0, 0)
+    let span = span_new(loc, loc)
+
+    when expr {
+        Literal(lit) => {
+            let vid = fresh_value(b)
+            let mir_const: MirConstant = when lit.value {
+                LitInt(v) => MirConstant::ConstInt(v),
+                LitFloat(v) => MirConstant::ConstFloat(v),
+                LitBool(v) => MirConstant::ConstBool(v),
+                LitStr(v) => MirConstant::ConstStr(v),
+                _ => MirConstant::ConstUnit
+            }
+            emit_inst(mf, b, vid, MirType::Primitive(MirPrimitive::I64),
+                      MirInst::Constant(ConstantInst { value: mir_const }), span)
+            return vid
+        },
+        Var(v) => {
+            if b.locals.has(v.name) {
+                return b.locals.get(v.name)
+            }
+            return invalid_value()
+        },
+        Binary(bin) => {
+            let left = lower_thir_to_mir(b, mf, bin.left.get())
+            let right = lower_thir_to_mir(b, mf, bin.right.get())
+            let vid = fresh_value(b)
+            emit_inst(mf, b, vid, MirType::Primitive(MirPrimitive::I64),
+                      MirInst::Binary(BinaryInst { op: bin.op, left: left, right: right }), span)
+            return vid
+        },
+        Unary(un) => {
+            let operand = lower_thir_to_mir(b, mf, un.operand.get())
+            let vid = fresh_value(b)
+            emit_inst(mf, b, vid, MirType::Primitive(MirPrimitive::I64),
+                      MirInst::Unary(UnaryInst { op: un.op, operand: operand }), span)
+            return vid
+        },
+        Call(call) => {
+            let args = List[ValueId]::new(call.args.len() as I64)
+            let ac: I64 = call.args.len() as I64
+            for i in 0 to ac {
+                args.push(lower_thir_to_mir(b, mf, call.args.get(i).get()))
+            }
+            let vid = fresh_value(b)
+            emit_inst(mf, b, vid, MirType::Primitive(MirPrimitive::I64),
+                      MirInst::Call(CallInst {
+                          callee: call.func_name,
+                          args: args,
+                          type_args: List[MirType]::new(0)
+                      }), span)
+            return vid
+        },
+        Block(blk) => {
+            let sc: I64 = blk.stmts.len() as I64
+            for i in 0 to sc {
+                lower_thir_stmt(b, mf, blk.stmts.get(i).get())
+            }
+            when blk.expr {
+                Just(trail) => return lower_thir_to_mir(b, mf, trail.get()),
+                Nothing => return invalid_value()
+            }
+        },
+        Return(ret) => {
+            when ret.value {
+                Just(rv) => {
+                    let vid = lower_thir_to_mir(b, mf, rv.get())
+                    let entry = mf.blocks.get(b.current_block_id)
+                    entry.terminator = Just(Terminator::Return(ReturnTerm { value: Just(vid) }))
+                    return vid
+                },
+                Nothing => {
+                    let entry = mf.blocks.get(b.current_block_id)
+                    entry.terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+                    return invalid_value()
+                }
+            }
+        },
+        If(ife) => {
+            let cond = lower_thir_to_mir(b, mf, ife.condition.get())
+            let then_bb = new_block_id(b)
+            let else_bb = new_block_id(b)
+            let join_bb = new_block_id(b)
+
+            // Emit conditional branch
+            let cur = mf.blocks.get(b.current_block_id)
+            cur.terminator = Just(Terminator::CondBranch(CondBranchTerm {
+                condition: cond, true_target: then_bb, false_target: else_bb
+            }))
+
+            // Then block
+            mf.blocks.push(block_new(then_bb, "if.then"))
+            b.current_block_id = then_bb
+            let then_val = lower_thir_to_mir(b, mf, ife.then_branch.get())
+            let then_cur = mf.blocks.get(b.current_block_id)
+            then_cur.terminator = Just(Terminator::Branch(BranchTerm { target: join_bb }))
+
+            // Else block
+            mf.blocks.push(block_new(else_bb, "if.else"))
+            b.current_block_id = else_bb
+            when ife.else_branch {
+                Just(eb) => { let _ = lower_thir_to_mir(b, mf, eb.get()) },
+                Nothing => {}
+            }
+            let else_cur = mf.blocks.get(b.current_block_id)
+            else_cur.terminator = Just(Terminator::Branch(BranchTerm { target: join_bb }))
+
+            // Join block
+            mf.blocks.push(block_new(join_bb, "if.join"))
+            b.current_block_id = join_bb
+            return then_val
+        },
+        _ => return invalid_value()
+    }
+}
+
+/// Lower a ThirStmt to MIR instructions.
+func lower_thir_stmt(b: MirBuilder, mf: MirFunc, stmt: ThirStmt) {
+    let loc = loc_new("<mir>", 0, 0, 0, 0)
+    let span = span_new(loc, loc)
+
+    when stmt {
+        Let(ls) => {
+            when ls.init {
+                Just(init_expr) => {
+                    let vid = lower_thir_to_mir(b, mf, init_expr.get())
+                    // Extract name from pattern
+                    when ls.pattern.get() {
+                        Binding(bp) => b.locals.set(bp.name, vid),
+                        _ => {}
+                    }
+                },
+                Nothing => {}
+            }
+        },
+        Expr(es) => {
+            let _ = lower_thir_to_mir(b, mf, es.expr.get())
+        }
+    }
+}
+
+// ============================================================================
+// Instruction emission helper
+// ============================================================================
+
+/// Emit an instruction into the current basic block.
+func emit_inst(mf: MirFunc, b: MirBuilder, result: ValueId, result_type: MirType, inst: MirInst, span: SourceSpan) {
+    let block = mf.blocks.get(b.current_block_id)
+    block.instructions.push(InstructionData {
+        result: result,
+        result_type: result_type,
+        inst: inst,
+        span: span
+    })
+}

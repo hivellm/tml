@@ -1,0 +1,47 @@
+//! MIR Type system — simplified types for codegen.
+//! Mirrors `compiler/include/mir/mir.hpp` MirType.
+//! Phase 15c — item 1.2.
+
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+/// Primitive types at MIR level.
+@repr(U8)
+pub enum MirPrimitive {
+    Unit, Bool,
+    I8, I16, I32, I64, I128,
+    U8, U16, U32, U64, U128,
+    F32, F64,
+    Char, Str, RawPtr
+}
+
+pub type MirPointerType { pointee: Heap[MirType], is_mutable: I64 }
+pub type MirArrayType { element: Heap[MirType], size: I64 }
+pub type MirSliceType { element: Heap[MirType] }
+pub type MirTupleType { elements: List[Heap[MirType]] }
+pub type MirStructType { name: Str, fields: List[Heap[MirType]] }
+pub type MirEnumType { name: Str, variants: List[MirEnumVariantType] }
+pub type MirEnumVariantType { name: Str, payload_types: List[Heap[MirType]], discriminant: I64 }
+pub type MirFunctionType { params: List[Heap[MirType]], return_type: Heap[MirType] }
+pub type MirVectorType { element: Heap[MirType], width: I64 }
+pub type MirDynType { behavior_name: Str }
+
+/// MIR type — tagged union of all type variants.
+pub enum MirType {
+    Primitive(MirPrimitive),
+    Pointer(MirPointerType),
+    Array(MirArrayType),
+    Slice(MirSliceType),
+    Tuple(MirTupleType),
+    Struct(MirStructType),
+    Enum(MirEnumType),
+    Function(MirFunctionType),
+    Vector(MirVectorType),
+    Dyn(MirDynType)
+}
+
+/// Value ID — SSA register name (%0, %1, ...).
+pub type ValueId = I64
+
+/// Invalid value sentinel.
+pub func invalid_value() -> I64 { return -1 as I64 }
