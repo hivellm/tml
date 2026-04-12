@@ -547,10 +547,8 @@ impl[T, E] Outcome[T, E] {
     pub func transpose(this) -> Maybe[Outcome[T, E]] where T: Maybe[T] {
         when this {
             Ok(maybe) => {
-                when maybe {
-                    Just(val) => return Just(Ok(val)),
-                    Nothing => return Nothing
-                }
+                let Just(val) = maybe else { return Nothing }
+                return Just(Ok(val))
             },
             Err(err) => return Just(Err(err))
         }

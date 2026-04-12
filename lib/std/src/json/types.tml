@@ -805,18 +805,14 @@ impl Json {
 
     /// Get string at path directly
     pub func get_path_string(this, path: Str) -> Maybe[Str] {
-        when this.get_path(path) {
-            Just(json) => json.as_str(),
-            Nothing => Nothing,
-        }
+        let Just(json) = this.get_path(path) else { return Nothing }
+        return json.as_str()
     }
 
     /// Get integer at path directly
     pub func get_path_i64(this, path: Str) -> Maybe[I64] {
-        when this.get_path(path) {
-            Just(json) => json.as_i64(),
-            Nothing => Nothing,
-        }
+        let Just(json) = this.get_path(path) else { return Nothing }
+        return json.as_i64()
     }
 
     // ------------------------------------------------------------------------

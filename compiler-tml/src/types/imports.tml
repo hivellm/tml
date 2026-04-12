@@ -92,62 +92,58 @@ func resolve_single_import_impl(reg: ModuleRegistry, env: TypeEnv, mod_path: Str
     visited.push(mod_path)
 
     let maybe_mod: Maybe[Module] = registry_get(reg, mod_path)
-    when maybe_mod {
-        Nothing => {
-            // Module not found — try shorter path (module might include the symbol)
-            // e.g., "std::collections::list::List" → module "std::collections::list", symbol "List"
-        },
-        Just(m) => {
-            // Try function
-            let func_r: Maybe[FuncSig] = module_lookup_func(m, symbol)
-            when func_r {
-                Just(sig) => { env_register_function(env, local_name, sig); return },
-                Nothing => {}
-            }
+    // Module not found — try shorter path (module might include the symbol)
+    // e.g., "std::collections::list::List" → module "std::collections::list", symbol "List"
+    let Just(m) = maybe_mod else { return }
 
-            // Try struct
-            let struct_r: Maybe[StructDef] = module_lookup_struct(m, symbol)
-            when struct_r {
-                Just(def) => { env_register_struct(env, local_name, def); return },
-                Nothing => {}
-            }
+    // Try function
+    let func_r: Maybe[FuncSig] = module_lookup_func(m, symbol)
+    when func_r {
+        Just(sig) => { env_register_function(env, local_name, sig); return },
+        Nothing => {}
+    }
 
-            // Try enum
-            let enum_r: Maybe[EnumDef] = module_lookup_enum(m, symbol)
-            when enum_r {
-                Just(def) => { env_register_enum(env, local_name, def); return },
-                Nothing => {}
-            }
+    // Try struct
+    let struct_r: Maybe[StructDef] = module_lookup_struct(m, symbol)
+    when struct_r {
+        Just(def) => { env_register_struct(env, local_name, def); return },
+        Nothing => {}
+    }
 
-            // Try behavior
-            let beh_r: Maybe[BehaviorDef] = module_lookup_behavior(m, symbol)
-            when beh_r {
-                Just(def) => { env_register_behavior(env, local_name, def); return },
-                Nothing => {}
-            }
+    // Try enum
+    let enum_r: Maybe[EnumDef] = module_lookup_enum(m, symbol)
+    when enum_r {
+        Just(def) => { env_register_enum(env, local_name, def); return },
+        Nothing => {}
+    }
 
-            // Try type alias
-            let alias_r: Maybe[Type] = module_lookup_alias(m, symbol)
-            when alias_r {
-                Just(ty) => { env_register_type_alias(env, local_name, ty); return },
-                Nothing => {}
-            }
+    // Try behavior
+    let beh_r: Maybe[BehaviorDef] = module_lookup_behavior(m, symbol)
+    when beh_r {
+        Just(def) => { env_register_behavior(env, local_name, def); return },
+        Nothing => {}
+    }
 
-            // Try re-exports
-            let re_count: I64 = m.re_exports.len() as I64
-            for ri in 0 to re_count {
-                let re: ReExport = m.re_exports.get(ri)
-                if re.is_glob != 0 {
+    // Try type alias
+    let alias_r: Maybe[Type] = module_lookup_alias(m, symbol)
+    when alias_r {
+        Just(ty) => { env_register_type_alias(env, local_name, ty); return },
+        Nothing => {}
+    }
+
+    // Try re-exports
+    let re_count: I64 = m.re_exports.len() as I64
+    for ri in 0 to re_count {
+        let re: ReExport = m.re_exports.get(ri)
+        if re.is_glob != 0 {
+            resolve_single_import_impl(reg, env, re.source_path, symbol, local_name, visited)
+            return
+        } else {
+            let sc: I64 = re.symbols.len() as I64
+            for si in 0 to sc {
+                if re.symbols.get(si) == symbol {
                     resolve_single_import_impl(reg, env, re.source_path, symbol, local_name, visited)
                     return
-                } else {
-                    let sc: I64 = re.symbols.len() as I64
-                    for si in 0 to sc {
-                        if re.symbols.get(si) == symbol {
-                            resolve_single_import_impl(reg, env, re.source_path, symbol, local_name, visited)
-                            return
-                        }
-                    }
                 }
             }
         }
@@ -161,50 +157,47 @@ func resolve_single_import_impl(reg: ModuleRegistry, env: TypeEnv, mod_path: Str
 /// Resolve `use module::path::*` — register all public symbols from the module.
 pub func resolve_glob_import(reg: ModuleRegistry, env: TypeEnv, mod_path: Str) {
     let maybe_mod: Maybe[Module] = registry_get(reg, mod_path)
-    when maybe_mod {
-        Nothing => {},
-        Just(m) => {
-            // Register all functions
-            let fc: I64 = m.func_store.len() as I64
-            for fi in 0 to fc {
-                let sig: FuncSig = m.func_store.get(fi)
-                env_register_function(env, sig.name, sig)
-            }
+    let Just(m) = maybe_mod else { return }
 
-            // Register all structs
-            let sc: I64 = m.struct_store.len() as I64
-            for si in 0 to sc {
-                let def: StructDef = m.struct_store.get(si)
-                env_register_struct(env, def.name, def)
-            }
+    // Register all functions
+    let fc: I64 = m.func_store.len() as I64
+    for fi in 0 to fc {
+        let sig: FuncSig = m.func_store.get(fi)
+        env_register_function(env, sig.name, sig)
+    }
 
-            // Register all enums
-            let ec: I64 = m.enum_store.len() as I64
-            for ei in 0 to ec {
-                let def: EnumDef = m.enum_store.get(ei)
-                env_register_enum(env, def.name, def)
-            }
+    // Register all structs
+    let sc: I64 = m.struct_store.len() as I64
+    for si in 0 to sc {
+        let def: StructDef = m.struct_store.get(si)
+        env_register_struct(env, def.name, def)
+    }
 
-            // Register all behaviors
-            let bc: I64 = m.behavior_store.len() as I64
-            for bi in 0 to bc {
-                let def: BehaviorDef = m.behavior_store.get(bi)
-                env_register_behavior(env, def.name, def)
-            }
+    // Register all enums
+    let ec: I64 = m.enum_store.len() as I64
+    for ei in 0 to ec {
+        let def: EnumDef = m.enum_store.get(ei)
+        env_register_enum(env, def.name, def)
+    }
 
-            // Propagate re-exports
-            let rc: I64 = m.re_exports.len() as I64
-            for ri in 0 to rc {
-                let re: ReExport = m.re_exports.get(ri)
-                if re.is_glob != 0 {
-                    resolve_glob_import(reg, env, re.source_path)
-                } else {
-                    let rsc: I64 = re.symbols.len() as I64
-                    for rsi in 0 to rsc {
-                        let sym: Str = re.symbols.get(rsi)
-                        resolve_single_import(reg, env, re.source_path, sym, sym)
-                    }
-                }
+    // Register all behaviors
+    let bc: I64 = m.behavior_store.len() as I64
+    for bi in 0 to bc {
+        let def: BehaviorDef = m.behavior_store.get(bi)
+        env_register_behavior(env, def.name, def)
+    }
+
+    // Propagate re-exports
+    let rc: I64 = m.re_exports.len() as I64
+    for ri in 0 to rc {
+        let re: ReExport = m.re_exports.get(ri)
+        if re.is_glob != 0 {
+            resolve_glob_import(reg, env, re.source_path)
+        } else {
+            let rsc: I64 = re.symbols.len() as I64
+            for rsi in 0 to rsc {
+                let sym: Str = re.symbols.get(rsi)
+                resolve_single_import(reg, env, re.source_path, sym, sym)
             }
         }
     }
@@ -218,11 +211,7 @@ pub func resolve_glob_import(reg: ModuleRegistry, env: TypeEnv, mod_path: Str) {
 /// Called after loading a module to make Drop/Send/Sync etc. visible.
 pub func propagate_behavior_impls(reg: ModuleRegistry, env: TypeEnv, mod_path: Str) {
     let maybe_mod: Maybe[Module] = registry_get(reg, mod_path)
-    when maybe_mod {
-        Nothing => {},
-        Just(m) => {
-            // behavior_impls is HashMap[Str, List[Str]] — can't iterate directly
-            // The impls are registered during module loading via register.tml
-        }
-    }
+    let Just(_m) = maybe_mod else { return }
+    // behavior_impls is HashMap[Str, List[Str]] — can't iterate directly
+    // The impls are registered during module loading via register.tml
 }

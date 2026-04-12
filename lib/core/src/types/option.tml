@@ -480,15 +480,11 @@ impl[T] Maybe[T] {
     /// assert(Nothing.filter(is_even) == Nothing)
     /// ```
     pub func filter(this, predicate: func(ref T) -> Bool) -> Maybe[T] {
-        when this {
-            Just(val) => {
-                if predicate(ref val) {
-                    return Just(val)
-                }
-                return Nothing
-            },
-            Nothing => return Nothing
+        let Just(val) = this else { return Nothing }
+        if predicate(ref val) {
+            return Just(val)
         }
+        return Nothing
     }
 }
 
@@ -538,14 +534,10 @@ impl[T] Maybe[T] {
     /// [`Just(Ok(x))`] will be mapped to [`Ok(Just(x))`].
     /// [`Just(Err(e))`] will be mapped to [`Err(e)`].
     pub func transpose[E](this) -> Outcome[Maybe[T], E] where T: Outcome[T, E] {
-        when this {
-            Just(result) => {
-                when result {
-                    Ok(val) => return Ok(Just(val)),
-                    Err(e) => return Err(e)
-                }
-            },
-            Nothing => return Ok(Nothing)
+        let Just(result) = this else { return Ok(Nothing) }
+        when result {
+            Ok(val) => return Ok(Just(val)),
+            Err(e) => return Err(e)
         }
     }
 }
@@ -609,15 +601,9 @@ impl[T] Maybe[T] {
     /// assert(x.zip(z) == Nothing)
     /// ```
     pub func zip[U](this, other: Maybe[U]) -> Maybe[(T, U)] {
-        when this {
-            Just(a) => {
-                when other {
-                    Just(b) => return Just((a, b)),
-                    Nothing => return Nothing
-                }
-            },
-            Nothing => return Nothing
-        }
+        let Just(a) = this else { return Nothing }
+        let Just(b) = other else { return Nothing }
+        return Just((a, b))
     }
 
     /// Zips `self` and `other` with function `f`.
@@ -633,15 +619,9 @@ impl[T] Maybe[T] {
     /// assert(x.zip_with(y, do(a, b) a + b) == Just(13))
     /// ```
     pub func zip_with[U, V](this, other: Maybe[U], f: func(T, U) -> V) -> Maybe[V] {
-        when this {
-            Just(a) => {
-                when other {
-                    Just(b) => return Just(f(a, b)),
-                    Nothing => return Nothing
-                }
-            },
-            Nothing => return Nothing
-        }
+        let Just(a) = this else { return Nothing }
+        let Just(b) = other else { return Nothing }
+        return Just(f(a, b))
     }
 }
 

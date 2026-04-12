@@ -200,28 +200,20 @@ impl[T, E] Poll[Outcome[T, E]] {
     ///
     /// This is useful when chaining operations on poll results that may fail.
     pub func map_ok[U, F](this, f: F) -> Poll[Outcome[U, E]] where F: FnOnce[(T,), Output = U] {
-        when this {
-            Ready(result) => {
-                when result {
-                    Ok(t) => return Poll::Ready(Ok(f.call_once((t,)))),
-                    Err(e) => return Poll::Ready(Err(e))
-                }
-            },
-            Pending => return Poll::Pending
+        let Ready(result) = this else { return Poll::Pending }
+        when result {
+            Ok(t) => return Poll::Ready(Ok(f.call_once((t,)))),
+            Err(e) => return Poll::Ready(Err(e))
         }
     }
 
     /// Maps a `Poll[Outcome[T, E]]` to `Poll[Outcome[T, F]]` by applying
     /// a function to the `Err` value.
     pub func map_err[F2, Func](this, f: Func) -> Poll[Outcome[T, F2]] where Func: FnOnce[(E,), Output = F2] {
-        when this {
-            Ready(result) => {
-                when result {
-                    Ok(t) => return Poll::Ready(Ok(t)),
-                    Err(e) => return Poll::Ready(Err(f.call_once((e,))))
-                }
-            },
-            Pending => return Poll::Pending
+        let Ready(result) = this else { return Poll::Pending }
+        when result {
+            Ok(t) => return Poll::Ready(Ok(t)),
+            Err(e) => return Poll::Ready(Err(f.call_once((e,))))
         }
     }
 }

@@ -315,13 +315,11 @@ func type_expr_to_type(te: TypeExpr) -> Type {
             let name: Str = type_path_to_str(nt.path)
             // Check if this is a known primitive
             let prim: Maybe[Type] = lookup_primitive(name)
-            when prim {
-                Just(t) => return t,
-                Nothing => {
-                    let args: List[Heap[Type]] = convert_type_expr_list(nt.args)
-                    return make_named(name, "", args)
-                }
+            let Just(t) = prim else {
+                let args: List[Heap[Type]] = convert_type_expr_list(nt.args)
+                return make_named(name, "", args)
             }
+            return t
         },
         Tuple(tt) => {
             let elems: List[Heap[Type]] = convert_type_expr_list(tt.elements)

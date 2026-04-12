@@ -91,12 +91,8 @@ pub func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
 /// Returns `Nothing` if the maybe is `Nothing`, or if the predicate returns false.
 pub func filter[T](m: Maybe[T], predicate: func(T) -> Bool) -> Maybe[T] {
     when m {
-        Just(val) => {
-            if predicate(val) {
-                return Just(val)
-            }
-            return Nothing
-        },
+        Just(val) if predicate(val) => return Just(val),
+        Just(_) => return Nothing,
         Nothing => return Nothing,
     }
     return Nothing

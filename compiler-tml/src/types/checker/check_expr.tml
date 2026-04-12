@@ -256,23 +256,17 @@ func infer_field(ctx: InferCtx, env: TypeEnv, fld: FieldExpr) -> Type {
         Named(nt) => {
             // Look up struct definition
             let struct_r = env_lookup_struct(env, nt.name)
-            when struct_r {
-                Just(def) => {
-                    // Find field by name
-                    let fc: I64 = def.fields.len() as I64
-                    for i in 0 to fc {
-                        let f: StructFieldDef = def.fields.get(i)
-                        if f.name == fld.field {
-                            return f.ty.get()
-                        }
-                    }
-                    ctx.errors.push(unknown_field(nt.name, fld.field, fld.span))
-                    return fresh_var(ctx)
-                },
-                Nothing => {
-                    return fresh_var(ctx)
+            let Just(def) = struct_r else { return fresh_var(ctx) }
+            // Find field by name
+            let fc: I64 = def.fields.len() as I64
+            for i in 0 to fc {
+                let f: StructFieldDef = def.fields.get(i)
+                if f.name == fld.field {
+                    return f.ty.get()
                 }
             }
+            ctx.errors.push(unknown_field(nt.name, fld.field, fld.span))
+            return fresh_var(ctx)
         },
         _ => return fresh_var(ctx)
     }
@@ -329,18 +323,13 @@ func infer_if(ctx: InferCtx, env: TypeEnv, ife: IfExpr) -> Type {
     let then_ty: Type = infer_expr(ctx, env, ife.then_branch.get())
 
     // Infer else branch if present
-    when ife.else_branch {
-        Just(else_expr) => {
-            let else_ty: Type = infer_expr(ctx, env, else_expr.get())
-            // If neither branch is Never, unify them
-            if not is_never(then_ty) and not is_never(else_ty) {
-                unify(ctx, then_ty, else_ty, ife.span)
-            }
-            return resolve(ctx, then_ty)
-        },
-        Nothing => return make_unit()
+    let Just(else_expr) = ife.else_branch else { return make_unit() }
+    let else_ty: Type = infer_expr(ctx, env, else_expr.get())
+    // If neither branch is Never, unify them
+    if not is_never(then_ty) and not is_never(else_ty) {
+        unify(ctx, then_ty, else_ty, ife.span)
     }
-    return make_unit()
+    return resolve(ctx, then_ty)
 }
 
 // ============================================================================

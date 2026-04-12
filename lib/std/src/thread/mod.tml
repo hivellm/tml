@@ -587,14 +587,8 @@ impl[T] JoinHandle[T] {
             return Err(JoinError::OsError(status))
         }
 
-        when this.result {
-            Just(value) => {
-                return Ok(value)
-            },
-            Nothing => {
-                return Err(JoinError::NoResult)
-            }
-        }
+        let Just(value) = this.result else { return Err(JoinError::NoResult) }
+        return Ok(value)
     }
 
     /// Checks if the associated thread has finished running.
