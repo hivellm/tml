@@ -73,7 +73,17 @@ check_module "compiler-tml/src/hir/lower_expr.tml"
 check_module "compiler-tml/src/hir/monomorph.tml"
 check_module "compiler-tml/src/hir/printer.tml"
 
+# THIR (phase 15b)
+check_module "compiler-tml/src/thir/common.tml"
+check_module "compiler-tml/src/thir/pattern.tml"
+check_module "compiler-tml/src/thir/stmt.tml"
+check_module "compiler-tml/src/thir/expr.tml"
+check_module "compiler-tml/src/thir/module.tml"
+check_module "compiler-tml/src/thir/lower.tml"
+check_module "compiler-tml/src/thir/exhaustiveness.tml"
+
 # Test files
+check_module "compiler-tml/tests/thir/thir_types.test.tml"
 check_module "compiler-tml/tests/hir/hir_types.test.tml"
 check_module "compiler-tml/tests/types/unify_basic.test.tml"
 check_module "compiler-tml/tests/types/unify_primitives.test.tml"

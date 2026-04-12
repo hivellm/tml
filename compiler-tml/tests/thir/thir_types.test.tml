@@ -1,0 +1,57 @@
+//! Self-hosting validation for THIR modules.
+//! Phase 15b — items 4.1–4.3, tail 1.2.
+
+use test
+use compiler::thir::expr::ThirExpr
+use compiler::thir::expr::ThirCoercionExpr
+use compiler::thir::expr::ThirLiteralExpr
+use compiler::thir::expr::ThirCallExpr
+use compiler::thir::expr::ThirMethodCallExpr
+use compiler::thir::expr::ResolvedMethod
+use compiler::thir::expr::thir_expr_type
+use compiler::thir::stmt::ThirStmt
+use compiler::thir::pattern::ThirPattern
+use compiler::thir::pattern::thir_pattern_type
+use compiler::thir::module::ThirModule
+use compiler::thir::module::ThirFunction
+use compiler::thir::module::thir_module_new
+use compiler::thir::lower::ThirLower
+use compiler::thir::lower::thir_lower_new
+use compiler::thir::lower::lower_hir_to_thir
+use compiler::thir::lower::maybe_insert_coercion
+use compiler::thir::exhaustiveness::ExhaustivenessResult
+use compiler::thir::exhaustiveness::check_when_exhaustiveness
+use compiler::thir::exhaustiveness::format_exhaustiveness_error
+use compiler::thir::exhaustiveness::format_unreachable_warnings
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_str
+
+@test
+func test_thir_modules_typecheck() -> I32 {
+    assert(true)
+    return 0
+}
+
+@test
+func test_thir_module_new() -> I32 {
+    let tmod = thir_module_new("test", "test.tml")
+    assert_eq(tmod.name, "test")
+    assert_eq(tmod.functions.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_exhaustiveness_format() -> I32 {
+    let missing = std::collections::list::List[Str]::new(2)
+    missing.push("Just")
+    missing.push("Nothing")
+    let unreachable = std::collections::list::List[I64]::new(0)
+    let result = ExhaustivenessResult {
+        is_exhaustive: 0,
+        missing_patterns: missing,
+        unreachable_arms: unreachable
+    }
+    let msg = format_exhaustiveness_error(result)
+    assert(msg.len() > 0)
+    return 0
+}

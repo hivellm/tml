@@ -1,0 +1,16 @@
+//! THIR Statement types.
+//! Phase 15b — item 1.2 (part of THIR data types).
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::thir::expr::ThirExpr
+use compiler::thir::pattern::ThirPattern
+use core::alloc::heap::Heap
+
+pub type ThirLetStmt { id: I64, pattern: Heap[ThirPattern], declared_type: Type, init: Maybe[Heap[ThirExpr]], is_mutable: I64, span: SourceSpan }
+pub type ThirExprStmt { id: I64, expr: Heap[ThirExpr], span: SourceSpan }
+
+pub enum ThirStmt {
+    Let(ThirLetStmt),
+    Expr(ThirExprStmt)
+}

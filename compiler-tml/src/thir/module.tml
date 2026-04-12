@@ -1,0 +1,50 @@
+//! THIR Module types — mirrors ThirModule from C++ thir_module.hpp.
+//! Phase 15b — item 1.3.
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use compiler::thir::expr::ThirExpr
+use compiler::thir::pattern::ThirPattern
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+pub type ThirParam { name: Str, param_type: Type, is_mutable: I64, span: SourceSpan }
+
+pub type ThirFunction {
+    id: I64,
+    name: Str,
+    mangled_name: Str,
+    params: List[ThirParam],
+    return_type: Type,
+    body: Maybe[Heap[ThirExpr]],
+    is_public: I64,
+    is_async: I64,
+    is_extern: I64,
+    span: SourceSpan
+}
+
+pub type ThirField { name: Str, field_type: Type, index: I64 }
+pub type ThirStruct { id: I64, name: Str, mangled_name: Str, fields: List[ThirField], is_public: I64, span: SourceSpan }
+pub type ThirVariant { name: Str, payload_types: List[Type], discriminant: I64 }
+pub type ThirEnum { id: I64, name: Str, mangled_name: Str, variants: List[ThirVariant], is_public: I64, span: SourceSpan }
+pub type ThirImpl { id: I64, type_name: Str, behavior_name: Str, methods: List[ThirFunction], span: SourceSpan }
+
+pub type ThirModule {
+    name: Str,
+    source_path: Str,
+    structs: List[ThirStruct],
+    enums: List[ThirEnum],
+    functions: List[ThirFunction],
+    impls: List[ThirImpl]
+}
+
+pub func thir_module_new(name: Str, source_path: Str) -> ThirModule {
+    return ThirModule {
+        name: name,
+        source_path: source_path,
+        structs: List[ThirStruct]::new(16),
+        enums: List[ThirEnum]::new(8),
+        functions: List[ThirFunction]::new(32),
+        impls: List[ThirImpl]::new(16)
+    }
+}

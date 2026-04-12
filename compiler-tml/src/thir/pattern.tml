@@ -1,0 +1,38 @@
+//! THIR Pattern types.
+//! Phase 15b — item 1.2 (part of THIR data types).
+
+use compiler::source::SourceSpan
+use compiler::types::ty::Type
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+pub type ThirWildcardPattern { id: I64, resolved_type: Type, span: SourceSpan }
+pub type ThirBindingPattern { id: I64, name: Str, is_mutable: I64, resolved_type: Type, span: SourceSpan }
+pub type ThirLiteralPattern { id: I64, value: Str, resolved_type: Type, span: SourceSpan }
+pub type ThirTuplePattern { id: I64, elements: List[Heap[ThirPattern]], resolved_type: Type, span: SourceSpan }
+pub type ThirPatternField { name: Str, pattern: Heap[ThirPattern] }
+pub type ThirStructPattern { id: I64, struct_name: Str, fields: List[ThirPatternField], has_rest: I64, resolved_type: Type, span: SourceSpan }
+pub type ThirEnumPattern { id: I64, enum_name: Str, variant_name: Str, variant_index: I64, args: List[Heap[ThirPattern]], resolved_type: Type, span: SourceSpan }
+pub type ThirOrPattern { id: I64, alternatives: List[Heap[ThirPattern]], resolved_type: Type, span: SourceSpan }
+
+pub enum ThirPattern {
+    Wildcard(ThirWildcardPattern),
+    Binding(ThirBindingPattern),
+    Literal(ThirLiteralPattern),
+    Tuple(ThirTuplePattern),
+    Struct(ThirStructPattern),
+    Enum(ThirEnumPattern),
+    Or(ThirOrPattern)
+}
+
+pub func thir_pattern_type(p: ThirPattern) -> Type {
+    when p {
+        Wildcard(x) => return x.resolved_type,
+        Binding(x) => return x.resolved_type,
+        Literal(x) => return x.resolved_type,
+        Tuple(x) => return x.resolved_type,
+        Struct(x) => return x.resolved_type,
+        Enum(x) => return x.resolved_type,
+        Or(x) => return x.resolved_type
+    }
+}
