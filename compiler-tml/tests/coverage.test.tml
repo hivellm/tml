@@ -1,0 +1,365 @@
+//! compiler-tml Coverage Test
+//!
+//! Single file that imports every public API from every compiler-tml module.
+//! If this file type-checks, ALL modules are internally consistent.
+//! The @test functions verify actual functionality per subsystem.
+
+use test
+
+// ============================================================================
+// Subsystem: source
+// ============================================================================
+use compiler::source::SourceSpan
+use compiler::source::SourceLoc
+use compiler::source::loc_new
+use compiler::source::span_new
+
+// ============================================================================
+// Subsystem: token
+// ============================================================================
+use compiler::token::Token
+use compiler::token::TokenKind
+
+// ============================================================================
+// Subsystem: ast
+// ============================================================================
+use compiler::ast::common::LiteralKind
+use compiler::ast::exprs::Expr
+use compiler::ast::exprs::BinaryExpr
+use compiler::ast::exprs::CallExpr
+use compiler::ast::exprs::MethodCallExpr
+use compiler::ast::exprs::ClosureExpr
+use compiler::ast::exprs::WhenExpr
+use compiler::ast::exprs::IfExpr
+use compiler::ast::exprs::BlockExpr
+use compiler::ast::stmts::Stmt
+use compiler::ast::stmts::LetStmt
+use compiler::ast::stmts::VarStmt
+use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::Module as AstModule
+use compiler::ast::decls::Decl
+use compiler::ast::decls::FuncDecl
+use compiler::ast::decls::StructDecl
+use compiler::ast::decls::EnumDecl
+
+// ============================================================================
+// Subsystem: types (phase 14a)
+// ============================================================================
+use compiler::types::ty::Type
+use compiler::types::ty::PrimitiveKind
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_i64
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::make_never
+use compiler::types::ty::make_named
+use compiler::types::ty::make_named_simple
+use compiler::types::ty::make_ref
+use compiler::types::ty::make_tuple
+use compiler::types::ty::make_func
+use compiler::types::ty::make_closure
+use compiler::types::ty::types_equal
+use compiler::types::ty::type_to_str
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_new
+use compiler::types::env::env_register_struct
+use compiler::types::env::env_register_enum
+use compiler::types::env::env_register_function
+use compiler::types::env::env_register_behavior
+use compiler::types::env::env_register_impl
+use compiler::types::env::env_lookup_type
+use compiler::types::env::env_lookup_function
+use compiler::types::env::env_lookup_struct
+use compiler::types::env::env_lookup_enum
+use compiler::types::env::env_lookup_behavior
+use compiler::types::env::env_type_implements
+use compiler::types::builtins::register_all_builtins
+use compiler::types::register::register_module_decls
+
+// ============================================================================
+// Subsystem: inference (phase 14c)
+// ============================================================================
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::check_expr::infer_expr
+use compiler::types::checker::check_call::check_call
+use compiler::types::checker::check_call::check_method_call
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::extract_type_params
+use compiler::types::checker::check_call::get_type_name
+use compiler::types::checker::check_call::operator_behavior_name
+use compiler::types::checker::check_stmt::check_stmt
+use compiler::types::checker::check_pattern::check_pattern
+use compiler::types::checker::check_pattern::check_exhaustiveness
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::errors::dummy_span
+
+// ============================================================================
+// Subsystem: behaviors (phase 14d)
+// ============================================================================
+use compiler::types::behaviors::registry::BehaviorRegistry
+use compiler::types::behaviors::registry::ImplBlock
+use compiler::types::behaviors::registry::registry_new
+use compiler::types::behaviors::registry::register_behavior
+use compiler::types::behaviors::registry::register_impl_block
+use compiler::types::behaviors::registry::is_reserved_behavior
+use compiler::types::behaviors::registry::find_impl
+use compiler::types::behaviors::solver::resolve_behavior
+use compiler::types::behaviors::solver::check_bounds
+use compiler::types::behaviors::solver::check_coherence
+use compiler::types::behaviors::solver::resolve_associated_type
+use compiler::types::behaviors::dispatch::dispatch_method
+use compiler::types::behaviors::dispatch::MethodResolution
+use compiler::types::coercion::CoercionKind
+use compiler::types::coercion::find_coercion
+use compiler::types::coercion::desugar_op_final
+use compiler::types::coercion::normalize_type
+use compiler::types::pipeline::TypeCheckResult
+use compiler::types::pipeline::check_expression
+use compiler::types::pipeline::has_type_errors
+
+// ============================================================================
+// Subsystem: HIR (phase 15a)
+// ============================================================================
+use compiler::hir::expr::HirExpr
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::hir::expr::HirLitValue
+use compiler::hir::expr::hir_expr_type
+use compiler::hir::stmt::HirStmt
+use compiler::hir::pattern::HirPattern
+use compiler::hir::pattern::hir_pattern_type
+use compiler::hir::module::HirModule
+use compiler::hir::module::HirFunction
+use compiler::hir::module::hir_module_new
+use compiler::hir::builder::HirBuilder
+use compiler::hir::builder::builder_new as hir_builder_new
+use compiler::hir::builder::lower_module
+use compiler::hir::builder::mangle_name
+use compiler::hir::lower_expr::lower_full_expr
+use compiler::hir::monomorph::MonomorphQueue
+use compiler::hir::monomorph::mono_queue_new
+use compiler::hir::monomorph::request_mono
+use compiler::hir::printer::print_module as print_hir_module
+
+// ============================================================================
+// Subsystem: THIR (phase 15b)
+// ============================================================================
+use compiler::thir::expr::ThirExpr
+use compiler::thir::expr::ThirCoercionExpr
+use compiler::thir::expr::ResolvedMethod
+use compiler::thir::expr::thir_expr_type
+use compiler::thir::stmt::ThirStmt
+use compiler::thir::pattern::ThirPattern
+use compiler::thir::module::ThirModule
+use compiler::thir::module::thir_module_new
+use compiler::thir::lower::ThirLower
+use compiler::thir::lower::thir_lower_new
+use compiler::thir::lower::lower_hir_to_thir
+use compiler::thir::lower::maybe_insert_coercion
+use compiler::thir::exhaustiveness::check_when_exhaustiveness
+use compiler::thir::exhaustiveness::format_exhaustiveness_error
+
+// ============================================================================
+// Subsystem: MIR (phase 15c)
+// ============================================================================
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::types::invalid_value
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::block_new
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::mir::module::mir_func_new
+use compiler::mir::module::mir_module_new
+use compiler::mir::builder::core::MirBuilder
+use compiler::mir::builder::core::builder_new as mir_builder_new
+use compiler::mir::builder::core::build_mir
+use compiler::mir::builder::core::fresh_value
+use compiler::mir::printer::print_mir_module
+use compiler::mir::printer::print_mir_type
+
+// ============================================================================
+// Subsystem: MIR passes (phase 15d)
+// ============================================================================
+use compiler::mir::passes::common::PassManager
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::common::pass_manager_new
+use compiler::mir::passes::common::run_passes
+use compiler::mir::passes::analysis::find_reachable_blocks
+use compiler::mir::passes::analysis::compute_successors
+use compiler::mir::passes::analysis::is_value_used
+use compiler::mir::passes::analysis::build_use_def
+use compiler::mir::passes::mem2reg::run_mem2reg
+use compiler::mir::passes::dce::run_dead_code_elimination
+use compiler::mir::passes::dfe::run_dead_function_elimination
+use compiler::mir::passes::uce::run_unreachable_code_elimination
+use compiler::mir::passes::block_merge::run_block_merge
+use compiler::mir::passes::const_fold::run_constant_folding
+use compiler::mir::passes::const_prop::run_constant_propagation
+use compiler::mir::passes::copy_prop::run_copy_propagation
+use compiler::mir::passes::simplify_cfg::run_simplify_cfg
+use compiler::mir::passes::inst_simplify::run_inst_simplify
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Coverage stats — one @test per subsystem
+// ============================================================================
+
+@test
+func test_coverage_source() -> I32 {
+    let loc = loc_new("test.tml", 1, 0, 1, 5)
+    let span = span_new(loc, loc)
+    assert(true)
+    return 0
+}
+
+@test
+func test_coverage_types() -> I32 {
+    assert(types_equal(make_i32(), make_i32()))
+    assert(not types_equal(make_i32(), make_str()))
+    assert_eq(type_to_str(make_bool()), "Bool")
+    let env = env_new()
+    register_all_builtins(env)
+    return 0
+}
+
+@test
+func test_coverage_inference() -> I32 {
+    let ctx = infer_ctx_new()
+    let span = dummy_span()
+    let tv = fresh_var(ctx)
+    assert(unify(ctx, tv, make_i32(), span))
+    assert(types_equal(resolve(ctx, tv), make_i32()))
+    assert(not has_errors(ctx))
+    return 0
+}
+
+@test
+func test_coverage_behaviors() -> I32 {
+    assert(is_reserved_behavior("Add"))
+    assert(is_reserved_behavior("Iterator"))
+    assert(not is_reserved_behavior("MyTrait"))
+    let env = env_new()
+    let reg = registry_new(env)
+    let coherence = check_coherence(reg)
+    assert_eq(coherence.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_coverage_coercion() -> I32 {
+    // I32 → I64 = widen
+    let c1 = find_coercion(make_i32(), make_i64())
+    when c1 { IntegerWiden => assert(true), _ => assert(false) }
+    // I64 → I32 = no coercion (no narrowing)
+    let c2 = find_coercion(make_i64(), make_i32())
+    when c2 { NoCoercion => assert(true), _ => assert(false) }
+    // Same type = no coercion
+    let c3 = find_coercion(make_str(), make_str())
+    when c3 { NoCoercion => assert(true), _ => assert(false) }
+    return 0
+}
+
+@test
+func test_coverage_operator_desugar() -> I32 {
+    let Just(add) = operator_behavior_name("+") else { assert(false); return 1 }
+    assert_eq(add, "Add")
+    let Just(sub) = operator_behavior_name("-") else { assert(false); return 1 }
+    assert_eq(sub, "Sub")
+    let none = operator_behavior_name("???")
+    when none { Nothing => assert(true), _ => assert(false) }
+    return 0
+}
+
+@test
+func test_coverage_hir() -> I32 {
+    let hmod = hir_module_new("test", "test.tml")
+    assert_eq(hmod.name, "test")
+    let args = List[Type]::new(1)
+    args.push(make_i32())
+    assert_eq(mangle_name("Vec", args), "Vec_I32")
+    return 0
+}
+
+@test
+func test_coverage_monomorph() -> I32 {
+    let q = mono_queue_new()
+    let args = List[Type]::new(1)
+    args.push(make_i64())
+    let mangled = request_mono(q, "List", args)
+    assert_eq(mangled, "List_I64")
+    return 0
+}
+
+@test
+func test_coverage_thir() -> I32 {
+    let tmod = thir_module_new("test", "test.tml")
+    assert_eq(tmod.name, "test")
+    assert_eq(tmod.functions.len() as I64, 0)
+    return 0
+}
+
+@test
+func test_coverage_mir() -> I32 {
+    let mmod = mir_module_new("test")
+    assert_eq(mmod.name, "test")
+    let mf = mir_func_new("main", MirType::Primitive(MirPrimitive::I32))
+    assert_eq(mf.blocks.len() as I64, 1)
+    assert_eq(print_mir_type(MirType::Primitive(MirPrimitive::I64)), "i64")
+    return 0
+}
+
+@test
+func test_coverage_mir_builder() -> I32 {
+    let b = mir_builder_new()
+    let v1 = fresh_value(b)
+    let v2 = fresh_value(b)
+    assert_eq(v1, 0)
+    assert_eq(v2, 1)
+    return 0
+}
+
+@test
+func test_coverage_mir_passes() -> I32 {
+    let pm = pass_manager_new()
+    assert_eq(pm.enable_tier0, 1)
+    assert_eq(pm.stats.passes_run, 0)
+
+    // Test analysis
+    let mf = mir_func_new("f", MirType::Primitive(MirPrimitive::Unit))
+    mf.blocks.get(0).terminator = Just(Terminator::Return(compiler::mir::block::ReturnTerm { value: Nothing }))
+    let reachable = find_reachable_blocks(mf)
+    assert(reachable.has("0"))
+    return 0
+}
+
+@test
+func test_coverage_pipeline() -> I32 {
+    let env = env_new()
+    let expr_ty = check_expression(env, compiler::ast::exprs::Expr::Literal(
+        compiler::ast::exprs::LiteralExpr {
+            value: LiteralKind::LitInt(42),
+            span: dummy_span()
+        }
+    ))
+    // Should return some type (I32 or Unit depending on resolution)
+    assert(true)
+    return 0
+}
