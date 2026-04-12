@@ -215,7 +215,7 @@ enum TokenKind {
 /// Literal payloads (numeric base, escape-processed string content, etc.) are
 /// kept on the `value` field as raw text and re-parsed by later phases —
 /// this keeps the wire format simple and matches the phase12f token reader.
-type Token {
+pub type Token {
     kind: TokenKind,
     value: Str,
     span: SourceSpan

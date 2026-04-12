@@ -36,6 +36,7 @@ use compiler::parser::common::p_expect_ident
 use compiler::parser::common::tok_kind_eq
 use compiler::parser::common::parse_err
 use compiler::parser::common::is_decl_start
+use compiler::parser::parse_decl::parse_decl
 use compiler::parser::parse_type::parse_type
 use compiler::parser::parse_pattern::parse_pattern
 use compiler::parser::parse_expr::parse_expr
@@ -60,7 +61,7 @@ pub func parse_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, ParseF
 
     // Declaration statement (func, type, behavior, impl, const, use, pub, @, ...)
     if is_decl_start(tok.kind) {
-        let decl_r: ParsedDecl = compiler::parser::parse_decl::parse_decl(tokens, p)!
+        let decl_r: ParsedDecl = parse_decl(tokens, p)!
         let span: SourceSpan = p_peek(tokens, pos).span
         let s: Stmt = Stmt::Decl(decl_r.decl)
         return Ok(ParsedStmt { stmt: Heap::new(s), pos: decl_r.pos })
@@ -130,13 +131,13 @@ pub func parse_let_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
 
     // Require at least one of type annotation or initializer
     when ty {
-        Nothing => {
+        Just(_) => {},
+        _ => {
             when init {
-                Nothing => return Err(parse_err("Type annotation or initializer required for 'let'", p_peek(tokens, p).span)),
-                _ => {}
+                Just(_) => {},
+                _ => return Err(parse_err("Type annotation or initializer required for 'let'", p_peek(tokens, p).span)),
             }
-        },
-        _ => {}
+        }
     }
 
     // let-else: `let Pattern = expr else { block }`
@@ -204,13 +205,13 @@ pub func parse_var_stmt(tokens: List[Token], pos: I64) -> Outcome[ParsedStmt, Pa
 
     // Require at least one of type annotation or initializer
     when ty {
-        Nothing => {
+        Just(_) => {},
+        _ => {
             when init {
-                Nothing => return Err(parse_err("Type annotation or initializer required for 'var'", p_peek(tokens, p).span)),
-                _ => {}
+                Just(_) => {},
+                _ => return Err(parse_err("Type annotation or initializer required for 'var'", p_peek(tokens, p).span)),
             }
-        },
-        _ => {}
+        }
     }
 
     let end_span: SourceSpan = p_prev(tokens, p).span

@@ -30,10 +30,7 @@ use compiler::types::env::env_lookup_behavior
 use compiler::types::env::BehaviorDef
 use compiler::types::behaviors::registry::BehaviorRegistry
 use compiler::types::behaviors::solver::resolve_associated_type
-use compiler::types::checker::check_call::substitute_type
-use compiler::types::checker::check_call::get_type_name
-use compiler::types::checker::check_call::operator_behavior_name
-use compiler::types::checker::check_call::operator_method_name
+use compiler::types::checker::check_call::apply_type_subs
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
@@ -186,6 +183,43 @@ func check_primitive_coercion(from: PrimitiveKind, target_kind: PrimitiveKind) -
 // Operator desugaring finalization (item 4.3)
 // ============================================================================
 
+/// Map a TML binary operator symbol to its behavior name.
+func operator_behavior_name(op: Str) -> Maybe[Str] {
+    if op == "+" { return Just("Add") }
+    if op == "-" { return Just("Sub") }
+    if op == "*" { return Just("Mul") }
+    if op == "/" { return Just("Div") }
+    if op == "%" { return Just("Rem") }
+    if op == "==" { return Just("PartialEq") }
+    if op == "!=" { return Just("PartialEq") }
+    if op == "<" { return Just("PartialOrd") }
+    if op == ">" { return Just("PartialOrd") }
+    if op == "<=" { return Just("PartialOrd") }
+    if op == ">=" { return Just("PartialOrd") }
+    return Nothing
+}
+
+/// Map a TML binary operator symbol to its method name.
+func operator_method_name(op: Str) -> Str {
+    if op == "+" { return "add" }
+    if op == "-" { return "sub" }
+    if op == "*" { return "mul" }
+    if op == "/" { return "div" }
+    if op == "%" { return "rem" }
+    if op == "==" { return "eq" }
+    if op == "!=" { return "ne" }
+    if op == "<" { return "lt" }
+    if op == ">" { return "gt" }
+    if op == "<=" { return "le" }
+    if op == ">=" { return "ge" }
+    return "unknown"
+}
+
+/// Get a display name for a type (delegates to type_to_str).
+func get_type_name(ty: Type) -> Str {
+    return type_to_str(ty)
+}
+
 /// A desugared operator: the method name and the behavior it comes from.
 pub type DesugaredOp {
     behavior_name: Str,
@@ -224,7 +258,7 @@ pub func desugar_op_final(
             // Substitute Self with the concrete type
             let subs = HashMap[Str, Type]::new(2)
             subs.set("Self", left_ty)
-            let ret = substitute_type(msig.return_type.get(), subs)
+            let ret = apply_type_subs(msig.return_type.get(), subs)
             return Just(DesugaredOp {
                 behavior_name: bhv_name,
                 method_name: method,

@@ -686,6 +686,32 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
         }
     }
 
+    // Handle N-segment fully-qualified paths (3+ segments).
+    // e.g., compiler::parser::parse_stmt::parse_stmt(tokens, pos)
+    // Module path = all segments except the last, joined with "::".
+    // Function name = last segment.
+    // Modules are loaded on demand via load_native_module() so that FQN
+    // cross-module calls work even without an explicit `use` import, which
+    // is the only way to break mutual parse_expr ↔ parse_stmt cycles in TML.
+    if (segments.size() >= 3) {
+        const std::string& func_name = segments.back();
+        std::string module_path;
+        for (size_t i = 0; i + 1 < segments.size(); ++i) {
+            if (i > 0)
+                module_path += "::";
+            module_path += segments[i];
+        }
+        // Load the module on demand if not yet registered (silent to suppress warnings).
+        env_.load_native_module(module_path, /*silent=*/true);
+        auto module = env_.get_module(module_path);
+        if (module) {
+            auto func_it = module->functions.find(func_name);
+            if (func_it != module->functions.end()) {
+                return make_func(func_it->second.params, func_it->second.return_type);
+            }
+        }
+    }
+
     return make_unit();
 }
 
