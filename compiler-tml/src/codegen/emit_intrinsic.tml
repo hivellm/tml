@@ -148,6 +148,85 @@ pub func emit_puts(result: I64, str_ptr: I64) -> Str {
 }
 
 // ============================================================================
+// Print/println intrinsics (phase 33b items 1.1-1.2)
+// ============================================================================
+
+/// Emit `println(s)` — prints string with trailing newline.
+/// For string literal: `puts(ptr)`. For dynamic string: `printf("%s\n", ptr)`.
+pub func emit_println(result: I64, str_val: I64, is_literal: I64) -> Str {
+    if is_literal > 0 {
+        return emit_puts(result, str_val)
+    }
+    // Dynamic string — use printf with format
+    return "  " + reg(result) + " = call i32 (ptr, ...) @printf(ptr @.str_fmt_newline, ptr " + reg(str_val) + ")\n"
+}
+
+/// Emit `print(s)` — prints string without trailing newline.
+pub func emit_print(result: I64, str_val: I64) -> Str {
+    return "  " + reg(result) + " = call i32 (ptr, ...) @printf(ptr @.str_fmt_no_newline, ptr " + reg(str_val) + ")\n"
+}
+
+/// Emit format string constants needed by print/println.
+pub func emit_print_format_consts() -> Str {
+    var s: Str = ""
+    s = s + "@.str_fmt_newline = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
+    s = s + "@.str_fmt_no_newline = private unnamed_addr constant [3 x i8] c\"%s\\00\"\n"
+    return s
+}
+
+// ============================================================================
+// Primitive to_string helpers (phase 33b item 1.4)
+// ============================================================================
+
+/// Emit `I64.to_string(val)` — snprintf into 64-byte alloca buffer.
+pub func emit_i64_to_string(result: I64, val: I64) -> Str {
+    var s: Str = ""
+    s = s + "  %ts_buf_" + result.to_string() + " = alloca [64 x i8], align 1\n"
+    s = s + "  %ts_bp_" + result.to_string() + " = getelementptr [64 x i8], ptr %ts_buf_" + result.to_string() + ", i32 0, i32 0\n"
+    s = s + "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %ts_bp_" + result.to_string() + ", i64 64, ptr @.fmt_i64, i64 " + reg(val) + ")\n"
+    s = s + "  " + reg(result) + " = bitcast ptr %ts_bp_" + result.to_string() + " to ptr\n"
+    return s
+}
+
+/// Emit `I32.to_string(val)`.
+pub func emit_i32_to_string(result: I64, val: I64) -> Str {
+    var s: Str = ""
+    s = s + "  %ts_buf_" + result.to_string() + " = alloca [64 x i8], align 1\n"
+    s = s + "  %ts_bp_" + result.to_string() + " = getelementptr [64 x i8], ptr %ts_buf_" + result.to_string() + ", i32 0, i32 0\n"
+    s = s + "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %ts_bp_" + result.to_string() + ", i64 64, ptr @.fmt_i32, i32 " + reg(val) + ")\n"
+    s = s + "  " + reg(result) + " = bitcast ptr %ts_bp_" + result.to_string() + " to ptr\n"
+    return s
+}
+
+/// Emit `F64.to_string(val)`.
+pub func emit_f64_to_string(result: I64, val: I64) -> Str {
+    var s: Str = ""
+    s = s + "  %ts_buf_" + result.to_string() + " = alloca [64 x i8], align 1\n"
+    s = s + "  %ts_bp_" + result.to_string() + " = getelementptr [64 x i8], ptr %ts_buf_" + result.to_string() + ", i32 0, i32 0\n"
+    s = s + "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %ts_bp_" + result.to_string() + ", i64 64, ptr @.fmt_f64, double " + reg(val) + ")\n"
+    s = s + "  " + reg(result) + " = bitcast ptr %ts_bp_" + result.to_string() + " to ptr\n"
+    return s
+}
+
+/// Emit `Bool.to_string(val)`.
+pub func emit_bool_to_string(result: I64, val: I64) -> Str {
+    var s: Str = ""
+    s = s + "  " + reg(result) + " = select i1 " + reg(val) + ", ptr @.str_true, ptr @.str_false\n"
+    return s
+}
+
+/// Emit format constants for to_string helpers.
+pub func emit_to_string_format_consts() -> Str {
+    var s: Str = ""
+    s = s + "@.fmt_i64 = private unnamed_addr constant [5 x i8] c\"%lld\\00\"\n"
+    s = s + "@.fmt_i32 = private unnamed_addr constant [3 x i8] c\"%d\\00\"\n"
+    s = s + "@.fmt_f64 = private unnamed_addr constant [3 x i8] c\"%g\\00\"\n"
+    s = s + "@.str_true = private unnamed_addr constant [5 x i8] c\"true\\00\"\n"
+    s = s + "@.str_false = private unnamed_addr constant [6 x i8] c\"false\\00\"\n"
+    return s
+}
+
+// ============================================================================
 // Assert intrinsic
 // ============================================================================
 
@@ -192,5 +271,6 @@ pub func emit_intrinsic_decls() -> Str {
     s = s + "declare i32 @printf(ptr, ...)\n"
     s = s + "declare i32 @puts(ptr)\n"
     s = s + "declare void @tml_assert_fail(ptr, ptr, i64)\n"
+    s = s + "declare i32 @snprintf(ptr, i64, ptr, ...)\n"
     return s
 }

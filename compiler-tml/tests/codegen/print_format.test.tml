@@ -1,0 +1,71 @@
+//! Tests for print/println intrinsic codegen and to_string helpers.
+//! Phase 33b.
+
+use test::{assert, assert_eq}
+use compiler::codegen::emit_intrinsic::*
+use std::collections::list::List
+
+@test func test_println_literal() {
+    let ir: Str = emit_println(10, 5, 1)
+    assert(ir.contains("@puts"))
+}
+
+@test func test_println_dynamic() {
+    let ir: Str = emit_println(10, 5, 0)
+    assert(ir.contains("@printf"))
+    assert(ir.contains("@.str_fmt_newline"))
+}
+
+@test func test_print() {
+    let ir: Str = emit_print(10, 5)
+    assert(ir.contains("@printf"))
+    assert(ir.contains("@.str_fmt_no_newline"))
+}
+
+@test func test_i64_to_string() {
+    let ir: Str = emit_i64_to_string(20, 10)
+    assert(ir.contains("snprintf"))
+    assert(ir.contains("@.fmt_i64"))
+    assert(ir.contains("alloca [64 x i8]"))
+}
+
+@test func test_i32_to_string() {
+    let ir: Str = emit_i32_to_string(25, 15)
+    assert(ir.contains("snprintf"))
+    assert(ir.contains("@.fmt_i32"))
+}
+
+@test func test_f64_to_string() {
+    let ir: Str = emit_f64_to_string(30, 20)
+    assert(ir.contains("snprintf"))
+    assert(ir.contains("@.fmt_f64"))
+}
+
+@test func test_bool_to_string() {
+    let ir: Str = emit_bool_to_string(35, 25)
+    assert(ir.contains("select i1"))
+    assert(ir.contains("@.str_true"))
+    assert(ir.contains("@.str_false"))
+}
+
+@test func test_print_format_consts() {
+    let ir: Str = emit_print_format_consts()
+    assert(ir.contains("@.str_fmt_newline"))
+    assert(ir.contains("@.str_fmt_no_newline"))
+}
+
+@test func test_to_string_format_consts() {
+    let ir: Str = emit_to_string_format_consts()
+    assert(ir.contains("@.fmt_i64"))
+    assert(ir.contains("@.fmt_i32"))
+    assert(ir.contains("@.fmt_f64"))
+    assert(ir.contains("@.str_true"))
+    assert(ir.contains("@.str_false"))
+}
+
+@test func test_intrinsic_decls_include_snprintf() {
+    let ir: Str = emit_intrinsic_decls()
+    assert(ir.contains("@snprintf"))
+    assert(ir.contains("@printf"))
+    assert(ir.contains("@puts"))
+}
