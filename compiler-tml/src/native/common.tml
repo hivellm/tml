@@ -109,6 +109,13 @@ pub use compiler::native::coff_emit::make_rel32_reloc
 // --- Object file writer ---
 pub use compiler::native::obj_writer::write_coff
 
+// --- Generic instantiation ---
+pub use compiler::native::generic_inst::GenericCallRegistry
+pub use compiler::native::generic_inst::registry_new
+pub use compiler::native::generic_inst::registry_record
+pub use compiler::native::generic_inst::mangle_generic_name
+pub use compiler::native::generic_inst::substitute_mir_type
+
 // --- Pipeline orchestrator ---
 pub use compiler::native::pipeline::compile_module_native
 pub use compiler::native::pipeline::NativeCompileResult

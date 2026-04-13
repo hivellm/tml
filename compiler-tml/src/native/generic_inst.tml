@@ -1,0 +1,256 @@
+//! Generic instantiation for the native backend.
+//!
+//! When a call to `List[I64]::push` is encountered, the generic function
+//! body must be emitted with `T = I64` substituted throughout. This module
+//! handles:
+//! 1. Collecting which instantiations are needed (GenericCallRegistry)
+//! 2. Type substitution in MIR types and instructions
+//! 3. Name mangling for unique symbols
+//! 4. Deduplication (emit each instantiation exactly once)
+//!
+//! Phase 30a — items 1.1–1.5.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::mir::types::MirEnumType
+use compiler::mir::types::MirPointerType
+use compiler::mir::types::MirArrayType
+use compiler::mir::types::MirTupleType
+use compiler::mir::types::MirFunctionType
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::CallInst
+use compiler::mir::block::BasicBlock
+use compiler::mir::module::MirFunc
+use compiler::mir::module::MirFuncParam
+use compiler::mir::module::mir_func_new
+use compiler::native::machir::MachFunc
+use compiler::native::mir_lower::lower_function
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Generic Call Registry (item 1.1)
+// ============================================================================
+
+/// Tracks which generic instantiations have been seen and emitted.
+pub type GenericCallRegistry {
+    /// Mangled name → 1 if already emitted.
+    emitted: HashMap[Str, I64],
+    /// List of (mangled_name, base_func_name, type_args) tuples to instantiate.
+    pending: List[GenericCallSite]
+}
+
+/// A pending generic call site to instantiate.
+pub type GenericCallSite {
+    mangled_name: Str,
+    base_func_name: Str,
+    type_args: List[MirType]
+}
+
+/// Create a new empty registry.
+pub func registry_new() -> GenericCallRegistry {
+    return GenericCallRegistry {
+        emitted: HashMap[Str, I64]::new(64),
+        pending: List[GenericCallSite]::new(16)
+    }
+}
+
+/// Record a generic call site. Returns the mangled name to use.
+/// If already seen, returns the existing name without re-queuing.
+pub func registry_record(reg: GenericCallRegistry, base_name: Str, type_args: List[MirType]) -> Str {
+    let mangled: Str = mangle_generic_name(base_name, type_args)
+    if reg.emitted.has(mangled) { return mangled }
+    reg.emitted.set(mangled, 0)  // 0 = pending, 1 = emitted
+    reg.pending.push(GenericCallSite {
+        mangled_name: mangled,
+        base_func_name: base_name,
+        type_args: type_args
+    })
+    return mangled
+}
+
+/// Mark an instantiation as emitted.
+pub func registry_mark_emitted(reg: GenericCallRegistry, mangled: Str) {
+    reg.emitted.set(mangled, 1)
+}
+
+/// Check if there are pending instantiations.
+pub func registry_has_pending(reg: GenericCallRegistry) -> I64 {
+    let n: I64 = reg.pending.len() as I64
+    for i in 0 to n {
+        let site: GenericCallSite = reg.pending.get(i)
+        if reg.emitted.has(site.mangled_name) {
+            if reg.emitted.get(site.mangled_name) == 0 { return 1 }
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// Name Mangling (item 1.4)
+// ============================================================================
+
+/// Mangle a generic function name with its type arguments.
+/// `List::push` + [I64] → `List_I64__push`
+/// `HashMap::get` + [Str, I64] → `HashMap_Str_I64__get`
+pub func mangle_generic_name(base_name: Str, type_args: List[MirType]) -> Str {
+    // Split base_name on "::" to get type part and method part
+    let parts: List[Str] = split_on_colons(base_name)
+    let pc: I64 = parts.len() as I64
+
+    var type_part: Str = base_name
+    var method_part: Str = ""
+    if pc >= 2 {
+        type_part = parts.get(0)
+        method_part = parts.get(pc - 1)
+    }
+
+    // Build mangled name: TypePart_Arg0_Arg1__MethodPart
+    var result: Str = type_part
+    let ac: I64 = type_args.len() as I64
+    for i in 0 to ac {
+        result = result + "_" + mir_type_mangle(type_args.get(i))
+    }
+    if method_part != "" {
+        result = result + "__" + method_part
+    }
+    return result
+}
+
+/// Mangle a MirType to a string for use in symbol names.
+func mir_type_mangle(ty: MirType) -> Str {
+    when ty {
+        Primitive(p) => {
+            when p {
+                Unit => return "Unit",
+                Bool => return "Bool",
+                I8 => return "I8",
+                I16 => return "I16",
+                I32 => return "I32",
+                I64 => return "I64",
+                I128 => return "I128",
+                U8 => return "U8",
+                U16 => return "U16",
+                U32 => return "U32",
+                U64 => return "U64",
+                U128 => return "U128",
+                F32 => return "F32",
+                F64 => return "F64",
+                Char => return "Char",
+                Str => return "Str",
+                RawPtr => return "Ptr"
+            }
+        },
+        Struct(s) => return s.name,
+        Enum(e) => return e.name,
+        Pointer(_) => return "Ptr",
+        Array(a) => return "Arr_" + mir_type_mangle(a.element.get()),
+        Tuple(t) => {
+            var s: Str = "Tup"
+            let n: I64 = t.elements.len() as I64
+            for i in 0 to n {
+                s = s + "_" + mir_type_mangle(t.elements.get(i).get())
+            }
+            return s
+        },
+        _ => return "Unknown"
+    }
+}
+
+// ============================================================================
+// Type Substitution (item 1.2)
+// ============================================================================
+
+/// Substitute type parameters in a MirType.
+/// `type_params` maps parameter names to their positions.
+/// `type_args` provides concrete types for each position.
+pub func substitute_mir_type(ty: MirType, param_names: List[Str], type_args: List[MirType]) -> MirType {
+    when ty {
+        Struct(s) => {
+            // Check if struct name matches a type param
+            let idx: I64 = find_param(s.name, param_names)
+            if idx >= 0 { return type_args.get(idx) }
+            // Recursively substitute fields
+            let new_fields = List[Heap[MirType]]::new(s.fields.len() as I64)
+            let fc: I64 = s.fields.len() as I64
+            for i in 0 to fc {
+                new_fields.push(Heap::new(substitute_mir_type(s.fields.get(i).get(), param_names, type_args)))
+            }
+            return MirType::Struct(MirStructType { name: s.name, fields: new_fields })
+        },
+        Pointer(p) => {
+            return MirType::Pointer(MirPointerType {
+                pointee: Heap::new(substitute_mir_type(p.pointee.get(), param_names, type_args)),
+                is_mutable: p.is_mutable
+            })
+        },
+        Array(a) => {
+            return MirType::Array(MirArrayType {
+                element: Heap::new(substitute_mir_type(a.element.get(), param_names, type_args)),
+                size: a.size
+            })
+        },
+        Tuple(t) => {
+            let new_elems = List[Heap[MirType]]::new(t.elements.len() as I64)
+            let ec: I64 = t.elements.len() as I64
+            for i in 0 to ec {
+                new_elems.push(Heap::new(substitute_mir_type(t.elements.get(i).get(), param_names, type_args)))
+            }
+            return MirType::Tuple(MirTupleType { elements: new_elems })
+        },
+        Function(f) => {
+            let new_params = List[Heap[MirType]]::new(f.params.len() as I64)
+            let pc: I64 = f.params.len() as I64
+            for i in 0 to pc {
+                new_params.push(Heap::new(substitute_mir_type(f.params.get(i).get(), param_names, type_args)))
+            }
+            let new_ret: MirType = substitute_mir_type(f.return_type.get(), param_names, type_args)
+            return MirType::Function(MirFunctionType { params: new_params, return_type: Heap::new(new_ret) })
+        },
+        _ => return ty
+    }
+}
+
+/// Find a type parameter name in the param list. Returns index or -1.
+func find_param(name: Str, params: List[Str]) -> I64 {
+    let n: I64 = params.len() as I64
+    for i in 0 to n {
+        if params.get(i) == name { return i }
+    }
+    return -1 as I64
+}
+
+// ============================================================================
+// String helpers
+// ============================================================================
+
+/// Split a string on "::" separators.
+func split_on_colons(s: Str) -> List[Str] {
+    let result = List[Str]::new(4)
+    let s_ptr: I64 = s as I64
+    let n: I64 = s.len() as I64
+    var start: I64 = 0
+
+    var i: I64 = 0
+    loop (i < n - 1) {
+        let b1: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        let b2: I64 = lowlevel { ptr_read[I8]((s_ptr + i + 1) as *I8) } as I64
+        if b1 == 58 and b2 == 58 {  // ':' ':'
+            if i > start {
+                result.push(s.slice(start, i))
+            }
+            start = i + 2
+            i = i + 2
+        } else {
+            i = i + 1
+        }
+    }
+    if start < n {
+        result.push(s.slice(start, n))
+    }
+    return result
+}

@@ -1,0 +1,76 @@
+//! Tests for generic instantiation: registry, name mangling, type substitution.
+//! Phase 30a.
+
+use test::assert
+use test::assert_eq
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::MirStructType
+use compiler::native::generic_inst::GenericCallRegistry
+use compiler::native::generic_inst::GenericCallSite
+use compiler::native::generic_inst::registry_new
+use compiler::native::generic_inst::registry_record
+use compiler::native::generic_inst::registry_mark_emitted
+use compiler::native::generic_inst::registry_has_pending
+use compiler::native::generic_inst::mangle_generic_name
+use compiler::native::generic_inst::substitute_mir_type
+use compiler::native::generic_inst::mir_type_mangle
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+@test func test_generics() {
+    // 1. Name mangling
+    let args1 = List[MirType]::new(1)
+    args1.push(MirType::Primitive(MirPrimitive::I64))
+    assert_eq(mangle_generic_name("List::push", args1), "List_I64__push")
+
+    let args2 = List[MirType]::new(2)
+    args2.push(MirType::Primitive(MirPrimitive::Str))
+    args2.push(MirType::Primitive(MirPrimitive::I64))
+    assert_eq(mangle_generic_name("HashMap::get", args2), "HashMap_Str_I64__get")
+
+    // 2. Type mangling
+    assert_eq(mir_type_mangle(MirType::Primitive(MirPrimitive::I64)), "I64")
+    assert_eq(mir_type_mangle(MirType::Primitive(MirPrimitive::Str)), "Str")
+    assert_eq(mir_type_mangle(MirType::Primitive(MirPrimitive::Bool)), "Bool")
+
+    // 3. Registry
+    let reg: GenericCallRegistry = registry_new()
+    let name1: Str = registry_record(reg, "List::push", args1)
+    assert_eq(name1, "List_I64__push")
+    assert_eq(registry_has_pending(reg) as I32, 1)
+
+    // Same instantiation again — should not add duplicate
+    let name2: Str = registry_record(reg, "List::push", args1)
+    assert_eq(name2, "List_I64__push")
+
+    // Mark emitted
+    registry_mark_emitted(reg, "List_I64__push")
+    assert_eq(registry_has_pending(reg) as I32, 0)
+
+    // 4. Type substitution
+    let param_names = List[Str]::new(1)
+    param_names.push("T")
+    let sub_args = List[MirType]::new(1)
+    sub_args.push(MirType::Primitive(MirPrimitive::I32))
+
+    // Substitute "T" → I32 in a struct named "T"
+    let fields = List[Heap[MirType]]::new(0)
+    let input_ty = MirType::Struct(MirStructType { name: "T", fields: fields })
+    let result_ty: MirType = substitute_mir_type(input_ty, param_names, sub_args)
+    when result_ty {
+        Primitive(p) => {
+            when p { I32 => assert(true), _ => assert(false) }
+        },
+        _ => assert(false)
+    }
+
+    // Non-matching name stays unchanged
+    let fields2 = List[Heap[MirType]]::new(0)
+    let input2 = MirType::Struct(MirStructType { name: "Point", fields: fields2 })
+    let result2: MirType = substitute_mir_type(input2, param_names, sub_args)
+    when result2 {
+        Struct(s) => assert_eq(s.name, "Point"),
+        _ => assert(false)
+    }
+}
