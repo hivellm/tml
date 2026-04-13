@@ -244,6 +244,26 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
     // 6. Register for later use
     struct_types_[mangled] = type_name;
     struct_fields_[mangled] = fields;
+
+    // 7. Generate @derive(Duplicate) for instantiated generic if the original struct has it.
+    // K001 fix: generic instantiations previously had no duplicate() method, causing
+    // "Unknown method: duplicate" crashes when List[LargeStruct].push() copies the value.
+    bool has_dup = false;
+    for (const auto& deco : decl.decorators) {
+        if (deco.name == "derive" || deco.name == "auto") {
+            for (const auto& arg : deco.args) {
+                if (arg->is<parser::IdentExpr>()) {
+                    const auto& name = arg->as<parser::IdentExpr>().name;
+                    if (name == "Duplicate" || name == "Copy" || name == "duplicate") {
+                        has_dup = true;
+                    }
+                }
+            }
+        }
+    }
+    if (has_dup) {
+        gen_derive_duplicate_instantiation(mangled);
+    }
 }
 
 // Request instantiation of a generic struct - returns mangled name

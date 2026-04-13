@@ -993,6 +993,7 @@ private:
 
     // @derive(Duplicate, Copy) support
     void gen_derive_duplicate_struct(const parser::StructDecl& s);
+    void gen_derive_duplicate_instantiation(const std::string& mangled_name);
     void gen_derive_duplicate_enum(const parser::EnumDecl& e);
 
     // @derive(Hash) support

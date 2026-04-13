@@ -190,6 +190,87 @@ void LLVMIRGen::gen_derive_duplicate_struct(const parser::StructDecl& s) {
 }
 
 // ============================================================================
+// Duplicate Generation for Generic Struct Instantiations (K001 fix)
+// ============================================================================
+
+/// Generate duplicate() for an instantiated generic struct.
+/// Called from gen_struct_instantiation() after the type and fields are registered.
+/// Unlike gen_derive_duplicate_struct(), this does NOT check @derive decorators
+/// (the original generic struct has the decorator; the instantiation inherits it).
+void LLVMIRGen::gen_derive_duplicate_instantiation(const std::string& mangled_name) {
+    std::string llvm_type = "%struct." + mangled_name;
+    std::string func_name = "@" + mangle_impl_method(mangled_name, "duplicate");
+
+    // Skip if already generated
+    if (generated_functions_.count(func_name) > 0) {
+        return;
+    }
+    generated_functions_.insert(func_name);
+
+    // Get field info (must be registered by gen_struct_instantiation)
+    auto fields_it = struct_fields_.find(mangled_name);
+    if (fields_it == struct_fields_.end()) {
+        return;
+    }
+    const auto& fields = fields_it->second;
+
+    type_defs_buffer_ << "; @derive(Duplicate) for " << mangled_name
+                      << " (generic instantiation)\n";
+    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "(ptr %this) {\n";
+    type_defs_buffer_ << "entry:\n";
+
+    if (fields.empty()) {
+        type_defs_buffer_ << "  ret " << llvm_type << " zeroinitializer\n";
+        type_defs_buffer_ << "}\n\n";
+        return;
+    }
+
+    type_defs_buffer_ << "  %ret = alloca " << llvm_type << "\n";
+
+    int temp_counter = 0;
+    auto fresh_temp = [&temp_counter]() -> std::string {
+        return "%t" + std::to_string(temp_counter++);
+    };
+
+    for (const auto& field : fields) {
+        std::string src_ptr = fresh_temp();
+        std::string dst_ptr = fresh_temp();
+
+        type_defs_buffer_ << "  " << src_ptr << " = getelementptr inbounds " << llvm_type
+                          << ", ptr %this, i32 0, i32 " << field.index << "\n";
+        type_defs_buffer_ << "  " << dst_ptr << " = getelementptr inbounds " << llvm_type
+                          << ", ptr %ret, i32 0, i32 " << field.index << "\n";
+
+        if (is_primitive_copyable(field.llvm_type)) {
+            std::string val = fresh_temp();
+            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr " << src_ptr
+                              << "\n";
+            type_defs_buffer_ << "  store " << field.llvm_type << " " << val << ", ptr " << dst_ptr
+                              << "\n";
+        } else {
+            std::string field_type_name;
+            if (field.llvm_type.substr(0, 8) == "%struct.") {
+                field_type_name = field.llvm_type.substr(8);
+            } else {
+                field_type_name = field.llvm_type;
+            }
+
+            std::string field_dup_func = "@" + mangle_impl_method(field_type_name, "duplicate");
+            std::string dup_result = fresh_temp();
+            type_defs_buffer_ << "  " << dup_result << " = call " << field.llvm_type << " "
+                              << field_dup_func << "(ptr " << src_ptr << ")\n";
+            type_defs_buffer_ << "  store " << field.llvm_type << " " << dup_result << ", ptr "
+                              << dst_ptr << "\n";
+        }
+    }
+
+    std::string result = fresh_temp();
+    type_defs_buffer_ << "  " << result << " = load " << llvm_type << ", ptr %ret\n";
+    type_defs_buffer_ << "  ret " << llvm_type << " " << result << "\n";
+    type_defs_buffer_ << "}\n\n";
+}
+
+// ============================================================================
 // Duplicate Generation for Enums
 // ============================================================================
 
