@@ -7,6 +7,7 @@
 //!
 //! Phase 14c — items 6.1, 6.2 (diagnostic-level differential testing).
 
+use test
 
 // ============================================================================
 // Self-checking: verify inference modules are internally consistent
@@ -22,16 +23,43 @@
 // in the inference engine. If any module has a type error, this
 // file won't type-check.
 
+use compiler::types::infer::unify::InferCtx
+use compiler::types::infer::unify::infer_ctx_new
+use compiler::types::infer::unify::fresh_var
+use compiler::types::infer::unify::unify
+use compiler::types::infer::unify::resolve
+use compiler::types::infer::unify::has_errors
+use compiler::types::infer::unify::error_count
+use compiler::types::checker::check_expr::infer_expr
+use compiler::types::checker::check_expr::bind_pattern_simple
+use compiler::types::checker::check_call::check_call
+use compiler::types::checker::check_call::check_method_call
+use compiler::types::checker::check_call::substitute_type
+use compiler::types::checker::check_call::extract_type_params
+use compiler::types::checker::check_call::desugar_operator
+use compiler::types::checker::check_call::get_type_name
+use compiler::types::checker::check_call::operator_behavior_name
+use compiler::types::checker::check_call::operator_method_name
+use compiler::types::checker::check_stmt::check_stmt
+use compiler::types::checker::check_stmt::bind_pattern_full
+use compiler::types::checker::check_pattern::check_pattern
+use compiler::types::checker::check_pattern::check_exhaustiveness
+use compiler::types::checker::errors::TypeError
+use compiler::types::checker::errors::type_error
+use compiler::types::checker::errors::type_mismatch
+use compiler::types::checker::errors::undefined_variable
+use compiler::types::checker::errors::undefined_function
+use compiler::types::checker::errors::unknown_field
+use compiler::types::checker::errors::dummy_span
+use compiler::types::ty::Type
+use compiler::types::ty::make_i32
+use compiler::types::ty::make_str
+use compiler::types::ty::make_bool
+use compiler::types::ty::make_unit
+use compiler::types::ty::types_equal
+use compiler::types::env::TypeEnv
+use compiler::types::env::env_new
 
-use compiler::types::checker::check_call::*
-use compiler::types::checker::check_expr::{infer_expr, bind_pattern_simple}
-use compiler::types::checker::check_pattern::{check_pattern, check_exhaustiveness}
-use compiler::types::checker::check_stmt::{check_stmt, bind_pattern_full}
-use compiler::types::checker::errors::*
-use compiler::types::env::{TypeEnv, env_new}
-use compiler::types::infer::unify::*
-use compiler::types::ty::*
-use test
 @test
 func test_inference_modules_typecheck() -> I32 {
     // If we got here, all 8 inference modules type-checked successfully.

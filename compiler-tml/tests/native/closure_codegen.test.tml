@@ -15,7 +15,7 @@ use compiler::source::{SourceSpan, span_new, loc_new}
 @test func test_closure_init_no_captures() {
     // Build a MIR function that has a ClosureInit with no captures
     let f: MirFunc = mir_func_new("test_fn", MirType::Primitive(MirPrimitive::I64))
-    let sp: SourceSpan = span_new(loc_new(0 as I64, 0 as I64, 0 as I64), loc_new(0 as I64, 0 as I64, 0 as I64))
+    let sp: SourceSpan = span_new(loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64), loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64))
     let blk: BasicBlock = f.blocks.get(0)
     blk.instructions.push(InstructionData {
         result: 1 as ValueId,
@@ -37,7 +37,7 @@ use compiler::source::{SourceSpan, span_new, loc_new}
 @test func test_closure_init_with_captures() {
     // Build a MIR function: const 42 → closure_init with 1 capture
     let f: MirFunc = mir_func_new("test_fn2", MirType::Primitive(MirPrimitive::I64))
-    let sp: SourceSpan = span_new(loc_new(0 as I64, 0 as I64, 0 as I64), loc_new(0 as I64, 0 as I64, 0 as I64))
+    let sp: SourceSpan = span_new(loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64), loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64))
     let blk: BasicBlock = f.blocks.get(0)
 
     // First: const 42 into v1

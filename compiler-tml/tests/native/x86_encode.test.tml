@@ -1,9 +1,31 @@
 //! Unit tests for x86_64 instruction encoding.
 //! Phase 18b — item 6.1.
 
-use test::{assert, assert_eq}
-use compiler::native::x86::encode::*
-use compiler::native::machir::*
+use test::assert
+use test::assert_eq
+use compiler::native::x86::encode::modrm
+use compiler::native::x86::encode::rex
+use compiler::native::x86::encode::rex_w
+use compiler::native::x86::encode::encode_mov_rr
+use compiler::native::x86::encode::encode_mov_ri32
+use compiler::native::x86::encode::encode_add_rr
+use compiler::native::x86::encode::encode_sub_rr
+use compiler::native::x86::encode::encode_push
+use compiler::native::x86::encode::encode_pop
+use compiler::native::x86::encode::encode_ret
+use compiler::native::x86::encode::encode_nop
+use compiler::native::x86::encode::encode_cmp_rr
+use compiler::native::x86::encode::encode_jmp_rel32
+use compiler::native::x86::encode::encode_call_rel32
+use compiler::native::x86::encode::encode_neg
+use compiler::native::x86::encode::encode_imul_rr
+use compiler::native::x86::encode::fits_imm8
+use compiler::native::x86::encode::fits_imm32
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSP
 use std::collections::list::List
 
 // ============================================================================

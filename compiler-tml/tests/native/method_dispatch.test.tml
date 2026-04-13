@@ -15,7 +15,7 @@ use compiler::source::{SourceSpan, span_new, loc_new}
 @test func test_method_call_lowering() {
     // Build: v1 = const 0 (receiver), v2 = method_call v1.push(v3), v3 = const 42
     let f: MirFunc = mir_func_new("test_method", MirType::Primitive(MirPrimitive::I64))
-    let sp: SourceSpan = span_new(loc_new(0 as I64, 0 as I64, 0 as I64), loc_new(0 as I64, 0 as I64, 0 as I64))
+    let sp: SourceSpan = span_new(loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64), loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64))
     let blk: BasicBlock = f.blocks.get(0)
 
     // v1 = const 0 (list ptr)
@@ -62,7 +62,7 @@ use compiler::source::{SourceSpan, span_new, loc_new}
 @test func test_method_call_no_args() {
     // Method call with no extra args (just receiver): v1.len()
     let f: MirFunc = mir_func_new("test_len", MirType::Primitive(MirPrimitive::I64))
-    let sp: SourceSpan = span_new(loc_new(0 as I64, 0 as I64, 0 as I64), loc_new(0 as I64, 0 as I64, 0 as I64))
+    let sp: SourceSpan = span_new(loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64), loc_new("", 0 as I64, 0 as I64, 0 as I64, 0 as I64))
     let blk: BasicBlock = f.blocks.get(0)
 
     blk.instructions.push(InstructionData {
