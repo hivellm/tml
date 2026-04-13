@@ -1,20 +1,9 @@
 //! Tests for generic instantiation: registry, name mangling, type substitution.
 //! Phase 30a.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::native::generic_inst::GenericCallRegistry
-use compiler::native::generic_inst::GenericCallSite
-use compiler::native::generic_inst::registry_new
-use compiler::native::generic_inst::registry_record
-use compiler::native::generic_inst::registry_mark_emitted
-use compiler::native::generic_inst::registry_has_pending
-use compiler::native::generic_inst::mangle_generic_name
-use compiler::native::generic_inst::substitute_mir_type
-use compiler::native::generic_inst::mir_type_mangle
+use test::{assert, assert_eq}
+use compiler::mir::types::{MirType, MirPrimitive, MirStructType}
+use compiler::native::generic_inst::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

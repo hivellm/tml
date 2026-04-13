@@ -142,6 +142,8 @@ func lower_instruction(ctx: LowerCtx, data: InstructionData) {
         Call(c) => lower_call(ctx, result_id, c),
         Constant(c) => lower_constant(ctx, result_id, c),
         Select(s) => lower_select(ctx, result_id, s),
+        ClosureInit(ci) => lower_closure_init(ctx, result_id, ci),
+        MethodCall(mc) => lower_method_call(ctx, result_id, mc),
         _ => {}
     }
 }
@@ -265,6 +267,85 @@ func lower_select(ctx: LowerCtx, result_id: I64, s: SelectInst) {
     emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(dst_reg), src: Operand::PhysReg(fv_reg), size: 8 }))
     emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::PhysReg(cond_reg), rhs: Operand::Imm(0), size: 8 }))
     // Simplified: use conditional move via branching (CMOVne not yet in MachInst)
+}
+
+// ============================================================================
+// Method call lowering (phase 30c)
+// ============================================================================
+
+/// Lower a method call: prepend receiver to args, call mangled method name.
+/// Win64 ABI: receiver goes in RCX (first arg), then method args in RDX, R8, R9.
+func lower_method_call(ctx: LowerCtx, result_id: I64, mc: MethodCallInst) {
+    ctx.func_out.is_leaf = 0
+    let arg_regs = List[I64]::new(4)
+    arg_regs.push(1)   // RCX
+    arg_regs.push(2)   // RDX
+    arg_regs.push(8)   // R8
+    arg_regs.push(9)   // R9
+
+    // First arg = receiver (self/this pointer)
+    let recv_reg: I64 = get_phys_reg(ctx, mc.receiver as I64)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(arg_regs.get(0)), src: Operand::PhysReg(recv_reg), size: 8 }))
+
+    // Remaining args shift by 1
+    let ac: I64 = mc.args.len() as I64
+    for i in 0 to ac {
+        if (i + 1) < 4 {
+            let src_reg: I64 = get_phys_reg(ctx, mc.args.get(i) as I64)
+            emit(ctx, MachInst::Mov(MachMov {
+                dst: Operand::PhysReg(arg_regs.get(i + 1)),
+                src: Operand::PhysReg(src_reg),
+                size: 8
+            }))
+        }
+    }
+
+    emit(ctx, MachInst::Call(MachCall { target: mc.method, arg_count: ac + 1 }))
+
+    // Move return value from RAX to result vreg
+    let dst_reg: I64 = get_phys_reg(ctx, result_id)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(dst_reg), src: Operand::PhysReg(0), size: 8 }))
+}
+
+// ============================================================================
+// Closure lowering (phase 30b)
+// ============================================================================
+
+/// Lower ClosureInit: allocate capture env on heap, store captured values.
+/// Result is a fat pointer {fn_ptr, env_ptr} — we store env_ptr in the result
+/// register and resolve fn_ptr at call sites from the closure's func_name.
+func lower_closure_init(ctx: LowerCtx, result_id: I64, ci: ClosureInitInst) {
+    ctx.func_out.is_leaf = 0
+    let capture_count: I64 = ci.captures.len() as I64
+    let env_size: I64 = capture_count * 8  // each capture is 8 bytes (I64-aligned)
+
+    if capture_count == 0 {
+        // No captures — env_ptr is null, just store fn_ptr as label
+        let dst_reg: I64 = get_phys_reg(ctx, result_id)
+        emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(dst_reg), src: Operand::Label(ci.func_name), size: 8 }))
+        return
+    }
+
+    // Call malloc(env_size) to allocate capture struct
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(1), src: Operand::Imm(env_size), size: 8 }))  // RCX = size
+    emit(ctx, MachInst::Call(MachCall { target: "malloc", arg_count: 1 }))
+
+    // RAX now has env_ptr — save to result register
+    let env_reg: I64 = get_phys_reg(ctx, result_id)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(env_reg), src: Operand::PhysReg(0), size: 8 }))
+
+    // Store each captured value into env[i*8]
+    for i in 0 to capture_count {
+        let cap_reg: I64 = get_phys_reg(ctx, ci.captures.get(i) as I64)
+        // Store captured value at [env_ptr + i*8]
+        // MOV [env_reg + offset], cap_reg
+        emit(ctx, MachInst::Store(MachStore {
+            addr: Operand::PhysReg(env_reg),
+            offset: i * 8,
+            src: Operand::PhysReg(cap_reg),
+            size: 8
+        }))
+    }
 }
 
 // ============================================================================

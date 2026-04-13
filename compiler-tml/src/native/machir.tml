@@ -108,7 +108,13 @@ pub enum MachInst {
     /// MOVZX dst, src — zero-extend.
     Movzx(MachMov),
     /// NOP — no operation (alignment padding).
-    Nop
+    Nop,
+    /// Store value to [base + offset] — memory write with displacement.
+    Store(MachStore),
+    /// Load value from [base + offset] — memory read with displacement.
+    LoadMem(MachLoad),
+    /// CALL through register — indirect function call.
+    CallIndirect(MachCallIndirect)
 }
 
 /// MOV-class instruction operands.
@@ -156,6 +162,15 @@ pub type MachSpill { vreg: VirtualReg, slot_offset: I64, size: I64 }
 
 /// Reload pseudo-instruction: load vreg from stack.
 pub type MachReload { vreg: VirtualReg, slot_offset: I64, size: I64 }
+
+/// Memory store: MOV [addr + offset], src
+pub type MachStore { addr: Operand, offset: I64, src: Operand, size: I64 }
+
+/// Memory load: MOV dst, [addr + offset]
+pub type MachLoad { dst: Operand, addr: Operand, offset: I64, size: I64 }
+
+/// Indirect call through a register.
+pub type MachCallIndirect { target_reg: Operand, arg_count: I64 }
 
 // ============================================================================
 // Machine Blocks (item 1.3)

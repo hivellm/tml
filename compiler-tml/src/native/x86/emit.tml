@@ -167,6 +167,9 @@ func emit_mach_inst_with_relocs(buf: List[I64], inst: MachInst, alloc: StackAllo
         Shl(b) => emit_shift_shl(buf, b, alloc),
         Sar(b) => emit_shift_sar(buf, b, alloc),
         Nop => encode_nop(buf),
+        Store(s) => emit_store_mem(buf, s, alloc),
+        LoadMem(l) => emit_load_mem(buf, l, alloc),
+        CallIndirect(ci) => emit_call_indirect(buf, ci, alloc),
         _ => encode_nop(buf)
     }
 }
@@ -340,4 +343,72 @@ func emit_shift_sar(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
     } else {
         encode_sar_ri(buf, operand_to_reg(b.dst), 1)
     }
+}
+
+// ============================================================================
+// Memory store/load with displacement (phase 30b — closures)
+// ============================================================================
+
+/// Emit MOV [addr + offset], src — store to memory with displacement.
+func emit_store_mem(buf: List[I64], s: MachStore, alloc: StackAllocation) {
+    let addr_reg: I64 = operand_to_reg(s.addr)
+    let src_reg: I64 = operand_to_reg(s.src)
+    // REX.W MOV [reg + disp32], reg — opcode 0x89, ModRM with disp8/disp32
+    emit_byte(buf, rex_w(src_reg, addr_reg))
+    emit_byte(buf, 0x89)
+    if s.offset == 0 and (addr_reg % 8) != 5 {
+        // [reg] with no displacement (except RBP which always needs disp8)
+        emit_byte(buf, modrm(0, src_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }  // SIB for RSP-based
+    } else if s.offset >= -128 and s.offset <= 127 {
+        // [reg + disp8]
+        emit_byte(buf, modrm(1, src_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }
+        emit_byte(buf, (s.offset + 256) % 256)
+    } else {
+        // [reg + disp32]
+        emit_byte(buf, modrm(2, src_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }
+        emit_disp32(buf, s.offset)
+    }
+}
+
+/// Emit MOV dst, [addr + offset] — load from memory with displacement.
+func emit_load_mem(buf: List[I64], l: MachLoad, alloc: StackAllocation) {
+    let dst_reg: I64 = operand_to_reg(l.dst)
+    let addr_reg: I64 = operand_to_reg(l.addr)
+    // REX.W MOV reg, [reg + disp] — opcode 0x8B
+    emit_byte(buf, rex_w(dst_reg, addr_reg))
+    emit_byte(buf, 0x8B)
+    if l.offset == 0 and (addr_reg % 8) != 5 {
+        emit_byte(buf, modrm(0, dst_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }
+    } else if l.offset >= -128 and l.offset <= 127 {
+        emit_byte(buf, modrm(1, dst_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }
+        emit_byte(buf, (l.offset + 256) % 256)
+    } else {
+        emit_byte(buf, modrm(2, dst_reg % 8, addr_reg % 8))
+        if (addr_reg % 8) == 4 { emit_byte(buf, 0x24) }
+        emit_disp32(buf, l.offset)
+    }
+}
+
+/// Emit a 32-bit displacement (little-endian).
+func emit_disp32(buf: List[I64], val: I64) {
+    emit_byte(buf, (val) % 256)
+    emit_byte(buf, (val / 256) % 256)
+    emit_byte(buf, (val / 65536) % 256)
+    emit_byte(buf, (val / 16777216) % 256)
+}
+
+/// Emit CALL reg — indirect function call through register.
+func emit_call_indirect(buf: List[I64], ci: MachCallIndirect, alloc: StackAllocation) {
+    let reg: I64 = operand_to_reg(ci.target_reg)
+    // CALL reg: FF /2 (ModRM mod=11, reg=2, rm=reg)
+    if reg >= 8 {
+        emit_byte(buf, 0x41)  // REX.B for extended registers
+    }
+    emit_byte(buf, 0xFF)
+    emit_byte(buf, modrm(3, 2, reg % 8))
 }

@@ -1,0 +1,90 @@
+//! Tests for native method call dispatch.
+//! Phase 30c.
+
+use test::{assert, assert_eq}
+use compiler::mir::types::{MirType, MirPrimitive, ValueId}
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::mir::module::{MirFunc, MirFuncParam, mir_func_new}
+use compiler::native::machir::*
+use compiler::native::mir_lower::lower_function
+use std::collections::list::List
+use core::alloc::heap::Heap
+use compiler::source::{SourceSpan, span_new, loc_new}
+
+@test func test_method_call_lowering() {
+    // Build: v1 = const 0 (receiver), v2 = method_call v1.push(v3), v3 = const 42
+    let f: MirFunc = mir_func_new("test_method", MirType::Primitive(MirPrimitive::I64))
+    let sp: SourceSpan = span_new(loc_new(0, 0, 0), loc_new(0, 0, 0))
+    let blk: BasicBlock = f.blocks.get(0)
+
+    // v1 = const 0 (list ptr)
+    blk.instructions.push(InstructionData {
+        result: 1 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(0) }),
+        span: sp
+    })
+
+    // v2 = const 42 (value to push)
+    blk.instructions.push(InstructionData {
+        result: 2 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(42) }),
+        span: sp
+    })
+
+    // v3 = method_call receiver=v1, method="List__push", args=[v2]
+    let args = List[ValueId]::new(1)
+    args.push(2 as ValueId)
+    blk.instructions.push(InstructionData {
+        result: 3 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::Unit),
+        inst: MirInst::MethodCall(MethodCallInst {
+            receiver: 1 as ValueId,
+            method: "List__push",
+            args: args
+        }),
+        span: sp
+    })
+
+    blk.terminator = Just(Terminator::Return(ReturnTerm { value: Just(3 as ValueId) }))
+
+    let mach: MachFunc = lower_function(f)
+    // Function should not be leaf (has method call)
+    assert_eq(mach.is_leaf as I32, 0)
+
+    // Block 0 should have instructions for consts + arg moves + call + result mov + ret
+    let block0: MachBlock = mach.blocks.get(0)
+    assert(block0.insts.len() as I64 >= 5)
+}
+
+@test func test_method_call_no_args() {
+    // Method call with no extra args (just receiver): v1.len()
+    let f: MirFunc = mir_func_new("test_len", MirType::Primitive(MirPrimitive::I64))
+    let sp: SourceSpan = span_new(loc_new(0, 0, 0), loc_new(0, 0, 0))
+    let blk: BasicBlock = f.blocks.get(0)
+
+    blk.instructions.push(InstructionData {
+        result: 1 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(0) }),
+        span: sp
+    })
+
+    blk.instructions.push(InstructionData {
+        result: 2 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::MethodCall(MethodCallInst {
+            receiver: 1 as ValueId,
+            method: "List__len",
+            args: List[ValueId]::new(0)
+        }),
+        span: sp
+    })
+
+    blk.terminator = Just(Terminator::Return(ReturnTerm { value: Just(2 as ValueId) }))
+
+    let mach: MachFunc = lower_function(f)
+    assert_eq(mach.is_leaf as I32, 0)
+}

@@ -23,9 +23,11 @@
 
 use compiler::mir::module::{MirModule, MirFunc}
 use compiler::mir::inst::*
+use compiler::mir::types::MirType
 use compiler::mir::block::BasicBlock
 use compiler::native::machir::*
 use compiler::native::mir_lower::lower_function
+use compiler::native::generic_inst::{GenericCallRegistry, registry_new, registry_record, registry_mark_emitted, registry_has_pending}
 use compiler::native::liveness::compute_live_intervals
 use compiler::native::linear_scan::{linear_scan, RegAllocResult}
 use compiler::native::stack_alloc::{allocate_stack, StackAllocation}
@@ -70,6 +72,10 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
     let all_relocs = List[RelocEntry]::new(16)
     var total_spills: I64 = 0
     var funcs_compiled: I64 = 0
+
+    // Pre-pass: rewrite generic call targets to mangled names
+    let greg: GenericCallRegistry = registry_new()
+    rewrite_generic_calls(m, greg)
 
     let fc: I64 = m.functions.len() as I64
     for fi in 0 to fc {
@@ -240,5 +246,50 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
         code_size: all_code.len() as I64,
         total_spills: total_spills,
         success: 1
+    }
+}
+
+// ============================================================================
+// Generic call rewriting (phase 30a item 1.3)
+// ============================================================================
+
+/// Pre-pass: scan all functions for generic call sites and rewrite callee
+/// names to mangled instantiation names. The C++ frontend already monomorphizes
+/// before MIR emission, but calls still carry type_args — we use these to
+/// produce unique symbol names matching the emitted instantiation.
+func rewrite_generic_calls(m: MirModule, reg: GenericCallRegistry) {
+    let fc: I64 = m.functions.len() as I64
+    for fi in 0 to fc {
+        let mir_func: MirFunc = m.functions.get(fi)
+        if mir_func.is_extern > 0 { continue }
+        let bc: I64 = mir_func.blocks.len() as I64
+        for bi in 0 to bc {
+            let blk: BasicBlock = mir_func.blocks.get(bi)
+            let ic: I64 = blk.instructions.len() as I64
+            for ii in 0 to ic {
+                let inst_data: InstructionData = blk.instructions.get(ii)
+                when inst_data.inst {
+                    Call(c) => {
+                        if c.type_args.len() as I64 > 0 {
+                            // Generic call — register and rewrite target
+                            let mangled: Str = registry_record(reg, c.callee, c.type_args)
+                            let new_call: CallInst = CallInst {
+                                callee: mangled,
+                                args: c.args,
+                                type_args: c.type_args
+                            }
+                            let new_inst: InstructionData = InstructionData {
+                                result: inst_data.result,
+                                result_type: inst_data.result_type,
+                                inst: MirInst::Call(new_call),
+                                span: inst_data.span
+                            }
+                            blk.instructions.set(ii, new_inst)
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
     }
 }

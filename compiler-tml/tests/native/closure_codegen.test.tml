@@ -1,0 +1,103 @@
+//! Tests for native closure codegen: capture struct, indirect call, Store/Load.
+//! Phase 30b.
+
+use test::{assert, assert_eq}
+use compiler::mir::types::{MirType, MirPrimitive}
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::mir::module::{MirFunc, MirFuncParam, mir_func_new}
+use compiler::native::machir::*
+use compiler::native::mir_lower::lower_function
+use std::collections::list::List
+use core::alloc::heap::Heap
+use compiler::source::{SourceSpan, span_new, loc_new}
+
+@test func test_closure_init_no_captures() {
+    // Build a MIR function that has a ClosureInit with no captures
+    let f: MirFunc = mir_func_new("test_fn", MirType::Primitive(MirPrimitive::I64))
+    let sp: SourceSpan = span_new(loc_new(0, 0, 0), loc_new(0, 0, 0))
+    let blk: BasicBlock = f.blocks.get(0)
+    blk.instructions.push(InstructionData {
+        result: 1 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::ClosureInit(ClosureInitInst {
+            func_name: "__closure_0",
+            captures: List[ValueId]::new(0)
+        }),
+        span: sp
+    })
+    blk.terminator = Just(Terminator::Return(ReturnTerm { value: Just(1 as ValueId) }))
+
+    let mach: MachFunc = lower_function(f)
+    // Should have some instructions in block 0
+    let block0: MachBlock = mach.blocks.get(0)
+    assert(block0.insts.len() as I64 > 0)
+}
+
+@test func test_closure_init_with_captures() {
+    // Build a MIR function: const 42 → closure_init with 1 capture
+    let f: MirFunc = mir_func_new("test_fn2", MirType::Primitive(MirPrimitive::I64))
+    let sp: SourceSpan = span_new(loc_new(0, 0, 0), loc_new(0, 0, 0))
+    let blk: BasicBlock = f.blocks.get(0)
+
+    // First: const 42 into v1
+    blk.instructions.push(InstructionData {
+        result: 1 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::Constant(ConstantInst { value: MirConstant::ConstInt(42) }),
+        span: sp
+    })
+
+    // Then: closure_init with capture of v1
+    let caps = List[ValueId]::new(1)
+    caps.push(1 as ValueId)
+    blk.instructions.push(InstructionData {
+        result: 2 as ValueId,
+        result_type: MirType::Primitive(MirPrimitive::I64),
+        inst: MirInst::ClosureInit(ClosureInitInst {
+            func_name: "__closure_1",
+            captures: caps
+        }),
+        span: sp
+    })
+    blk.terminator = Just(Terminator::Return(ReturnTerm { value: Just(2 as ValueId) }))
+
+    let mach: MachFunc = lower_function(f)
+    // Function is not leaf (calls malloc for capture env)
+    assert_eq(mach.is_leaf as I32, 0)
+    // Block 0 should have multiple instructions (const + malloc call + mov + store + ret)
+    let block0: MachBlock = mach.blocks.get(0)
+    assert(block0.insts.len() as I64 >= 4)
+}
+
+@test func test_mach_store_type() {
+    // Verify MachStore struct is constructible
+    let s: MachStore = MachStore {
+        addr: Operand::PhysReg(3),
+        offset: 16,
+        src: Operand::PhysReg(6),
+        size: 8
+    }
+    assert_eq(s.offset as I32, 16)
+    assert_eq(s.size as I32, 8)
+}
+
+@test func test_mach_load_type() {
+    // Verify MachLoad struct is constructible
+    let l: MachLoad = MachLoad {
+        dst: Operand::PhysReg(0),
+        addr: Operand::PhysReg(3),
+        offset: 8,
+        size: 8
+    }
+    assert_eq(l.offset as I32, 8)
+}
+
+@test func test_call_indirect_type() {
+    // Verify MachCallIndirect struct is constructible
+    let ci: MachCallIndirect = MachCallIndirect {
+        target_reg: Operand::PhysReg(0),
+        arg_count: 2
+    }
+    assert_eq(ci.arg_count as I32, 2)
+}
