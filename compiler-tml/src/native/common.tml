@@ -1,0 +1,35 @@
+//! Native backend module root — MIR → x86_64 machine code without LLVM.
+//!
+//! This module implements ERA 2's custom backend:
+//! MIR → MachIR → stack allocation → frame layout → x86_64 encoding → PE/ELF object
+//!
+//! Phase 18a establishes MachIR, lowering, and stack allocation.
+//! Phase 18b adds x86_64 instruction encoding.
+//! Phase 18c adds PE/ELF object file emission.
+//! Phase 19a adds linear scan register allocation.
+
+// --- MachIR types ---
+pub use compiler::native::machir::VirtualReg
+pub use compiler::native::machir::Operand
+pub use compiler::native::machir::MachInst
+pub use compiler::native::machir::MachBlock
+pub use compiler::native::machir::MachFunc
+pub use compiler::native::machir::CondCode
+pub use compiler::native::machir::mach_block_new
+pub use compiler::native::machir::mach_func_new
+pub use compiler::native::machir::fresh_vreg
+
+// --- MIR → MachIR lowering ---
+pub use compiler::native::mir_lower::lower_function
+pub use compiler::native::mir_lower::LowerCtx
+
+// --- Stack allocation ---
+pub use compiler::native::stack_alloc::StackAllocation
+pub use compiler::native::stack_alloc::allocate_stack
+pub use compiler::native::stack_alloc::get_slot_offset
+
+// --- Frame layout ---
+pub use compiler::native::frame::compute_frame_size
+pub use compiler::native::frame::emit_prologue
+pub use compiler::native::frame::emit_epilogue
+pub use compiler::native::frame::stack_operand

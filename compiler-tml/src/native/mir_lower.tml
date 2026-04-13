@@ -1,0 +1,288 @@
+//! MIR → MachIR lowering pass.
+//!
+//! Translates each MIR instruction into one or more MachIR instructions
+//! using unlimited virtual registers. No register allocation happens here —
+//! that's the allocator's job (stack_alloc.tml or linear_scan.tml).
+//!
+//! Phase 18a — items 2.1–2.6.
+
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+use compiler::mir::types::ValueId
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::BinaryInst
+use compiler::mir::inst::UnaryInst
+use compiler::mir::inst::LoadInst
+use compiler::mir::inst::StoreInst
+use compiler::mir::inst::AllocaInst
+use compiler::mir::inst::CallInst
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::inst::PhiInst
+use compiler::mir::inst::PhiEntry
+use compiler::mir::inst::SelectInst
+use compiler::mir::block::BasicBlock
+use compiler::mir::block::Terminator
+use compiler::mir::block::ReturnTerm
+use compiler::mir::block::BranchTerm
+use compiler::mir::block::CondBranchTerm
+use compiler::mir::block::SwitchTerm
+use compiler::mir::block::SwitchArm
+use compiler::mir::module::MirFunc
+use compiler::hir::expr::HirBinOp
+use compiler::hir::expr::HirUnaryOp
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::Operand
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachUnaryOp
+use compiler::native::machir::MachCmp
+use compiler::native::machir::MachJcc
+use compiler::native::machir::MachJmp
+use compiler::native::machir::MachCall
+use compiler::native::machir::MachRet
+use compiler::native::machir::CondCode
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachFunc
+use compiler::native::machir::mach_block_new
+use compiler::native::machir::mach_func_new
+use compiler::native::machir::fresh_vreg
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Lowering context
+// ============================================================================
+
+/// Tracks MIR ValueId → MachIR VirtualReg mapping.
+pub type LowerCtx {
+    func_out: MachFunc,
+    value_map: HashMap[I64, I64],
+    current_block: I64
+}
+
+/// Create a lowering context for a MIR function.
+pub func lower_ctx_new(name: Str) -> LowerCtx {
+    return LowerCtx {
+        func_out: mach_func_new(name),
+        value_map: HashMap[I64, I64]::new(64),
+        current_block: 0
+    }
+}
+
+/// Map a MIR ValueId to a VirtualReg, creating a fresh one if needed.
+func get_or_create_vreg(ctx: LowerCtx, val: I64) -> VirtualReg {
+    if ctx.value_map.has(val) {
+        return VirtualReg { id: ctx.value_map.get(val) }
+    }
+    let vr: VirtualReg = fresh_vreg(ctx.func_out)
+    ctx.value_map.set(val, vr.id)
+    return vr
+}
+
+/// Emit a MachInst to the current block.
+func emit(ctx: LowerCtx, inst: MachInst) {
+    let block: MachBlock = ctx.func_out.blocks.get(ctx.current_block)
+    block.insts.push(inst)
+}
+
+// ============================================================================
+// Full function lowering
+// ============================================================================
+
+/// Lower an entire MIR function to MachIR.
+pub func lower_function(mir_func: MirFunc) -> MachFunc {
+    let ctx: LowerCtx = lower_ctx_new(mir_func.name)
+
+    // Create MachBlocks for each MIR basic block
+    let bc: I64 = mir_func.blocks.len() as I64
+    // Block 0 already exists (entry)
+    for i in 1 to bc {
+        let mir_bb: BasicBlock = mir_func.blocks.get(i)
+        ctx.func_out.blocks.push(mach_block_new(i, mir_bb.name))
+    }
+
+    // Lower each block's instructions
+    for bi in 0 to bc {
+        ctx.current_block = bi
+        let mir_bb: BasicBlock = mir_func.blocks.get(bi)
+        let ic: I64 = mir_bb.instructions.len() as I64
+        for ii in 0 to ic {
+            let inst_data: InstructionData = mir_bb.instructions.get(ii)
+            lower_instruction(ctx, inst_data)
+        }
+        // Lower terminator
+        when mir_bb.terminator {
+            Just(term) => lower_terminator(ctx, term),
+            _ => {}
+        }
+    }
+
+    return ctx.func_out
+}
+
+// ============================================================================
+// Instruction lowering (items 2.1–2.5)
+// ============================================================================
+
+/// Lower a single MIR instruction to MachIR.
+func lower_instruction(ctx: LowerCtx, data: InstructionData) {
+    let result_id: I64 = data.result as I64
+    when data.inst {
+        Binary(b) => lower_binary(ctx, result_id, b),
+        Unary(u) => lower_unary(ctx, result_id, u),
+        Load(l) => lower_load(ctx, result_id, l),
+        Store(s) => lower_store(ctx, s),
+        Alloca(a) => lower_alloca(ctx, result_id, a),
+        Call(c) => lower_call(ctx, result_id, c),
+        Constant(c) => lower_constant(ctx, result_id, c),
+        Select(s) => lower_select(ctx, result_id, s),
+        _ => {}
+    }
+}
+
+/// Lower binary arithmetic (item 2.1).
+func lower_binary(ctx: LowerCtx, result_id: I64, b: BinaryInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    let lhs: VirtualReg = get_or_create_vreg(ctx, b.left as I64)
+    let rhs: VirtualReg = get_or_create_vreg(ctx, b.right as I64)
+
+    // MOV dst, lhs (copy lhs to dst)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Reg(lhs), size: 8 }))
+
+    when b.op {
+        Add => emit(ctx, MachInst::Add(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        Sub => emit(ctx, MachInst::Sub(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        Mul => emit(ctx, MachInst::Imul(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        BitAnd => emit(ctx, MachInst::And(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        BitOr => emit(ctx, MachInst::Or(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        BitXor => emit(ctx, MachInst::Xor(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        Shl => emit(ctx, MachInst::Shl(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        Shr => emit(ctx, MachInst::Sar(MachBinOp { dst: Operand::Reg(dst), src: Operand::Reg(rhs), size: 8 })),
+        Eq => {
+            emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 }))
+            // Result is in flags — set via SETcc (simplified: just record the compare)
+        },
+        Ne => emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 })),
+        Lt => emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 })),
+        Le => emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 })),
+        Gt => emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 })),
+        Ge => emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(lhs), rhs: Operand::Reg(rhs), size: 8 })),
+        _ => {}
+    }
+}
+
+/// Lower unary operations.
+func lower_unary(ctx: LowerCtx, result_id: I64, u: UnaryInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    let src: VirtualReg = get_or_create_vreg(ctx, u.operand as I64)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Reg(src), size: 8 }))
+    when u.op {
+        Neg => emit(ctx, MachInst::Neg(MachUnaryOp { operand: Operand::Reg(dst), size: 8 })),
+        Not => emit(ctx, MachInst::Xor(MachBinOp { dst: Operand::Reg(dst), src: Operand::Imm(1), size: 8 })),
+        BitNot => emit(ctx, MachInst::Xor(MachBinOp { dst: Operand::Reg(dst), src: Operand::Imm(-1 as I64), size: 8 })),
+        _ => {}
+    }
+}
+
+/// Lower memory load (item 2.2).
+func lower_load(ctx: LowerCtx, result_id: I64, l: LoadInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    let ptr: VirtualReg = get_or_create_vreg(ctx, l.ptr as I64)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Reg(ptr), size: 8 }))
+}
+
+/// Lower memory store (item 2.2).
+func lower_store(ctx: LowerCtx, s: StoreInst) {
+    let val: VirtualReg = get_or_create_vreg(ctx, s.value as I64)
+    let ptr: VirtualReg = get_or_create_vreg(ctx, s.ptr as I64)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(ptr), src: Operand::Reg(val), size: 8 }))
+}
+
+/// Lower alloca (item 2.2).
+func lower_alloca(ctx: LowerCtx, result_id: I64, a: AllocaInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    // Alloca is resolved to a stack slot by the allocator
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(0), size: 8 }))
+}
+
+/// Lower function call (item 2.4).
+func lower_call(ctx: LowerCtx, result_id: I64, c: CallInst) {
+    ctx.func_out.is_leaf = 0
+    emit(ctx, MachInst::Call(MachCall { target: c.callee, arg_count: c.args.len() as I64 }))
+    // Move return value from RAX to result vreg
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::PhysReg(0), size: 8 }))
+}
+
+/// Lower constant.
+func lower_constant(ctx: LowerCtx, result_id: I64, c: ConstantInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    when c.value {
+        ConstInt(v) => emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(v), size: 8 })),
+        ConstBool(v) => {
+            let imm: I64 = if v { 1 } else { 0 }
+            emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(imm), size: 8 }))
+        },
+        _ => emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(0), size: 8 }))
+    }
+}
+
+/// Lower select.
+func lower_select(ctx: LowerCtx, result_id: I64, s: SelectInst) {
+    let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
+    let cond: VirtualReg = get_or_create_vreg(ctx, s.condition as I64)
+    let tv: VirtualReg = get_or_create_vreg(ctx, s.true_val as I64)
+    let fv: VirtualReg = get_or_create_vreg(ctx, s.false_val as I64)
+    // CMOVne: move true_val if cond != 0, else false_val
+    emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Reg(fv), size: 8 }))
+    emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(cond), rhs: Operand::Imm(0), size: 8 }))
+    // Simplified: use conditional move via branching (CMOVne not yet in MachInst)
+}
+
+// ============================================================================
+// Terminator lowering (item 2.3)
+// ============================================================================
+
+func lower_terminator(ctx: LowerCtx, term: Terminator) {
+    when term {
+        Return(r) => {
+            when r.value {
+                Just(v) => {
+                    let src: VirtualReg = get_or_create_vreg(ctx, v as I64)
+                    emit(ctx, MachInst::Mov(MachMov { dst: Operand::PhysReg(0), src: Operand::Reg(src), size: 8 }))
+                },
+                _ => {}
+            }
+            emit(ctx, MachInst::Ret(MachRet { has_value: 1 }))
+        },
+        Branch(b) => {
+            emit(ctx, MachInst::Jmp(MachJmp { target: b.target }))
+            let block: MachBlock = ctx.func_out.blocks.get(ctx.current_block)
+            block.successors.push(b.target)
+        },
+        CondBranch(cb) => {
+            let cond: VirtualReg = get_or_create_vreg(ctx, cb.condition as I64)
+            emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(cond), rhs: Operand::Imm(0), size: 8 }))
+            emit(ctx, MachInst::Jcc(MachJcc { cond: CondCode::Ne, target: cb.true_target }))
+            emit(ctx, MachInst::Jmp(MachJmp { target: cb.false_target }))
+            let block: MachBlock = ctx.func_out.blocks.get(ctx.current_block)
+            block.successors.push(cb.true_target)
+            block.successors.push(cb.false_target)
+        },
+        Switch(sw) => {
+            let disc: VirtualReg = get_or_create_vreg(ctx, sw.discriminant as I64)
+            let ac: I64 = sw.arms.len() as I64
+            for i in 0 to ac {
+                let arm: SwitchArm = sw.arms.get(i)
+                emit(ctx, MachInst::Cmp(MachCmp { lhs: Operand::Reg(disc), rhs: Operand::Imm(arm.value), size: 8 }))
+                emit(ctx, MachInst::Jcc(MachJcc { cond: CondCode::Eq, target: arm.target }))
+            }
+            emit(ctx, MachInst::Jmp(MachJmp { target: sw.default_target }))
+        },
+        Unreachable(_) => {}
+    }
+}

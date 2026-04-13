@@ -1,0 +1,213 @@
+//! MachIR — Machine-level intermediate representation.
+//!
+//! Sits between MIR and raw encoded bytes. Each MachInst maps 1:1 to an
+//! x86_64 instruction. Virtual registers (VirtualReg) are unlimited —
+//! the register allocator (stack_alloc or linear scan) assigns physicals.
+//!
+//! ## Architecture
+//!
+//! ```
+//! MIR → [mir_lower] → MachIR → [stack_alloc] → MachIR (resolved) → [encoder] → bytes
+//! ```
+//!
+//! Phase 18a — items 1.1–1.4.
+
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Virtual Registers (item 1.1)
+// ============================================================================
+
+/// A virtual register — unlimited, never reused.
+/// ID 0, 1, 2, ... assigned sequentially by the lowering pass.
+pub type VirtualReg { id: I64 }
+
+/// Operand — either a virtual register, immediate value, or memory reference.
+pub enum Operand {
+    /// Virtual register: %vrN.
+    Reg(VirtualReg),
+    /// Immediate integer constant.
+    Imm(I64),
+    /// Stack slot: [RBP - offset].
+    Stack(I64),
+    /// RIP-relative label reference.
+    Label(Str),
+    /// Physical register (after allocation): RAX=0, RCX=1, ...
+    PhysReg(I64)
+}
+
+// Physical register IDs (x86_64 System V / Win64)
+const REG_RAX: I64 = 0
+const REG_RCX: I64 = 1
+const REG_RDX: I64 = 2
+const REG_RBX: I64 = 3
+const REG_RSP: I64 = 4
+const REG_RBP: I64 = 5
+const REG_RSI: I64 = 6
+const REG_RDI: I64 = 7
+const REG_R8: I64 = 8
+const REG_R9: I64 = 9
+const REG_R10: I64 = 10
+const REG_R11: I64 = 11
+const REG_R12: I64 = 12
+const REG_R13: I64 = 13
+const REG_R14: I64 = 14
+const REG_R15: I64 = 15
+
+// ============================================================================
+// Machine Instructions (item 1.2)
+// ============================================================================
+
+/// x86_64 machine instruction — one per actual CPU instruction.
+pub enum MachInst {
+    /// MOV dst, src — register/memory move.
+    Mov(MachMov),
+    /// ADD dst, src — integer addition.
+    Add(MachBinOp),
+    /// SUB dst, src — integer subtraction.
+    Sub(MachBinOp),
+    /// IMUL dst, src — signed multiplication.
+    Imul(MachBinOp),
+    /// IDIV src — signed division (RAX = RAX / src, RDX = remainder).
+    Idiv(MachUnaryOp),
+    /// CMP lhs, rhs — compare (sets flags, no result register).
+    Cmp(MachCmp),
+    /// Jcc target — conditional jump based on flags.
+    Jcc(MachJcc),
+    /// JMP target — unconditional jump.
+    Jmp(MachJmp),
+    /// CALL target — function call.
+    Call(MachCall),
+    /// RET — function return.
+    Ret(MachRet),
+    /// PUSH src — push onto stack.
+    Push(MachUnaryOp),
+    /// POP dst — pop from stack.
+    Pop(MachUnaryOp),
+    /// LEA dst, [base + index*scale + disp] — load effective address.
+    Lea(MachLea),
+    /// Spill vreg to stack slot (pseudo-instruction, resolved by allocator).
+    Spill(MachSpill),
+    /// Reload vreg from stack slot (pseudo-instruction, resolved by allocator).
+    Reload(MachReload),
+    /// NEG dst — two's complement negation.
+    Neg(MachUnaryOp),
+    /// AND dst, src — bitwise AND.
+    And(MachBinOp),
+    /// OR dst, src — bitwise OR.
+    Or(MachBinOp),
+    /// XOR dst, src — bitwise XOR.
+    Xor(MachBinOp),
+    /// SHL dst, count — shift left.
+    Shl(MachBinOp),
+    /// SAR dst, count — arithmetic shift right.
+    Sar(MachBinOp),
+    /// MOVSX dst, src — sign-extend.
+    Movsx(MachMov),
+    /// MOVZX dst, src — zero-extend.
+    Movzx(MachMov),
+    /// NOP — no operation (alignment padding).
+    Nop
+}
+
+/// MOV-class instruction operands.
+pub type MachMov { dst: Operand, src: Operand, size: I64 }
+
+/// Binary operation operands (ADD, SUB, IMUL, AND, OR, XOR, SHL, SAR).
+pub type MachBinOp { dst: Operand, src: Operand, size: I64 }
+
+/// Unary operation operand (IDIV, PUSH, POP, NEG).
+pub type MachUnaryOp { operand: Operand, size: I64 }
+
+/// Compare operands.
+pub type MachCmp { lhs: Operand, rhs: Operand, size: I64 }
+
+/// Condition code for Jcc.
+@repr(U8)
+pub enum CondCode {
+    Eq,   // JE / JZ
+    Ne,   // JNE / JNZ
+    Lt,   // JL (signed)
+    Le,   // JLE
+    Gt,   // JG (signed)
+    Ge,   // JGE
+    Below, // JB (unsigned)
+    Above  // JA (unsigned)
+}
+
+/// Conditional jump.
+pub type MachJcc { cond: CondCode, target: I64 }
+
+/// Unconditional jump.
+pub type MachJmp { target: I64 }
+
+/// Function call.
+pub type MachCall { target: Str, arg_count: I64 }
+
+/// Return instruction.
+pub type MachRet { has_value: I64 }
+
+/// LEA instruction.
+pub type MachLea { dst: Operand, base_reg: I64, disp: I64, size: I64 }
+
+/// Spill pseudo-instruction: save vreg to stack.
+pub type MachSpill { vreg: VirtualReg, slot_offset: I64, size: I64 }
+
+/// Reload pseudo-instruction: load vreg from stack.
+pub type MachReload { vreg: VirtualReg, slot_offset: I64, size: I64 }
+
+// ============================================================================
+// Machine Blocks (item 1.3)
+// ============================================================================
+
+/// A basic block of machine instructions.
+pub type MachBlock {
+    id: I64,
+    label: Str,
+    insts: List[MachInst],
+    successors: List[I64]
+}
+
+/// Create a new empty MachBlock.
+pub func mach_block_new(id: I64, label: Str) -> MachBlock {
+    return MachBlock {
+        id: id,
+        label: label,
+        insts: List[MachInst]::new(16),
+        successors: List[I64]::new(2)
+    }
+}
+
+// ============================================================================
+// Machine Functions (item 1.4)
+// ============================================================================
+
+/// A complete machine function.
+pub type MachFunc {
+    name: Str,
+    blocks: List[MachBlock],
+    vreg_count: I64,
+    frame_size: I64,
+    is_leaf: I64
+}
+
+/// Create a new MachFunc with an entry block.
+pub func mach_func_new(name: Str) -> MachFunc {
+    let blocks = List[MachBlock]::new(8)
+    blocks.push(mach_block_new(0, "entry"))
+    return MachFunc {
+        name: name,
+        blocks: blocks,
+        vreg_count: 0,
+        frame_size: 0,
+        is_leaf: 1
+    }
+}
+
+/// Allocate a fresh virtual register.
+pub func fresh_vreg(mf: MachFunc) -> VirtualReg {
+    let id: I64 = mf.vreg_count
+    mf.vreg_count = id + 1
+    return VirtualReg { id: id }
+}

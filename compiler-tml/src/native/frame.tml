@@ -1,0 +1,120 @@
+//! Stack frame layout — prologue/epilogue emission.
+//!
+//! Generates the x86_64 function prologue and epilogue as MachIR
+//! pseudo-instructions. These are later encoded to raw bytes by
+//! phase 18b.
+//!
+//! ## x86_64 Stack Frame Layout
+//!
+//! ```
+//! [return address]     ← RSP on entry
+//! [saved RBP]          ← RBP after prologue
+//! [local slot 0]       ← RBP - 8
+//! [local slot 1]       ← RBP - 16
+//! ...
+//! [local slot N-1]     ← RBP - frame_size
+//!                      ← RSP after prologue
+//! ```
+//!
+//! Phase 18a — items 4.1–4.4.
+
+use compiler::native::machir::Operand
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachUnaryOp
+use compiler::native::machir::MachRet
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSP
+use compiler::native::stack_alloc::StackAllocation
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Frame size computation (item 4.1)
+// ============================================================================
+
+/// Compute the aligned frame size for a function.
+/// Result is always a multiple of 16 (x86_64 ABI requirement).
+pub func compute_frame_size(alloc: StackAllocation, is_leaf: I64) -> I64 {
+    var size: I64 = alloc.frame_size
+    // Non-leaf functions need 16-byte stack alignment at call sites.
+    // After PUSH RBP (8 bytes) + return address (8 bytes) = 16 bytes,
+    // so frame_size must be a multiple of 16 to maintain alignment.
+    if size == 0 and is_leaf == 0 {
+        size = 16  // Minimum for non-leaf
+    }
+    return size
+}
+
+// ============================================================================
+// Prologue emission (item 4.2)
+// ============================================================================
+
+/// Generate function prologue instructions.
+/// ```
+/// push rbp
+/// mov rbp, rsp
+/// sub rsp, frame_size   (if frame_size > 0)
+/// ```
+pub func emit_prologue(frame_size: I64) -> List[MachInst] {
+    let insts = List[MachInst]::new(3)
+
+    // PUSH RBP
+    insts.push(MachInst::Push(MachUnaryOp { operand: Operand::PhysReg(REG_RBP), size: 8 }))
+
+    // MOV RBP, RSP
+    insts.push(MachInst::Mov(MachMov { dst: Operand::PhysReg(REG_RBP), src: Operand::PhysReg(REG_RSP), size: 8 }))
+
+    // SUB RSP, frame_size (only if nonzero)
+    if frame_size > 0 {
+        insts.push(MachInst::Sub(MachBinOp { dst: Operand::PhysReg(REG_RSP), src: Operand::Imm(frame_size), size: 8 }))
+    }
+
+    return insts
+}
+
+// ============================================================================
+// Epilogue emission (item 4.3)
+// ============================================================================
+
+/// Generate function epilogue instructions.
+/// ```
+/// add rsp, frame_size   (if frame_size > 0)
+/// pop rbp
+/// ret
+/// ```
+pub func emit_epilogue(frame_size: I64, has_return_value: I64) -> List[MachInst] {
+    let insts = List[MachInst]::new(3)
+
+    // ADD RSP, frame_size (only if nonzero)
+    if frame_size > 0 {
+        insts.push(MachInst::Add(MachBinOp { dst: Operand::PhysReg(REG_RSP), src: Operand::Imm(frame_size), size: 8 }))
+    }
+
+    // POP RBP
+    insts.push(MachInst::Pop(MachUnaryOp { operand: Operand::PhysReg(REG_RBP), size: 8 }))
+
+    // RET
+    insts.push(MachInst::Ret(MachRet { has_value: has_return_value }))
+
+    return insts
+}
+
+// ============================================================================
+// Stack slot addressing (item 4.4)
+// ============================================================================
+
+/// Convert a stack slot offset to an [RBP - offset] Operand.
+/// Slot 0 → [RBP - 8], slot 1 → [RBP - 16], etc.
+pub func stack_operand(slot_offset: I64) -> Operand {
+    return Operand::Stack(slot_offset)
+}
+
+/// Compute the total number of bytes needed for the frame, including
+/// callee-saved registers (if any).
+pub func total_frame_bytes(frame_size: I64, callee_saved_count: I64) -> I64 {
+    return frame_size + callee_saved_count * 8
+}

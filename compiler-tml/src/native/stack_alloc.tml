@@ -1,0 +1,65 @@
+//! Stack-only register allocation — MVP allocator for debug backend.
+//!
+//! Every virtual register gets its own 8-byte stack slot. Correct but slow.
+//! Phase 19a replaces this with a linear scan allocator.
+//!
+//! Phase 18a — items 3.1–3.4.
+
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::Operand
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachSpill
+use compiler::native::machir::MachReload
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Stack slot assignment (item 3.1)
+// ============================================================================
+
+/// Allocation result: vreg ID → stack slot offset from RBP.
+pub type StackAllocation {
+    /// vreg_id → negative offset from RBP (e.g., -8, -16, -24, ...).
+    slot_offsets: HashMap[I64, I64],
+    /// Total frame size in bytes (aligned to 16).
+    frame_size: I64,
+    /// Number of slots allocated.
+    slot_count: I64
+}
+
+/// Assign each virtual register a unique 8-byte stack slot.
+pub func allocate_stack(mf: MachFunc) -> StackAllocation {
+    let offsets = HashMap[I64, I64]::new(64)
+    let vreg_count: I64 = mf.vreg_count
+    var next_offset: I64 = -8 as I64
+
+    for i in 0 to vreg_count {
+        offsets.set(i, next_offset)
+        next_offset = next_offset - 8
+    }
+
+    // Align frame size to 16 bytes
+    let raw_size: I64 = vreg_count * 8
+    var frame_size: I64 = (raw_size + 15) / 16 * 16
+
+    // Ensure minimum 16-byte alignment for non-leaf functions
+    if frame_size == 0 { frame_size = 0 }
+
+    return StackAllocation {
+        slot_offsets: offsets,
+        frame_size: frame_size,
+        slot_count: vreg_count
+    }
+}
+
+/// Get the stack slot offset for a virtual register.
+pub func get_slot_offset(alloc: StackAllocation, vreg_id: I64) -> I64 {
+    if alloc.slot_offsets.has(vreg_id) {
+        return alloc.slot_offsets.get(vreg_id)
+    }
+    return 0
+}

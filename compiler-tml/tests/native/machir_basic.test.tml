@@ -1,0 +1,122 @@
+//! Unit tests for MachIR data types, stack allocation, and frame layout.
+//! Phase 18a — item 5.1.
+
+use test::assert
+use test::assert_eq
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::Operand
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachUnaryOp
+use compiler::native::machir::MachRet
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachFunc
+use compiler::native::machir::mach_block_new
+use compiler::native::machir::mach_func_new
+use compiler::native::machir::fresh_vreg
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSP
+use compiler::native::stack_alloc::StackAllocation
+use compiler::native::stack_alloc::allocate_stack
+use compiler::native::stack_alloc::get_slot_offset
+use compiler::native::frame::compute_frame_size
+use compiler::native::frame::emit_prologue
+use compiler::native::frame::emit_epilogue
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// VirtualReg
+// ============================================================================
+
+@test func test_fresh_vreg() {
+    let mf: MachFunc = mach_func_new("test")
+    let vr0: VirtualReg = fresh_vreg(mf)
+    let vr1: VirtualReg = fresh_vreg(mf)
+    assert_eq(vr0.id as I32, 0)
+    assert_eq(vr1.id as I32, 1)
+    assert_eq(mf.vreg_count as I32, 2)
+}
+
+@test func test_mach_func_has_entry() {
+    let mf: MachFunc = mach_func_new("main")
+    assert_eq(mf.blocks.len() as I32, 1)
+    assert_eq(mf.name, "main")
+    assert_eq(mf.is_leaf as I32, 1)
+}
+
+@test func test_mach_block_new() {
+    let bb: MachBlock = mach_block_new(3, "loop_header")
+    assert_eq(bb.id as I32, 3)
+    assert_eq(bb.label, "loop_header")
+    assert_eq(bb.insts.len() as I32, 0)
+}
+
+// ============================================================================
+// Stack allocation
+// ============================================================================
+
+@test func test_stack_alloc_empty() {
+    let mf: MachFunc = mach_func_new("empty")
+    let alloc: StackAllocation = allocate_stack(mf)
+    assert_eq(alloc.frame_size as I32, 0)
+    assert_eq(alloc.slot_count as I32, 0)
+}
+
+@test func test_stack_alloc_3_vregs() {
+    let mf: MachFunc = mach_func_new("f")
+    fresh_vreg(mf)
+    fresh_vreg(mf)
+    fresh_vreg(mf)
+    let alloc: StackAllocation = allocate_stack(mf)
+    // 3 vregs × 8 bytes = 24, aligned to 16 → 32
+    assert_eq(alloc.frame_size as I32, 32)
+    assert_eq(alloc.slot_count as I32, 3)
+    assert_eq(get_slot_offset(alloc, 0) as I32, -8 as I32)
+    assert_eq(get_slot_offset(alloc, 1) as I32, -16 as I32)
+    assert_eq(get_slot_offset(alloc, 2) as I32, -24 as I32)
+}
+
+@test func test_stack_alloc_alignment() {
+    let mf: MachFunc = mach_func_new("f")
+    fresh_vreg(mf)
+    fresh_vreg(mf)
+    let alloc: StackAllocation = allocate_stack(mf)
+    // 2 vregs × 8 = 16, aligned to 16 → 16
+    assert_eq(alloc.frame_size as I32, 16)
+}
+
+// ============================================================================
+// Frame layout
+// ============================================================================
+
+@test func test_frame_size_leaf() {
+    let alloc = StackAllocation {
+        slot_offsets: HashMap[I64, I64]::new(4),
+        frame_size: 32,
+        slot_count: 4
+    }
+    let size: I64 = compute_frame_size(alloc, 1)
+    assert_eq(size as I32, 32)
+}
+
+@test func test_prologue_with_frame() {
+    let insts: List[MachInst] = emit_prologue(32)
+    assert_eq(insts.len() as I32, 3)  // push rbp, mov rbp rsp, sub rsp 32
+}
+
+@test func test_prologue_no_frame() {
+    let insts: List[MachInst] = emit_prologue(0)
+    assert_eq(insts.len() as I32, 2)  // push rbp, mov rbp rsp (no sub)
+}
+
+@test func test_epilogue_with_frame() {
+    let insts: List[MachInst] = emit_epilogue(32, 1)
+    assert_eq(insts.len() as I32, 3)  // add rsp 32, pop rbp, ret
+}
+
+@test func test_epilogue_no_frame() {
+    let insts: List[MachInst] = emit_epilogue(0, 0)
+    assert_eq(insts.len() as I32, 2)  // pop rbp, ret (no add)
+}
