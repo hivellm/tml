@@ -41,11 +41,13 @@ pub type HashMap[K, V] {
 //   offset 8:  ctrl pointer (*Unit) — 8 bytes
 //   offset 16: len (I64) — 8 bytes
 //   offset 24: capacity (I64) — 8 bytes
-// Total header: 32 bytes
+//   offset 32: entry_size (I64) — 8 bytes (key_size + val_size, cached)
+//   offset 40: val_size (I64) — 8 bytes (cached sizeof_type[V])
+// Total header: 48 bytes
 //
-// Each entry (16 bytes):
-//   offset 0:  key (I64) — 8 bytes
-//   offset 8:  value (I64) — 8 bytes
+// Each entry (entry_size bytes, dynamically sized):
+//   offset 0:          key (8 bytes, always I64-sized — keys are Str ptr or integer)
+//   offset 8:          value (val_size bytes — supports structs > 8 bytes)
 //
 // Control bytes (1 byte per slot, separate dense array):
 //   -1   (0xFF) = EMPTY — slot has never been used
@@ -63,12 +65,18 @@ impl[K, V] HashMap[K, V] {
             cap = cap * 2
         }
 
-        // Allocate header (32 bytes)
-        let header: *Unit = lowlevel { mem_alloc(32) }
+        // Compute value size — minimum 8 bytes for scalar types
+        let raw_val_size: I64 = lowlevel { size_of[V]() }
+        var val_size: I64 = raw_val_size
+        if val_size < 8 { val_size = 8 }
+        let entry_size: I64 = 8 + val_size  // key (8) + value (val_size)
+
+        // Allocate header (48 bytes)
+        let header: *Unit = lowlevel { mem_alloc(48) }
         let hdr: I64 = header as I64
 
-        // Allocate entries array (cap * 16 bytes)
-        let entries: *Unit = lowlevel { mem_alloc(cap * 16) }
+        // Allocate entries array (cap * entry_size bytes)
+        let entries: *Unit = lowlevel { mem_alloc(cap * entry_size) }
 
         // Allocate control byte array (cap bytes), init to EMPTY (-1 = 0xFF)
         let ctrl: *Unit = lowlevel { mem_alloc(cap) }
@@ -82,6 +90,10 @@ impl[K, V] HashMap[K, V] {
         lowlevel { ptr_write[I64]((hdr + 16) as *I64, 0 as I64) }
         // Store capacity at offset 24
         lowlevel { ptr_write[I64]((hdr + 24) as *I64, cap) }
+        // Store entry_size at offset 32
+        lowlevel { ptr_write[I64]((hdr + 32) as *I64, entry_size) }
+        // Store val_size at offset 40
+        lowlevel { ptr_write[I64]((hdr + 40) as *I64, val_size) }
 
         HashMap[K, V] { handle: header }
     }
@@ -97,6 +109,8 @@ impl[K, V] HashMap[K, V] {
         let hdr: I64 = this.handle as I64
         let p_len: *I64 = (hdr + 16) as *I64
         let p_cap: *I64 = (hdr + 24) as *I64
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
+        let vsz: I64 = lowlevel { ptr_read[I64]((hdr + 40) as *I64) }
         var cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
         var cur_cap: I64 = lowlevel { ptr_read[I64](p_cap) }
 
@@ -105,56 +119,50 @@ impl[K, V] HashMap[K, V] {
             let new_cap: I64 = cur_cap * 2
             let new_mask: I64 = new_cap - 1
 
-            // Allocate new entries and ctrl arrays
-            let new_entries: *Unit = lowlevel { mem_alloc(new_cap * 16) }
+            let new_entries: *Unit = lowlevel { mem_alloc(new_cap * esz) }
             let new_ctrl: *Unit = lowlevel { mem_alloc(new_cap) }
             lowlevel { write_bytes[I8](new_ctrl, -1 as I8, new_cap) }
             let new_entries_addr: I64 = new_entries as I64
             let new_ctrl_addr: I64 = new_ctrl as I64
 
-            // Read old pointers
             let old_entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
             let old_ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
-            // Rehash all occupied entries (ctrl >= 0 means occupied)
             for i in 0 to cur_cap {
                 let c: I8 = lowlevel { ptr_read[I8]((old_ctrl_addr + i) as *I8) }
                 if c >= (0 as I8) {
-                    let old_base: I64 = old_entries_addr + i * 16
+                    let old_base: I64 = old_entries_addr + i * esz
                     let e_key: I64 = lowlevel { ptr_read[I64](old_base as *I64) }
-                    let e_val: I64 = lowlevel { ptr_read[I64]((old_base + 8) as *I64) }
 
-                    // Cast stored I64 back to K for content-based hashing
                     let e_key_typed: K = e_key as K
                     let hash: I64 = HashMap[K, V].hash_typed(e_key_typed)
                     var h: I64 = hash & new_mask
                     let h2: I8 = HashMap[K, V].h2(hash)
 
-                    // Probe for empty slot (fresh table has no DELETED)
                     loop (lowlevel { ptr_read[I8]((new_ctrl_addr + h) as *I8) } >= (0 as I8)) {
                         h = (h + 1) & new_mask
                     }
 
-                    // Write entry and ctrl
-                    let new_base: I64 = new_entries_addr + h * 16
+                    let new_base: I64 = new_entries_addr + h * esz
+                    // Copy key (always 8 bytes)
                     lowlevel { ptr_write[I64](new_base as *I64, e_key) }
-                    lowlevel { ptr_write[I64]((new_base + 8) as *I64, e_val) }
+                    // Copy value (val_size bytes) via memcpy
+                    let old_val_ptr: *Unit = (old_base + 8) as *Unit
+                    let new_val_ptr: *Unit = (new_base + 8) as *Unit
+                    lowlevel { mem_copy(new_val_ptr, old_val_ptr, vsz) }
                     lowlevel { ptr_write[I8]((new_ctrl_addr + h) as *I8, h2) }
                 }
             }
 
-            // Free old arrays
             lowlevel { mem_free(old_entries_addr as *Unit) }
             lowlevel { mem_free(old_ctrl_addr as *Unit) }
 
-            // Update header
             lowlevel { ptr_write[I64](hdr as *I64, new_entries_addr) }
             lowlevel { ptr_write[I64]((hdr + 8) as *I64, new_ctrl_addr) }
             lowlevel { ptr_write[I64](p_cap, new_cap) }
             cur_cap = new_cap
         }
 
-        // Read current pointers
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
@@ -164,32 +172,28 @@ impl[K, V] HashMap[K, V] {
         let h2: I8 = HashMap[K, V].h2(hash)
         let start: I64 = h
 
-        // Probe: find existing key or first available slot
         var insert_slot: I64 = -1
         var cont: Bool = true
         loop (cont) {
             let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
 
             if c == (-1 as I8) {
-                // EMPTY: key not in table — stop probing
                 if insert_slot == -1 {
                     insert_slot = h
                 }
                 cont = false
             } else {
                 if c == (-128 as I8) {
-                    // DELETED: remember first deleted slot for insertion
                     if insert_slot == -1 {
                         insert_slot = h
                     }
                 } else {
-                    // OCCUPIED: check if h2 fingerprint matches
                     if c == h2 {
-                        let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                        let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                         if HashMap[K, V].keys_equal(e_key, key) {
-                            // Key exists: update value in place (duplicate to own)
-                            let owned_val_i64: I64 = value.duplicate() as I64
-                            lowlevel { ptr_write[I64]((entries_addr + h * 16 + 8) as *I64, owned_val_i64) }
+                            // Key exists: update value in place using type-aware write
+                            let val_ptr: *V = (entries_addr + h * esz + 8) as *V
+                            lowlevel { ptr_write[V](val_ptr, value.duplicate()) }
                             return
                         }
                     }
@@ -201,15 +205,13 @@ impl[K, V] HashMap[K, V] {
             }
         }
 
-        // Insert new entry — duplicate key to own the storage
-        // (prevents use-after-free when caller's key binding goes out of scope)
-        // Cast to I64 immediately so the compiler doesn't track it as an owned Str
-        // (otherwise @allocates cleanup would free the duplicate on scope exit)
+        // Insert new entry
         let owned_key_i64: I64 = key.duplicate() as I64
-        let owned_val_i64: I64 = value.duplicate() as I64
-        let slot_base: I64 = entries_addr + insert_slot * 16
+        let slot_base: I64 = entries_addr + insert_slot * esz
         lowlevel { ptr_write[I64](slot_base as *I64, owned_key_i64) }
-        lowlevel { ptr_write[I64]((slot_base + 8) as *I64, owned_val_i64) }
+        // Write value using type-aware ptr_write[V]
+        let val_ptr: *V = (slot_base + 8) as *V
+        lowlevel { ptr_write[V](val_ptr, value.duplicate()) }
         lowlevel { ptr_write[I8]((ctrl_addr + insert_slot) as *I8, h2) }
 
         cur_len = cur_len + 1
@@ -230,6 +232,7 @@ impl[K, V] HashMap[K, V] {
         }
 
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
@@ -243,9 +246,10 @@ impl[K, V] HashMap[K, V] {
             let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
             if c == (-1 as I8) { return 0 as V }
             if c == h2 {
-                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) {
-                    return lowlevel { ptr_read[I64]((entries_addr + h * 16 + 8) as *I64) } as V
+                    let val_ptr: *V = (entries_addr + h * esz + 8) as *V
+                    return lowlevel { ptr_read[V](val_ptr) }
                 }
             }
             h = (h + 1) & mask
@@ -262,6 +266,7 @@ impl[K, V] HashMap[K, V] {
         }
 
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
@@ -275,7 +280,7 @@ impl[K, V] HashMap[K, V] {
             let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
             if c == (-1 as I8) { return false }
             if c == h2 {
-                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) { return true }
             }
             h = (h + 1) & mask
@@ -294,6 +299,7 @@ impl[K, V] HashMap[K, V] {
         }
 
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
 
@@ -307,7 +313,7 @@ impl[K, V] HashMap[K, V] {
             let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
             if c == (-1 as I8) { return false }
             if c == h2 {
-                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * 16) as *I64) }
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) {
                     lowlevel { ptr_write[I8]((ctrl_addr + h) as *I8, -128 as I8) }
                     lowlevel { ptr_write[I64](p_len, cur_len - 1) }
@@ -438,6 +444,7 @@ impl[K, V] HashMap[K, V] {
     pub func retain(this, pred: func(K, V) -> Bool) {
         let hdr: I64 = this.handle as I64
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
         let p_len: *I64 = (hdr + 16) as *I64
@@ -446,11 +453,11 @@ impl[K, V] HashMap[K, V] {
         for i in 0 to cur_cap {
             let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
             if c >= (0 as I8) {
-                let e_base: I64 = entries_addr + i * 16
+                let e_base: I64 = entries_addr + i * esz
                 let e_key: K = lowlevel { ptr_read[I64](e_base as *I64) } as K
-                let e_val: V = lowlevel { ptr_read[I64]((e_base + 8) as *I64) } as V
+                let val_ptr: *V = (e_base + 8) as *V
+                let e_val: V = lowlevel { ptr_read[V](val_ptr) }
                 if not pred(e_key, e_val) {
-                    // Mark as DELETED
                     lowlevel { ptr_write[I8]((ctrl_addr + i) as *I8, -128 as I8) }
                     cur_len = cur_len - 1
                 }
@@ -567,8 +574,9 @@ impl[K, V] HashMapIter[K, V] {
 
         let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](map_handle_addr as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 32) as *I64) }
 
-        let key_i64: I64 = lowlevel { ptr_read[I64]((entries_addr + cur_idx * 16) as *I64) }
+        let key_i64: I64 = lowlevel { ptr_read[I64]((entries_addr + cur_idx * esz) as *I64) }
         key_i64 as K
     }
 
@@ -582,9 +590,10 @@ impl[K, V] HashMapIter[K, V] {
 
         let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
         let entries_addr: I64 = lowlevel { ptr_read[I64](map_handle_addr as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 32) as *I64) }
 
-        let val_i64: I64 = lowlevel { ptr_read[I64]((entries_addr + cur_idx * 16 + 8) as *I64) }
-        val_i64 as V
+        let val_ptr: *V = (entries_addr + cur_idx * esz + 8) as *V
+        return lowlevel { ptr_read[V](val_ptr) }
     }
 
     /// Destroys the iterator and frees all associated memory.
