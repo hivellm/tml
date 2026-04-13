@@ -49,3 +49,17 @@ pub use compiler::native::x86_encode::encode_nop
 // --- MachIR → bytes emission ---
 pub use compiler::native::x86_emit::emit_func
 pub use compiler::native::x86_emit::EmitResult
+
+// --- COFF object file ---
+pub use compiler::native::coff_emit::CoffSection
+pub use compiler::native::coff_emit::CoffSymbol
+pub use compiler::native::coff_emit::CoffRelocation
+pub use compiler::native::coff_emit::make_text_section
+pub use compiler::native::coff_emit::make_data_section
+pub use compiler::native::coff_emit::make_rdata_section
+pub use compiler::native::coff_emit::make_func_symbol
+pub use compiler::native::coff_emit::make_extern_symbol
+pub use compiler::native::coff_emit::make_rel32_reloc
+
+// --- Object file writer ---
+pub use compiler::native::obj_writer::write_coff

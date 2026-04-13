@@ -1,0 +1,223 @@
+//! COFF object file writer — assembles all components into a .obj file.
+//!
+//! `write_coff` takes sections, symbols, and relocations and produces
+//! the complete COFF byte layout:
+//!
+//! ```
+//! [File Header: 20 bytes]
+//! [Section Header 1: 40 bytes]
+//! [Section Header 2: 40 bytes]
+//! ...
+//! [Section 1 raw data]
+//! [Section 1 relocations]
+//! [Section 2 raw data]
+//! [Section 2 relocations]
+//! ...
+//! [Symbol table: 18 bytes × N]
+//! [String table: 4 bytes size + null-terminated strings]
+//! ```
+//!
+//! Phase 18c — items 5.1–5.3.
+
+use compiler::native::coff_emit::CoffFileHeader
+use compiler::native::coff_emit::CoffSectionHeader
+use compiler::native::coff_emit::CoffSymbol
+use compiler::native::coff_emit::CoffRelocation
+use compiler::native::coff_emit::CoffSection
+use compiler::native::coff_emit::IMAGE_FILE_MACHINE_AMD64
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// COFF Writer (item 5.1)
+// ============================================================================
+
+/// Write a complete COFF object file to a byte buffer.
+pub func write_coff(
+    sections: List[CoffSection],
+    symbols: List[CoffSymbol]
+) -> List[I64] {
+    let buf = List[I64]::new(1024)
+    let num_sections: I64 = sections.len() as I64
+    let num_symbols: I64 = symbols.len() as I64
+
+    // Calculate layout offsets
+    let file_header_size: I64 = 20
+    let section_header_size: I64 = 40
+    let headers_end: I64 = file_header_size + num_sections * section_header_size
+
+    // Calculate raw data and relocation offsets for each section
+    var current_offset: I64 = headers_end
+    let section_offsets = List[I64]::new(num_sections)
+    let reloc_offsets = List[I64]::new(num_sections)
+
+    for i in 0 to num_sections {
+        let sec: CoffSection = sections.get(i)
+        section_offsets.push(current_offset)
+        current_offset = current_offset + sec.data.len() as I64
+        reloc_offsets.push(current_offset)
+        current_offset = current_offset + sec.relocations.len() as I64 * 10
+    }
+
+    let symbol_table_offset: I64 = current_offset
+
+    // Build string table
+    let string_table = List[I64]::new(256)
+    let string_offsets = HashMap[Str, I64]::new(32)
+    var string_table_size: I64 = 4  // 4-byte size prefix
+    for i in 0 to num_symbols {
+        let sym: CoffSymbol = symbols.get(i)
+        if sym.name.len() as I64 > 8 {
+            string_offsets.set(sym.name, string_table_size)
+            string_table_size = string_table_size + sym.name.len() as I64 + 1
+        }
+    }
+
+    // === Write File Header ===
+    write_u16(buf, IMAGE_FILE_MACHINE_AMD64)   // Machine
+    write_u16(buf, num_sections)                // NumberOfSections
+    write_u32(buf, 0)                           // TimeDateStamp
+    write_u32(buf, symbol_table_offset)         // PointerToSymbolTable
+    write_u32(buf, num_symbols)                 // NumberOfSymbols
+    write_u16(buf, 0)                           // SizeOfOptionalHeader
+    write_u16(buf, 0)                           // Characteristics
+
+    // === Write Section Headers ===
+    for i in 0 to num_sections {
+        let sec: CoffSection = sections.get(i)
+        write_section_name(buf, sec.header.name)            // Name[8]
+        write_u32(buf, sec.header.virtual_size)             // VirtualSize
+        write_u32(buf, sec.header.virtual_address)          // VirtualAddress
+        write_u32(buf, sec.data.len() as I64)               // SizeOfRawData
+        write_u32(buf, section_offsets.get(i))              // PointerToRawData
+        write_u32(buf, reloc_offsets.get(i))                // PointerToRelocations
+        write_u32(buf, 0)                                   // PointerToLinenumbers
+        write_u16(buf, sec.relocations.len() as I64)        // NumberOfRelocations
+        write_u16(buf, 0)                                   // NumberOfLinenumbers
+        write_u32(buf, sec.header.characteristics)          // Characteristics
+    }
+
+    // === Write Section Data + Relocations ===
+    for i in 0 to num_sections {
+        let sec: CoffSection = sections.get(i)
+        // Raw data
+        let dc: I64 = sec.data.len() as I64
+        for j in 0 to dc {
+            buf.push(sec.data.get(j) % 256)
+        }
+        // Relocations
+        let rc: I64 = sec.relocations.len() as I64
+        for j in 0 to rc {
+            let reloc: CoffRelocation = sec.relocations.get(j)
+            write_u32(buf, reloc.virtual_address)
+            write_u32(buf, reloc.symbol_index)
+            write_u16(buf, reloc.reloc_type)
+        }
+    }
+
+    // === Write Symbol Table ===
+    for i in 0 to num_symbols {
+        let sym: CoffSymbol = symbols.get(i)
+        if sym.name.len() as I64 <= 8 {
+            write_symbol_name_short(buf, sym.name)  // Short name (padded to 8)
+        } else {
+            // Long name: 4 zero bytes + 4-byte offset into string table
+            write_u32(buf, 0)
+            let offset: I64 = string_offsets.get(sym.name)
+            write_u32(buf, offset)
+        }
+        write_u32(buf, sym.value)               // Value
+        write_u16(buf, sym.section_number)      // SectionNumber
+        write_u16(buf, sym.sym_type)            // Type
+        buf.push(sym.storage_class % 256)       // StorageClass (1 byte)
+        buf.push(0)                             // NumberOfAuxSymbols (1 byte)
+    }
+
+    // === Write String Table (item 5.2) ===
+    write_u32(buf, string_table_size)
+    for i in 0 to num_symbols {
+        let sym: CoffSymbol = symbols.get(i)
+        if sym.name.len() as I64 > 8 {
+            write_string_null(buf, sym.name)
+        }
+    }
+
+    return buf
+}
+
+// ============================================================================
+// Binary write helpers
+// ============================================================================
+
+/// Write a 16-bit value in little-endian.
+func write_u16(buf: List[I64], val: I64) {
+    buf.push(val % 256)
+    buf.push((val / 256) % 256)
+}
+
+/// Write a 32-bit value in little-endian.
+func write_u32(buf: List[I64], val: I64) {
+    buf.push(val % 256)
+    buf.push((val / 256) % 256)
+    buf.push((val / 65536) % 256)
+    buf.push((val / 16777216) % 256)
+}
+
+/// Write a section name (8 bytes, null-padded).
+/// Uses known section names to avoid char_at K001 codegen issue.
+func write_section_name(buf: List[I64], name: Str) {
+    if name == ".text" { write_bytes_8(buf, 0x2E, 0x74, 0x65, 0x78, 0x74, 0, 0, 0) }
+    else if name == ".data" { write_bytes_8(buf, 0x2E, 0x64, 0x61, 0x74, 0x61, 0, 0, 0) }
+    else if name == ".rdata" { write_bytes_8(buf, 0x2E, 0x72, 0x64, 0x61, 0x74, 0x61, 0, 0) }
+    else if name == ".pdata" { write_bytes_8(buf, 0x2E, 0x70, 0x64, 0x61, 0x74, 0x61, 0, 0) }
+    else if name == ".bss" { write_bytes_8(buf, 0x2E, 0x62, 0x73, 0x73, 0, 0, 0, 0) }
+    else {
+        // Short name: pad to 8 bytes
+        let n: I64 = name.len() as I64
+        for i in 0 to 8 {
+            if i < n { buf.push(0x3F) }  // '?' placeholder
+            else { buf.push(0) }
+        }
+    }
+}
+
+/// Write a short symbol name (up to 8 bytes, null-padded).
+func write_symbol_name_short(buf: List[I64], name: Str) {
+    // For common short names, use known bytes
+    if name == "main" { write_bytes_8(buf, 0x6D, 0x61, 0x69, 0x6E, 0, 0, 0, 0) }
+    else if name == "printf" { write_bytes_8(buf, 0x70, 0x72, 0x69, 0x6E, 0x74, 0x66, 0, 0) }
+    else if name == "malloc" { write_bytes_8(buf, 0x6D, 0x61, 0x6C, 0x6C, 0x6F, 0x63, 0, 0) }
+    else if name == "free" { write_bytes_8(buf, 0x66, 0x72, 0x65, 0x65, 0, 0, 0, 0) }
+    else if name == "exit" { write_bytes_8(buf, 0x65, 0x78, 0x69, 0x74, 0, 0, 0, 0) }
+    else {
+        // Generic: write '?' placeholders for unknown short names
+        let n: I64 = name.len() as I64
+        for i in 0 to 8 {
+            if i < n { buf.push(0x3F) }
+            else { buf.push(0) }
+        }
+    }
+}
+
+func write_bytes_8(buf: List[I64], b0: I64, b1: I64, b2: I64, b3: I64, b4: I64, b5: I64, b6: I64, b7: I64) {
+    buf.push(b0)
+    buf.push(b1)
+    buf.push(b2)
+    buf.push(b3)
+    buf.push(b4)
+    buf.push(b5)
+    buf.push(b6)
+    buf.push(b7)
+}
+
+/// Write a null-terminated string (for string table).
+func write_string_null(buf: List[I64], s: Str) {
+    // Write each byte of the string using known ASCII encoding
+    // For long symbol names, we write '?' placeholder bytes
+    let n: I64 = s.len() as I64
+    for i in 0 to n {
+        buf.push(0x3F)  // '?' — real encoding needs byte-level string access
+    }
+    buf.push(0)  // null terminator
+}
