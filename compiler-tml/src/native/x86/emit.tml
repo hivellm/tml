@@ -80,11 +80,22 @@ pub type BranchPatch {
 // Emit result
 // ============================================================================
 
-/// Result of emitting a function: the byte buffer and block offset map.
+/// A relocation entry for the linker.
+pub type RelocEntry {
+    /// Byte offset in .text where the rel32 displacement starts.
+    offset: I64,
+    /// Symbol name to relocate to.
+    symbol_name: Str,
+    /// Relocation type: 0 = REL32 (call/branch), 1 = REL32 (data reference from LEA)
+    reloc_kind: I64
+}
+
+/// Result of emitting a function: the byte buffer, block offsets, and relocations.
 pub type EmitResult {
     bytes: List[I64],
     block_offsets: HashMap[I64, I64],
     patches: List[BranchPatch],
+    relocations: List[RelocEntry],
     size: I64
 }
 
@@ -97,6 +108,32 @@ pub func emit_func(mf: MachFunc, alloc: StackAllocation) -> EmitResult {
     let buf = List[I64]::new(256)
     let block_offsets = HashMap[I64, I64]::new(16)
     let patches = List[BranchPatch]::new(16)
+    let relocs = List[RelocEntry]::new(8)
+
+    // Detect if function has any CALL instructions (is_leaf might not propagate through value copies)
+    var has_calls: I64 = 0
+    let bc_check: I64 = mf.blocks.len() as I64
+    for bi_check in 0 to bc_check {
+        let blk: MachBlock = mf.blocks.get(bi_check)
+        let ic_check: I64 = blk.insts.len() as I64
+        for ii_check in 0 to ic_check {
+            when blk.insts.get(ii_check) {
+                Call(_) => { has_calls = 1 },
+                _ => {}
+            }
+        }
+    }
+
+    // Emit prologue for non-leaf functions (need stack alignment for calls)
+    if has_calls > 0 {
+        // push rbp
+        encode_push(buf, 5)  // RBP
+        // sub rsp, 32 (shadow space for Win64 ABI)
+        emit_byte(buf, 0x48)  // REX.W
+        emit_byte(buf, 0x83)  // SUB r64, imm8
+        emit_byte(buf, modrm(3, 5, 4))  // /5 = SUB, rm = RSP
+        emit_byte(buf, 32)   // 32 bytes shadow space
+    }
 
     // Pass 1: emit all instructions with placeholder branch displacements
     let bc: I64 = mf.blocks.len() as I64
@@ -107,7 +144,8 @@ pub func emit_func(mf: MachFunc, alloc: StackAllocation) -> EmitResult {
         let ic: I64 = block.insts.len() as I64
         for ii in 0 to ic {
             let inst: MachInst = block.insts.get(ii)
-            emit_mach_inst(buf, inst, alloc, patches)
+            let leaf_flag: I64 = if has_calls > 0 { 0 } else { 1 }
+            emit_mach_inst_with_relocs(buf, inst, alloc, patches, relocs, leaf_flag)
         }
     }
 
@@ -128,6 +166,7 @@ pub func emit_func(mf: MachFunc, alloc: StackAllocation) -> EmitResult {
         bytes: buf,
         block_offsets: block_offsets,
         patches: patches,
+        relocations: relocs,
         size: buf.len() as I64
     }
 }
@@ -144,10 +183,10 @@ func patch_imm32(buf: List[I64], offset: I64, val: I64) {
 // Single instruction emission
 // ============================================================================
 
-/// Emit a single MachInst to the byte buffer.
-func emit_mach_inst(buf: List[I64], inst: MachInst, alloc: StackAllocation, patches: List[BranchPatch]) {
+/// Emit a single MachInst to the byte buffer, tracking relocations.
+func emit_mach_inst_with_relocs(buf: List[I64], inst: MachInst, alloc: StackAllocation, patches: List[BranchPatch], relocs: List[RelocEntry], is_leaf: I64) {
     when inst {
-        Mov(m) => emit_mov(buf, m, alloc),
+        Mov(m) => emit_mov_with_reloc(buf, m, alloc, relocs),
         Add(b) => emit_binop_add(buf, b, alloc),
         Sub(b) => emit_binop_sub(buf, b, alloc),
         Imul(b) => emit_binop_imul(buf, b, alloc),
@@ -155,8 +194,20 @@ func emit_mach_inst(buf: List[I64], inst: MachInst, alloc: StackAllocation, patc
         Cmp(c) => emit_cmp(buf, c, alloc),
         Jcc(j) => emit_jcc(buf, j, patches),
         Jmp(j) => emit_jmp(buf, j, patches),
-        Call(c) => emit_call(buf, c, patches),
-        Ret(_) => encode_ret(buf),
+        Call(c) => emit_call_with_reloc(buf, c, patches, relocs),
+        Ret(_) => {
+            // Emit epilogue before ret for non-leaf functions
+            if is_leaf == 0 {
+                // add rsp, 32
+                emit_byte(buf, 0x48)
+                emit_byte(buf, 0x83)
+                emit_byte(buf, modrm(3, 0, 4))  // /0 = ADD, rm = RSP
+                emit_byte(buf, 32)
+                // pop rbp
+                encode_pop(buf, 5)  // RBP
+            }
+            encode_ret(buf)
+        },
         Push(u) => emit_push(buf, u),
         Pop(u) => emit_pop(buf, u),
         Lea(l) => emit_lea_inst(buf, l, alloc),
@@ -197,19 +248,23 @@ func is_imm(op: Operand) -> I64 {
     }
 }
 
-func emit_mov(buf: List[I64], m: MachMov, alloc: StackAllocation) {
+func emit_mov_with_reloc(buf: List[I64], m: MachMov, alloc: StackAllocation, relocs: List[RelocEntry]) {
     let dst_reg: I64 = operand_to_reg(m.dst)
     // Check for Label operand (string constants → LEA reg, [rip + disp32])
     when m.src {
         Label(name) => {
-            // Emit LEA dst, [rip + 0x00000000] — relocation to be patched
-            // LEA encoding: REX.W 0x8D ModRM(00, dst, 101=RIP-relative) + disp32
+            // Emit LEA dst, [rip + 0x00000000] — relocation to be patched by linker
             let rex_byte: I64 = 0x48 + (if dst_reg >= 8 { 4 } else { 0 })
             emit_byte(buf, rex_byte)
             emit_byte(buf, 0x8D)  // LEA
             emit_byte(buf, modrm(0, dst_reg % 8, 5))  // mod=00, rm=101 = RIP-relative
-            // Placeholder displacement (will be patched by linker via relocation)
-            emit_imm32(buf, 0)
+            // Record relocation: the disp32 starts at current buf position
+            relocs.push(RelocEntry {
+                offset: buf.len() as I64,
+                symbol_name: name,
+                reloc_kind: 1  // REL32 data reference
+            })
+            emit_imm32(buf, 0)  // placeholder displacement
             return
         },
         _ => {}
@@ -225,6 +280,16 @@ func emit_mov(buf: List[I64], m: MachMov, alloc: StackAllocation) {
         let src_reg: I64 = operand_to_reg(m.src)
         encode_mov_rr(buf, dst_reg, src_reg)
     }
+}
+
+func emit_call_with_reloc(buf: List[I64], c: MachCall, patches: List[BranchPatch], relocs: List[RelocEntry]) {
+    encode_call_rel32(buf, 0)  // placeholder displacement
+    // Record relocation for the call target
+    relocs.push(RelocEntry {
+        offset: buf.len() as I64 - 4,  // disp32 starts 4 bytes before end
+        symbol_name: c.target,
+        reloc_kind: 0  // REL32 call
+    })
 }
 
 func emit_binop_add(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
@@ -282,10 +347,7 @@ func emit_jmp(buf: List[I64], j: MachJmp, patches: List[BranchPatch]) {
     patches.push(BranchPatch { offset: buf.len() as I64 - 4, target_block: j.target })
 }
 
-func emit_call(buf: List[I64], c: MachCall, patches: List[BranchPatch]) {
-    encode_call_rel32(buf, 0)
-    // Call target resolution happens at link time, not here
-}
+// emit_call replaced by emit_call_with_reloc above
 
 func emit_push(buf: List[I64], u: MachUnaryOp) {
     encode_push(buf, operand_to_reg(u.operand))

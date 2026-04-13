@@ -39,6 +39,7 @@ use compiler::native::stack_alloc::allocate_stack
 use compiler::native::stack_alloc::StackAllocation
 use compiler::native::x86::emit::emit_func
 use compiler::native::x86::emit::EmitResult
+use compiler::native::x86::emit::RelocEntry
 use compiler::native::x86::peephole::run_peephole
 use compiler::native::x86::const_prop::run_const_prop
 use compiler::native::x86::frame::emit_prologue
@@ -85,6 +86,7 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
     let all_code = List[I64]::new(4096)
     let symbols = List[CoffSymbol]::new(32)
     let func_offsets = HashMap[Str, I64]::new(32)
+    let all_relocs = List[RelocEntry]::new(16)
     var total_spills: I64 = 0
     var funcs_compiled: I64 = 0
 
@@ -125,6 +127,17 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
         let code_len: I64 = emit_result.bytes.len() as I64
         for bi in 0 to code_len {
             all_code.push(emit_result.bytes.get(bi))
+        }
+
+        // Collect relocations (adjust offsets by function's position in .text)
+        let rc: I64 = emit_result.relocations.len() as I64
+        for ri in 0 to rc {
+            let reloc: RelocEntry = emit_result.relocations.get(ri)
+            all_relocs.push(RelocEntry {
+                offset: func_offset + reloc.offset,
+                symbol_name: reloc.symbol_name,
+                reloc_kind: reloc.reloc_kind
+            })
         }
 
         // Add function symbol
@@ -184,20 +197,56 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
         }
     }
 
+    // Build symbol index map (symbol name → index in symbols list)
+    let sym_index = HashMap[Str, I64]::new(32)
+    let sc: I64 = symbols.len() as I64
+    for si in 0 to sc {
+        let sym: CoffSymbol = symbols.get(si)
+        sym_index.set(sym.name, si)
+    }
+
+    // If we have .rdata, add a section symbol for it and a string data symbol
+    var rdata_section_num: I64 = 0
+    if rdata_bytes.len() as I64 > 0 {
+        rdata_section_num = 2  // .rdata is section 2 (1-indexed)
+        // Add a symbol for the .rdata section start
+        symbols.push(CoffSymbol {
+            name: ".rdata",
+            value: 0,
+            section_number: rdata_section_num,
+            sym_type: 0,
+            storage_class: 3  // STATIC
+        })
+        let rdata_sym_idx: I64 = symbols.len() as I64 - 1
+        sym_index.set(".rdata", rdata_sym_idx)
+    }
+
     // Assemble COFF .obj
     let text_section: CoffSection = make_text_section(all_code)
+
+    // Add relocations to .text section
+    let nrelocs: I64 = all_relocs.len() as I64
+    for ri in 0 to nrelocs {
+        let reloc: RelocEntry = all_relocs.get(ri)
+        if reloc.reloc_kind == 0 {
+            // CALL relocation → REL32 to extern symbol
+            if sym_index.has(reloc.symbol_name) {
+                section_add_reloc(text_section, make_rel32_reloc(reloc.offset, sym_index.get(reloc.symbol_name)))
+            }
+        } else {
+            // LEA data reference → REL32 to .rdata section
+            if rdata_section_num > 0 and sym_index.has(".rdata") {
+                section_add_reloc(text_section, make_rel32_reloc(reloc.offset, sym_index.get(".rdata")))
+            }
+        }
+    }
 
     let sections = List[CoffSection]::new(2)
     sections.push(text_section)
 
-    // Add .rdata section if we have string literals
     if rdata_bytes.len() as I64 > 0 {
         sections.push(make_rdata_section(rdata_bytes))
     }
-
-    // Add relocations for CALL instructions (REL32 to extern symbols)
-    // and LEA instructions (REL32 to .rdata string offsets)
-    // TODO: scan emit_result for relocation sites and add them to text_section
 
     let obj_bytes: List[I64] = write_coff(sections, symbols)
 
