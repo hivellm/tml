@@ -1,0 +1,92 @@
+//! Tests for SSE2 encoding, peephole optimization, and constant propagation.
+//! Phase 20a.
+
+use test::assert
+use test::assert_eq
+use compiler::native::x86_sse::encode_addsd
+use compiler::native::x86_sse::encode_ucomisd
+use compiler::native::x86_sse::encode_cvtsi2sd
+use compiler::native::x86_sse::encode_mfence
+use compiler::native::x86_sse::encode_sfence
+use compiler::native::x86_sse::encode_lfence
+use compiler::native::x86_sse::encode_lock_cmpxchg
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachRet
+use compiler::native::machir::Operand
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::mach_func_new
+use compiler::native::machir::fresh_vreg
+use compiler::native::peephole::run_peephole
+use compiler::native::peephole::PeepholeResult
+use compiler::native::const_prop::run_const_prop
+use compiler::native::const_prop::ConstPropResult
+use std::collections::list::List
+
+@test func test_sse2_and_optimizations() {
+    // 1. SSE2 ADDSD encoding: F2 0F 58 C1 (xmm0, xmm1)
+    let buf = List[I64]::new(8)
+    encode_addsd(buf, 0, 1)
+    assert_eq(buf.get(0) as I32, 0xF2 as I32)
+    assert_eq(buf.get(1) as I32, 0x0F as I32)
+    assert_eq(buf.get(2) as I32, 0x58 as I32)
+
+    // 2. UCOMISD encoding: 66 0F 2E C1
+    let buf2 = List[I64]::new(8)
+    encode_ucomisd(buf2, 0, 1)
+    assert_eq(buf2.get(0) as I32, 0x66 as I32)
+    assert_eq(buf2.get(1) as I32, 0x0F as I32)
+    assert_eq(buf2.get(2) as I32, 0x2E as I32)
+
+    // 3. CVTSI2SD encoding: F2 REX.W 0F 2A
+    let buf3 = List[I64]::new(8)
+    encode_cvtsi2sd(buf3, 0, 0)
+    assert_eq(buf3.get(0) as I32, 0xF2 as I32)
+    assert_eq(buf3.get(1) as I32, 0x48 as I32)  // REX.W
+    assert_eq(buf3.get(2) as I32, 0x0F as I32)
+    assert_eq(buf3.get(3) as I32, 0x2A as I32)
+
+    // 4. MFENCE: 0F AE F0
+    let buf4 = List[I64]::new(4)
+    encode_mfence(buf4)
+    assert_eq(buf4.len() as I32, 3)
+    assert_eq(buf4.get(0) as I32, 0x0F as I32)
+    assert_eq(buf4.get(1) as I32, 0xAE as I32)
+    assert_eq(buf4.get(2) as I32, 0xF0 as I32)
+
+    // 5. SFENCE and LFENCE
+    let buf5 = List[I64]::new(4)
+    encode_sfence(buf5)
+    assert_eq(buf5.get(2) as I32, 0xF8 as I32)
+    let buf6 = List[I64]::new(4)
+    encode_lfence(buf6)
+    assert_eq(buf6.get(2) as I32, 0xE8 as I32)
+
+    // 6. LOCK CMPXCHG: F0 48 0F B1
+    let buf7 = List[I64]::new(8)
+    encode_lock_cmpxchg(buf7, 0, 1)
+    assert_eq(buf7.get(0) as I32, 0xF0 as I32)  // LOCK
+
+    // 7. Peephole: MOV r, 0 → XOR r, r
+    let mf = mach_func_new("peep_test")
+    let bb = mf.blocks.get(0)
+    bb.insts.push(MachInst::Mov(MachMov { dst: Operand::PhysReg(0), src: Operand::Imm(0), size: 8 }))
+    bb.insts.push(MachInst::Ret(MachRet { has_value: 0 }))
+    let pr: PeepholeResult = run_peephole(mf)
+    assert(pr.zero_idioms > 0)
+
+    // 8. Const prop: MOV vr0, 3; MOV vr1, 4; ADD vr0, vr1 → MOV vr0, 7
+    let mf2 = mach_func_new("cp_test")
+    let vr0 = fresh_vreg(mf2)
+    let vr1 = fresh_vreg(mf2)
+    let bb2 = mf2.blocks.get(0)
+    bb2.insts.push(MachInst::Mov(MachMov { dst: Operand::Reg(vr0), src: Operand::Imm(3), size: 8 }))
+    bb2.insts.push(MachInst::Mov(MachMov { dst: Operand::Reg(vr1), src: Operand::Imm(4), size: 8 }))
+    bb2.insts.push(MachInst::Add(MachBinOp { dst: Operand::Reg(vr0), src: Operand::Reg(vr1), size: 8 }))
+    bb2.insts.push(MachInst::Ret(MachRet { has_value: 1 }))
+    let cp: ConstPropResult = run_const_prop(mf2)
+    assert(cp.constants_folded > 0)
+}

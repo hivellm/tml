@@ -67,6 +67,25 @@ pub use compiler::native::calling_conv::sysv_cc
 pub use compiler::native::calling_conv::is_callee_saved
 pub use compiler::native::calling_conv::arg_reg
 
+// --- SSE2/SSE4/AVX2 + atomics ---
+pub use compiler::native::x86_sse::encode_addsd
+pub use compiler::native::x86_sse::encode_subsd
+pub use compiler::native::x86_sse::encode_mulsd
+pub use compiler::native::x86_sse::encode_divsd
+pub use compiler::native::x86_sse::encode_cvtsi2sd
+pub use compiler::native::x86_sse::encode_cvtsd2si
+pub use compiler::native::x86_sse::encode_lock_cmpxchg
+pub use compiler::native::x86_sse::encode_lock_xadd
+pub use compiler::native::x86_sse::encode_mfence
+
+// --- Peephole optimization ---
+pub use compiler::native::peephole::PeepholeResult
+pub use compiler::native::peephole::run_peephole
+
+// --- Constant propagation ---
+pub use compiler::native::const_prop::ConstPropResult
+pub use compiler::native::const_prop::run_const_prop
+
 // --- COFF object file ---
 pub use compiler::native::coff_emit::CoffSection
 pub use compiler::native::coff_emit::CoffSymbol

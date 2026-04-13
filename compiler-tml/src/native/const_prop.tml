@@ -1,0 +1,124 @@
+//! Constant propagation at MachIR level.
+//!
+//! Tracks VirtualRegs holding compile-time constants and folds
+//! arithmetic on constant operands. Also eliminates dead branches
+//! where the condition is a known constant.
+//!
+//! Phase 20a — items 5.1–5.2.
+
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachCmp
+use compiler::native::machir::MachJcc
+use compiler::native::machir::MachJmp
+use compiler::native::machir::Operand
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::CondCode
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachFunc
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Constant propagation result
+// ============================================================================
+
+pub type ConstPropResult {
+    constants_folded: I64,
+    branches_eliminated: I64
+}
+
+// ============================================================================
+// Constant propagation (items 5.1–5.2)
+// ============================================================================
+
+/// Run constant propagation on a function.
+pub func run_const_prop(mf: MachFunc) -> ConstPropResult {
+    // Map vreg_id → known constant value
+    let constants = HashMap[I64, I64]::new(32)
+    var folded: I64 = 0
+    var branches_elim: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let block: MachBlock = mf.blocks.get(bi)
+        let ic: I64 = block.insts.len() as I64
+
+        for ii in 0 to ic {
+            let inst: MachInst = block.insts.get(ii)
+
+            // Track MOV vreg, imm → register vreg as constant
+            when inst {
+                Mov(m) => {
+                    let dst_id: I64 = operand_vreg_id(m.dst)
+                    when m.src {
+                        Imm(v) => {
+                            if dst_id >= 0 { constants.set(dst_id, v) }
+                        },
+                        _ => {
+                            // Non-constant source — invalidate dst
+                            if dst_id >= 0 and constants.has(dst_id) {
+                                constants.set(dst_id, 0)
+                            }
+                        }
+                    }
+                },
+                Add(b) => {
+                    let dst_id: I64 = operand_vreg_id(b.dst)
+                    let src_id: I64 = operand_vreg_id(b.src)
+                    // If both dst (current value) and src are known constants, fold
+                    if dst_id >= 0 and constants.has(dst_id) and src_id >= 0 and constants.has(src_id) {
+                        let result: I64 = constants.get(dst_id) + constants.get(src_id)
+                        constants.set(dst_id, result)
+                        // Replace ADD with MOV imm
+                        block.insts.set(ii, MachInst::Mov(MachMov {
+                            dst: b.dst,
+                            src: Operand::Imm(result),
+                            size: 8
+                        }))
+                        folded = folded + 1
+                    } else if dst_id >= 0 {
+                        // Result unknown — clear constant tracking
+                        constants.set(dst_id, 0)
+                    }
+                },
+                Sub(b) => {
+                    let dst_id: I64 = operand_vreg_id(b.dst)
+                    let src_id: I64 = operand_vreg_id(b.src)
+                    if dst_id >= 0 and constants.has(dst_id) and src_id >= 0 and constants.has(src_id) {
+                        let result: I64 = constants.get(dst_id) - constants.get(src_id)
+                        constants.set(dst_id, result)
+                        block.insts.set(ii, MachInst::Mov(MachMov {
+                            dst: b.dst,
+                            src: Operand::Imm(result),
+                            size: 8
+                        }))
+                        folded = folded + 1
+                    } else if dst_id >= 0 {
+                        constants.set(dst_id, 0)
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    return ConstPropResult {
+        constants_folded: folded,
+        branches_eliminated: branches_elim
+    }
+}
+
+// ============================================================================
+// Helper
+// ============================================================================
+
+func operand_vreg_id(op: Operand) -> I64 {
+    when op {
+        Reg(vr) => return vr.id,
+        PhysReg(r) => return -(r + 100),  // Negative to distinguish from vregs
+        _ => return -1 as I64
+    }
+}

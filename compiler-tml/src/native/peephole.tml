@@ -1,0 +1,209 @@
+//! Peephole optimization pass over MachInst list.
+//!
+//! Runs after register allocation on the physical-register MachInst list.
+//! Applies local pattern matching to eliminate redundant instructions,
+//! strength-reduce multiplications, and apply zero-register idioms.
+//!
+//! Phase 20a — items 4.1–4.4.
+
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachLea
+use compiler::native::machir::Operand
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachFunc
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Peephole pass result
+// ============================================================================
+
+pub type PeepholeResult {
+    instructions_removed: I64,
+    strength_reduced: I64,
+    zero_idioms: I64
+}
+
+// ============================================================================
+// Peephole optimization (items 4.1–4.4)
+// ============================================================================
+
+/// Run peephole optimizations on all blocks of a function.
+pub func run_peephole(mf: MachFunc) -> PeepholeResult {
+    var removed: I64 = 0
+    var reduced: I64 = 0
+    var zeroed: I64 = 0
+
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let block: MachBlock = mf.blocks.get(bi)
+        let ic: I64 = block.insts.len() as I64
+
+        // Scan for patterns (window of 2 adjacent instructions)
+        var i: I64 = 0
+        loop (i < ic - 1) {
+            let inst1: MachInst = block.insts.get(i)
+            let inst2: MachInst = block.insts.get(i + 1)
+
+            // Pattern 4.1: Redundant MOV pair — MOV rA, rB; MOV rB, rA → drop second
+            if is_redundant_mov_pair(inst1, inst2) {
+                // Mark second as NOP (we can't remove from list efficiently)
+                block.insts.set(i + 1, MachInst::Nop)
+                removed = removed + 1
+            }
+
+            // Pattern 4.4: MOV r64, 0 → XOR r32, r32 (shorter encoding)
+            if is_mov_zero(inst1) {
+                let dst: I64 = get_mov_dst_reg(inst1)
+                if dst >= 0 {
+                    block.insts.set(i, MachInst::Xor(MachBinOp {
+                        dst: Operand::PhysReg(dst),
+                        src: Operand::PhysReg(dst),
+                        size: 4  // 32-bit XOR clears upper 32 bits too
+                    }))
+                    zeroed = zeroed + 1
+                }
+            }
+
+            // Pattern 4.2: IMUL r64, 2 → SHL r64, 1
+            if is_imul_power_of_2(inst1) {
+                let info = get_imul_info(inst1)
+                if info.shift > 0 {
+                    block.insts.set(i, MachInst::Shl(MachBinOp {
+                        dst: info.dst,
+                        src: Operand::Imm(info.shift),
+                        size: 8
+                    }))
+                    reduced = reduced + 1
+                }
+            }
+
+            i = i + 1
+        }
+
+        // Check last instruction for zero idiom
+        if ic > 0 {
+            let last: MachInst = block.insts.get(ic - 1)
+            if is_mov_zero(last) {
+                let dst: I64 = get_mov_dst_reg(last)
+                if dst >= 0 {
+                    block.insts.set(ic - 1, MachInst::Xor(MachBinOp {
+                        dst: Operand::PhysReg(dst),
+                        src: Operand::PhysReg(dst),
+                        size: 4
+                    }))
+                    zeroed = zeroed + 1
+                }
+            }
+        }
+    }
+
+    return PeepholeResult {
+        instructions_removed: removed,
+        strength_reduced: reduced,
+        zero_idioms: zeroed
+    }
+}
+
+// ============================================================================
+// Pattern matching helpers
+// ============================================================================
+
+type ImulInfo { dst: Operand, shift: I64 }
+
+func is_redundant_mov_pair(a: MachInst, b: MachInst) -> Bool {
+    when a {
+        Mov(m1) => {
+            when b {
+                Mov(m2) => {
+                    return operands_equal(m1.dst, m2.src) and operands_equal(m1.src, m2.dst)
+                },
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+func is_mov_zero(inst: MachInst) -> Bool {
+    when inst {
+        Mov(m) => {
+            when m.src {
+                Imm(v) => return v == 0,
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+func get_mov_dst_reg(inst: MachInst) -> I64 {
+    when inst {
+        Mov(m) => {
+            when m.dst {
+                PhysReg(r) => return r,
+                Reg(vr) => return vr.id,
+                _ => return -1 as I64
+            }
+        },
+        _ => return -1 as I64
+    }
+}
+
+func is_imul_power_of_2(inst: MachInst) -> Bool {
+    when inst {
+        Imul(b) => {
+            when b.src {
+                Imm(v) => return v == 2 or v == 4 or v == 8 or v == 16,
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+func get_imul_info(inst: MachInst) -> ImulInfo {
+    when inst {
+        Imul(b) => {
+            when b.src {
+                Imm(v) => {
+                    var shift: I64 = 0
+                    if v == 2 { shift = 1 }
+                    else if v == 4 { shift = 2 }
+                    else if v == 8 { shift = 3 }
+                    else if v == 16 { shift = 4 }
+                    return ImulInfo { dst: b.dst, shift: shift }
+                },
+                _ => return ImulInfo { dst: b.dst, shift: 0 }
+            }
+        },
+        _ => return ImulInfo { dst: Operand::Imm(0), shift: 0 }
+    }
+}
+
+func operands_equal(a: Operand, b: Operand) -> Bool {
+    when a {
+        PhysReg(ra) => {
+            when b {
+                PhysReg(rb) => return ra == rb,
+                _ => return false
+            }
+        },
+        Reg(va) => {
+            when b {
+                Reg(vb) => return va.id == vb.id,
+                _ => return false
+            }
+        },
+        Imm(ia) => {
+            when b {
+                Imm(ib) => return ia == ib,
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}

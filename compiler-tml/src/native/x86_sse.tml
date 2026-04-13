@@ -1,0 +1,215 @@
+//! SSE2/SSE4/AVX2 instruction encoding for the native backend.
+//!
+//! Encodes floating-point (scalar and vector), SIMD integer, and
+//! conversion instructions. SSE2 is baseline (all x86_64 CPUs);
+//! SSE4.2 and AVX2 are checked via CPUID at startup.
+//!
+//! Phase 20a — items 1.1–2.4.
+
+use compiler::native::x86_encode::emit_byte
+use compiler::native::x86_encode::emit_imm8
+use compiler::native::x86_encode::modrm
+use compiler::native::x86_encode::rex
+use std::collections::list::List
+
+// ============================================================================
+// Phase 1: SSE2 Scalar Float (items 1.1–1.2)
+// ============================================================================
+
+/// ADDSD xmm1, xmm2 — scalar double add.
+/// Encoding: F2 0F 58 ModRM
+pub func encode_addsd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x58)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// SUBSD xmm1, xmm2 — scalar double subtract.
+pub func encode_subsd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5C)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// MULSD xmm1, xmm2 — scalar double multiply.
+pub func encode_mulsd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x59)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// DIVSD xmm1, xmm2 — scalar double divide.
+pub func encode_divsd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5E)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// SQRTSD xmm1, xmm2 — scalar double square root.
+pub func encode_sqrtsd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x51)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// UCOMISD xmm1, xmm2 — unordered compare scalar double (sets flags).
+pub func encode_ucomisd(buf: List[I64], src1: I64, src2: I64) {
+    emit_byte(buf, 0x66)
+    if src1 >= 8 or src2 >= 8 { emit_byte(buf, rex(0, if src1 >= 8 { 1 } else { 0 }, 0, if src2 >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x2E)
+    emit_byte(buf, modrm(3, src1 % 8, src2 % 8))
+}
+
+/// ADDSS xmm1, xmm2 — scalar float add.
+pub func encode_addss(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x58)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// SUBSS xmm1, xmm2 — scalar float subtract.
+pub func encode_subss(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5C)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// MULSS xmm1, xmm2 — scalar float multiply.
+pub func encode_mulss(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x59)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// DIVSS xmm1, xmm2 — scalar float divide.
+pub func encode_divss(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5E)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+// ============================================================================
+// SSE2 Vector Load/Store (item 1.3)
+// ============================================================================
+
+/// MOVSD xmm, xmm — move scalar double.
+pub func encode_movsd_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x10)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// MOVSS xmm, xmm — move scalar float.
+pub func encode_movss_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x10)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+// ============================================================================
+// Conversion Instructions (item 1.4)
+// ============================================================================
+
+/// CVTSI2SD xmm, r64 — convert I64 to F64.
+pub func encode_cvtsi2sd(buf: List[I64], xmm_dst: I64, gpr_src: I64) {
+    emit_byte(buf, 0xF2)
+    emit_byte(buf, rex(1, if xmm_dst >= 8 { 1 } else { 0 }, 0, if gpr_src >= 8 { 1 } else { 0 }))
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x2A)
+    emit_byte(buf, modrm(3, xmm_dst % 8, gpr_src % 8))
+}
+
+/// CVTSD2SI r64, xmm — convert F64 to I64 (truncate).
+pub func encode_cvtsd2si(buf: List[I64], gpr_dst: I64, xmm_src: I64) {
+    emit_byte(buf, 0xF2)
+    emit_byte(buf, rex(1, if gpr_dst >= 8 { 1 } else { 0 }, 0, if xmm_src >= 8 { 1 } else { 0 }))
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x2D)
+    emit_byte(buf, modrm(3, gpr_dst % 8, xmm_src % 8))
+}
+
+/// CVTSS2SD xmm, xmm — convert F32 to F64.
+pub func encode_cvtss2sd(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF3)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5A)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+/// CVTSD2SS xmm, xmm — convert F64 to F32.
+pub func encode_cvtsd2ss(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, 0xF2)
+    if dst >= 8 or src >= 8 { emit_byte(buf, rex(0, if dst >= 8 { 1 } else { 0 }, 0, if src >= 8 { 1 } else { 0 })) }
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0x5A)
+    emit_byte(buf, modrm(3, dst % 8, src % 8))
+}
+
+// ============================================================================
+// Phase 3: Atomic Instructions (items 3.1–3.3)
+// ============================================================================
+
+/// LOCK CMPXCHG [mem], r64 — atomic compare-and-swap.
+/// Encoding: LOCK F0 REX.W 0F B1 ModRM
+pub func encode_lock_cmpxchg(buf: List[I64], mem_reg: I64, val_reg: I64) {
+    emit_byte(buf, 0xF0)  // LOCK prefix
+    emit_byte(buf, rex(1, if val_reg >= 8 { 1 } else { 0 }, 0, if mem_reg >= 8 { 1 } else { 0 }))
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xB1)
+    emit_byte(buf, modrm(0, val_reg % 8, mem_reg % 8))
+}
+
+/// LOCK XADD [mem], r64 — atomic fetch-add.
+/// Encoding: LOCK F0 REX.W 0F C1 ModRM
+pub func encode_lock_xadd(buf: List[I64], mem_reg: I64, val_reg: I64) {
+    emit_byte(buf, 0xF0)  // LOCK prefix
+    emit_byte(buf, rex(1, if val_reg >= 8 { 1 } else { 0 }, 0, if mem_reg >= 8 { 1 } else { 0 }))
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xC1)
+    emit_byte(buf, modrm(0, val_reg % 8, mem_reg % 8))
+}
+
+/// MFENCE — full memory barrier.
+pub func encode_mfence(buf: List[I64]) {
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xAE)
+    emit_byte(buf, 0xF0)
+}
+
+/// SFENCE — store fence.
+pub func encode_sfence(buf: List[I64]) {
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xAE)
+    emit_byte(buf, 0xF8)
+}
+
+/// LFENCE — load fence.
+pub func encode_lfence(buf: List[I64]) {
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xAE)
+    emit_byte(buf, 0xE8)
+}
