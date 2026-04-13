@@ -1,0 +1,488 @@
+//! AArch64 instruction encoding — fixed 32-bit instruction words.
+//!
+//! Every AArch64 instruction is exactly 4 bytes (32 bits), always 4-byte aligned.
+//! Encoding is done by setting named bit fields in a 32-bit integer.
+//!
+//! ## Instruction Format Summary
+//!
+//! | Bits     | Field          | Common values                    |
+//! |----------|---------------|----------------------------------|
+//! | [31]     | sf            | 1=64-bit, 0=32-bit              |
+//! | [30:29]  | opc           | operation variant                |
+//! | [28:24]  | op0           | instruction group                |
+//! | [23:22]  | shift/hw      | shift amount / halfword          |
+//! | [21:10]  | imm12/imm     | immediate operand                |
+//! | [9:5]    | Rn            | first source register            |
+//! | [4:0]    | Rd            | destination register             |
+//!
+//! Phase 20b — items 1.2–1.5.
+
+use std::collections::list::List
+
+// ============================================================================
+// Bit-field helpers (item 1.2)
+// ============================================================================
+
+/// Set bits [hi:lo] of `word` to `value`. Bits are numbered 31..0.
+pub func set_bits(word: I64, hi: I64, lo: I64, value: I64) -> I64 {
+    let width: I64 = hi - lo + 1
+    let mask: I64 = (1 << width) - 1
+    let cleared: I64 = word & (not (mask << lo))
+    return cleared | ((value & mask) << lo)
+}
+
+/// Extract bits [hi:lo] from `word`.
+pub func get_bits(word: I64, hi: I64, lo: I64) -> I64 {
+    let width: I64 = hi - lo + 1
+    let mask: I64 = (1 << width) - 1
+    return (word >> lo) & mask
+}
+
+/// Emit a 32-bit instruction word as 4 little-endian bytes into buf.
+pub func emit_inst(buf: List[I64], word: I64) {
+    buf.push((word) & 0xFF)
+    buf.push((word >> 8) & 0xFF)
+    buf.push((word >> 16) & 0xFF)
+    buf.push((word >> 24) & 0xFF)
+}
+
+// ============================================================================
+// Data processing — immediate (item 2.1)
+// ============================================================================
+
+/// ADD Xd, Xn, #imm12 (64-bit) — encoding: sf=1, op=0, S=0, opc=0b10001
+pub func encode_add_imm(buf: List[I64], rd: I64, rn: I64, imm12: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1 (64-bit)
+    w = set_bits(w, 30, 29, 0)    // op=0, S=0
+    w = set_bits(w, 28, 24, 0x11) // 10001 = ADD immediate
+    w = set_bits(w, 23, 22, 0)    // shift=0 (no shift)
+    w = set_bits(w, 21, 10, imm12 & 0xFFF)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// SUB Xd, Xn, #imm12 (64-bit)
+pub func encode_sub_imm(buf: List[I64], rd: I64, rn: I64, imm12: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 2)    // op=1, S=0 → SUB
+    w = set_bits(w, 28, 24, 0x11)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 10, imm12 & 0xFFF)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// SUBS Xd, Xn, #imm12 (sets flags) — used for CMP: SUBS XZR, Xn, #imm
+pub func encode_subs_imm(buf: List[I64], rd: I64, rn: I64, imm12: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 3)    // op=1, S=1 → SUBS
+    w = set_bits(w, 28, 24, 0x11)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 10, imm12 & 0xFFF)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// CMP Xn, #imm12 — alias for SUBS XZR, Xn, #imm12
+pub func encode_cmp_imm(buf: List[I64], rn: I64, imm12: I64) {
+    encode_subs_imm(buf, 31, rn, imm12)  // Rd=XZR(31)
+}
+
+// ============================================================================
+// Data processing — register (item 2.1)
+// ============================================================================
+
+/// ADD Xd, Xn, Xm (64-bit, shifted register)
+pub func encode_add_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 0)    // op=0, S=0
+    w = set_bits(w, 28, 24, 0x0B) // 01011 = ADD shifted register
+    w = set_bits(w, 23, 22, 0)    // shift type = LSL
+    w = set_bits(w, 21, 21, 0)    // 0
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)    // shift amount = 0
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// SUB Xd, Xn, Xm (64-bit)
+pub func encode_sub_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 29, 2)    // op=1, S=0 → SUB
+    w = set_bits(w, 28, 24, 0x0B)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 21, 0)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// MUL Xd, Xn, Xm — alias for MADD Xd, Xn, Xm, XZR
+pub func encode_mul(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 24, 0x1B) // 0011011 = MADD/MSUB
+    w = set_bits(w, 23, 21, 0)    // o0=0 (MADD)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 15, 0)    // o1=0 (MADD, not MSUB)
+    w = set_bits(w, 14, 10, 31)   // Ra=XZR (MUL = MADD with Ra=XZR)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// SDIV Xd, Xn, Xm (signed divide)
+pub func encode_sdiv(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 21, 0x0D6) // data processing 2-source
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0x03)  // opcode=000011 (SDIV)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// NEG Xd, Xm — alias for SUB Xd, XZR, Xm
+pub func encode_neg(buf: List[I64], rd: I64, rm: I64) {
+    encode_sub_reg(buf, rd, 31, rm)  // Rn=XZR
+}
+
+/// AND Xd, Xn, Xm (logical register)
+pub func encode_and_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 0)    // opc=00 → AND
+    w = set_bits(w, 28, 24, 0x0A) // 01010 = logical shifted register
+    w = set_bits(w, 23, 22, 0)    // shift=LSL
+    w = set_bits(w, 21, 21, 0)    // N=0
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)    // shift amount=0
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// ORR Xd, Xn, Xm
+pub func encode_orr_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 29, 1)    // opc=01 → ORR
+    w = set_bits(w, 28, 24, 0x0A)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 21, 0)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// EOR Xd, Xn, Xm (XOR)
+pub func encode_eor_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 29, 2)    // opc=10 → EOR
+    w = set_bits(w, 28, 24, 0x0A)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 21, 0)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// LSL Xd, Xn, Xm — alias for LSLV
+pub func encode_lsl_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 21, 0x0D6) // data processing 2-source
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0x08)  // opcode=001000 (LSLV)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// ASR Xd, Xn, Xm — alias for ASRV
+pub func encode_asr_reg(buf: List[I64], rd: I64, rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 21, 0x0D6)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0x0A)  // opcode=001010 (ASRV)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+// ============================================================================
+// Load/Store (item 2.2)
+// ============================================================================
+
+/// LDR Xt, [Xn, #imm] — load 64-bit register from [base + unsigned offset]
+/// Offset is scaled by 8 (must be multiple of 8, divided by 8 for encoding).
+pub func encode_ldr_imm(buf: List[I64], rt: I64, rn: I64, offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 30, 3)    // size=11 (64-bit)
+    w = set_bits(w, 29, 27, 7)    // 111
+    w = set_bits(w, 26, 26, 0)    // V=0 (not SIMD)
+    w = set_bits(w, 25, 24, 1)    // 01 → unsigned offset
+    w = set_bits(w, 23, 22, 1)    // opc=01 → LDR
+    w = set_bits(w, 21, 10, (offset / 8) & 0xFFF) // scaled imm12
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rt & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// STR Xt, [Xn, #imm] — store 64-bit register to [base + unsigned offset]
+pub func encode_str_imm(buf: List[I64], rt: I64, rn: I64, offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 30, 3)    // size=11
+    w = set_bits(w, 29, 27, 7)
+    w = set_bits(w, 26, 26, 0)
+    w = set_bits(w, 25, 24, 1)
+    w = set_bits(w, 23, 22, 0)    // opc=00 → STR
+    w = set_bits(w, 21, 10, (offset / 8) & 0xFFF)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rt & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// STP Xt1, Xt2, [Xn, #imm]! — store pair with pre-index (prologue)
+pub func encode_stp_pre(buf: List[I64], rt1: I64, rt2: I64, rn: I64, imm7: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 30, 2)    // opc=10 (64-bit)
+    w = set_bits(w, 29, 27, 5)    // 101
+    w = set_bits(w, 26, 26, 0)    // V=0
+    w = set_bits(w, 25, 23, 3)    // 011 = pre-indexed
+    w = set_bits(w, 22, 22, 0)    // L=0 (store)
+    w = set_bits(w, 21, 15, (imm7 / 8) & 0x7F) // signed imm7 scaled by 8
+    w = set_bits(w, 14, 10, rt2 & 0x1F)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rt1 & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// LDP Xt1, Xt2, [Xn], #imm — load pair with post-index (epilogue)
+pub func encode_ldp_post(buf: List[I64], rt1: I64, rt2: I64, rn: I64, imm7: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 30, 2)    // opc=10
+    w = set_bits(w, 29, 27, 5)
+    w = set_bits(w, 26, 26, 0)
+    w = set_bits(w, 25, 23, 1)    // 001 = post-indexed
+    w = set_bits(w, 22, 22, 1)    // L=1 (load)
+    w = set_bits(w, 21, 15, (imm7 / 8) & 0x7F)
+    w = set_bits(w, 14, 10, rt2 & 0x1F)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rt1 & 0x1F)
+    emit_inst(buf, w)
+}
+
+// ============================================================================
+// Branches (items 2.3-2.5)
+// ============================================================================
+
+/// B #offset — unconditional branch (PC-relative, ±128MB)
+/// offset is in bytes, must be 4-byte aligned, divided by 4 for encoding.
+pub func encode_b(buf: List[I64], offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 26, 5)    // 000101 = B
+    w = set_bits(w, 25, 0, (offset / 4) & 0x3FFFFFF) // imm26
+    emit_inst(buf, w)
+}
+
+/// BL #offset — branch with link (call, saves PC+4 to X30)
+pub func encode_bl(buf: List[I64], offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 26, 0x25) // 100101 = BL
+    w = set_bits(w, 25, 0, (offset / 4) & 0x3FFFFFF)
+    emit_inst(buf, w)
+}
+
+/// BR Xn — branch to register (indirect jump)
+pub func encode_br(buf: List[I64], rn: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 25, 0x6B) // 1101011
+    w = set_bits(w, 24, 21, 0)    // opc=0000
+    w = set_bits(w, 20, 16, 0x1F) // op2=11111
+    w = set_bits(w, 15, 10, 0)    // op3=000000
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, 0)      // op4=00000
+    emit_inst(buf, w)
+}
+
+/// BLR Xn — branch with link to register (indirect call)
+pub func encode_blr(buf: List[I64], rn: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 25, 0x6B)
+    w = set_bits(w, 24, 21, 1)    // opc=0001 → BLR
+    w = set_bits(w, 20, 16, 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, 0)
+    emit_inst(buf, w)
+}
+
+/// RET — return (alias for BR X30)
+pub func encode_ret(buf: List[I64]) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 25, 0x6B)
+    w = set_bits(w, 24, 21, 2)    // opc=0010 → RET
+    w = set_bits(w, 20, 16, 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, 30)     // Rn=X30 (LR)
+    w = set_bits(w, 4, 0, 0)
+    emit_inst(buf, w)
+}
+
+/// B.cond #offset — conditional branch
+/// cond: 0=EQ, 1=NE, 10=GE, 11=LT, 12=GT, 13=LE
+pub func encode_b_cond(buf: List[I64], cond: I64, offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 25, 0x2A) // 0101010 = B.cond
+    w = set_bits(w, 24, 24, 0)
+    w = set_bits(w, 23, 5, (offset / 4) & 0x7FFFF) // imm19
+    w = set_bits(w, 4, 4, 0)
+    w = set_bits(w, 3, 0, cond & 0xF)
+    emit_inst(buf, w)
+}
+
+/// CBZ Xt, #offset — compare and branch if zero
+pub func encode_cbz(buf: List[I64], rt: I64, offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1 (64-bit)
+    w = set_bits(w, 30, 25, 0x1A) // 011010 = CBZ
+    w = set_bits(w, 24, 24, 0)    // op=0 (CBZ, not CBNZ)
+    w = set_bits(w, 23, 5, (offset / 4) & 0x7FFFF)
+    w = set_bits(w, 4, 0, rt & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// CBNZ Xt, #offset — compare and branch if not zero
+pub func encode_cbnz(buf: List[I64], rt: I64, offset: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 25, 0x1A)
+    w = set_bits(w, 24, 24, 1)    // op=1 (CBNZ)
+    w = set_bits(w, 23, 5, (offset / 4) & 0x7FFFF)
+    w = set_bits(w, 4, 0, rt & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// CMP Xn, Xm — alias for SUBS XZR, Xn, Xm
+pub func encode_cmp_reg(buf: List[I64], rn: I64, rm: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 3)    // op=1, S=1 → SUBS
+    w = set_bits(w, 28, 24, 0x0B)
+    w = set_bits(w, 23, 22, 0)
+    w = set_bits(w, 21, 21, 0)
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 10, 0)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, 31)     // Rd=XZR
+    emit_inst(buf, w)
+}
+
+/// CSEL Xd, Xn, Xm, cond — conditional select
+pub func encode_csel(buf: List[I64], rd: I64, rn: I64, rm: I64, cond: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 30, 0)    // op=0 (CSEL)
+    w = set_bits(w, 29, 21, 0x1A8) // 110101000
+    w = set_bits(w, 20, 16, rm & 0x1F)
+    w = set_bits(w, 15, 12, cond & 0xF)
+    w = set_bits(w, 11, 10, 0)    // op2=00 (CSEL)
+    w = set_bits(w, 9, 5, rn & 0x1F)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+// ============================================================================
+// Move and address (items 1.3, 1.5)
+// ============================================================================
+
+/// MOV Xd, Xm — alias for ORR Xd, XZR, Xm
+pub func encode_mov_reg(buf: List[I64], rd: I64, rm: I64) {
+    encode_orr_reg(buf, rd, 31, rm)  // Rn=XZR
+}
+
+/// MOVZ Xd, #imm16, LSL #shift — move wide with zero
+/// shift: 0, 16, 32, or 48 (hw field = shift/16)
+pub func encode_movz(buf: List[I64], rd: I64, imm16: I64, shift: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // sf=1
+    w = set_bits(w, 30, 29, 2)    // opc=10 → MOVZ
+    w = set_bits(w, 28, 23, 0x25) // 100101
+    w = set_bits(w, 22, 21, (shift / 16) & 3) // hw
+    w = set_bits(w, 20, 5, imm16 & 0xFFFF)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// MOVK Xd, #imm16, LSL #shift — move wide with keep
+pub func encode_movk(buf: List[I64], rd: I64, imm16: I64, shift: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)
+    w = set_bits(w, 30, 29, 3)    // opc=11 → MOVK
+    w = set_bits(w, 28, 23, 0x25)
+    w = set_bits(w, 22, 21, (shift / 16) & 3)
+    w = set_bits(w, 20, 5, imm16 & 0xFFFF)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// ADRP Xd, #page — load 4KB page address (PC-relative)
+/// Used with ADD for full address: ADRP Xd, sym@PAGE; ADD Xd, Xd, sym@PAGEOFF
+pub func encode_adrp(buf: List[I64], rd: I64, imm21: I64) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 31, 1)    // op=1 (ADRP, not ADR)
+    w = set_bits(w, 30, 29, (imm21) & 3) // immlo (bits 1:0)
+    w = set_bits(w, 28, 24, 0x10) // 10000
+    w = set_bits(w, 23, 5, (imm21 >> 2) & 0x7FFFF) // immhi (bits 20:2)
+    w = set_bits(w, 4, 0, rd & 0x1F)
+    emit_inst(buf, w)
+}
+
+/// NOP — encoded as HINT #0
+pub func encode_nop(buf: List[I64]) {
+    var w: I64 = 0
+    w = set_bits(w, 31, 22, 0x354) // 1101010100
+    w = set_bits(w, 21, 12, 0x03)  // op2=0000, CRm=0000, op2=011
+    w = set_bits(w, 11, 5, 0x1F)   // 11111
+    w = set_bits(w, 4, 0, 0x1F)    // Rd=11111
+    emit_inst(buf, w)
+}
+
+// ============================================================================
+// AArch64 condition codes
+// ============================================================================
+
+pub const COND_EQ: I64 = 0   // Equal (Z=1)
+pub const COND_NE: I64 = 1   // Not equal (Z=0)
+pub const COND_CS: I64 = 2   // Carry set / unsigned higher or same
+pub const COND_CC: I64 = 3   // Carry clear / unsigned lower
+pub const COND_MI: I64 = 4   // Minus / negative
+pub const COND_PL: I64 = 5   // Plus / positive or zero
+pub const COND_VS: I64 = 6   // Overflow
+pub const COND_VC: I64 = 7   // No overflow
+pub const COND_HI: I64 = 8   // Unsigned higher
+pub const COND_LS: I64 = 9   // Unsigned lower or same
+pub const COND_GE: I64 = 10  // Signed greater or equal
+pub const COND_LT: I64 = 11  // Signed less than
+pub const COND_GT: I64 = 12  // Signed greater than
+pub const COND_LE: I64 = 13  // Signed less or equal
+pub const COND_AL: I64 = 14  // Always

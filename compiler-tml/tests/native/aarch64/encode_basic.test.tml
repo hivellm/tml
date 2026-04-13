@@ -1,0 +1,98 @@
+//! Tests for AArch64 instruction encoding.
+//! Verifies fixed 32-bit instruction words are emitted correctly.
+//! Phase 20b.
+
+use test::{assert, assert_eq}
+use compiler::native::aarch64::encode::*
+use compiler::native::aarch64::regs::*
+use std::collections::list::List
+
+@test func test_set_bits() {
+    let w: I64 = set_bits(0, 7, 4, 0xA)
+    assert_eq(get_bits(w, 7, 4) as I32, 0xA)
+    assert_eq(get_bits(w, 3, 0) as I32, 0)
+}
+
+@test func test_add_imm_encoding() {
+    let buf = List[I64]::new(4)
+    encode_add_imm(buf, X0, X1, 42)
+    // Should produce exactly 4 bytes
+    assert_eq(buf.len() as I32, 4)
+    // Reconstruct word (little-endian)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    // sf=1 (bit 31)
+    assert_eq(get_bits(word, 31, 31) as I32, 1)
+    // Rd=0 (X0)
+    assert_eq(get_bits(word, 4, 0) as I32, 0)
+    // Rn=1 (X1)
+    assert_eq(get_bits(word, 9, 5) as I32, 1)
+    // imm12=42
+    assert_eq(get_bits(word, 21, 10) as I32, 42)
+}
+
+@test func test_sub_reg_encoding() {
+    let buf = List[I64]::new(4)
+    encode_sub_reg(buf, X2, X3, X4)
+    assert_eq(buf.len() as I32, 4)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    assert_eq(get_bits(word, 4, 0) as I32, 2)   // Rd=X2
+    assert_eq(get_bits(word, 9, 5) as I32, 3)   // Rn=X3
+    assert_eq(get_bits(word, 20, 16) as I32, 4) // Rm=X4
+}
+
+@test func test_ret_encoding() {
+    let buf = List[I64]::new(4)
+    encode_ret(buf)
+    assert_eq(buf.len() as I32, 4)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    // RET encodes Rn=X30
+    assert_eq(get_bits(word, 9, 5) as I32, 30)
+}
+
+@test func test_bl_encoding() {
+    let buf = List[I64]::new(4)
+    encode_bl(buf, 100)  // BL to offset +100 bytes
+    assert_eq(buf.len() as I32, 4)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    // imm26 = 100/4 = 25
+    assert_eq(get_bits(word, 25, 0) as I32, 25)
+}
+
+@test func test_movz_encoding() {
+    let buf = List[I64]::new(4)
+    encode_movz(buf, X5, 0x1234, 0)
+    assert_eq(buf.len() as I32, 4)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    assert_eq(get_bits(word, 4, 0) as I32, 5)      // Rd=X5
+    assert_eq(get_bits(word, 20, 5) as I32, 0x1234) // imm16
+}
+
+@test func test_ldr_str_round_trip() {
+    let buf = List[I64]::new(8)
+    encode_str_imm(buf, X0, SP, 16)  // STR X0, [SP, #16]
+    encode_ldr_imm(buf, X1, SP, 16)  // LDR X1, [SP, #16]
+    assert_eq(buf.len() as I32, 8)   // 2 instructions × 4 bytes
+}
+
+@test func test_b_cond_encoding() {
+    let buf = List[I64]::new(4)
+    encode_b_cond(buf, COND_EQ, 64)  // B.EQ +64
+    assert_eq(buf.len() as I32, 4)
+    let word: I64 = buf.get(0) | (buf.get(1) << 8) | (buf.get(2) << 16) | (buf.get(3) << 24)
+    assert_eq(get_bits(word, 3, 0) as I32, 0)  // cond=EQ
+}
+
+@test func test_stp_ldp_pair() {
+    let buf = List[I64]::new(8)
+    encode_stp_pre(buf, X29, X30, SP, -16)  // STP X29, X30, [SP, #-16]!
+    encode_ldp_post(buf, X29, X30, SP, 16)  // LDP X29, X30, [SP], #16
+    assert_eq(buf.len() as I32, 8)
+}
+
+@test func test_reg_names() {
+    assert_eq(x_reg_name(0), "X0")
+    assert_eq(x_reg_name(29), "X29")
+    assert_eq(x_reg_name(31), "SP")
+    assert_eq(w_reg_name(0), "W0")
+    assert_eq(w_reg_name(31), "WZR")
+}

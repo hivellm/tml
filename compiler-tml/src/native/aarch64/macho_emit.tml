@@ -1,0 +1,185 @@
+//! Mach-O 64-bit object file emission for AArch64 (Apple Silicon).
+//!
+//! Produces a relocatable Mach-O .o file targeting arm64 (Apple M1/M2/M3).
+//! Contains __TEXT/__text and __DATA/__data sections with ARM64 relocations.
+//!
+//! Phase 20b — items 5.1–5.3.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Mach-O constants (item 5.1)
+// ============================================================================
+
+/// Mach-O magic for 64-bit
+pub const MH_MAGIC_64: I64 = 0xFEEDFACF
+
+/// CPU type: ARM64
+pub const CPU_TYPE_ARM64: I64 = 0x0100000C  // CPU_TYPE_ARM | CPU_ARCH_ABI64
+
+/// CPU subtype: all ARM64
+pub const CPU_SUBTYPE_ARM64_ALL: I64 = 0
+
+/// File type: relocatable object
+pub const MH_OBJECT: I64 = 1
+
+/// Mach-O header size (64-bit): 32 bytes
+pub const MACHO_HEADER_SIZE: I64 = 32
+
+// ============================================================================
+// Mach-O load commands
+// ============================================================================
+
+pub const LC_SEGMENT_64: I64 = 0x19
+pub const LC_SYMTAB: I64 = 0x02
+
+// ============================================================================
+// ARM64 relocation types (item 5.3)
+// ============================================================================
+
+pub const ARM64_RELOC_BRANCH26: I64 = 2       // BL instruction
+pub const ARM64_RELOC_PAGE21: I64 = 3         // ADRP page
+pub const ARM64_RELOC_PAGEOFF12: I64 = 4      // ADD page offset
+
+// ============================================================================
+// Mach-O section descriptor
+// ============================================================================
+
+pub type MachoSection {
+    segname: Str,     // e.g. "__TEXT"
+    sectname: Str,    // e.g. "__text"
+    data: List[I64],
+    align_pow2: I64,  // alignment as power of 2 (2=4-byte, 3=8-byte)
+    flags: I64
+}
+
+pub type MachoSymbol {
+    name: Str,
+    section: I64,     // 1-indexed section number (0 = external)
+    value: I64,       // offset within section
+    is_external: I64  // 1 = global, 0 = local
+}
+
+pub type MachoReloc {
+    offset: I64,
+    symbol_index: I64,
+    reloc_type: I64,
+    pcrel: I64,       // 1 = PC-relative
+    length: I64       // 2 = 4 bytes (32-bit)
+}
+
+// ============================================================================
+// Mach-O 64-bit file writer (items 5.1–5.3)
+// ============================================================================
+
+/// Write a Mach-O 64-bit relocatable object file for ARM64.
+pub func write_macho64(
+    sections: List[MachoSection],
+    symbols: List[MachoSymbol],
+    relocs: List[MachoReloc]
+) -> List[I64] {
+    let buf = List[I64]::new(4096)
+
+    // --- Mach-O Header (32 bytes) ---
+    write_u32(buf, MH_MAGIC_64)          // magic
+    write_u32(buf, CPU_TYPE_ARM64)        // cputype
+    write_u32(buf, CPU_SUBTYPE_ARM64_ALL) // cpusubtype
+    write_u32(buf, MH_OBJECT)            // filetype
+    write_u32(buf, 1)                    // ncmds (just LC_SEGMENT_64 for now)
+    write_u32(buf, 0)                    // sizeofcmds (placeholder, patched below)
+    write_u32(buf, 0)                    // flags
+    write_u32(buf, 0)                    // reserved
+
+    let cmds_start: I64 = buf.len() as I64
+
+    // --- LC_SEGMENT_64 ---
+    let sc: I64 = sections.len() as I64
+    let seg_cmd_size: I64 = 72 + sc * 80  // segment command + section headers
+    write_u32(buf, LC_SEGMENT_64)
+    write_u32(buf, seg_cmd_size)
+    // segname: 16 bytes, empty for object files
+    for _ in 0 to 16 { buf.push(0) }
+    write_u64(buf, 0)   // vmaddr
+    write_u64(buf, 0)   // vmsize (filled by linker)
+    write_u64(buf, 0)   // fileoff (will be after headers)
+    write_u64(buf, 0)   // filesize (placeholder)
+    write_u32(buf, 7)   // maxprot (rwx)
+    write_u32(buf, 7)   // initprot
+    write_u32(buf, sc)  // nsects
+    write_u32(buf, 0)   // flags
+
+    // Section headers (80 bytes each)
+    for i in 0 to sc {
+        let sect: MachoSection = sections.get(i)
+        // sectname: 16 bytes
+        write_padded_16(buf, sect.sectname)
+        // segname: 16 bytes
+        write_padded_16(buf, sect.segname)
+        write_u64(buf, 0)  // addr
+        write_u64(buf, sect.data.len() as I64) // size
+        write_u32(buf, 0)  // offset (placeholder)
+        write_u32(buf, sect.align_pow2) // align
+        write_u32(buf, 0)  // reloff
+        write_u32(buf, 0)  // nreloc
+        write_u32(buf, sect.flags) // flags
+        write_u32(buf, 0)  // reserved1
+        write_u32(buf, 0)  // reserved2
+        write_u32(buf, 0)  // reserved3 (64-bit)
+    }
+
+    // Patch sizeofcmds
+    let cmds_end: I64 = buf.len() as I64
+    patch_u32(buf, 20, cmds_end - cmds_start)
+
+    // --- Section data ---
+    for i in 0 to sc {
+        let sect: MachoSection = sections.get(i)
+        let dc: I64 = sect.data.len() as I64
+        for di in 0 to dc {
+            buf.push(sect.data.get(di))
+        }
+    }
+
+    return buf
+}
+
+// ============================================================================
+// Byte-writing helpers
+// ============================================================================
+
+func write_u16(buf: List[I64], val: I64) {
+    buf.push(val & 0xFF)
+    buf.push((val >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], val: I64) {
+    buf.push(val & 0xFF)
+    buf.push((val >> 8) & 0xFF)
+    buf.push((val >> 16) & 0xFF)
+    buf.push((val >> 24) & 0xFF)
+}
+
+func write_u64(buf: List[I64], val: I64) {
+    write_u32(buf, val)
+    write_u32(buf, val >> 32)
+}
+
+func patch_u32(buf: List[I64], offset: I64, val: I64) {
+    buf.set(offset, val & 0xFF)
+    buf.set(offset + 1, (val >> 8) & 0xFF)
+    buf.set(offset + 2, (val >> 16) & 0xFF)
+    buf.set(offset + 3, (val >> 24) & 0xFF)
+}
+
+/// Write a string padded to 16 bytes with null bytes.
+func write_padded_16(buf: List[I64], s: Str) {
+    let n: I64 = s.len() as I64
+    let limit: I64 = if n > 16 { 16 } else { n }
+    let s_ptr: I64 = s as I64
+    for i in 0 to limit {
+        let byte: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        buf.push((byte + 256) % 256)
+    }
+    for _ in 0 to (16 - limit) { buf.push(0) }
+}

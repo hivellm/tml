@@ -1,0 +1,71 @@
+//! AAPCS64 calling convention for AArch64.
+//!
+//! Key differences from Win64 (x86_64):
+//! - 8 integer arg registers: X0-X7 (vs 4: RCX/RDX/R8/R9)
+//! - Return value in X0 (or X0/X1 for 128-bit)
+//! - Sret pointer in X8 (not first arg register)
+//! - Link register X30 saves return address (not pushed on stack)
+//! - Frame pointer X29 (callee-saved)
+//! - Callee-saved: X19-X28, X29(FP), X30(LR)
+//! - Caller-saved: X0-X18
+//!
+//! Phase 20b — items 3.1–3.3.
+
+use compiler::native::aarch64::regs::*
+use compiler::native::aarch64::encode::*
+use std::collections::list::List
+
+// ============================================================================
+// Argument assignment (item 3.1)
+// ============================================================================
+
+/// Get the physical register for integer argument `index` (0-7).
+/// Returns -1 if argument should go on stack.
+pub func aapcs64_arg_reg(index: I64) -> I64 {
+    if index >= 0 and index < 8 { return index }  // X0-X7
+    return -1 as I64  // stack
+}
+
+/// Get the stack offset for argument `index` (>= 8).
+/// First stack arg is at [SP], next at [SP+8], etc.
+pub func aapcs64_stack_arg_offset(index: I64) -> I64 {
+    return (index - 8) * 8
+}
+
+/// Return value register: X0 (or X0/X1 for 128-bit).
+pub const RETURN_REG: I64 = 0
+
+/// Sret (indirect result) register: X8.
+pub const SRET_REG: I64 = 8
+
+// ============================================================================
+// Prologue / Epilogue (item 3.3)
+// ============================================================================
+
+/// Emit AAPCS64 function prologue.
+/// STP X29, X30, [SP, #-frame_size]!  ; save FP and LR, adjust SP
+/// MOV X29, SP                        ; set up frame pointer
+pub func emit_prologue(buf: List[I64], frame_size: I64) {
+    // Round frame_size up to 16-byte alignment
+    let aligned: I64 = (frame_size + 15) & (not 15)
+    // STP X29, X30, [SP, #-aligned]!
+    encode_stp_pre(buf, X29, X30, SP, -aligned)
+    // MOV X29, SP (alias: ADD X29, SP, #0)
+    encode_add_imm(buf, X29, SP, 0)
+}
+
+/// Emit AAPCS64 function epilogue.
+/// LDP X29, X30, [SP], #frame_size  ; restore FP and LR, adjust SP
+/// RET                              ; return to LR
+pub func emit_epilogue(buf: List[I64], frame_size: I64) {
+    let aligned: I64 = (frame_size + 15) & (not 15)
+    // LDP X29, X30, [SP], #aligned
+    encode_ldp_post(buf, X29, X30, SP, aligned)
+    // RET
+    encode_ret(buf)
+}
+
+/// Emit a leaf function return (no prologue/epilogue needed).
+pub func emit_leaf_ret(buf: List[I64]) {
+    encode_ret(buf)
+}
