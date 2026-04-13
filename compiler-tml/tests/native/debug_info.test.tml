@@ -1,0 +1,154 @@
+//! Tests for CodeView debug info emission (.debug$S / .debug$T).
+//! Verifies that build_debug_s produces correct CodeView C13 format bytes.
+//! Phase 21a.
+
+use test::{assert, assert_eq}
+use compiler::native::x86::debug_info::*
+use std::collections::list::List
+
+/// Reconstruct a little-endian u32 from 4 bytes at offset.
+func read_u32(buf: List[I64], offset: I64) -> I64 {
+    return buf.get(offset) | (buf.get(offset + 1) << 8) | (buf.get(offset + 2) << 16) | (buf.get(offset + 3) << 24)
+}
+
+/// Reconstruct a little-endian u16 from 2 bytes at offset.
+func read_u16(buf: List[I64], offset: I64) -> I64 {
+    return buf.get(offset) | (buf.get(offset + 1) << 8)
+}
+
+@test func test_debug_t_has_cv_signature() {
+    let buf: List[I64] = build_debug_t()
+    // First 4 bytes must be CV_SIGNATURE_C13 = 4
+    assert(buf.len() as I64 >= 4)
+    assert_eq(read_u32(buf, 0) as I32, 4)  // CV_SIGNATURE_C13
+}
+
+@test func test_debug_s_empty_functions() {
+    let funcs = List[DebugFuncInfo]::new(0)
+    let buf: List[I64] = build_debug_s("test.tml", funcs)
+    // Should have CV_SIGNATURE_C13 + DEBUG_S_SYMBOLS header + empty subsection
+    assert(buf.len() as I64 >= 12)
+    // First 4 bytes: CV_SIGNATURE_C13
+    assert_eq(read_u32(buf, 0) as I32, 4)
+    // Next 4 bytes: DEBUG_S_SYMBOLS = 0xF1
+    assert_eq(read_u32(buf, 4) as I32, 0xF1)
+}
+
+@test func test_debug_s_one_function() {
+    let lines = List[DebugLineEntry]::new(2)
+    lines.push(DebugLineEntry { code_offset: 0, line_number: 10 })
+    lines.push(DebugLineEntry { code_offset: 8, line_number: 11 })
+
+    let funcs = List[DebugFuncInfo]::new(1)
+    funcs.push(DebugFuncInfo {
+        name: "main",
+        code_offset: 0,
+        code_size: 16,
+        type_index: 0x1000,
+        lines: lines
+    })
+
+    let buf: List[I64] = build_debug_s("test.tml", funcs)
+
+    // CV_SIGNATURE_C13
+    assert_eq(read_u32(buf, 0) as I32, 4)
+    // DEBUG_S_SYMBOLS subsection
+    assert_eq(read_u32(buf, 4) as I32, 0xF1)
+
+    // The buffer should be > 50 bytes (header + S_GPROC32 + S_END + line info)
+    assert(buf.len() as I64 > 50)
+
+    // Search for S_GPROC32 record type (0x1110) in the buffer
+    var found_gproc: Bool = false
+    let n: I64 = buf.len() as I64 - 1
+    for i in 0 to n {
+        if read_u16(buf, i) == 0x1110 {
+            found_gproc = true
+        }
+    }
+    assert(found_gproc)
+
+    // Search for S_END record type (0x0006)
+    var found_end: Bool = false
+    for i in 0 to n {
+        if read_u16(buf, i) == 0x0006 {
+            found_end = true
+        }
+    }
+    assert(found_end)
+
+    // Search for DEBUG_S_LINES (0xF2) — should appear after symbols
+    var found_lines: Bool = false
+    for i in 0 to (n - 3) {
+        if read_u32(buf, i) == 0xF2 {
+            found_lines = true
+        }
+    }
+    assert(found_lines)
+}
+
+@test func test_debug_s_function_name_in_bytes() {
+    let funcs = List[DebugFuncInfo]::new(1)
+    funcs.push(DebugFuncInfo {
+        name: "hello",
+        code_offset: 0,
+        code_size: 4,
+        type_index: 0,
+        lines: List[DebugLineEntry]::new(0)
+    })
+
+    let buf: List[I64] = build_debug_s("test.tml", funcs)
+
+    // The function name "hello" should appear as bytes: 104, 101, 108, 108, 111, 0
+    var found_name: Bool = false
+    let n: I64 = buf.len() as I64 - 5
+    for i in 0 to n {
+        if buf.get(i) == 104 and buf.get(i + 1) == 101 and buf.get(i + 2) == 108 and buf.get(i + 3) == 108 and buf.get(i + 4) == 111 {
+            found_name = true
+        }
+    }
+    assert(found_name)
+}
+
+@test func test_struct_type_record() {
+    let buf = List[I64]::new(64)
+    emit_struct_type_record(buf, "Point", 2, 16, 0x1001)
+    // Should have LF_STRUCTURE = 0x1505 somewhere
+    assert(buf.len() as I64 > 10)
+    // Check record type at offset 2 (after length u16)
+    assert_eq(read_u16(buf, 2) as I32, 0x1505)
+}
+
+@test func test_enum_type_record() {
+    let buf = List[I64]::new(64)
+    emit_enum_type_record(buf, "Color", 3, T_INT4, 0x1002)
+    assert(buf.len() as I64 > 10)
+    assert_eq(read_u16(buf, 2) as I32, 0x1507)  // LF_ENUM
+}
+
+@test func test_line_number_encoding() {
+    let lines = List[DebugLineEntry]::new(1)
+    lines.push(DebugLineEntry { code_offset: 0, line_number: 42 })
+
+    let funcs = List[DebugFuncInfo]::new(1)
+    funcs.push(DebugFuncInfo {
+        name: "f",
+        code_offset: 0,
+        code_size: 4,
+        type_index: 0,
+        lines: lines
+    })
+
+    let buf: List[I64] = build_debug_s("src.tml", funcs)
+
+    // Find the line number entry: line_number | 0x80000000 = 42 | 0x80000000
+    let expected: I64 = 42 | 0x80000000
+    var found_line: Bool = false
+    let n: I64 = buf.len() as I64 - 3
+    for i in 0 to n {
+        if read_u32(buf, i) == expected {
+            found_line = true
+        }
+    }
+    assert(found_line)
+}

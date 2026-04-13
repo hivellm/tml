@@ -9,8 +9,8 @@ use std::collections::list::List
     let ty: Str = "%tuple_i64_i64"
     let ir: Str = emit_tuple_destruct(10, 5, ty, 2)
     assert(ir.contains("extractvalue"))
-    assert(ir.contains("%r10"))
-    assert(ir.contains("%r11"))
+    assert(ir.contains("%10"))
+    assert(ir.contains("%11"))
 }
 
 @test func test_struct_destruct() {
