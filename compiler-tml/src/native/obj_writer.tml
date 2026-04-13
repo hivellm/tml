@@ -19,12 +19,7 @@
 //!
 //! Phase 18c — items 5.1–5.3.
 
-use compiler::native::coff_emit::CoffFileHeader
-use compiler::native::coff_emit::CoffSectionHeader
-use compiler::native::coff_emit::CoffSymbol
-use compiler::native::coff_emit::CoffRelocation
-use compiler::native::coff_emit::CoffSection
-use compiler::native::coff_emit::IMAGE_FILE_MACHINE_AMD64
+use compiler::native::coff_emit::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

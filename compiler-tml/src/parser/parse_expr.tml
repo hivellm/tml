@@ -3,91 +3,18 @@
 //! Implements the Pratt (top-down operator precedence) algorithm for all
 //! TML expression forms. Entry point: `parse_expr`.
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::IdentPattern
-use compiler::ast::exprs::Expr
-use compiler::ast::exprs::BinaryOp
-use compiler::ast::exprs::UnaryOp
-use compiler::ast::exprs::LiteralExpr
-use compiler::ast::exprs::IdentExpr
-use compiler::ast::exprs::UnaryExpr
-use compiler::ast::exprs::BinaryExpr
-use compiler::ast::exprs::CallExpr
-use compiler::ast::exprs::MethodCallExpr
-use compiler::ast::exprs::FieldExpr
-use compiler::ast::exprs::IndexExpr
-use compiler::ast::exprs::TupleExpr
-use compiler::ast::exprs::ArrayExpr
-use compiler::ast::exprs::ArrayKind
-use compiler::ast::exprs::StructExpr
-use compiler::ast::exprs::StructExprField
-use compiler::ast::exprs::IfExpr
-use compiler::ast::exprs::IfLetExpr
-use compiler::ast::exprs::WhenExpr
-use compiler::ast::exprs::WhenArm
-use compiler::ast::exprs::LoopExpr
-use compiler::ast::exprs::WhileExpr
-use compiler::ast::exprs::ForExpr
-use compiler::ast::exprs::BlockExpr
-use compiler::ast::exprs::ReturnExpr
-use compiler::ast::exprs::BreakExpr
-use compiler::ast::exprs::ContinueExpr
-use compiler::ast::exprs::ClosureExpr
-use compiler::ast::exprs::ClosureParam
-use compiler::ast::exprs::RangeExpr
-use compiler::ast::exprs::CastExpr
-use compiler::ast::exprs::IsExpr
-use compiler::ast::exprs::TryExpr
-use compiler::ast::exprs::AwaitExpr
-use compiler::ast::exprs::PathExpr
-use compiler::ast::exprs::LowlevelExpr
-use compiler::ast::exprs::ThrowExpr
-use compiler::ast::exprs::expr_span
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
+use compiler::ast::nodes::*
+use compiler::ast::exprs::*
 use compiler::ast::common::LiteralKind
 use compiler::ast::stmts::Stmt
-use compiler::parser::common::ParseFailure
-use compiler::parser::common::ParsedExpr
-use compiler::parser::common::ParsedExprs
-use compiler::parser::common::ParsedTypeExpr
-use compiler::parser::common::ParsedTypeExprs
-use compiler::parser::common::ParsedPattern
-use compiler::parser::common::ParsedStmt
-use compiler::parser::common::ParsedToken
-use compiler::parser::common::p_peek
-use compiler::parser::common::p_peek_next
-use compiler::parser::common::p_prev
-use compiler::parser::common::p_check
-use compiler::parser::common::p_check_next
-use compiler::parser::common::p_is_eof
-use compiler::parser::common::p_skip_newlines
-use compiler::parser::common::p_consume_if
-use compiler::parser::common::p_expect
-use compiler::parser::common::p_expect_ident
-use compiler::parser::common::tok_kind_eq
-use compiler::parser::common::tok_is_name
-use compiler::parser::common::parse_err
-use compiler::parser::common::get_prec
-use compiler::parser::common::is_right_assoc
-use compiler::parser::common::token_to_binop
-use compiler::parser::common::token_to_unaryop
-use compiler::parser::common::PREC_NONE
-use compiler::parser::common::PREC_ASSIGN
-use compiler::parser::common::PREC_PIPE
-use compiler::parser::common::PREC_CALL
-use compiler::parser::parse_type::parse_type
-use compiler::parser::parse_type::parse_type_path_full
-use compiler::parser::parse_type::parse_generic_args
+use compiler::parser::common::*
+use compiler::parser::parse_type::{parse_type, parse_type_path_full, parse_generic_args}
 use compiler::parser::parse_pattern::parse_pattern
 use std::collections::list::List
 use core::alloc::heap::Heap
-use core::str::parse::parse_i64
-use core::str::parse::parse_f64
+use core::str::parse::{parse_i64, parse_f64}
 
 // ============================================================================
 // Entry points

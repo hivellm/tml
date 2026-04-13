@@ -24,98 +24,19 @@
 //! ```
 
 // --- MachIR types ---
-pub use compiler::native::machir::VirtualReg
-pub use compiler::native::machir::Operand
-pub use compiler::native::machir::MachInst
-pub use compiler::native::machir::MachBlock
-pub use compiler::native::machir::MachFunc
-pub use compiler::native::machir::CondCode
-pub use compiler::native::machir::mach_block_new
-pub use compiler::native::machir::mach_func_new
-pub use compiler::native::machir::fresh_vreg
-
-// --- MIR → MachIR lowering ---
+pub use compiler::native::machir::*
 pub use compiler::native::mir_lower::lower_function
-
-// --- Stack allocation (MVP fallback) ---
-pub use compiler::native::stack_alloc::StackAllocation
-pub use compiler::native::stack_alloc::allocate_stack
-
-// --- Liveness analysis ---
-pub use compiler::native::liveness::LiveInterval
-pub use compiler::native::liveness::compute_live_intervals
-
-// --- Linear scan register allocator ---
-pub use compiler::native::linear_scan::RegAllocResult
-pub use compiler::native::linear_scan::linear_scan
-
-// --- x86_64 instruction encoding ---
-pub use compiler::native::x86::encode::modrm
-pub use compiler::native::x86::encode::rex
-pub use compiler::native::x86::encode::encode_mov_rr
-pub use compiler::native::x86::encode::encode_mov_ri64
-pub use compiler::native::x86::encode::encode_add_rr
-pub use compiler::native::x86::encode::encode_sub_rr
-pub use compiler::native::x86::encode::encode_push
-pub use compiler::native::x86::encode::encode_pop
-pub use compiler::native::x86::encode::encode_ret
-pub use compiler::native::x86::encode::encode_nop
-
-// --- MachIR → bytes emission ---
-pub use compiler::native::x86::emit::emit_func
-pub use compiler::native::x86::emit::EmitResult
-
-// --- SSE2/SSE4/AVX2 + atomics ---
-pub use compiler::native::x86::sse::encode_addsd
-pub use compiler::native::x86::sse::encode_subsd
-pub use compiler::native::x86::sse::encode_mulsd
-pub use compiler::native::x86::sse::encode_divsd
-pub use compiler::native::x86::sse::encode_cvtsi2sd
-pub use compiler::native::x86::sse::encode_cvtsd2si
-pub use compiler::native::x86::sse::encode_lock_cmpxchg
-pub use compiler::native::x86::sse::encode_lock_xadd
-pub use compiler::native::x86::sse::encode_mfence
-
-// --- x86 frame layout ---
-pub use compiler::native::x86::frame::compute_frame_size
-pub use compiler::native::x86::frame::emit_prologue
-pub use compiler::native::x86::frame::emit_epilogue
-
-// --- Calling conventions ---
-pub use compiler::native::x86::calling_conv::CallingConv
-pub use compiler::native::x86::calling_conv::win64_cc
-pub use compiler::native::x86::calling_conv::sysv_cc
-pub use compiler::native::x86::calling_conv::is_callee_saved
-pub use compiler::native::x86::calling_conv::arg_reg
-
-// --- Peephole optimization ---
-pub use compiler::native::x86::peephole::PeepholeResult
-pub use compiler::native::x86::peephole::run_peephole
-
-// --- Constant propagation ---
-pub use compiler::native::x86::const_prop::ConstPropResult
-pub use compiler::native::x86::const_prop::run_const_prop
-
-// --- COFF object file ---
-pub use compiler::native::coff_emit::CoffSection
-pub use compiler::native::coff_emit::CoffSymbol
-pub use compiler::native::coff_emit::CoffRelocation
-pub use compiler::native::coff_emit::make_text_section
-pub use compiler::native::coff_emit::make_data_section
-pub use compiler::native::coff_emit::make_func_symbol
-pub use compiler::native::coff_emit::make_extern_symbol
-pub use compiler::native::coff_emit::make_rel32_reloc
-
-// --- Object file writer ---
+pub use compiler::native::stack_alloc::{StackAllocation, allocate_stack}
+pub use compiler::native::liveness::{LiveInterval, compute_live_intervals}
+pub use compiler::native::linear_scan::{RegAllocResult, linear_scan}
+pub use compiler::native::x86::encode::*
+pub use compiler::native::x86::emit::{emit_func, EmitResult}
+pub use compiler::native::x86::sse::*
+pub use compiler::native::x86::frame::{compute_frame_size, emit_prologue, emit_epilogue}
+pub use compiler::native::x86::calling_conv::*
+pub use compiler::native::x86::peephole::{PeepholeResult, run_peephole}
+pub use compiler::native::x86::const_prop::{ConstPropResult, run_const_prop}
+pub use compiler::native::coff_emit::*
 pub use compiler::native::obj_writer::write_coff
-
-// --- Generic instantiation ---
-pub use compiler::native::generic_inst::GenericCallRegistry
-pub use compiler::native::generic_inst::registry_new
-pub use compiler::native::generic_inst::registry_record
-pub use compiler::native::generic_inst::mangle_generic_name
-pub use compiler::native::generic_inst::substitute_mir_type
-
-// --- Pipeline orchestrator ---
-pub use compiler::native::pipeline::compile_module_native
-pub use compiler::native::pipeline::NativeCompileResult
+pub use compiler::native::generic_inst::*
+pub use compiler::native::pipeline::{compile_module_native, NativeCompileResult}

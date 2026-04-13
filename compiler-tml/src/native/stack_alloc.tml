@@ -5,14 +5,7 @@
 //!
 //! Phase 18a — items 3.1–3.4.
 
-use compiler::native::machir::VirtualReg
-use compiler::native::machir::Operand
-use compiler::native::machir::MachInst
-use compiler::native::machir::MachMov
-use compiler::native::machir::MachSpill
-use compiler::native::machir::MachReload
-use compiler::native::machir::MachFunc
-use compiler::native::machir::MachBlock
+use compiler::native::machir::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

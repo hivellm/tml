@@ -18,16 +18,7 @@
 //!
 //! Phase 18a — items 4.1–4.4.
 
-use compiler::native::machir::Operand
-use compiler::native::machir::MachInst
-use compiler::native::machir::MachMov
-use compiler::native::machir::MachBinOp
-use compiler::native::machir::MachUnaryOp
-use compiler::native::machir::MachRet
-use compiler::native::machir::MachFunc
-use compiler::native::machir::MachBlock
-use compiler::native::machir::REG_RBP
-use compiler::native::machir::REG_RSP
+use compiler::native::machir::*
 use compiler::native::stack_alloc::StackAllocation
 use std::collections::list::List
 use core::alloc::heap::Heap

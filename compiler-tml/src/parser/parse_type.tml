@@ -3,38 +3,10 @@
 //! Parses all `TypeExpr` variants: named types, generic applications, ref/ptr,
 //! tuple, function, and inference types. Entry point: `parse_type`.
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::NamedType
-use compiler::ast::nodes::RefType
-use compiler::ast::nodes::PtrType
-use compiler::ast::nodes::TupleType
-use compiler::ast::nodes::FuncType
-use compiler::ast::nodes::DynType
-use compiler::ast::nodes::SliceType
-use compiler::parser::common::ParseFailure
-use compiler::parser::common::ParsedTypeExpr
-use compiler::parser::common::ParsedTypeExprs
-use compiler::parser::common::ParsedStr
-use compiler::parser::common::ParsedTypePath
-use compiler::parser::common::p_peek
-use compiler::parser::common::p_peek_next
-use compiler::parser::common::p_prev
-use compiler::parser::common::p_check
-use compiler::parser::common::p_check_next
-use compiler::parser::common::p_peek_next
-use compiler::parser::common::p_is_eof
-use compiler::parser::common::p_skip_newlines
-use compiler::parser::common::p_consume_if
-use compiler::parser::common::p_expect
-use compiler::parser::common::p_expect_ident
-use compiler::parser::common::tok_kind_eq
-use compiler::parser::common::tok_is_name
-use compiler::parser::common::parse_err
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
+use compiler::ast::nodes::*
+use compiler::parser::common::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

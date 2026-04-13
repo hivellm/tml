@@ -45,19 +45,8 @@ pub mod decode    // UTF-16 decoding utilities
 pub mod methods   // Character classification and manipulation methods
 
 // Re-export main types and functions
-pub use convert::from_u32
-pub use convert::from_u32_unchecked
-pub use convert::from_digit
-pub use convert::CharTryFromError
-pub use convert::ParseCharError
-pub use decode::DecodeUtf16Error
-pub use decode::is_high_surrogate
-pub use decode::is_low_surrogate
-pub use decode::is_surrogate
-pub use decode::decode_surrogate_pair
-pub use decode::decode_utf16_to_string
-pub use decode::is_valid_utf16
-pub use decode::count_chars_utf16
+pub use convert::*
+pub use decode::*
 pub use methods::*
 
 // ============================================================================

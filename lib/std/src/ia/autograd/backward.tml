@@ -10,9 +10,7 @@ use std::math::{ln, pow}
 use std::ia::tensor::tensor::Tensor
 use std::ia::tensor::dtype::DType
 use std::ia::tensor::init::{zeros, ones, full}
-use std::ia::tensor::ops
-use std::ia::tensor::matmul
-use std::ia::tensor::reshape
+use std::ia::tensor::{ops, matmul, reshape}
 use std::ia::autograd::graph::Tape
 use std::ia::autograd::graph::{OP_ADD, OP_SUB, OP_MUL, OP_DIV}
 use std::ia::autograd::graph::{OP_NEG, OP_EXP, OP_LOG, OP_SQRT, OP_RELU, OP_SIGMOID, OP_TANH}

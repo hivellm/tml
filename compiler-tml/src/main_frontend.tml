@@ -18,8 +18,7 @@
 
 use std::os
 use std::collections::Buffer
-use compiler::source::SourceSpan
-use compiler::source::SourceLocation
+use compiler::source::{SourceSpan, SourceLocation}
 use compiler::token::Token
 use compiler::lexer::lexer::tokenize
 use compiler::parser::parse_module::parse_module

@@ -6,14 +6,9 @@
 //!
 //! Phase 15a — items 4.1–4.3.
 
-use compiler::types::ty::Type
-use compiler::types::ty::type_to_str
-use compiler::hir::module::HirModule
-use compiler::hir::module::HirFunction
-use compiler::hir::module::HirStruct
-use compiler::hir::module::HirEnum
-use compiler::hir::builder::HirBuilder
-use compiler::hir::builder::mangle_name
+use compiler::types::ty::{Type, type_to_str}
+use compiler::hir::module::*
+use compiler::hir::builder::{HirBuilder, mangle_name}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

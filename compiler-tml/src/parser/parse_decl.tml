@@ -10,54 +10,15 @@
 //!   - `type Name = A | B`       → EnumDecl (sum type)
 //!   - `type Name = SomeType`    → TypeAliasDecl
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
 use compiler::ast::common::Visibility
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::NamedType
-use compiler::ast::decls::GenericParam
-use compiler::ast::decls::FuncParam
-use compiler::ast::decls::FuncDecl
-use compiler::ast::decls::StructField
-use compiler::ast::decls::StructDecl
-use compiler::ast::decls::UnionDecl
-use compiler::ast::decls::EnumVariant
-use compiler::ast::decls::EnumDecl
-use compiler::ast::decls::TraitDecl
-use compiler::ast::decls::ImplDecl
-use compiler::ast::decls::TypeAliasDecl
-use compiler::ast::decls::ConstDecl
-use compiler::ast::decls::UsePath
-use compiler::ast::decls::UseDecl
-use compiler::ast::decls::ModDecl
-use compiler::ast::decls::Decl
+use compiler::ast::nodes::{TypePath, TypeExpr, NamedType}
+use compiler::ast::decls::*
 use compiler::ast::exprs::Expr
-use compiler::parser::common::ParseFailure
-use compiler::parser::common::ParsedDecl
-use compiler::parser::common::ParsedDecls
-use compiler::parser::common::ParsedToken
-use compiler::parser::common::p_peek
-use compiler::parser::common::p_peek_next
-use compiler::parser::common::p_prev
-use compiler::parser::common::p_check
-use compiler::parser::common::p_check_next
-use compiler::parser::common::p_is_eof
-use compiler::parser::common::p_skip_newlines
-use compiler::parser::common::p_consume_if
-use compiler::parser::common::p_expect
-use compiler::parser::common::p_expect_ident
-use compiler::parser::common::tok_kind_eq
-use compiler::parser::common::tok_is_name
-use compiler::parser::common::parse_err
-use compiler::parser::parse_type::parse_type
-use compiler::parser::parse_type::parse_type_path_full
-use compiler::parser::parse_type::parse_named_type
-use compiler::parser::parse_type::parse_generic_args
-use compiler::parser::parse_expr::parse_expr
-use compiler::parser::parse_expr::parse_block_expr
+use compiler::parser::common::*
+use compiler::parser::parse_type::*
+use compiler::parser::parse_expr::{parse_expr, parse_block_expr}
 use std::collections::list::List
 use core::alloc::heap::Heap
 

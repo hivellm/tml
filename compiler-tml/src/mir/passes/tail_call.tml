@@ -8,12 +8,9 @@
 
 use compiler::mir::types::ValueId
 use compiler::mir::inst::MirInst
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
+use compiler::mir::block::{BasicBlock, Terminator}
 use compiler::mir::module::MirFunc
-use compiler::mir::passes::common::PassResult
-use compiler::mir::passes::common::no_change
-use compiler::mir::passes::common::did_change
+use compiler::mir::passes::common::{PassResult, no_change, did_change}
 
 /// Run tail call optimization on a function.
 ///

@@ -6,17 +6,6 @@
 //! Phase 17b — item 1.1.
 
 // --- CLI dispatcher ---
-pub use compiler::cli::dispatcher::dispatch
-pub use compiler::cli::dispatcher::CliArgs
-pub use compiler::cli::dispatcher::parse_args
-
-// --- Diagnostics ---
-pub use compiler::cli::diagnostic::Diagnostic
-pub use compiler::cli::diagnostic::DiagLevel
-pub use compiler::cli::diagnostic::format_diagnostic
-pub use compiler::cli::diagnostic::render_source_span
-
-// --- Builder ---
-pub use compiler::cli::builder::build_file
-pub use compiler::cli::builder::run_file
-pub use compiler::cli::builder::check_file
+pub use compiler::cli::dispatcher::{dispatch, CliArgs, parse_args}
+pub use compiler::cli::diagnostic::*
+pub use compiler::cli::builder::{build_file, run_file, check_file}

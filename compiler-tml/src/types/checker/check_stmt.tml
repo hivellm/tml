@@ -7,34 +7,14 @@
 //! Phase 14c — items 4.1–4.4.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::is_never
-use compiler::types::ty::type_to_str
-use compiler::types::env::TypeEnv
-use compiler::types::env::env_push_scope
-use compiler::types::env::env_pop_scope
-use compiler::types::env::ScopeKind
-use compiler::types::env::scope_define
-use compiler::types::infer::unify::InferCtx
-use compiler::types::infer::unify::fresh_var
-use compiler::types::infer::unify::unify
-use compiler::types::infer::unify::resolve
-use compiler::types::checker::errors::TypeError
-use compiler::types::checker::errors::type_error
-use compiler::types::checker::errors::type_mismatch
-use compiler::types::checker::check_expr::infer_expr
-use compiler::types::checker::check_expr::bind_pattern_simple
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::types::infer::unify::*
+use compiler::types::checker::errors::{TypeError, type_error, type_mismatch}
+use compiler::types::checker::check_expr::{infer_expr, bind_pattern_simple}
 use compiler::ast::exprs::Expr
-use compiler::ast::stmts::Stmt
-use compiler::ast::stmts::LetStmt
-use compiler::ast::stmts::VarStmt
-use compiler::ast::stmts::LetElseStmt
-use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::IdentPattern
-use compiler::ast::nodes::TuplePattern
-use compiler::ast::nodes::EnumPattern
+use compiler::ast::stmts::*
+use compiler::ast::nodes::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

@@ -8,18 +8,8 @@
 //! Phase 14b — items 3.1–3.5.
 
 use compiler::types::ty::Type
-use compiler::types::env::TypeEnv
-use compiler::types::env::env_register_struct
-use compiler::types::env::env_register_enum
-use compiler::types::env::env_register_function
-use compiler::types::env::env_register_behavior
-use compiler::types::env::env_register_impl
-use compiler::types::module::Module
-use compiler::types::module::ModuleRegistry
-use compiler::types::module::module_new
-use compiler::types::module::registry_register
-use compiler::types::module::registry_has
-use compiler::types::module::registry_get
+use compiler::types::env::*
+use compiler::types::module::*
 use compiler::types::register::register_module_decls
 use compiler::ast::nodes::Module as AstModule
 use compiler::token::Token

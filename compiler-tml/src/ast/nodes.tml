@@ -11,8 +11,7 @@
 //! `SourceSpan` for diagnostics.
 
 use compiler::source::SourceSpan
-use compiler::ast::common::Visibility
-use compiler::ast::common::LiteralKind
+use compiler::ast::common::{Visibility, LiteralKind}
 use compiler::ast::exprs::Expr
 use compiler::ast::decls::Decl
 use std::collections::list::List

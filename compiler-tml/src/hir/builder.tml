@@ -6,68 +6,17 @@
 //!
 //! Phase 15a — items 2.1–2.6.
 
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::types::ty::Type
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::make_named
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_ref
-use compiler::types::ty::make_func
-use compiler::types::ty::type_to_str
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::StructFieldDef
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::env_lookup_function
-use compiler::types::env::env_lookup_struct
-use compiler::types::env::env_lookup_enum
-use compiler::types::env::env_push_scope
-use compiler::types::env::env_pop_scope
-use compiler::types::env::ScopeKind
-use compiler::types::env::scope_define
-use compiler::hir::expr::HirExpr
-use compiler::hir::expr::HirLiteralExpr
-use compiler::hir::expr::HirVarExpr
-use compiler::hir::expr::HirCallExpr
-use compiler::hir::expr::HirBlockExpr
-use compiler::hir::expr::HirLitValue
-use compiler::hir::stmt::HirStmt
-use compiler::hir::stmt::HirLetStmt
-use compiler::hir::stmt::HirExprStmt
-use compiler::hir::pattern::HirPattern
-use compiler::hir::pattern::HirBindingPattern
-use compiler::hir::pattern::HirWildcardPattern
-use compiler::hir::module::HirModule
-use compiler::hir::module::HirFunction
-use compiler::hir::module::HirStruct
-use compiler::hir::module::HirEnum
-use compiler::hir::module::HirImpl
-use compiler::hir::module::HirConst
-use compiler::hir::module::HirParam
-use compiler::hir::module::HirField
-use compiler::hir::module::HirVariant
-use compiler::hir::module::hir_module_new
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::hir::expr::*
+use compiler::hir::stmt::{HirStmt, HirLetStmt, HirExprStmt}
+use compiler::hir::pattern::{HirPattern, HirBindingPattern, HirWildcardPattern}
+use compiler::hir::module::*
 use compiler::ast::nodes::Module as AstModule
 use compiler::ast::nodes::Pattern as AstPattern
 use compiler::ast::nodes::IdentPattern
-use compiler::ast::decls::Decl
-use compiler::ast::decls::FuncDecl
-use compiler::ast::decls::StructDecl
-use compiler::ast::decls::EnumDecl
-use compiler::ast::decls::ImplDecl
-use compiler::ast::decls::ConstDecl
-use compiler::ast::decls::FuncParam
+use compiler::ast::decls::*
 use compiler::ast::exprs::Expr
 use compiler::ast::stmts::Stmt
 use compiler::ast::common::LiteralKind

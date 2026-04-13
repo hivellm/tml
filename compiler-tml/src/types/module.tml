@@ -7,10 +7,7 @@
 //! Phase 14b — items 1.1–1.4.
 
 use compiler::types::ty::Type
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::EnumDef
-use compiler::types::env::BehaviorDef
+use compiler::types::env::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 

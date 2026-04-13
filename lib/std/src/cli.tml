@@ -27,8 +27,7 @@
 use core::str
 use core::fmt::helpers
 use std::os
-use std::collections::List
-use std::collections::HashMap
+use std::collections::{List, HashMap}
 
 // ============================================================================
 // Arg — defines a single CLI argument

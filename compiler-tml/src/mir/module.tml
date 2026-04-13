@@ -2,10 +2,8 @@
 //! Phase 15c — item 1.5.
 
 use compiler::source::SourceSpan
-use compiler::mir::types::MirType
-use compiler::mir::types::ValueId
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::block_new
+use compiler::mir::types::{MirType, ValueId}
+use compiler::mir::block::{BasicBlock, block_new}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

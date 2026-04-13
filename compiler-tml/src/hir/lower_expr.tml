@@ -7,97 +7,15 @@
 //!
 //! Phase 15a — items 2.6, 3.1–3.5.
 
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::types::ty::Type
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_ref
-use compiler::types::ty::make_closure
-use compiler::types::ty::type_to_str
-use compiler::types::ty::CapturedVar
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::types::ty::*
 use compiler::types::env::TypeEnv
-use compiler::hir::expr::HirExpr
-use compiler::hir::expr::HirLiteralExpr
-use compiler::hir::expr::HirVarExpr
-use compiler::hir::expr::HirBinaryExpr
-use compiler::hir::expr::HirUnaryExpr
-use compiler::hir::expr::HirCallExpr
-use compiler::hir::expr::HirMethodCallExpr
-use compiler::hir::expr::HirFieldExpr
-use compiler::hir::expr::HirIndexExpr
-use compiler::hir::expr::HirTupleExpr
-use compiler::hir::expr::HirArrayExpr
-use compiler::hir::expr::HirStructExpr
-use compiler::hir::expr::HirStructField
-use compiler::hir::expr::HirEnumExpr
-use compiler::hir::expr::HirBlockExpr
-use compiler::hir::expr::HirIfExpr
-use compiler::hir::expr::HirWhenExpr
-use compiler::hir::expr::HirWhenArm
-use compiler::hir::expr::HirLoopExpr
-use compiler::hir::expr::HirWhileExpr
-use compiler::hir::expr::HirForExpr
-use compiler::hir::expr::HirReturnExpr
-use compiler::hir::expr::HirBreakExpr
-use compiler::hir::expr::HirContinueExpr
-use compiler::hir::expr::HirClosureExpr
-use compiler::hir::expr::HirCastExpr
-use compiler::hir::expr::HirTryExpr
-use compiler::hir::expr::HirAwaitExpr
-use compiler::hir::expr::HirAssignExpr
-use compiler::hir::expr::HirLowlevelExpr
-use compiler::hir::expr::HirLitValue
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirUnaryOp
-use compiler::hir::expr::HirCapture
-use compiler::hir::stmt::HirStmt
-use compiler::hir::stmt::HirLetStmt
-use compiler::hir::stmt::HirExprStmt
-use compiler::hir::pattern::HirPattern
-use compiler::hir::pattern::HirBindingPattern
-use compiler::hir::pattern::HirWildcardPattern
-use compiler::hir::pattern::HirEnumPattern
-use compiler::hir::pattern::HirTuplePattern
-use compiler::hir::module::HirFunction
-use compiler::hir::module::HirParam
-use compiler::hir::builder::HirBuilder
-use compiler::hir::builder::fresh_id
-use compiler::hir::builder::lower_stmt
-use compiler::hir::builder::lower_pattern
-use compiler::ast::exprs::Expr
-use compiler::ast::exprs::BinaryExpr
-use compiler::ast::exprs::UnaryExpr
-use compiler::ast::exprs::CallExpr
-use compiler::ast::exprs::MethodCallExpr
-use compiler::ast::exprs::FieldExpr
-use compiler::ast::exprs::IndexExpr
-use compiler::ast::exprs::TupleExpr
-use compiler::ast::exprs::ArrayExpr
-use compiler::ast::exprs::StructExpr
-use compiler::ast::exprs::IfExpr
-use compiler::ast::exprs::WhenExpr
-use compiler::ast::exprs::WhenArm as AstWhenArm
-use compiler::ast::exprs::LoopExpr
-use compiler::ast::exprs::WhileExpr
-use compiler::ast::exprs::ForExpr
-use compiler::ast::exprs::BlockExpr
-use compiler::ast::exprs::ReturnExpr
-use compiler::ast::exprs::BreakExpr
-use compiler::ast::exprs::ClosureExpr
-use compiler::ast::exprs::ClosureParam
-use compiler::ast::exprs::CastExpr
-use compiler::ast::exprs::TryExpr
-use compiler::ast::exprs::AwaitExpr
-use compiler::ast::exprs::LowlevelExpr
-use compiler::ast::exprs::ArrayKind
+use compiler::hir::expr::*
+use compiler::hir::stmt::{HirStmt, HirLetStmt, HirExprStmt}
+use compiler::hir::pattern::*
+use compiler::hir::module::{HirFunction, HirParam}
+use compiler::hir::builder::*
+use compiler::ast::exprs::*
 use compiler::ast::common::LiteralKind
 use compiler::ast::nodes::Pattern as AstPattern
 use compiler::ast::nodes::IdentPattern
@@ -222,7 +140,7 @@ pub func lower_when(b: HirBuilder, w: WhenExpr) -> HirExpr {
     let arms = List[HirWhenArm]::new(w.arms.len() as I64)
     let ac: I64 = w.arms.len() as I64
     for i in 0 to ac {
-        let arm: AstWhenArm = w.arms.get(i)
+        let arm: WhenArm = w.arms.get(i)
         let pat = lower_pattern(b, arm.pattern.get())
         let guard: Maybe[Heap[HirExpr]] = when arm.guard {
             Just(g) => Just(Heap::new(lower_full_expr(b, g.get()))),

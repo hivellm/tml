@@ -7,61 +7,11 @@
 //!
 //! Phase 14a — items 4.1–4.4.
 
-use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::make_primitive
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_generic_simple
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_named
-use compiler::types::ty::make_ref
-use compiler::types::ty::make_ptr
-use compiler::types::ty::make_array
-use compiler::types::ty::make_slice
-use compiler::types::ty::make_tuple
-use compiler::types::ty::make_func
-use compiler::types::ty::make_dyn_behavior
-use compiler::types::ty::make_impl_behavior
-use compiler::types::ty::PrimitiveKind
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::StructFieldDef
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::BehaviorDef
-use compiler::types::env::AssociatedTypeDef
-use compiler::types::env::ConstGenericParam
-use compiler::types::env::WhereConstraint
-use compiler::types::env::env_register_struct
-use compiler::types::env::env_register_enum
-use compiler::types::env::env_register_function
-use compiler::types::env::env_register_behavior
-use compiler::types::env::env_register_impl
-use compiler::types::env::env_register_type_alias
-use compiler::ast::nodes::Module
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::TypePath
-use compiler::ast::decls::Decl
-use compiler::ast::decls::FuncDecl
-use compiler::ast::decls::FuncParam
-use compiler::ast::decls::StructDecl
-use compiler::ast::decls::StructField
-use compiler::ast::decls::UnionDecl
-use compiler::ast::decls::EnumDecl
-use compiler::ast::decls::EnumVariant
-use compiler::ast::decls::TraitDecl
-use compiler::ast::decls::ImplDecl
-use compiler::ast::decls::TypeAliasDecl
-use compiler::ast::decls::GenericParam
-use compiler::ast::decls::ConstDecl
-use compiler::ast::decls::UseDecl
-use compiler::ast::decls::ModDecl
-use compiler::ast::decls::ClassDecl
-use compiler::ast::decls::InterfaceDecl
-use compiler::ast::decls::NamespaceDecl
-use compiler::source::loc_new
-use compiler::source::span_new
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::types::ty::{Type, StructDef, StructFieldDef, ConstGenericParam, EnumDef, EnumVariantDef, FuncSig, WhereConstraint, BehaviorDef, AssociatedTypeDef, PrimitiveKind, make_unit, make_named, make_tuple, make_array, make_slice, make_ref, make_ptr, make_func, make_primitive, make_dyn_behavior, make_impl_behavior}
+use compiler::types::env::*
+use compiler::ast::nodes::*
+use compiler::ast::decls::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

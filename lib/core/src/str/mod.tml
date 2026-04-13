@@ -3,28 +3,14 @@
 //! This module provides functions for working with strings. All functions
 //! operate on TML's `Str` type, which is a UTF-8 encoded string.
 
-pub use core::str::basic
+pub use core::str::*
 pub use core::str::basic::{len, is_empty, char_at, first_char, last_char, substring, substring_from, substring_to}
-
-pub use core::str::search
 pub use core::str::search::{contains, starts_with, ends_with, find, rfind, is_ascii, matches}
-
-pub use core::str::split
 pub use core::str::split::{split, split_whitespace, lines, split_once, rsplit_once, splitn, rsplit}
-
-pub use core::str::replace
 pub use core::str::replace::{replace, replace_first, replacen}
-
-pub use core::str::transform
 pub use core::str::transform::{trim, trim_start, trim_end, trim_matches, to_uppercase, to_lowercase, eq_ignore_ascii_case}
-
-pub use core::str::parse
 pub use core::str::parse::{parse_i32, parse_i64, parse_f64, parse_bool}
-
-pub use core::str::convert
 pub use core::str::convert::{repeat, pad_left, pad_right, join, concat, concat_all, chars, strip_prefix, strip_suffix, bytes}
-
-pub use core::str::simd
 pub use core::str::simd::{find_byte, find_byte_scalar, find_byte_simd, contains_fast, contains_scalar, contains_simd, find_substr, find_substr_scalar, find_simd, count_byte, count_byte_scalar, is_ascii_fast, is_ascii_scalar, is_ascii_simd}
 
 // ============================================================================

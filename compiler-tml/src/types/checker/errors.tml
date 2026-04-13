@@ -2,11 +2,8 @@
 //!
 //! Phase 14c — error representation.
 
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::types::ty::Type
-use compiler::types::ty::type_to_str
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::types::ty::{Type, type_to_str}
 
 /// A type checking error with source location and error code.
 pub type TypeError {

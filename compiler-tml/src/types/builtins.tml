@@ -7,31 +7,9 @@
 //!
 //! Phase 14a — items 3.1–3.4.
 
-use compiler::types::ty::Type
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::make_primitive
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_generic_simple
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::BehaviorDef
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::StructDef
-use compiler::types::env::AssociatedTypeDef
-use compiler::types::env::ConstGenericParam
-use compiler::types::env::WhereConstraint
-use compiler::types::env::env_register_builtin
-use compiler::types::env::env_register_behavior
-use compiler::types::env::env_register_enum
-use compiler::types::env::env_register_impl
-use compiler::types::env::env_register_function
-use compiler::source::SourceSpan
-use compiler::source::SourceLocation
-use compiler::source::loc_new
-use compiler::source::span_new
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::source::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

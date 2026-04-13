@@ -15,22 +15,5 @@ pub mod graph
 pub mod backward
 
 pub use std::ia::autograd::variable::Variable
-pub use std::ia::autograd::graph::Tape
-pub use std::ia::autograd::backward::GradStore
-pub use std::ia::autograd::backward::backward
-pub use std::ia::autograd::backward::zero_grad
-pub use std::ia::autograd::backward::no_grad_begin
-pub use std::ia::autograd::backward::no_grad_end
-pub use std::ia::autograd::graph::OP_ADD
-pub use std::ia::autograd::graph::OP_SUB
-pub use std::ia::autograd::graph::OP_MUL
-pub use std::ia::autograd::graph::OP_DIV
-pub use std::ia::autograd::graph::OP_NEG
-pub use std::ia::autograd::graph::OP_EXP
-pub use std::ia::autograd::graph::OP_LOG
-pub use std::ia::autograd::graph::OP_SQRT
-pub use std::ia::autograd::graph::OP_RELU
-pub use std::ia::autograd::graph::OP_SIGMOID
-pub use std::ia::autograd::graph::OP_TANH
-pub use std::ia::autograd::graph::OP_SUM
-pub use std::ia::autograd::graph::OP_MEAN
+pub use std::ia::autograd::graph::*
+pub use std::ia::autograd::backward::*

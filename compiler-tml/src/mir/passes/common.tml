@@ -22,13 +22,10 @@
 //!
 //! Phase 15d — items 1.1, 1.2.
 
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
+use compiler::mir::module::{MirModule, MirFunc}
 use compiler::mir::block::BasicBlock
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::MirInst
-use compiler::mir::types::ValueId
-use compiler::mir::types::invalid_value
+use compiler::mir::inst::{InstructionData, MirInst}
+use compiler::mir::types::{ValueId, invalid_value}
 use compiler::mir::passes::mem2reg::run_mem2reg
 use compiler::mir::passes::dce::run_dead_code_elimination
 use compiler::mir::passes::dfe::run_dead_function_elimination

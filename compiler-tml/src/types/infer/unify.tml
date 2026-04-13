@@ -6,25 +6,8 @@
 //! Phase 14c — items 1.1–1.6.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::PrimitiveType
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::NamedType
-use compiler::types::ty::RefType
-use compiler::types::ty::PtrType
-use compiler::types::ty::ArrayType
-use compiler::types::ty::SliceType
-use compiler::types::ty::TupleType
-use compiler::types::ty::FuncType
-use compiler::types::ty::TypeVarType
-use compiler::types::ty::GenericType
-use compiler::types::ty::types_equal
-use compiler::types::ty::type_to_str
-use compiler::types::ty::prim_kind_eq
-use compiler::types::ty::make_type_var
-use compiler::types::checker::errors::TypeError
-use compiler::types::checker::errors::type_mismatch
-use compiler::types::checker::errors::dummy_span
+use compiler::types::ty::*
+use compiler::types::checker::errors::{TypeError, type_mismatch, dummy_span}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

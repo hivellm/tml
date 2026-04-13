@@ -6,8 +6,7 @@
 //! Decl) and freely references `Stmt` via `use compiler::ast::stmts::Stmt`.
 
 use compiler::source::SourceSpan
-use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::TypeExpr
+use compiler::ast::nodes::{Pattern, TypeExpr}
 use compiler::ast::exprs::Expr
 use compiler::ast::decls::Decl
 use core::alloc::heap::Heap

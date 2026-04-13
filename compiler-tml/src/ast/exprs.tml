@@ -7,9 +7,7 @@
 
 use compiler::source::SourceSpan
 use compiler::ast::common::LiteralKind
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::{TypePath, TypeExpr, Pattern}
 use compiler::ast::stmts::Stmt
 use std::collections::list::List
 use core::alloc::heap::Heap

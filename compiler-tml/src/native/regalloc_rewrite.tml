@@ -3,15 +3,7 @@
 //! After linear_scan assigns physical registers, this pass walks all
 //! instructions and replaces Operand::Reg(vreg) with Operand::PhysReg(phys).
 
-use compiler::native::machir::MachFunc
-use compiler::native::machir::MachBlock
-use compiler::native::machir::MachInst
-use compiler::native::machir::MachMov
-use compiler::native::machir::MachBinOp
-use compiler::native::machir::MachUnaryOp
-use compiler::native::machir::MachCmp
-use compiler::native::machir::Operand
-use compiler::native::machir::VirtualReg
+use compiler::native::machir::*
 use compiler::native::linear_scan::RegAllocResult
 use std::collections::list::List
 use std::collections::hashmap::HashMap

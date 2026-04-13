@@ -9,17 +9,11 @@
 //!
 //! Phase 17b — items 5.1–5.4.
 
-use compiler::query::key::QueryKey
-use compiler::query::key::ReadSourceKey
-use compiler::query::key::CodegenUnitKey
-use compiler::query::context::QueryContext
-use compiler::query::context::context_new
-use compiler::query::context::force
+use compiler::query::key::{QueryKey, ReadSourceKey, CodegenUnitKey}
+use compiler::query::context::{QueryContext, context_new, force}
 use compiler::cli::dispatcher::CliArgs
-use compiler::native::pipeline::compile_module_native
-use compiler::native::pipeline::NativeCompileResult
-use compiler::mir::module::MirModule
-use compiler::mir::module::mir_module_new
+use compiler::native::pipeline::{compile_module_native, NativeCompileResult}
+use compiler::mir::module::{MirModule, mir_module_new}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

@@ -12,17 +12,9 @@
 //!
 //! Phase 14b — items 4.1–4.4.
 
-use compiler::types::ty::Type
-use compiler::types::ty::type_to_str
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::StructFieldDef
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::BehaviorDef
-use compiler::types::env::ConstGenericParam
-use compiler::types::module::Module
-use compiler::types::module::ReExport
+use compiler::types::ty::{Type, type_to_str}
+use compiler::types::env::*
+use compiler::types::module::{Module, ReExport}
 use compiler::serial::writer::BinaryWriter
 use std::collections::buffer::Buffer
 use std::collections::list::List

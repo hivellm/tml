@@ -7,17 +7,9 @@
 //! Design: the `Lexer` struct holds mutable scanning state. Free functions
 //! take `var Lexer` or read-only `Lexer` parameters.
 
-use compiler::source::SourceLocation
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::token::token_new
-use compiler::token::keyword_lookup
-use core::str::basic::len
-use core::str::basic::char_at
-use core::str::basic::substring
+use compiler::source::*
+use compiler::token::*
+use core::str::basic::{len, char_at, substring}
 use std::collections::list::List
 
 // ============================================================================

@@ -6,16 +6,10 @@
 //! returns `Outcome[ParsedX, ParseFailure]` where `ParsedX` carries both the
 //! parsed value and the updated position.
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::Pattern
-use compiler::ast::exprs::Expr
-use compiler::ast::exprs::BinaryOp
-use compiler::ast::exprs::UnaryOp
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
+use compiler::ast::nodes::{TypeExpr, TypePath, Pattern}
+use compiler::ast::exprs::{Expr, BinaryOp, UnaryOp}
 use compiler::ast::stmts::Stmt
 use compiler::ast::decls::Decl
 use std::collections::list::List

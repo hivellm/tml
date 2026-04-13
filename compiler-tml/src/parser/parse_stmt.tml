@@ -10,37 +10,17 @@
 //!   decl_stmt ::= (pub | func | type | behavior | impl | const | use | ...) ...
 //!   expr_stmt ::= expr
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::Pattern
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
+use compiler::ast::nodes::{TypeExpr, Pattern}
 use compiler::ast::exprs::Expr
-use compiler::ast::stmts::LetStmt
-use compiler::ast::stmts::VarStmt
-use compiler::ast::stmts::LetElseStmt
-use compiler::ast::stmts::Stmt
+use compiler::ast::stmts::*
 use compiler::ast::decls::Decl
-use compiler::parser::common::ParseFailure
-use compiler::parser::common::ParsedStmt
-use compiler::parser::common::ParsedDecl
-use compiler::parser::common::ParsedToken
-use compiler::parser::common::p_peek
-use compiler::parser::common::p_prev
-use compiler::parser::common::p_check
-use compiler::parser::common::p_is_eof
-use compiler::parser::common::p_skip_newlines
-use compiler::parser::common::p_expect
-use compiler::parser::common::p_expect_ident
-use compiler::parser::common::tok_kind_eq
-use compiler::parser::common::parse_err
-use compiler::parser::common::is_decl_start
+use compiler::parser::common::*
 use compiler::parser::parse_decl::parse_decl
 use compiler::parser::parse_type::parse_type
 use compiler::parser::parse_pattern::parse_pattern
-use compiler::parser::parse_expr::parse_expr
-use compiler::parser::parse_expr::parse_block_expr
+use compiler::parser::parse_expr::{parse_expr, parse_block_expr}
 use std::collections::list::List
 use core::alloc::heap::Heap
 

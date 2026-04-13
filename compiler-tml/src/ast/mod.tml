@@ -14,14 +14,8 @@
 //! Re-export shims (`types`, `patterns`, `oop`, `module`) provide
 //! backwards-compatible import paths.
 
-use compiler::ast::common::Visibility
-use compiler::ast::common::Mutability
-use compiler::ast::common::AstId
-use compiler::ast::common::LiteralKind
-
-use compiler::ast::nodes::TypeExpr
-use compiler::ast::nodes::Pattern
+use compiler::ast::common::*
+use compiler::ast::nodes::{TypeExpr, Pattern, Module}
 use compiler::ast::exprs::Expr
 use compiler::ast::stmts::Stmt
 use compiler::ast::decls::Decl
-use compiler::ast::nodes::Module

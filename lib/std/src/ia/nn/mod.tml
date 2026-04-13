@@ -23,34 +23,11 @@ pub mod embedding
 pub mod attention
 
 // -- module (Parameter, init helpers) --
-pub use std::ia::nn::module::Parameter
-pub use std::ia::nn::module::xavier_uniform
-pub use std::ia::nn::module::xavier_normal
-pub use std::ia::nn::module::kaiming_uniform
-pub use std::ia::nn::module::kaiming_normal
-
-// -- activation functions --
-pub use std::ia::nn::activation::relu
-pub use std::ia::nn::activation::leaky_relu
-pub use std::ia::nn::activation::sigmoid
-pub use std::ia::nn::activation::tanh_act
-pub use std::ia::nn::activation::gelu
-pub use std::ia::nn::activation::silu
-pub use std::ia::nn::activation::softmax
-pub use std::ia::nn::activation::log_softmax
-
-// -- layers --
+pub use std::ia::nn::module::*
+pub use std::ia::nn::activation::*
 pub use std::ia::nn::linear::Linear
 pub use std::ia::nn::dropout::Dropout
-pub use std::ia::nn::norm::LayerNorm
-pub use std::ia::nn::norm::RMSNorm
+pub use std::ia::nn::norm::{LayerNorm, RMSNorm}
 pub use std::ia::nn::embedding::Embedding
-pub use std::ia::nn::attention::MultiHeadAttention
-pub use std::ia::nn::attention::scaled_dot_product_attention
-
-// -- loss functions --
-pub use std::ia::nn::loss::mse_loss
-pub use std::ia::nn::loss::cross_entropy_loss
-pub use std::ia::nn::loss::l1_loss
-pub use std::ia::nn::loss::bce_loss
-pub use std::ia::nn::loss::huber_loss
+pub use std::ia::nn::attention::{MultiHeadAttention, scaled_dot_product_attention}
+pub use std::ia::nn::loss::*

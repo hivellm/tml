@@ -7,25 +7,10 @@
 //! Phase 14d — items 2.1–2.6.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::NamedType
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::type_to_str
-use compiler::types::ty::types_equal
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::BehaviorDef
-use compiler::types::env::AssociatedTypeDef
-use compiler::types::env::env_lookup_behavior
-use compiler::types::env::env_type_implements
-use compiler::types::env::env_get_behavior_impls
-use compiler::types::behaviors::registry::BehaviorRegistry
-use compiler::types::behaviors::registry::ImplBlock
-use compiler::types::behaviors::registry::find_impl
-use compiler::types::behaviors::registry::get_impl_blocks
-use compiler::types::checker::check_call::substitute_type
-use compiler::types::checker::check_call::get_type_name
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::types::behaviors::registry::*
+use compiler::types::checker::check_call::{substitute_type, get_type_name}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

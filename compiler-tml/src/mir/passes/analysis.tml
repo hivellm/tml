@@ -5,12 +5,9 @@
 //!
 //! Phase 15d — item 1.3.
 
-use compiler::mir::types::ValueId
-use compiler::mir::types::invalid_value
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
+use compiler::mir::types::{ValueId, invalid_value}
+use compiler::mir::inst::{MirInst, InstructionData}
+use compiler::mir::block::{BasicBlock, Terminator}
 use compiler::mir::module::MirFunc
 use std::collections::list::List
 use std::collections::hashmap::HashMap

@@ -9,25 +9,8 @@
 //! Phase 14d — items 4.1–4.4.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::NamedType
-use compiler::types::ty::PrimitiveType
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::GenericType
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_named
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_ref
-use compiler::types::ty::make_tuple
-use compiler::types::ty::make_func
-use compiler::types::ty::type_to_str
-use compiler::types::ty::types_equal
-use compiler::types::env::TypeEnv
-use compiler::types::env::env_lookup_behavior
-use compiler::types::env::BehaviorDef
+use compiler::types::ty::*
+use compiler::types::env::{TypeEnv, env_lookup_behavior, BehaviorDef}
 use compiler::types::behaviors::registry::BehaviorRegistry
 use compiler::types::behaviors::solver::resolve_associated_type
 use compiler::types::checker::check_call::apply_type_subs

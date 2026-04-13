@@ -33,19 +33,7 @@
 //! module for details.
 
 pub use std::sync::ordering::Ordering
-
-// Submodules
-pub use std::sync::atomic::bool
-pub use std::sync::atomic::i32
-pub use std::sync::atomic::i64
-pub use std::sync::atomic::u32
-pub use std::sync::atomic::u64
-pub use std::sync::atomic::usize
-pub use std::sync::atomic::isize
-pub use std::sync::atomic::ptr
-pub use std::sync::atomic::hints
-
-// Re-export types
+pub use std::sync::atomic::*
 pub use std::sync::atomic::bool::AtomicBool
 pub use std::sync::atomic::i32::AtomicI32
 pub use std::sync::atomic::i64::AtomicI64

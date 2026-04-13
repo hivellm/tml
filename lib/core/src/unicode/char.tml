@@ -35,8 +35,7 @@
 
 use core::types::option::Maybe
 use core::char::Char
-use core::unicode::unicode_data
-use core::unicode::GeneralCategory
+use core::unicode::{unicode_data, GeneralCategory}
 
 // ============================================================================
 // Constants

@@ -5,22 +5,7 @@
 //!
 //! Phase 19a — items 4.1–4.4.
 
-use compiler::native::machir::REG_RAX
-use compiler::native::machir::REG_RCX
-use compiler::native::machir::REG_RDX
-use compiler::native::machir::REG_RBX
-use compiler::native::machir::REG_RSP
-use compiler::native::machir::REG_RBP
-use compiler::native::machir::REG_RSI
-use compiler::native::machir::REG_RDI
-use compiler::native::machir::REG_R8
-use compiler::native::machir::REG_R9
-use compiler::native::machir::REG_R10
-use compiler::native::machir::REG_R11
-use compiler::native::machir::REG_R12
-use compiler::native::machir::REG_R13
-use compiler::native::machir::REG_R14
-use compiler::native::machir::REG_R15
+use compiler::native::machir::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

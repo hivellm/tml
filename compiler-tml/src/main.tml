@@ -34,15 +34,8 @@
 //! Phase 17c — item 1.1.
 
 use std::os
-use compiler::cli::dispatcher::CliArgs
-use compiler::cli::dispatcher::parse_args
-use compiler::cli::dispatcher::dispatch
-use compiler::cli::dispatcher::help_text
-use compiler::cli::builder::build_file
-use compiler::cli::builder::run_file
-use compiler::cli::builder::check_file
-use compiler::cli::builder::build_config_from_args
-use compiler::cli::builder::BuildConfig
+use compiler::cli::dispatcher::*
+use compiler::cli::builder::*
 use std::collections::list::List
 
 /// Compiler version string.

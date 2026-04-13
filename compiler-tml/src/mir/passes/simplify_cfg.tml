@@ -9,21 +9,12 @@
 //!
 //! Phase 15d — item 3.4.
 
-use compiler::mir::types::ValueId
-use compiler::mir::types::invalid_value
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::MirConstant
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::BranchTerm
-use compiler::mir::block::CondBranchTerm
+use compiler::mir::types::{ValueId, invalid_value}
+use compiler::mir::inst::{MirInst, InstructionData, MirConstant}
+use compiler::mir::block::*
 use compiler::mir::module::MirFunc
-use compiler::mir::passes::common::PassResult
-use compiler::mir::passes::common::no_change
-use compiler::mir::passes::common::did_change
-use compiler::mir::passes::analysis::compute_successors
-use compiler::mir::passes::analysis::find_reachable_blocks
+use compiler::mir::passes::common::{PassResult, no_change, did_change}
+use compiler::mir::passes::analysis::{compute_successors, find_reachable_blocks}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 

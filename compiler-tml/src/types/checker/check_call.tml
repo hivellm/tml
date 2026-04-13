@@ -21,60 +21,14 @@
 //! Phase 14c — items 3.1–3.5.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::NamedType
-use compiler::types::ty::GenericType
-use compiler::types::ty::PrimitiveType
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::RefType
-use compiler::types::ty::TupleType
-use compiler::types::ty::ArrayType
-use compiler::types::ty::SliceType
-use compiler::types::ty::FuncType
-use compiler::types::ty::ClosureType
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::make_named
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::type_to_str
-use compiler::types::ty::is_never
-use compiler::types::ty::prim_kind_to_str
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::BehaviorDef
-use compiler::types::env::env_lookup_type
-use compiler::types::env::env_lookup_function
-use compiler::types::env::env_lookup_struct
-use compiler::types::env::env_lookup_enum
-use compiler::types::env::env_lookup_behavior
-use compiler::types::env::env_type_implements
-use compiler::types::infer::unify::InferCtx
-use compiler::types::infer::unify::fresh_var
-use compiler::types::infer::unify::unify
-use compiler::types::infer::unify::resolve
-use compiler::types::checker::errors::TypeError
-use compiler::types::checker::errors::type_error
-use compiler::types::checker::errors::type_mismatch
-use compiler::types::checker::errors::undefined_function
-use compiler::ast::exprs::Expr
-use compiler::ast::exprs::CallExpr
-use compiler::ast::exprs::MethodCallExpr
-use compiler::ast::exprs::IdentExpr
-use compiler::ast::exprs::PathExpr
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::types::infer::unify::*
+use compiler::types::checker::errors::*
+use compiler::ast::exprs::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
-
-// Forward declaration — infer_expr lives in check_expr.tml.
-// We import it here because call checking needs to recurse into args.
 use compiler::types::checker::check_expr::infer_expr
 
 // ============================================================================

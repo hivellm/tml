@@ -1,15 +1,10 @@
 //! MIR pretty-printer — text format for debugging.
 //! Phase 15c — item 5.1.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::MirConstant
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
+use compiler::mir::types::{MirType, MirPrimitive}
+use compiler::mir::inst::{MirInst, InstructionData, MirConstant}
+use compiler::mir::block::{BasicBlock, Terminator}
+use compiler::mir::module::{MirModule, MirFunc}
 use std::collections::list::List
 
 /// Print a MirModule in text format.

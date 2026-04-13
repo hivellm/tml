@@ -1,12 +1,3 @@
 //! Pattern AST nodes. Canonical definitions live in `ast/nodes.tml`.
 
-use compiler::ast::nodes::IdentPattern
-use compiler::ast::nodes::LiteralPattern
-use compiler::ast::nodes::TuplePattern
-use compiler::ast::nodes::FieldPattern
-use compiler::ast::nodes::StructPattern
-use compiler::ast::nodes::EnumPattern
-use compiler::ast::nodes::OrPattern
-use compiler::ast::nodes::RangePattern
-use compiler::ast::nodes::ArrayPattern
-use compiler::ast::nodes::Pattern
+use compiler::ast::nodes::*

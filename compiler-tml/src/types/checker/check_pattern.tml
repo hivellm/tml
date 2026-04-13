@@ -21,45 +21,13 @@
 //! Phase 14c — items 5.1–5.3.
 
 use compiler::source::SourceSpan
-use compiler::types::ty::Type
-use compiler::types::ty::NamedType
-use compiler::types::ty::TupleType
-use compiler::types::ty::ArrayType
-use compiler::types::ty::SliceType
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::type_to_str
-use compiler::types::env::TypeEnv
-use compiler::types::env::EnumDef
-use compiler::types::env::EnumVariantDef
-use compiler::types::env::StructDef
-use compiler::types::env::StructFieldDef
-use compiler::types::env::env_lookup_enum
-use compiler::types::env::env_lookup_struct
-use compiler::types::env::scope_define
-use compiler::types::infer::unify::InferCtx
-use compiler::types::infer::unify::fresh_var
-use compiler::types::infer::unify::unify
-use compiler::types::infer::unify::resolve
-use compiler::types::checker::errors::TypeError
-use compiler::types::checker::errors::type_error
-use compiler::types::checker::check_call::apply_type_subs
-use compiler::types::checker::check_call::extract_type_params
+use compiler::types::ty::*
+use compiler::types::env::*
+use compiler::types::infer::unify::*
+use compiler::types::checker::errors::{TypeError, type_error}
+use compiler::types::checker::check_call::{apply_type_subs, extract_type_params}
 use compiler::ast::common::LiteralKind
-use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::IdentPattern
-use compiler::ast::nodes::LiteralPattern
-use compiler::ast::nodes::TuplePattern
-use compiler::ast::nodes::StructPattern
-use compiler::ast::nodes::FieldPattern
-use compiler::ast::nodes::EnumPattern
-use compiler::ast::nodes::OrPattern
-use compiler::ast::nodes::ArrayPattern
-use compiler::ast::nodes::RangePattern
-use compiler::ast::nodes::TypePath
+use compiler::ast::nodes::{Pattern, IdentPattern, LiteralPattern, TuplePattern, StructPattern, EnumPattern, OrPattern, ArrayPattern, FieldPattern}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

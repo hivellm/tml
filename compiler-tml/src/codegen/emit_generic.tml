@@ -14,8 +14,7 @@
 //!
 //! Phase 16c — items 4.1–4.4.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
+use compiler::mir::types::{MirType, MirPrimitive}
 use compiler::codegen::emit_type::emit_type_for_data
 use compiler::codegen::emit_method::mangle_type_name
 use std::collections::list::List

@@ -6,21 +6,8 @@
 //!
 //! Phase 17a — items 2.1–2.5.
 
-use compiler::query::key::QueryKey
-use compiler::query::key::QueryKind
-use compiler::query::key::query_kind
-use compiler::query::key::query_kind_name
-use compiler::query::key::query_cache_key
-use compiler::query::key::query_file_path
-use compiler::query::cache::QueryCache
-use compiler::query::cache::CacheEntry
-use compiler::query::cache::Fingerprint
-use compiler::query::cache::cache_new
-use compiler::query::cache::cache_get
-use compiler::query::cache::cache_store
-use compiler::query::cache::cache_is_green
-use compiler::query::cache::fingerprint
-use compiler::query::cache::empty_fingerprint
+use compiler::query::key::*
+use compiler::query::cache::*
 use std::collections::hashmap::HashMap
 use std::collections::list::List
 use core::alloc::heap::Heap

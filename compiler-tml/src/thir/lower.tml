@@ -5,71 +5,21 @@
 //!
 //! Phase 15b — items 2.1–2.6.
 
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::types::ty::Type
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::type_to_str
-use compiler::types::ty::types_equal
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::types::ty::*
 use compiler::types::env::TypeEnv
-use compiler::types::coercion::CoercionKind
-use compiler::types::coercion::find_coercion
-use compiler::types::coercion::normalize_type
+use compiler::types::coercion::{CoercionKind, find_coercion, normalize_type}
 use compiler::types::behaviors::registry::BehaviorRegistry
-use compiler::types::behaviors::dispatch::dispatch_method
-use compiler::types::behaviors::dispatch::MethodResolution
-use compiler::types::behaviors::dispatch::MethodSource
-use compiler::types::checker::check_call::operator_behavior_name
-use compiler::types::checker::check_call::operator_method_name
-use compiler::types::checker::check_call::get_type_name
-use compiler::hir::expr::HirExpr
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirLitValue
-use compiler::hir::expr::hir_expr_type
+use compiler::types::behaviors::dispatch::{dispatch_method, MethodResolution, MethodSource}
+use compiler::types::checker::check_call::{operator_behavior_name, operator_method_name, get_type_name}
+use compiler::hir::expr::*
 use compiler::hir::stmt::HirStmt
 use compiler::hir::pattern::HirPattern
-use compiler::hir::module::HirModule
-use compiler::hir::module::HirFunction
-use compiler::hir::module::HirParam
-use compiler::thir::expr::ThirExpr
-use compiler::thir::expr::ThirCoercionExpr
-use compiler::thir::expr::ThirLiteralExpr
-use compiler::thir::expr::ThirVarExpr
-use compiler::thir::expr::ThirBinaryExpr
-use compiler::thir::expr::ThirUnaryExpr
-use compiler::thir::expr::ThirCallExpr
-use compiler::thir::expr::ThirMethodCallExpr
-use compiler::thir::expr::ThirFieldExpr
-use compiler::thir::expr::ThirIndexExpr
-use compiler::thir::expr::ThirBlockExpr
-use compiler::thir::expr::ThirIfExpr
-use compiler::thir::expr::ThirReturnExpr
-use compiler::thir::expr::ThirLoopExpr
-use compiler::thir::expr::ThirContinueExpr
-use compiler::thir::expr::ThirBreakExpr
-use compiler::thir::expr::ThirWhenExpr
-use compiler::thir::expr::ThirWhenArm
-use compiler::thir::expr::ResolvedMethod
-use compiler::thir::expr::thir_expr_type
-use compiler::thir::stmt::ThirStmt
-use compiler::thir::stmt::ThirLetStmt
-use compiler::thir::stmt::ThirExprStmt
-use compiler::thir::pattern::ThirPattern
-use compiler::thir::pattern::ThirWildcardPattern
-use compiler::thir::pattern::ThirBindingPattern
-use compiler::thir::pattern::ThirEnumPattern
-use compiler::thir::module::ThirModule
-use compiler::thir::module::ThirFunction
-use compiler::thir::module::ThirParam
-use compiler::thir::module::ThirStruct
-use compiler::thir::module::ThirField
-use compiler::thir::module::ThirEnum
-use compiler::thir::module::ThirVariant
-use compiler::thir::module::ThirImpl
-use compiler::thir::module::thir_module_new
+use compiler::hir::module::{HirModule, HirFunction, HirParam}
+use compiler::thir::expr::*
+use compiler::thir::stmt::{ThirStmt, ThirLetStmt, ThirExprStmt}
+use compiler::thir::pattern::*
+use compiler::thir::module::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

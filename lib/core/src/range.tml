@@ -4,5 +4,4 @@
 //! and the concrete iterator types `RangeIterI64`, `RangeInclusiveIterI64`.
 
 pub use core::ops::range::*
-pub use core::types::range::RangeIterI64
-pub use core::types::range::RangeInclusiveIterI64
+pub use core::types::range::{RangeIterI64, RangeInclusiveIterI64}

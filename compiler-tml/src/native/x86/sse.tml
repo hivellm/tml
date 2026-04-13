@@ -6,10 +6,7 @@
 //!
 //! Phase 20a — items 1.1–2.4.
 
-use compiler::native::x86::encode::emit_byte
-use compiler::native::x86::encode::emit_imm8
-use compiler::native::x86::encode::modrm
-use compiler::native::x86::encode::rex
+use compiler::native::x86::encode::*
 use std::collections::list::List
 
 // ============================================================================

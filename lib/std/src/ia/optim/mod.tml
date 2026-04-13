@@ -14,11 +14,7 @@ pub mod sgd
 pub mod adam
 pub mod scheduler
 
-pub use std::ia::optim::optimizer::ParamGroup
-pub use std::ia::optim::optimizer::clip_grad_value
-pub use std::ia::optim::optimizer::clip_grad_norm
+pub use std::ia::optim::optimizer::{ParamGroup, clip_grad_value, clip_grad_norm}
 pub use std::ia::optim::sgd::SGD
 pub use std::ia::optim::adam::Adam
-pub use std::ia::optim::scheduler::CosineAnnealing
-pub use std::ia::optim::scheduler::LinearWarmup
-pub use std::ia::optim::scheduler::StepLR
+pub use std::ia::optim::scheduler::{CosineAnnealing, LinearWarmup, StepLR}

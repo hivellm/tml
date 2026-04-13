@@ -4,40 +4,15 @@
 //! Entry point: `parse_pattern` (includes or-patterns).
 //! `parse_pattern_no_or` is used inside or-patterns to avoid left-recursion.
 
-use compiler::source::SourceSpan
-use compiler::source::span_merge
-use compiler::token::Token
-use compiler::token::TokenKind
-use compiler::ast::nodes::TypePath
-use compiler::ast::nodes::Pattern
-use compiler::ast::nodes::IdentPattern
-use compiler::ast::nodes::LiteralPattern
-use compiler::ast::nodes::TuplePattern
-use compiler::ast::nodes::StructPattern
-use compiler::ast::nodes::FieldPattern
-use compiler::ast::nodes::EnumPattern
-use compiler::ast::nodes::OrPattern
-use compiler::ast::nodes::RangePattern
-use compiler::ast::nodes::ArrayPattern
+use compiler::source::{SourceSpan, span_merge}
+use compiler::token::{Token, TokenKind}
+use compiler::ast::nodes::*
 use compiler::ast::common::LiteralKind
-use compiler::parser::common::ParseFailure
-use compiler::parser::common::ParsedPattern
-use compiler::parser::common::p_peek
-use compiler::parser::common::p_peek_next
-use compiler::parser::common::p_prev
-use compiler::parser::common::p_check
-use compiler::parser::common::p_check_next
-use compiler::parser::common::p_is_eof
-use compiler::parser::common::p_skip_newlines
-use compiler::parser::common::p_expect
-use compiler::parser::common::p_expect_ident
-use compiler::parser::common::tok_kind_eq
-use compiler::parser::common::parse_err
+use compiler::parser::common::*
 use compiler::parser::parse_type::parse_type_path_full
 use std::collections::list::List
 use core::alloc::heap::Heap
-use core::str::parse::parse_i64
-use core::str::parse::parse_f64
+use core::str::parse::{parse_i64, parse_f64}
 
 // ============================================================================
 // Public entry points

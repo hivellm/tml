@@ -10,22 +10,10 @@
 //!
 //! Phase 30a — items 1.1–1.5.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirPointerType
-use compiler::mir::types::MirArrayType
-use compiler::mir::types::MirTupleType
-use compiler::mir::types::MirFunctionType
-use compiler::mir::types::ValueId
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::CallInst
+use compiler::mir::types::*
+use compiler::mir::inst::{MirInst, InstructionData, CallInst}
 use compiler::mir::block::BasicBlock
-use compiler::mir::module::MirFunc
-use compiler::mir::module::MirFuncParam
-use compiler::mir::module::mir_func_new
+use compiler::mir::module::{MirFunc, MirFuncParam, mir_func_new}
 use compiler::native::machir::MachFunc
 use compiler::native::mir_lower::lower_function
 use std::collections::list::List

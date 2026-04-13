@@ -7,49 +7,7 @@
 //! Phase 17a — item 1.1.
 
 // --- Query keys ---
-pub use compiler::query::key::QueryKey
-pub use compiler::query::key::QueryKind
-pub use compiler::query::key::ReadSourceKey
-pub use compiler::query::key::TokenizeKey
-pub use compiler::query::key::ParseModuleKey
-pub use compiler::query::key::TypecheckModuleKey
-pub use compiler::query::key::BorrowcheckModuleKey
-pub use compiler::query::key::HirLowerKey
-pub use compiler::query::key::ThirLowerKey
-pub use compiler::query::key::MirBuildKey
-pub use compiler::query::key::CodegenUnitKey
-pub use compiler::query::key::query_kind
-pub use compiler::query::key::query_kind_name
-pub use compiler::query::key::query_file_path
-pub use compiler::query::key::query_cache_key
-
-// --- Cache ---
-pub use compiler::query::cache::QueryCache
-pub use compiler::query::cache::CacheEntry
-pub use compiler::query::cache::Fingerprint
-pub use compiler::query::cache::cache_new
-pub use compiler::query::cache::cache_get
-pub use compiler::query::cache::cache_store
-pub use compiler::query::cache::cache_is_green
-pub use compiler::query::cache::cache_invalidate
-pub use compiler::query::cache::fingerprint
-pub use compiler::query::cache::empty_fingerprint
-pub use compiler::query::cache::fingerprints_equal
-
-// --- Context ---
-pub use compiler::query::context::QueryContext
-pub use compiler::query::context::context_new
-pub use compiler::query::context::context_new_traced
-pub use compiler::query::context::force
-pub use compiler::query::context::record_dependency
-pub use compiler::query::context::is_cached_green
-pub use compiler::query::context::context_stats
-
-// --- Incremental ---
-pub use compiler::query::incremental::IncrementalState
-pub use compiler::query::incremental::incr_new
-pub use compiler::query::incremental::incr_check_file
-pub use compiler::query::incremental::incr_is_green
-pub use compiler::query::incremental::incr_is_red
-pub use compiler::query::incremental::incr_all_inputs_green
-pub use compiler::query::incremental::incr_stats
+pub use compiler::query::key::*
+pub use compiler::query::cache::*
+pub use compiler::query::context::*
+pub use compiler::query::incremental::*

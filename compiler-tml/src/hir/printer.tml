@@ -6,21 +6,11 @@
 //!
 //! Phase 15a — item 5.1.
 
-use compiler::types::ty::Type
-use compiler::types::ty::type_to_str
-use compiler::hir::expr::HirExpr
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirUnaryOp
-use compiler::hir::expr::HirLitValue
-use compiler::hir::expr::hir_expr_type
+use compiler::types::ty::{Type, type_to_str}
+use compiler::hir::expr::*
 use compiler::hir::stmt::HirStmt
 use compiler::hir::pattern::HirPattern
-use compiler::hir::module::HirModule
-use compiler::hir::module::HirFunction
-use compiler::hir::module::HirStruct
-use compiler::hir::module::HirEnum
-use compiler::hir::module::HirImpl
-use compiler::hir::module::HirConst
+use compiler::hir::module::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

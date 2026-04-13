@@ -5,21 +5,7 @@
 //!
 //! Phase 15a — item 1.1.
 
-pub use compiler::hir::expr::HirExpr
-pub use compiler::hir::expr::HirBinOp
-pub use compiler::hir::expr::HirUnaryOp
-pub use compiler::hir::expr::HirLitValue
-pub use compiler::hir::expr::hir_expr_type
-pub use compiler::hir::expr::hir_expr_id
-pub use compiler::hir::stmt::HirStmt
-pub use compiler::hir::stmt::HirLetStmt
-pub use compiler::hir::stmt::HirExprStmt
-pub use compiler::hir::pattern::HirPattern
-pub use compiler::hir::pattern::hir_pattern_type
-pub use compiler::hir::module::HirModule
-pub use compiler::hir::module::HirFunction
-pub use compiler::hir::module::HirStruct
-pub use compiler::hir::module::HirEnum
-pub use compiler::hir::module::HirImpl
-pub use compiler::hir::module::HirParam
-pub use compiler::hir::module::hir_module_new
+pub use compiler::hir::expr::*
+pub use compiler::hir::stmt::{HirStmt, HirLetStmt, HirExprStmt}
+pub use compiler::hir::pattern::{HirPattern, hir_pattern_type}
+pub use compiler::hir::module::*

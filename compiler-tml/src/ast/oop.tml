@@ -1,7 +1,4 @@
 //! OOP AST nodes (class/interface/namespace). Canonical definitions live
 //! in `ast/decls.tml`.
 
-use compiler::ast::decls::ClassField
-use compiler::ast::decls::ClassDecl
-use compiler::ast::decls::InterfaceDecl
-use compiler::ast::decls::NamespaceDecl
+use compiler::ast::decls::*

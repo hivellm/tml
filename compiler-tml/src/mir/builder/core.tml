@@ -22,45 +22,15 @@
 //!
 //! Phase 15c — items 2.1–2.6.
 
-use compiler::source::SourceSpan
-use compiler::source::loc_new
-use compiler::source::span_new
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::ValueId
-use compiler::mir::types::invalid_value
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::BinaryInst
-use compiler::mir::inst::UnaryInst
-use compiler::mir::inst::LoadInst
-use compiler::mir::inst::StoreInst
-use compiler::mir::inst::AllocaInst
-use compiler::mir::inst::CallInst
-use compiler::mir::inst::ConstantInst
-use compiler::mir::inst::MirConstant
-use compiler::mir::inst::StructInitInst
-use compiler::mir::inst::EnumInitInst
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::ReturnTerm
-use compiler::mir::block::BranchTerm
-use compiler::mir::block::CondBranchTerm
-use compiler::mir::block::block_new
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::MirFuncParam
-use compiler::mir::module::mir_func_new
-use compiler::mir::module::mir_module_new
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirUnaryOp
-use compiler::hir::expr::HirLitValue
-use compiler::thir::expr::ThirExpr
-use compiler::thir::expr::thir_expr_type
+use compiler::source::{SourceSpan, loc_new, span_new}
+use compiler::mir::types::*
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::mir::module::*
+use compiler::hir::expr::{HirBinOp, HirUnaryOp, HirLitValue}
+use compiler::thir::expr::{ThirExpr, thir_expr_type}
 use compiler::thir::stmt::ThirStmt
-use compiler::thir::module::ThirModule
-use compiler::thir::module::ThirFunction
-use compiler::thir::module::ThirParam
+use compiler::thir::module::{ThirModule, ThirFunction, ThirParam}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

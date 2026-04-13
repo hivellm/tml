@@ -4,8 +4,7 @@
 //! `Outcome[_, Str]` errors into [`DbError`] values, providing a
 //! driver-agnostic interface over SQLite.
 
-use std::sqlite::Database
-use std::sqlite::Statement
+use std::sqlite::{Database, Statement}
 use std::db::error::{DbError, DbErrorKind}
 use std::db::driver::connection::Connection
 

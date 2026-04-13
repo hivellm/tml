@@ -8,10 +8,4 @@
 //!
 //! Phase 14c — item 1.1.
 
-pub use compiler::types::infer::unify::InferCtx
-pub use compiler::types::infer::unify::infer_ctx_new
-pub use compiler::types::infer::unify::fresh_var
-pub use compiler::types::infer::unify::resolve
-pub use compiler::types::infer::unify::unify
-pub use compiler::types::infer::unify::has_errors
-pub use compiler::types::infer::unify::error_count
+pub use compiler::types::infer::unify::*

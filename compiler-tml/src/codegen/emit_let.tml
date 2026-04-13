@@ -8,8 +8,7 @@
 //!
 //! Phase 16d — items 5.1–5.3.
 
-use compiler::codegen::emit_inst::reg
-use compiler::codegen::emit_inst::block_label
+use compiler::codegen::emit_inst::{reg, block_label}
 use std::collections::list::List
 use core::alloc::heap::Heap
 

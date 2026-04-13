@@ -9,10 +9,7 @@
 
 use compiler::source::SourceSpan
 use compiler::types::ty::Type
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirUnaryOp
-use compiler::hir::expr::HirCompoundOp
-use compiler::hir::expr::HirLitValue
+use compiler::hir::expr::*
 use compiler::types::coercion::CoercionKind
 use std::collections::list::List
 use core::alloc::heap::Heap

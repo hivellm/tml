@@ -7,30 +7,9 @@
 //! Phase 14b — items 2.1–2.5.
 
 use compiler::types::ty::Type
-use compiler::types::env::TypeEnv
-use compiler::types::env::FuncSig
-use compiler::types::env::StructDef
-use compiler::types::env::EnumDef
-use compiler::types::env::BehaviorDef
-use compiler::types::env::env_register_function
-use compiler::types::env::env_register_struct
-use compiler::types::env::env_register_enum
-use compiler::types::env::env_register_behavior
-use compiler::types::env::env_register_type_alias
-use compiler::types::env::env_register_impl
-use compiler::types::module::Module
-use compiler::types::module::ModuleRegistry
-use compiler::types::module::ReExport
-use compiler::types::module::ImportedSymbol
-use compiler::types::module::registry_get
-use compiler::types::module::registry_has
-use compiler::types::module::module_lookup_func
-use compiler::types::module::module_lookup_struct
-use compiler::types::module::module_lookup_enum
-use compiler::types::module::module_lookup_behavior
-use compiler::types::module::module_lookup_alias
-use compiler::ast::decls::UseDecl
-use compiler::ast::decls::UsePath
+use compiler::types::env::*
+use compiler::types::module::*
+use compiler::ast::decls::{UseDecl, UsePath}
 use std::collections::list::List
 
 // ============================================================================

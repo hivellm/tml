@@ -16,10 +16,5 @@ pub mod checkpoint
 
 pub use std::ia::train::dataset::Dataset
 pub use std::ia::train::dataloader::DataLoader
-pub use std::ia::train::trainer::TrainConfig
-pub use std::ia::train::trainer::EpochResult
-pub use std::ia::train::trainer::LossAccumulator
-pub use std::ia::train::trainer::range_indices
-pub use std::ia::train::trainer::shuffle_indices
-pub use std::ia::train::checkpoint::Checkpoint
-pub use std::ia::train::checkpoint::CheckpointStore
+pub use std::ia::train::trainer::*
+pub use std::ia::train::checkpoint::{Checkpoint, CheckpointStore}

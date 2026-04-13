@@ -3,9 +3,7 @@
 
 use compiler::mir::module::MirFunc
 use compiler::mir::block::BasicBlock
-use compiler::mir::passes::common::PassResult
-use compiler::mir::passes::common::no_change
-use compiler::mir::passes::common::did_change
+use compiler::mir::passes::common::{PassResult, no_change, did_change}
 use compiler::mir::passes::analysis::find_reachable_blocks
 use std::collections::hashmap::HashMap
 
