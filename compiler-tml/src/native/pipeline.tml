@@ -23,6 +23,11 @@
 
 use compiler::mir::module::MirModule
 use compiler::mir::module::MirFunc
+use compiler::mir::inst::InstructionData
+use compiler::mir::inst::MirInst
+use compiler::mir::inst::ConstantInst
+use compiler::mir::inst::MirConstant
+use compiler::mir::block::BasicBlock
 use compiler::native::machir::MachFunc
 use compiler::native::machir::MachBlock
 use compiler::native::machir::MachInst
@@ -43,6 +48,7 @@ use compiler::native::coff_emit::CoffSection
 use compiler::native::coff_emit::CoffSymbol
 use compiler::native::coff_emit::CoffRelocation
 use compiler::native::coff_emit::make_text_section
+use compiler::native::coff_emit::make_rdata_section
 use compiler::native::coff_emit::make_func_symbol
 use compiler::native::coff_emit::make_extern_symbol
 use compiler::native::coff_emit::make_rel32_reloc
@@ -138,10 +144,60 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
         funcs_compiled = funcs_compiled + 1
     }
 
+    // Collect string literals from MIR into .rdata section
+    let rdata_bytes = List[I64]::new(256)
+    let string_offsets = HashMap[Str, I64]::new(16)
+    let fc2: I64 = m.functions.len() as I64
+    for fi in 0 to fc2 {
+        let mfn: MirFunc = m.functions.get(fi)
+        if mfn.is_extern > 0 { continue }
+        let bc: I64 = mfn.blocks.len() as I64
+        for bi in 0 to bc {
+            let blk: BasicBlock = mfn.blocks.get(bi)
+            let ic: I64 = blk.instructions.len() as I64
+            for ii in 0 to ic {
+                let inst_data: InstructionData = blk.instructions.get(ii)
+                when inst_data.inst {
+                    Constant(c) => {
+                        when c.value {
+                            ConstStr(s) => {
+                                if not string_offsets.has(s) {
+                                    let offset: I64 = rdata_bytes.len() as I64
+                                    string_offsets.set(s, offset)
+                                    // Write string bytes + null terminator
+                                    let s_ptr: I64 = s as I64
+                                    let slen: I64 = s.len() as I64
+                                    for si in 0 to slen {
+                                        let byte_ptr: *I8 = (s_ptr + si) as *I8
+                                        let bval: I64 = lowlevel { ptr_read[I8](byte_ptr) } as I64
+                                        rdata_bytes.push((bval + 256) % 256)
+                                    }
+                                    rdata_bytes.push(0)  // null terminator
+                                }
+                            },
+                            _ => {}
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+
     // Assemble COFF .obj
     let text_section: CoffSection = make_text_section(all_code)
-    let sections = List[CoffSection]::new(1)
+
+    let sections = List[CoffSection]::new(2)
     sections.push(text_section)
+
+    // Add .rdata section if we have string literals
+    if rdata_bytes.len() as I64 > 0 {
+        sections.push(make_rdata_section(rdata_bytes))
+    }
+
+    // Add relocations for CALL instructions (REL32 to extern symbols)
+    // and LEA instructions (REL32 to .rdata string offsets)
+    // TODO: scan emit_result for relocation sites and add them to text_section
 
     let obj_bytes: List[I64] = write_coff(sections, symbols)
 

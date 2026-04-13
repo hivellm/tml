@@ -25,6 +25,7 @@ use compiler::native::machir::CondCode
 use compiler::native::machir::REG_RAX
 use compiler::native::machir::REG_RBP
 use compiler::native::machir::REG_RSP
+use compiler::native::x86::encode::modrm
 use compiler::native::x86::encode::encode_mov_rr
 use compiler::native::x86::encode::encode_mov_ri64
 use compiler::native::x86::encode::encode_mov_ri32
@@ -198,6 +199,21 @@ func is_imm(op: Operand) -> I64 {
 
 func emit_mov(buf: List[I64], m: MachMov, alloc: StackAllocation) {
     let dst_reg: I64 = operand_to_reg(m.dst)
+    // Check for Label operand (string constants → LEA reg, [rip + disp32])
+    when m.src {
+        Label(name) => {
+            // Emit LEA dst, [rip + 0x00000000] — relocation to be patched
+            // LEA encoding: REX.W 0x8D ModRM(00, dst, 101=RIP-relative) + disp32
+            let rex_byte: I64 = 0x48 + (if dst_reg >= 8 { 4 } else { 0 })
+            emit_byte(buf, rex_byte)
+            emit_byte(buf, 0x8D)  // LEA
+            emit_byte(buf, modrm(0, dst_reg % 8, 5))  // mod=00, rm=101 = RIP-relative
+            // Placeholder displacement (will be patched by linker via relocation)
+            emit_imm32(buf, 0)
+            return
+        },
+        _ => {}
+    }
     if is_imm(m.src) > 0 {
         let imm: I64 = operand_to_imm(m.src)
         if fits_imm32(imm) > 0 {

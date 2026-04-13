@@ -210,9 +210,27 @@ func lower_alloca(ctx: LowerCtx, result_id: I64, a: AllocaInst) {
 }
 
 /// Lower function call (item 2.4).
+/// Win64 ABI: first 4 integer args in RCX(1), RDX(2), R8(8), R9(9).
 func lower_call(ctx: LowerCtx, result_id: I64, c: CallInst) {
     ctx.func_out.is_leaf = 0
-    emit(ctx, MachInst::Call(MachCall { target: c.callee, arg_count: c.args.len() as I64 }))
+    // Move arguments into physical registers (Win64 convention)
+    let arg_regs = List[I64]::new(4)
+    arg_regs.push(1)   // RCX
+    arg_regs.push(2)   // RDX
+    arg_regs.push(8)   // R8
+    arg_regs.push(9)   // R9
+    let ac: I64 = c.args.len() as I64
+    for i in 0 to ac {
+        if i < 4 {
+            let src: VirtualReg = get_or_create_vreg(ctx, c.args.get(i) as I64)
+            emit(ctx, MachInst::Mov(MachMov {
+                dst: Operand::PhysReg(arg_regs.get(i)),
+                src: Operand::Reg(src),
+                size: 8
+            }))
+        }
+    }
+    emit(ctx, MachInst::Call(MachCall { target: c.callee, arg_count: ac }))
     // Move return value from RAX to result vreg
     let dst: VirtualReg = get_or_create_vreg(ctx, result_id)
     emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::PhysReg(0), size: 8 }))
@@ -226,6 +244,10 @@ func lower_constant(ctx: LowerCtx, result_id: I64, c: ConstantInst) {
         ConstBool(v) => {
             let imm: I64 = if v { 1 } else { 0 }
             emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(imm), size: 8 }))
+        },
+        ConstStr(s) => {
+            // String constants use a Label operand — resolved to .rdata offset at link time
+            emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Label(s), size: 8 }))
         },
         _ => emit(ctx, MachInst::Mov(MachMov { dst: Operand::Reg(dst), src: Operand::Imm(0), size: 8 }))
     }
