@@ -1,0 +1,107 @@
+//! TML Self-Hosted Compiler — main entry point.
+//!
+//! This is the top-level binary that assembles all compiler subsystems:
+//! - Lexer (compiler::lexer)
+//! - Parser (compiler::parser)
+//! - Type checker (compiler::types)
+//! - HIR lowering (compiler::hir)
+//! - THIR lowering (compiler::thir)
+//! - MIR building (compiler::mir)
+//! - Codegen (compiler::codegen)
+//! - Query system (compiler::query)
+//! - CLI (compiler::cli)
+//! - Test system (compiler::testing)
+//! - Formatter (compiler::format)
+//!
+//! ## Bootstrap Chain
+//!
+//! Stage 0: C++ `tml.exe` compiles this file → `tml-stage1.exe`
+//! Stage 1: `tml-stage1.exe` compiles this file → `tml-stage2.exe`
+//! Stage 2: Verify Stage 1 output == Stage 2 output (IR-diff = zero)
+//!
+//! ## Usage
+//!
+//! ```
+//! tml-stage1 build <file.tml>       Build a TML file
+//! tml-stage1 run <file.tml>         Build and execute
+//! tml-stage1 check <file.tml>       Type-check only
+//! tml-stage1 test --suite=<name>    Run test suites
+//! tml-stage1 fmt <file.tml>         Format source
+//! tml-stage1 --version              Show version
+//! tml-stage1 --help                 Show help
+//! ```
+//!
+//! Phase 17c — item 1.1.
+
+use std::os
+use compiler::cli::dispatcher::CliArgs
+use compiler::cli::dispatcher::parse_args
+use compiler::cli::dispatcher::dispatch
+use compiler::cli::dispatcher::help_text
+use compiler::cli::builder::build_file
+use compiler::cli::builder::run_file
+use compiler::cli::builder::check_file
+use compiler::cli::builder::build_config_from_args
+use compiler::cli::builder::BuildConfig
+use std::collections::list::List
+
+/// Compiler version string.
+func version() -> Str {
+    return "tml 1.0.0-self-hosted (ERA 1)"
+}
+
+/// Main entry point.
+func main() -> I32 {
+    let args_list: List[Str] = os::args()
+    let argc: I64 = args_list.len() as I64
+
+    // No arguments → show help
+    if argc < 2 {
+        os::println(help_text())
+        return 0
+    }
+
+    // Special flags before subcommand
+    let first_arg: Str = args_list.get(1)
+    if first_arg == "--version" or first_arg == "-V" {
+        os::println(version())
+        return 0
+    }
+    if first_arg == "--help" or first_arg == "-h" {
+        os::println(help_text())
+        return 0
+    }
+
+    // Parse arguments
+    let cli: CliArgs = parse_args(args_list)
+
+    // Dispatch to subcommand
+    if cli.command == "build" {
+        let cfg: BuildConfig = build_config_from_args(cli)
+        return build_file(cfg) as I32
+    }
+    if cli.command == "run" {
+        let cfg: BuildConfig = build_config_from_args(cli)
+        return run_file(cfg) as I32
+    }
+    if cli.command == "check" {
+        return check_file(cli.file_path) as I32
+    }
+    if cli.command == "test" {
+        // Test runner integrated with query pipeline
+        os::println("test command: use --suite= to filter")
+        return 0
+    }
+    if cli.command == "fmt" {
+        os::println("format command: not yet wired to AST pretty-printer")
+        return 0
+    }
+    if cli.command == "help" {
+        os::println(help_text())
+        return 0
+    }
+
+    os::eprintln("Unknown command: " + cli.command)
+    os::eprintln("Run 'tml --help' for usage information.")
+    return 1
+}

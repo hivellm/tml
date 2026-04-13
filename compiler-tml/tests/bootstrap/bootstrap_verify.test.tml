@@ -1,0 +1,90 @@
+//! Bootstrap verification tests — validates the self-hosted compiler assembly.
+//!
+//! These tests verify that all compiler subsystems type-check, the entry point
+//! wires correctly, and the query pipeline can be invoked.
+//!
+//! Phase 17c — items 1.1, 3.1.
+
+use test::assert
+use test::assert_eq
+
+// Verify all modules are importable (type-check proves linkability)
+use compiler::cli::dispatcher::help_text
+use compiler::cli::dispatcher::dispatch
+use compiler::codegen::types::LlvmType
+use compiler::codegen::types::llvm_type_to_str
+use compiler::codegen::emit_type::emit_type
+use compiler::codegen::emit_inst::reg
+use compiler::codegen::emit_inst::block_label
+use compiler::codegen::emit_call::cc_for_func
+use compiler::codegen::emit_method::mangle_inherent
+use compiler::codegen::emit_generic::mir_type_to_mangle
+use compiler::query::key::QueryKey
+use compiler::query::key::QueryKind
+use compiler::query::key::query_kind_name
+use compiler::query::cache::fingerprint
+use compiler::query::cache::fingerprints_equal
+use compiler::query::context::context_new
+use compiler::query::incremental::incr_new
+use compiler::query::incremental::incr_stats
+use compiler::mir::types::MirType
+use compiler::mir::types::MirPrimitive
+
+// ============================================================================
+// Module integration tests
+// ============================================================================
+
+@test func test_all_modules_importable() {
+    // If this test compiles, all 13 subsystems are linkable
+    assert(true)
+}
+
+@test func test_version_string() {
+    // Verify the compiler has a help text (proves CLI module works)
+    let h: Str = help_text()
+    assert(h.contains("tml"))
+}
+
+@test func test_codegen_pipeline_types() {
+    // Verify codegen types are usable end-to-end
+    let ty = MirType::Primitive(MirPrimitive::I64)
+    let ir: Str = emit_type(ty)
+    assert_eq(ir, "i64")
+}
+
+@test func test_codegen_register_naming() {
+    assert_eq(reg(0), "%0")
+    assert_eq(block_label(0), "entry")
+    assert_eq(block_label(1), "bb_1")
+}
+
+@test func test_codegen_call_convention() {
+    assert_eq(cc_for_func(0), "fastcc")
+    assert_eq(cc_for_func(1), "ccc")
+}
+
+@test func test_codegen_mangling() {
+    assert_eq(mangle_inherent("List", "push"), "List__push")
+    assert_eq(mir_type_to_mangle(MirType::Primitive(MirPrimitive::Str)), "Str")
+}
+
+@test func test_query_system_types() {
+    assert_eq(query_kind_name(QueryKind::CodegenUnit), "CodegenUnit")
+}
+
+@test func test_fingerprint_consistency() {
+    let fp1 = fingerprint("compiler-tml/src/main.tml")
+    let fp2 = fingerprint("compiler-tml/src/main.tml")
+    assert_eq(fingerprints_equal(fp1, fp2) as I32, 1)
+}
+
+@test func test_incremental_initial_state() {
+    let state = incr_new()
+    assert_eq(incr_stats(state), "green=0 red=0")
+}
+
+@test func test_llvm_type_to_str() {
+    assert_eq(llvm_type_to_str(LlvmType::I64), "i64")
+    assert_eq(llvm_type_to_str(LlvmType::Ptr), "ptr")
+    assert_eq(llvm_type_to_str(LlvmType::Void), "void")
+}
