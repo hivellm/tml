@@ -27,7 +27,9 @@ use std::collections::list::List
 pub func set_bits(word: I64, hi: I64, lo: I64, value: I64) -> I64 {
     let width: I64 = hi - lo + 1
     let mask: I64 = (1 << width) - 1
-    let cleared: I64 = word & (not (mask << lo))
+    let shifted_mask: I64 = mask << lo
+    let inverted: I64 = shifted_mask ^ (-1 as I64)
+    let cleared: I64 = word & inverted
     return cleared | ((value & mask) << lo)
 }
 

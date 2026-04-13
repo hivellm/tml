@@ -47,7 +47,7 @@ pub const SRET_REG: I64 = 8
 /// MOV X29, SP                        ; set up frame pointer
 pub func emit_prologue(buf: List[I64], frame_size: I64) {
     // Round frame_size up to 16-byte alignment
-    let aligned: I64 = (frame_size + 15) & (not 15)
+    let aligned: I64 = (frame_size + 15) & (15 ^ (-1 as I64))
     // STP X29, X30, [SP, #-aligned]!
     encode_stp_pre(buf, X29, X30, SP, -aligned)
     // MOV X29, SP (alias: ADD X29, SP, #0)
@@ -58,7 +58,7 @@ pub func emit_prologue(buf: List[I64], frame_size: I64) {
 /// LDP X29, X30, [SP], #frame_size  ; restore FP and LR, adjust SP
 /// RET                              ; return to LR
 pub func emit_epilogue(buf: List[I64], frame_size: I64) {
-    let aligned: I64 = (frame_size + 15) & (not 15)
+    let aligned: I64 = (frame_size + 15) & (15 ^ (-1 as I64))
     // LDP X29, X30, [SP], #aligned
     encode_ldp_post(buf, X29, X30, SP, aligned)
     // RET
