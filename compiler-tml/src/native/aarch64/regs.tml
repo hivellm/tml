@@ -79,11 +79,13 @@ pub func w_reg_name(r: I64) -> Str {
 }
 
 /// Check if a register is callee-saved (X19-X28).
-pub func is_callee_saved(r: I64) -> Bool {
-    return r >= 19 and r <= 28
+pub func is_callee_saved(r: I64) -> I64 {
+    if r >= 19 and r <= 28 { return 1 }
+    return 0
 }
 
 /// Check if a register is an argument register (X0-X7).
-pub func is_arg_reg(r: I64) -> Bool {
-    return r >= 0 and r <= 7
+pub func is_arg_reg(r: I64) -> I64 {
+    if r >= 0 and r <= 7 { return 1 }
+    return 0
 }
