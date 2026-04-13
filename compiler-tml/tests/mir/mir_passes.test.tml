@@ -69,6 +69,15 @@ func emit(bb: BasicBlock, result: I64, ty: MirType, inst: MirInst) {
 
 func i64_type() -> MirType { return MirType::Primitive(MirPrimitive::I64) }
 
+/// Helper: set the terminator on a block in a function's block list.
+/// Required because List[BasicBlock].get() returns a copy — setting .terminator
+/// on the copy doesn't update the list. This writes the modified block back.
+func set_terminator(blocks: List[BasicBlock], idx: I64, term: Terminator) {
+    var bb: BasicBlock = blocks.get(idx)
+    bb.terminator = Just(term)
+    blocks.set(idx, bb)
+}
+
 // ============================================================================
 // Analysis tests
 // ============================================================================
@@ -77,11 +86,11 @@ func i64_type() -> MirType { return MirType::Primitive(MirPrimitive::I64) }
 func test_reachable_blocks_linear() -> I32 {
     // entry → bb1 → bb2 (all reachable)
     let mf = mir_func_new("f", i64_type())
-    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    set_terminator(mf.blocks, 0, Terminator::Branch(BranchTerm { target: 1 }))
     mf.blocks.push(block_new(1, "bb1"))
-    mf.blocks.get(1).terminator = Just(Terminator::Branch(BranchTerm { target: 2 }))
+    set_terminator(mf.blocks, 1, Terminator::Branch(BranchTerm { target: 2 }))
     mf.blocks.push(block_new(2, "bb2"))
-    mf.blocks.get(2).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 2, Terminator::Return(ReturnTerm { value: Nothing }))
 
     let reachable = find_reachable_blocks(mf)
     assert(reachable.has("0"))
@@ -94,11 +103,11 @@ func test_reachable_blocks_linear() -> I32 {
 func test_reachable_blocks_with_unreachable() -> I32 {
     // entry → bb1, bb2 is unreachable
     let mf = mir_func_new("f", i64_type())
-    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    set_terminator(mf.blocks, 0, Terminator::Branch(BranchTerm { target: 1 }))
     mf.blocks.push(block_new(1, "bb1"))
-    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 1, Terminator::Return(ReturnTerm { value: Nothing }))
     mf.blocks.push(block_new(2, "bb2_unreachable"))
-    mf.blocks.get(2).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 2, Terminator::Return(ReturnTerm { value: Nothing }))
 
     let reachable = find_reachable_blocks(mf)
     assert(reachable.has("0"))
@@ -194,11 +203,11 @@ func test_dfe_removes_uncalled() -> I32 {
     mmod.functions.push(main_fn)
 
     let helper = mir_func_new("helper", i64_type())
-    helper.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(helper.blocks, 0, Terminator::Return(ReturnTerm { value: Nothing }))
     mmod.functions.push(helper)
 
     let unused = mir_func_new("unused_func", i64_type())
-    unused.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(unused.blocks, 0, Terminator::Return(ReturnTerm { value: Nothing }))
     mmod.functions.push(unused)
 
     let result = run_dead_function_elimination(mmod)
@@ -214,10 +223,10 @@ func test_dfe_removes_uncalled() -> I32 {
 @test
 func test_uce_finds_unreachable() -> I32 {
     let mf = mir_func_new("f", i64_type())
-    mf.blocks.get(0).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 0, Terminator::Return(ReturnTerm { value: Nothing }))
     // bb1 is unreachable (no edge from entry)
     mf.blocks.push(block_new(1, "dead"))
-    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 1, Terminator::Return(ReturnTerm { value: Nothing }))
 
     let result = run_unreachable_code_elimination(mf)
     assert(result.changed > 0)
@@ -233,9 +242,9 @@ func test_uce_finds_unreachable() -> I32 {
 func test_block_merge_finds_candidates() -> I32 {
     // entry → bb1 (single pred/succ) — mergeable
     let mf = mir_func_new("f", i64_type())
-    mf.blocks.get(0).terminator = Just(Terminator::Branch(BranchTerm { target: 1 }))
+    set_terminator(mf.blocks, 0, Terminator::Branch(BranchTerm { target: 1 }))
     mf.blocks.push(block_new(1, "bb1"))
-    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 1, Terminator::Return(ReturnTerm { value: Nothing }))
 
     let result = run_block_merge(mf)
     assert(result.changed > 0)
@@ -247,11 +256,11 @@ func test_block_merge_no_merge_multi_pred() -> I32 {
     // entry → bb1, entry → bb1 (cond branch) — bb1 has 2 preds, not mergeable
     let mf = mir_func_new("f", i64_type())
     emit(mf.blocks.get(0), 0, i64_type(), MirInst::Constant(ConstantInst { value: MirConstant::ConstBool(true) }))
-    mf.blocks.get(0).terminator = Just(Terminator::CondBranch(CondBranchTerm {
+    set_terminator(mf.blocks, 0, Terminator::CondBranch(CondBranchTerm {
         condition: 0 as ValueId, true_target: 1, false_target: 1
     }))
     mf.blocks.push(block_new(1, "bb1"))
-    mf.blocks.get(1).terminator = Just(Terminator::Return(ReturnTerm { value: Nothing }))
+    set_terminator(mf.blocks, 1, Terminator::Return(ReturnTerm { value: Nothing }))
 
     let result = run_block_merge(mf)
     // bb1 has 2 predecessors (both from entry), should NOT merge
