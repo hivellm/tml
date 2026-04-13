@@ -105,6 +105,29 @@ pub func lower_function(mir_func: MirFunc) -> MachFunc {
         ctx.func_out.blocks.push(mach_block_new(i, mir_bb.name))
     }
 
+    // Load parameters from physical registers into virtual registers (Win64 ABI)
+    // RCX(1), RDX(2), R8(8), R9(9) for first 4 integer args
+    let param_regs = List[I64]::new(4)
+    param_regs.push(1)   // RCX
+    param_regs.push(2)   // RDX
+    param_regs.push(8)   // R8
+    param_regs.push(9)   // R9
+    let pc: I64 = mir_func.params.len() as I64
+    if pc > 0 {
+        ctx.current_block = 0
+        for pi in 0 to pc {
+            if pi < 4 {
+                let param: MirFuncParam = mir_func.params.get(pi)
+                let dst: VirtualReg = get_or_create_vreg(ctx, param.value_id as I64)
+                emit(ctx, MachInst::Mov(MachMov {
+                    dst: Operand::Reg(dst),
+                    src: Operand::PhysReg(param_regs.get(pi)),
+                    size: 8
+                }))
+            }
+        }
+    }
+
     // Lower each block's instructions
     for bi in 0 to bc {
         ctx.current_block = bi
