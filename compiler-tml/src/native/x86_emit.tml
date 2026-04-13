@@ -1,0 +1,316 @@
+//! MachIR → x86_64 bytes — top-level emitter with two-pass branch patching.
+//!
+//! `emit_func` takes a MachFunc (with stack allocation applied) and produces
+//! a buffer of x86_64 machine code bytes. Branches use placeholder displacements
+//! in pass 1, which are back-patched in pass 2 once all block offsets are known.
+//!
+//! Phase 18b — items 5.1–5.3.
+
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachUnaryOp
+use compiler::native::machir::MachCmp
+use compiler::native::machir::MachJcc
+use compiler::native::machir::MachJmp
+use compiler::native::machir::MachCall
+use compiler::native::machir::MachRet
+use compiler::native::machir::MachLea
+use compiler::native::machir::MachSpill
+use compiler::native::machir::MachReload
+use compiler::native::machir::Operand
+use compiler::native::machir::CondCode
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSP
+use compiler::native::x86_encode::encode_mov_rr
+use compiler::native::x86_encode::encode_mov_ri64
+use compiler::native::x86_encode::encode_mov_ri32
+use compiler::native::x86_encode::encode_mov_r_mem
+use compiler::native::x86_encode::encode_mov_mem_r
+use compiler::native::x86_encode::encode_lea
+use compiler::native::x86_encode::encode_push
+use compiler::native::x86_encode::encode_pop
+use compiler::native::x86_encode::encode_add_rr
+use compiler::native::x86_encode::encode_add_ri
+use compiler::native::x86_encode::encode_sub_rr
+use compiler::native::x86_encode::encode_sub_ri
+use compiler::native::x86_encode::encode_imul_rr
+use compiler::native::x86_encode::encode_idiv
+use compiler::native::x86_encode::encode_neg
+use compiler::native::x86_encode::encode_not
+use compiler::native::x86_encode::encode_and_rr
+use compiler::native::x86_encode::encode_or_rr
+use compiler::native::x86_encode::encode_xor_rr
+use compiler::native::x86_encode::encode_shl_ri
+use compiler::native::x86_encode::encode_sar_ri
+use compiler::native::x86_encode::encode_cmp_rr
+use compiler::native::x86_encode::encode_cmp_ri
+use compiler::native::x86_encode::encode_jcc_rel32
+use compiler::native::x86_encode::encode_jmp_rel32
+use compiler::native::x86_encode::encode_call_rel32
+use compiler::native::x86_encode::encode_ret
+use compiler::native::x86_encode::encode_nop
+use compiler::native::x86_encode::condcode_to_jcc_opcode
+use compiler::native::x86_encode::fits_imm32
+use compiler::native::x86_encode::emit_byte
+use compiler::native::x86_encode::emit_imm32
+use compiler::native::stack_alloc::StackAllocation
+use compiler::native::stack_alloc::get_slot_offset
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Branch patch record
+// ============================================================================
+
+/// A branch instruction that needs its displacement patched.
+pub type BranchPatch {
+    /// Byte offset in the buffer where the rel32 displacement starts.
+    offset: I64,
+    /// Target block ID.
+    target_block: I64
+}
+
+// ============================================================================
+// Emit result
+// ============================================================================
+
+/// Result of emitting a function: the byte buffer and block offset map.
+pub type EmitResult {
+    bytes: List[I64],
+    block_offsets: HashMap[I64, I64],
+    patches: List[BranchPatch],
+    size: I64
+}
+
+// ============================================================================
+// Top-level emitter (item 5.1)
+// ============================================================================
+
+/// Emit an entire MachFunc to x86_64 bytes with two-pass branch patching.
+pub func emit_func(mf: MachFunc, alloc: StackAllocation) -> EmitResult {
+    let buf = List[I64]::new(256)
+    let block_offsets = HashMap[I64, I64]::new(16)
+    let patches = List[BranchPatch]::new(16)
+
+    // Pass 1: emit all instructions with placeholder branch displacements
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let block: MachBlock = mf.blocks.get(bi)
+        block_offsets.set(block.id, buf.len() as I64)
+
+        let ic: I64 = block.insts.len() as I64
+        for ii in 0 to ic {
+            let inst: MachInst = block.insts.get(ii)
+            emit_mach_inst(buf, inst, alloc, patches)
+        }
+    }
+
+    // Pass 2: patch branch displacements (item 5.2)
+    let pc: I64 = patches.len() as I64
+    for pi in 0 to pc {
+        let patch: BranchPatch = patches.get(pi)
+        if block_offsets.has(patch.target_block) {
+            let target_offset: I64 = block_offsets.get(patch.target_block)
+            // rel32 = target - (patch_offset + 4) — displacement is relative to end of instruction
+            let displacement: I64 = target_offset - (patch.offset + 4)
+            // Patch the 4 bytes at patch.offset
+            patch_imm32(buf, patch.offset, displacement)
+        }
+    }
+
+    return EmitResult {
+        bytes: buf,
+        block_offsets: block_offsets,
+        patches: patches,
+        size: buf.len() as I64
+    }
+}
+
+/// Patch a 32-bit value at a specific offset in the buffer.
+func patch_imm32(buf: List[I64], offset: I64, val: I64) {
+    buf.set(offset, val % 256)
+    buf.set(offset + 1, (val / 256) % 256)
+    buf.set(offset + 2, (val / 65536) % 256)
+    buf.set(offset + 3, (val / 16777216) % 256)
+}
+
+// ============================================================================
+// Single instruction emission
+// ============================================================================
+
+/// Emit a single MachInst to the byte buffer.
+func emit_mach_inst(buf: List[I64], inst: MachInst, alloc: StackAllocation, patches: List[BranchPatch]) {
+    when inst {
+        Mov(m) => emit_mov(buf, m, alloc),
+        Add(b) => emit_binop_add(buf, b, alloc),
+        Sub(b) => emit_binop_sub(buf, b, alloc),
+        Imul(b) => emit_binop_imul(buf, b, alloc),
+        Idiv(u) => emit_idiv(buf, u, alloc),
+        Cmp(c) => emit_cmp(buf, c, alloc),
+        Jcc(j) => emit_jcc(buf, j, patches),
+        Jmp(j) => emit_jmp(buf, j, patches),
+        Call(c) => emit_call(buf, c, patches),
+        Ret(_) => encode_ret(buf),
+        Push(u) => emit_push(buf, u),
+        Pop(u) => emit_pop(buf, u),
+        Lea(l) => emit_lea_inst(buf, l, alloc),
+        Neg(u) => emit_neg(buf, u, alloc),
+        And(b) => emit_binop_and(buf, b, alloc),
+        Or(b) => emit_binop_or(buf, b, alloc),
+        Xor(b) => emit_binop_xor(buf, b, alloc),
+        Shl(b) => emit_shift_shl(buf, b, alloc),
+        Sar(b) => emit_shift_sar(buf, b, alloc),
+        Nop => encode_nop(buf),
+        _ => encode_nop(buf)
+    }
+}
+
+// ============================================================================
+// Per-instruction emission helpers
+// ============================================================================
+
+func operand_to_reg(op: Operand) -> I64 {
+    when op {
+        PhysReg(r) => return r,
+        Reg(vr) => return vr.id % 16,
+        _ => return 0
+    }
+}
+
+func operand_to_imm(op: Operand) -> I64 {
+    when op {
+        Imm(v) => return v,
+        _ => return 0
+    }
+}
+
+func is_imm(op: Operand) -> I64 {
+    when op {
+        Imm(_) => return 1,
+        _ => return 0
+    }
+}
+
+func emit_mov(buf: List[I64], m: MachMov, alloc: StackAllocation) {
+    let dst_reg: I64 = operand_to_reg(m.dst)
+    if is_imm(m.src) > 0 {
+        let imm: I64 = operand_to_imm(m.src)
+        if fits_imm32(imm) > 0 {
+            encode_mov_ri32(buf, dst_reg, imm)
+        } else {
+            encode_mov_ri64(buf, dst_reg, imm)
+        }
+    } else {
+        let src_reg: I64 = operand_to_reg(m.src)
+        encode_mov_rr(buf, dst_reg, src_reg)
+    }
+}
+
+func emit_binop_add(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    let dst: I64 = operand_to_reg(b.dst)
+    if is_imm(b.src) > 0 {
+        encode_add_ri(buf, dst, operand_to_imm(b.src))
+    } else {
+        encode_add_rr(buf, dst, operand_to_reg(b.src))
+    }
+}
+
+func emit_binop_sub(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    let dst: I64 = operand_to_reg(b.dst)
+    if is_imm(b.src) > 0 {
+        encode_sub_ri(buf, dst, operand_to_imm(b.src))
+    } else {
+        encode_sub_rr(buf, dst, operand_to_reg(b.src))
+    }
+}
+
+func emit_binop_imul(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    encode_imul_rr(buf, operand_to_reg(b.dst), operand_to_reg(b.src))
+}
+
+func emit_idiv(buf: List[I64], u: MachUnaryOp, alloc: StackAllocation) {
+    encode_idiv(buf, operand_to_reg(u.operand))
+}
+
+func emit_cmp(buf: List[I64], c: MachCmp, alloc: StackAllocation) {
+    if is_imm(c.rhs) > 0 {
+        encode_cmp_ri(buf, operand_to_reg(c.lhs), operand_to_imm(c.rhs))
+    } else {
+        encode_cmp_rr(buf, operand_to_reg(c.lhs), operand_to_reg(c.rhs))
+    }
+}
+
+func emit_jcc(buf: List[I64], j: MachJcc, patches: List[BranchPatch]) {
+    let cc_val: I64 = 0
+    when j.cond {
+        Eq => { encode_jcc_rel32(buf, 0x84, 0) },
+        Ne => { encode_jcc_rel32(buf, 0x85, 0) },
+        Lt => { encode_jcc_rel32(buf, 0x8C, 0) },
+        Le => { encode_jcc_rel32(buf, 0x8E, 0) },
+        Gt => { encode_jcc_rel32(buf, 0x8F, 0) },
+        Ge => { encode_jcc_rel32(buf, 0x8D, 0) },
+        Below => { encode_jcc_rel32(buf, 0x82, 0) },
+        Above => { encode_jcc_rel32(buf, 0x87, 0) }
+    }
+    // Record patch: displacement starts 4 bytes before current position
+    patches.push(BranchPatch { offset: buf.len() as I64 - 4, target_block: j.target })
+}
+
+func emit_jmp(buf: List[I64], j: MachJmp, patches: List[BranchPatch]) {
+    encode_jmp_rel32(buf, 0)
+    patches.push(BranchPatch { offset: buf.len() as I64 - 4, target_block: j.target })
+}
+
+func emit_call(buf: List[I64], c: MachCall, patches: List[BranchPatch]) {
+    encode_call_rel32(buf, 0)
+    // Call target resolution happens at link time, not here
+}
+
+func emit_push(buf: List[I64], u: MachUnaryOp) {
+    encode_push(buf, operand_to_reg(u.operand))
+}
+
+func emit_pop(buf: List[I64], u: MachUnaryOp) {
+    encode_pop(buf, operand_to_reg(u.operand))
+}
+
+func emit_lea_inst(buf: List[I64], l: MachLea, alloc: StackAllocation) {
+    encode_lea(buf, operand_to_reg(l.dst), l.disp)
+}
+
+func emit_neg(buf: List[I64], u: MachUnaryOp, alloc: StackAllocation) {
+    encode_neg(buf, operand_to_reg(u.operand))
+}
+
+func emit_binop_and(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    encode_and_rr(buf, operand_to_reg(b.dst), operand_to_reg(b.src))
+}
+
+func emit_binop_or(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    encode_or_rr(buf, operand_to_reg(b.dst), operand_to_reg(b.src))
+}
+
+func emit_binop_xor(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    encode_xor_rr(buf, operand_to_reg(b.dst), operand_to_reg(b.src))
+}
+
+func emit_shift_shl(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    if is_imm(b.src) > 0 {
+        encode_shl_ri(buf, operand_to_reg(b.dst), operand_to_imm(b.src))
+    } else {
+        encode_shl_ri(buf, operand_to_reg(b.dst), 1)
+    }
+}
+
+func emit_shift_sar(buf: List[I64], b: MachBinOp, alloc: StackAllocation) {
+    if is_imm(b.src) > 0 {
+        encode_sar_ri(buf, operand_to_reg(b.dst), operand_to_imm(b.src))
+    } else {
+        encode_sar_ri(buf, operand_to_reg(b.dst), 1)
+    }
+}

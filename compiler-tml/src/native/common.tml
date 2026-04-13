@@ -33,3 +33,19 @@ pub use compiler::native::frame::compute_frame_size
 pub use compiler::native::frame::emit_prologue
 pub use compiler::native::frame::emit_epilogue
 pub use compiler::native::frame::stack_operand
+
+// --- x86_64 instruction encoding ---
+pub use compiler::native::x86_encode::modrm
+pub use compiler::native::x86_encode::rex
+pub use compiler::native::x86_encode::encode_mov_rr
+pub use compiler::native::x86_encode::encode_mov_ri64
+pub use compiler::native::x86_encode::encode_add_rr
+pub use compiler::native::x86_encode::encode_sub_rr
+pub use compiler::native::x86_encode::encode_push
+pub use compiler::native::x86_encode::encode_pop
+pub use compiler::native::x86_encode::encode_ret
+pub use compiler::native::x86_encode::encode_nop
+
+// --- MachIR → bytes emission ---
+pub use compiler::native::x86_emit::emit_func
+pub use compiler::native::x86_emit::EmitResult

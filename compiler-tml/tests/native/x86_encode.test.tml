@@ -1,0 +1,179 @@
+//! Unit tests for x86_64 instruction encoding.
+//! Phase 18b — item 6.1.
+
+use test::assert
+use test::assert_eq
+use compiler::native::x86_encode::modrm
+use compiler::native::x86_encode::rex
+use compiler::native::x86_encode::rex_w
+use compiler::native::x86_encode::encode_mov_rr
+use compiler::native::x86_encode::encode_mov_ri32
+use compiler::native::x86_encode::encode_add_rr
+use compiler::native::x86_encode::encode_sub_rr
+use compiler::native::x86_encode::encode_push
+use compiler::native::x86_encode::encode_pop
+use compiler::native::x86_encode::encode_ret
+use compiler::native::x86_encode::encode_nop
+use compiler::native::x86_encode::encode_cmp_rr
+use compiler::native::x86_encode::encode_jmp_rel32
+use compiler::native::x86_encode::encode_call_rel32
+use compiler::native::x86_encode::encode_neg
+use compiler::native::x86_encode::encode_imul_rr
+use compiler::native::x86_encode::fits_imm8
+use compiler::native::x86_encode::fits_imm32
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSP
+use std::collections::list::List
+
+// ============================================================================
+// ModRM / REX helpers
+// ============================================================================
+
+@test func test_modrm_reg_reg() {
+    // ModRM for register-to-register: mod=11, reg=RAX(0), rm=RCX(1)
+    assert_eq(modrm(3, 0, 1) as I32, 0xC1 as I32)
+}
+
+@test func test_modrm_reg_reg2() {
+    // mod=11, reg=RDX(2), rm=RAX(0) → 0xD0
+    assert_eq(modrm(3, 2, 0) as I32, 0xD0 as I32)
+}
+
+@test func test_rex_w() {
+    assert_eq(rex_w() as I32, 0x48 as I32)
+}
+
+@test func test_rex_custom() {
+    // REX with W=1, R=0, X=0, B=1 → 0x49
+    assert_eq(rex(1, 0, 0, 1) as I32, 0x49 as I32)
+}
+
+// ============================================================================
+// Immediate helpers
+// ============================================================================
+
+@test func test_fits_imm8() {
+    assert_eq(fits_imm8(0) as I32, 1)
+    assert_eq(fits_imm8(127) as I32, 1)
+    assert_eq(fits_imm8(-128 as I64) as I32, 1)
+    assert_eq(fits_imm8(128) as I32, 0)
+}
+
+@test func test_fits_imm32() {
+    assert_eq(fits_imm32(0) as I32, 1)
+    assert_eq(fits_imm32(2147483647) as I32, 1)
+}
+
+// ============================================================================
+// MOV encoding
+// ============================================================================
+
+@test func test_mov_rr_rax_rcx() {
+    // MOV RAX, RCX → REX.W 0x89 ModRM(11, RCX, RAX) → 48 89 C8
+    let buf = List[I64]::new(8)
+    encode_mov_rr(buf, REG_RAX, REG_RCX)
+    assert_eq(buf.len() as I32, 3)
+    assert_eq(buf.get(0) as I32, 0x48 as I32)  // REX.W
+    assert_eq(buf.get(1) as I32, 0x89 as I32)  // MOV opcode
+    assert_eq(buf.get(2) as I32, 0xC8 as I32)  // ModRM(11, RCX=1, RAX=0)
+}
+
+@test func test_mov_ri32() {
+    // MOV RAX, 42 → REX.W 0xC7 ModRM(11, 0, RAX) imm32
+    let buf = List[I64]::new(8)
+    encode_mov_ri32(buf, REG_RAX, 42)
+    assert_eq(buf.get(0) as I32, 0x48 as I32)  // REX.W
+    assert_eq(buf.get(1) as I32, 0xC7 as I32)  // MOV imm opcode
+    // imm32 = 42 = 0x2A, little-endian
+    assert_eq(buf.get(3) as I32, 42)
+}
+
+// ============================================================================
+// Arithmetic encoding
+// ============================================================================
+
+@test func test_add_rr() {
+    // ADD RAX, RCX → REX.W 0x01 ModRM(11, RCX, RAX) → 48 01 C8
+    let buf = List[I64]::new(8)
+    encode_add_rr(buf, REG_RAX, REG_RCX)
+    assert_eq(buf.len() as I32, 3)
+    assert_eq(buf.get(1) as I32, 0x01 as I32)
+}
+
+@test func test_sub_rr() {
+    // SUB RAX, RDX → REX.W 0x29 ModRM(11, RDX, RAX)
+    let buf = List[I64]::new(8)
+    encode_sub_rr(buf, REG_RAX, REG_RDX)
+    assert_eq(buf.get(1) as I32, 0x29 as I32)
+}
+
+@test func test_imul_rr() {
+    // IMUL RAX, RCX → REX.W 0x0F 0xAF ModRM(11, RAX, RCX)
+    let buf = List[I64]::new(8)
+    encode_imul_rr(buf, REG_RAX, REG_RCX)
+    assert_eq(buf.len() as I32, 4)
+    assert_eq(buf.get(1) as I32, 0x0F as I32)
+    assert_eq(buf.get(2) as I32, 0xAF as I32)
+}
+
+@test func test_neg() {
+    // NEG RAX → REX.W 0xF7 ModRM(11, /3, RAX)
+    let buf = List[I64]::new(8)
+    encode_neg(buf, REG_RAX)
+    assert_eq(buf.get(1) as I32, 0xF7 as I32)
+}
+
+// ============================================================================
+// Comparison encoding
+// ============================================================================
+
+@test func test_cmp_rr() {
+    // CMP RAX, RCX → REX.W 0x39 ModRM(11, RCX, RAX)
+    let buf = List[I64]::new(8)
+    encode_cmp_rr(buf, REG_RAX, REG_RCX)
+    assert_eq(buf.get(1) as I32, 0x39 as I32)
+}
+
+// ============================================================================
+// Control flow encoding
+// ============================================================================
+
+@test func test_push_pop() {
+    let buf = List[I64]::new(8)
+    encode_push(buf, REG_RBP)
+    assert_eq(buf.get(0) as I32, 0x55 as I32)  // PUSH RBP = 0x50 + 5
+
+    let buf2 = List[I64]::new(8)
+    encode_pop(buf2, REG_RBP)
+    assert_eq(buf2.get(0) as I32, 0x5D as I32)  // POP RBP = 0x58 + 5
+}
+
+@test func test_ret() {
+    let buf = List[I64]::new(4)
+    encode_ret(buf)
+    assert_eq(buf.len() as I32, 1)
+    assert_eq(buf.get(0) as I32, 0xC3 as I32)
+}
+
+@test func test_nop() {
+    let buf = List[I64]::new(4)
+    encode_nop(buf)
+    assert_eq(buf.get(0) as I32, 0x90 as I32)
+}
+
+@test func test_jmp_rel32() {
+    let buf = List[I64]::new(8)
+    encode_jmp_rel32(buf, 0)
+    assert_eq(buf.get(0) as I32, 0xE9 as I32)
+    assert_eq(buf.len() as I32, 5)
+}
+
+@test func test_call_rel32() {
+    let buf = List[I64]::new(8)
+    encode_call_rel32(buf, 0)
+    assert_eq(buf.get(0) as I32, 0xE8 as I32)
+    assert_eq(buf.len() as I32, 5)
+}

@@ -1,0 +1,423 @@
+//! x86_64 instruction encoding — raw byte generation for each instruction class.
+//!
+//! Encodes MachIR instructions to x86_64 machine code bytes. Each function
+//! appends bytes to a `List[I64]` buffer (using I64 to store U8 values since
+//! TML doesn't have a native U8 list type yet).
+//!
+//! ## Encoding Overview
+//!
+//! x86_64 instructions are variable-length (1–15 bytes):
+//! `[prefixes] [REX] [opcode] [ModRM] [SIB] [displacement] [immediate]`
+//!
+//! - REX prefix (0x40–0x4F): REX.W=1 for 64-bit operand size
+//! - ModRM byte: mod[2] | reg[3] | rm[3] — selects addressing mode
+//! - SIB byte: scale[2] | index[3] | base[3] — for complex addressing
+//!
+//! Phase 18b — items 1.1–4.4.
+
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RBX
+use compiler::native::machir::REG_RSP
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSI
+use compiler::native::machir::REG_RDI
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Phase 1: Encoding Infrastructure (items 1.1–1.5)
+// ============================================================================
+
+/// Build a ModRM byte: mod[2] | reg[3] | rm[3].
+/// mod: 0b00=indirect, 0b01=disp8, 0b10=disp32, 0b11=register
+pub func modrm(mod_field: I64, reg_field: I64, rm_field: I64) -> I64 {
+    return ((mod_field * 64) + (reg_field % 8) * 8 + (rm_field % 8)) % 256
+}
+
+/// Build a SIB byte: scale[2] | index[3] | base[3].
+pub func sib(scale: I64, index: I64, base_reg: I64) -> I64 {
+    return ((scale * 64) + (index % 8) * 8 + (base_reg % 8)) % 256
+}
+
+/// Build a REX prefix byte.
+/// w=1 for 64-bit, r=1 for reg extension, x=1 for SIB index ext, b=1 for rm/base ext.
+pub func rex(w: I64, r: I64, x: I64, b: I64) -> I64 {
+    return 0x40 + w * 8 + r * 4 + x * 2 + b
+}
+
+/// REX.W prefix (64-bit operand size) — most common.
+pub func rex_w() -> I64 { return 0x48 }
+
+/// REX.W with B bit (for R8-R15 in rm field).
+pub func rex_wb() -> I64 { return 0x49 }
+
+/// REX.W with R bit (for R8-R15 in reg field).
+pub func rex_wr() -> I64 { return 0x4C }
+
+/// Check if a register needs REX.B extension (R8-R15).
+pub func needs_rex_b(reg_id: I64) -> I64 {
+    if reg_id >= 8 { return 1 }
+    return 0
+}
+
+/// Check if a register needs REX.R extension (R8-R15 in reg field).
+pub func needs_rex_r(reg_id: I64) -> I64 {
+    if reg_id >= 8 { return 1 }
+    return 0
+}
+
+/// Compute the REX byte for a reg-to-reg operation.
+pub func rex_for_rr(dst: I64, src: I64) -> I64 {
+    return rex(1, needs_rex_r(dst), 0, needs_rex_b(src))
+}
+
+// ============================================================================
+// Immediate encoding helpers (item 1.4)
+// ============================================================================
+
+/// Append a single byte to the buffer.
+pub func emit_byte(buf: List[I64], b: I64) {
+    buf.push(b % 256)
+}
+
+/// Append an imm8 (1 byte, signed).
+pub func emit_imm8(buf: List[I64], val: I64) {
+    buf.push(val % 256)
+}
+
+/// Append an imm32 (4 bytes, little-endian).
+pub func emit_imm32(buf: List[I64], val: I64) {
+    buf.push(val % 256)
+    buf.push((val / 256) % 256)
+    buf.push((val / 65536) % 256)
+    buf.push((val / 16777216) % 256)
+}
+
+/// Append an imm64 (8 bytes, little-endian).
+pub func emit_imm64(buf: List[I64], val: I64) {
+    emit_imm32(buf, val)
+    emit_imm32(buf, val / 4294967296)
+}
+
+/// Check if a value fits in a signed 8-bit immediate.
+pub func fits_imm8(val: I64) -> I64 {
+    if val >= -128 as I64 and val <= 127 { return 1 }
+    return 0
+}
+
+/// Check if a value fits in a signed 32-bit immediate.
+pub func fits_imm32(val: I64) -> I64 {
+    if val >= -2147483648 as I64 and val <= 2147483647 { return 1 }
+    return 0
+}
+
+// ============================================================================
+// Phase 2: Data Movement (items 2.1–2.4)
+// ============================================================================
+
+/// MOV r64, r64 — register to register.
+/// Encoding: REX.W 0x89 ModRM(11, src, dst)
+pub func encode_mov_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x89)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// MOV r64, imm64 — load 64-bit immediate.
+/// Encoding: REX.W 0xB8+rd imm64
+pub func encode_mov_ri64(buf: List[I64], dst: I64, imm: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xB8 + (dst % 8))
+    emit_imm64(buf, imm)
+}
+
+/// MOV r64, imm32 (sign-extended) — for values that fit in 32 bits.
+/// Encoding: REX.W 0xC7 ModRM(11, 0, dst) imm32
+pub func encode_mov_ri32(buf: List[I64], dst: I64, imm: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xC7)
+    emit_byte(buf, modrm(3, 0, dst))
+    emit_imm32(buf, imm)
+}
+
+/// MOV r64, [RBP + disp] — load from stack slot.
+/// Encoding: REX.W 0x8B ModRM(mod, dst, RBP) [disp8|disp32]
+pub func encode_mov_r_mem(buf: List[I64], dst: I64, disp: I64) {
+    let rex_byte: I64 = rex(1, needs_rex_r(dst), 0, 0)
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0x8B)
+    if fits_imm8(disp) > 0 {
+        emit_byte(buf, modrm(1, dst, REG_RBP))
+        emit_imm8(buf, disp)
+    } else {
+        emit_byte(buf, modrm(2, dst, REG_RBP))
+        emit_imm32(buf, disp)
+    }
+}
+
+/// MOV [RBP + disp], r64 — store to stack slot.
+/// Encoding: REX.W 0x89 ModRM(mod, src, RBP) [disp8|disp32]
+pub func encode_mov_mem_r(buf: List[I64], disp: I64, src: I64) {
+    let rex_byte: I64 = rex(1, needs_rex_r(src), 0, 0)
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0x89)
+    if fits_imm8(disp) > 0 {
+        emit_byte(buf, modrm(1, src, REG_RBP))
+        emit_imm8(buf, disp)
+    } else {
+        emit_byte(buf, modrm(2, src, REG_RBP))
+        emit_imm32(buf, disp)
+    }
+}
+
+/// LEA r64, [RBP + disp] — load effective address of stack slot.
+/// Encoding: REX.W 0x8D ModRM(mod, dst, RBP) [disp8|disp32]
+pub func encode_lea(buf: List[I64], dst: I64, disp: I64) {
+    let rex_byte: I64 = rex(1, needs_rex_r(dst), 0, 0)
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0x8D)
+    if fits_imm8(disp) > 0 {
+        emit_byte(buf, modrm(1, dst, REG_RBP))
+        emit_imm8(buf, disp)
+    } else {
+        emit_byte(buf, modrm(2, dst, REG_RBP))
+        emit_imm32(buf, disp)
+    }
+}
+
+/// PUSH r64 — push register onto stack.
+/// Encoding: [REX.B] 0x50+rd
+pub func encode_push(buf: List[I64], reg_id: I64) {
+    if needs_rex_b(reg_id) > 0 { emit_byte(buf, 0x41) }
+    emit_byte(buf, 0x50 + (reg_id % 8))
+}
+
+/// POP r64 — pop from stack into register.
+/// Encoding: [REX.B] 0x58+rd
+pub func encode_pop(buf: List[I64], reg_id: I64) {
+    if needs_rex_b(reg_id) > 0 { emit_byte(buf, 0x41) }
+    emit_byte(buf, 0x58 + (reg_id % 8))
+}
+
+// ============================================================================
+// Phase 3: Arithmetic (items 3.1–3.4)
+// ============================================================================
+
+/// ADD r64, r64.
+/// Encoding: REX.W 0x01 ModRM(11, src, dst)
+pub func encode_add_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x01)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// ADD r64, imm32.
+/// Encoding: REX.W 0x81 ModRM(11, /0, dst) imm32
+pub func encode_add_ri(buf: List[I64], dst: I64, imm: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    if fits_imm8(imm) > 0 {
+        emit_byte(buf, 0x83)
+        emit_byte(buf, modrm(3, 0, dst))
+        emit_imm8(buf, imm)
+    } else {
+        emit_byte(buf, 0x81)
+        emit_byte(buf, modrm(3, 0, dst))
+        emit_imm32(buf, imm)
+    }
+}
+
+/// SUB r64, r64.
+/// Encoding: REX.W 0x29 ModRM(11, src, dst)
+pub func encode_sub_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x29)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// SUB r64, imm32.
+/// Encoding: REX.W 0x81 ModRM(11, /5, dst) imm32
+pub func encode_sub_ri(buf: List[I64], dst: I64, imm: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    if fits_imm8(imm) > 0 {
+        emit_byte(buf, 0x83)
+        emit_byte(buf, modrm(3, 5, dst))
+        emit_imm8(buf, imm)
+    } else {
+        emit_byte(buf, 0x81)
+        emit_byte(buf, modrm(3, 5, dst))
+        emit_imm32(buf, imm)
+    }
+}
+
+/// IMUL r64, r64.
+/// Encoding: REX.W 0x0F 0xAF ModRM(11, dst, src)
+pub func encode_imul_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(dst, src))
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, 0xAF)
+    emit_byte(buf, modrm(3, dst, src))
+}
+
+/// IDIV r64 — signed divide RDX:RAX by r64, quotient in RAX, remainder in RDX.
+/// Encoding: REX.W 0xF7 ModRM(11, /7, src)
+pub func encode_idiv(buf: List[I64], src: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(src))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xF7)
+    emit_byte(buf, modrm(3, 7, src))
+}
+
+/// NEG r64 — two's complement negation.
+/// Encoding: REX.W 0xF7 ModRM(11, /3, dst)
+pub func encode_neg(buf: List[I64], dst: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xF7)
+    emit_byte(buf, modrm(3, 3, dst))
+}
+
+/// NOT r64 — bitwise NOT.
+/// Encoding: REX.W 0xF7 ModRM(11, /2, dst)
+pub func encode_not(buf: List[I64], dst: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xF7)
+    emit_byte(buf, modrm(3, 2, dst))
+}
+
+/// AND r64, r64.
+/// Encoding: REX.W 0x21 ModRM(11, src, dst)
+pub func encode_and_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x21)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// OR r64, r64.
+/// Encoding: REX.W 0x09 ModRM(11, src, dst)
+pub func encode_or_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x09)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// XOR r64, r64.
+/// Encoding: REX.W 0x31 ModRM(11, src, dst)
+pub func encode_xor_rr(buf: List[I64], dst: I64, src: I64) {
+    emit_byte(buf, rex_for_rr(src, dst))
+    emit_byte(buf, 0x31)
+    emit_byte(buf, modrm(3, src, dst))
+}
+
+/// SHL r64, imm8.
+/// Encoding: REX.W 0xC1 ModRM(11, /4, dst) imm8
+pub func encode_shl_ri(buf: List[I64], dst: I64, count: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xC1)
+    emit_byte(buf, modrm(3, 4, dst))
+    emit_imm8(buf, count)
+}
+
+/// SAR r64, imm8 (arithmetic shift right).
+/// Encoding: REX.W 0xC1 ModRM(11, /7, dst) imm8
+pub func encode_sar_ri(buf: List[I64], dst: I64, count: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(dst))
+    emit_byte(buf, rex_byte)
+    emit_byte(buf, 0xC1)
+    emit_byte(buf, modrm(3, 7, dst))
+    emit_imm8(buf, count)
+}
+
+// ============================================================================
+// Phase 4: Comparison and Branches (items 4.1–4.4)
+// ============================================================================
+
+/// CMP r64, r64.
+/// Encoding: REX.W 0x39 ModRM(11, src, dst)
+pub func encode_cmp_rr(buf: List[I64], lhs: I64, rhs: I64) {
+    emit_byte(buf, rex_for_rr(rhs, lhs))
+    emit_byte(buf, 0x39)
+    emit_byte(buf, modrm(3, rhs, lhs))
+}
+
+/// CMP r64, imm32.
+/// Encoding: REX.W 0x81 ModRM(11, /7, reg) imm32
+pub func encode_cmp_ri(buf: List[I64], reg_id: I64, imm: I64) {
+    let rex_byte: I64 = rex(1, 0, 0, needs_rex_b(reg_id))
+    emit_byte(buf, rex_byte)
+    if fits_imm8(imm) > 0 {
+        emit_byte(buf, 0x83)
+        emit_byte(buf, modrm(3, 7, reg_id))
+        emit_imm8(buf, imm)
+    } else {
+        emit_byte(buf, 0x81)
+        emit_byte(buf, modrm(3, 7, reg_id))
+        emit_imm32(buf, imm)
+    }
+}
+
+/// Jcc rel32 — conditional jump with 32-bit displacement.
+/// cc: 0x84=JE, 0x85=JNE, 0x8C=JL, 0x8E=JLE, 0x8F=JG, 0x8D=JGE, 0x82=JB, 0x87=JA
+pub func encode_jcc_rel32(buf: List[I64], cc_opcode: I64, displacement: I64) {
+    emit_byte(buf, 0x0F)
+    emit_byte(buf, cc_opcode)
+    emit_imm32(buf, displacement)
+}
+
+/// JMP rel32 — unconditional jump.
+/// Encoding: 0xE9 rel32
+pub func encode_jmp_rel32(buf: List[I64], displacement: I64) {
+    emit_byte(buf, 0xE9)
+    emit_imm32(buf, displacement)
+}
+
+/// JMP rel8 — short jump.
+/// Encoding: 0xEB rel8
+pub func encode_jmp_rel8(buf: List[I64], displacement: I64) {
+    emit_byte(buf, 0xEB)
+    emit_imm8(buf, displacement)
+}
+
+/// CALL rel32 — relative function call.
+/// Encoding: 0xE8 rel32
+pub func encode_call_rel32(buf: List[I64], displacement: I64) {
+    emit_byte(buf, 0xE8)
+    emit_imm32(buf, displacement)
+}
+
+/// RET — return from function.
+/// Encoding: 0xC3
+pub func encode_ret(buf: List[I64]) {
+    emit_byte(buf, 0xC3)
+}
+
+/// NOP — no operation (1 byte).
+/// Encoding: 0x90
+pub func encode_nop(buf: List[I64]) {
+    emit_byte(buf, 0x90)
+}
+
+// ============================================================================
+// Condition code → opcode mapping
+// ============================================================================
+
+/// Map CondCode to Jcc opcode (second byte after 0x0F prefix).
+pub func condcode_to_jcc_opcode(cc: I64) -> I64 {
+    // cc values match CondCode enum: Eq=0, Ne=1, Lt=2, Le=3, Gt=4, Ge=5, Below=6, Above=7
+    if cc == 0 { return 0x84 }  // JE
+    if cc == 1 { return 0x85 }  // JNE
+    if cc == 2 { return 0x8C }  // JL
+    if cc == 3 { return 0x8E }  // JLE
+    if cc == 4 { return 0x8F }  // JG
+    if cc == 5 { return 0x8D }  // JGE
+    if cc == 6 { return 0x82 }  // JB
+    if cc == 7 { return 0x87 }  // JA
+    return 0x84  // default: JE
+}
