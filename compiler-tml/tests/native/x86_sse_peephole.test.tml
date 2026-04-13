@@ -3,13 +3,13 @@
 
 use test::assert
 use test::assert_eq
-use compiler::native::x86_sse::encode_addsd
-use compiler::native::x86_sse::encode_ucomisd
-use compiler::native::x86_sse::encode_cvtsi2sd
-use compiler::native::x86_sse::encode_mfence
-use compiler::native::x86_sse::encode_sfence
-use compiler::native::x86_sse::encode_lfence
-use compiler::native::x86_sse::encode_lock_cmpxchg
+use compiler::native::x86::sse::encode_addsd
+use compiler::native::x86::sse::encode_ucomisd
+use compiler::native::x86::sse::encode_cvtsi2sd
+use compiler::native::x86::sse::encode_mfence
+use compiler::native::x86::sse::encode_sfence
+use compiler::native::x86::sse::encode_lfence
+use compiler::native::x86::sse::encode_lock_cmpxchg
 use compiler::native::machir::MachFunc
 use compiler::native::machir::MachBlock
 use compiler::native::machir::MachInst
@@ -20,10 +20,10 @@ use compiler::native::machir::Operand
 use compiler::native::machir::VirtualReg
 use compiler::native::machir::mach_func_new
 use compiler::native::machir::fresh_vreg
-use compiler::native::peephole::run_peephole
-use compiler::native::peephole::PeepholeResult
-use compiler::native::const_prop::run_const_prop
-use compiler::native::const_prop::ConstPropResult
+use compiler::native::x86::peephole::run_peephole
+use compiler::native::x86::peephole::PeepholeResult
+use compiler::native::x86::const_prop::run_const_prop
+use compiler::native::x86::const_prop::ConstPropResult
 use std::collections::list::List
 
 @test func test_sse2_and_optimizations() {

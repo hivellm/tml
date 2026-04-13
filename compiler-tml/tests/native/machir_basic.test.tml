@@ -20,9 +20,9 @@ use compiler::native::machir::REG_RSP
 use compiler::native::stack_alloc::StackAllocation
 use compiler::native::stack_alloc::allocate_stack
 use compiler::native::stack_alloc::get_slot_offset
-use compiler::native::frame::compute_frame_size
-use compiler::native::frame::emit_prologue
-use compiler::native::frame::emit_epilogue
+use compiler::native::x86::frame::compute_frame_size
+use compiler::native::x86::frame::emit_prologue
+use compiler::native::x86::frame::emit_epilogue
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 

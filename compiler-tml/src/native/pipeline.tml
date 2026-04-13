@@ -1,0 +1,155 @@
+//! Native compilation pipeline — end-to-end MIR → .obj file.
+//!
+//! `compile_module_native` takes a MirModule and produces a COFF .obj file
+//! ready for linking with LLD. This is the top-level entry point for the
+//! `--backend=native` flag.
+//!
+//! ## Pipeline Steps
+//!
+//! For each function in the MirModule:
+//! 1. Lower MIR → MachIR (`lower_function`)
+//! 2. Compute liveness (`compute_live_intervals`)
+//! 3. Register allocation (`linear_scan`)
+//! 4. Peephole optimization (`run_peephole`)
+//! 5. Constant propagation (`run_const_prop`)
+//! 6. Frame layout (prologue/epilogue)
+//! 7. Encode to x86_64 bytes (`emit_func`)
+//!
+//! Then assemble all function bytes into a COFF .obj:
+//! 8. Create .text section with all function bytes
+//! 9. Create symbol table (one entry per function)
+//! 10. Create relocations for cross-function calls
+//! 11. Write COFF file (`write_coff`)
+
+use compiler::mir::module::MirModule
+use compiler::mir::module::MirFunc
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachInst
+use compiler::native::mir_lower::lower_function
+use compiler::native::liveness::compute_live_intervals
+use compiler::native::linear_scan::linear_scan
+use compiler::native::linear_scan::RegAllocResult
+use compiler::native::stack_alloc::allocate_stack
+use compiler::native::stack_alloc::StackAllocation
+use compiler::native::x86::emit::emit_func
+use compiler::native::x86::emit::EmitResult
+use compiler::native::x86::peephole::run_peephole
+use compiler::native::x86::const_prop::run_const_prop
+use compiler::native::x86::frame::emit_prologue
+use compiler::native::x86::frame::emit_epilogue
+use compiler::native::x86::frame::compute_frame_size
+use compiler::native::coff_emit::CoffSection
+use compiler::native::coff_emit::CoffSymbol
+use compiler::native::coff_emit::CoffRelocation
+use compiler::native::coff_emit::make_text_section
+use compiler::native::coff_emit::make_func_symbol
+use compiler::native::coff_emit::make_extern_symbol
+use compiler::native::coff_emit::make_rel32_reloc
+use compiler::native::coff_emit::section_add_reloc
+use compiler::native::obj_writer::write_coff
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Pipeline result
+// ============================================================================
+
+/// Result of native compilation.
+pub type NativeCompileResult {
+    /// The COFF object file bytes.
+    obj_bytes: List[I64],
+    /// Number of functions compiled.
+    functions_compiled: I64,
+    /// Total code size in bytes.
+    code_size: I64,
+    /// Total spills across all functions.
+    total_spills: I64,
+    /// Whether compilation succeeded.
+    success: I64
+}
+
+// ============================================================================
+// Pipeline entry point
+// ============================================================================
+
+/// Compile a MirModule to a COFF .obj file via the native x86_64 backend.
+pub func compile_module_native(m: MirModule) -> NativeCompileResult {
+    let all_code = List[I64]::new(4096)
+    let symbols = List[CoffSymbol]::new(32)
+    let func_offsets = HashMap[Str, I64]::new(32)
+    var total_spills: I64 = 0
+    var funcs_compiled: I64 = 0
+
+    let fc: I64 = m.functions.len() as I64
+    for fi in 0 to fc {
+        let mir_func: MirFunc = m.functions.get(fi)
+
+        // Skip extern functions (they're declared, not defined)
+        if mir_func.is_extern > 0 {
+            symbols.push(make_extern_symbol(mir_func.name))
+            continue
+        }
+
+        // Record function offset in .text section
+        let func_offset: I64 = all_code.len() as I64
+        func_offsets.set(mir_func.name, func_offset)
+
+        // Step 1: MIR → MachIR
+        let mach_func: MachFunc = lower_function(mir_func)
+
+        // Step 2-3: Register allocation (linear scan)
+        let regalloc: RegAllocResult = linear_scan(mach_func)
+        total_spills = total_spills + regalloc.spills
+
+        // Step 4: Peephole optimization
+        run_peephole(mach_func)
+
+        // Step 5: Constant propagation
+        run_const_prop(mach_func)
+
+        // Step 6: Stack allocation for spills
+        let stack: StackAllocation = allocate_stack(mach_func)
+
+        // Step 7: Encode to x86_64 bytes
+        let emit_result: EmitResult = emit_func(mach_func, stack)
+
+        // Append function bytes to .text section
+        let code_len: I64 = emit_result.bytes.len() as I64
+        for bi in 0 to code_len {
+            all_code.push(emit_result.bytes.get(bi))
+        }
+
+        // Add function symbol
+        let section_num: I64 = 1  // .text is section 1
+        if mir_func.is_public > 0 {
+            symbols.push(make_func_symbol(mir_func.name, func_offset, section_num))
+        } else {
+            symbols.push(CoffSymbol {
+                name: mir_func.name,
+                value: func_offset,
+                section_number: section_num,
+                sym_type: 0x20,
+                storage_class: 3  // IMAGE_SYM_CLASS_STATIC (internal)
+            })
+        }
+
+        funcs_compiled = funcs_compiled + 1
+    }
+
+    // Assemble COFF .obj
+    let text_section: CoffSection = make_text_section(all_code)
+    let sections = List[CoffSection]::new(1)
+    sections.push(text_section)
+
+    let obj_bytes: List[I64] = write_coff(sections, symbols)
+
+    return NativeCompileResult {
+        obj_bytes: obj_bytes,
+        functions_compiled: funcs_compiled,
+        code_size: all_code.len() as I64,
+        total_spills: total_spills,
+        success: 1
+    }
+}

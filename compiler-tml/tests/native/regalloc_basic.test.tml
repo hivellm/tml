@@ -25,11 +25,11 @@ use compiler::native::liveness::inst_def
 use compiler::native::liveness::inst_uses
 use compiler::native::linear_scan::linear_scan
 use compiler::native::linear_scan::RegAllocResult
-use compiler::native::calling_conv::win64_cc
-use compiler::native::calling_conv::sysv_cc
-use compiler::native::calling_conv::is_callee_saved
-use compiler::native::calling_conv::arg_reg
-use compiler::native::calling_conv::CallingConv
+use compiler::native::x86::calling_conv::win64_cc
+use compiler::native::x86::calling_conv::sysv_cc
+use compiler::native::x86::calling_conv::is_callee_saved
+use compiler::native::x86::calling_conv::arg_reg
+use compiler::native::x86::calling_conv::CallingConv
 use std::collections::list::List
 
 @test func test_regalloc_all() {

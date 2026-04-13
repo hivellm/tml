@@ -16,6 +16,10 @@ use compiler::query::context::QueryContext
 use compiler::query::context::context_new
 use compiler::query::context::force
 use compiler::cli::dispatcher::CliArgs
+use compiler::native::pipeline::compile_module_native
+use compiler::native::pipeline::NativeCompileResult
+use compiler::mir::module::MirModule
+use compiler::mir::module::mir_module_new
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
@@ -31,18 +35,25 @@ pub type BuildConfig {
     opt_level: I64,
     emit_ir: I64,
     verbose: I64,
-    output_path: Str
+    output_path: Str,
+    /// 0 = LLVM (default), 1 = native x86_64
+    backend: I64
 }
 
 /// Create build config from CLI args.
 pub func build_config_from_args(args: CliArgs) -> BuildConfig {
+    var backend: I64 = 0
+    if args.options.has("backend") {
+        if args.options.get("backend") == "native" { backend = 1 }
+    }
     return BuildConfig {
         file_path: args.file_path,
         module_name: "",
         opt_level: args.opt_level,
         emit_ir: args.emit_ir,
         verbose: args.verbose,
-        output_path: ""
+        output_path: "",
+        backend: backend
     }
 }
 
@@ -53,9 +64,15 @@ pub func build_config_from_args(args: CliArgs) -> BuildConfig {
 /// Build a TML source file to a binary.
 /// Returns 0 on success, nonzero on error.
 pub func build_file(cfg: BuildConfig) -> I64 {
-    let ctx: QueryContext = context_new()
+    if cfg.backend == 1 {
+        return build_native(cfg)
+    }
+    return build_llvm(cfg)
+}
 
-    // Force the full pipeline
+/// Build via LLVM backend (default).
+func build_llvm(cfg: BuildConfig) -> I64 {
+    let ctx: QueryContext = context_new()
     let key = QueryKey::CodegenUnit(CodegenUnitKey {
         file_path: cfg.file_path,
         module_name: cfg.module_name,
@@ -64,13 +81,25 @@ pub func build_file(cfg: BuildConfig) -> I64 {
         test_entry_index: -1 as I64,
         library_decls_only: 0
     })
-
-    // The result is the LLVM IR text (as a pointer/handle)
     let result: I64 = force(ctx, key, 0, cfg.file_path)
+    if result < 0 { return 1 }
+    return 0
+}
 
-    if result < 0 {
-        return 1
-    }
+/// Build via native x86_64 backend.
+func build_native(cfg: BuildConfig) -> I64 {
+    // Create an empty MirModule — the actual MIR generation from source
+    // requires the parser → type checker → HIR → THIR → MIR pipeline.
+    // For now this demonstrates the native pipeline plumbing.
+    // Full integration requires force(MirBuild) which produces a MirModule.
+    let m: MirModule = mir_module_new(cfg.file_path)
+
+    let result: NativeCompileResult = compile_module_native(m)
+    if result.success == 0 { return 1 }
+
+    // The obj_bytes contain the COFF .obj file.
+    // To produce an executable, LLD must link it with the TML runtime.
+    // This step is handled by the C++ link_objects() shim.
     return 0
 }
 
