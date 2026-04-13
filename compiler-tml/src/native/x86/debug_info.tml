@@ -1,0 +1,293 @@
+//! CodeView debug information emission for Windows PDB.
+//!
+//! Generates .debug$S (symbol subsection) and .debug$T (type records)
+//! COFF sections for Windows debuggers (Visual Studio, WinDbg).
+//!
+//! ## CodeView Record Layout
+//!
+//! .debug$S contains:
+//!   - CV_SIGNATURE_C13 (4 bytes)
+//!   - Subsections: DEBUG_S_SYMBOLS, DEBUG_S_LINES, DEBUG_S_FILECHKSMS
+//!
+//! .debug$T contains:
+//!   - CV_SIGNATURE_C13
+//!   - Type records (LF_STRUCTURE, LF_ENUM, LF_PROCEDURE, etc.)
+//!
+//! Phase 21a — items 1.1–1.6.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// CodeView constants (item 1.1)
+// ============================================================================
+
+/// CodeView signature for C13 format.
+pub const CV_SIGNATURE_C13: I64 = 4
+
+/// Symbol record types
+pub const S_GPROC32: I64 = 0x1110  // Global procedure start (32-bit)
+pub const S_END: I64 = 0x0006      // Block/procedure end
+pub const S_COMPILE3: I64 = 0x113C // Compiler info record
+pub const S_OBJNAME: I64 = 0x1101  // Object file name
+
+/// Subsection types for .debug$S
+pub const DEBUG_S_SYMBOLS: I64 = 0xF1
+pub const DEBUG_S_LINES: I64 = 0xF2
+pub const DEBUG_S_FILECHKSMS: I64 = 0xF4
+pub const DEBUG_S_STRINGTABLE: I64 = 0xF3
+
+/// Primitive type indices (CodeView)
+pub const T_VOID: I64 = 0x0003
+pub const T_INT1: I64 = 0x0068  // I8
+pub const T_INT2: I64 = 0x0072  // I16
+pub const T_INT4: I64 = 0x0074  // I32
+pub const T_INT8: I64 = 0x0076  // I64
+pub const T_UINT1: I64 = 0x0069 // U8
+pub const T_UINT2: I64 = 0x0073 // U16
+pub const T_UINT4: I64 = 0x0075 // U32
+pub const T_UINT8: I64 = 0x0077 // U64
+pub const T_REAL32: I64 = 0x0040 // F32
+pub const T_REAL64: I64 = 0x0041 // F64
+pub const T_BOOL08: I64 = 0x0030 // Bool (8-bit)
+pub const T_RCHAR: I64 = 0x0070  // Char
+
+/// Leaf types for .debug$T
+pub const LF_STRUCTURE: I64 = 0x1505
+pub const LF_ENUM: I64 = 0x1507
+pub const LF_PROCEDURE: I64 = 0x1008
+pub const LF_ARGLIST: I64 = 0x1201
+pub const LF_FIELDLIST: I64 = 0x1203
+pub const LF_MEMBER: I64 = 0x150D
+pub const LF_ENUMERATE: I64 = 0x1502
+
+// ============================================================================
+// Debug info structs
+// ============================================================================
+
+/// Source line mapping: instruction offset → source line.
+pub type DebugLineEntry {
+    code_offset: I64,
+    line_number: I64
+}
+
+/// Function debug info.
+pub type DebugFuncInfo {
+    name: Str,
+    code_offset: I64,
+    code_size: I64,
+    type_index: I64,
+    lines: List[DebugLineEntry]
+}
+
+/// Struct field info for type records.
+pub type DebugFieldInfo {
+    name: Str,
+    type_index: I64,
+    offset: I64
+}
+
+// ============================================================================
+// .debug$S section — symbol subsection (items 1.2, 1.5)
+// ============================================================================
+
+/// Build the .debug$S section bytes.
+pub func build_debug_s(
+    source_file: Str,
+    functions: List[DebugFuncInfo]
+) -> List[I64] {
+    let buf = List[I64]::new(1024)
+
+    // CV_SIGNATURE_C13
+    write_u32(buf, CV_SIGNATURE_C13)
+
+    // --- DEBUG_S_SYMBOLS subsection ---
+    write_u32(buf, DEBUG_S_SYMBOLS)
+    let sym_size_pos: I64 = buf.len() as I64
+    write_u32(buf, 0)  // placeholder for subsection size
+
+    let sym_start: I64 = buf.len() as I64
+    let fc: I64 = functions.len() as I64
+    for i in 0 to fc {
+        let fn_info: DebugFuncInfo = functions.get(i)
+
+        // S_GPROC32 record
+        let rec_len_pos: I64 = buf.len() as I64
+        write_u16(buf, 0)  // record length placeholder
+        write_u16(buf, S_GPROC32)
+        // Fields: pParent, pEnd, pNext (all 0 for simple case)
+        write_u32(buf, 0)  // pParent
+        write_u32(buf, 0)  // pEnd
+        write_u32(buf, 0)  // pNext
+        write_u32(buf, fn_info.code_size)  // procedure length
+        write_u32(buf, 0)  // debug start offset
+        write_u32(buf, fn_info.code_size)  // debug end offset
+        write_u32(buf, fn_info.type_index) // type index
+        write_u32(buf, fn_info.code_offset) // offset (in .text section)
+        write_u16(buf, 1)  // segment (section number, 1 = .text)
+        // flags
+        write_u8(buf, 0)
+        // Procedure name (null-terminated)
+        write_string_null(buf, fn_info.name)
+        // Align to 4 bytes
+        align_to_4(buf)
+
+        // Patch record length
+        let rec_end: I64 = buf.len() as I64
+        patch_u16(buf, rec_len_pos, rec_end - rec_len_pos - 2)
+
+        // S_END record
+        write_u16(buf, 2)       // record length = 2
+        write_u16(buf, S_END)
+    }
+
+    // Patch subsection size
+    let sym_end: I64 = buf.len() as I64
+    patch_u32(buf, sym_size_pos, sym_end - sym_start)
+
+    // --- DEBUG_S_LINES subsection ---
+    // Emit line number info for each function
+    for i in 0 to fc {
+        let fn_info: DebugFuncInfo = functions.get(i)
+        if fn_info.lines.len() as I64 == 0 { continue }
+
+        write_u32(buf, DEBUG_S_LINES)
+        let lines_size_pos: I64 = buf.len() as I64
+        write_u32(buf, 0)  // subsection size placeholder
+        let lines_start: I64 = buf.len() as I64
+
+        // Header: code offset, segment, flags, code size
+        write_u32(buf, fn_info.code_offset)
+        write_u16(buf, 1)  // segment
+        write_u16(buf, 0)  // flags
+        write_u32(buf, fn_info.code_size)
+
+        // File block: file index + line count
+        write_u32(buf, 0)  // file index (into file checksums)
+        let lc: I64 = fn_info.lines.len() as I64
+        write_u32(buf, lc)
+        // Block size
+        write_u32(buf, 12 + lc * 8)
+
+        // Line entries: offset + lineNumber flags
+        for li in 0 to lc {
+            let entry: DebugLineEntry = fn_info.lines.get(li)
+            write_u32(buf, entry.code_offset)
+            write_u32(buf, entry.line_number | 0x80000000) // bit 31 = statement
+        }
+
+        let lines_end: I64 = buf.len() as I64
+        patch_u32(buf, lines_size_pos, lines_end - lines_start)
+    }
+
+    return buf
+}
+
+// ============================================================================
+// .debug$T section — type records (items 1.3, 1.4)
+// ============================================================================
+
+/// Build the .debug$T section bytes.
+pub func build_debug_t() -> List[I64] {
+    let buf = List[I64]::new(256)
+    // CV_SIGNATURE_C13
+    write_u32(buf, CV_SIGNATURE_C13)
+    // Primitive type records are built-in (T_INT4, etc.) — no emission needed.
+    // User-defined types would go here via LF_STRUCTURE/LF_ENUM records.
+    return buf
+}
+
+/// Emit an LF_STRUCTURE type record for a struct.
+pub func emit_struct_type_record(
+    buf: List[I64],
+    name: Str,
+    field_count: I64,
+    size: I64,
+    field_list_index: I64
+) {
+    let rec_len_pos: I64 = buf.len() as I64
+    write_u16(buf, 0)  // length placeholder
+    write_u16(buf, LF_STRUCTURE)
+    write_u16(buf, field_count) // count
+    write_u16(buf, 0)   // property (not forward ref, not nested, etc.)
+    write_u32(buf, field_list_index) // field list type index
+    write_u32(buf, 0)   // derived from
+    write_u32(buf, 0)   // vshape
+    write_u16(buf, size) // struct size (simplified: u16 for small structs)
+    write_string_null(buf, name)
+    align_to_4(buf)
+    let rec_end: I64 = buf.len() as I64
+    patch_u16(buf, rec_len_pos, rec_end - rec_len_pos - 2)
+}
+
+/// Emit an LF_ENUM type record for an enum.
+pub func emit_enum_type_record(
+    buf: List[I64],
+    name: Str,
+    variant_count: I64,
+    underlying_type: I64,
+    field_list_index: I64
+) {
+    let rec_len_pos: I64 = buf.len() as I64
+    write_u16(buf, 0)
+    write_u16(buf, LF_ENUM)
+    write_u16(buf, variant_count)
+    write_u16(buf, 0)  // property
+    write_u32(buf, underlying_type) // underlying type (e.g. T_INT4)
+    write_u32(buf, field_list_index)
+    write_string_null(buf, name)
+    align_to_4(buf)
+    let rec_end: I64 = buf.len() as I64
+    patch_u16(buf, rec_len_pos, rec_end - rec_len_pos - 2)
+}
+
+// ============================================================================
+// Byte-writing helpers
+// ============================================================================
+
+func write_u8(buf: List[I64], val: I64) {
+    buf.push(val & 0xFF)
+}
+
+func write_u16(buf: List[I64], val: I64) {
+    buf.push(val & 0xFF)
+    buf.push((val >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], val: I64) {
+    buf.push(val & 0xFF)
+    buf.push((val >> 8) & 0xFF)
+    buf.push((val >> 16) & 0xFF)
+    buf.push((val >> 24) & 0xFF)
+}
+
+func patch_u16(buf: List[I64], offset: I64, val: I64) {
+    buf.set(offset, val & 0xFF)
+    buf.set(offset + 1, (val >> 8) & 0xFF)
+}
+
+func patch_u32(buf: List[I64], offset: I64, val: I64) {
+    buf.set(offset, val & 0xFF)
+    buf.set(offset + 1, (val >> 8) & 0xFF)
+    buf.set(offset + 2, (val >> 16) & 0xFF)
+    buf.set(offset + 3, (val >> 24) & 0xFF)
+}
+
+/// Write a null-terminated string.
+func write_string_null(buf: List[I64], s: Str) {
+    let n: I64 = s.len() as I64
+    let s_ptr: I64 = s as I64
+    for i in 0 to n {
+        let b: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        buf.push((b + 256) % 256)
+    }
+    buf.push(0)  // null terminator
+}
+
+/// Align buffer to 4-byte boundary with zero padding.
+func align_to_4(buf: List[I64]) {
+    let rem: I64 = (buf.len() as I64) % 4
+    if rem > 0 {
+        for _ in 0 to (4 - rem) { buf.push(0) }
+    }
+}
