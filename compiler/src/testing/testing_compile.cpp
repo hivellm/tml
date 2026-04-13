@@ -680,7 +680,7 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
             // Run codegen with a timeout to avoid hangs from LLVM global state
             // corruption after compiling many files in the same process.
-            constexpr int CODEGEN_TIMEOUT_SECONDS = 30;
+            constexpr int CODEGEN_TIMEOUT_SECONDS = 60;
             std::atomic<bool> codegen_done{false};
             query::CodegenUnitResult codegen_result;
 
@@ -1032,10 +1032,16 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     // No stdlib .obj linked — each test .obj has full library defs (internal linkage).
 
-    // Link to executable — remove stale exe to avoid "permission denied"
+    // Link to executable — remove stale exe to avoid "permission denied".
+    // Retry removal to handle transient file locks (antivirus, Windows indexer).
     auto exe_path = cache_dir / (suite.name + ".exe");
-    std::error_code ec;
-    fs::remove(exe_path, ec);
+    for (int retry = 0; retry < 3; ++retry) {
+        std::error_code ec;
+        fs::remove(exe_path, ec);
+        if (!ec || !fs::exists(exe_path))
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     cli::LinkOptions link_opts;
     link_opts.output_type = cli::LinkOptions::OutputType::Executable;

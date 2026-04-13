@@ -467,7 +467,9 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                             auto& t = sr.tests[idx];
                             t.passed = false;
                             if (started_indices.contains(idx)) {
-                                t.error = "[X002] TIMEOUT: test exceeded 100ms limit — killed";
+                                t.error = "[X002] TIMEOUT: test exceeded " +
+                                          std::to_string(config.per_test_timeout_us / 1000) +
+                                          "ms limit — killed";
                                 sr.failed++;
                             } else {
                                 t.error = "NOT RUN: previous test timed out";
