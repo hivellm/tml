@@ -1,0 +1,333 @@
+//! Mach-O 64-bit object file emission — shared by x86_64 and ARM64 backends.
+//!
+//! Produces a relocatable Mach-O .o file with:
+//! - mach_header_64 (MH_OBJECT, configurable CPU type)
+//! - LC_SEGMENT_64 with __TEXT/__text and __DATA/__data sections
+//! - LC_SYMTAB with nlist_64 symbol table and string table
+//! - Relocation entries (relocation_info format)
+//!
+//! Phase 21c — items 1.1–1.7.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Mach-O constants (item 1.1)
+// ============================================================================
+
+pub const MH_MAGIC_64: I64 = 0xFEEDFACF
+pub const MH_OBJECT: I64 = 1
+
+/// CPU types
+pub const CPU_TYPE_X86_64: I64 = 0x01000007
+pub const CPU_TYPE_ARM64: I64 = 0x0100000C
+pub const CPU_SUBTYPE_ALL: I64 = 3
+pub const CPU_SUBTYPE_ARM64_ALL: I64 = 0
+
+/// Load command types
+pub const LC_SEGMENT_64: I64 = 0x19
+pub const LC_SYMTAB: I64 = 0x02
+
+/// mach_header_64 size: 32 bytes
+pub const MACH_HEADER_SIZE: I64 = 32
+
+/// section_64 size: 80 bytes
+pub const SECTION_64_SIZE: I64 = 80
+
+/// segment_command_64 size (without sections): 72 bytes
+pub const SEGMENT_CMD_SIZE: I64 = 72
+
+/// LC_SYMTAB size: 24 bytes
+pub const SYMTAB_CMD_SIZE: I64 = 24
+
+/// nlist_64 size: 16 bytes
+pub const NLIST_64_SIZE: I64 = 16
+
+/// relocation_info size: 8 bytes
+pub const RELOC_INFO_SIZE: I64 = 8
+
+// ============================================================================
+// Section flags (item 1.2)
+// ============================================================================
+
+pub const S_REGULAR: I64 = 0
+pub const S_ATTR_PURE_INSTRUCTIONS: I64 = 0x80000000
+pub const S_ATTR_SOME_INSTRUCTIONS: I64 = 0x00000400
+
+// ============================================================================
+// Symbol types (item 1.4)
+// ============================================================================
+
+pub const N_UNDF: I64 = 0x00
+pub const N_EXT: I64 = 0x01
+pub const N_SECT: I64 = 0x0E
+
+// ============================================================================
+// x86_64 relocation types (item 1.6)
+// ============================================================================
+
+pub const X86_64_RELOC_BRANCH: I64 = 2
+pub const X86_64_RELOC_SIGNED: I64 = 1
+pub const X86_64_RELOC_UNSIGNED: I64 = 0
+
+/// ARM64 relocation types
+pub const ARM64_RELOC_BRANCH26: I64 = 2
+pub const ARM64_RELOC_PAGE21: I64 = 3
+pub const ARM64_RELOC_PAGEOFF12: I64 = 4
+
+// ============================================================================
+// Input data types
+// ============================================================================
+
+pub type MachoSymbol {
+    name: Str,
+    section: I64,       // 1-indexed section (0 = undefined/extern)
+    value: I64,         // offset within section
+    is_external: I64    // 1 = global, 0 = local
+}
+
+pub type MachoReloc {
+    address: I64,       // offset in section where reloc applies
+    symbol_idx: I64,    // symbol index
+    pcrel: I64,         // 1 = PC-relative
+    length: I64,        // 2 = 4 bytes (32-bit)
+    is_extern: I64,     // 1 = external symbol
+    reloc_type: I64     // X86_64_RELOC_BRANCH, etc.
+}
+
+// ============================================================================
+// Mach-O 64-bit writer (items 1.1–1.7)
+// ============================================================================
+
+/// Write a complete Mach-O 64-bit relocatable object file.
+/// `cpu_type` is CPU_TYPE_X86_64 or CPU_TYPE_ARM64.
+/// `cpu_subtype` is CPU_SUBTYPE_ALL (x86) or CPU_SUBTYPE_ARM64_ALL.
+pub func write_macho64_obj(
+    cpu_type: I64,
+    cpu_subtype: I64,
+    text_bytes: List[I64],
+    data_bytes: List[I64],
+    symbols: List[MachoSymbol],
+    relocs: List[MachoReloc]
+) -> List[I64] {
+    let buf = List[I64]::new(8192)
+
+    let has_data: I64 = if data_bytes.len() as I64 > 0 { 1 } else { 0 }
+    let nsects: I64 = if has_data > 0 { 2 } else { 1 }
+
+    // Build string table
+    let strtab = List[I64]::new(256)
+    strtab.push(0x20)  // Mach-O convention: first byte is space
+    strtab.push(0)      // then null
+    let str_offsets = HashMap[Str, I64]::new(32)
+    let sc: I64 = symbols.len() as I64
+    for i in 0 to sc {
+        let sym: MachoSymbol = symbols.get(i)
+        if sym.name != "" {
+            str_offsets.set(sym.name, strtab.len() as I64)
+            // Mach-O prepends underscore to C symbols
+            strtab.push(0x5F)  // '_'
+            write_str_null(strtab, sym.name)
+        }
+    }
+
+    // Compute sizes
+    let seg_cmd_size: I64 = SEGMENT_CMD_SIZE + nsects * SECTION_64_SIZE
+    let symtab_cmd_size: I64 = SYMTAB_CMD_SIZE
+    let ncmds: I64 = 2  // LC_SEGMENT_64 + LC_SYMTAB
+    let sizeofcmds: I64 = seg_cmd_size + symtab_cmd_size
+
+    let text_off: I64 = MACH_HEADER_SIZE + sizeofcmds
+    let text_size: I64 = text_bytes.len() as I64
+
+    let data_off: I64 = align4(text_off + text_size)
+    let data_size: I64 = data_bytes.len() as I64
+
+    let reloc_off: I64 = align4(data_off + data_size)
+    let nrelocs: I64 = relocs.len() as I64
+    let reloc_size: I64 = nrelocs * RELOC_INFO_SIZE
+
+    let sym_count: I64 = sc + 1  // +1 for null symbol
+    let symtab_off: I64 = align4(reloc_off + reloc_size)
+    let symtab_size: I64 = sym_count * NLIST_64_SIZE
+
+    let strtab_off: I64 = symtab_off + symtab_size
+    let strtab_size: I64 = strtab.len() as I64
+
+    // === mach_header_64 (item 1.1) ===
+    write_u32(buf, MH_MAGIC_64)
+    write_u32(buf, cpu_type)
+    write_u32(buf, cpu_subtype)
+    write_u32(buf, MH_OBJECT)
+    write_u32(buf, ncmds)
+    write_u32(buf, sizeofcmds)
+    write_u32(buf, 0)  // flags
+    write_u32(buf, 0)  // reserved
+
+    // === LC_SEGMENT_64 (items 1.2–1.3) ===
+    write_u32(buf, LC_SEGMENT_64)
+    write_u32(buf, seg_cmd_size)
+    write_padded_16(buf, "")  // segname (empty for .o)
+    write_u64(buf, 0)         // vmaddr
+    write_u64(buf, text_size + data_size) // vmsize
+    write_u64(buf, text_off)  // fileoff
+    write_u64(buf, text_size + data_size) // filesize
+    write_u32(buf, 7)         // maxprot (rwx)
+    write_u32(buf, 7)         // initprot
+    write_u32(buf, nsects)
+    write_u32(buf, 0)         // flags
+
+    // section_64: __text (item 1.3)
+    write_padded_16(buf, "__text")
+    write_padded_16(buf, "__TEXT")
+    write_u64(buf, 0)         // addr
+    write_u64(buf, text_size) // size
+    write_u32(buf, text_off)  // offset
+    write_u32(buf, 4)         // align (2^4 = 16)
+    write_u32(buf, reloc_off) // reloff
+    write_u32(buf, nrelocs)   // nreloc
+    write_u32(buf, S_REGULAR | S_ATTR_PURE_INSTRUCTIONS | S_ATTR_SOME_INSTRUCTIONS)
+    write_u32(buf, 0)         // reserved1
+    write_u32(buf, 0)         // reserved2
+    write_u32(buf, 0)         // reserved3
+
+    // section_64: __data (if present)
+    if has_data > 0 {
+        write_padded_16(buf, "__data")
+        write_padded_16(buf, "__DATA")
+        write_u64(buf, text_size)  // addr (follows text in vmaddr)
+        write_u64(buf, data_size)
+        write_u32(buf, data_off)
+        write_u32(buf, 3)         // align (2^3 = 8)
+        write_u32(buf, 0)         // reloff (no data relocs for now)
+        write_u32(buf, 0)         // nreloc
+        write_u32(buf, S_REGULAR)
+        write_u32(buf, 0)
+        write_u32(buf, 0)
+        write_u32(buf, 0)
+    }
+
+    // === LC_SYMTAB (items 1.4–1.5) ===
+    write_u32(buf, LC_SYMTAB)
+    write_u32(buf, symtab_cmd_size)
+    write_u32(buf, symtab_off)
+    write_u32(buf, sym_count)
+    write_u32(buf, strtab_off)
+    write_u32(buf, strtab_size)
+
+    // === Section data ===
+    // __text bytes
+    write_bytes(buf, text_bytes)
+    pad_to(buf, data_off)
+
+    // __data bytes
+    if has_data > 0 {
+        write_bytes(buf, data_bytes)
+    }
+    pad_to(buf, reloc_off)
+
+    // === Relocation entries (item 1.6) ===
+    for i in 0 to nrelocs {
+        let rel: MachoReloc = relocs.get(i)
+        // relocation_info: r_address (4), packed r_info (4)
+        write_u32(buf, rel.address)
+        // r_info: symbolnum(24) | pcrel(1) | length(2) | extern(1) | type(4)
+        let r_info: I64 = (rel.symbol_idx & 0xFFFFFF)
+            | ((rel.pcrel & 1) << 24)
+            | ((rel.length & 3) << 25)
+            | ((rel.is_extern & 1) << 27)
+            | ((rel.reloc_type & 0xF) << 28)
+        write_u32(buf, r_info)
+    }
+    pad_to(buf, symtab_off)
+
+    // === Symbol table (item 1.4) ===
+    // null symbol
+    write_u32(buf, 0)   // n_strx
+    buf.push(0)         // n_type
+    buf.push(0)         // n_sect
+    write_u16(buf, 0)   // n_desc
+    write_u64(buf, 0)   // n_value
+
+    for i in 0 to sc {
+        let sym: MachoSymbol = symbols.get(i)
+        let n_strx: I64 = if sym.name != "" and str_offsets.has(sym.name) { str_offsets.get(sym.name) } else { 0 }
+        write_u32(buf, n_strx)
+        // n_type
+        let n_type: I64 = if sym.section > 0 {
+            if sym.is_external > 0 { N_SECT | N_EXT } else { N_SECT }
+        } else {
+            if sym.is_external > 0 { N_EXT } else { N_UNDF }
+        }
+        buf.push(n_type & 0xFF)
+        // n_sect (1-indexed, 0 = NO_SECT)
+        buf.push(sym.section & 0xFF)
+        // n_desc
+        write_u16(buf, 0)
+        // n_value
+        write_u64(buf, sym.value)
+    }
+
+    // === String table (item 1.5) ===
+    write_bytes(buf, strtab)
+
+    return buf
+}
+
+// ============================================================================
+// Byte-writing helpers
+// ============================================================================
+
+func write_u16(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+    buf.push((v >> 16) & 0xFF)
+    buf.push((v >> 24) & 0xFF)
+}
+
+func write_u64(buf: List[I64], v: I64) {
+    write_u32(buf, v)
+    write_u32(buf, v >> 32)
+}
+
+func write_bytes(buf: List[I64], src: List[I64]) {
+    let n: I64 = src.len() as I64
+    for i in 0 to n { buf.push(src.get(i)) }
+}
+
+func write_str_null(buf: List[I64], s: Str) {
+    let n: I64 = s.len() as I64
+    let s_ptr: I64 = s as I64
+    for i in 0 to n {
+        let b: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        buf.push((b + 256) % 256)
+    }
+    buf.push(0)
+}
+
+func write_padded_16(buf: List[I64], s: Str) {
+    let n: I64 = s.len() as I64
+    let limit: I64 = if n > 16 { 16 } else { n }
+    let s_ptr: I64 = s as I64
+    for i in 0 to limit {
+        let b: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        buf.push((b + 256) % 256)
+    }
+    for _ in 0 to (16 - limit) { buf.push(0) }
+}
+
+func align4(v: I64) -> I64 {
+    return (v + 3) & (3 ^ (-1 as I64))
+}
+
+func pad_to(buf: List[I64], target: I64) {
+    let current: I64 = buf.len() as I64
+    if current < target {
+        for _ in 0 to (target - current) { buf.push(0) }
+    }
+}

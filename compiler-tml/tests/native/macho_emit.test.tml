@@ -1,0 +1,59 @@
+//! Tests for Mach-O 64-bit object file emission.
+
+use test::{assert, assert_eq}
+use compiler::native::macho_emit::*
+use std::collections::list::List
+
+func read_u32(buf: List[I64], off: I64) -> I64 {
+    return buf.get(off) | (buf.get(off + 1) << 8) | (buf.get(off + 2) << 16) | (buf.get(off + 3) << 24)
+}
+
+@test func test_macho_magic() {
+    let text = List[I64]::new(4)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    let obj: List[I64] = write_macho64_obj(CPU_TYPE_X86_64, CPU_SUBTYPE_ALL, text, List[I64]::new(0), List[MachoSymbol]::new(0), List[MachoReloc]::new(0))
+    assert_eq(read_u32(obj, 0) as I32, 0xFEEDFACF as I32)
+}
+
+@test func test_macho_x86_cpu() {
+    let text = List[I64]::new(1)
+    text.push(0xC3)
+    let obj: List[I64] = write_macho64_obj(CPU_TYPE_X86_64, CPU_SUBTYPE_ALL, text, List[I64]::new(0), List[MachoSymbol]::new(0), List[MachoReloc]::new(0))
+    assert_eq(read_u32(obj, 4) as I32, CPU_TYPE_X86_64 as I32)
+    assert_eq(read_u32(obj, 12) as I32, MH_OBJECT as I32)
+}
+
+@test func test_macho_arm64_cpu() {
+    let text = List[I64]::new(4)
+    for _ in 0 to 4 { text.push(0) }
+    let obj: List[I64] = write_macho64_obj(CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_ALL, text, List[I64]::new(0), List[MachoSymbol]::new(0), List[MachoReloc]::new(0))
+    assert_eq(read_u32(obj, 4) as I32, CPU_TYPE_ARM64 as I32)
+}
+
+@test func test_macho_with_symbol() {
+    let text = List[I64]::new(4)
+    for _ in 0 to 4 { text.push(0xCC) }
+    let syms = List[MachoSymbol]::new(1)
+    syms.push(MachoSymbol {
+        name: "main",
+        section: 1 as I64,
+        value: 0 as I64,
+        is_external: 1 as I64
+    })
+    let obj: List[I64] = write_macho64_obj(CPU_TYPE_X86_64, CPU_SUBTYPE_ALL, text, List[I64]::new(0), syms, List[MachoReloc]::new(0))
+    // ncmds at offset 16: 2 (LC_SEGMENT_64 + LC_SYMTAB)
+    assert_eq(read_u32(obj, 16) as I32, 2)
+    assert(obj.len() as I64 > 100)
+}
+
+@test func test_macho_with_data() {
+    let text = List[I64]::new(4)
+    for _ in 0 to 4 { text.push(0x90) }
+    let data = List[I64]::new(8)
+    for _ in 0 to 8 { data.push(0x42) }
+    let obj: List[I64] = write_macho64_obj(CPU_TYPE_X86_64, CPU_SUBTYPE_ALL, text, data, List[MachoSymbol]::new(0), List[MachoReloc]::new(0))
+    assert(obj.len() as I64 > 150)
+}
