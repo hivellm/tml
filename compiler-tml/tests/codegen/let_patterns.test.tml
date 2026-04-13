@@ -1,0 +1,64 @@
+//! Tests for let-pattern codegen: nested enum, guard, or-pattern, nested struct.
+//! Phase 30f.
+
+use test::{assert, assert_eq}
+use compiler::codegen::emit_let::*
+use std::collections::list::List
+
+@test func test_tuple_destruct() {
+    let ty: Str = "%tuple_i64_i64"
+    let ir: Str = emit_tuple_destruct(10, 5, ty, 2)
+    assert(ir.contains("extractvalue"))
+    assert(ir.contains("%r10"))
+    assert(ir.contains("%r11"))
+}
+
+@test func test_struct_destruct() {
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("ptr")
+    let ir: Str = emit_struct_destruct(20, 5, "%struct.Point", 2, types)
+    assert(ir.contains("getelementptr inbounds %struct.Point"))
+    assert(ir.contains("load i64"))
+    assert(ir.contains("load ptr"))
+}
+
+@test func test_let_else() {
+    let ir: Str = emit_let_else(30, 10, "%struct.Maybe", 0, "ok", "else_block")
+    assert(ir.contains("extractvalue %struct.Maybe"))
+    assert(ir.contains("icmp ne i32"))
+    assert(ir.contains("label %ok"))
+    assert(ir.contains("label %else_block"))
+}
+
+@test func test_nested_enum() {
+    let ir: Str = emit_nested_enum_destruct(40, 15, "%struct.Maybe", 0, "inner_ok", "else")
+    assert(ir.contains("extractvalue %struct.Maybe"))
+    assert(ir.contains("label %inner_ok"))
+}
+
+@test func test_guard_check() {
+    let ir: Str = emit_guard_check(50, "pass", "fail")
+    assert(ir.contains("br i1 %r50"))
+    assert(ir.contains("label %pass"))
+    assert(ir.contains("label %fail"))
+}
+
+@test func test_or_pattern() {
+    let ir: Str = emit_or_pattern(60, 20, "%struct.Color", 0, 2, "matched", "no_match")
+    assert(ir.contains("extractvalue %struct.Color"))
+    assert(ir.contains("icmp eq i32"))
+    assert(ir.contains("label %matched"))
+    assert(ir.contains("label %no_match"))
+    assert(ir.contains("try_b_60"))
+}
+
+@test func test_nested_struct_destruct() {
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("i64")
+    let ir: Str = emit_nested_struct_destruct(70, 5, "%struct.Wrapper", 1, "%struct.Point", 2, types)
+    assert(ir.contains("getelementptr inbounds %struct.Wrapper"))
+    assert(ir.contains("getelementptr inbounds %struct.Point"))
+    assert(ir.contains("load i64"))
+}

@@ -90,3 +90,99 @@ pub func emit_let_else(
 pub func emit_let_else_payload(result: I64, enum_val: I64, enum_ty: Str) -> Str {
     return "  " + reg(result) + " = extractvalue " + enum_ty + " " + reg(enum_val) + ", 1\n"
 }
+
+// ============================================================================
+// Nested enum pattern (phase 30f item 1.2)
+// ============================================================================
+
+/// Emit nested enum destructuring: `let Just(Just(x)) = v else { ... }`.
+/// After outer let-else succeeds, extract inner payload and recurse.
+pub func emit_nested_enum_destruct(
+    result_base: I64,
+    outer_payload: I64,
+    inner_enum_ty: Str,
+    inner_expected_variant: I64,
+    ok_bb: Str,
+    else_bb: Str
+) -> Str {
+    // Same as let-else but on the inner payload
+    return emit_let_else(result_base, outer_payload, inner_enum_ty, inner_expected_variant, ok_bb, else_bb)
+}
+
+// ============================================================================
+// Guard pattern (phase 30f item 1.3)
+// ============================================================================
+
+/// Emit guard condition after pattern bindings: `let x if x > 0 = expr else { ... }`.
+/// The guard expression result (i1) determines whether to continue or branch to else.
+pub func emit_guard_check(
+    guard_val: I64,
+    ok_bb: Str,
+    else_bb: Str
+) -> Str {
+    return "  br i1 " + reg(guard_val) + ", label %" + ok_bb + ", label %" + else_bb + "\n"
+}
+
+// ============================================================================
+// Or-pattern (phase 30f item 1.4)
+// ============================================================================
+
+/// Emit or-pattern: `let A | B = v else { ... }`.
+/// Try first alternative; if discriminant doesn't match, try second.
+pub func emit_or_pattern(
+    result_base: I64,
+    enum_val: I64,
+    enum_ty: Str,
+    variant_a: I64,
+    variant_b: I64,
+    ok_bb: Str,
+    else_bb: Str
+) -> Str {
+    let disc_reg: Str = reg(result_base)
+    let cmp_a: Str = reg(result_base + 1)
+    let cmp_b: Str = reg(result_base + 2)
+    let try_b_bb: Str = "try_b_" + result_base.to_string()
+
+    var s: Str = ""
+    s = s + "  " + disc_reg + " = extractvalue " + enum_ty + " " + reg(enum_val) + ", 0\n"
+    // Try variant A
+    s = s + "  " + cmp_a + " = icmp eq i32 " + disc_reg + ", " + variant_a.to_string() + "\n"
+    s = s + "  br i1 " + cmp_a + ", label %" + ok_bb + ", label %" + try_b_bb + "\n"
+    // Try variant B
+    s = s + try_b_bb + ":\n"
+    s = s + "  " + cmp_b + " = icmp eq i32 " + disc_reg + ", " + variant_b.to_string() + "\n"
+    s = s + "  br i1 " + cmp_b + ", label %" + ok_bb + ", label %" + else_bb + "\n"
+    return s
+}
+
+// ============================================================================
+// Nested struct pattern (phase 30f item 1.5)
+// ============================================================================
+
+/// Emit nested struct destructuring from a pointer.
+/// Each field sub-pattern loads the field value via GEP from the source pointer.
+/// This is the recursive version that works on struct-within-struct patterns.
+pub func emit_nested_struct_destruct(
+    result_base: I64,
+    src_ptr: I64,
+    outer_struct_ty: Str,
+    outer_field_index: I64,
+    inner_struct_ty: Str,
+    inner_field_count: I64,
+    inner_field_types: List[Str]
+) -> Str {
+    var s: Str = ""
+    // GEP to the outer field (which is the inner struct)
+    let outer_gep: Str = reg(result_base)
+    s = s + "  " + outer_gep + " = getelementptr inbounds " + outer_struct_ty + ", ptr " + reg(src_ptr) + ", i32 0, i32 " + outer_field_index.to_string() + "\n"
+
+    // Now destructure the inner struct from the field pointer
+    for i in 0 to inner_field_count {
+        let gep_reg: Str = reg(result_base + 1 + i * 2)
+        let load_reg: Str = reg(result_base + 1 + i * 2 + 1)
+        let ft: Str = inner_field_types.get(i)
+        s = s + "  " + gep_reg + " = getelementptr inbounds " + inner_struct_ty + ", ptr " + outer_gep + ", i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + load_reg + " = load " + ft + ", ptr " + gep_reg + "\n"
+    }
+    return s
+}
