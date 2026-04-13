@@ -18,6 +18,12 @@ func tml_exe() -> Str {
     return root + "/build/debug/bin/tml.exe"
 }
 
+/// Returns the bin directory containing tml.exe and its DLLs.
+func tml_bin_dir() -> Str {
+    let root: Str = os::current_dir()
+    return root + "/build/debug/bin"
+}
+
 // ============================================================================
 // Symbol lookup tests
 // ============================================================================
@@ -25,7 +31,7 @@ func tml_exe() -> Str {
 @test
 @slow_test
 func test_doc_list_type() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("List")
         .output()
@@ -42,7 +48,7 @@ func test_doc_list_type() -> I32 {
 @test
 @slow_test
 func test_doc_hashmap_type() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("HashMap")
         .output()
@@ -59,7 +65,7 @@ func test_doc_hashmap_type() -> I32 {
 @test
 @slow_test
 func test_doc_str_type() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("Str")
         .output()
@@ -76,7 +82,7 @@ func test_doc_str_type() -> I32 {
 @test
 @slow_test
 func test_doc_qualified_path() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("core::str::split")
         .output()
@@ -93,7 +99,7 @@ func test_doc_qualified_path() -> I32 {
 @test
 @slow_test
 func test_doc_method_lookup() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("HashMap::get")
         .output()
@@ -110,7 +116,7 @@ func test_doc_method_lookup() -> I32 {
 @test
 @slow_test
 func test_doc_exits_zero_on_success() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("Mutex")
         .output()
@@ -130,7 +136,7 @@ func test_doc_exits_zero_on_success() -> I32 {
 @test
 @slow_test
 func test_doc_help_flag() -> I32 {
-    let result = Command::new(tml_exe())
+    let result = Command::new(tml_exe()).current_dir(tml_bin_dir())
         .arg("doc")
         .arg("--help")
         .output()
