@@ -1316,7 +1316,23 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         }
     }
 
-    auto link_result = cli::link_objects(all_object_files, exe_path, g_clang_path, link_opts);
+    // Link with retry — transient "permission denied" on Windows from antivirus/indexer
+    // scanning the output path between exe removal and LLD write.
+    cli::LinkResult link_result;
+    for (int link_retry = 0; link_retry < 3; ++link_retry) {
+        link_result = cli::link_objects(all_object_files, exe_path, g_clang_path, link_opts);
+        if (link_result.success)
+            break;
+        // Only retry on permission-denied type errors
+        if (link_result.error_message.find("permission denied") == std::string::npos &&
+            link_result.error_message.find("Permission denied") == std::string::npos &&
+            link_result.error_message.find("failed to write") == std::string::npos)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // Try removing the exe again before retry
+        std::error_code retry_ec;
+        fs::remove(exe_path, retry_ec);
+    }
 
     auto end = Clock::now();
     result.compile_time_us =
