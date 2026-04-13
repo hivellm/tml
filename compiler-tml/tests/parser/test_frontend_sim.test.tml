@@ -1,11 +1,11 @@
-use test
-use compiler::lexer::lexer::tokenize
-use compiler::token::Token
-use compiler::parser::parse_module::parse_module
-use compiler::parser::common::ParseFailure
-use compiler::ast::nodes::Module
-use std::collections::list::List
 
+use compiler::ast::nodes::Module
+use compiler::lexer::lexer::tokenize
+use compiler::parser::common::ParseFailure
+use compiler::parser::parse_module::parse_module
+use compiler::token::Token
+use std::collections::list::List
+use test
 @test
 func test_parse_simple() -> I32 {
     let source: Str = "func main() {}"

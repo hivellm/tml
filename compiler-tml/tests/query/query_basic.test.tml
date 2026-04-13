@@ -1,38 +1,11 @@
 //! Unit tests for the query system — keys, cache, context, incremental.
 //! Phase 17a — item 4.1.
 
-use test::assert
-use test::assert_eq
-use compiler::query::key::QueryKey
-use compiler::query::key::QueryKind
-use compiler::query::key::ReadSourceKey
-use compiler::query::key::TokenizeKey
-use compiler::query::key::ParseModuleKey
-use compiler::query::key::CodegenUnitKey
-use compiler::query::key::query_kind
-use compiler::query::key::query_kind_name
-use compiler::query::key::query_file_path
-use compiler::query::key::query_cache_key
-use compiler::query::cache::QueryCache
-use compiler::query::cache::Fingerprint
-use compiler::query::cache::cache_new
-use compiler::query::cache::cache_get
-use compiler::query::cache::cache_store
-use compiler::query::cache::cache_is_green
-use compiler::query::cache::fingerprint
-use compiler::query::cache::empty_fingerprint
-use compiler::query::cache::fingerprints_equal
-use compiler::query::context::QueryContext
-use compiler::query::context::context_new
-use compiler::query::context::context_new_traced
-use compiler::query::context::force
-use compiler::query::context::context_stats
-use compiler::query::incremental::IncrementalState
-use compiler::query::incremental::incr_new
-use compiler::query::incremental::incr_check_file
-use compiler::query::incremental::incr_is_green
-use compiler::query::incremental::incr_is_red
-use compiler::query::incremental::incr_stats
+use test::{assert, assert_eq}
+use compiler::query::key::*
+use compiler::query::cache::*
+use compiler::query::context::*
+use compiler::query::incremental::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

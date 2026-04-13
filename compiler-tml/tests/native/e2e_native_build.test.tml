@@ -6,25 +6,12 @@
 //! Writing to disk and linking requires std::file which has K001 import
 //! issues, so this test verifies the in-memory output only.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::ValueId
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::ConstantInst
-use compiler::mir::inst::MirConstant
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::ReturnTerm
-use compiler::mir::block::block_new
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::mir_func_new
-use compiler::mir::module::mir_module_new
-use compiler::native::pipeline::compile_module_native
-use compiler::native::pipeline::NativeCompileResult
+use test::{assert, assert_eq}
+use compiler::mir::types::*
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::mir::module::*
+use compiler::native::pipeline::*
 use compiler::source::loc_new
 use compiler::source::span_new
 use std::collections::list::List

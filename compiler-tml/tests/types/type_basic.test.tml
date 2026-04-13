@@ -1,36 +1,13 @@
 //! Basic tests for compiler::types::ty — Type enum, equality, display,
 //! size/align, predicates.
 
-use test
-use compiler::types::ty::Type
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_f64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_never
-use compiler::types::ty::make_ref
-use compiler::types::ty::make_ptr
-use compiler::types::ty::make_array
-use compiler::types::ty::types_equal
-use compiler::types::ty::type_to_str
-use compiler::types::ty::type_size
-use compiler::types::ty::type_align
-use compiler::types::ty::prim_kind_eq
-use compiler::types::ty::prim_kind_to_str
-use compiler::types::ty::is_never
-use compiler::types::ty::is_unit
-use compiler::types::ty::is_primitive
-use compiler::types::ty::is_numeric
-use compiler::types::ty::is_integer
-use compiler::types::ty::is_float
 
 // ============================================================================
 // Primitive factories + equality
 // ============================================================================
 
+use compiler::types::ty::*
+use test
 @test
 func test_primitive_equality() -> I32 {
     assert(types_equal(make_i32(), make_i32()))

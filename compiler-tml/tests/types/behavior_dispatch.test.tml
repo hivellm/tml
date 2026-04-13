@@ -6,57 +6,24 @@
 //!
 //! Phase 14d — items 5.2, 6.1, 6.2 (diagnostic-level differential testing).
 
-use test
-use compiler::types::ty::Type
-use compiler::types::ty::PrimitiveKind
-use compiler::types::ty::make_i32
-use compiler::types::ty::make_i64
-use compiler::types::ty::make_str
-use compiler::types::ty::make_bool
-use compiler::types::ty::make_unit
-use compiler::types::ty::make_named_simple
-use compiler::types::ty::make_ref
-use compiler::types::ty::types_equal
-use compiler::types::ty::type_to_str
 
 // Import all behavior system APIs to force full type resolution
-use compiler::types::behaviors::registry::BehaviorRegistry
-use compiler::types::behaviors::registry::ImplBlock
-use compiler::types::behaviors::registry::registry_new
-use compiler::types::behaviors::registry::register_behavior
-use compiler::types::behaviors::registry::register_impl_block
-use compiler::types::behaviors::registry::is_reserved_behavior
-use compiler::types::behaviors::registry::get_impl_blocks
-use compiler::types::behaviors::registry::find_impl
-use compiler::types::behaviors::registry::find_method_in_impls
-use compiler::types::behaviors::solver::resolve_behavior
-use compiler::types::behaviors::solver::check_bounds
-use compiler::types::behaviors::solver::check_super_behaviors
-use compiler::types::behaviors::solver::resolve_associated_type
-use compiler::types::behaviors::solver::check_coherence
-use compiler::types::behaviors::dispatch::MethodResolution
-use compiler::types::behaviors::dispatch::MethodSource
-use compiler::types::behaviors::dispatch::dispatch_method
-use compiler::types::coercion::CoercionKind
-use compiler::types::coercion::find_coercion
-use compiler::types::coercion::desugar_op_final
-use compiler::types::coercion::normalize_type
-use compiler::types::pipeline::TypeCheckResult
-use compiler::types::pipeline::check_expression
-use compiler::types::pipeline::has_type_errors
-use compiler::types::pipeline::total_error_count
-use compiler::types::env::TypeEnv
-use compiler::types::env::env_new
-use compiler::types::infer::unify::InferCtx
-use compiler::types::infer::unify::infer_ctx_new
-use compiler::types::checker::errors::TypeError
-use compiler::types::checker::errors::dummy_span
-use std::collections::list::List
 
 // ============================================================================
 // Self-hosting validation: all modules type-check
 // ============================================================================
 
+use compiler::types::behaviors::dispatch::{MethodResolution, MethodSource, dispatch_method}
+use compiler::types::behaviors::registry::*
+use compiler::types::behaviors::solver::*
+use compiler::types::checker::errors::{TypeError, dummy_span}
+use compiler::types::coercion::*
+use compiler::types::env::{TypeEnv, env_new}
+use compiler::types::infer::unify::{InferCtx, infer_ctx_new}
+use compiler::types::pipeline::*
+use compiler::types::ty::*
+use std::collections::list::List
+use test
 @test
 func test_behavior_modules_typecheck() -> I32 {
     // If we got here, all behavior system modules type-checked successfully.

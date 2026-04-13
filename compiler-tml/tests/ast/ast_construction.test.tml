@@ -7,17 +7,14 @@
 // null pointer on struct layout). Only enum variant dispatch and
 // simple I64/Bool field access are tested here.
 
-use test
-use compiler::ast::common::AstId
-use compiler::ast::common::ast_id_new
-use compiler::ast::common::LiteralKind
-use compiler::ast::exprs::UnaryOp
-use compiler::ast::exprs::BinaryOp
 
 // ---------------------------------------------------------------------------
 // common.tml — AstId, LiteralKind
 // ---------------------------------------------------------------------------
 
+use compiler::ast::common::{AstId, ast_id_new, LiteralKind}
+use compiler::ast::exprs::{UnaryOp, BinaryOp}
+use test
 @test
 func test_ast_id_new() -> I32 {
     let id: AstId = ast_id_new(42)

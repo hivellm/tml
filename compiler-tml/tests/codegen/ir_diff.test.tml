@@ -7,34 +7,14 @@
 //!
 //! Phase 16a — item 6.3.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::mir::types::MirFunctionType
-use compiler::mir::types::MirPointerType
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::MirFuncParam
-use compiler::mir::module::MirStructDef
-use compiler::mir::module::MirEnumDef
-use compiler::mir::module::MirEnumVariantDef
-use compiler::mir::module::mir_module_new
-use compiler::mir::module::mir_func_new
-use compiler::codegen::config::CodegenConfig
-use compiler::codegen::config::OptLevel
-use compiler::codegen::emit_type::emit_type
-use compiler::codegen::emit_type::emit_type_for_data
-use compiler::codegen::emit_type::emit_struct_typedef
-use compiler::codegen::emit_type::emit_enum_typedef
-use compiler::codegen::emit_func::emit_func_decl
-use compiler::codegen::emit_func::emit_extern_decl
+use test::{assert, assert_eq}
+use compiler::mir::types::*
+use compiler::mir::module::*
+use compiler::codegen::config::*
+use compiler::codegen::emit_type::*
+use compiler::codegen::emit_func::*
 use compiler::codegen::emit_module::emit_module
-use compiler::codegen::layout::compute_struct_layout
-use compiler::codegen::layout::StructLayout
+use compiler::codegen::layout::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

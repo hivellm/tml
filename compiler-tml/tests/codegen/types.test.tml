@@ -1,37 +1,17 @@
 //! Unit tests for codegen type emission.
 //! Phase 16a — item 6.1.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::mir::types::MirArrayType
-use compiler::mir::types::MirTupleType
-use compiler::mir::types::MirFunctionType
-use compiler::mir::types::MirPointerType
-use compiler::mir::types::MirSliceType
-use compiler::mir::types::MirVectorType
-use compiler::mir::types::MirDynType
-use compiler::codegen::emit_type::emit_type
-use compiler::codegen::emit_type::emit_type_for_data
-use compiler::codegen::emit_type::emit_struct_typedef
-use compiler::codegen::emit_type::emit_enum_typedef
-use compiler::codegen::emit_type::compute_enum_body
-use compiler::codegen::emit_type::llvm_type_byte_size
-use compiler::codegen::emit_type::llvm_type_alignment
-use compiler::codegen::emit_type::mir_to_llvm
-use compiler::codegen::types::LlvmType
-use compiler::codegen::types::llvm_type_to_str
-use std::collections::list::List
-use core::alloc::heap::Heap
 
 // ============================================================================
 // Primitive type emission
 // ============================================================================
 
+use compiler::codegen::emit_type::*
+use compiler::codegen::types::{LlvmType, llvm_type_to_str}
+use compiler::mir::types::*
+use core::alloc::heap::Heap
+use std::collections::list::List
+use test::{assert, assert_eq}
 @test func test_emit_i8() {
     assert_eq(emit_type(MirType::Primitive(MirPrimitive::I8)), "i8")
 }

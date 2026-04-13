@@ -13,13 +13,11 @@
 // That is tracked separately; tag-level round-trip is sufficient to verify
 // the C1/C2/C5 fixes.
 
-use test
-use compiler::serial::writer::BinaryWriter
-use compiler::serial::reader::BinaryReader
-use compiler::token::TokenKind
-use compiler::token::token_kind_to_tag
-use compiler::token::tag_to_token_kind
 
+use compiler::serial::reader::BinaryReader
+use compiler::serial::writer::BinaryWriter
+use compiler::token::{TokenKind, token_kind_to_tag, tag_to_token_kind}
+use test
 @test
 func test_token_kind_tag_stable() -> I32 {
     assert_eq(token_kind_to_tag(TokenKind::Eof), 0)

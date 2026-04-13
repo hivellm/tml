@@ -5,30 +5,21 @@
 //!
 //! Phase 17c — items 1.1, 3.1.
 
-use test::assert
-use test::assert_eq
+use test::{assert, assert_eq}
 
 // Verify all modules are importable (type-check proves linkability)
-use compiler::cli::dispatcher::help_text
-use compiler::cli::dispatcher::dispatch
-use compiler::codegen::types::LlvmType
-use compiler::codegen::types::llvm_type_to_str
+use compiler::cli::dispatcher::*
+use compiler::codegen::types::*
 use compiler::codegen::emit_type::emit_type
-use compiler::codegen::emit_inst::reg
-use compiler::codegen::emit_inst::block_label
+use compiler::codegen::emit_inst::*
 use compiler::codegen::emit_call::cc_for_func
 use compiler::codegen::emit_method::mangle_inherent
 use compiler::codegen::emit_generic::mir_type_to_mangle
-use compiler::query::key::QueryKey
-use compiler::query::key::QueryKind
-use compiler::query::key::query_kind_name
-use compiler::query::cache::fingerprint
-use compiler::query::cache::fingerprints_equal
+use compiler::query::key::*
+use compiler::query::cache::*
 use compiler::query::context::context_new
-use compiler::query::incremental::incr_new
-use compiler::query::incremental::incr_stats
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
+use compiler::query::incremental::*
+use compiler::mir::types::*
 
 // ============================================================================
 // Module integration tests

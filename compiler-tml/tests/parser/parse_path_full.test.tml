@@ -1,10 +1,10 @@
 //! Test parse_type_path_full (returns tuple).
 
-use test
-use compiler::lexer::lexer::tokenize
-use compiler::ast::nodes::TypePath
-use compiler::parser::parse_type::parse_type_path_full
 
+use compiler::ast::nodes::TypePath
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_type::parse_type_path_full
+use test
 @test
 func test_parse_path_full() -> I32 {
     let tokens = tokenize("I32", "test.tml")

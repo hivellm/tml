@@ -1,28 +1,10 @@
 //! Unit tests for MachIR data types, stack allocation, and frame layout.
 //! Phase 18a — item 5.1.
 
-use test::assert
-use test::assert_eq
-use compiler::native::machir::VirtualReg
-use compiler::native::machir::Operand
-use compiler::native::machir::MachInst
-use compiler::native::machir::MachMov
-use compiler::native::machir::MachBinOp
-use compiler::native::machir::MachUnaryOp
-use compiler::native::machir::MachRet
-use compiler::native::machir::MachBlock
-use compiler::native::machir::MachFunc
-use compiler::native::machir::mach_block_new
-use compiler::native::machir::mach_func_new
-use compiler::native::machir::fresh_vreg
-use compiler::native::machir::REG_RBP
-use compiler::native::machir::REG_RSP
-use compiler::native::stack_alloc::StackAllocation
-use compiler::native::stack_alloc::allocate_stack
-use compiler::native::stack_alloc::get_slot_offset
-use compiler::native::x86::frame::compute_frame_size
-use compiler::native::x86::frame::emit_prologue
-use compiler::native::x86::frame::emit_epilogue
+use test::{assert, assert_eq}
+use compiler::native::machir::*
+use compiler::native::stack_alloc::*
+use compiler::native::x86::frame::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 

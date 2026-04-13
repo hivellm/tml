@@ -1,24 +1,16 @@
 //! Unit tests for struct layout computation.
 //! Phase 16a — item 6.2.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::codegen::layout::StructLayout
-use compiler::codegen::layout::FieldLayout
-use compiler::codegen::layout::compute_struct_layout
-use compiler::codegen::layout::compute_size
-use compiler::codegen::layout::compute_alignment
-use compiler::codegen::layout::emit_struct_def
-use std::collections::list::List
-use core::alloc::heap::Heap
 
 // ============================================================================
 // Primitive sizes
 // ============================================================================
 
+use compiler::codegen::layout::*
+use compiler::mir::types::{MirType, MirPrimitive, MirStructType}
+use core::alloc::heap::Heap
+use std::collections::list::List
+use test::{assert, assert_eq}
 @test func test_size_i8() {
     assert_eq(compute_size(MirType::Primitive(MirPrimitive::I8)) as I32, 1)
 }

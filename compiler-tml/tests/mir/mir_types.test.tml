@@ -1,29 +1,14 @@
 //! Self-hosting validation for MIR modules.
 //! Phase 15c — items 6.1, 6.2, tail.
 
-use test
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::ValueId
-use compiler::mir::types::invalid_value
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::MirConstant
-use compiler::mir::inst::InstructionData
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::block_new
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::mir_func_new
-use compiler::mir::module::mir_module_new
-use compiler::mir::builder::core::MirBuilder
-use compiler::mir::builder::core::builder_new
-use compiler::mir::builder::core::build_mir
-use compiler::mir::builder::core::fresh_value
-use compiler::mir::printer::print_mir_module
-use compiler::mir::printer::print_mir_type
-use compiler::mir::printer::print_mir_func
 
+use compiler::mir::block::{BasicBlock, Terminator, block_new}
+use compiler::mir::builder::core::*
+use compiler::mir::inst::{MirInst, MirConstant, InstructionData}
+use compiler::mir::module::*
+use compiler::mir::printer::{print_mir_module, print_mir_type, print_mir_func}
+use compiler::mir::types::*
+use test
 @test
 func test_mir_modules_typecheck() -> I32 {
     assert(true)

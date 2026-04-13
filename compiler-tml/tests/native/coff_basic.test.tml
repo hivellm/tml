@@ -5,17 +5,8 @@
 //! (struct contains List[I64] + List[CoffRelocation] > 8 bytes).
 //! Tests below verify simple struct construction and the write_coff header bytes.
 
-use test::assert
-use test::assert_eq
-use compiler::native::coff_emit::CoffSymbol
-use compiler::native::coff_emit::CoffRelocation
-use compiler::native::coff_emit::make_func_symbol
-use compiler::native::coff_emit::make_extern_symbol
-use compiler::native::coff_emit::make_rel32_reloc
-use compiler::native::coff_emit::make_addr64_reloc
-use compiler::native::coff_emit::IMAGE_FILE_MACHINE_AMD64
-use compiler::native::coff_emit::IMAGE_REL_AMD64_REL32
-use compiler::native::coff_emit::IMAGE_REL_AMD64_ADDR64
+use test::{assert, assert_eq}
+use compiler::native::coff_emit::*
 
 // ============================================================================
 // Constants

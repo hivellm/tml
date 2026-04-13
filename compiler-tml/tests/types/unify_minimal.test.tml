@@ -1,13 +1,9 @@
 //! Minimal test to isolate crash in unify tests.
 
-use test
-use compiler::types::ty::Type
-use compiler::types::ty::make_i32
-use compiler::types::ty::prim_kind_eq
-use compiler::types::ty::PrimitiveKind
-use compiler::types::infer::unify::InferCtx
-use compiler::types::infer::unify::infer_ctx_new
 
+use compiler::types::infer::unify::{InferCtx, infer_ctx_new}
+use compiler::types::ty::*
+use test
 @test
 func test_just_ctx_new() -> I32 {
     let ctx = infer_ctx_new()

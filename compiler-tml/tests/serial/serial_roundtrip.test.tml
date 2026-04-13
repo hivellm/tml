@@ -9,17 +9,15 @@
 // as a known issue for resolution when the self-hosting lexer (phase13b)
 // provides its own serialization that bypasses the C++ TmlSourceLocation type.
 
-use test
-use compiler::serial::writer::BinaryWriter
-use compiler::serial::reader::BinaryReader
-use compiler::ast::serial::write_module_header
-use compiler::ast::serial::read_module_header
-use compiler::ast::serial::MODULE_MAGIC
 
 // ---------------------------------------------------------------------------
 // Module header round-trip
 // ---------------------------------------------------------------------------
 
+use compiler::ast::serial::{write_module_header, read_module_header, MODULE_MAGIC}
+use compiler::serial::reader::BinaryReader
+use compiler::serial::writer::BinaryWriter
+use test
 @test
 func test_module_header_roundtrip() -> I32 {
     let w = BinaryWriter::new(64)

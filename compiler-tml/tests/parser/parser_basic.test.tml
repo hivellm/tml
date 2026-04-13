@@ -4,15 +4,15 @@
 //! with `parse_module`. They verify that the parser returns `Ok` for
 //! valid input and the correct number of top-level declarations.
 
-use test
-use compiler::lexer::lexer::tokenize
-use compiler::parser::parse_module::parse_module
-use compiler::ast::decls::Decl
 
 // ============================================================================
 // Empty / trivial inputs
 // ============================================================================
 
+use compiler::ast::decls::Decl
+use compiler::lexer::lexer::tokenize
+use compiler::parser::parse_module::parse_module
+use test
 @test
 func test_parse_empty() -> I32 {
     let tokens = tokenize("", "test.tml")

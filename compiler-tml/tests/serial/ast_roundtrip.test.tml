@@ -1,10 +1,10 @@
 // Round-trip tests for binary serialization primitives.
 // Uses BinaryWriter/BinaryReader to test encoding used by AST and TypeEnv.
 
-use test
-use compiler::serial::writer::BinaryWriter
-use compiler::serial::reader::BinaryReader
 
+use compiler::serial::reader::BinaryReader
+use compiler::serial::writer::BinaryWriter
+use test
 @test
 func test_u8_roundtrip() -> I32 {
     let w = BinaryWriter::new(16)

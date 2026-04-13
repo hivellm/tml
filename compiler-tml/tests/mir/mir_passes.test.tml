@@ -2,40 +2,22 @@
 //! Tests the actual logic of each pass via main() to avoid @test framework
 //! crash with large struct returns (PassResult = 24 bytes).
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::ValueId
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::ConstantInst
-use compiler::mir::inst::CallInst
-use compiler::mir::inst::MirConstant
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::ReturnTerm
-use compiler::mir::block::BranchTerm
-use compiler::mir::block::CondBranchTerm
-use compiler::mir::block::block_new
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::MirFuncParam
-use compiler::mir::module::mir_func_new
-use compiler::mir::module::mir_module_new
+
+use compiler::hir::expr::HirBinOp
+use compiler::mir::passes::block_merge::run_block_merge
 use compiler::mir::passes::common::PassResult
-use compiler::mir::passes::analysis::find_reachable_blocks
-use compiler::mir::passes::analysis::compute_successors
+use compiler::mir::passes::const_fold::run_constant_folding
 use compiler::mir::passes::dce::run_dead_code_elimination
 use compiler::mir::passes::dfe::run_dead_function_elimination
 use compiler::mir::passes::uce::run_unreachable_code_elimination
-use compiler::mir::passes::block_merge::run_block_merge
-use compiler::mir::passes::const_fold::run_constant_folding
-use compiler::hir::expr::HirBinOp
-use compiler::source::loc_new
-use compiler::source::span_new
+use compiler::source::{loc_new, span_new}
 use std::collections::list::List
-
+use test::{assert, assert_eq}
+use compiler::mir::types::*
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::mir::module::*
+use compiler::mir::passes::analysis::*
 func test_span() -> compiler::source::SourceSpan {
     let loc = loc_new("<test>", 0, 0, 0, 0)
     return span_new(loc, loc)

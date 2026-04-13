@@ -1,29 +1,11 @@
 //! Unit tests for call emission, ABI classification, and method dispatch.
 //! Consolidated into 3 @test functions to avoid framework crash.
 
-use test::assert
-use test::assert_eq
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::codegen::emit_call::AbiClass
-use compiler::codegen::emit_call::abi_class
-use compiler::codegen::emit_call::abi_return_class
-use compiler::codegen::emit_call::cc_for_func
-use compiler::codegen::emit_call::is_win64_triple
-use compiler::codegen::emit_call::emit_try_operator
-use compiler::codegen::emit_method::mangle_type_name
-use compiler::codegen::emit_method::mangle_inherent
-use compiler::codegen::emit_method::mangle_behavior
-use compiler::codegen::emit_method::emit_inherent_call
-use compiler::codegen::emit_generic::mangle_generic_func
-use compiler::codegen::emit_generic::mir_type_to_mangle
-use compiler::codegen::emit_generic::GenericInstantiator
-use compiler::codegen::emit_generic::instantiator_new
-use compiler::codegen::emit_generic::is_instantiated
-use compiler::codegen::emit_generic::mark_instantiated
+use test::{assert, assert_eq}
+use compiler::mir::types::*
+use compiler::codegen::emit_call::*
+use compiler::codegen::emit_method::*
+use compiler::codegen::emit_generic::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

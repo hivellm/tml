@@ -1,19 +1,9 @@
 //! Unit tests for instruction emission.
 //! Phase 16b — item 7.1.
 
-use test::assert
-use test::assert_eq
-use compiler::codegen::emit_inst::reg
-use compiler::codegen::emit_inst::block_label
-use compiler::codegen::emit_inst::emit_block_header
-use compiler::codegen::emit_inst::emit_terminator
-use compiler::mir::block::Terminator
-use compiler::mir::block::ReturnTerm
-use compiler::mir::block::BranchTerm
-use compiler::mir::block::CondBranchTerm
-use compiler::mir::block::SwitchTerm
-use compiler::mir::block::SwitchArm
-use compiler::mir::block::UnreachableTerm
+use test::{assert, assert_eq}
+use compiler::codegen::emit_inst::*
+use compiler::mir::block::*
 use std::collections::list::List
 
 // ============================================================================
