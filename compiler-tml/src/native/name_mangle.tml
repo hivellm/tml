@@ -1,0 +1,179 @@
+//! TML name mangling — compatible with the C++ compiler's Itanium-inspired scheme.
+//!
+//! The mangling format matches `compiler/src/codegen/llvm/core/llvm_utils.cpp`
+//! so that native-compiled objects link correctly with C++-compiled runtime libraries.
+//!
+//! ## Format
+//!
+//! ```
+//! tml_N<len><seg>...<len><func>E[_<param_type_codes>]
+//! ```
+//!
+//! Examples:
+//!   `core::str::to_lowercase` → `tml_N4core3str12to_lowercaseE`
+//!   `core::str::repeat(Str, I64)` → `tml_N4core3str6repeatE_Sl`
+//!   `Str::split` in module `core::str` → `tml_N4core3str3Str5splitE`
+//!
+//! ## Type Codes (Itanium-inspired)
+//!
+//! | TML Type | Code | | TML Type | Code |
+//! |----------|------|-|----------|------|
+//! | I8       | a    | | U8       | h    |
+//! | I16      | s    | | U16      | t    |
+//! | I32      | i    | | U32      | j    |
+//! | I64      | l    | | U64      | m    |
+//! | I128     | x    | | U128     | y    |
+//! | F32      | f    | | F64      | d    |
+//! | Bool     | b    | | Char     | c    |
+//! | Str      | S    | | Unit     | v    |
+//! | Never    | z    | | Ref[T]   | R<T> |
+//! | Ptr[T]   | P<T> | | Named    | <len><name>[I<args>E] |
+//!
+//! Phase 20b+ — ABI compatibility layer.
+
+use compiler::mir::types::*
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Symbol mangling
+// ============================================================================
+
+/// Mangle a module-qualified function name in TML Itanium-inspired format.
+/// `mangle_symbol("core::str", "to_lowercase")` → `tml_N4core3str12to_lowercaseE`
+pub func mangle_symbol(module_path: Str, func_name: Str) -> Str {
+    if module_path == "" {
+        return "tml_" + func_name
+    }
+    var result: Str = "tml_N"
+    // Encode each :: separated path segment
+    let segments: List[Str] = split_path(module_path)
+    let sc: I64 = segments.len() as I64
+    for i in 0 to sc {
+        let seg: Str = segments.get(i)
+        if seg.len() as I64 > 0 {
+            result = result + (seg.len() as I64).to_string() + seg
+        }
+    }
+    // Encode function name as last segment
+    result = result + (func_name.len() as I64).to_string() + func_name
+    result = result + "E"
+    return result
+}
+
+/// Mangle a module-qualified function name with parameter type suffix.
+/// `mangle_symbol_typed("core::str", "repeat", [Str, I64])` → `tml_N4core3str6repeatE_Sl`
+pub func mangle_symbol_typed(module_path: Str, func_name: Str, param_types: List[MirType]) -> Str {
+    var result: Str = mangle_symbol(module_path, func_name)
+    let pc: I64 = param_types.len() as I64
+    if module_path != "" and pc > 0 {
+        result = result + "_"
+        for i in 0 to pc {
+            result = result + mir_type_code(param_types.get(i))
+        }
+    }
+    return result
+}
+
+/// Mangle an impl method: `type_name.method_name` in its module context.
+/// `mangle_impl_method("core::str", "Str", "split")` → `tml_N4core3str3Str5splitE`
+pub func mangle_impl_method(module_path: Str, type_name: Str, method_name: Str) -> Str {
+    if module_path == "" {
+        return "tml_" + type_name + "_" + method_name
+    }
+    return mangle_symbol(module_path + "::" + type_name, method_name)
+}
+
+// ============================================================================
+// Type code encoding
+// ============================================================================
+
+/// Encode a MirType to its single-char or multi-char type code.
+pub func mir_type_code(ty: MirType) -> Str {
+    when ty {
+        Primitive(p) => {
+            when p {
+                I8 => return "a",
+                I16 => return "s",
+                I32 => return "i",
+                I64 => return "l",
+                I128 => return "x",
+                U8 => return "h",
+                U16 => return "t",
+                U32 => return "j",
+                U64 => return "m",
+                U128 => return "y",
+                F32 => return "f",
+                F64 => return "d",
+                Bool => return "b",
+                Char => return "c",
+                Str => return "S",
+                Unit => return "v",
+                RawPtr => return "Pv"
+            }
+        },
+        Struct(s) => {
+            return (s.name.len() as I64).to_string() + s.name
+        },
+        Enum(e) => {
+            return (e.name.len() as I64).to_string() + e.name
+        },
+        Pointer(p) => {
+            return "P" + mir_type_code(p.pointee.get())
+        },
+        Array(a) => {
+            return "A" + mir_type_code(a.element.get())
+        },
+        Tuple(t) => {
+            var code: Str = "T"
+            let n: I64 = t.elements.len() as I64
+            for i in 0 to n {
+                code = code + mir_type_code(t.elements.get(i).get())
+            }
+            code = code + "E"
+            return code
+        },
+        Function(fn_t) => {
+            var code: Str = "F"
+            let n: I64 = fn_t.params.len() as I64
+            for i in 0 to n {
+                code = code + mir_type_code(fn_t.params.get(i).get())
+            }
+            code = code + mir_type_code(fn_t.return_type.get())
+            code = code + "E"
+            return code
+        },
+        _ => return "v"
+    }
+}
+
+// ============================================================================
+// Path helpers
+// ============================================================================
+
+/// Split a module path on "::" into segments.
+func split_path(path: Str) -> List[Str] {
+    let result = List[Str]::new(8)
+    let n: I64 = path.len() as I64
+    var start: I64 = 0
+    let path_ptr: I64 = path as I64
+
+    var i: I64 = 0
+    loop (i < n - 1) {
+        let b1: I64 = lowlevel { ptr_read[I8]((path_ptr + i) as *I8) } as I64
+        let b2: I64 = lowlevel { ptr_read[I8]((path_ptr + i + 1) as *I8) } as I64
+        if b1 == 58 and b2 == 58 {  // ':' ':'
+            if i > start {
+                result.push(path.slice(start, i))
+            }
+            start = i + 2
+            i = i + 2
+        } else {
+            i = i + 1
+        }
+    }
+    if start < n {
+        result.push(path.slice(start, n))
+    }
+    return result
+}

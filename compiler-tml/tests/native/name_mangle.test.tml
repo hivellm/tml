@@ -1,0 +1,73 @@
+//! Tests for TML name mangling — verifies ABI compatibility with C++ compiler.
+//! Must produce identical mangled names as compiler/src/codegen/llvm/core/llvm_utils.cpp.
+
+use test::{assert, assert_eq}
+use compiler::native::name_mangle::*
+use compiler::mir::types::{MirType, MirPrimitive}
+use std::collections::list::List
+
+@test func test_mangle_simple_module_func() {
+    // core::str::to_lowercase → tml_N4core3str12to_lowercaseE
+    assert_eq(mangle_symbol("core::str", "to_lowercase"), "tml_N4core3str12to_lowercaseE")
+}
+
+@test func test_mangle_deep_module() {
+    // core::iter::sources::repeat → tml_N4core4iter7sources6repeat6repeatE
+    assert_eq(mangle_symbol("core::iter::sources::repeat", "repeat"), "tml_N4core4iter7sources6repeat6repeatE")
+}
+
+@test func test_mangle_no_module() {
+    // local func "main" → tml_main
+    assert_eq(mangle_symbol("", "main"), "tml_main")
+}
+
+@test func test_mangle_impl_method() {
+    // Str.split in core::str → tml_N4core3str3Str5splitE
+    assert_eq(mangle_impl_method("core::str", "Str", "split"), "tml_N4core3str3Str5splitE")
+}
+
+@test func test_mangle_impl_method_local() {
+    // local type MyStruct.foo → tml_MyStruct_foo
+    assert_eq(mangle_impl_method("", "MyStruct", "foo"), "tml_MyStruct_foo")
+}
+
+@test func test_type_code_primitives() {
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::I8)), "a")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::I16)), "s")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::I32)), "i")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::I64)), "l")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::F32)), "f")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::F64)), "d")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::Bool)), "b")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::Char)), "c")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::Str)), "S")
+    assert_eq(mir_type_code(MirType::Primitive(MirPrimitive::Unit)), "v")
+}
+
+@test func test_mangle_typed_symbol() {
+    // core::str::repeat(Str, I64) → tml_N4core3str6repeatE_Sl
+    let params = List[MirType]::new(2)
+    params.push(MirType::Primitive(MirPrimitive::Str))
+    params.push(MirType::Primitive(MirPrimitive::I64))
+    assert_eq(mangle_symbol_typed("core::str", "repeat", params), "tml_N4core3str6repeatE_Sl")
+}
+
+@test func test_mangle_single_param() {
+    // std::collections::list::len(ptr) → with I64 param
+    let params = List[MirType]::new(1)
+    params.push(MirType::Primitive(MirPrimitive::I64))
+    assert_eq(mangle_symbol_typed("std::collections::list", "len", params), "tml_N3std11collections4list3lenE_l")
+}
+
+@test func test_mangle_no_params_no_suffix() {
+    // Module function with no params → no _suffix
+    let params = List[MirType]::new(0)
+    assert_eq(mangle_symbol_typed("core::str", "new", params), "tml_N4core3str3newE")
+}
+
+@test func test_mangle_local_no_suffix() {
+    // Local function never gets type suffix even with params
+    let params = List[MirType]::new(1)
+    params.push(MirType::Primitive(MirPrimitive::I32))
+    assert_eq(mangle_symbol_typed("", "add", params), "tml_add")
+}
