@@ -10,6 +10,7 @@ use compiler::codegen::emit_type::emit_type_for_data
 use compiler::codegen::emit_inst::reg
 use compiler::codegen::emit_method::mangle_inherent
 use std::collections::list::List
+use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
 
 // ============================================================================
@@ -60,11 +61,38 @@ pub func emit_drop_struct(
     return s
 }
 
-/// Emit drop glue for an enum (item 3.4).
+// ============================================================================
+// Heap-field predicate (phase 30e item 1.1)
+// ============================================================================
+
+/// Check if a type name refers to a heap-allocated type that needs drop.
+/// Returns 1 for List, HashMap, Str (heap-backed), Box, Heap, and any
+/// user type whose name is in the heap_types set.
+pub func has_heap_type(type_name: Str, visited: HashMap[Str, I64]) -> I64 {
+    // Prevent infinite recursion on recursive types
+    if visited.has(type_name) { return 0 }
+    visited.set(type_name, 1)
+
+    // Known heap-allocated types
+    if type_name == "List" or type_name == "HashMap" or type_name == "Str" { return 1 }
+    if type_name == "Box" or type_name == "Heap" { return 1 }
+    // Parameterized variants: List_I64, HashMap_Str_I64, etc.
+    if type_name.starts_with("List_") or type_name.starts_with("HashMap_") { return 1 }
+    if type_name.starts_with("Box_") or type_name.starts_with("Heap_") { return 1 }
+    return 0
+}
+
+// ============================================================================
+// Enum drop glue with variant payload drop (phase 30e items 1.2-1.4)
+// ============================================================================
+
+/// Emit drop glue for an enum (item 3.4, extended phase 30e).
 /// Checks discriminant, switches to per-variant drop blocks.
+/// Each variant with heap-type payload gets a call to drop_glue + free.
 pub func emit_drop_enum(
     type_name: Str,
     variant_names: List[Str],
+    variant_payload_types: List[Str],
     has_drop_impl: I64
 ) -> Str {
     let struct_ty: Str = "%struct." + type_name
@@ -82,9 +110,28 @@ pub func emit_drop_enum(
     }
     s = s + "  ]\n"
 
-    // Per-variant drop blocks (payload drop would go here)
+    // Per-variant drop blocks with payload drop
+    let visited: HashMap[Str, I64] = HashMap[Str, I64]::new(16)
     for i in 0 to vc {
         s = s + "drop_variant_" + i.to_string() + ":\n"
+        // Check if this variant has a heap-type payload
+        if i < (variant_payload_types.len() as I64) {
+            let payload_ty: Str = variant_payload_types.get(i)
+            if payload_ty != "" and payload_ty != "void" and payload_ty != "unit" {
+                // GEP to payload field (field 1 after discriminant)
+                let pay_gep: Str = "%pay_gep_" + i.to_string()
+                let pay_ptr: Str = "%pay_ptr_" + i.to_string()
+                s = s + "  " + pay_gep + " = getelementptr inbounds " + struct_ty + ", ptr %p, i32 0, i32 1\n"
+                s = s + "  " + pay_ptr + " = load ptr, ptr " + pay_gep + "\n"
+
+                // If heap type, call its drop_glue then free
+                visited.set(type_name, 1)  // prevent self-recursion
+                if has_heap_type(payload_ty, visited) > 0 {
+                    s = s + "  call void @drop_glue_" + payload_ty + "(ptr " + pay_ptr + ")\n"
+                    s = s + "  call void @free(ptr " + pay_ptr + ")\n"
+                }
+            }
+        }
         s = s + "  br label %drop_exit\n"
     }
 
@@ -96,4 +143,14 @@ pub func emit_drop_enum(
     }
     s = s + "  ret void\n}\n"
     return s
+}
+
+/// Legacy overload without payload types — for backward compatibility.
+pub func emit_drop_enum_simple(
+    type_name: Str,
+    variant_names: List[Str],
+    has_drop_impl: I64
+) -> Str {
+    let empty_payloads = List[Str]::new(0)
+    return emit_drop_enum(type_name, variant_names, empty_payloads, has_drop_impl)
 }

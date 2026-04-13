@@ -1,0 +1,88 @@
+//! Tests for extended derive codegen: Debug, Display, Default, Serialize,
+//! Deserialize, FromStr, PartialOrd, Reflect.
+//! Phase 30d.
+
+use test::{assert, assert_eq}
+use compiler::codegen::emit_derive::*
+use std::collections::list::List
+
+@test func test_derive_debug() {
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("ptr")
+    let names = List[Str]::new(2)
+    names.push("x")
+    names.push("name")
+    let ir: Str = emit_derive_debug("Point", 2, types, names)
+    assert(ir.len() as I64 > 0)
+    assert(ir.contains("@Point__Debug__debug"))
+    assert(ir.contains("snprintf"))
+}
+
+@test func test_derive_display() {
+    let ir: Str = emit_derive_display("Point")
+    assert(ir.contains("@Point__Display__display"))
+    assert(ir.contains("@Point__Debug__debug"))
+}
+
+@test func test_derive_default() {
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("ptr")
+    let ir: Str = emit_derive_default("Config", 2, types)
+    assert(ir.contains("@Config__Default__default"))
+    assert(ir.contains("store i64 0"))
+    assert(ir.contains("store ptr null"))
+}
+
+@test func test_derive_serialize() {
+    let types = List[Str]::new(1)
+    types.push("i64")
+    let names = List[Str]::new(1)
+    names.push("value")
+    let ir: Str = emit_derive_serialize("Item", 1, types, names)
+    assert(ir.contains("@Item__Serialize__serialize"))
+    assert(ir.contains("snprintf"))
+}
+
+@test func test_derive_deserialize() {
+    let types = List[Str]::new(1)
+    types.push("i64")
+    let ir: Str = emit_derive_deserialize("Item", 1, types)
+    assert(ir.contains("@Item__Deserialize__deserialize"))
+    assert(ir.contains("store i64 0"))
+}
+
+@test func test_derive_from_str() {
+    let ir: Str = emit_derive_from_str("Item")
+    assert(ir.contains("@Item__FromStr__from_str"))
+    assert(ir.contains("@Item__Deserialize__deserialize"))
+}
+
+@test func test_derive_partial_ord() {
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("i64")
+    let ir: Str = emit_derive_partial_ord("Pair", 2, types)
+    assert(ir.contains("@Pair__PartialOrd__partial_cmp"))
+    assert(ir.contains("icmp slt"))
+    assert(ir.contains("icmp sgt"))
+    assert(ir.contains("ret i64 -1"))
+    assert(ir.contains("ret i64 1"))
+    assert(ir.contains("ret i64 0"))
+}
+
+@test func test_derive_partial_ord_empty() {
+    let types = List[Str]::new(0)
+    let ir: Str = emit_derive_partial_ord("Empty", 0, types)
+    assert(ir.contains("ret i64 0"))
+}
+
+@test func test_derive_reflect() {
+    let names = List[Str]::new(1)
+    names.push("x")
+    let ir: Str = emit_derive_reflect("Widget", 1, names)
+    assert(ir.contains("@Widget__Reflect__type_info"))
+    assert(ir.contains("Widget"))
+    assert(ir.contains("store i64 1"))
+}

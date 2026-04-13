@@ -1,0 +1,72 @@
+//! Tests for drop glue emission: struct, enum, enum with heap payload.
+//! Phase 30e.
+
+use test::{assert, assert_eq}
+use compiler::codegen::emit_drop::*
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+@test func test_drop_noop() {
+    let ir: Str = emit_drop_noop("I64")
+    assert(ir.contains("@drop_glue_I64"))
+    assert(ir.contains("ret void"))
+}
+
+@test func test_drop_struct() {
+    let names = List[Str]::new(2)
+    names.push("x")
+    names.push("data")
+    let types = List[Str]::new(2)
+    types.push("i64")
+    types.push("ptr")
+    let ir: Str = emit_drop_struct("Widget", names, types, 0)
+    assert(ir.contains("@drop_glue_Widget"))
+    // Should drop in reverse order: data (index 1) then x (index 0)
+    assert(ir.contains("getelementptr"))
+}
+
+@test func test_drop_struct_with_drop_impl() {
+    let names = List[Str]::new(1)
+    names.push("fd")
+    let types = List[Str]::new(1)
+    types.push("i64")
+    let ir: Str = emit_drop_struct("FileHandle", names, types, 1)
+    assert(ir.contains("@FileHandle__drop"))
+}
+
+@test func test_drop_enum_simple() {
+    let variants = List[Str]::new(2)
+    variants.push("Just")
+    variants.push("Nothing")
+    let ir: Str = emit_drop_enum_simple("Maybe", variants, 0)
+    assert(ir.contains("@drop_glue_Maybe"))
+    assert(ir.contains("switch i32 %tag"))
+    assert(ir.contains("drop_variant_0"))
+    assert(ir.contains("drop_variant_1"))
+}
+
+@test func test_drop_enum_with_heap_payload() {
+    let variants = List[Str]::new(2)
+    variants.push("Just")
+    variants.push("Nothing")
+    let payloads = List[Str]::new(2)
+    payloads.push("List_I64")
+    payloads.push("")
+    let ir: Str = emit_drop_enum("Maybe_List_I64", variants, payloads, 0)
+    assert(ir.contains("@drop_glue_Maybe_List_I64"))
+    // Just variant should drop the List payload
+    assert(ir.contains("drop_glue_List_I64"))
+    assert(ir.contains("call void @free"))
+    // Nothing variant should not have free
+}
+
+@test func test_has_heap_type() {
+    let visited = HashMap[Str, I64]::new(8)
+    assert_eq(has_heap_type("List", visited) as I32, 1)
+    let visited2 = HashMap[Str, I64]::new(8)
+    assert_eq(has_heap_type("HashMap", visited2) as I32, 1)
+    let visited3 = HashMap[Str, I64]::new(8)
+    assert_eq(has_heap_type("I64", visited3) as I32, 0)
+    let visited4 = HashMap[Str, I64]::new(8)
+    assert_eq(has_heap_type("List_I64", visited4) as I32, 1)
+}

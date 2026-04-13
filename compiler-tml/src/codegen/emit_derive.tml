@@ -92,6 +92,258 @@ pub func emit_derive_eq(
 // Derived Hash — item 4.3
 // ============================================================================
 
+// ============================================================================
+// Derived Debug — phase 30d item 1.1
+// ============================================================================
+
+/// Emit derived `debug` for a struct: format each field as `name=value`.
+/// Returns a Str (ptr) with format: "TypeName { field0=val0, field1=val1 }".
+pub func emit_derive_debug(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str],
+    field_names: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Debug", "debug")
+    var s: Str = "define ptr @" + mangled + "(ptr %self) #0 {\nentry:\n"
+    // Allocate 256-byte stack buffer for formatting
+    s = s + "  %buf = alloca [256 x i8], align 1\n"
+    s = s + "  %bp = getelementptr [256 x i8], ptr %buf, i32 0, i32 0\n"
+    // snprintf(buf, 256, "TypeName { ... }", fields...)
+    var fmt: Str = type_name + " { "
+    var args_str: Str = ""
+    for i in 0 to field_count {
+        if i > 0 { fmt = fmt + ", " }
+        let fname: Str = if i < (field_names.len() as I64) { field_names.get(i) } else { "f" + i.to_string() }
+        let ft: Str = field_types.get(i)
+        fmt = fmt + fname + "="
+        if ft == "i64" or ft == "i32" {
+            fmt = fmt + "%lld"
+        } else if ft == "ptr" {
+            fmt = fmt + "%s"
+        } else {
+            fmt = fmt + "%d"
+        }
+        let gep: Str = "%dbg_gep_" + i.to_string()
+        let val: Str = "%dbg_val_" + i.to_string()
+        s = s + "  " + gep + " = getelementptr inbounds " + struct_ty + ", ptr %self, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + val + " = load " + ft + ", ptr " + gep + "\n"
+        args_str = args_str + ", " + ft + " " + val
+    }
+    fmt = fmt + " }"
+    s = s + "  @.debug_fmt." + type_name + " = private unnamed_addr constant [" + (fmt.len() as I64 + 1).to_string() + " x i8] c\"" + fmt + "\\00\"\n"
+    s = s + "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %bp, i64 256, ptr @.debug_fmt." + type_name + args_str + ")\n"
+    s = s + "  ret ptr %bp\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Display — phase 30d item 1.2
+// ============================================================================
+
+/// Emit derived `display`: delegates to Debug by default.
+pub func emit_derive_display(type_name: Str) -> Str {
+    let debug_mangled: Str = mangle_behavior(type_name, "Debug", "debug")
+    let display_mangled: Str = mangle_behavior(type_name, "Display", "display")
+    var s: Str = "define ptr @" + display_mangled + "(ptr %self) #0 {\nentry:\n"
+    s = s + "  %r = call ptr @" + debug_mangled + "(ptr %self)\n"
+    s = s + "  ret ptr %r\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Default — phase 30d item 1.3
+// ============================================================================
+
+/// Emit derived `default` for a struct: zero-initialize all fields.
+pub func emit_derive_default(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Default", "default")
+    var s: Str = "define void @" + mangled + "(ptr sret(" + struct_ty + ") align 8 %out) #0 {\nentry:\n"
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let gep: Str = "%def_gep_" + i.to_string()
+        s = s + "  " + gep + " = getelementptr inbounds " + struct_ty + ", ptr %out, i32 0, i32 " + i.to_string() + "\n"
+        if ft == "ptr" {
+            s = s + "  store ptr null, ptr " + gep + "\n"
+        } else {
+            s = s + "  store " + ft + " 0, ptr " + gep + "\n"
+        }
+    }
+    s = s + "  ret void\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Serialize — phase 30d item 1.4
+// ============================================================================
+
+/// Emit derived `serialize`: produce JSON object string with field key-value pairs.
+pub func emit_derive_serialize(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str],
+    field_names: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Serialize", "serialize")
+    var s: Str = "define ptr @" + mangled + "(ptr %self) #0 {\nentry:\n"
+    s = s + "  %buf = alloca [1024 x i8], align 1\n"
+    s = s + "  %bp = getelementptr [1024 x i8], ptr %buf, i32 0, i32 0\n"
+    // Build JSON format string: {"field0":val,"field1":val}
+    var fmt: Str = "{"
+    var args_str: Str = ""
+    for i in 0 to field_count {
+        if i > 0 { fmt = fmt + "," }
+        let fname: Str = if i < (field_names.len() as I64) { field_names.get(i) } else { "f" + i.to_string() }
+        let ft: Str = field_types.get(i)
+        fmt = fmt + "\\22" + fname + "\\22:"
+        if ft == "i64" or ft == "i32" { fmt = fmt + "%lld" }
+        else if ft == "ptr" { fmt = fmt + "\\22%s\\22" }
+        else { fmt = fmt + "%d" }
+        let gep: Str = "%ser_gep_" + i.to_string()
+        let val: Str = "%ser_val_" + i.to_string()
+        s = s + "  " + gep + " = getelementptr inbounds " + struct_ty + ", ptr %self, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + val + " = load " + ft + ", ptr " + gep + "\n"
+        args_str = args_str + ", " + ft + " " + val
+    }
+    fmt = fmt + "}"
+    s = s + "  @.ser_fmt." + type_name + " = private unnamed_addr constant [" + (fmt.len() as I64 + 1).to_string() + " x i8] c\"" + fmt + "\\00\"\n"
+    s = s + "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %bp, i64 1024, ptr @.ser_fmt." + type_name + args_str + ")\n"
+    s = s + "  ret ptr %bp\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Deserialize — phase 30d item 1.5
+// ============================================================================
+
+/// Emit derived `deserialize`: stub that returns a zeroed struct.
+/// Full JSON parsing requires runtime support; this provides the symbol.
+pub func emit_derive_deserialize(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "Deserialize", "deserialize")
+    var s: Str = "define void @" + mangled + "(ptr sret(" + struct_ty + ") align 8 %out, ptr %input) #0 {\nentry:\n"
+    // Zero-initialize all fields (full JSON parsing deferred to runtime)
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let gep: Str = "%deser_gep_" + i.to_string()
+        s = s + "  " + gep + " = getelementptr inbounds " + struct_ty + ", ptr %out, i32 0, i32 " + i.to_string() + "\n"
+        if ft == "ptr" {
+            s = s + "  store ptr null, ptr " + gep + "\n"
+        } else {
+            s = s + "  store " + ft + " 0, ptr " + gep + "\n"
+        }
+    }
+    s = s + "  ret void\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived FromStr — phase 30d item 1.6
+// ============================================================================
+
+/// Emit derived `from_str`: delegates to Deserialize.
+pub func emit_derive_from_str(type_name: Str) -> Str {
+    let deser_mangled: Str = mangle_behavior(type_name, "Deserialize", "deserialize")
+    let mangled: Str = mangle_behavior(type_name, "FromStr", "from_str")
+    let struct_ty: Str = "%struct." + type_name
+    var s: Str = "define void @" + mangled + "(ptr sret(" + struct_ty + ") align 8 %out, ptr %input) #0 {\nentry:\n"
+    s = s + "  call void @" + deser_mangled + "(ptr sret(" + struct_ty + ") %out, ptr %input)\n"
+    s = s + "  ret void\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived PartialOrd — phase 30d item 1.7
+// ============================================================================
+
+/// Emit derived `partial_cmp`: lexicographic field-by-field comparison.
+/// Returns i64: -1 (Less), 0 (Equal), 1 (Greater).
+pub func emit_derive_partial_ord(
+    type_name: Str,
+    field_count: I64,
+    field_types: List[Str]
+) -> Str {
+    let struct_ty: Str = "%struct." + type_name
+    let mangled: Str = mangle_behavior(type_name, "PartialOrd", "partial_cmp")
+    var s: Str = "define i64 @" + mangled + "(ptr %a, ptr %b) #0 {\nentry:\n"
+
+    if field_count == 0 {
+        s = s + "  ret i64 0\n}\n"
+        return s
+    }
+
+    for i in 0 to field_count {
+        let ft: Str = field_types.get(i)
+        let a_gep: Str = "%ord_a_" + i.to_string()
+        let b_gep: Str = "%ord_b_" + i.to_string()
+        let a_val: Str = "%ord_av_" + i.to_string()
+        let b_val: Str = "%ord_bv_" + i.to_string()
+        let lt: Str = "%ord_lt_" + i.to_string()
+        let gt: Str = "%ord_gt_" + i.to_string()
+
+        s = s + "  " + a_gep + " = getelementptr inbounds " + struct_ty + ", ptr %a, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + a_val + " = load " + ft + ", ptr " + a_gep + "\n"
+        s = s + "  " + b_gep + " = getelementptr inbounds " + struct_ty + ", ptr %b, i32 0, i32 " + i.to_string() + "\n"
+        s = s + "  " + b_val + " = load " + ft + ", ptr " + b_gep + "\n"
+
+        s = s + "  " + lt + " = icmp slt " + ft + " " + a_val + ", " + b_val + "\n"
+        s = s + "  br i1 " + lt + ", label %less_" + i.to_string() + ", label %check_gt_" + i.to_string() + "\n"
+        s = s + "less_" + i.to_string() + ":\n  ret i64 -1\n"
+        s = s + "check_gt_" + i.to_string() + ":\n"
+        s = s + "  " + gt + " = icmp sgt " + ft + " " + a_val + ", " + b_val + "\n"
+
+        if i < field_count - 1 {
+            s = s + "  br i1 " + gt + ", label %greater_" + i.to_string() + ", label %next_" + i.to_string() + "\n"
+            s = s + "greater_" + i.to_string() + ":\n  ret i64 1\n"
+            s = s + "next_" + i.to_string() + ":\n"
+        } else {
+            s = s + "  br i1 " + gt + ", label %greater_" + i.to_string() + ", label %equal\n"
+            s = s + "greater_" + i.to_string() + ":\n  ret i64 1\n"
+        }
+    }
+
+    s = s + "equal:\n  ret i64 0\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Reflect — phase 30d item 1.8
+// ============================================================================
+
+/// Emit derived `reflect`: returns a static TypeInfo pointer with type name and field count.
+pub func emit_derive_reflect(
+    type_name: Str,
+    field_count: I64,
+    field_names: List[Str]
+) -> Str {
+    let mangled: Str = mangle_behavior(type_name, "Reflect", "type_info")
+    var s: Str = "define ptr @" + mangled + "() #0 {\nentry:\n"
+    // Return a static struct { ptr type_name, i64 field_count }
+    s = s + "  @.reflect_name." + type_name + " = private unnamed_addr constant [" + (type_name.len() as I64 + 1).to_string() + " x i8] c\"" + type_name + "\\00\"\n"
+    s = s + "  %info = alloca { ptr, i64 }, align 8\n"
+    s = s + "  %name_ptr = getelementptr { ptr, i64 }, ptr %info, i32 0, i32 0\n"
+    s = s + "  store ptr @.reflect_name." + type_name + ", ptr %name_ptr\n"
+    s = s + "  %count_ptr = getelementptr { ptr, i64 }, ptr %info, i32 0, i32 1\n"
+    s = s + "  store i64 " + field_count.to_string() + ", ptr %count_ptr\n"
+    s = s + "  ret ptr %info\n}\n"
+    return s
+}
+
+// ============================================================================
+// Derived Hash — item 4.3
+// ============================================================================
+
 /// Emit derived `hash` for a struct: FNV-1a hash of each field.
 pub func emit_derive_hash(
     type_name: Str,
