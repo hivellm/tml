@@ -14,20 +14,9 @@
 //!
 //! Phase 16a — items 3.1–3.4.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::codegen::types::LlvmType
-use compiler::codegen::types::llvm_type_to_str
-use compiler::codegen::types::make_llvm_struct
-use compiler::codegen::types::make_llvm_named_struct
-use compiler::codegen::types::make_llvm_array
-use compiler::codegen::emit_type::mir_to_llvm
-use compiler::codegen::emit_type::llvm_type_byte_size
-use compiler::codegen::emit_type::llvm_type_alignment
-use compiler::codegen::emit_type::compute_enum_body
+use compiler::mir::types::*
+use compiler::codegen::types::*
+use compiler::codegen::emit_type::*
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

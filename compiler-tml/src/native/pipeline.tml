@@ -21,39 +21,20 @@
 //! 10. Create relocations for cross-function calls
 //! 11. Write COFF file (`write_coff`)
 
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::ConstantInst
-use compiler::mir::inst::MirConstant
+use compiler::mir::module::{MirModule, MirFunc}
+use compiler::mir::inst::*
 use compiler::mir::block::BasicBlock
-use compiler::native::machir::MachFunc
-use compiler::native::machir::MachBlock
-use compiler::native::machir::MachInst
+use compiler::native::machir::*
 use compiler::native::mir_lower::lower_function
 use compiler::native::liveness::compute_live_intervals
-use compiler::native::linear_scan::linear_scan
-use compiler::native::linear_scan::RegAllocResult
-use compiler::native::stack_alloc::allocate_stack
-use compiler::native::stack_alloc::StackAllocation
-use compiler::native::x86::emit::emit_func
-use compiler::native::x86::emit::EmitResult
-use compiler::native::x86::emit::RelocEntry
+use compiler::native::linear_scan::{linear_scan, RegAllocResult}
+use compiler::native::stack_alloc::{allocate_stack, StackAllocation}
+use compiler::native::regalloc_rewrite::rewrite_vregs
+use compiler::native::x86::emit::{emit_func, EmitResult, RelocEntry}
 use compiler::native::x86::peephole::run_peephole
 use compiler::native::x86::const_prop::run_const_prop
-use compiler::native::x86::frame::emit_prologue
-use compiler::native::x86::frame::emit_epilogue
-use compiler::native::x86::frame::compute_frame_size
-use compiler::native::coff_emit::CoffSection
-use compiler::native::coff_emit::CoffSymbol
-use compiler::native::coff_emit::CoffRelocation
-use compiler::native::coff_emit::make_text_section
-use compiler::native::coff_emit::make_rdata_section
-use compiler::native::coff_emit::make_func_symbol
-use compiler::native::coff_emit::make_extern_symbol
-use compiler::native::coff_emit::make_rel32_reloc
-use compiler::native::coff_emit::section_add_reloc
+use compiler::native::x86::frame::*
+use compiler::native::coff_emit::*
 use compiler::native::obj_writer::write_coff
 use std::collections::list::List
 use std::collections::hashmap::HashMap
@@ -110,6 +91,9 @@ pub func compile_module_native(m: MirModule) -> NativeCompileResult {
         // Step 2-3: Register allocation (linear scan)
         let regalloc: RegAllocResult = linear_scan(mach_func)
         total_spills = total_spills + regalloc.spills
+
+        // Step 3.5: Rewrite VirtualRegs to PhysRegs
+        rewrite_vregs(mach_func, regalloc)
 
         // Step 4: Peephole optimization
         run_peephole(mach_func)

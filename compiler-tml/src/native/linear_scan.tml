@@ -6,18 +6,8 @@
 //!
 //! Phase 19a — items 2.1–2.5.
 
-use compiler::native::machir::MachFunc
-use compiler::native::machir::REG_RAX
-use compiler::native::machir::REG_RCX
-use compiler::native::machir::REG_RDX
-use compiler::native::machir::REG_RSI
-use compiler::native::machir::REG_RDI
-use compiler::native::machir::REG_R8
-use compiler::native::machir::REG_R9
-use compiler::native::machir::REG_R10
-use compiler::native::machir::REG_R11
-use compiler::native::liveness::LiveInterval
-use compiler::native::liveness::compute_live_intervals
+use compiler::native::machir::*
+use compiler::native::liveness::{LiveInterval, compute_live_intervals}
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap

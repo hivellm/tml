@@ -11,54 +11,12 @@
 //!
 //! Phase 16b — items 1.1–6.2.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::ValueId
-use compiler::mir::inst::MirInst
-use compiler::mir::inst::InstructionData
-use compiler::mir::inst::BinaryInst
-use compiler::mir::inst::UnaryInst
-use compiler::mir::inst::LoadInst
-use compiler::mir::inst::StoreInst
-use compiler::mir::inst::AllocaInst
-use compiler::mir::inst::GetElementPtrInst
-use compiler::mir::inst::ExtractValueInst
-use compiler::mir::inst::InsertValueInst
-use compiler::mir::inst::CallInst
-use compiler::mir::inst::CastInst
-use compiler::mir::inst::PhiInst
-use compiler::mir::inst::PhiEntry
-use compiler::mir::inst::ConstantInst
-use compiler::mir::inst::MirConstant
-use compiler::mir::inst::SelectInst
-use compiler::mir::inst::StructInitInst
-use compiler::mir::inst::EnumInitInst
-use compiler::mir::inst::TupleInitInst
-use compiler::mir::inst::ArrayInitInst
-use compiler::mir::inst::ClosureInitInst
-use compiler::mir::inst::AtomicLoadInst
-use compiler::mir::inst::AtomicStoreInst
-use compiler::mir::inst::AtomicRMWInst
-use compiler::mir::inst::AtomicCmpXchgInst
-use compiler::mir::inst::FenceInst
-use compiler::mir::inst::AtomicOrdering
-use compiler::mir::inst::AtomicRMWOp
-use compiler::mir::block::BasicBlock
-use compiler::mir::block::Terminator
-use compiler::mir::block::ReturnTerm
-use compiler::mir::block::BranchTerm
-use compiler::mir::block::CondBranchTerm
-use compiler::mir::block::SwitchTerm
-use compiler::mir::block::SwitchArm
-use compiler::hir::expr::HirBinOp
-use compiler::hir::expr::HirUnaryOp
-use compiler::codegen::emit_type::emit_type
-use compiler::codegen::emit_type::emit_type_for_data
-use compiler::codegen::emit_type::mir_to_llvm
-use compiler::codegen::emit_type::llvm_type_byte_size
-use compiler::codegen::emit_type::llvm_type_alignment
-use compiler::codegen::types::LlvmType
-use compiler::codegen::types::llvm_type_to_str
+use compiler::mir::types::*
+use compiler::mir::inst::*
+use compiler::mir::block::*
+use compiler::hir::expr::{HirBinOp, HirUnaryOp}
+use compiler::codegen::emit_type::*
+use compiler::codegen::types::{LlvmType, llvm_type_to_str}
 use std::collections::list::List
 use core::alloc::heap::Heap
 

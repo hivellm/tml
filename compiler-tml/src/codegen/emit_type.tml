@@ -30,27 +30,8 @@
 //!
 //! Phase 16a — items 2.1–2.6.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirPrimitive
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::mir::types::MirArrayType
-use compiler::mir::types::MirTupleType
-use compiler::mir::types::MirFunctionType
-use compiler::mir::types::MirPointerType
-use compiler::mir::types::MirSliceType
-use compiler::mir::types::MirVectorType
-use compiler::mir::types::MirDynType
-use compiler::codegen::types::LlvmType
-use compiler::codegen::types::LlvmStructType
-use compiler::codegen::types::LlvmArrayType
-use compiler::codegen::types::llvm_type_to_str
-use compiler::codegen::types::make_llvm_struct
-use compiler::codegen::types::make_llvm_named_struct
-use compiler::codegen::types::make_llvm_array
-use compiler::codegen::types::make_fat_ptr
-use compiler::codegen::types::make_slice_type
+use compiler::mir::types::*
+use compiler::codegen::types::*
 use std::collections::list::List
 use core::alloc::heap::Heap
 

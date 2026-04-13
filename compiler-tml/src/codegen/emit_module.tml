@@ -7,23 +7,11 @@
 //!
 //! Phase 16a — items 5.1–5.4.
 
-use compiler::mir::types::MirType
-use compiler::mir::types::MirStructType
-use compiler::mir::types::MirEnumType
-use compiler::mir::types::MirEnumVariantType
-use compiler::mir::module::MirModule
-use compiler::mir::module::MirFunc
-use compiler::mir::module::MirStructDef
-use compiler::mir::module::MirEnumDef
-use compiler::mir::module::MirEnumVariantDef
+use compiler::mir::types::*
+use compiler::mir::module::*
 use compiler::codegen::config::CodegenConfig
-use compiler::codegen::emit_func::emit_func_decl
-use compiler::codegen::emit_func::emit_extern_decl
-use compiler::codegen::emit_func::emit_attribute_group
-use compiler::codegen::layout::StructDefEmitter
-use compiler::codegen::layout::emitter_new
-use compiler::codegen::layout::emitter_emit_struct
-use compiler::codegen::layout::emitter_emit_enum
+use compiler::codegen::emit_func::{emit_func_decl, emit_extern_decl, emit_attribute_group}
+use compiler::codegen::layout::*
 use core::fmt::helpers::char_to_str
 use std::collections::list::List
 use std::collections::hashmap::HashMap
