@@ -173,29 +173,27 @@ func write_section_name(buf: List[I64], name: Str) {
     else if name == ".pdata" { write_bytes_8(buf, 0x2E, 0x70, 0x64, 0x61, 0x74, 0x61, 0, 0) }
     else if name == ".bss" { write_bytes_8(buf, 0x2E, 0x62, 0x73, 0x73, 0, 0, 0, 0) }
     else {
-        // Short name: pad to 8 bytes
-        let n: I64 = name.len() as I64
-        for i in 0 to 8 {
-            if i < n { buf.push(0x3F) }  // '?' placeholder
-            else { buf.push(0) }
-        }
+        // Generic: write actual string bytes via lowlevel ptr_read
+        write_str_padded_8(buf, name)
     }
 }
 
 /// Write a short symbol name (up to 8 bytes, null-padded).
 func write_symbol_name_short(buf: List[I64], name: Str) {
-    // For common short names, use known bytes
-    if name == "main" { write_bytes_8(buf, 0x6D, 0x61, 0x69, 0x6E, 0, 0, 0, 0) }
-    else if name == "printf" { write_bytes_8(buf, 0x70, 0x72, 0x69, 0x6E, 0x74, 0x66, 0, 0) }
-    else if name == "malloc" { write_bytes_8(buf, 0x6D, 0x61, 0x6C, 0x6C, 0x6F, 0x63, 0, 0) }
-    else if name == "free" { write_bytes_8(buf, 0x66, 0x72, 0x65, 0x65, 0, 0, 0, 0) }
-    else if name == "exit" { write_bytes_8(buf, 0x65, 0x78, 0x69, 0x74, 0, 0, 0, 0) }
-    else {
-        // Generic: write '?' placeholders for unknown short names
-        let n: I64 = name.len() as I64
-        for i in 0 to 8 {
-            if i < n { buf.push(0x3F) }
-            else { buf.push(0) }
+    write_str_padded_8(buf, name)
+}
+
+/// Write a string as exactly 8 bytes, null-padded, reading raw bytes via lowlevel.
+func write_str_padded_8(buf: List[I64], s: Str) {
+    let s_ptr: I64 = s as I64
+    let n: I64 = s.len() as I64
+    for i in 0 to 8 {
+        if i < n {
+            let byte_ptr: *I8 = (s_ptr + i) as *I8
+            let byte_val: I64 = lowlevel { ptr_read[I8](byte_ptr) } as I64
+            buf.push((byte_val + 256) % 256)
+        } else {
+            buf.push(0)
         }
     }
 }
@@ -213,11 +211,14 @@ func write_bytes_8(buf: List[I64], b0: I64, b1: I64, b2: I64, b3: I64, b4: I64, 
 
 /// Write a null-terminated string (for string table).
 func write_string_null(buf: List[I64], s: Str) {
-    // Write each byte of the string using known ASCII encoding
-    // For long symbol names, we write '?' placeholder bytes
+    // Read each byte from the Str's underlying memory via lowlevel ptr_read
+    let s_ptr: I64 = s as I64
     let n: I64 = s.len() as I64
     for i in 0 to n {
-        buf.push(0x3F)  // '?' — real encoding needs byte-level string access
+        let byte_ptr: *I8 = (s_ptr + i) as *I8
+        let byte_val: I64 = lowlevel { ptr_read[I8](byte_ptr) } as I64
+        // Mask to unsigned byte (I8 is signed, -128..127 → 0..255)
+        buf.push((byte_val + 256) % 256)
     }
     buf.push(0)  // null terminator
 }
