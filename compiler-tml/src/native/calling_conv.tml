@@ -1,0 +1,156 @@
+//! Calling convention enforcement — Win64 and SysV AMD64 ABI.
+//!
+//! Maps function parameters and return values to physical registers
+//! according to the platform ABI.
+//!
+//! Phase 19a — items 4.1–4.4.
+
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RBX
+use compiler::native::machir::REG_RSP
+use compiler::native::machir::REG_RBP
+use compiler::native::machir::REG_RSI
+use compiler::native::machir::REG_RDI
+use compiler::native::machir::REG_R8
+use compiler::native::machir::REG_R9
+use compiler::native::machir::REG_R10
+use compiler::native::machir::REG_R11
+use compiler::native::machir::REG_R12
+use compiler::native::machir::REG_R13
+use compiler::native::machir::REG_R14
+use compiler::native::machir::REG_R15
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Calling convention types
+// ============================================================================
+
+/// Which registers are used for what purpose.
+pub type CallingConv {
+    /// Integer argument registers (in order).
+    int_arg_regs: List[I64],
+    /// Return value register (integer).
+    int_ret_reg: I64,
+    /// Callee-saved registers (must be preserved across calls).
+    callee_saved: List[I64],
+    /// Caller-saved registers (clobbered by calls).
+    caller_saved: List[I64],
+    /// Shadow space size in bytes (Win64: 32, SysV: 0).
+    shadow_space: I64
+}
+
+// ============================================================================
+// Win64 ABI (item 4.1–4.2)
+// ============================================================================
+
+/// Win64 (Microsoft x64) calling convention.
+pub func win64_cc() -> CallingConv {
+    let int_args = List[I64]::new(4)
+    int_args.push(REG_RCX)
+    int_args.push(REG_RDX)
+    int_args.push(REG_R8)
+    int_args.push(REG_R9)
+
+    let callee = List[I64]::new(8)
+    callee.push(REG_RBX)
+    callee.push(REG_RBP)
+    callee.push(REG_RDI)
+    callee.push(REG_RSI)
+    callee.push(REG_R12)
+    callee.push(REG_R13)
+    callee.push(REG_R14)
+    callee.push(REG_R15)
+
+    let caller = List[I64]::new(7)
+    caller.push(REG_RAX)
+    caller.push(REG_RCX)
+    caller.push(REG_RDX)
+    caller.push(REG_R8)
+    caller.push(REG_R9)
+    caller.push(REG_R10)
+    caller.push(REG_R11)
+
+    return CallingConv {
+        int_arg_regs: int_args,
+        int_ret_reg: REG_RAX,
+        callee_saved: callee,
+        caller_saved: caller,
+        shadow_space: 32
+    }
+}
+
+// ============================================================================
+// SysV AMD64 ABI (item 4.4)
+// ============================================================================
+
+/// SysV AMD64 (Linux/macOS) calling convention.
+pub func sysv_cc() -> CallingConv {
+    let int_args = List[I64]::new(6)
+    int_args.push(REG_RDI)
+    int_args.push(REG_RSI)
+    int_args.push(REG_RDX)
+    int_args.push(REG_RCX)
+    int_args.push(REG_R8)
+    int_args.push(REG_R9)
+
+    let callee = List[I64]::new(6)
+    callee.push(REG_RBX)
+    callee.push(REG_RBP)
+    callee.push(REG_R12)
+    callee.push(REG_R13)
+    callee.push(REG_R14)
+    callee.push(REG_R15)
+
+    let caller = List[I64]::new(9)
+    caller.push(REG_RAX)
+    caller.push(REG_RCX)
+    caller.push(REG_RDX)
+    caller.push(REG_RSI)
+    caller.push(REG_RDI)
+    caller.push(REG_R8)
+    caller.push(REG_R9)
+    caller.push(REG_R10)
+    caller.push(REG_R11)
+
+    return CallingConv {
+        int_arg_regs: int_args,
+        int_ret_reg: REG_RAX,
+        callee_saved: callee,
+        caller_saved: caller,
+        shadow_space: 0
+    }
+}
+
+// ============================================================================
+// Callee-saved register management (item 4.3)
+// ============================================================================
+
+/// Check if a physical register is callee-saved in the given convention.
+pub func is_callee_saved(cc: CallingConv, reg: I64) -> I64 {
+    let n: I64 = cc.callee_saved.len() as I64
+    for i in 0 to n {
+        if cc.callee_saved.get(i) == reg { return 1 }
+    }
+    return 0
+}
+
+/// Get the argument register for a given parameter position, or -1 if stack.
+pub func arg_reg(cc: CallingConv, position: I64) -> I64 {
+    if position < cc.int_arg_regs.len() as I64 {
+        return cc.int_arg_regs.get(position)
+    }
+    return -1 as I64
+}
+
+/// Compute the stack offset for a parameter that doesn't fit in registers.
+/// On Win64: shadow space (32 bytes) + position * 8.
+/// On SysV: (position - 6) * 8.
+pub func stack_arg_offset(cc: CallingConv, position: I64) -> I64 {
+    let reg_count: I64 = cc.int_arg_regs.len() as I64
+    if position < reg_count { return 0 }  // Not on stack
+    let stack_pos: I64 = position - reg_count
+    return cc.shadow_space + 16 + stack_pos * 8  // +16 for return addr + saved RBP
+}

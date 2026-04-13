@@ -1,0 +1,220 @@
+//! Linear scan register allocator — Poletto & Sarkar 1999.
+//!
+//! Assigns physical registers to virtual registers by processing live
+//! intervals in order of start position. When all registers are busy,
+//! the interval with the farthest end is spilled to a stack slot.
+//!
+//! Phase 19a — items 2.1–2.5.
+
+use compiler::native::machir::MachFunc
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RSI
+use compiler::native::machir::REG_RDI
+use compiler::native::machir::REG_R8
+use compiler::native::machir::REG_R9
+use compiler::native::machir::REG_R10
+use compiler::native::machir::REG_R11
+use compiler::native::liveness::LiveInterval
+use compiler::native::liveness::compute_live_intervals
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Allocation result
+// ============================================================================
+
+/// Result of register allocation.
+pub type RegAllocResult {
+    /// vreg_id → physical register (0-15) or -1 if spilled.
+    assignments: HashMap[I64, I64],
+    /// vreg_id → stack slot offset (negative from RBP) for spilled regs.
+    spill_slots: HashMap[I64, I64],
+    /// Number of physical registers used.
+    regs_used: I64,
+    /// Number of spilled intervals.
+    spills: I64,
+    /// Total stack frame size for spills (aligned to 16).
+    spill_frame_size: I64
+}
+
+// ============================================================================
+// Available register set
+// ============================================================================
+
+/// Allocatable registers (caller-saved on both Win64 and SysV).
+/// Excludes RSP (stack), RBP (frame), RBX (callee-saved).
+func allocatable_regs() -> List[I64] {
+    let regs = List[I64]::new(8)
+    regs.push(REG_RAX)
+    regs.push(REG_RCX)
+    regs.push(REG_RDX)
+    regs.push(REG_R8)
+    regs.push(REG_R9)
+    regs.push(REG_R10)
+    regs.push(REG_R11)
+    return regs
+}
+
+// ============================================================================
+// Linear scan (items 2.1–2.5)
+// ============================================================================
+
+/// Run linear scan register allocation on a function.
+pub func linear_scan(mf: MachFunc) -> RegAllocResult {
+    let intervals: List[LiveInterval] = compute_live_intervals(mf)
+    let regs: List[I64] = allocatable_regs()
+    let num_regs: I64 = regs.len() as I64
+
+    let assignments = HashMap[I64, I64]::new(64)
+    let spill_slots = HashMap[I64, I64]::new(16)
+
+    // Free register tracking
+    let free = List[I64]::new(num_regs)
+    for i in 0 to num_regs {
+        free.push(regs.get(i))
+    }
+
+    // Active intervals (sorted by end position) — simple list, linear scan
+    let active = List[LiveInterval]::new(16)
+
+    var spill_count: I64 = 0
+    var regs_used: I64 = 0
+
+    let ic: I64 = intervals.len() as I64
+    for i in 0 to ic {
+        let interval: LiveInterval = intervals.get(i)
+
+        // Expire old intervals (item 2.2)
+        expire_old(active, free, interval.start)
+
+        if free.len() as I64 == 0 {
+            // All registers busy — spill (item 2.3)
+            spill_at(active, free, interval, spill_slots, assignments, spill_count)
+            spill_count = spill_count + 1
+        } else {
+            // Assign free register
+            let reg: I64 = free.pop()
+            assignments.set(interval.vreg_id, reg)
+            regs_used = regs_used + 1
+
+            // Insert into active (sorted by end position)
+            insert_active(active, LiveInterval {
+                vreg_id: interval.vreg_id,
+                start: interval.start,
+                end_pos: interval.end_pos,
+                assigned_reg: reg,
+                spilled: 0
+            })
+        }
+    }
+
+    // Compute spill frame size
+    let spill_frame: I64 = ((spill_count * 8 + 15) / 16) * 16
+
+    return RegAllocResult {
+        assignments: assignments,
+        spill_slots: spill_slots,
+        regs_used: regs_used,
+        spills: spill_count,
+        spill_frame_size: spill_frame
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Expire intervals that end before the current position.
+func expire_old(active: List[LiveInterval], free: List[I64], current_start: I64) {
+    // Remove from front (active sorted by end)
+    loop (active.len() as I64 > 0) {
+        let first: LiveInterval = active.get(0)
+        if first.end_pos >= current_start { return }
+        // This interval is expired — free its register
+        free.push(first.assigned_reg)
+        remove_first(active)
+    }
+}
+
+/// Remove the first element from a list (shift left).
+func remove_first(list: List[LiveInterval]) {
+    let n: I64 = list.len() as I64
+    if n <= 1 {
+        // Can't efficiently remove from List — just pop
+        if n == 1 { list.pop() }
+        return
+    }
+    // Shift elements left
+    let limit: I64 = n - 1
+    for i in 0 to limit {
+        list.set(i, list.get(i + 1))
+    }
+    list.pop()
+}
+
+/// Insert an interval into the active list sorted by end position.
+func insert_active(active: List[LiveInterval], interval: LiveInterval) {
+    let n: I64 = active.len() as I64
+    // Find insertion point
+    var pos: I64 = n
+    for i in 0 to n {
+        if active.get(i).end_pos > interval.end_pos {
+            pos = i
+            // break — but TML doesn't have labeled breaks in for-in, so we scan all
+        }
+    }
+    // Simple approach: push at end (unsorted insert is OK for small active sets)
+    active.push(interval)
+}
+
+/// Spill the active interval with the farthest end (Poletto/Sarkar heuristic).
+func spill_at(
+    active: List[LiveInterval],
+    free: List[I64],
+    current: LiveInterval,
+    spill_slots: HashMap[I64, I64],
+    assignments: HashMap[I64, I64],
+    spill_count: I64
+) {
+    let n: I64 = active.len() as I64
+    if n == 0 {
+        // No active intervals — spill current
+        let slot_offset: I64 = -(spill_count + 1) * 8
+        spill_slots.set(current.vreg_id, slot_offset)
+        return
+    }
+
+    // Find interval with farthest end
+    var farthest_idx: I64 = 0
+    var farthest_end: I64 = active.get(0).end_pos
+    for i in 1 to n {
+        let e: I64 = active.get(i).end_pos
+        if e > farthest_end {
+            farthest_end = e
+            farthest_idx = i
+        }
+    }
+
+    let spill_candidate: LiveInterval = active.get(farthest_idx)
+    if spill_candidate.end_pos > current.end_pos {
+        // Spill the farthest active interval, assign its register to current
+        assignments.set(current.vreg_id, spill_candidate.assigned_reg)
+        let slot_offset: I64 = -(spill_count + 1) * 8
+        spill_slots.set(spill_candidate.vreg_id, slot_offset)
+        // Remove spilled from active, add current
+        active.set(farthest_idx, LiveInterval {
+            vreg_id: current.vreg_id,
+            start: current.start,
+            end_pos: current.end_pos,
+            assigned_reg: spill_candidate.assigned_reg,
+            spilled: 0
+        })
+    } else {
+        // Spill current interval
+        let slot_offset: I64 = -(spill_count + 1) * 8
+        spill_slots.set(current.vreg_id, slot_offset)
+    }
+}

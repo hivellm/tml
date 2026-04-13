@@ -50,6 +50,23 @@ pub use compiler::native::x86_encode::encode_nop
 pub use compiler::native::x86_emit::emit_func
 pub use compiler::native::x86_emit::EmitResult
 
+// --- Liveness analysis ---
+pub use compiler::native::liveness::LiveInterval
+pub use compiler::native::liveness::compute_live_intervals
+pub use compiler::native::liveness::inst_def
+pub use compiler::native::liveness::inst_uses
+
+// --- Linear scan register allocator ---
+pub use compiler::native::linear_scan::RegAllocResult
+pub use compiler::native::linear_scan::linear_scan
+
+// --- Calling conventions ---
+pub use compiler::native::calling_conv::CallingConv
+pub use compiler::native::calling_conv::win64_cc
+pub use compiler::native::calling_conv::sysv_cc
+pub use compiler::native::calling_conv::is_callee_saved
+pub use compiler::native::calling_conv::arg_reg
+
 // --- COFF object file ---
 pub use compiler::native::coff_emit::CoffSection
 pub use compiler::native::coff_emit::CoffSymbol

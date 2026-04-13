@@ -1,0 +1,88 @@
+//! Unit tests for liveness analysis, linear scan, and calling conventions.
+//! Phase 19a.
+
+use test::assert
+use test::assert_eq
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachRet
+use compiler::native::machir::Operand
+use compiler::native::machir::VirtualReg
+use compiler::native::machir::mach_func_new
+use compiler::native::machir::mach_block_new
+use compiler::native::machir::fresh_vreg
+use compiler::native::machir::REG_RAX
+use compiler::native::machir::REG_RCX
+use compiler::native::machir::REG_RDX
+use compiler::native::machir::REG_RDI
+use compiler::native::machir::REG_RSI
+use compiler::native::liveness::LiveInterval
+use compiler::native::liveness::compute_live_intervals
+use compiler::native::liveness::inst_def
+use compiler::native::liveness::inst_uses
+use compiler::native::linear_scan::linear_scan
+use compiler::native::linear_scan::RegAllocResult
+use compiler::native::calling_conv::win64_cc
+use compiler::native::calling_conv::sysv_cc
+use compiler::native::calling_conv::is_callee_saved
+use compiler::native::calling_conv::arg_reg
+use compiler::native::calling_conv::CallingConv
+use std::collections::list::List
+
+@test func test_regalloc_all() {
+    // 1. Liveness: inst_def on MOV
+    let def_id: I64 = inst_def(MachInst::Mov(MachMov {
+        dst: Operand::Reg(VirtualReg { id: 5 }),
+        src: Operand::Imm(42),
+        size: 8
+    }))
+    assert_eq(def_id as I32, 5)
+
+    // 2. Liveness: inst_uses on ADD
+    let uses: List[I64] = inst_uses(MachInst::Add(MachBinOp {
+        dst: Operand::Reg(VirtualReg { id: 0 }),
+        src: Operand::Reg(VirtualReg { id: 1 }),
+        size: 8
+    }))
+    assert_eq(uses.len() as I32, 1)
+    assert_eq(uses.get(0) as I32, 1)
+
+    // 3. Linear scan on simple function
+    let mf: MachFunc = mach_func_new("add_test")
+    let vr0: VirtualReg = fresh_vreg(mf)
+    let vr1: VirtualReg = fresh_vreg(mf)
+    let vr2: VirtualReg = fresh_vreg(mf)
+    let bb: MachBlock = mf.blocks.get(0)
+    bb.insts.push(MachInst::Mov(MachMov { dst: Operand::Reg(vr0), src: Operand::Imm(10), size: 8 }))
+    bb.insts.push(MachInst::Mov(MachMov { dst: Operand::Reg(vr1), src: Operand::Imm(20), size: 8 }))
+    bb.insts.push(MachInst::Mov(MachMov { dst: Operand::Reg(vr2), src: Operand::Reg(vr0), size: 8 }))
+    bb.insts.push(MachInst::Add(MachBinOp { dst: Operand::Reg(vr2), src: Operand::Reg(vr1), size: 8 }))
+    bb.insts.push(MachInst::Ret(MachRet { has_value: 1 }))
+
+    let result: RegAllocResult = linear_scan(mf)
+    // 3 vregs should all get physical registers (we have 7 available)
+    assert_eq(result.spills as I32, 0)
+    assert(result.regs_used as I32 >= 3)
+
+    // 4. Win64 calling convention
+    let w: CallingConv = win64_cc()
+    assert_eq(arg_reg(w, 0) as I32, REG_RCX as I32)
+    assert_eq(arg_reg(w, 1) as I32, REG_RDX as I32)
+    assert_eq(arg_reg(w, 2) as I32, 8)
+    assert_eq(arg_reg(w, 3) as I32, 9)
+    assert_eq(arg_reg(w, 4) as I32, -1 as I32)  // stack
+    assert_eq(w.shadow_space as I32, 32)
+
+    // 5. SysV calling convention
+    let s: CallingConv = sysv_cc()
+    assert_eq(arg_reg(s, 0) as I32, REG_RDI as I32)
+    assert_eq(arg_reg(s, 1) as I32, REG_RSI as I32)
+    assert_eq(arg_reg(s, 5) as I32, 9)
+    assert_eq(s.shadow_space as I32, 0)
+
+    // 6. Callee-saved check
+    assert_eq(is_callee_saved(w, REG_RAX) as I32, 0)  // caller-saved
+}

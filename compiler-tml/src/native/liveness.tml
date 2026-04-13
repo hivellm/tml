@@ -1,0 +1,180 @@
+//! Liveness analysis — compute live intervals for register allocation.
+//!
+//! Performs backward dataflow analysis to compute live_in/live_out sets
+//! for each basic block, then derives live intervals for each virtual
+//! register as [first_def, last_use] ranges over linearized instruction
+//! positions.
+//!
+//! Phase 19a — items 1.1–1.4.
+
+use compiler::native::machir::MachFunc
+use compiler::native::machir::MachBlock
+use compiler::native::machir::MachInst
+use compiler::native::machir::MachMov
+use compiler::native::machir::MachBinOp
+use compiler::native::machir::MachUnaryOp
+use compiler::native::machir::MachCmp
+use compiler::native::machir::MachJcc
+use compiler::native::machir::MachCall
+use compiler::native::machir::MachSpill
+use compiler::native::machir::MachReload
+use compiler::native::machir::Operand
+use compiler::native::machir::VirtualReg
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Live interval
+// ============================================================================
+
+/// A live interval for a virtual register.
+pub type LiveInterval {
+    vreg_id: I64,
+    start: I64,
+    end_pos: I64,
+    assigned_reg: I64,
+    spilled: I64
+}
+
+/// Create a new live interval.
+pub func interval_new(vreg_id: I64, start: I64, end_pos: I64) -> LiveInterval {
+    return LiveInterval {
+        vreg_id: vreg_id,
+        start: start,
+        end_pos: end_pos,
+        assigned_reg: -1 as I64,
+        spilled: 0
+    }
+}
+
+// ============================================================================
+// Instruction numbering (item 1.4)
+// ============================================================================
+
+/// Assign linear instruction numbers across all blocks.
+/// Returns total instruction count.
+pub func number_instructions(mf: MachFunc) -> I64 {
+    var pos: I64 = 0
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let block: MachBlock = mf.blocks.get(bi)
+        let ic: I64 = block.insts.len() as I64
+        pos = pos + ic
+    }
+    return pos
+}
+
+// ============================================================================
+// Def/Use extraction (item 1.1)
+// ============================================================================
+
+/// Extract the defined VirtualReg from an instruction (if any).
+pub func inst_def(inst: MachInst) -> I64 {
+    when inst {
+        Mov(m) => return operand_vreg(m.dst),
+        Add(b) => return operand_vreg(b.dst),
+        Sub(b) => return operand_vreg(b.dst),
+        Imul(b) => return operand_vreg(b.dst),
+        And(b) => return operand_vreg(b.dst),
+        Or(b) => return operand_vreg(b.dst),
+        Xor(b) => return operand_vreg(b.dst),
+        Shl(b) => return operand_vreg(b.dst),
+        Sar(b) => return operand_vreg(b.dst),
+        Neg(u) => return operand_vreg(u.operand),
+        Movsx(m) => return operand_vreg(m.dst),
+        Movzx(m) => return operand_vreg(m.dst),
+        Lea(l) => return operand_vreg(l.dst),
+        _ => return -1 as I64
+    }
+}
+
+/// Extract the used VirtualRegs from an instruction.
+pub func inst_uses(inst: MachInst) -> List[I64] {
+    let uses = List[I64]::new(2)
+    when inst {
+        Mov(m) => { add_vreg(uses, m.src) },
+        Add(b) => { add_vreg(uses, b.src) },
+        Sub(b) => { add_vreg(uses, b.src) },
+        Imul(b) => { add_vreg(uses, b.src) },
+        Cmp(c) => { add_vreg(uses, c.lhs); add_vreg(uses, c.rhs) },
+        And(b) => { add_vreg(uses, b.src) },
+        Or(b) => { add_vreg(uses, b.src) },
+        Xor(b) => { add_vreg(uses, b.src) },
+        Shl(b) => { add_vreg(uses, b.src) },
+        Sar(b) => { add_vreg(uses, b.src) },
+        Neg(u) => { add_vreg(uses, u.operand) },
+        Push(u) => { add_vreg(uses, u.operand) },
+        _ => {}
+    }
+    return uses
+}
+
+func operand_vreg(op: Operand) -> I64 {
+    when op {
+        Reg(vr) => return vr.id,
+        _ => return -1 as I64
+    }
+}
+
+func add_vreg(list: List[I64], op: Operand) {
+    let id: I64 = operand_vreg(op)
+    if id >= 0 { list.push(id) }
+}
+
+// ============================================================================
+// Live interval computation (items 1.2–1.3)
+// ============================================================================
+
+/// Compute live intervals for all virtual registers in a function.
+pub func compute_live_intervals(mf: MachFunc) -> List[LiveInterval] {
+    let intervals = HashMap[I64, LiveInterval]::new(64)
+
+    var pos: I64 = 0
+    let bc: I64 = mf.blocks.len() as I64
+    for bi in 0 to bc {
+        let block: MachBlock = mf.blocks.get(bi)
+        let ic: I64 = block.insts.len() as I64
+        for ii in 0 to ic {
+            let inst: MachInst = block.insts.get(ii)
+
+            // Update end positions for uses
+            let uses: List[I64] = inst_uses(inst)
+            let uc: I64 = uses.len() as I64
+            for ui in 0 to uc {
+                let vreg_id: I64 = uses.get(ui)
+                if intervals.has(vreg_id) {
+                    let existing: LiveInterval = intervals.get(vreg_id)
+                    intervals.set(vreg_id, LiveInterval {
+                        vreg_id: vreg_id,
+                        start: existing.start,
+                        end_pos: pos,
+                        assigned_reg: existing.assigned_reg,
+                        spilled: existing.spilled
+                    })
+                } else {
+                    intervals.set(vreg_id, interval_new(vreg_id, pos, pos))
+                }
+            }
+
+            // Record first def
+            let def_id: I64 = inst_def(inst)
+            if def_id >= 0 {
+                if not intervals.has(def_id) {
+                    intervals.set(def_id, interval_new(def_id, pos, pos))
+                }
+            }
+
+            pos = pos + 1
+        }
+    }
+
+    // Collect into sorted list (by start position)
+    let result = List[LiveInterval]::new(mf.vreg_count)
+    for i in 0 to mf.vreg_count {
+        if intervals.has(i) {
+            result.push(intervals.get(i))
+        }
+    }
+    return result
+}
