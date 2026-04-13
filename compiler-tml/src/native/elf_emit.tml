@@ -1,0 +1,355 @@
+//! ELF64 object file emission — shared by x86_64 and AArch64 backends.
+//!
+//! Produces a relocatable ELF64 .o file with:
+//! - ELF header (e_ident magic, ET_REL, configurable e_machine)
+//! - .text section with machine code bytes
+//! - .symtab section with function/extern symbols (Elf64_Sym)
+//! - .strtab section with null-terminated symbol name strings
+//! - .rela.text section with relocations (Elf64_Rela)
+//! - .shstrtab section with section name strings
+//!
+//! Phase 21b — items 1.1–1.7.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// ELF64 constants (item 1.1)
+// ============================================================================
+
+/// ELF magic bytes: 0x7F 'E' 'L' 'F'
+pub const ELF_MAG0: I64 = 0x7F
+pub const ELF_MAG1: I64 = 0x45
+pub const ELF_MAG2: I64 = 0x4C
+pub const ELF_MAG3: I64 = 0x46
+
+pub const ELFCLASS64: I64 = 2
+pub const ELFDATA2LSB: I64 = 1
+pub const EV_CURRENT: I64 = 1
+pub const ELFOSABI_NONE: I64 = 0
+
+pub const ET_REL: I64 = 1
+
+/// Machine types
+pub const EM_X86_64: I64 = 62
+pub const EM_AARCH64: I64 = 183
+
+/// Section header sizes
+pub const ELF64_EHDR_SIZE: I64 = 64
+pub const ELF64_SHDR_SIZE: I64 = 64
+pub const ELF64_SYM_SIZE: I64 = 24
+pub const ELF64_RELA_SIZE: I64 = 24
+
+// ============================================================================
+// Section types and flags (item 1.2)
+// ============================================================================
+
+pub const SHT_NULL: I64 = 0
+pub const SHT_PROGBITS: I64 = 1
+pub const SHT_SYMTAB: I64 = 2
+pub const SHT_STRTAB: I64 = 3
+pub const SHT_RELA: I64 = 4
+
+pub const SHF_WRITE: I64 = 1
+pub const SHF_ALLOC: I64 = 2
+pub const SHF_EXECINSTR: I64 = 4
+pub const SHF_INFO_LINK: I64 = 0x40
+
+// ============================================================================
+// Symbol binding and type (item 1.4)
+// ============================================================================
+
+pub const STB_LOCAL: I64 = 0
+pub const STB_GLOBAL: I64 = 1
+pub const STT_NOTYPE: I64 = 0
+pub const STT_FUNC: I64 = 2
+pub const STT_SECTION: I64 = 3
+pub const STT_FILE: I64 = 4
+
+pub const SHN_UNDEF: I64 = 0
+
+// ============================================================================
+// x86_64 relocation types (item 1.6)
+// ============================================================================
+
+pub const R_X86_64_PC32: I64 = 2
+pub const R_X86_64_PLT32: I64 = 4
+pub const R_X86_64_32: I64 = 10
+pub const R_X86_64_64: I64 = 1
+
+// ============================================================================
+// AArch64 relocation types (re-export from aarch64/elf_emit)
+// ============================================================================
+
+pub const R_AARCH64_CALL26: I64 = 283
+pub const R_AARCH64_ADR_PREL_PG_HI21: I64 = 275
+pub const R_AARCH64_ADD_ABS_LO12_NC: I64 = 277
+
+// ============================================================================
+// Input data types
+// ============================================================================
+
+/// A symbol to emit in the ELF symbol table.
+pub type ElfSymbol {
+    name: Str,
+    value: I64,        // offset within section
+    size: I64,         // symbol size (0 for external)
+    binding: I64,      // STB_LOCAL or STB_GLOBAL
+    sym_type: I64,     // STT_FUNC, STT_SECTION, etc.
+    section_idx: I64   // section index (0 = undefined/extern)
+}
+
+/// A relocation entry for .rela.text.
+pub type ElfRelocation {
+    offset: I64,       // offset in .text where relocation applies
+    sym_idx: I64,      // symbol table index
+    rel_type: I64,     // R_X86_64_PLT32, R_X86_64_PC32, etc.
+    addend: I64        // addend (usually -4 for PC-relative)
+}
+
+// ============================================================================
+// ELF64 writer (items 1.1–1.7)
+// ============================================================================
+
+/// Write a complete ELF64 relocatable object file.
+/// `machine` is EM_X86_64 (62) or EM_AARCH64 (183).
+pub func write_elf64_obj(
+    machine: I64,
+    text_bytes: List[I64],
+    rdata_bytes: List[I64],
+    symbols: List[ElfSymbol],
+    relocations: List[ElfRelocation]
+) -> List[I64] {
+    let buf = List[I64]::new(8192)
+
+    // Build .strtab (section 3)
+    let strtab = List[I64]::new(256)
+    let str_offsets = HashMap[Str, I64]::new(32)
+    strtab.push(0)  // first byte is null
+    let sc: I64 = symbols.len() as I64
+    for i in 0 to sc {
+        let sym: ElfSymbol = symbols.get(i)
+        if sym.name != "" {
+            str_offsets.set(sym.name, strtab.len() as I64)
+            write_str_null(strtab, sym.name)
+        }
+    }
+
+    // Build .shstrtab (section 5)
+    let shstrtab = List[I64]::new(64)
+    shstrtab.push(0)  // null
+    let sh_text_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".text")
+    let sh_rdata_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".rodata")
+    let sh_symtab_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".symtab")
+    let sh_strtab_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".strtab")
+    let sh_rela_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".rela.text")
+    let sh_shstrtab_off: I64 = shstrtab.len() as I64
+    write_str_null(shstrtab, ".shstrtab")
+
+    // Section layout: 0=NULL, 1=.text, 2=.rodata, 3=.strtab, 4=.symtab, 5=.shstrtab, 6=.rela.text
+    let num_sections: I64 = 7
+
+    // Compute data offsets (after ELF header)
+    let text_off: I64 = ELF64_EHDR_SIZE
+    let text_size: I64 = text_bytes.len() as I64
+    let rdata_off: I64 = align8(text_off + text_size)
+    let rdata_size: I64 = rdata_bytes.len() as I64
+    let strtab_off: I64 = align8(rdata_off + rdata_size)
+    let strtab_size: I64 = strtab.len() as I64
+
+    // Build symtab entries
+    let symtab = List[I64]::new(sc * ELF64_SYM_SIZE)
+    // First entry: null symbol
+    for _ in 0 to ELF64_SYM_SIZE { symtab.push(0) }
+    var num_locals: I64 = 1  // null symbol is local
+    // Local symbols first
+    for i in 0 to sc {
+        let sym: ElfSymbol = symbols.get(i)
+        if sym.binding == STB_LOCAL {
+            let name_off: I64 = if sym.name != "" and str_offsets.has(sym.name) { str_offsets.get(sym.name) } else { 0 }
+            write_elf64_sym(symtab, name_off, sym.value, sym.size, STB_LOCAL, sym.sym_type, sym.section_idx)
+            num_locals = num_locals + 1
+        }
+    }
+    // Then global symbols
+    for i in 0 to sc {
+        let sym: ElfSymbol = symbols.get(i)
+        if sym.binding == STB_GLOBAL {
+            let name_off: I64 = if sym.name != "" and str_offsets.has(sym.name) { str_offsets.get(sym.name) } else { 0 }
+            write_elf64_sym(symtab, name_off, sym.value, sym.size, STB_GLOBAL, sym.sym_type, sym.section_idx)
+        }
+    }
+
+    let symtab_off: I64 = align8(strtab_off + strtab_size)
+    let symtab_size: I64 = symtab.len() as I64
+
+    // Build .rela.text
+    let relatext = List[I64]::new(relocations.len() as I64 * ELF64_RELA_SIZE)
+    let rc: I64 = relocations.len() as I64
+    for i in 0 to rc {
+        let rel: ElfRelocation = relocations.get(i)
+        write_elf64_rela(relatext, rel.offset, rel.sym_idx, rel.rel_type, rel.addend)
+    }
+    let rela_off: I64 = align8(symtab_off + symtab_size)
+    let rela_size: I64 = relatext.len() as I64
+
+    let shstrtab_off: I64 = align8(rela_off + rela_size)
+    let shstrtab_size: I64 = shstrtab.len() as I64
+
+    let shdr_off: I64 = align8(shstrtab_off + shstrtab_size)
+
+    // === Write ELF header (item 1.1) ===
+    // e_ident
+    buf.push(ELF_MAG0)
+    buf.push(ELF_MAG1)
+    buf.push(ELF_MAG2)
+    buf.push(ELF_MAG3)
+    buf.push(ELFCLASS64)
+    buf.push(ELFDATA2LSB)
+    buf.push(EV_CURRENT)
+    buf.push(ELFOSABI_NONE)
+    for _ in 0 to 8 { buf.push(0) }  // pad to 16
+
+    write_u16(buf, ET_REL)
+    write_u16(buf, machine)
+    write_u32(buf, EV_CURRENT)
+    write_u64(buf, 0)          // e_entry
+    write_u64(buf, 0)          // e_phoff
+    write_u64(buf, shdr_off)   // e_shoff
+    write_u32(buf, 0)          // e_flags
+    write_u16(buf, ELF64_EHDR_SIZE) // e_ehsize
+    write_u16(buf, 0)          // e_phentsize
+    write_u16(buf, 0)          // e_phnum
+    write_u16(buf, ELF64_SHDR_SIZE) // e_shentsize
+    write_u16(buf, num_sections)    // e_shnum
+    write_u16(buf, 5)          // e_shstrndx = .shstrtab section index
+
+    // === Write section data ===
+    // .text (item 1.3)
+    write_bytes(buf, text_bytes)
+    pad_to(buf, rdata_off)
+
+    // .rodata
+    write_bytes(buf, rdata_bytes)
+    pad_to(buf, strtab_off)
+
+    // .strtab (item 1.5)
+    write_bytes(buf, strtab)
+    pad_to(buf, symtab_off)
+
+    // .symtab (item 1.4)
+    write_bytes(buf, symtab)
+    pad_to(buf, rela_off)
+
+    // .rela.text (item 1.6)
+    write_bytes(buf, relatext)
+    pad_to(buf, shstrtab_off)
+
+    // .shstrtab
+    write_bytes(buf, shstrtab)
+    pad_to(buf, shdr_off)
+
+    // === Section header table (item 1.2) ===
+    // 0: NULL
+    write_shdr(buf, 0, SHT_NULL, 0, 0, 0, 0, 0, 0, 0, 0)
+    // 1: .text
+    write_shdr(buf, sh_text_off, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 0, text_off, text_size, 0, 0, 16, 0)
+    // 2: .rodata
+    write_shdr(buf, sh_rdata_off, SHT_PROGBITS, SHF_ALLOC, 0, rdata_off, rdata_size, 0, 0, 8, 0)
+    // 3: .strtab
+    write_shdr(buf, sh_strtab_off, SHT_STRTAB, 0, 0, strtab_off, strtab_size, 0, 0, 1, 0)
+    // 4: .symtab
+    write_shdr(buf, sh_symtab_off, SHT_SYMTAB, 0, 0, symtab_off, symtab_size, 3, num_locals, 8, ELF64_SYM_SIZE)
+    // 5: .shstrtab
+    write_shdr(buf, sh_shstrtab_off, SHT_STRTAB, 0, 0, shstrtab_off, shstrtab_size, 0, 0, 1, 0)
+    // 6: .rela.text
+    write_shdr(buf, sh_rela_off, SHT_RELA, SHF_INFO_LINK, 0, rela_off, rela_size, 4, 1, 8, ELF64_RELA_SIZE)
+
+    return buf
+}
+
+// ============================================================================
+// Binary encoding helpers
+// ============================================================================
+
+func write_u16(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+    buf.push((v >> 16) & 0xFF)
+    buf.push((v >> 24) & 0xFF)
+}
+
+func write_u64(buf: List[I64], v: I64) {
+    write_u32(buf, v)
+    write_u32(buf, v >> 32)
+}
+
+func write_bytes(buf: List[I64], src: List[I64]) {
+    let n: I64 = src.len() as I64
+    for i in 0 to n {
+        buf.push(src.get(i))
+    }
+}
+
+func write_str_null(buf: List[I64], s: Str) {
+    let n: I64 = s.len() as I64
+    let s_ptr: I64 = s as I64
+    for i in 0 to n {
+        let b: I64 = lowlevel { ptr_read[I8]((s_ptr + i) as *I8) } as I64
+        buf.push((b + 256) % 256)
+    }
+    buf.push(0)
+}
+
+func align8(v: I64) -> I64 {
+    return (v + 7) & (7 ^ (-1 as I64))
+}
+
+func pad_to(buf: List[I64], target: I64) {
+    let current: I64 = buf.len() as I64
+    if current < target {
+        let n: I64 = target - current
+        for _ in 0 to n { buf.push(0) }
+    }
+}
+
+/// Write Elf64_Sym (24 bytes)
+func write_elf64_sym(buf: List[I64], name: I64, value: I64, size: I64, bind: I64, stype: I64, shndx: I64) {
+    write_u32(buf, name)                    // st_name
+    buf.push((bind << 4) | (stype & 0xF))  // st_info
+    buf.push(0)                             // st_other
+    write_u16(buf, shndx)                   // st_shndx
+    write_u64(buf, value)                   // st_value
+    write_u64(buf, size)                    // st_size
+}
+
+/// Write Elf64_Rela (24 bytes)
+func write_elf64_rela(buf: List[I64], offset: I64, sym: I64, rtype: I64, addend: I64) {
+    write_u64(buf, offset)                  // r_offset
+    write_u64(buf, (sym << 32) | rtype)     // r_info = ELF64_R_INFO(sym, type)
+    write_u64(buf, addend)                  // r_addend
+}
+
+/// Write Elf64_Shdr (64 bytes)
+func write_shdr(buf: List[I64], name: I64, stype: I64, flags: I64, addr: I64, offset: I64, size: I64, link: I64, info: I64, addralign: I64, entsize: I64) {
+    write_u32(buf, name)     // sh_name
+    write_u32(buf, stype)    // sh_type
+    write_u64(buf, flags)    // sh_flags
+    write_u64(buf, addr)     // sh_addr
+    write_u64(buf, offset)   // sh_offset
+    write_u64(buf, size)     // sh_size
+    write_u32(buf, link)     // sh_link
+    write_u32(buf, info)     // sh_info
+    write_u64(buf, addralign) // sh_addralign
+    write_u64(buf, entsize)  // sh_entsize
+}

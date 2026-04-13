@@ -1,0 +1,109 @@
+//! Tests for ELF64 object file emission.
+//! Verifies header magic, machine type, section layout, and symbol encoding.
+
+use test::{assert, assert_eq}
+use compiler::native::elf_emit::*
+use std::collections::list::List
+
+func read_u16(buf: List[I64], off: I64) -> I64 {
+    return buf.get(off) | (buf.get(off + 1) << 8)
+}
+
+func read_u32(buf: List[I64], off: I64) -> I64 {
+    return buf.get(off) | (buf.get(off + 1) << 8) | (buf.get(off + 2) << 16) | (buf.get(off + 3) << 24)
+}
+
+@test func test_elf_magic() {
+    let text = List[I64]::new(4)
+    text.push(0xCC)  // int3
+    text.push(0xCC)
+    text.push(0xCC)
+    text.push(0xC3)  // ret
+    let rdata = List[I64]::new(0)
+    let syms = List[ElfSymbol]::new(0)
+    let relocs = List[ElfRelocation]::new(0)
+
+    let elf: List[I64] = write_elf64_obj(EM_X86_64, text, rdata, syms, relocs)
+
+    // ELF magic: 7F 45 4C 46
+    assert_eq(elf.get(0) as I32, 0x7F)
+    assert_eq(elf.get(1) as I32, 0x45)
+    assert_eq(elf.get(2) as I32, 0x4C)
+    assert_eq(elf.get(3) as I32, 0x46)
+    // Class: 64-bit
+    assert_eq(elf.get(4) as I32, 2)
+    // Data: little-endian
+    assert_eq(elf.get(5) as I32, 1)
+}
+
+@test func test_elf_machine_x86() {
+    let text = List[I64]::new(1)
+    text.push(0xC3)
+    let elf: List[I64] = write_elf64_obj(EM_X86_64, text, List[I64]::new(0), List[ElfSymbol]::new(0), List[ElfRelocation]::new(0))
+    // e_type at offset 16: ET_REL=1
+    assert_eq(read_u16(elf, 16) as I32, 1)
+    // e_machine at offset 18: EM_X86_64=62
+    assert_eq(read_u16(elf, 18) as I32, 62)
+}
+
+@test func test_elf_machine_aarch64() {
+    let text = List[I64]::new(4)
+    for _ in 0 to 4 { text.push(0) }  // NOP
+    let elf: List[I64] = write_elf64_obj(EM_AARCH64, text, List[I64]::new(0), List[ElfSymbol]::new(0), List[ElfRelocation]::new(0))
+    // e_machine at offset 18: EM_AARCH64=183
+    assert_eq(read_u16(elf, 18) as I32, 183)
+}
+
+@test func test_elf_has_text_data() {
+    let text = List[I64]::new(8)
+    for _ in 0 to 8 { text.push(0x90) }  // NOP padding
+    let elf: List[I64] = write_elf64_obj(EM_X86_64, text, List[I64]::new(0), List[ElfSymbol]::new(0), List[ElfRelocation]::new(0))
+    // .text starts at offset 64 (after ELF header)
+    assert_eq(elf.get(64) as I32, 0x90)
+    assert_eq(elf.get(71) as I32, 0x90)
+}
+
+@test func test_elf_with_symbol() {
+    let text = List[I64]::new(4)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    let syms = List[ElfSymbol]::new(1)
+    syms.push(ElfSymbol {
+        name: "main",
+        value: 0 as I64,
+        size: 4 as I64,
+        binding: STB_GLOBAL,
+        sym_type: STT_FUNC,
+        section_idx: 1 as I64
+    })
+    let elf: List[I64] = write_elf64_obj(EM_X86_64, text, List[I64]::new(0), syms, List[ElfRelocation]::new(0))
+    // Should be larger than header alone (has symtab + strtab)
+    assert(elf.len() as I64 > 200)
+    // e_shnum at offset 60: 7 sections
+    assert_eq(read_u16(elf, 60) as I32, 7)
+}
+
+@test func test_elf_with_relocation() {
+    let text = List[I64]::new(8)
+    for _ in 0 to 8 { text.push(0) }
+    let syms = List[ElfSymbol]::new(1)
+    syms.push(ElfSymbol {
+        name: "puts",
+        value: 0 as I64,
+        size: 0 as I64,
+        binding: STB_GLOBAL,
+        sym_type: STT_NOTYPE,
+        section_idx: 0 as I64
+    })
+    let relocs = List[ElfRelocation]::new(1)
+    relocs.push(ElfRelocation {
+        offset: 4 as I64,
+        sym_idx: 1 as I64,
+        rel_type: R_X86_64_PLT32,
+        addend: -4 as I64
+    })
+    let elf: List[I64] = write_elf64_obj(EM_X86_64, text, List[I64]::new(0), syms, relocs)
+    assert(elf.len() as I64 > 300)
+}
