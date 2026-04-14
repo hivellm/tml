@@ -13,9 +13,9 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-No active task. Last completed: phase0d_codegen-switch-when-dense — ARCHIVED (2026-04-14).
-Branch: feat/self-hosting-compiler. Version: 0.3.6.
-Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist).
+No active task. Last completed: phase0h_cmov-select-if-else — ARCHIVED (2026-04-14).
+Branch: feat/self-hosting-compiler. Version: 0.3.10.
+Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), slice_split_pred X002 timeout.
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
@@ -27,6 +27,24 @@ No active task.
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-14
+## phase0h_cmov-select-if-else — COMPLETE
+
+### Accomplished
+Implemented LLVM `select` instruction optimization for scalar if-else expressions in AST codegen (`compiler/src/codegen/llvm/control/if.cpp`).
+- Added `is_simple_scalar_branch()`: eligible when branch is literal/ident/empty-block-wrapper/recursively eligible nested if-else
+- Added `is_scalar_llvm_type()`: i1/i8/i16/i32/i64/float/double/ptr
+- In `gen_if`: before emitting br+label, checks eligibility → emits `select i1 %cond, T %then, T %else`
+- Chained if-else-if naturally produces nested selects via recursive `gen_if`
+- Parser limitation: `{ identifier } else { ... }` fails LL(1) parse — identifier branches can't be block-wrapped
+
+### Results
+- +20% on ternary chain at debug; LLVM DCE folds at -O2 (benchmark loops have no external output)
+- No regressions: compiler 184/184, core 750/751 (pre-existing slice_split_pred X002)
+- Regression test: `compiler/tests/compiler/select_if_else.test.tml` (9 tests)
+- Commits: `12d0302d`, `a9b7ebce`
+- Version bumped to 0.3.10, docs/patches/v0.3.10.md created
+
 ### 2026-04-14
 ## phase0_codegen-fixes — core test suite K001 fixes COMPLETE
 
