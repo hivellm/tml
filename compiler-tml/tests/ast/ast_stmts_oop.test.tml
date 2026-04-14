@@ -1,0 +1,48 @@
+//! Tests for ast/stmts, ast/patterns, ast/oop, ast/ast_writer — construct and verify AST nodes.
+
+use test::{assert, assert_eq}
+use compiler::ast::stmts::*
+use compiler::ast::patterns::*
+use compiler::ast::oop::*
+use compiler::ast::ast_writer::*
+use compiler::ast::nodes::{Pattern, Module, TypePath}
+use compiler::ast::decls::ClassField
+use compiler::ast::common::Visibility
+use compiler::source::{SourceSpan, span_new, loc_new}
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+func sp() -> SourceSpan {
+    return span_new(loc_new("t", 0 as I64, 0 as I64, 0 as I64, 0 as I64), loc_new("t", 0 as I64, 0 as I64, 0 as I64, 0 as I64))
+}
+
+@test func test_var_stmt_and_enum() {
+    let vs: VarStmt = VarStmt { name: "counter", ty: Nothing, init: Nothing, span: sp() }
+    assert_eq(vs.name, "counter")
+    let s: Stmt = Stmt::Var(vs)
+    when s { Var(v) => assert_eq(v.name, "counter"), _ => assert(false) }
+}
+
+@test func test_wildcard_pattern() {
+    let p: Pattern = Pattern::Wildcard(sp())
+    when p { Wildcard(_) => assert(true), _ => assert(false) }
+}
+
+@test func test_class_decl() {
+    let cd: ClassDecl = ClassDecl {
+        name: "Animal",
+        visibility: Visibility::Public,
+        generics: List::new(0 as I64),
+        parent: Nothing,
+        interfaces: List[TypePath]::new(0 as I64),
+        fields: List[ClassField]::new(0 as I64),
+        methods: List::new(0 as I64),
+        span: sp()
+    }
+    assert_eq(cd.name, "Animal")
+}
+
+@test func test_module_for_writer() {
+    let m: Module = Module { name: "test_mod", docs: List[Str]::new(0 as I64), decls: List::new(0 as I64), span: sp() }
+    assert_eq(m.name, "test_mod")
+}

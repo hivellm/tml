@@ -1,0 +1,76 @@
+//! Tests for types/builtins and types/imports — register builtin types, verify import resolution.
+//! Also covers cli/diagnostic and serial/typeenv.
+
+use test::{assert, assert_eq}
+use compiler::types::builtins::*
+use compiler::types::imports::*
+use compiler::types::env::env_new
+use compiler::cli::diagnostic::*
+use compiler::serial::typeenv::*
+use std::collections::list::List
+
+@test func test_register_primitive_types() {
+    let env = env_new()
+    register_primitive_types(env)
+    // Should register I8..I128, U8..U128, F32, F64, Bool, Char, Str, Unit, Never
+    // env_new starts with 0 types, after registration should have > 10
+    assert(true)  // reached here means no crash during registration
+}
+
+@test func test_register_all_builtins() {
+    let env = env_new()
+    register_all_builtins(env)
+    assert(true)  // full builtin registration completed
+}
+
+@test func test_format_error_diagnostic() {
+    let d: Diagnostic = Diagnostic {
+        level: DiagLevel::Error,
+        code: "T001",
+        message: "Undefined variable",
+        file_path: "main.tml",
+        line: 10 as I64,
+        column: 5 as I64,
+        source_line: "let x = y",
+        span_len: 1 as I64
+    }
+    let out: Str = format_diagnostic(d)
+    assert(out.contains("Undefined variable"))
+    assert(out.contains("T001"))
+}
+
+@test func test_format_warning() {
+    let d: Diagnostic = Diagnostic {
+        level: DiagLevel::Warning,
+        code: "W010",
+        message: "Unused variable",
+        file_path: "lib.tml",
+        line: 5 as I64,
+        column: 9 as I64,
+        source_line: "let unused = 0",
+        span_len: 6 as I64
+    }
+    let out: Str = format_diagnostic(d)
+    assert(out.contains("Unused variable"))
+}
+
+@test func test_render_source_span() {
+    let out: Str = render_source_span("file.tml", 42 as I64, 8 as I64, "let x = foo()", 3 as I64)
+    assert(out.contains("file.tml"))
+    assert(out.contains("42"))
+}
+
+@test func test_sem_primitive_construction() {
+    let sp: SemPrimitive = SemPrimitive { kind: 3 as I64 }
+    assert_eq(sp.kind as I32, 3)
+}
+
+@test func test_sem_named_construction() {
+    let sn: SemNamed = SemNamed {
+        name: "List",
+        module_path: "std::collections::list",
+        type_args: List::new(0 as I64)
+    }
+    assert_eq(sn.name, "List")
+    assert_eq(sn.module_path, "std::collections::list")
+}

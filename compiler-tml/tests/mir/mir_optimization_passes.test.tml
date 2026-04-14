@@ -1,0 +1,68 @@
+//! Tests for 11 MIR optimization passes: copy_prop, devirt, escape, inlining,
+//! inst_simplify, licm, mem2reg, rvo, simplify_cfg, sroa, tail_call.
+//! Also covers native/obj_writer (write_coff) and native/regalloc_rewrite.
+
+use test::{assert, assert_eq}
+use compiler::mir::module::*
+use compiler::mir::types::{MirType, MirPrimitive}
+use compiler::mir::passes::common::PassResult
+use compiler::mir::passes::copy_prop::run_copy_propagation
+use compiler::mir::passes::escape_analysis::run_escape_analysis
+use compiler::mir::passes::inst_simplify::run_inst_simplify
+use compiler::mir::passes::licm::run_licm
+use compiler::mir::passes::mem2reg::run_mem2reg
+use compiler::mir::passes::rvo::run_rvo
+use compiler::mir::passes::simplify_cfg::run_simplify_cfg
+use compiler::mir::passes::sroa::run_sroa
+use compiler::mir::passes::tail_call::run_tail_call
+use compiler::mir::passes::devirtualization::run_devirtualization
+use compiler::mir::passes::inlining::run_inlining
+use compiler::native::obj_writer::write_coff
+use compiler::native::coff_emit::*
+use compiler::native::regalloc_rewrite::rewrite_vregs
+use compiler::native::machir::{MachFunc, mach_func_new}
+use compiler::native::linear_scan::RegAllocResult
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+func mf() -> MirFunc { return mir_func_new("t", MirType::Primitive(MirPrimitive::Unit)) }
+func mm() -> MirModule {
+    let m: MirModule = MirModule { name: "t", structs: List::new(0 as I64), enums: List::new(0 as I64), functions: List::new(1 as I64), constants: HashMap[Str, I64]::new(4) }
+    m.functions.push(mf())
+    return m
+}
+
+@test func test_copy_prop()   { assert_eq(run_copy_propagation(mf()).changed as I32, 0) }
+@test func test_escape()      { assert_eq(run_escape_analysis(mf()).changed as I32, 0) }
+@test func test_inst_simp()   { assert_eq(run_inst_simplify(mf()).changed as I32, 0) }
+@test func test_licm()        { assert_eq(run_licm(mf()).changed as I32, 0) }
+@test func test_mem2reg()     { assert_eq(run_mem2reg(mf()).changed as I32, 0) }
+@test func test_rvo()         { assert_eq(run_rvo(mf()).changed as I32, 0) }
+@test func test_simp_cfg()    { assert_eq(run_simplify_cfg(mf()).changed as I32, 0) }
+@test func test_sroa()        { assert_eq(run_sroa(mf()).changed as I32, 0) }
+@test func test_tail_call()   { assert_eq(run_tail_call(mf()).changed as I32, 0) }
+@test func test_devirt()      { assert_eq(run_devirtualization(mm()).changed as I32, 0) }
+@test func test_inlining()    { assert_eq(run_inlining(mm()).changed as I32, 0) }
+
+@test func test_coff_obj_writer() {
+    let data = List[I64]::new(4)
+    data.push(0xCC)
+    data.push(0xC3)
+    data.push(0xCC)
+    data.push(0xC3)
+    let sects = List[CoffSection]::new(1)
+    sects.push(make_text_section(data))
+    let syms = List[CoffSymbol]::new(1)
+    syms.push(make_func_symbol("main", 0 as I64, 1 as I64))
+    let obj: List[I64] = write_coff(sects, syms)
+    assert(obj.len() as I64 > 20)
+    assert_eq(obj.get(0) as I32, 0x64)
+    assert_eq(obj.get(1) as I32, 0x86)
+}
+
+@test func test_regalloc_rewrite() {
+    let machf: MachFunc = mach_func_new("rr")
+    let ra: RegAllocResult = RegAllocResult { assignments: HashMap[I64, I64]::new(4), spill_slots: HashMap[I64, I64]::new(4), regs_used: 0 as I64, spills: 0 as I64, spill_frame_size: 0 as I64 }
+    rewrite_vregs(machf, ra)
+    assert_eq(machf.blocks.len() as I32, 1)
+}
