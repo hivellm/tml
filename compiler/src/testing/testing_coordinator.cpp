@@ -777,7 +777,7 @@ TestRunResult run_tests(const TestConfig& config) {
         CompileConfig compile_config;
         compile_config.verbose = config.verbose;
         compile_config.coverage = config.coverage;
-        compile_config.optimization_level = 0;
+        compile_config.optimization_level = config.optimization_level;
         compile_config.num_threads = config.compile_threads;
         compile_config.no_cache = config.no_cache;
         compile_config.stage_overrides = config.stage_overrides;
@@ -1289,6 +1289,7 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.fail_fast = config.fail_fast;
         compile_config.num_threads = config.compile_threads; // 0 = auto (up to 8)
         compile_config.stage_overrides = config.stage_overrides;
+        compile_config.optimization_level = config.optimization_level;
 
         // (incremental cache saves happen after each batch below)
 

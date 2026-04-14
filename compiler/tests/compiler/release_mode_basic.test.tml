@@ -1,0 +1,68 @@
+// Regression test for --release mode (phase0i).
+//
+// Verifies that code compiled with --release (LLVM O3) produces
+// the same correct results as debug mode. These functions use
+// observable outputs (assert_eq) so LLVM cannot DCE them away.
+
+use test::assert_eq
+
+// Arithmetic — must not be DCE'd due to assert_eq
+func add(a: I64, b: I64) -> I64 { a + b }
+func mul(a: I64, b: I64) -> I64 { a * b }
+func div(a: I64, b: I64) -> I64 { a / b }
+
+// Float ops
+func fadd(a: F64, b: F64) -> F64 { a + b }
+func fmul(a: F64, b: F64) -> F64 { a * b }
+
+// Nested function call chain — tests inlining
+func double(x: I64) -> I64 { x * 2 }
+func quad(x: I64) -> I64 { double(double(x)) }
+
+// Conditional — tests select/CMOV stability under O3
+// Note: `{ ident } else` fails LL(1) parse, so branches use expressions.
+func max_val(a: I64, b: I64) -> I64 {
+    if a > b { a + 0 } else { b + 0 }
+}
+
+func min_val(a: I64, b: I64) -> I64 {
+    if a < b { a + 0 } else { b + 0 }
+}
+
+@test
+func test_integer_arithmetic() {
+    assert_eq(add(3, 4), 7)
+    assert_eq(add(-1, 1), 0)
+    assert_eq(mul(6, 7), 42)
+    assert_eq(div(100, 4), 25)
+}
+
+@test
+func test_float_arithmetic() {
+    assert_eq(fadd(1.5, 2.5), 4.0)
+    assert_eq(fmul(3.0, 4.0), 12.0)
+}
+
+@test
+func test_inlining_correctness() {
+    assert_eq(double(5), 10)
+    assert_eq(quad(3), 12)
+    assert_eq(quad(0), 0)
+}
+
+@test
+func test_select_correctness() {
+    assert_eq(max_val(10, 20), 20)
+    assert_eq(max_val(20, 10), 20)
+    assert_eq(max_val(5, 5), 5)
+    assert_eq(min_val(3, 7), 3)
+    assert_eq(min_val(7, 3), 3)
+}
+
+@test
+func test_negative_numbers() {
+    assert_eq(add(-5, -3), -8)
+    assert_eq(mul(-4, 3), -12)
+    assert_eq(max_val(-1, -10), -1)
+    assert_eq(min_val(-1, -10), -10)
+}

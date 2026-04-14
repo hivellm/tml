@@ -70,6 +70,8 @@ struct TestConfig {
     // Empty = use default for each stage (TML for parser since phase13d switchover).
     // Set {"parser", "cpp"} to force C++ frontend for all test compilation.
     std::map<std::string, std::string> stage_overrides;
+
+    int optimization_level = 0; // 0=debug (O0), 2=release (O2), 3=release (O3)
 };
 
 // ============================================================================
