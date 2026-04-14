@@ -32,6 +32,13 @@ set(CMAKE_C_COMPILE_FEATURES "c_std_11;c_std_17" CACHE STRING "" FORCE)
 # Use MSVC resource compiler (rc.exe) — Zig doesn't include windres
 set(CMAKE_RC_COMPILER "rc" CACHE FILEPATH "" FORCE)
 
+# Archiver and ranlib — use zig ar (LLVM-ar compatible, avoids CMAKE_AR-NOTFOUND on clean builds)
+set(CMAKE_AR "${_scripts_dir}/zig-ar.bat" CACHE FILEPATH "" FORCE)
+set(CMAKE_RANLIB "${_scripts_dir}/zig-ar.bat" CACHE FILEPATH "" FORCE)
+# Silence CMake's "ranlib needs no args" warning for LLVM-style archives
+set(CMAKE_C_CREATE_STATIC_LIBRARY "<CMAKE_AR> qc <TARGET> <OBJECTS>" CACHE STRING "" FORCE)
+set(CMAKE_CXX_CREATE_STATIC_LIBRARY "<CMAKE_AR> qc <TARGET> <OBJECTS>" CACHE STRING "" FORCE)
+
 # Force dynamic CRT (/MD) to match LLVM static libs built with /MD
 # Zig CC default is static CRT; -D_DLL -D_MT selects dynamic CRT headers
 # --dependent-lib=msvcrt tells the linker to link msvcrt.lib (dynamic CRT)

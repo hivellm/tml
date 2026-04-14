@@ -395,9 +395,20 @@ pub behavior BuildHasher {
 ///
 /// Uses a variant of FNV-1a (Fowler-Noll-Vo) hashing, which is fast and
 /// has good distribution properties.
-@auto(duplicate, equal)
 pub type DefaultHasher {
     state: U64
+}
+
+impl Duplicate for DefaultHasher {
+    pub func duplicate(this) -> DefaultHasher {
+        return DefaultHasher { state: this.state }
+    }
+}
+
+impl PartialEq for DefaultHasher {
+    pub func eq(this, other: ref DefaultHasher) -> Bool {
+        return this.state == other.state
+    }
 }
 
 // FNV-1a constants
@@ -497,10 +508,21 @@ impl Default for DefaultHasher {
 ///
 /// Each `RandomState` instance is initialized with random keys. Different
 /// instances will produce different hash values for the same input.
-@auto(duplicate, equal)
 pub type RandomState {
     k0: U64,
     k1: U64
+}
+
+impl Duplicate for RandomState {
+    pub func duplicate(this) -> RandomState {
+        return RandomState { k0: this.k0, k1: this.k1 }
+    }
+}
+
+impl PartialEq for RandomState {
+    pub func eq(this, other: ref RandomState) -> Bool {
+        return this.k0 == other.k0 and this.k1 == other.k1
+    }
 }
 
 impl RandomState {

@@ -25597,26 +25597,6 @@
         },
         {
           "id": "lib::core::src::net::ip::impl_Ipv4Addr",
-          "name": "Duplicate for Ipv4Addr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_Ipv4Addr",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for Ipv4Addr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_Ipv4Addr",
-          "name": "PartialEq for Ipv4Addr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_Ipv4Addr",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for Ipv4Addr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_Ipv4Addr",
           "name": "Eq for Ipv4Addr",
           "kind": "trait_impl",
           "path": "lib::core::src::net::ip::impl_Ipv4Addr",
@@ -25965,26 +25945,6 @@
         },
         {
           "id": "lib::core::src::net::ip::impl_Ipv6Addr",
-          "name": "Duplicate for Ipv6Addr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_Ipv6Addr",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for Ipv6Addr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_Ipv6Addr",
-          "name": "PartialEq for Ipv6Addr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_Ipv6Addr",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for Ipv6Addr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_Ipv6Addr",
           "name": "Eq for Ipv6Addr",
           "kind": "trait_impl",
           "path": "lib::core::src::net::ip::impl_Ipv6Addr",
@@ -26267,26 +26227,6 @@
         },
         {
           "id": "lib::core::src::net::ip::impl_IpAddr",
-          "name": "Duplicate for IpAddr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_IpAddr",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for IpAddr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_IpAddr",
-          "name": "PartialEq for IpAddr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::ip::impl_IpAddr",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for IpAddr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::ip::impl_IpAddr",
           "name": "Eq for IpAddr",
           "kind": "trait_impl",
           "path": "lib::core::src::net::ip::impl_IpAddr",
@@ -26489,26 +26429,6 @@
           "path": "lib::core::src::net::socket::impl_SocketAddrV4",
           "visibility": "unknown",
           "signature": "impl Copy for SocketAddrV4",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddrV4",
-          "name": "Duplicate for SocketAddrV4",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddrV4",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for SocketAddrV4",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddrV4",
-          "name": "PartialEq for SocketAddrV4",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddrV4",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for SocketAddrV4",
           "doc": "",
           "summary": ""
         },
@@ -26755,26 +26675,6 @@
         },
         {
           "id": "lib::core::src::net::socket::impl_SocketAddrV6",
-          "name": "Duplicate for SocketAddrV6",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddrV6",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for SocketAddrV6",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddrV6",
-          "name": "PartialEq for SocketAddrV6",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddrV6",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for SocketAddrV6",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddrV6",
           "name": "Eq for SocketAddrV6",
           "kind": "trait_impl",
           "path": "lib::core::src::net::socket::impl_SocketAddrV6",
@@ -26988,26 +26888,6 @@
           "path": "lib::core::src::net::socket::impl_SocketAddr",
           "visibility": "unknown",
           "signature": "impl Copy for SocketAddr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddr",
-          "name": "Duplicate for SocketAddr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddr",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for SocketAddr",
-          "doc": "",
-          "summary": ""
-        },
-        {
-          "id": "lib::core::src::net::socket::impl_SocketAddr",
-          "name": "PartialEq for SocketAddr",
-          "kind": "trait_impl",
-          "path": "lib::core::src::net::socket::impl_SocketAddr",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for SocketAddr",
           "doc": "",
           "summary": ""
         },
@@ -59413,33 +59293,6 @@
         },
         {
           "id": "lib::core::src::time::impl_Duration",
-          "name": "PartialEq for Duration",
-          "kind": "trait_impl",
-          "path": "lib::core::src::time::impl_Duration",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for Duration",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::time::impl_Duration::eq",
-              "name": "eq",
-              "kind": "method",
-              "path": "lib::core::src::time::impl_Duration::eq",
-              "visibility": "public",
-              "signature": "func eq(this, other: ref Duration) -> Bool",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""},
-                {"name": "other", "type": "ref Duration", "description": ""}
-              ],
-              "returns": {"type": "Bool", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::core::src::time::impl_Duration",
           "name": "Eq for Duration",
           "kind": "trait_impl",
           "path": "lib::core::src::time::impl_Duration",
@@ -59629,32 +59482,6 @@
               "signature": "func default() -> Duration",
               "doc": "",
               "summary": "",
-              "returns": {"type": "Duration", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::core::src::time::impl_Duration",
-          "name": "Duplicate for Duration",
-          "kind": "trait_impl",
-          "path": "lib::core::src::time::impl_Duration",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for Duration",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::time::impl_Duration::duplicate",
-              "name": "duplicate",
-              "kind": "method",
-              "path": "lib::core::src::time::impl_Duration::duplicate",
-              "visibility": "public",
-              "signature": "func duplicate(this) -> Duration",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""}
-              ],
               "returns": {"type": "Duration", "description": ""}
             }
           ]
@@ -64582,32 +64409,6 @@
           ]
         },
         {
-          "id": "lib::core::src::traits::hash::impl_DefaultHasher",
-          "name": "Duplicate for DefaultHasher",
-          "kind": "trait_impl",
-          "path": "lib::core::src::traits::hash::impl_DefaultHasher",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for DefaultHasher",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::traits::hash::impl_DefaultHasher::duplicate",
-              "name": "duplicate",
-              "kind": "method",
-              "path": "lib::core::src::traits::hash::impl_DefaultHasher::duplicate",
-              "visibility": "public",
-              "signature": "func duplicate(this) -> DefaultHasher",
-              "doc": "Creates a copy of this `DefaultHasher` with the same internal state.",
-              "summary": "Creates a copy of this `DefaultHasher` with the same internal state.",
-              "params": [
-                {"name": "this", "type": "This", "description": ""}
-              ],
-              "returns": {"type": "DefaultHasher", "description": ""}
-            }
-          ]
-        },
-        {
           "id": "lib::core::src::traits::hash::RandomState",
           "name": "RandomState",
           "kind": "struct",
@@ -64700,32 +64501,6 @@
               "signature": "func default() -> RandomState",
               "doc": "Returns a new `RandomState` initialized with fresh random keys.",
               "summary": "Returns a new `RandomState` initialized with fresh random keys.",
-              "returns": {"type": "RandomState", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::core::src::traits::hash::impl_RandomState",
-          "name": "Duplicate for RandomState",
-          "kind": "trait_impl",
-          "path": "lib::core::src::traits::hash::impl_RandomState",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for RandomState",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::traits::hash::impl_RandomState::duplicate",
-              "name": "duplicate",
-              "kind": "method",
-              "path": "lib::core::src::traits::hash::impl_RandomState::duplicate",
-              "visibility": "public",
-              "signature": "func duplicate(this) -> RandomState",
-              "doc": "Creates a copy of this `RandomState` with the same random keys.",
-              "summary": "Creates a copy of this `RandomState` with the same random keys.",
-              "params": [
-                {"name": "this", "type": "This", "description": ""}
-              ],
               "returns": {"type": "RandomState", "description": ""}
             }
           ]
@@ -65575,48 +65350,6 @@
         },
         {
           "id": "lib::core::src::types::any::impl_TypeId",
-          "name": "PartialEq for TypeId",
-          "kind": "trait_impl",
-          "path": "lib::core::src::types::any::impl_TypeId",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for TypeId",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::types::any::impl_TypeId::eq",
-              "name": "eq",
-              "kind": "method",
-              "path": "lib::core::src::types::any::impl_TypeId::eq",
-              "visibility": "public",
-              "signature": "func eq(this, other: ref TypeId) -> Bool",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""},
-                {"name": "other", "type": "ref TypeId", "description": ""}
-              ],
-              "returns": {"type": "Bool", "description": ""}
-            },
-            {
-              "id": "lib::core::src::types::any::impl_TypeId::ne",
-              "name": "ne",
-              "kind": "method",
-              "path": "lib::core::src::types::any::impl_TypeId::ne",
-              "visibility": "public",
-              "signature": "func ne(this, other: ref TypeId) -> Bool",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""},
-                {"name": "other", "type": "ref TypeId", "description": ""}
-              ],
-              "returns": {"type": "Bool", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::core::src::types::any::impl_TypeId",
           "name": "Eq for TypeId",
           "kind": "trait_impl",
           "path": "lib::core::src::types::any::impl_TypeId",
@@ -65791,32 +65524,6 @@
                 {"name": "this", "type": "This", "description": ""}
               ],
               "returns": {"type": "Str", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::core::src::types::any::impl_TypeId",
-          "name": "Duplicate for TypeId",
-          "kind": "trait_impl",
-          "path": "lib::core::src::types::any::impl_TypeId",
-          "visibility": "unknown",
-          "signature": "impl Duplicate for TypeId",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::core::src::types::any::impl_TypeId::duplicate",
-              "name": "duplicate",
-              "kind": "method",
-              "path": "lib::core::src::types::any::impl_TypeId::duplicate",
-              "visibility": "public",
-              "signature": "func duplicate(this) -> TypeId",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""}
-              ],
-              "returns": {"type": "TypeId", "description": ""}
             }
           ]
         },
@@ -147247,11 +146954,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::arc::impl_Arc[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Send for Arc[T]",
+          "signature": "impl[T: ThreadSafe] Send for Arc[T]",
           "doc": "Arc[T] is Send if T is Send + Sync.\nThe Arc can be sent to another thread if the data it contains\ncan be accessed from multiple threads safely.",
           "summary": "Arc[T] is Send if T is Send + Sync. The Arc can be sent to another thread if the data it contains can be accessed from multiple threads safely.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         },
         {
@@ -147260,11 +146967,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::arc::impl_Arc[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Sync for Arc[T]",
+          "signature": "impl[T: ThreadSafe] Sync for Arc[T]",
           "doc": "Arc[T] is Sync if T is Send + Sync.\nMultiple threads can have references to the Arc if the data\nsupports shared access across threads.",
           "summary": "Arc[T] is Sync if T is Send + Sync. Multiple threads can have references to the Arc if the data supports shared access across threads.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         },
         {
@@ -147273,11 +146980,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::arc::impl_Weak[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Send for Weak[T]",
+          "signature": "impl[T: ThreadSafe] Send for Weak[T]",
           "doc": "Weak[T] is Send if T is Send + Sync.",
           "summary": "Weak[T] is Send if T is Send + Sync.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         },
         {
@@ -147286,11 +146993,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::arc::impl_Weak[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Sync for Weak[T]",
+          "signature": "impl[T: ThreadSafe] Sync for Weak[T]",
           "doc": "Weak[T] is Sync if T is Send + Sync.",
           "summary": "Weak[T] is Sync if T is Send + Sync.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         }
       ]
@@ -148929,11 +148636,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::atomic::mod::impl_AtomicPtr[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Sync for AtomicPtr[T]",
+          "signature": "impl[T: ThreadSafe] Sync for AtomicPtr[T]",
           "doc": "",
           "summary": "",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         }
       ]
@@ -151822,11 +151529,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::once::impl_OnceLock[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Sync for OnceLock[T]",
+          "signature": "impl[T: ThreadSafe] Sync for OnceLock[T]",
           "doc": "OnceLock[T] is Sync if T is Send + Sync.\nOnceLock provides synchronized access for initialization, but once\ninitialized, multiple threads may read the value simultaneously,\nso T needs to be Sync.",
           "summary": "OnceLock[T] is Sync if T is Send + Sync. OnceLock provides synchronized access for initialization, but once initialized, multiple threads may read the value simultaneously, so T needs to be Sync.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         }
       ]
@@ -152451,11 +152158,11 @@
           "kind": "trait_impl",
           "path": "lib::std::src::sync::rwlock::impl_RwLock[T]",
           "visibility": "unknown",
-          "signature": "impl[T: Send + Sync] Sync for RwLock[T]",
+          "signature": "impl[T: ThreadSafe] Sync for RwLock[T]",
           "doc": "RwLock[T] is Sync if T is Send + Sync.\nUnlike Mutex, RwLock allows multiple simultaneous readers, so T must be\nSync to ensure safe shared access. T must also be Send because the lock\nitself might be used to transfer ownership when exclusively locked.",
           "summary": "RwLock[T] is Sync if T is Send + Sync. Unlike Mutex, RwLock allows multiple simultaneous readers, so T must be Sync to ensure safe shared access. T must also be Send because the lock itself might be used to transfer ownership when exclusively locked.",
           "generics": [
-            {"name": "T", "bounds": ["Send", "Sync"]}
+            {"name": "T", "bounds": ["ThreadSafe"]}
           ]
         },
         {
@@ -154610,6 +154317,150 @@
       ]
     },
     {
+      "name": "scope",
+      "path": "lib::std::src::thread::scope",
+      "doc": "Scoped threads for borrowing from parent scope.\n\nThis module provides [`scope`] for creating threads that can borrow data\nfrom their parent stack frame without requiring `'static` lifetimes.\n\n# Overview\n\nUnlike regular threads created with [`spawn`], scoped threads are guaranteed\nto terminate before the scope exits. This allows them to safely borrow data\nfrom the parent scope.\n\n# Examples\n\n## Borrowing Local Data\n\n```tml\nuse std::thread\n\nlet data = [1, 2, 3, 4, 5]\n\nthread::scope(do(s: ref Scope) {\n    s.spawn(do() {\n        // We can borrow `data` here because the thread will\n        // join before `scope` returns\n        print(\"Sum: {data.iter().sum()}\\n\")\n    })\n\n    s.spawn(do() {\n        print(\"Product: {data.iter().product()}\\n\")\n    })\n})\n\n// Both threads have joined here, `data` is still valid\n```\n\n## Collecting Results\n\n```tml\nuse std::thread\nuse sync::Mutex\n\nlet numbers = [1, 2, 3, 4, 5, 6, 7, 8]\nlet results = Mutex::new(Vec::new())\n\nthread::scope(do(s: ref Scope) {\n    for chunk in numbers.chunks(2) {\n        s.spawn(do() {\n            let sum = chunk.iter().sum()\n            results.lock().push(sum)\n        })\n    }\n})\n\nlet total = results.into_inner().iter().sum()\nprint(\"Total: {total}\\n\")\n```\n\n# Safety\n\nThe [`scope`] function ensures all spawned threads are joined before it\nreturns, even if the closure panics. This is enforced by the type system:\n[`ScopedJoinHandle`] cannot be sent outside the scope.",
+      "summary": "Scoped threads for borrowing from parent scope.",
+      "items": [
+        {
+          "id": "lib::std::src::thread::scope::Scope",
+          "name": "Scope",
+          "kind": "struct",
+          "path": "lib::std::src::thread::scope::Scope",
+          "visibility": "public",
+          "signature": "type Scope",
+          "doc": "A scope for spawning scoped threads.\n\nThe `Scope` type is provided to the closure passed to [`scope`].\nUse it to spawn threads that can borrow from the parent scope.\n\n# Thread Safety\n\n`Scope` is `Sync`, meaning multiple threads can spawn new threads\nfrom the same scope concurrently.\n\n# Examples\n\n```tml\nuse std::thread\n\nthread::scope(do(s: ref Scope) {\n    s.spawn(do() {\n        print(\"Hello from scoped thread!\\n\")\n    })\n})\n```",
+          "summary": "A scope for spawning scoped threads."
+        },
+        {
+          "id": "lib::std::src::thread::scope::impl_Scope",
+          "name": "Scope",
+          "kind": "impl",
+          "path": "lib::std::src::thread::scope::impl_Scope",
+          "visibility": "unknown",
+          "signature": "impl Scope",
+          "doc": "",
+          "summary": "",
+          "methods": [
+            {
+              "id": "lib::std::src::thread::scope::impl_Scope::spawn",
+              "name": "spawn",
+              "kind": "method",
+              "path": "lib::std::src::thread::scope::impl_Scope::spawn",
+              "visibility": "public",
+              "signature": "func spawn[T](mut this: mut ref This, f: func() -> T) -> ScopedJoinHandle[T]",
+              "doc": "Spawns a new scoped thread.\n\nThe spawned thread may borrow data from the parent scope because\nit is guaranteed to join before the scope exits.\n\n# Examples\n\n```tml\nuse std::thread\n\nlet message = \"Hello\"\n\nthread::scope(do(s: ref Scope) {\n    s.spawn(do() {\n        print(\"{message} from thread!\\n\")\n    })\n})\n```",
+              "summary": "Spawns a new scoped thread.",
+              "params": [
+                {"name": "this", "type": "mut ref This", "description": ""},
+                {"name": "f", "type": "func() -> T", "description": ""}
+              ],
+              "returns": {"type": "ScopedJoinHandle[T]", "description": ""},
+              "generics": [
+                {"name": "T", "bounds": []}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "lib::std::src::thread::scope::impl_Scope",
+          "name": "Sync for Scope",
+          "kind": "trait_impl",
+          "path": "lib::std::src::thread::scope::impl_Scope",
+          "visibility": "unknown",
+          "signature": "impl Sync for Scope",
+          "doc": "",
+          "summary": ""
+        },
+        {
+          "id": "lib::std::src::thread::scope::ScopedJoinHandle",
+          "name": "ScopedJoinHandle",
+          "kind": "struct",
+          "path": "lib::std::src::thread::scope::ScopedJoinHandle",
+          "visibility": "public",
+          "signature": "type ScopedJoinHandle[T]",
+          "doc": "An owned permission to join on a scoped thread.\n\nUnlike [`JoinHandle`], a `ScopedJoinHandle` is tied to the scope that\ncreated it and cannot outlive that scope.\n\n# Examples\n\n```tml\nuse std::thread\n\nthread::scope(do(s: ref Scope) {\n    let handle = s.spawn(do() 42)\n\n    let result = handle.join()\n    assert_eq(result, 42)\n})\n```",
+          "summary": "An owned permission to join on a scoped thread.",
+          "generics": [
+            {"name": "T", "bounds": []}
+          ]
+        },
+        {
+          "id": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]",
+          "name": "ScopedJoinHandle[T]",
+          "kind": "impl",
+          "path": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]",
+          "visibility": "unknown",
+          "signature": "impl[T] ScopedJoinHandle[T]",
+          "doc": "",
+          "summary": "",
+          "generics": [
+            {"name": "T", "bounds": []}
+          ],
+          "methods": [
+            {
+              "id": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]::join",
+              "name": "join",
+              "kind": "method",
+              "path": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]::join",
+              "visibility": "public",
+              "signature": "func join(mut this: mut ref This) -> T",
+              "doc": "Waits for the thread to finish and returns its result.\n\n# Panics\n\nPanics if called more than once on the same handle.\n\n# Examples\n\n```tml\nuse std::thread\n\nthread::scope(do(s: ref Scope) {\n    let handle = s.spawn(do() {\n        return \"Hello from thread\"\n    })\n\n    let message = handle.join()\n    print(\"{message}\\n\")\n})\n```",
+              "summary": "Waits for the thread to finish and returns its result.",
+              "params": [
+                {"name": "this", "type": "mut ref This", "description": ""}
+              ],
+              "returns": {"type": "T", "description": ""}
+            },
+            {
+              "id": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]::is_finished",
+              "name": "is_finished",
+              "kind": "method",
+              "path": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]::is_finished",
+              "visibility": "public",
+              "signature": "func is_finished(this) -> Bool",
+              "doc": "Checks if the thread has finished running.\n\n# Examples\n\n```tml\nuse std::thread\n\nthread::scope(do(s: ref Scope) {\n    let handle = s.spawn(do() {\n        thread::sleep_ms(100)\n    })\n\n    // Thread might still be running\n    if not handle.is_finished() {\n        print(\"Still running...\\n\")\n    }\n\n    handle.join()\n})\n```",
+              "summary": "Checks if the thread has finished running.",
+              "params": [
+                {"name": "this", "type": "This", "description": ""}
+              ],
+              "returns": {"type": "Bool", "description": ""}
+            }
+          ]
+        },
+        {
+          "id": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]",
+          "name": "Drop for ScopedJoinHandle[T]",
+          "kind": "trait_impl",
+          "path": "lib::std::src::thread::scope::impl_ScopedJoinHandle[T]",
+          "visibility": "unknown",
+          "signature": "impl[T] Drop for ScopedJoinHandle[T]",
+          "doc": "",
+          "summary": "",
+          "generics": [
+            {"name": "T", "bounds": []}
+          ]
+        },
+        {
+          "id": "lib::std::src::thread::scope::scope",
+          "name": "scope",
+          "kind": "function",
+          "path": "lib::std::src::thread::scope::scope",
+          "visibility": "public",
+          "signature": "func scope[R](f: func(mut ref Scope) -> R) -> R",
+          "doc": "Creates a scope for spawning scoped threads.\n\nAll threads spawned within this scope are guaranteed to terminate\nbefore this function returns. This allows the threads to borrow\ndata from the parent scope without requiring `'static` lifetimes.\n\n# Panics\n\nIf any of the spawned threads panic, `scope` will also panic after\nall threads have joined.\n\n# Examples\n\n## Basic Usage\n\n```tml\nuse std::thread\n\nlet data = \"shared data\"\n\nthread::scope(do(s: ref Scope) {\n    s.spawn(do() {\n        print(\"Thread 1 sees: {data}\\n\")\n    })\n\n    s.spawn(do() {\n        print(\"Thread 2 sees: {data}\\n\")\n    })\n})\n\n// Both threads have terminated here\n```\n\n## Collecting Results\n\n```tml\nuse std::thread\n\nlet inputs = [1, 2, 3, 4]\nvar outputs = Vec::with_capacity(4)\n\nthread::scope(do(s: ref Scope) {\n    for i in inputs {\n        let handle = s.spawn(do() i * 2)\n        outputs.push(handle.join())\n    }\n})\n\nassert_eq(outputs, [2, 4, 6, 8])\n```\n\n## Parallel Processing with Shared State\n\n```tml\nuse std::thread\nuse sync::Mutex\n\nlet counter = Mutex::new(0)\n\nthread::scope(do(s: ref Scope) {\n    loop _ in 0 to 10 {\n        s.spawn(do() {\n            let mut guard = counter.lock()\n            *guard = *guard + 1\n        })\n    }\n})\n\nassert_eq(*counter.lock(), 10)\n```",
+          "summary": "Creates a scope for spawning scoped threads.",
+          "params": [
+            {"name": "f", "type": "func(mut ref Scope) -> R", "description": ""}
+          ],
+          "returns": {"type": "R", "description": ""},
+          "generics": [
+            {"name": "R", "bounds": []}
+          ]
+        }
+      ]
+    },
+    {
       "name": "datetime",
       "path": "lib::std::src::time::datetime",
       "doc": "UTC date and time from Unix timestamps.\n\nThis module provides [`DateTime`] for converting between Unix epoch\nseconds and human-readable date/time components (year, month, day,\nhour, minute, second). UTC only — no timezone support.\n\n# Example\n\n```tml\nuse std::datetime::DateTime\n\nlet dt: DateTime = DateTime::now()\nlet year: I64 = dt.year()\n```",
@@ -156601,33 +156452,6 @@
                 {"name": "this", "type": "This", "description": ""}
               ],
               "returns": {"type": "I64", "description": ""}
-            }
-          ]
-        },
-        {
-          "id": "lib::std::src::uuid::impl_Uuid",
-          "name": "PartialEq for Uuid",
-          "kind": "trait_impl",
-          "path": "lib::std::src::uuid::impl_Uuid",
-          "visibility": "unknown",
-          "signature": "impl PartialEq for Uuid",
-          "doc": "",
-          "summary": "",
-          "methods": [
-            {
-              "id": "lib::std::src::uuid::impl_Uuid::eq",
-              "name": "eq",
-              "kind": "method",
-              "path": "lib::std::src::uuid::impl_Uuid::eq",
-              "visibility": "public",
-              "signature": "func eq(this, other: ref Uuid) -> Bool",
-              "doc": "",
-              "summary": "",
-              "params": [
-                {"name": "this", "type": "This", "description": ""},
-                {"name": "other", "type": "ref Uuid", "description": ""}
-              ],
-              "returns": {"type": "Bool", "description": ""}
             }
           ]
         },

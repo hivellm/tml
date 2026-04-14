@@ -49,11 +49,22 @@ use core::traits::cmp::Ordering
 /// The `of[T]()` function requires compiler intrinsics to generate a
 /// unique ID for each monomorphized type. Without compiler support,
 /// type IDs will not be reliable.
-@auto(duplicate, equal)
 pub type TypeId {
     /// Internal unique identifier for the type.
     /// This should be a hash or unique number assigned by the compiler.
     id: U64
+}
+
+impl Duplicate for TypeId {
+    pub func duplicate(this) -> TypeId {
+        return TypeId { id: this.id }
+    }
+}
+
+impl PartialEq for TypeId {
+    pub func eq(this, other: ref TypeId) -> Bool {
+        return this.id == other.id
+    }
 }
 
 impl TypeId {

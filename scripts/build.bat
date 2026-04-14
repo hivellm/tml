@@ -33,6 +33,7 @@ set "BUILD_BENCH=OFF"
 set "USE_ZIG_CC=auto"
 set "USE_CLANG=0"
 set "ENABLE_JIT=OFF"
+set "ENABLE_INSTALL=0"
 
 :: Parse arguments
 :parse_args
@@ -58,6 +59,7 @@ if /i "%~1"=="--target" set "BUILD_TARGET=%~2" & shift & shift & goto :parse_arg
 if /i "%~1"=="--bump-major" set "BUMP_MAJOR=1" & shift & goto :parse_args
 if /i "%~1"=="--bump-minor" set "BUMP_MINOR=1" & shift & goto :parse_args
 if /i "%~1"=="--jit" set "ENABLE_JIT=ON" & shift & goto :parse_args
+if /i "%~1"=="--install" set "ENABLE_INSTALL=1" & shift & goto :parse_args
 if /i "%~1"=="--ci" set "CI_MODE=1" & set "BUILD_TESTS=OFF" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
@@ -90,6 +92,7 @@ echo   --zig          Use Zig CC (default when available, fastest builds)
 echo   --msvc         Force MSVC compiler (cl.exe via Ninja or MSBuild)
 echo   --clang        Use system Clang (clang/clang++ via Ninja)
 echo   --target X     Build only target X (e.g., tml, tml_mcp, tml_tests)
+echo   --install      After build: regenerate docs.json and install to Program Files
 echo   --help         Show this help message
 echo.
 echo Version:
@@ -187,6 +190,8 @@ if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 :: Kill any running tml.exe to prevent link errors (LNK1168)
 taskkill /F /IM tml.exe >nul 2>&1
+:: Kill tml_daemon.exe (MCP server) — always, since it ships in every build
+taskkill /F /IM tml_daemon.exe >nul 2>&1
 :: Only kill tml_mcp.exe if we're actually building it (target is empty=all, or tml_mcp)
 if "%BUILD_TARGET%"=="" taskkill /F /IM tml_mcp.exe >nul 2>&1
 if "%BUILD_TARGET%"=="tml_mcp" taskkill /F /IM tml_mcp.exe >nul 2>&1
@@ -424,5 +429,24 @@ if "%BUILD_TESTS%"=="ON" (
     echo Tests:       %OUTPUT_DIR%\tml_tests.exe
 )
 echo.
+
+:: ============ Install to Program Files (opt-in via --install) ============
+if "%ENABLE_INSTALL%"=="1" (
+    echo.
+    echo Regenerating docs.json...
+    cd /d "%ROOT_DIR%"
+    "%OUTPUT_DIR%\bin\tml.exe" doc --all --format=json --output=docs 2>nul
+    if errorlevel 1 (
+        echo WARNING: docs.json regeneration failed ^(non-fatal^).
+    ) else (
+        echo   OK docs\docs.json
+    )
+
+    echo Installing to Program Files...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%install.ps1" -BuildType "%BUILD_TYPE%"
+    if errorlevel 1 (
+        echo WARNING: Install step failed. Run scripts\install.ps1 manually as Administrator.
+    )
+)
 
 endlocal

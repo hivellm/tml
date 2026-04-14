@@ -382,8 +382,8 @@ pub func scope[R](f: func(mut ref Scope) -> R) -> R {
 // Send/Sync implementations
 // ============================================================================
 
-/// Scope is NOT Send - must be used from the thread that created it.
-/// (We don't implement Send, making it implicitly not Send)
+// Scope is NOT Send - must be used from the thread that created it.
+// (We don't implement Send, making it implicitly not Send)
 
-/// ScopedJoinHandle is NOT Send - must stay within the scope.
-/// (We don't implement Send, making it implicitly not Send)
+// ScopedJoinHandle is NOT Send - must stay within the scope.
+// (We don't implement Send, making it implicitly not Send)
