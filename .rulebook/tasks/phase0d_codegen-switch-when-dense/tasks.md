@@ -20,3 +20,6 @@
 - [ ] 5.1 Update CHANGELOG.md
 - [ ] 5.2 Write regression test: when with 10 dense integer cases
 - [ ] 5.3 Run tests and confirm they pass
+- [ ] Update or create documentation covering the implementation
+- [ ] Write tests covering the new functionality
+- [ ] Verify all tests pass
