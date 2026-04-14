@@ -1,0 +1,5 @@
+//! Mach-O linker module root. Phase 22c.
+
+pub use compiler::link::macho::macho_parser::*
+pub use compiler::link::macho::codesign::*
+pub use compiler::link::macho::fat::*

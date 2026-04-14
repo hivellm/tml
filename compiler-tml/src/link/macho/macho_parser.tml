@@ -1,0 +1,307 @@
+//! Mach-O 64-bit object file parser for linking.
+//!
+//! Parses mach_header_64, load commands (LC_SEGMENT_64, LC_SYMTAB),
+//! sections, nlist_64 symbols, and relocation_info entries.
+//! Reference: Apple Mach-O Reference, cctools-port/ld64.
+//!
+//! Phase 22c — items 1.1–1.4.
+
+use std::collections::list::List
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+pub const MH_MAGIC_64: I64 = 0xFEEDFACF
+pub const MH_OBJECT: I64 = 1
+pub const MH_EXECUTE: I64 = 2
+pub const MH_DYLIB: I64 = 6
+
+pub const CPU_TYPE_X86_64: I64 = 0x01000007
+pub const CPU_TYPE_ARM64: I64 = 0x0100000C
+
+pub const LC_SEGMENT_64: I64 = 0x19
+pub const LC_SYMTAB: I64 = 0x02
+pub const LC_DYSYMTAB: I64 = 0x0B
+pub const LC_LOAD_DYLIB: I64 = 0x0C
+pub const LC_LOAD_DYLINKER: I64 = 0x0E
+pub const LC_MAIN: I64 = 0x80000028
+pub const LC_CODE_SIGNATURE: I64 = 0x1D
+pub const LC_DYLD_CHAINED_FIXUPS: I64 = 0x80000034
+pub const LC_LOAD_WEAK_DYLIB: I64 = 0x80000018
+
+/// Symbol types (n_type field)
+pub const N_UNDF: I64 = 0x00
+pub const N_ABS: I64 = 0x02
+pub const N_SECT: I64 = 0x0E
+pub const N_EXT: I64 = 0x01
+pub const N_PEXT: I64 = 0x10
+
+/// Symbol desc flags
+pub const N_WEAK_DEF: I64 = 0x0080
+pub const N_WEAK_REF: I64 = 0x0040
+
+/// x86_64 relocation types
+pub const X86_64_RELOC_UNSIGNED: I64 = 0
+pub const X86_64_RELOC_SIGNED: I64 = 1
+pub const X86_64_RELOC_BRANCH: I64 = 2
+pub const X86_64_RELOC_GOT_LOAD: I64 = 3
+pub const X86_64_RELOC_GOT: I64 = 4
+
+/// ARM64 relocation types
+pub const ARM64_RELOC_UNSIGNED: I64 = 0
+pub const ARM64_RELOC_BRANCH26: I64 = 2
+pub const ARM64_RELOC_PAGE21: I64 = 3
+pub const ARM64_RELOC_PAGEOFF12: I64 = 4
+pub const ARM64_RELOC_GOT_LOAD_PAGE21: I64 = 5
+pub const ARM64_RELOC_GOT_LOAD_PAGEOFF12: I64 = 6
+
+// ============================================================================
+// Parsed types (item 1.1)
+// ============================================================================
+
+pub type MachoObject {
+    magic: I64,
+    cpu_type: I64,
+    cpu_subtype: I64,
+    file_type: I64,
+    ncmds: I64,
+    sizeofcmds: I64,
+    segments: List[MachoParsedSegment],
+    symbols: List[MachoParsedSymbol],
+    relocations: List[MachoParsedReloc]
+}
+
+pub type MachoParsedSegment {
+    name: Str,
+    vmaddr: I64,
+    vmsize: I64,
+    fileoff: I64,
+    filesize: I64,
+    maxprot: I64,
+    initprot: I64,
+    sections: List[MachoParsedSection]
+}
+
+pub type MachoParsedSection {
+    sectname: Str,
+    segname: Str,
+    addr: I64,
+    size: I64,
+    offset: I64,
+    align_val: I64,
+    reloff: I64,
+    nreloc: I64,
+    flags: I64,
+    data: List[I64],
+    relocations: List[MachoParsedReloc]
+}
+
+pub type MachoParsedSymbol {
+    name: Str,
+    n_type: I64,
+    n_sect: I64,
+    n_desc: I64,
+    n_value: I64
+}
+
+pub type MachoParsedReloc {
+    address: I64,
+    symbolnum: I64,
+    pcrel: I64,
+    length: I64,
+    is_extern: I64,
+    reloc_type: I64
+}
+
+// ============================================================================
+// Parser (items 1.1–1.4)
+// ============================================================================
+
+pub func parse_macho(bytes: List[I64]) -> MachoObject {
+    let size: I64 = bytes.len() as I64
+
+    // (1.1) Header — 32 bytes
+    let magic: I64 = read_u32(bytes, 0 as I64)
+    let cpu_type: I64 = read_u32(bytes, 4 as I64)
+    let cpu_sub: I64 = read_u32(bytes, 8 as I64)
+    let ftype: I64 = read_u32(bytes, 12 as I64)
+    let ncmds: I64 = read_u32(bytes, 16 as I64)
+    let sizeofcmds: I64 = read_u32(bytes, 20 as I64)
+
+    let segments = List[MachoParsedSegment]::new(4)
+    let symbols = List[MachoParsedSymbol]::new(32)
+    let all_relocs = List[MachoParsedReloc]::new(16)
+
+    // (1.2) Parse load commands
+    var cmd_off: I64 = 32  // after mach_header_64 (32 bytes including reserved)
+    for ci in 0 to ncmds {
+        if cmd_off + 8 > size { continue }
+        let cmd: I64 = read_u32(bytes, cmd_off)
+        let cmdsize: I64 = read_u32(bytes, cmd_off + 4)
+
+        if cmd == LC_SEGMENT_64 and cmd_off + 72 <= size {
+            let seg_name: Str = read_str16(bytes, cmd_off + 8)
+            let vmaddr: I64 = read_u64(bytes, cmd_off + 24)
+            let vmsize: I64 = read_u64(bytes, cmd_off + 32)
+            let fileoff: I64 = read_u64(bytes, cmd_off + 40)
+            let filesize: I64 = read_u64(bytes, cmd_off + 48)
+            let maxprot: I64 = read_u32(bytes, cmd_off + 56)
+            let initprot: I64 = read_u32(bytes, cmd_off + 60)
+            let nsects: I64 = read_u32(bytes, cmd_off + 64)
+
+            let sects = List[MachoParsedSection]::new(nsects)
+            for si in 0 to nsects {
+                let soff: I64 = cmd_off + 72 + si * 80
+                if soff + 80 > size { continue }
+                let sn: Str = read_str16(bytes, soff)
+                let sgn: Str = read_str16(bytes, soff + 16)
+                let saddr: I64 = read_u64(bytes, soff + 32)
+                let ssize: I64 = read_u64(bytes, soff + 40)
+                let soffset: I64 = read_u32(bytes, soff + 48)
+                let salign: I64 = read_u32(bytes, soff + 52)
+                let sreloff: I64 = read_u32(bytes, soff + 56)
+                let snreloc: I64 = read_u32(bytes, soff + 60)
+                let sflags: I64 = read_u32(bytes, soff + 64)
+
+                // Read section data
+                let sdata = List[I64]::new(ssize)
+                if soffset > 0 and ssize > 0 and soffset + ssize <= size {
+                    for j in 0 to ssize { sdata.push(bytes.get(soffset + j)) }
+                }
+
+                // (1.4) Read relocations
+                let sec_relocs = List[MachoParsedReloc]::new(snreloc)
+                for ri in 0 to snreloc {
+                    let roff: I64 = sreloff + ri * 8
+                    if roff + 8 > size { continue }
+                    let r_addr: I64 = read_u32(bytes, roff)
+                    let r_info: I64 = read_u32(bytes, roff + 4)
+                    let r: MachoParsedReloc = MachoParsedReloc {
+                        address: r_addr,
+                        symbolnum: r_info & 0xFFFFFF,
+                        pcrel: (r_info >> 24) & 1,
+                        length: (r_info >> 25) & 3,
+                        is_extern: (r_info >> 27) & 1,
+                        reloc_type: (r_info >> 28) & 0xF
+                    }
+                    sec_relocs.push(r)
+                    all_relocs.push(r)
+                }
+
+                sects.push(MachoParsedSection {
+                    sectname: sn,
+                    segname: sgn,
+                    addr: saddr,
+                    size: ssize,
+                    offset: soffset,
+                    align_val: salign,
+                    reloff: sreloff,
+                    nreloc: snreloc,
+                    flags: sflags,
+                    data: sdata,
+                    relocations: sec_relocs
+                })
+            }
+
+            segments.push(MachoParsedSegment {
+                name: seg_name,
+                vmaddr: vmaddr,
+                vmsize: vmsize,
+                fileoff: fileoff,
+                filesize: filesize,
+                maxprot: maxprot,
+                initprot: initprot,
+                sections: sects
+            })
+        }
+
+        // (1.3) LC_SYMTAB
+        if cmd == LC_SYMTAB and cmd_off + 24 <= size {
+            let symoff: I64 = read_u32(bytes, cmd_off + 8)
+            let nsyms: I64 = read_u32(bytes, cmd_off + 12)
+            let stroff: I64 = read_u32(bytes, cmd_off + 16)
+            let strsize: I64 = read_u32(bytes, cmd_off + 20)
+
+            for si in 0 to nsyms {
+                let noff: I64 = symoff + si * 16  // nlist_64 = 16 bytes
+                if noff + 16 > size { continue }
+                let n_strx: I64 = read_u32(bytes, noff)
+                let n_type: I64 = bytes.get(noff + 4) & 0xFF
+                let n_sect: I64 = bytes.get(noff + 5) & 0xFF
+                let n_desc: I64 = read_u16(bytes, noff + 6)
+                let n_value: I64 = read_u64(bytes, noff + 8)
+
+                let sym_name: Str = read_null_str(bytes, stroff + n_strx, size)
+                symbols.push(MachoParsedSymbol {
+                    name: sym_name,
+                    n_type: n_type,
+                    n_sect: n_sect,
+                    n_desc: n_desc,
+                    n_value: n_value
+                })
+            }
+        }
+
+        cmd_off = cmd_off + cmdsize
+    }
+
+    return MachoObject {
+        magic: magic,
+        cpu_type: cpu_type,
+        cpu_subtype: cpu_sub,
+        file_type: ftype,
+        ncmds: ncmds,
+        sizeofcmds: sizeofcmds,
+        segments: segments,
+        symbols: symbols,
+        relocations: all_relocs
+    }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func read_u16(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8)
+}
+func read_u32(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8) | ((bytes.get(off + 2) & 0xFF) << 16) | ((bytes.get(off + 3) & 0xFF) << 24)
+}
+func read_u64(bytes: List[I64], off: I64) -> I64 {
+    return read_u32(bytes, off) | (read_u32(bytes, off + 4) << 32)
+}
+
+func read_str16(bytes: List[I64], off: I64) -> Str {
+    var s: Str = ""
+    for i in 0 to 16 {
+        let b: I64 = bytes.get(off + i) & 0xFF
+        if b == 0 { return s }
+        s = s + cb(b)
+    }
+    return s
+}
+
+func read_null_str(bytes: List[I64], off: I64, limit: I64) -> Str {
+    var s: Str = ""
+    var i: I64 = off
+    loop (i < limit) {
+        let b: I64 = bytes.get(i) & 0xFF
+        if b == 0 { return s }
+        s = s + cb(b)
+        i = i + 1
+    }
+    return s
+}
+
+func cb(b: I64) -> Str {
+    if b >= 32 and b < 127 {
+        let p: *() = lowlevel { mem_alloc(2 as I64) }
+        let a: I64 = p as I64
+        lowlevel { ptr_write[I8](a as *I8, b as I8) }
+        lowlevel { ptr_write[I8]((a + 1) as *I8, 0 as I8) }
+        return a as Str
+    }
+    return "?"
+}

@@ -1,0 +1,89 @@
+//! Universal (fat) Mach-O binary writer.
+//!
+//! Wraps multiple Mach-O slices (one per architecture) in a fat_header.
+//! Magic: 0xCAFEBABE (big-endian).
+//!
+//! Phase 22c — items 6.1–6.2.
+
+use std::collections::list::List
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+pub const FAT_MAGIC: I64 = 0xCAFEBABE
+pub const FAT_MAGIC_64: I64 = 0xCAFEBABF
+
+// ============================================================================
+// Types
+// ============================================================================
+
+pub type FatSlice {
+    cpu_type: I64,
+    cpu_subtype: I64,
+    data: List[I64]
+}
+
+// ============================================================================
+// Fat binary writer (item 6.1)
+// ============================================================================
+
+/// Write a universal (fat) Mach-O binary from multiple architecture slices.
+pub func write_fat_binary(slices: List[FatSlice]) -> List[I64] {
+    let buf = List[I64]::new(8192)
+    let nslices: I64 = slices.len() as I64
+
+    // fat_header (8 bytes, big-endian)
+    write_u32_be(buf, FAT_MAGIC)
+    write_u32_be(buf, nslices)
+
+    // Compute offsets — each slice aligned to 4KB (2^12 = 4096)
+    let header_size: I64 = 8 + nslices * 20  // fat_header + fat_arch array
+    var current_offset: I64 = align_up(header_size, 4096 as I64)
+
+    // fat_arch entries (20 bytes each, big-endian)
+    for i in 0 to nslices {
+        let slice: FatSlice = slices.get(i)
+        let slice_size: I64 = slice.data.len() as I64
+        write_u32_be(buf, slice.cpu_type)
+        write_u32_be(buf, slice.cpu_subtype)
+        write_u32_be(buf, current_offset)   // offset
+        write_u32_be(buf, slice_size)        // size
+        write_u32_be(buf, 12 as I64)         // align = 2^12 = 4096
+        current_offset = align_up(current_offset + slice_size, 4096 as I64)
+    }
+
+    // Pad to first slice offset
+    let first_offset: I64 = align_up(header_size, 4096 as I64)
+    let current: I64 = buf.len() as I64
+    for _ in 0 to (first_offset - current) { buf.push(0) }
+
+    // Write slice data with alignment padding
+    for i in 0 to nslices {
+        let slice: FatSlice = slices.get(i)
+        let dc: I64 = slice.data.len() as I64
+        for j in 0 to dc { buf.push(slice.data.get(j)) }
+        // Pad to 4KB alignment
+        let remainder: I64 = dc % 4096
+        if remainder > 0 {
+            for _ in 0 to (4096 - remainder) { buf.push(0) }
+        }
+    }
+
+    return buf
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func write_u32_be(buf: List[I64], v: I64) {
+    buf.push((v >> 24) & 0xFF)
+    buf.push((v >> 16) & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+    buf.push(v & 0xFF)
+}
+
+func align_up(val: I64, alignment: I64) -> I64 {
+    return (val + alignment - 1) & (0 - alignment)
+}
