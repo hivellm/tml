@@ -7,6 +7,8 @@
 
 One binary. Zero external tools. 11,000+ tests. 99% library coverage. Everything you need from code to production.
 
+> **Status:** The C++ compiler is **100% functional (beta)** — all language features, standard library, and tooling are fully implemented and test-covered. The self-hosted TML compiler (written in TML itself) is **actively in development** on the `feat/self-hosting-compiler` branch as part of the self-hosting roadmap.
+
 ```tml
 use std::json::{Json}
 use std::hash::{fnv1a64}
