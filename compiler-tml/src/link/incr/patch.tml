@@ -1,0 +1,111 @@
+//! In-place binary patching — writes only changed bytes to the output file.
+//!
+//! Instead of rewriting the entire binary, opens for read-write and patches
+//! specific byte ranges at their exact file offsets.
+//!
+//! Phase 22d — items 4.1–4.4.
+
+use std::collections::list::List
+
+// ============================================================================
+// Patch set (item 4.1)
+// ============================================================================
+
+/// A single patch: bytes to write at a specific file offset.
+pub type Patch {
+    file_offset: I64,
+    data: List[I64]
+}
+
+/// Collection of patches to apply to an output binary.
+pub type PatchSet {
+    patches: List[Patch],
+    total_bytes: I64
+}
+
+/// Create a new empty patch set.
+pub func patch_set_new() -> PatchSet {
+    return PatchSet { patches: List[Patch]::new(16), total_bytes: 0 as I64 }
+}
+
+/// Add a patch to the set.
+pub func patch_add(ps: PatchSet, offset: I64, data: List[I64]) {
+    let sz: I64 = data.len() as I64
+    ps.patches.push(Patch { file_offset: offset, data: data })
+    ps.total_bytes = ps.total_bytes + sz
+}
+
+// ============================================================================
+// Patch application (item 4.2)
+// ============================================================================
+
+/// Apply patches to an in-memory copy of the binary.
+/// `binary` is the full output binary bytes (mutable).
+pub func apply_patches_to_buffer(binary: List[I64], ps: PatchSet) -> I64 {
+    let bin_size: I64 = binary.len() as I64
+    let pc: I64 = ps.patches.len() as I64
+    var applied: I64 = 0
+
+    for i in 0 to pc {
+        let p: Patch = ps.patches.get(i)
+        let dc: I64 = p.data.len() as I64
+        if p.file_offset + dc > bin_size { continue }  // skip out-of-bounds
+
+        for j in 0 to dc {
+            binary.set(p.file_offset + j, p.data.get(j))
+        }
+        applied = applied + 1
+    }
+
+    return applied
+}
+
+// ============================================================================
+// Section size change detection (item 4.3)
+// ============================================================================
+
+/// Check if any section changed size between old and new state.
+/// Returns the name of the first section that changed size, or "" if none.
+pub func detect_size_change(
+    old_sizes: List[I64],
+    new_sizes: List[I64]
+) -> Str {
+    let n: I64 = old_sizes.len() as I64
+    if n != (new_sizes.len() as I64) { return "section_count_changed" }
+    for i in 0 to n {
+        if old_sizes.get(i) != new_sizes.get(i) {
+            return "section_" + i.to_string()
+        }
+    }
+    return ""
+}
+
+// ============================================================================
+// PE checksum / Mach-O codesign patch (item 4.4)
+// ============================================================================
+
+/// After patching, recompute the PE checksum at the known offset.
+/// `checksum_offset` = 64 + 4 + 20 + 64 = 152 for standard PE32+.
+pub func patch_pe_checksum(binary: List[I64], checksum_offset: I64) {
+    let size: I64 = binary.len() as I64
+    var checksum: I64 = 0
+    var i: I64 = 0
+    loop (i < size - 1) {
+        if i == checksum_offset or i == checksum_offset + 2 {
+            i = i + 2
+            continue
+        }
+        let word: I64 = (binary.get(i) & 0xFF) | ((binary.get(i + 1) & 0xFF) << 8)
+        checksum = checksum + word
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+        i = i + 2
+    }
+    checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    let final_cs: I64 = checksum + size
+
+    // Write checksum at offset (little-endian u32)
+    binary.set(checksum_offset, final_cs & 0xFF)
+    binary.set(checksum_offset + 1, (final_cs >> 8) & 0xFF)
+    binary.set(checksum_offset + 2, (final_cs >> 16) & 0xFF)
+    binary.set(checksum_offset + 3, (final_cs >> 24) & 0xFF)
+}

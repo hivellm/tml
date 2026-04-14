@@ -1,0 +1,6 @@
+//! Incremental linker module root. Phase 22d.
+
+pub use compiler::link::incr::state::*
+pub use compiler::link::incr::fingerprint::*
+pub use compiler::link::incr::delta_reloc::*
+pub use compiler::link::incr::patch::*

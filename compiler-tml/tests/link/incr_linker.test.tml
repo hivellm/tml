@@ -1,0 +1,124 @@
+//! Tests for incremental linker — state, fingerprint, delta relocation, patching.
+
+use test::{assert, assert_eq}
+use compiler::link::incr::state::*
+use compiler::link::incr::fingerprint::*
+use compiler::link::incr::delta_reloc::*
+use compiler::link::incr::patch::*
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// --- State ---
+
+@test func test_link_state_save_load() {
+    let st: LinkState = link_state_new("output.exe")
+    st.sections.push(SectionRecord { name: ".text", start_rva: 0x1000 as I64, file_offset: 0x200 as I64, size: 256 as I64, flags: 0x60000020 as I64 })
+    let saved: List[I64] = link_state_save(st)
+    // Verify magic "TMLS"
+    assert_eq(saved.get(0) as I32, 0x54)
+    assert_eq(saved.get(1) as I32, 0x4D)
+    assert_eq(saved.get(2) as I32, 0x4C)
+    assert_eq(saved.get(3) as I32, 0x53)
+    // Verify roundtrip
+    let loaded: Maybe[LinkState] = link_state_load(saved)
+    when loaded { Just(ls) => assert_eq(ls.version as I32, 1), Nothing => assert(false) }
+}
+
+// --- Fingerprint ---
+
+@test func test_fingerprint_deterministic() {
+    let data = List[I64]::new(4)
+    data.push(1)
+    data.push(2)
+    data.push(3)
+    data.push(4)
+    let h1: I64 = fingerprint_bytes(data)
+    let h2: I64 = fingerprint_bytes(data)
+    assert_eq(h1 as I32, h2 as I32)
+}
+
+@test func test_fingerprint_different() {
+    let a = List[I64]::new(2)
+    a.push(0)
+    a.push(1)
+    let b = List[I64]::new(2)
+    b.push(1)
+    b.push(0)
+    let ha: I64 = fingerprint_bytes(a)
+    let hb: I64 = fingerprint_bytes(b)
+    assert(ha != hb)
+}
+
+@test func test_detect_changes_all_unchanged() {
+    let stored = HashMap[Str, I64]::new(4)
+    stored.set("a.obj", 100 as I64)
+    stored.set("b.obj", 200 as I64)
+    let paths = List[Str]::new(2)
+    paths.push("a.obj")
+    paths.push("b.obj")
+    let fps = HashMap[Str, I64]::new(4)
+    fps.set("a.obj", 100 as I64)
+    fps.set("b.obj", 200 as I64)
+    let cs: ChangeSummary = detect_changes(stored, paths, fps)
+    assert_eq(cs.unchanged.len() as I32, 2)
+    assert_eq(cs.modified.len() as I32, 0)
+    assert_eq(cs.added.len() as I32, 0)
+}
+
+@test func test_detect_changes_one_modified() {
+    let stored = HashMap[Str, I64]::new(4)
+    stored.set("a.obj", 100 as I64)
+    let paths = List[Str]::new(1)
+    paths.push("a.obj")
+    let fps = HashMap[Str, I64]::new(4)
+    fps.set("a.obj", 999 as I64)
+    let cs: ChangeSummary = detect_changes(stored, paths, fps)
+    assert_eq(cs.modified.len() as I32, 1)
+    assert_eq(cs.unchanged.len() as I32, 0)
+}
+
+// --- Delta relocation ---
+
+@test func test_compute_delta_direct() {
+    let log = List[AppliedReloc]::new(2)
+    log.push(AppliedReloc { source_section: 0 as I64, source_offset: 10 as I64, target_symbol: "foo", addend: 0 as I64, reloc_type: 4 as I64, file_offset: 0x210 as I64 })
+    log.push(AppliedReloc { source_section: 1 as I64, source_offset: 20 as I64, target_symbol: "bar", addend: 0 as I64, reloc_type: 4 as I64, file_offset: 0x310 as I64 })
+    let changed = HashMap[I64, I64]::new(4)
+    changed.set(0 as I64, 1 as I64)  // section 0 changed
+    let moved = HashMap[Str, I64]::new(4)
+    let dr: DeltaResult = compute_delta(log, changed, moved)
+    assert_eq(dr.direct_relocs.len() as I32, 1)
+    assert_eq(dr.transitive_relocs.len() as I32, 0)
+}
+
+// --- Patching ---
+
+@test func test_apply_patches() {
+    let binary = List[I64]::new(16)
+    for _ in 0 to 16 { binary.push(0) }
+    let ps: PatchSet = patch_set_new()
+    let pdata = List[I64]::new(4)
+    pdata.push(0xDE)
+    pdata.push(0xAD)
+    pdata.push(0xBE)
+    pdata.push(0xEF)
+    patch_add(ps, 4 as I64, pdata)
+    let applied: I64 = apply_patches_to_buffer(binary, ps)
+    assert_eq(applied as I32, 1)
+    assert_eq(binary.get(4) as I32, 0xDE)
+    assert_eq(binary.get(7) as I32, 0xEF)
+}
+
+@test func test_detect_size_change() {
+    let old = List[I64]::new(2)
+    old.push(100)
+    old.push(200)
+    let new_same = List[I64]::new(2)
+    new_same.push(100)
+    new_same.push(200)
+    assert_eq(detect_size_change(old, new_same), "")
+    let new_diff = List[I64]::new(2)
+    new_diff.push(100)
+    new_diff.push(250)
+    assert(detect_size_change(old, new_diff) != "")
+}

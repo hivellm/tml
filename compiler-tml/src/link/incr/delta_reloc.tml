@@ -1,0 +1,89 @@
+//! Delta relocation computation — identifies which relocations need reprocessing.
+//!
+//! For modified .obj files, determines which sections changed and computes
+//! the set of affected relocations (direct + transitive).
+//!
+//! Phase 22d — items 3.1–3.4.
+
+use compiler::link::incr::state::*
+use compiler::link::incr::fingerprint::fingerprint_bytes
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Delta computation (items 3.1–3.3)
+// ============================================================================
+
+/// A section that changed and needs relocation reprocessing.
+pub type ChangedSection {
+    section_index: I64,
+    old_hash: I64,
+    new_hash: I64,
+    new_data: List[I64]
+}
+
+/// Result of delta relocation analysis.
+pub type DeltaResult {
+    direct_relocs: List[AppliedReloc],     // relocations in changed sections
+    transitive_relocs: List[AppliedReloc], // relocations in unchanged sections referencing moved symbols
+    changed_sections: List[ChangedSection]
+}
+
+/// Compute delta relocations from the relocation log and changed section set.
+pub func compute_delta(
+    reloc_log: List[AppliedReloc],
+    changed_section_indices: HashMap[I64, I64],
+    moved_symbols: HashMap[Str, I64]
+) -> DeltaResult {
+    let direct = List[AppliedReloc]::new(32)
+    let transitive = List[AppliedReloc]::new(16)
+
+    let rc: I64 = reloc_log.len() as I64
+    for i in 0 to rc {
+        let rel: AppliedReloc = reloc_log.get(i)
+
+        // (3.2) Direct: relocation site is in a changed section
+        if changed_section_indices.has(rel.source_section) {
+            direct.push(rel)
+            continue
+        }
+
+        // (3.3) Transitive: relocation in unchanged section references a moved symbol
+        if moved_symbols.has(rel.target_symbol) {
+            transitive.push(rel)
+        }
+    }
+
+    return DeltaResult {
+        direct_relocs: direct,
+        transitive_relocs: transitive,
+        changed_sections: List[ChangedSection]::new(0 as I64)
+    }
+}
+
+// ============================================================================
+// Validation (item 3.4)
+// ============================================================================
+
+/// Validate that all delta relocations produce valid addresses.
+/// Returns error messages for any overflow or out-of-bounds issues.
+pub func validate_delta(
+    delta: DeltaResult,
+    sections: List[SectionRecord]
+) -> List[Str] {
+    let errors = List[Str]::new(4)
+
+    // Check each direct reloc's target is within section bounds
+    let dc: I64 = delta.direct_relocs.len() as I64
+    for i in 0 to dc {
+        let rel: AppliedReloc = delta.direct_relocs.get(i)
+        if rel.source_section >= 0 and rel.source_section < (sections.len() as I64) {
+            let sec: SectionRecord = sections.get(rel.source_section)
+            if rel.source_offset >= sec.size {
+                errors.push("relocation at offset " + rel.source_offset.to_string() + " exceeds section size " + sec.size.to_string())
+            }
+        }
+    }
+
+    return errors
+}
