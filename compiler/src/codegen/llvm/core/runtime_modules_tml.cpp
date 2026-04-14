@@ -215,6 +215,17 @@ void LLVMIRGen::emit_module_pure_tml_functions(
             // These are in a separate module from the type definitions.
             "std::collections::behaviors",
             "core::str",
+            // core::str submodules — impl Str method bodies delegate to these free functions.
+            // Without them, calls like @tml_N4core3str6search11starts_withE_SS are unresolved
+            // because the module is not in `all_modules` and can't be processed.
+            "core::str::basic",
+            "core::str::search",
+            "core::str::split",
+            "core::str::replace",
+            "core::str::transform",
+            "core::str::parse",
+            "core::str::convert",
+            "core::str::simd",
             "core::hash",
             "std::text",
             "core::fmt::impls",
@@ -603,7 +614,20 @@ void LLVMIRGen::emit_module_pure_tml_functions(
                     "core::types",
                     "core::ops",
                     "core::ops::arith",
+                    // core::str and ALL its submodules (basic, search, split, replace,
+                    // transform, parse, convert, simd). core::str::mod.tml only contains
+                    // the impl Str wrapper methods; the actual function bodies live in
+                    // submodules. Without the submodules, calls emitted by the wrappers
+                    // (e.g. @tml_N4core3str5basic3lenE_S) have no definitions.
                     "core::str",
+                    "core::str::basic",
+                    "core::str::search",
+                    "core::str::split",
+                    "core::str::replace",
+                    "core::str::transform",
+                    "core::str::parse",
+                    "core::str::convert",
+                    "core::str::simd",
                     "std::collections::list",
                     "std::collections::List",
                     "std::collections::buffer",

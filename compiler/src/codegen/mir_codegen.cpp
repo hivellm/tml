@@ -1133,6 +1133,30 @@ void MirCodegen::emit_preamble() {
     emitln("  ret ptr %r");
     emitln("}");
 
+    // core::str::len — null-safe wrapper around strlen
+    // Symbol @tml_N4core3str3lenE_S: "core::str::len" taking one Str (_S) param.
+    // Called by MIR path when user code calls s.len() on a Str value.
+    emitln("define internal i64 @tml_N4core3str3lenE_S(ptr %s) {");
+    emitln("entry:");
+    emitln("    %is_null = icmp eq ptr %s, null");
+    emitln("    br i1 %is_null, label %str_len_ret0, label %str_len_call");
+    emitln("str_len_ret0:");
+    emitln("    ret i64 0");
+    emitln("str_len_call:");
+    emitln("    %r = call i64 @strlen(ptr %s)");
+    emitln("    ret i64 %r");
+    emitln("}");
+    emitln();
+
+    // core::str::is_empty — true when len == 0
+    emitln("define internal i1 @tml_N4core3str8is_emptyE_S(ptr %s) {");
+    emitln("entry:");
+    emitln("    %len = call i64 @tml_N4core3str3lenE_S(ptr %s)");
+    emitln("    %r = icmp eq i64 %len, 0");
+    emitln("    ret i1 %r");
+    emitln("}");
+    emitln();
+
     // Aliases for MIR method dispatch (which generates lowercase_type + "_" + method)
     // These handle cases where the MIR builder creates CallInst with bare function names
     emitln("@to_string = internal alias ptr (i1), ptr @tml_N4core4Bool9to_stringE");

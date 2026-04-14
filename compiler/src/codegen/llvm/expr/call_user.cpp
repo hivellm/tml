@@ -230,6 +230,13 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                     std::string found_bare = found_func_it->first;
                     for (const auto& re : mod.re_exports) {
                         if (re.is_glob) {
+                            // Skip self-referential glob re-exports (e.g. `pub use core::str::*`
+                            // inside `core/str/mod.tml` where source_path == mod_name). These
+                            // circular imports always match because the function is already in
+                            // the current module, causing the loop to break before reaching the
+                            // specific named re-export that records the true definition site.
+                            if (re.source_path == mod_name)
+                                continue;
                             // Glob re-export: check if source module has this function
                             auto src_mod = env_.module_registry()->get_module(re.source_path);
                             if (src_mod.has_value() && src_mod->functions.count(found_bare) > 0) {

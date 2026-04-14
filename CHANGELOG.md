@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.3](docs/patches/v0.3.3.md) | 2026-04-14 | K001 fix: `core::str` methods (`len`, `is_empty`, `starts_with`, `ends_with`, `contains`, `trim`) in AST path — string benchmarks unblocked |
 | [0.3.2](docs/patches/v0.3.2.md) | 2026-04-12 | K001 codegen fixes, runtime crash fix (InferCtx shared counter), `tml cv` in-process — 27/28 tests pass |
 | [0.3.1](docs/patches/v0.3.1.md) | 2026-04-12 | Self-hosting compiler port (phases 14c–15d), `tml cv` coverage command, 84 TML modules, 215 tests |
 | [0.3.0](docs/patches/v0.3.0.md) | 2026-04-11 | Language ergonomics — `for i in 0 to N`, `Point { x: 5, ..p1 }`, pattern guards, `let Pair { a, b } = p`, Bool struct fix |

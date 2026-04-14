@@ -261,6 +261,213 @@ void LLVMIRGen::init_runtime_catalog() {
 
     // --- Inline IR definitions (multi-line, with dependencies) ---
 
+    // core::str::basic::len — free function called by impl Str::len (AST codegen path).
+    // Symbol: tml_N4core3str5basic3lenE_S (module=core::str::basic, func=len, param=Str)
+    // Mirrors the MIR-path inline definition of @tml_N4core3str3lenE_S in mir_codegen.cpp.
+    // Required because emit_module_pure_tml_functions() may be skipped (cached_library_state
+    // fast path) or core::str::basic may not be in imported_module_paths, leaving this
+    // free function body unregistered in pending_library_funcs_.
+    add("tml_N4core3str5basic3lenE_S",
+        "define internal i64 @tml_N4core3str5basic3lenE_S(ptr %s) {\n"
+        "entry:\n"
+        "  %is_null = icmp eq ptr %s, null\n"
+        "  br i1 %is_null, label %str_len_ret0, label %str_len_call\n"
+        "str_len_ret0:\n"
+        "  ret i64 0\n"
+        "str_len_call:\n"
+        "  %r = call i64 @strlen(ptr %s)\n"
+        "  ret i64 %r\n"
+        "}",
+        {"strlen"});
+
+    // core::str::basic::is_empty — free function; depends on len above.
+    add("tml_N4core3str5basic8is_emptyE_S",
+        "define internal i1 @tml_N4core3str5basic8is_emptyE_S(ptr %s) {\n"
+        "entry:\n"
+        "  %len = call i64 @tml_N4core3str5basic3lenE_S(ptr %s)\n"
+        "  %r = icmp eq i64 %len, 0\n"
+        "  ret i1 %r\n"
+        "}",
+        {"tml_N4core3str5basic3lenE_S"});
+
+    // core::str::search::starts_with(s: Str, prefix: Str) -> Bool
+    // Symbol: tml_N4core3str6search11starts_withE_SS
+    // Mirrors lib/core/src/str/search.tml starts_with implementation.
+    add("tml_N4core3str6search11starts_withE_SS",
+        "define internal i1 @tml_N4core3str6search11starts_withE_SS(ptr %s, ptr %prefix) {\n"
+        "entry:\n"
+        "  %pnull = icmp eq ptr %prefix, null\n"
+        "  br i1 %pnull, label %ret_true, label %check_s\n"
+        "check_s:\n"
+        "  %snull = icmp eq ptr %s, null\n"
+        "  br i1 %snull, label %ret_false, label %get_lens\n"
+        "get_lens:\n"
+        "  %s_len = call i64 @strlen(ptr %s)\n"
+        "  %p_len = call i64 @strlen(ptr %prefix)\n"
+        "  %pz = icmp eq i64 %p_len, 0\n"
+        "  br i1 %pz, label %ret_true, label %check_fit\n"
+        "check_fit:\n"
+        "  %too_big = icmp ugt i64 %p_len, %s_len\n"
+        "  br i1 %too_big, label %ret_false, label %do_cmp\n"
+        "do_cmp:\n"
+        "  %cmp = call i32 @memcmp(ptr %s, ptr %prefix, i64 %p_len)\n"
+        "  %r = icmp eq i32 %cmp, 0\n"
+        "  ret i1 %r\n"
+        "ret_true:\n"
+        "  ret i1 true\n"
+        "ret_false:\n"
+        "  ret i1 false\n"
+        "}",
+        {"strlen", "memcmp"});
+
+    // core::str::search::ends_with(s: Str, suffix: Str) -> Bool
+    // Symbol: tml_N4core3str6search9ends_withE_SS
+    add("tml_N4core3str6search9ends_withE_SS",
+        "define internal i1 @tml_N4core3str6search9ends_withE_SS(ptr %s, ptr %suffix) {\n"
+        "entry:\n"
+        "  %pnull = icmp eq ptr %suffix, null\n"
+        "  br i1 %pnull, label %ret_true, label %check_s\n"
+        "check_s:\n"
+        "  %snull = icmp eq ptr %s, null\n"
+        "  br i1 %snull, label %ret_false, label %get_lens\n"
+        "get_lens:\n"
+        "  %s_len = call i64 @strlen(ptr %s)\n"
+        "  %p_len = call i64 @strlen(ptr %suffix)\n"
+        "  %pz = icmp eq i64 %p_len, 0\n"
+        "  br i1 %pz, label %ret_true, label %check_fit\n"
+        "check_fit:\n"
+        "  %too_big = icmp ugt i64 %p_len, %s_len\n"
+        "  br i1 %too_big, label %ret_false, label %do_cmp\n"
+        "do_cmp:\n"
+        "  %offset = sub i64 %s_len, %p_len\n"
+        "  %ptr = getelementptr i8, ptr %s, i64 %offset\n"
+        "  %cmp = call i32 @memcmp(ptr %ptr, ptr %suffix, i64 %p_len)\n"
+        "  %r = icmp eq i32 %cmp, 0\n"
+        "  ret i1 %r\n"
+        "ret_true:\n"
+        "  ret i1 true\n"
+        "ret_false:\n"
+        "  ret i1 false\n"
+        "}",
+        {"strlen", "memcmp"});
+
+    // core::str::search::contains(s: Str, pattern: Str) -> Bool
+    // Symbol: tml_N4core3str6search8containsE_SS
+    // Scalar scan: for each position i in [0, s_len - p_len], check memcmp.
+    add("tml_N4core3str6search8containsE_SS",
+        "define internal i1 @tml_N4core3str6search8containsE_SS(ptr %s, ptr %pattern) {\n"
+        "entry:\n"
+        "  %pnull = icmp eq ptr %pattern, null\n"
+        "  br i1 %pnull, label %ret_true, label %check_s\n"
+        "check_s:\n"
+        "  %snull = icmp eq ptr %s, null\n"
+        "  br i1 %snull, label %ret_false, label %get_lens\n"
+        "get_lens:\n"
+        "  %s_len = call i64 @strlen(ptr %s)\n"
+        "  %p_len = call i64 @strlen(ptr %pattern)\n"
+        "  %pz = icmp eq i64 %p_len, 0\n"
+        "  br i1 %pz, label %ret_true, label %check_fit\n"
+        "check_fit:\n"
+        "  %too_big = icmp ugt i64 %p_len, %s_len\n"
+        "  br i1 %too_big, label %ret_false, label %loop_init\n"
+        "loop_init:\n"
+        "  %limit = sub i64 %s_len, %p_len\n"
+        "  br label %loop_hdr\n"
+        "loop_hdr:\n"
+        "  %i = phi i64 [ 0, %loop_init ], [ %i_next, %loop_cont ]\n"
+        "  %done = icmp ugt i64 %i, %limit\n"
+        "  br i1 %done, label %ret_false, label %loop_body\n"
+        "loop_body:\n"
+        "  %ptr = getelementptr i8, ptr %s, i64 %i\n"
+        "  %cmp = call i32 @memcmp(ptr %ptr, ptr %pattern, i64 %p_len)\n"
+        "  %eq = icmp eq i32 %cmp, 0\n"
+        "  br i1 %eq, label %ret_true, label %loop_cont\n"
+        "loop_cont:\n"
+        "  %i_next = add i64 %i, 1\n"
+        "  br label %loop_hdr\n"
+        "ret_true:\n"
+        "  ret i1 true\n"
+        "ret_false:\n"
+        "  ret i1 false\n"
+        "}",
+        {"strlen", "memcmp"});
+
+    // core::str::transform::trim(s: Str) -> Str
+    // Symbol: tml_N4core3str9transform4trimE_S
+    // Scan forward for first non-whitespace, backward for last non-whitespace,
+    // allocate new buffer of (end-start+1) bytes, memcpy, null-terminate.
+    // Whitespace: space(32), tab(9), newline(10), CR(13).
+    add("tml_N4core3str9transform4trimE_S",
+        "define internal ptr @tml_N4core3str9transform4trimE_S(ptr %s) {\n"
+        "entry:\n"
+        "  %snull = icmp eq ptr %s, null\n"
+        "  br i1 %snull, label %ret_null, label %get_len\n"
+        "get_len:\n"
+        "  %s_len = call i64 @strlen(ptr %s)\n"
+        "  %zero = icmp eq i64 %s_len, 0\n"
+        "  br i1 %zero, label %ret_null, label %scan_start\n"
+        "scan_start:\n"
+        "  br label %fwd_hdr\n"
+        "fwd_hdr:\n"
+        "  %fi = phi i64 [ 0, %scan_start ], [ %fi_next, %fwd_cont ]\n"
+        "  %fdone = icmp uge i64 %fi, %s_len\n"
+        "  br i1 %fdone, label %ret_empty, label %fwd_body\n"
+        "fwd_body:\n"
+        "  %fc = getelementptr i8, ptr %s, i64 %fi\n"
+        "  %fv = load i8, ptr %fc\n"
+        "  %fsp = icmp eq i8 %fv, 32\n"
+        "  %ftb = icmp eq i8 %fv, 9\n"
+        "  %fnl = icmp eq i8 %fv, 10\n"
+        "  %fcr = icmp eq i8 %fv, 13\n"
+        "  %fws1 = or i1 %fsp, %ftb\n"
+        "  %fws2 = or i1 %fnl, %fcr\n"
+        "  %fws = or i1 %fws1, %fws2\n"
+        "  br i1 %fws, label %fwd_cont, label %scan_end\n"
+        "fwd_cont:\n"
+        "  %fi_next = add i64 %fi, 1\n"
+        "  br label %fwd_hdr\n"
+        "scan_end:\n"
+        "  %start = phi i64 [ %fi, %fwd_body ]\n"
+        "  %sl_minus1 = sub i64 %s_len, 1\n"
+        "  br label %bwd_hdr\n"
+        "bwd_hdr:\n"
+        "  %bi = phi i64 [ %sl_minus1, %scan_end ], [ %bi_next, %bwd_cont ]\n"
+        "  %bdone = icmp ult i64 %bi, %start\n"
+        "  br i1 %bdone, label %ret_empty, label %bwd_body\n"
+        "bwd_body:\n"
+        "  %bc = getelementptr i8, ptr %s, i64 %bi\n"
+        "  %bv = load i8, ptr %bc\n"
+        "  %bsp = icmp eq i8 %bv, 32\n"
+        "  %btb = icmp eq i8 %bv, 9\n"
+        "  %bnl = icmp eq i8 %bv, 10\n"
+        "  %bcr = icmp eq i8 %bv, 13\n"
+        "  %bws1 = or i1 %bsp, %btb\n"
+        "  %bws2 = or i1 %bnl, %bcr\n"
+        "  %bws = or i1 %bws1, %bws2\n"
+        "  br i1 %bws, label %bwd_cont, label %alloc\n"
+        "bwd_cont:\n"
+        "  %bi_next = sub i64 %bi, 1\n"
+        "  br label %bwd_hdr\n"
+        "alloc:\n"
+        "  %end = phi i64 [ %bi, %bwd_body ]\n"
+        "  %new_len = sub i64 %end, %start\n"
+        "  %new_len1 = add i64 %new_len, 1\n"
+        "  %alloc_sz = add i64 %new_len1, 1\n"
+        "  %buf = call ptr @mem_alloc(i64 %alloc_sz)\n"
+        "  %src = getelementptr i8, ptr %s, i64 %start\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %src, i64 %new_len1, i1 false)\n"
+        "  %null_pos = getelementptr i8, ptr %buf, i64 %new_len1\n"
+        "  store i8 0, ptr %null_pos\n"
+        "  ret ptr %buf\n"
+        "ret_empty:\n"
+        "  %ebuf = call ptr @mem_alloc(i64 1)\n"
+        "  store i8 0, ptr %ebuf\n"
+        "  ret ptr %ebuf\n"
+        "ret_null:\n"
+        "  ret ptr null\n"
+        "}",
+        {"strlen", "mem_alloc", "llvm.memcpy.p0.p0.i64"});
+
     // str_eq depends on strcmp
     add("str_eq",
         "; String utilities (inline IR)\n"

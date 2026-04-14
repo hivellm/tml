@@ -1,0 +1,70 @@
+// Regression test for K001: core::str methods must emit valid LLVM IR in AST codegen path.
+// Importing std::text::Text forces the AST codegen path (has_local_generics check).
+// Before the fix, @tml_N4core3str5basic3lenE_S and other core::str free functions were
+// undefined in the emitted IR, causing LLVM parse errors.
+
+use test
+use std::text::Text
+
+@test
+func test_str_len_ast() -> I32 {
+    let s: Str = "hello world"
+    let n: I64 = s.len()
+    assert_eq(n, 11, "str.len returns correct length")
+    assert_eq("".len(), 0, "empty str.len returns 0")
+    return 0
+}
+
+@test
+func test_str_is_empty_ast() -> I32 {
+    assert_eq("".is_empty(), true, "empty string is_empty")
+    assert_eq("x".is_empty(), false, "non-empty string not is_empty")
+    return 0
+}
+
+@test
+func test_str_starts_with_ast() -> I32 {
+    let s: Str = "hello world"
+    assert_eq(s.starts_with("hello"), true, "starts_with matching prefix")
+    assert_eq(s.starts_with("world"), false, "starts_with non-matching prefix")
+    assert_eq(s.starts_with(""), true, "starts_with empty prefix")
+    return 0
+}
+
+@test
+func test_str_ends_with_ast() -> I32 {
+    let s: Str = "hello world"
+    assert_eq(s.ends_with("world"), true, "ends_with matching suffix")
+    assert_eq(s.ends_with("hello"), false, "ends_with non-matching suffix")
+    assert_eq(s.ends_with(""), true, "ends_with empty suffix")
+    return 0
+}
+
+@test
+func test_str_contains_ast() -> I32 {
+    let s: Str = "hello world"
+    assert_eq(s.contains("world"), true, "contains present substring")
+    assert_eq(s.contains("xyz"), false, "contains absent substring")
+    assert_eq(s.contains(""), true, "contains empty string")
+    return 0
+}
+
+@test
+func test_str_trim_ast() -> I32 {
+    let trimmed: Str = "  hello  ".trim()
+    assert_eq(trimmed, "hello", "trim removes surrounding whitespace")
+    assert_eq("  ".trim(), "", "trim of all-whitespace returns empty")
+    assert_eq("hello".trim(), "hello", "trim of no-whitespace unchanged")
+    return 0
+}
+
+@test
+func test_str_methods_text_coexistence() -> I32 {
+    // Ensure Text and Str methods work in the same compilation unit (AST path)
+    let t: Text = Text::new()
+    t.push_str("ok")
+    let s: Str = t.as_str()
+    assert_eq(s.len(), 2, "Text::as_str then len works in AST path")
+    t.drop()
+    return 0
+}
