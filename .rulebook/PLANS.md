@@ -13,27 +13,110 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-Active task: phase0_codegen-blockers-k001 — in-progress (9/18).
-Fixed 3 K001 bugs in AST codegen: enum discriminant struct_fields_, type alias resolution, boolean coercion.
-20/27 compiler-tml tests pass (was 18/27). +2 tests: behavior_dispatch, mir_types.
-7 remaining failures: 2 runtime crashes (unify tests), 2 timeouts, 1 overload resolution, 1 path resolution, 1 runtime timeout.
-InferCtx changed to use List[Heap[Type]] to avoid memory corruption from oversized List entries.
+No active task. Last completed: phase0c_fix-n002-crypto-obj-linking — ARCHIVED (2026-04-14).
+Branch: feat/self-hosting-compiler. Version: 0.3.5.
+Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase0_codegen-blockers-k001 — in-progress (9/18)
-Phase 1: K001 enum discriminant — DONE (7/7). Root cause: AST codegen used for generics, enums not in struct_fields_.
-Phase 2: K001b runtime crashes — 1/3 done. unify tests still crash (exit code 127), likely deeper ABI/codegen issue.
-Phase 3-5: Build parser, tml cv, validation — not started.
-Tests: unify_basic.test.tml (15 tests), infer_differential.test.tml (10 tests). All type-check; runtime blocked by K001.
-Remaining: items 6.1, 6.2 — requires K001 fix or full C++ backend for differential comparison.
+No active task.
 <!-- PLANS:TASK:END -->
 
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-14
+## phase0c_fix-n002-crypto-obj-linking — COMPLETE
+
+### Accomplished
+
+**N002 crypto/TLS C runtime linking fix**:
+- Root cause: `find_openssl()` Tier 0 (vcpkg) check found OpenSSL but left `include_dir` empty. `ensure_c_compiled()` then invoked zig-cc with `-I""`, failing to find `<openssl/sha.h>`. Fallback returned raw `.c` source paths → LLD received `crypto.c` → "unknown file type" error.
+- Fix: set `result.include_dir` from vcpkg path in `builder_helpers.cpp` Tier 0 block.
+- Also fixed: `run_profiled.cpp` (`--time` path) missing OpenSSL `.lib` + `/DEFAULTLIB` additions.
+- Verified: 9 crypto `.obj` files (`crypto_DTMLHASO.obj` … `tls_DTMLHASO.obj`) compile on first fresh run.
+- Benchmarks pass: `crypto_bench.tml` (SHA-256/512/MD5), `large_scale_bench.tml` (100K socket binds).
+- Tests: `lib/std/tests/crypto/hash.test.tml` (35+ tests) passes. Core 50/50, std 20/20, no regressions.
+
+### Key Discovery
+
+`CompilerOptions::check_leaks = true` by default → `use_precompiled=false` always → `libtml_runtime.a` is NEVER used for `tml run`. Every C runtime file including crypto is compiled via `ensure_c_compiled()` on each fresh run. The precompiled runtime path is only active when `--check-leaks=false` is explicitly set.
+
+### Investigation method used
+
+Added `linker_inputs.log` diagnostic to `builder_run.cpp` to dump all linker inputs, confirming `use_precompiled=false` and all 38 object file paths. Added `n002_diag.log` + `compile_diag.log` to `ensure_c_compiled()` confirming compilation commands and failures. All diagnostics removed before commit.
+
+### Commits
+- 5efe2499: fix(build): fix N002 crypto/TLS C runtime linking failure
+
+### 2026-04-14
+## phase0b_fix-k001-bool-i32-mismatch — COMPLETE
+
+### Accomplished
+
+**K001 bool/i32 mismatch fix (AST codegen)**:
+- Root cause: in `gen_binary_ops`, when processing `== 1` inside a `Just(Bool)` constructor, `expected_literal_type_` was already set to `"i1"` by the enum constructor; the literal `1` was typed as `i1`; `is_bool=true`; `int_type="i1"`; but the left operand (loaded from `let result: I32`) was `i32` → LLVM verifier rejected `icmp eq i1 %i32_val, 1`.
+- Fix: added mixed-width normalization in `BinaryOp::Eq` and `BinaryOp::Ne` in `compiler/src/codegen/llvm/expr/binary_ops.cpp`: when `int_type=="i1"` and one operand is a wider integer, `zext i1 <narrow> to <T>` before the `icmp`, use the wider type. Preserves exact equality semantics.
+- Verified: `benchmarks/profile_tml/json_bench.tml --stage=parser:cpp` compiles and runs (exit 0). `icmp eq i32 %t4892, %t4894` (via `zext i1 1 to i32`) is now emitted instead of the invalid `icmp eq i1 %t4892, 1`.
+- No regressions: core 50/50, std 10/10, compiler 224/224.
+- Regression test: `compiler/tests/compiler/bool_i32_comparison.test.tml` — 4 tests, all pass.
+- Bump: VERSION 0.3.1 → 0.3.4, CHANGELOG entry added, docs/patches/v0.3.4.md created.
+
+### Key Discovery
+
+The trigger for `right_type="i1"` on the literal `1` is `expected_literal_type_` being set to `"i1"` by the `Just(Bool)` enum constructor in `call_enum.cpp` before evaluating the argument expression. The binary op then inherits this context. Any `(i32_expr) == (i1_typed_literal)` pattern inside an enum Bool constructor exhibits this bug.
+
+### Commits
+- c52b7cd3: fix(codegen): fix bool i32/i1 mismatch in comparison emission (K001)
+
+### Next Steps
+- No active tasks. Branch: feat/self-hosting-compiler.
+- Remaining pre-existing failures unchanged: c_preprocessor (phi {} K001), hir_types (Heap→i64 K001), infer_differential (i32→ptr K001), core/any T056 errors, std/aio N001 link errors, std/collections/arraylist K001.
+- Toolchain: cmake/toolchains/zig.cmake + scripts/toolchain/zig-ar.bat are modified/untracked (pre-existing from prior session) — should be committed separately.
+
+### 2026-04-14
+## phase0a_fix-k001-str-len-symbol — COMPLETE
+
+### Accomplished
+
+**K001 core::str fix (AST codegen path)**:
+- Added 6 inline IR catalog entries to `compiler/src/codegen/llvm/core/runtime.cpp`:
+  `tml_N4core3str5basic3lenE_S`, `tml_N4core3str5basic8is_emptyE_S`,
+  `tml_N4core3str6search11starts_withE_SS`, `tml_N4core3str6search9ends_withE_SS`,
+  `tml_N4core3str6search8containsE_SS`, `tml_N4core3str9transform4trimE_S`
+- The verify-and-recover loop in `runtime_modules_library.cpp` finds these and emits them
+  when the AST codegen path encounters unresolved @tml_N4core3str* references
+
+**MIR path**: Added inline definitions for `@tml_N4core3str3lenE_S` and
+`@tml_N4core3str8is_emptyE_S` in `mir_codegen.cpp emit_preamble()`
+
+**Circular re-export fix**: `call_user.cpp` — skip self-referential glob re-exports
+(source_path == mod_name) to fix loop breaking early on core::str imports
+
+**Benchmarks**: `string_bench.tml` and `text_bench.tml` compile and run (exit 0)
+
+**Regression test**: `compiler/tests/compiler/str_methods_ast.test.tml` — 7 tests, all pass
+
+**No regressions**: All 3 suites (core/std/compiler) same failures as before (pre-existing)
+
+### Key Discovery
+
+`essential_library_modules` approach does NOT work for core::str submodules — the
+auto-registration loop requires either GlobalModuleCache entries or .tml.meta binary
+disk files; neither exists for core::str::basic/search/transform. The runtime catalog
+approach (adding entries to runtime.cpp) works because the verify-and-recover loop
+runs after all other emission and catches remaining unresolved @tml_* refs.
+
+### Commits
+- 86bd48d4: fix(codegen): add core::str free function catalog entries for AST path (K001)
+
+### Next Steps
+- No pending tasks. Branch: feat/self-hosting-compiler.
+- Remaining pre-existing failures: c_preprocessor (phi {} K001), hir_types (Heap→i64 K001),
+  infer_differential (i32→ptr K001), core/any T056 errors, std/aio N001 link errors.
+
 ### 2026-04-12
 ## phase0_codegen-blockers-k001 — COMPLETE (18/18)
 
