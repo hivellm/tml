@@ -1119,6 +1119,104 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     }
     // =========================================================================
 
+    // =========================================================================
+    // Short-Circuit Boolean Operators (`and` / `or`)
+    // =========================================================================
+    // `and` and `or` must short-circuit: if the LHS determines the result,
+    // the RHS must NOT be evaluated (it may have side effects or panic).
+    //
+    //   a and b → if a is false, result is false without evaluating b
+    //   a or  b → if a is true,  result is true  without evaluating b
+    //
+    // We emit a 2-block phi layout:
+    //
+    //   entry_block:
+    //     %lhs = <evaluate a>
+    //     br i1 %lhs, label %sc.rhs, label %sc.merge   ; (and: skip rhs if false)
+    //   sc.rhs:
+    //     %rhs = <evaluate b>
+    //     br label %sc.merge
+    //   sc.merge:
+    //     %result = phi i1 [ <short_val>, %entry_block ], [ %rhs, %sc.rhs_end ]
+    //
+    // LLVM's optimizer folds this back to a single `and i1` / `or i1` when both
+    // operands are side-effect-free (pure comparisons, loads), so release-mode
+    // performance is identical to the eager form.
+    if (bin.op == parser::BinaryOp::And || bin.op == parser::BinaryOp::Or) {
+        const bool is_and = (bin.op == parser::BinaryOp::And);
+
+        // Evaluate LHS
+        std::string lhs = gen_expr(*bin.left);
+        std::string lhs_type = last_expr_type_;
+
+        // Coerce LHS to i1
+        std::string lhs_i1 = lhs;
+        if (lhs_type != "i1") {
+            lhs_i1 = fresh_reg();
+            emit_line("  " + lhs_i1 + " = icmp ne " + lhs_type + " " + lhs + ", 0");
+        }
+
+        // Emit a fresh named block for the branch so the phi predecessor is
+        // always within the CURRENT function. `current_block_` is a member that
+        // persists across functions — if we used it directly it could reference
+        // a block label from the PREVIOUS function (e.g. "when_end784"), which
+        // is undefined in the current function's scope and fails LLVM verification.
+        std::string label_entry = fresh_label(is_and ? "and.entry" : "or.entry");
+        emit_line("  br label %" + label_entry);
+        emit_line(label_entry + ":");
+        current_block_ = label_entry;
+        block_terminated_ = false;
+        std::string entry_block = label_entry;
+
+        std::string label_rhs   = fresh_label(is_and ? "and.rhs"   : "or.rhs");
+        std::string label_merge = fresh_label(is_and ? "and.merge"  : "or.merge");
+
+        // Branch: for `and`, skip RHS when LHS is false; for `or`, skip RHS when LHS is true.
+        if (is_and) {
+            emit_line("  br i1 " + lhs_i1 + ", label %" + label_rhs + ", label %" + label_merge);
+        } else {
+            emit_line("  br i1 " + lhs_i1 + ", label %" + label_merge + ", label %" + label_rhs);
+        }
+
+        // RHS block
+        emit_line(label_rhs + ":");
+        current_block_ = label_rhs;
+        block_terminated_ = false;
+
+        std::string rhs = gen_expr(*bin.right);
+        std::string rhs_type = last_expr_type_;
+
+        // Coerce RHS to i1
+        std::string rhs_i1 = rhs;
+        if (rhs_type != "i1") {
+            rhs_i1 = fresh_reg();
+            emit_line("  " + rhs_i1 + " = icmp ne " + rhs_type + " " + rhs + ", 0");
+        }
+
+        // The RHS block may itself have changed current_block_ (e.g., nested ifs).
+        std::string rhs_end_block = current_block_;
+
+        if (!block_terminated_) {
+            emit_line("  br label %" + label_merge);
+        }
+
+        // Merge block
+        emit_line(label_merge + ":");
+        current_block_ = label_merge;
+        block_terminated_ = false;
+
+        // phi: if we came from entry (short-circuit path), result is the short-circuit value.
+        //   and: short-circuit value is false (0)
+        //   or:  short-circuit value is true  (1)
+        std::string result = fresh_reg();
+        const char* short_val = is_and ? "false" : "true";
+        emit_line("  " + result + " = phi i1 [ " + short_val + ", %" + entry_block + " ], "
+                  "[ " + rhs_i1 + ", %" + rhs_end_block + " ]");
+        last_expr_type_ = "i1";
+        return result;
+    }
+    // =========================================================================
+
     // Delegate to gen_binary_ops for operand evaluation, type coercion,
     // tuple/enum comparisons, and the operator switch (arithmetic, comparison,
     // logical, bitwise). See binary_ops.cpp.

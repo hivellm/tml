@@ -1,0 +1,115 @@
+// Regression tests for short-circuit `and` / `or` evaluation (phase0f).
+//
+// `a and b` must NOT evaluate `b` when `a` is false.
+// `a or  b` must NOT evaluate `b` when `a` is true.
+//
+// Each test uses a local `var calls: I64` counter and a block expression
+// as the RHS. If short-circuit works, the block is not executed and the
+// counter stays at zero. If eager evaluation is used instead, the counter
+// increments and the assertion fails.
+
+use test::assert_eq
+use test::assert_true
+use test::assert_false
+
+// ─── and ──────────────────────────────────────────────────────────────────────
+
+@test
+func test_and_short_circuits_when_lhs_false() {
+    var calls: I64 = 0
+    let result = false and {
+        calls = calls + 1
+        true
+    }
+    assert_false(result)
+    // RHS block must NOT have been evaluated
+    assert_eq(calls, 0)
+}
+
+@test
+func test_and_evaluates_rhs_when_lhs_true() {
+    var calls: I64 = 0
+    let result = true and {
+        calls = calls + 1
+        true
+    }
+    assert_true(result)
+    assert_eq(calls, 1)
+}
+
+@test
+func test_and_rhs_false_when_lhs_true() {
+    var calls: I64 = 0
+    let result = true and {
+        calls = calls + 1
+        false
+    }
+    assert_false(result)
+    assert_eq(calls, 1)
+}
+
+// ─── or ───────────────────────────────────────────────────────────────────────
+
+@test
+func test_or_short_circuits_when_lhs_true() {
+    var calls: I64 = 0
+    let result = true or {
+        calls = calls + 1
+        false
+    }
+    assert_true(result)
+    // RHS block must NOT have been evaluated
+    assert_eq(calls, 0)
+}
+
+@test
+func test_or_evaluates_rhs_when_lhs_false() {
+    var calls: I64 = 0
+    let result = false or {
+        calls = calls + 1
+        false
+    }
+    assert_false(result)
+    assert_eq(calls, 1)
+}
+
+@test
+func test_or_rhs_true_when_lhs_false() {
+    var calls: I64 = 0
+    let result = false or {
+        calls = calls + 1
+        true
+    }
+    assert_true(result)
+    assert_eq(calls, 1)
+}
+
+// ─── nested ───────────────────────────────────────────────────────────────────
+
+@test
+func test_nested_and_or_evaluation_order() {
+    var calls: I64 = 0
+    // (false and {calls+=1; true}) or {calls+=1; true}
+    // First `and`: lhs=false → short-circuit, rhs block NOT called (calls stays 0)
+    // Then  `or`:  lhs=false → evaluate rhs block, calls becomes 1
+    let result = (false and { calls = calls + 1; true }) or {
+        calls = calls + 1
+        true
+    }
+    assert_true(result)
+    assert_eq(calls, 1)
+}
+
+@test
+func test_nested_or_and_evaluation_order() {
+    var calls: I64 = 0
+    // (true or {calls+=1; false}) and {calls+=1; true}
+    // First `or`:  lhs=true  → short-circuit, rhs block NOT called (calls stays 0)
+    // Then  `and`: lhs=true  → evaluate rhs block, calls becomes 1
+    let result = (true or { calls = calls + 1; false }) and {
+        calls = calls + 1
+        true
+    }
+    assert_true(result)
+    assert_eq(calls, 1)
+}
