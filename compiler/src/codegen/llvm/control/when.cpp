@@ -394,12 +394,83 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
     // scrutinee_semantic already computed above for string detection
 
-    // Generate switch based on pattern
-    // For now, simplified: each arm is checked sequentially
+    // Pre-scan for switch eligibility: emit a single LLVM `switch` instruction for
+    // dense integer patterns (≥4 LiteralPattern int/bool arms, no guards, no OrPattern).
+    // LLVM lowers switch to a jump table or binary search — far faster than icmp chains.
+    static constexpr int kMinSwitchArms = 4;
+    bool can_use_switch = false;
+    std::string sw_default_label;
+
+    {
+        bool is_int_scrutinee =
+            (scrutinee_type == "i1" || scrutinee_type == "i8" || scrutinee_type == "i16" ||
+             scrutinee_type == "i32" || scrutinee_type == "i64") &&
+            !is_string_scrutinee;
+
+        if (is_int_scrutinee) {
+            bool all_eligible = true;
+            int const_count = 0;
+            for (const auto& a : when.arms) {
+                if (a.guard.has_value()) {
+                    all_eligible = false;
+                    break;
+                }
+                if (a.pattern->is<parser::WildcardPattern>())
+                    continue;
+                if (a.pattern->is<parser::IdentPattern>() && is_primitive_scrutinee)
+                    continue; // binding (catch-all)
+                if (!a.pattern->is<parser::LiteralPattern>()) {
+                    all_eligible = false;
+                    break;
+                }
+                const auto& lit = a.pattern->as<parser::LiteralPattern>();
+                if (lit.literal.kind != lexer::TokenKind::IntLiteral &&
+                    lit.literal.kind != lexer::TokenKind::BoolLiteral) {
+                    all_eligible = false;
+                    break;
+                }
+                ++const_count;
+            }
+            can_use_switch = all_eligible && (const_count >= kMinSwitchArms);
+        }
+    }
+
+    if (can_use_switch) {
+        // Default arm: first wildcard/binding arm, or label_end if no catch-all
+        sw_default_label = label_end;
+        for (size_t ai = 0; ai < when.arms.size(); ++ai) {
+            const auto& a = when.arms[ai];
+            if (a.pattern->is<parser::WildcardPattern>() ||
+                (a.pattern->is<parser::IdentPattern>() && is_primitive_scrutinee)) {
+                sw_default_label = arm_labels[ai];
+                break;
+            }
+        }
+        emit_line("  switch " + scrutinee_type + " " + scrutinee + ", label %" +
+                  sw_default_label + " [");
+        for (size_t ai = 0; ai < when.arms.size(); ++ai) {
+            const auto& a = when.arms[ai];
+            if (!a.pattern->is<parser::LiteralPattern>())
+                continue;
+            const auto& lit = a.pattern->as<parser::LiteralPattern>();
+            int64_t sw_val = 0;
+            if (lit.literal.kind == lexer::TokenKind::IntLiteral)
+                sw_val = lit.literal.int_value().value;
+            else
+                sw_val = lit.literal.bool_value() ? 1 : 0;
+            emit_line("    " + scrutinee_type + " " + std::to_string(sw_val) + ", label %" +
+                      arm_labels[ai]);
+        }
+        emit_line("  ]");
+    }
+
+    // Generate per-arm comparison and body
     for (size_t arm_idx = 0; arm_idx < when.arms.size(); ++arm_idx) {
         const auto& arm = when.arms[arm_idx];
-        std::string next_label =
-            (arm_idx + 1 < when.arms.size()) ? fresh_label("when_next") : label_end;
+        std::string next_label;
+        if (!can_use_switch) {
+            next_label =
+                (arm_idx + 1 < when.arms.size()) ? fresh_label("when_next") : label_end;
 
         // Check if pattern matches
         // Handle OrPattern: generate comparisons for each sub-pattern and OR them together
@@ -600,6 +671,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                           next_label);
             }
         }
+        } // end if (!can_use_switch) — comparison dispatch
 
         // Generate arm body
         emit_line(arm_labels[arm_idx] + ":");
@@ -1320,8 +1392,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         pop_drop_scope();
         locals_ = saved_locals;
 
-        // Next check label (if not last arm)
-        if (arm_idx + 1 < when.arms.size()) {
+        // Next check label (if not last arm) — only needed for linear if/else path
+        if (!can_use_switch && arm_idx + 1 < when.arms.size()) {
             emit_line(next_label + ":");
             block_terminated_ = false;
         }

@@ -67,46 +67,51 @@ func bench_nested_if(iterations: I64) -> I64 {
     sum
 }
 
-// When expression (like switch dense)
+// When expression — dense integer switch (10 consecutive cases)
+// Generates a single LLVM `switch` instruction via AST gen_when optimization.
 func bench_when_dense(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
     loop (i < iterations) {
         let x: I64 = i % 10
-        // Using if-else chain since when may not be fully optimized yet
-        if x == 0 { sum = sum + 0 }
-        else if x == 1 { sum = sum + 1 }
-        else if x == 2 { sum = sum + 2 }
-        else if x == 3 { sum = sum + 3 }
-        else if x == 4 { sum = sum + 4 }
-        else if x == 5 { sum = sum + 5 }
-        else if x == 6 { sum = sum + 6 }
-        else if x == 7 { sum = sum + 7 }
-        else if x == 8 { sum = sum + 8 }
-        else if x == 9 { sum = sum + 9 }
-        else { sum = sum + 10 }
+        when x {
+            0 => { sum = sum + 0 },
+            1 => { sum = sum + 1 },
+            2 => { sum = sum + 2 },
+            3 => { sum = sum + 3 },
+            4 => { sum = sum + 4 },
+            5 => { sum = sum + 5 },
+            6 => { sum = sum + 6 },
+            7 => { sum = sum + 7 },
+            8 => { sum = sum + 8 },
+            9 => { sum = sum + 9 },
+            _ => { sum = sum + 10 },
+        }
         i = i + 1
     }
     sum
 }
 
-// Switch sparse (using if-else)
+// When expression — sparse integer switch (10 non-consecutive cases, stride 100)
+// LLVM converts sparse switch to binary search, still faster than icmp chain.
 func bench_when_sparse(iterations: I64) -> I64 {
     var sum: I64 = 0
     var i: I64 = 0
     loop (i < iterations) {
         let x: I64 = (i * 100) % 1000
-        if x == 0 { sum = sum + 0 }
-        else if x == 100 { sum = sum + 1 }
-        else if x == 200 { sum = sum + 2 }
-        else if x == 300 { sum = sum + 3 }
-        else if x == 400 { sum = sum + 4 }
-        else if x == 500 { sum = sum + 5 }
-        else if x == 600 { sum = sum + 6 }
-        else if x == 700 { sum = sum + 7 }
-        else if x == 800 { sum = sum + 8 }
-        else if x == 900 { sum = sum + 9 }
-        else { sum = sum + 10 }
+        when x {
+            0 => { sum = sum + 0 },
+            100 => { sum = sum + 1 },
+            200 => { sum = sum + 2 },
+            300 => { sum = sum + 3 },
+            400 => { sum = sum + 4 },
+            500 => { sum = sum + 5 },
+            600 => { sum = sum + 6 },
+            700 => { sum = sum + 7 },
+            800 => { sum = sum + 8 },
+            900 => { sum = sum + 9 },
+            _ => { sum = sum + 10 },
+        }
         i = i + 1
     }
     sum
