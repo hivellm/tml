@@ -1,0 +1,133 @@
+//! Macro expansion with blue-paint algorithm (C11 §6.10.3.4).
+//!
+//! Phase 23a — items 2.1–2.5.
+
+use compiler::cc::preproc::token::*
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Expansion (items 2.2–2.5)
+// ============================================================================
+
+/// Expand macros in a token list, returning the expanded result.
+/// Implements the blue-paint algorithm: each token tracks which macros produced it.
+pub func expand_macros(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken] {
+    let result = List[PpToken]::new(tokens.len() as I64)
+    let n: I64 = tokens.len() as I64
+
+    for i in 0 to n {
+        let tok: PpToken = tokens.get(i)
+
+        // Only identifiers can be macro names
+        when tok.kind {
+            Ident => {
+                let name: Str = tok.text
+                // Check blue-paint: if this macro name is in the token's blue set, skip
+                if is_blue_painted(tok, name) > 0 {
+                    result.push(tok)
+                    continue
+                }
+                // Check if name is a defined macro
+                if pp.defines.has(name) {
+                    let def: MacroDef = pp.defines.get(name)
+                    when def {
+                        ObjectLike(body) => {
+                            // Paint all body tokens with this macro name
+                            let bc: I64 = body.len() as I64
+                            for bi in 0 to bc {
+                                let btok: PpToken = body.get(bi)
+                                let painted: PpToken = add_blue_paint(btok, name)
+                                // Union source token's blue set into painted token
+                                let painted2: PpToken = union_blue_sets(painted, tok)
+                                result.push(painted2)
+                            }
+                        },
+                        FunctionLike(fdef) => {
+                            // Function-like macros need argument collection
+                            // For now, push as-is (full arg collection in next iteration)
+                            result.push(tok)
+                        }
+                    }
+                } else {
+                    result.push(tok)
+                }
+            },
+            _ => result.push(tok)
+        }
+    }
+
+    return result
+}
+
+// ============================================================================
+// Blue-paint helpers (item 2.5)
+// ============================================================================
+
+/// Check if a macro name is in the token's blue set.
+func is_blue_painted(tok: PpToken, name: Str) -> I64 {
+    let n: I64 = tok.blue_set.len() as I64
+    for i in 0 to n {
+        if tok.blue_set.get(i) == name { return 1 }
+    }
+    return 0
+}
+
+/// Add a macro name to a token's blue set, returning a new token.
+func add_blue_paint(tok: PpToken, name: Str) -> PpToken {
+    let new_blue = List[Str]::new(tok.blue_set.len() as I64 + 1)
+    let n: I64 = tok.blue_set.len() as I64
+    for i in 0 to n { new_blue.push(tok.blue_set.get(i)) }
+    new_blue.push(name)
+    return PpToken { kind: tok.kind, text: tok.text, file: tok.file, line: tok.line, col: tok.col, blue_set: new_blue }
+}
+
+/// Union two tokens' blue sets into a new token (keeps the first token's other fields).
+func union_blue_sets(target: PpToken, source: PpToken) -> PpToken {
+    let n: I64 = source.blue_set.len() as I64
+    if n == 0 { return target }
+    let new_blue = List[Str]::new(target.blue_set.len() as I64 + n)
+    let tn: I64 = target.blue_set.len() as I64
+    for i in 0 to tn { new_blue.push(target.blue_set.get(i)) }
+    for i in 0 to n {
+        let name: Str = source.blue_set.get(i)
+        // Avoid duplicates
+        var found: I64 = 0
+        for j in 0 to tn {
+            if new_blue.get(j) == name { found = 1 }
+        }
+        if found == 0 { new_blue.push(name) }
+    }
+    return PpToken { kind: target.kind, text: target.text, file: target.file, line: target.line, col: target.col, blue_set: new_blue }
+}
+
+// ============================================================================
+// Stringification (#) and token pasting (##) — items 4.1–4.3
+// ============================================================================
+
+/// Stringify a list of tokens into a string literal token.
+pub func stringify_tokens(tokens: List[PpToken]) -> PpToken {
+    var s: Str = "\""
+    let n: I64 = tokens.len() as I64
+    for i in 0 to n {
+        if i > 0 { s = s + " " }
+        s = s + tokens.get(i).text
+    }
+    s = s + "\""
+    return pp_token(PpTokenKind::StringLit, s, "", 0 as I64, 0 as I64)
+}
+
+/// Paste two tokens together, producing a new token.
+pub func paste_tokens(left: PpToken, right: PpToken) -> PpToken {
+    let pasted_text: Str = left.text + right.text
+    // Determine kind of pasted result — simplified heuristic
+    var kind: PpTokenKind = PpTokenKind::Ident
+    let first_char: I64 = pasted_text.char_at(0)
+    if first_char >= 48 and first_char <= 57 {
+        kind = PpTokenKind::IntLit
+    }
+    // Union blue sets
+    let result: PpToken = pp_token(kind, pasted_text, left.file, left.line, left.col)
+    let r2: PpToken = union_blue_sets(result, left)
+    return union_blue_sets(r2, right)
+}

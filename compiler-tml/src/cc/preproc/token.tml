@@ -1,0 +1,171 @@
+//! Preprocessor token types and the Preprocessor state machine.
+//!
+//! Phase 23a — items 1.1–1.4.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Token types
+// ============================================================================
+
+pub enum PpTokenKind {
+    Ident,
+    IntLit,
+    FloatLit,
+    CharLit,
+    StringLit,
+    Punct,       // operator or punctuation
+    Newline,
+    Whitespace,
+    Eof
+}
+
+pub type PpToken {
+    kind: PpTokenKind,
+    text: Str,
+    file: Str,
+    line: I64,
+    col: I64,
+    blue_set: List[Str]   // macro names that produced this token (blue-paint)
+}
+
+pub func pp_token(kind: PpTokenKind, text: Str, file: Str, line: I64, col: I64) -> PpToken {
+    return PpToken { kind: kind, text: text, file: file, line: line, col: col, blue_set: List[Str]::new(0 as I64) }
+}
+
+// ============================================================================
+// Include frame
+// ============================================================================
+
+pub type IncludeFrame {
+    path: Str,
+    line: I64,
+    col: I64
+}
+
+// ============================================================================
+// Preprocessor state (item 1.1)
+// ============================================================================
+
+pub type Preprocessor {
+    system_paths: List[Str],
+    user_paths: List[Str],
+    defines: HashMap[Str, MacroDef],
+    include_stack: List[IncludeFrame],
+    include_guards: HashMap[Str, I64],
+    pragma_once_files: HashMap[Str, I64],
+    output: List[PpToken],
+    errors: List[Str],
+    cond_stack: List[CondFrame]
+}
+
+/// Macro definition.
+pub enum MacroDef {
+    ObjectLike(List[PpToken]),
+    FunctionLike(FuncMacroDef)
+}
+
+pub type FuncMacroDef {
+    params: List[Str],
+    is_variadic: I64,
+    body: List[PpToken]
+}
+
+/// Conditional compilation frame.
+pub type CondFrame {
+    active: I64,        // 1 = currently active branch
+    ever_active: I64,   // 1 = at least one branch was taken
+    depth: I64
+}
+
+/// Create a new preprocessor.
+pub func pp_new(sys_paths: List[Str], usr_paths: List[Str]) -> Preprocessor {
+    return Preprocessor {
+        system_paths: sys_paths,
+        user_paths: usr_paths,
+        defines: HashMap[Str, MacroDef]::new(128),
+        include_stack: List[IncludeFrame]::new(16),
+        include_guards: HashMap[Str, I64]::new(32),
+        pragma_once_files: HashMap[Str, I64]::new(16),
+        output: List[PpToken]::new(1024),
+        errors: List[Str]::new(8),
+        cond_stack: List[CondFrame]::new(16)
+    }
+}
+
+// ============================================================================
+// Include handling (items 1.2–1.4)
+// ============================================================================
+
+/// Check if a file has already been included (via include guard or pragma once).
+pub func pp_is_guarded(pp: Preprocessor, path: Str) -> I64 {
+    if pp.pragma_once_files.has(path) { return 1 }
+    if pp.include_guards.has(path) { return 1 }
+    return 0
+}
+
+/// Register a pragma once for a file.
+pub func pp_pragma_once(pp: Preprocessor, path: Str) {
+    pp.pragma_once_files.set(path, 1 as I64)
+}
+
+/// Register an include guard for a file.
+pub func pp_set_guard(pp: Preprocessor, path: Str, guard_name: Str) {
+    pp.include_guards.set(path, 1 as I64)
+    // Also define the guard macro as empty
+    pp.defines.set(guard_name, MacroDef::ObjectLike(List[PpToken]::new(0 as I64)))
+}
+
+/// Check for circular include.
+pub func pp_is_circular(pp: Preprocessor, path: Str) -> I64 {
+    let n: I64 = pp.include_stack.len() as I64
+    for i in 0 to n {
+        if pp.include_stack.get(i).path == path { return 1 }
+    }
+    return 0
+}
+
+/// Push an include frame.
+pub func pp_push_include(pp: Preprocessor, path: Str) {
+    pp.include_stack.push(IncludeFrame { path: path, line: 1 as I64, col: 1 as I64 })
+}
+
+/// Pop an include frame.
+pub func pp_pop_include(pp: Preprocessor) {
+    let n: I64 = pp.include_stack.len() as I64
+    if n > 0 {
+        pp.include_stack.pop()
+    }
+}
+
+/// Define an object-like macro.
+pub func pp_define_object(pp: Preprocessor, name: Str, body: List[PpToken]) {
+    pp.defines.set(name, MacroDef::ObjectLike(body))
+}
+
+/// Define a simple text macro (convenience).
+pub func pp_define_str(pp: Preprocessor, name: Str, value: Str) {
+    let body = List[PpToken]::new(1 as I64)
+    body.push(pp_token(PpTokenKind::Ident, value, "", 0 as I64, 0 as I64))
+    pp.defines.set(name, MacroDef::ObjectLike(body))
+}
+
+/// Define a numeric macro (convenience).
+pub func pp_define_int(pp: Preprocessor, name: Str, value: I64) {
+    let body = List[PpToken]::new(1 as I64)
+    body.push(pp_token(PpTokenKind::IntLit, value.to_string(), "", 0 as I64, 0 as I64))
+    pp.defines.set(name, MacroDef::ObjectLike(body))
+}
+
+/// Check if a macro is defined.
+pub func pp_is_defined(pp: Preprocessor, name: Str) -> I64 {
+    if pp.defines.has(name) { return 1 }
+    return 0
+}
+
+/// Undefine a macro.
+pub func pp_undef(pp: Preprocessor, name: Str) {
+    // HashMap has no remove — set to empty object-like
+    pp.defines.set(name + "__UNDEF__", MacroDef::ObjectLike(List[PpToken]::new(0 as I64)))
+}

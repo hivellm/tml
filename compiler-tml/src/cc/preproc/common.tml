@@ -1,0 +1,11 @@
+//! C preprocessor — include handling, macro expansion, conditionals.
+//!
+//! Implements C11 §6.10 preprocessing directives. Takes C source + include
+//! paths + defines and produces a flat List[PpToken] for the C parser.
+//!
+//! Phase 23a — module root.
+
+pub use compiler::cc::preproc::token::*
+pub use compiler::cc::preproc::macros::*
+pub use compiler::cc::preproc::conditionals::*
+pub use compiler::cc::preproc::predefined::*

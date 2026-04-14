@@ -1,0 +1,119 @@
+//! Tests for C preprocessor — macros, conditionals, blue-paint, predefined.
+
+use test::{assert, assert_eq}
+use compiler::cc::preproc::token::*
+use compiler::cc::preproc::macros::*
+use compiler::cc::preproc::conditionals::*
+use compiler::cc::preproc::predefined::*
+use std::collections::list::List
+
+@test func test_c_preprocessor_full() {
+    // === Create preprocessor ===
+    let pp: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+
+    // === Predefined macros ===
+    register_predefined_macros(pp)
+    assert_eq(pp_is_defined(pp, "__STDC__") as I32, 1)
+    assert_eq(pp_is_defined(pp, "__TML__") as I32, 1)
+    assert_eq(pp_is_defined(pp, "_WIN32") as I32, 1)
+    assert_eq(pp_is_defined(pp, "__GNUC__") as I32, 1)
+    assert_eq(pp_is_defined(pp, "NONEXISTENT") as I32, 0)
+
+    // === Object-like macro define + expand ===
+    let body = List[PpToken]::new(1 as I64)
+    body.push(pp_token(PpTokenKind::IntLit, "42", "test.c", 1 as I64, 1 as I64))
+    pp_define_object(pp, "ANSWER", body)
+    assert_eq(pp_is_defined(pp, "ANSWER") as I32, 1)
+
+    // Expand a token list containing ANSWER
+    let input = List[PpToken]::new(1 as I64)
+    input.push(pp_token(PpTokenKind::Ident, "ANSWER", "test.c", 1 as I64, 1 as I64))
+    let expanded: List[PpToken] = expand_macros(pp, input)
+    assert_eq(expanded.len() as I32, 1)
+    assert_eq(expanded.get(0).text, "42")
+
+    // === Blue-paint prevents infinite recursion ===
+    // Define A -> A (self-referencing)
+    let self_body = List[PpToken]::new(1 as I64)
+    self_body.push(pp_token(PpTokenKind::Ident, "RECURSE", "test.c", 1 as I64, 1 as I64))
+    pp_define_object(pp, "RECURSE", self_body)
+
+    let recurse_input = List[PpToken]::new(1 as I64)
+    recurse_input.push(pp_token(PpTokenKind::Ident, "RECURSE", "test.c", 1 as I64, 1 as I64))
+    let recurse_result: List[PpToken] = expand_macros(pp, recurse_input)
+    // Blue-paint should prevent infinite expansion — result is "RECURSE" with blue paint
+    assert_eq(recurse_result.len() as I32, 1)
+    assert_eq(recurse_result.get(0).text, "RECURSE")
+    assert(recurse_result.get(0).blue_set.len() as I64 > 0)
+
+    // === Conditionals ===
+    // #if 1
+    cond_push(pp, 1 as I64)
+    assert_eq(cond_is_active(pp) as I32, 1)
+
+    // #else (should deactivate since branch was taken)
+    cond_else(pp)
+    assert_eq(cond_is_active(pp) as I32, 0)
+
+    // #endif
+    cond_endif(pp)
+    assert_eq(cond_is_active(pp) as I32, 1)  // back to top level
+
+    // #ifdef __STDC__
+    cond_push(pp, pp_is_defined(pp, "__STDC__"))
+    assert_eq(cond_is_active(pp) as I32, 1)  // __STDC__ is defined
+    cond_endif(pp)
+
+    // #ifndef FOOBAR
+    let foobar_defined: I64 = pp_is_defined(pp, "FOOBAR")
+    let ifndef_active: I64 = if foobar_defined > 0 { 0 } else { 1 }
+    cond_push(pp, ifndef_active)
+    assert_eq(cond_is_active(pp) as I32, 1)  // FOOBAR not defined
+    cond_endif(pp)
+
+    // === Constant expression evaluation ===
+    let expr1 = List[PpToken]::new(1 as I64)
+    expr1.push(pp_token(PpTokenKind::IntLit, "42", "", 0 as I64, 0 as I64))
+    assert_eq(eval_const_expr(pp, expr1) as I32, 42)
+
+    let expr_hex = List[PpToken]::new(1 as I64)
+    expr_hex.push(pp_token(PpTokenKind::IntLit, "0xFF", "", 0 as I64, 0 as I64))
+    assert_eq(eval_const_expr(pp, expr_hex) as I32, 255)
+
+    let expr_defined = List[PpToken]::new(2 as I64)
+    expr_defined.push(pp_token(PpTokenKind::Ident, "defined", "", 0 as I64, 0 as I64))
+    expr_defined.push(pp_token(PpTokenKind::Ident, "__STDC__", "", 0 as I64, 0 as I64))
+    assert_eq(eval_const_expr(pp, expr_defined) as I32, 1)
+
+    // === Include guards ===
+    pp_pragma_once(pp, "/usr/include/stdio.h")
+    assert_eq(pp_is_guarded(pp, "/usr/include/stdio.h") as I32, 1)
+    assert_eq(pp_is_guarded(pp, "/usr/include/stdlib.h") as I32, 0)
+
+    pp_set_guard(pp, "myheader.h", "MYHEADER_H")
+    assert_eq(pp_is_guarded(pp, "myheader.h") as I32, 1)
+    assert_eq(pp_is_defined(pp, "MYHEADER_H") as I32, 1)
+
+    // === Circular include detection ===
+    pp_push_include(pp, "a.h")
+    pp_push_include(pp, "b.h")
+    assert_eq(pp_is_circular(pp, "a.h") as I32, 1)
+    assert_eq(pp_is_circular(pp, "c.h") as I32, 0)
+    pp_pop_include(pp)
+    pp_pop_include(pp)
+
+    // === Stringification ===
+    let str_tokens = List[PpToken]::new(3 as I64)
+    str_tokens.push(pp_token(PpTokenKind::Ident, "hello", "", 0 as I64, 0 as I64))
+    str_tokens.push(pp_token(PpTokenKind::Punct, "+", "", 0 as I64, 0 as I64))
+    str_tokens.push(pp_token(PpTokenKind::IntLit, "42", "", 0 as I64, 0 as I64))
+    let stringified: PpToken = stringify_tokens(str_tokens)
+    assert(stringified.text.contains("hello"))
+    assert(stringified.text.contains("42"))
+
+    // === Token pasting ===
+    let left: PpToken = pp_token(PpTokenKind::Ident, "my_", "", 0 as I64, 0 as I64)
+    let right: PpToken = pp_token(PpTokenKind::Ident, "func", "", 0 as I64, 0 as I64)
+    let pasted: PpToken = paste_tokens(left, right)
+    assert_eq(pasted.text, "my_func")
+}
