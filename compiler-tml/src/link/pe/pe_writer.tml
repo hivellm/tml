@@ -1,0 +1,283 @@
+//! PE32+ executable writer — produces valid Windows .exe files.
+//!
+//! Writes: DOS stub, PE signature, COFF file header, PE Optional Header (240 bytes),
+//! section headers, and section data with proper alignment.
+//!
+//! Reference: Microsoft PE/COFF Specification §3.4 (PE format).
+//!
+//! Phase 22a — items 4.1–4.4.
+
+use compiler::link::pe::coff_parser::*
+use std::collections::list::List
+
+// ============================================================================
+// PE constants
+// ============================================================================
+
+pub const PE_MAGIC: I64 = 0x00004550       // "PE\0\0"
+pub const PE32PLUS_MAGIC: I64 = 0x020B     // PE32+ optional header magic
+pub const IMAGE_FILE_EXECUTABLE: I64 = 0x0002
+pub const IMAGE_FILE_LARGE_ADDRESS: I64 = 0x0020
+
+pub const IMAGE_SUBSYSTEM_CONSOLE: I64 = 3
+pub const IMAGE_SUBSYSTEM_WINDOWS: I64 = 2
+
+pub const DEFAULT_IMAGE_BASE: I64 = 0x140000000    // 64-bit default
+pub const DEFAULT_SECTION_ALIGN: I64 = 0x1000      // 4KB
+pub const DEFAULT_FILE_ALIGN: I64 = 0x200           // 512 bytes
+
+pub const DEFAULT_STACK_RESERVE: I64 = 0x100000     // 1MB
+pub const DEFAULT_STACK_COMMIT: I64 = 0x1000        // 4KB
+pub const DEFAULT_HEAP_RESERVE: I64 = 0x100000
+pub const DEFAULT_HEAP_COMMIT: I64 = 0x1000
+
+pub const NUM_DATA_DIRECTORIES: I64 = 16
+
+// ============================================================================
+// PE section descriptor
+// ============================================================================
+
+pub type PeSection {
+    name: Str,
+    data: List[I64],
+    characteristics: I64,
+    rva: I64,
+    file_offset: I64
+}
+
+/// Options for PE output.
+pub type PeOptions {
+    entry_point_rva: I64,
+    subsystem: I64,
+    image_base_val: I64,
+    idata_rva: I64,
+    idata_size: I64,
+    iat_rva: I64,
+    iat_size: I64
+}
+
+/// Default PE options for a console application.
+pub func pe_options_console(entry_rva: I64) -> PeOptions {
+    return PeOptions {
+        entry_point_rva: entry_rva,
+        subsystem: IMAGE_SUBSYSTEM_CONSOLE,
+        image_base_val: DEFAULT_IMAGE_BASE,
+        idata_rva: 0 as I64,
+        idata_size: 0 as I64,
+        iat_rva: 0 as I64,
+        iat_size: 0 as I64
+    }
+}
+
+// ============================================================================
+// PE writer (items 4.1–4.4)
+// ============================================================================
+
+/// Write a complete PE32+ executable from sections.
+pub func write_pe(sections: List[PeSection], opts: PeOptions) -> List[I64] {
+    let buf = List[I64]::new(16384)
+    let num_sects: I64 = sections.len() as I64
+
+    // --- (4.1) DOS stub (64 bytes) ---
+    // MZ signature
+    buf.push(0x4D)  // 'M'
+    buf.push(0x5A)  // 'Z'
+    // Fill DOS header with zeros except e_lfanew at offset 0x3C
+    for _ in 0 to 58 { buf.push(0) }
+    // e_lfanew = 0x40 (PE header starts at offset 64)
+    write_u32(buf, 0x40)
+
+    // --- PE signature ---
+    write_u32(buf, PE_MAGIC)
+
+    // --- COFF file header (20 bytes) ---
+    write_u16(buf, IMAGE_FILE_MACHINE_AMD64)              // Machine
+    write_u16(buf, num_sects)                              // NumberOfSections
+    write_u32(buf, 0 as I64)                               // TimeDateStamp
+    write_u32(buf, 0 as I64)                               // PointerToSymbolTable
+    write_u32(buf, 0 as I64)                               // NumberOfSymbols
+    write_u16(buf, 240 as I64)                             // SizeOfOptionalHeader (PE32+)
+    write_u16(buf, IMAGE_FILE_EXECUTABLE | IMAGE_FILE_LARGE_ADDRESS) // Characteristics
+
+    // --- (4.2) PE Optional Header (240 bytes for PE32+) ---
+    write_u16(buf, PE32PLUS_MAGIC)                         // Magic
+    buf.push(14)                                           // MajorLinkerVersion
+    buf.push(0)                                            // MinorLinkerVersion
+
+    // Compute sizes
+    var code_size: I64 = 0
+    var init_data_size: I64 = 0
+    for i in 0 to num_sects {
+        let sec: PeSection = sections.get(i)
+        if (sec.characteristics & IMAGE_SCN_CNT_CODE) != 0 {
+            code_size = code_size + align_to(sec.data.len() as I64, DEFAULT_FILE_ALIGN)
+        }
+        if (sec.characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA) != 0 {
+            init_data_size = init_data_size + align_to(sec.data.len() as I64, DEFAULT_FILE_ALIGN)
+        }
+    }
+    write_u32(buf, code_size)                              // SizeOfCode
+    write_u32(buf, init_data_size)                         // SizeOfInitializedData
+    write_u32(buf, 0 as I64)                               // SizeOfUninitializedData
+    write_u32(buf, opts.entry_point_rva)                   // AddressOfEntryPoint
+    write_u32(buf, DEFAULT_SECTION_ALIGN)                  // BaseOfCode
+
+    // PE32+ specific (8-byte ImageBase)
+    write_u64(buf, opts.image_base_val)                    // ImageBase
+    write_u32(buf, DEFAULT_SECTION_ALIGN)                  // SectionAlignment
+    write_u32(buf, DEFAULT_FILE_ALIGN)                     // FileAlignment
+    write_u16(buf, 6 as I64)                               // MajorOperatingSystemVersion
+    write_u16(buf, 0 as I64)                               // MinorOperatingSystemVersion
+    write_u16(buf, 0 as I64)                               // MajorImageVersion
+    write_u16(buf, 0 as I64)                               // MinorImageVersion
+    write_u16(buf, 6 as I64)                               // MajorSubsystemVersion
+    write_u16(buf, 0 as I64)                               // MinorSubsystemVersion
+    write_u32(buf, 0 as I64)                               // Win32VersionValue
+
+    // Compute SizeOfImage (last section RVA + aligned size, rounded up to SectionAlignment)
+    var last_rva: I64 = DEFAULT_SECTION_ALIGN
+    for i in 0 to num_sects {
+        let sec: PeSection = sections.get(i)
+        let sec_end: I64 = sec.rva + align_to(sec.data.len() as I64, DEFAULT_SECTION_ALIGN)
+        if sec_end > last_rva { last_rva = sec_end }
+    }
+    write_u32(buf, last_rva)                               // SizeOfImage
+
+    // SizeOfHeaders (DOS + PE sig + COFF hdr + optional hdr + section headers, aligned to FileAlignment)
+    let headers_size: I64 = 64 + 4 + 20 + 240 + num_sects * 40
+    write_u32(buf, align_to(headers_size, DEFAULT_FILE_ALIGN)) // SizeOfHeaders
+    write_u32(buf, 0 as I64)                               // CheckSum (will be patched by item 4.4)
+    write_u16(buf, opts.subsystem)                         // Subsystem
+    write_u16(buf, 0x8160)                                 // DllCharacteristics (DEP + ASLR + terminal server aware)
+    write_u64(buf, DEFAULT_STACK_RESERVE)                  // SizeOfStackReserve
+    write_u64(buf, DEFAULT_STACK_COMMIT)                   // SizeOfStackCommit
+    write_u64(buf, DEFAULT_HEAP_RESERVE)                   // SizeOfHeapReserve
+    write_u64(buf, DEFAULT_HEAP_COMMIT)                    // SizeOfHeapCommit
+    write_u32(buf, 0 as I64)                               // LoaderFlags
+    write_u32(buf, NUM_DATA_DIRECTORIES)                   // NumberOfRvaAndSizes
+
+    // Data directories (16 entries × 8 bytes = 128 bytes)
+    // Only Import Table (index 1) and IAT (index 12) are non-zero
+    for i in 0 to NUM_DATA_DIRECTORIES {
+        if i == 1 and opts.idata_rva > 0 {
+            write_u32(buf, opts.idata_rva)
+            write_u32(buf, opts.idata_size)
+        } else if i == 12 and opts.iat_rva > 0 {
+            write_u32(buf, opts.iat_rva)
+            write_u32(buf, opts.iat_size)
+        } else {
+            write_u32(buf, 0 as I64)
+            write_u32(buf, 0 as I64)
+        }
+    }
+
+    // --- (4.3) Section headers (40 bytes each) ---
+    for i in 0 to num_sects {
+        let sec: PeSection = sections.get(i)
+        // Name (8 bytes, null-padded)
+        write_section_name(buf, sec.name)
+        let virtual_size: I64 = sec.data.len() as I64
+        let raw_size: I64 = align_to(virtual_size, DEFAULT_FILE_ALIGN)
+        write_u32(buf, virtual_size)                       // VirtualSize
+        write_u32(buf, sec.rva)                            // VirtualAddress
+        write_u32(buf, raw_size)                           // SizeOfRawData
+        write_u32(buf, sec.file_offset)                    // PointerToRawData
+        write_u32(buf, 0 as I64)                           // PointerToRelocations
+        write_u32(buf, 0 as I64)                           // PointerToLinenumbers
+        write_u16(buf, 0 as I64)                           // NumberOfRelocations
+        write_u16(buf, 0 as I64)                           // NumberOfLinenumbers
+        write_u32(buf, sec.characteristics)                // Characteristics
+    }
+
+    // Pad headers to FileAlignment
+    pad_to_align(buf, DEFAULT_FILE_ALIGN)
+
+    // --- Section data ---
+    for i in 0 to num_sects {
+        let sec: PeSection = sections.get(i)
+        let dc: I64 = sec.data.len() as I64
+        for j in 0 to dc {
+            buf.push(sec.data.get(j))
+        }
+        pad_to_align(buf, DEFAULT_FILE_ALIGN)
+    }
+
+    return buf
+}
+
+// ============================================================================
+// (4.4) PE checksum
+// ============================================================================
+
+/// Compute and patch the PE checksum at offset 0x58 (88) in the optional header.
+/// Standard PE checksum: sum all 16-bit words, fold carries, add file size.
+pub func pe_compute_checksum(pe_bytes: List[I64]) -> I64 {
+    let size: I64 = pe_bytes.len() as I64
+    var checksum: I64 = 0
+    let checksum_offset: I64 = 64 + 4 + 20 + 64  // DOS(64) + PE_sig(4) + COFF_hdr(20) + 64 bytes into optional hdr
+
+    var i: I64 = 0
+    loop (i < size - 1) {
+        // Skip the CheckSum field itself (4 bytes at checksum_offset)
+        if i == checksum_offset or i == checksum_offset + 2 {
+            i = i + 2
+            continue
+        }
+        let word: I64 = (pe_bytes.get(i) & 0xFF) | ((pe_bytes.get(i + 1) & 0xFF) << 8)
+        checksum = checksum + word
+        // Fold carry
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+        i = i + 2
+    }
+    // Handle odd byte
+    if size % 2 == 1 {
+        checksum = checksum + (pe_bytes.get(size - 1) & 0xFF)
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    }
+    // Final fold
+    checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    return checksum + size
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func write_u16(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+    buf.push((v >> 16) & 0xFF)
+    buf.push((v >> 24) & 0xFF)
+}
+
+func write_u64(buf: List[I64], v: I64) {
+    write_u32(buf, v)
+    write_u32(buf, v >> 32)
+}
+
+func write_section_name(buf: List[I64], name: Str) {
+    let n: I64 = name.len() as I64
+    let limit: I64 = if n > 8 { 8 } else { n }
+    let ptr: I64 = name as I64
+    for i in 0 to limit {
+        let b: I64 = lowlevel { ptr_read[I8]((ptr + i) as *I8) } as I64
+        buf.push((b + 256) % 256)
+    }
+    for _ in 0 to (8 - limit) { buf.push(0) }
+}
+
+func align_to(val: I64, alignment: I64) -> I64 {
+    return (val + alignment - 1) & (0 - alignment)
+}
+
+func pad_to_align(buf: List[I64], alignment: I64) {
+    let current: I64 = buf.len() as I64
+    let target: I64 = align_to(current, alignment)
+    let padding: I64 = target - current
+    for _ in 0 to padding { buf.push(0) }
+}

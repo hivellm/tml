@@ -1,0 +1,11 @@
+//! PE/COFF linker module root — re-exports all linker components.
+//!
+//! Usage: `use compiler::link::pe::common::*` to access the full linker API.
+//!
+//! Phase 22a.
+
+pub use compiler::link::pe::coff_parser::*
+pub use compiler::link::pe::symbol_table::*
+pub use compiler::link::pe::relocations::*
+pub use compiler::link::pe::pe_writer::*
+pub use compiler::link::pe::import_lib::*

@@ -1,0 +1,296 @@
+//! COFF object file parser — reads .obj files produced by TML or MSVC.
+//!
+//! Parses the COFF file header, section table, symbol table, and per-section
+//! relocations. Reference: Microsoft PE/COFF Specification v8.3 §3–5.
+//!
+//! Phase 22a — items 1.1–1.4.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// COFF constants (§3.1)
+// ============================================================================
+
+pub const IMAGE_FILE_MACHINE_AMD64: I64 = 0x8664
+pub const IMAGE_FILE_MACHINE_ARM64: I64 = 0xAA64
+
+/// Symbol storage classes (§5.4.4)
+pub const IMAGE_SYM_CLASS_EXTERNAL: I64 = 2
+pub const IMAGE_SYM_CLASS_STATIC: I64 = 3
+pub const IMAGE_SYM_CLASS_LABEL: I64 = 6
+pub const IMAGE_SYM_CLASS_FUNCTION: I64 = 101
+pub const IMAGE_SYM_CLASS_FILE: I64 = 103
+pub const IMAGE_SYM_CLASS_SECTION: I64 = 104
+pub const IMAGE_SYM_CLASS_WEAK_EXTERNAL: I64 = 105
+
+/// Symbol section numbers (§5.4.2)
+pub const IMAGE_SYM_UNDEFINED: I64 = 0
+pub const IMAGE_SYM_ABSOLUTE: I64 = -1
+pub const IMAGE_SYM_DEBUG: I64 = -2
+
+/// Section flags (§4.1)
+pub const IMAGE_SCN_CNT_CODE: I64 = 0x00000020
+pub const IMAGE_SCN_CNT_INITIALIZED_DATA: I64 = 0x00000040
+pub const IMAGE_SCN_CNT_UNINITIALIZED_DATA: I64 = 0x00000080
+pub const IMAGE_SCN_LNK_COMDAT: I64 = 0x00001000
+pub const IMAGE_SCN_MEM_EXECUTE: I64 = 0x20000000
+pub const IMAGE_SCN_MEM_READ: I64 = 0x40000000
+pub const IMAGE_SCN_MEM_WRITE: I64 = 0x80000000
+
+/// Relocation types for AMD64 (§5.2.1)
+pub const IMAGE_REL_AMD64_ADDR64: I64 = 1
+pub const IMAGE_REL_AMD64_ADDR32: I64 = 2
+pub const IMAGE_REL_AMD64_ADDR32NB: I64 = 3
+pub const IMAGE_REL_AMD64_REL32: I64 = 4
+pub const IMAGE_REL_AMD64_SECTION: I64 = 10
+pub const IMAGE_REL_AMD64_SECREL: I64 = 11
+
+// ============================================================================
+// Parsed COFF data types (item 1.1)
+// ============================================================================
+
+/// Parsed COFF object file.
+pub type CoffObject {
+    machine: I64,
+    num_sections: I64,
+    timestamp: I64,
+    symbol_table_offset: I64,
+    num_symbols: I64,
+    optional_header_size: I64,
+    characteristics: I64,
+    sections: List[CoffParsedSection],
+    symbols: List[CoffParsedSymbol]
+}
+
+/// Parsed COFF section (item 1.2).
+pub type CoffParsedSection {
+    name: Str,
+    virtual_size: I64,
+    virtual_address: I64,
+    raw_data_size: I64,
+    raw_data_offset: I64,
+    reloc_offset: I64,
+    num_relocs: I64,
+    characteristics: I64,
+    data: List[I64],
+    relocations: List[CoffParsedReloc]
+}
+
+/// Parsed COFF symbol (item 1.3).
+pub type CoffParsedSymbol {
+    name: Str,
+    value: I64,
+    section_number: I64,
+    sym_type: I64,
+    storage_class: I64,
+    num_aux: I64
+}
+
+/// Parsed COFF relocation (item 1.4).
+pub type CoffParsedReloc {
+    virtual_address: I64,
+    symbol_index: I64,
+    reloc_type: I64
+}
+
+// ============================================================================
+// Parser (items 1.1–1.4)
+// ============================================================================
+
+/// Parse a COFF object file from raw bytes.
+pub func parse_coff(bytes: List[I64]) -> CoffObject {
+    let size: I64 = bytes.len() as I64
+
+    // (1.1) COFF file header — 20 bytes
+    let machine: I64 = read_u16(bytes, 0 as I64)
+    let num_sections: I64 = read_u16(bytes, 2 as I64)
+    let timestamp: I64 = read_u32(bytes, 4 as I64)
+    let sym_offset: I64 = read_u32(bytes, 8 as I64)
+    let num_symbols: I64 = read_u32(bytes, 12 as I64)
+    let opt_size: I64 = read_u16(bytes, 16 as I64)
+    let chars: I64 = read_u16(bytes, 18 as I64)
+
+    // (1.2) Section table — starts at offset 20 + opt_size
+    let sec_start: I64 = 20 + opt_size
+    let sections = List[CoffParsedSection]::new(num_sections)
+
+    for i in 0 to num_sections {
+        let off: I64 = sec_start + i * 40
+        let sec_name: Str = read_section_name(bytes, off)
+        let vsize: I64 = read_u32(bytes, off + 8)
+        let vaddr: I64 = read_u32(bytes, off + 12)
+        let rdata_size: I64 = read_u32(bytes, off + 16)
+        let rdata_off: I64 = read_u32(bytes, off + 20)
+        let reloc_off: I64 = read_u32(bytes, off + 24)
+        let nrelocs: I64 = read_u16(bytes, off + 32)
+        let sec_chars: I64 = read_u32(bytes, off + 36)
+
+        // Read raw section data
+        let data = List[I64]::new(rdata_size)
+        if rdata_off > 0 and rdata_size > 0 and rdata_off + rdata_size <= size {
+            for j in 0 to rdata_size {
+                data.push(bytes.get(rdata_off + j))
+            }
+        }
+
+        // (1.4) Read section relocations — 10 bytes each
+        let relocs = List[CoffParsedReloc]::new(nrelocs)
+        if reloc_off > 0 and nrelocs > 0 {
+            for j in 0 to nrelocs {
+                let roff: I64 = reloc_off + j * 10
+                if roff + 10 <= size {
+                    relocs.push(CoffParsedReloc {
+                        virtual_address: read_u32(bytes, roff),
+                        symbol_index: read_u32(bytes, roff + 4),
+                        reloc_type: read_u16(bytes, roff + 8)
+                    })
+                }
+            }
+        }
+
+        sections.push(CoffParsedSection {
+            name: sec_name,
+            virtual_size: vsize,
+            virtual_address: vaddr,
+            raw_data_size: rdata_size,
+            raw_data_offset: rdata_off,
+            reloc_offset: reloc_off,
+            num_relocs: nrelocs,
+            characteristics: sec_chars,
+            data: data,
+            relocations: relocs
+        })
+    }
+
+    // (1.3) Symbol table — 18 bytes per symbol
+    let symbols = List[CoffParsedSymbol]::new(num_symbols)
+    var si: I64 = 0
+    loop (si < num_symbols) {
+        let soff: I64 = sym_offset + si * 18
+        if soff + 18 > size { si = si + 1; continue }
+
+        let sym_name: Str = read_symbol_name(bytes, soff, sym_offset, num_symbols)
+        let sym_val: I64 = read_u32(bytes, soff + 8)
+        let sym_sec: I64 = read_i16(bytes, soff + 12)
+        let sym_ty: I64 = read_u16(bytes, soff + 14)
+        let sym_class: I64 = bytes.get(soff + 16) & 0xFF
+        let sym_aux: I64 = bytes.get(soff + 17) & 0xFF
+
+        symbols.push(CoffParsedSymbol {
+            name: sym_name,
+            value: sym_val,
+            section_number: sym_sec,
+            sym_type: sym_ty,
+            storage_class: sym_class,
+            num_aux: sym_aux
+        })
+
+        // Skip auxiliary records
+        si = si + 1 + sym_aux
+    }
+
+    return CoffObject {
+        machine: machine,
+        num_sections: num_sections,
+        timestamp: timestamp,
+        symbol_table_offset: sym_offset,
+        num_symbols: num_symbols,
+        optional_header_size: opt_size,
+        characteristics: chars,
+        sections: sections,
+        symbols: symbols
+    }
+}
+
+// ============================================================================
+// String reading helpers
+// ============================================================================
+
+/// Read a section name from the section header (8 bytes, null-padded or /offset to strtab).
+func read_section_name(bytes: List[I64], offset: I64) -> Str {
+    // Check for long name (starts with '/')
+    if bytes.get(offset) == 0x2F {
+        // Long name: /offset into string table — simplified: return "/<digits>"
+        var s: Str = "/"
+        for i in 1 to 8 {
+            let b: I64 = bytes.get(offset + i) & 0xFF
+            if b == 0 { return s }
+            s = s + char_from_byte(b)
+        }
+        return s
+    }
+    // Short name: up to 8 bytes, null-padded
+    var name: Str = ""
+    for i in 0 to 8 {
+        let b: I64 = bytes.get(offset + i) & 0xFF
+        if b == 0 { return name }
+        name = name + char_from_byte(b)
+    }
+    return name
+}
+
+/// Read a symbol name (first 8 bytes of symbol entry).
+/// If first 4 bytes are zero, the name is in the string table at the offset in bytes 4-7.
+func read_symbol_name(bytes: List[I64], sym_off: I64, sym_table_off: I64, num_syms: I64) -> Str {
+    let first4: I64 = read_u32(bytes, sym_off)
+    if first4 == 0 {
+        // Long name: offset into string table (which follows symbol table)
+        let str_offset: I64 = read_u32(bytes, sym_off + 4)
+        let strtab_start: I64 = sym_table_off + num_syms * 18
+        return read_null_str(bytes, strtab_start + str_offset)
+    }
+    // Short name: up to 8 bytes
+    var name: Str = ""
+    for i in 0 to 8 {
+        let b: I64 = bytes.get(sym_off + i) & 0xFF
+        if b == 0 { return name }
+        name = name + char_from_byte(b)
+    }
+    return name
+}
+
+/// Read a null-terminated string from bytes at offset.
+func read_null_str(bytes: List[I64], offset: I64) -> Str {
+    var s: Str = ""
+    let size: I64 = bytes.len() as I64
+    var i: I64 = offset
+    loop (i < size) {
+        let b: I64 = bytes.get(i) & 0xFF
+        if b == 0 { return s }
+        s = s + char_from_byte(b)
+        i = i + 1
+    }
+    return s
+}
+
+// ============================================================================
+// Byte reading helpers
+// ============================================================================
+
+func read_u16(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8)
+}
+
+func read_i16(bytes: List[I64], off: I64) -> I64 {
+    let v: I64 = read_u16(bytes, off)
+    if v >= 0x8000 { return v - 0x10000 }
+    return v
+}
+
+func read_u32(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8) | ((bytes.get(off + 2) & 0xFF) << 16) | ((bytes.get(off + 3) & 0xFF) << 24)
+}
+
+/// Convert a byte value (0-127 ASCII) to a single-character string.
+func char_from_byte(b: I64) -> Str {
+    // Use lowlevel to create a 1-byte string from the byte value
+    if b >= 32 and b < 127 {
+        let buf: *() = lowlevel { mem_alloc(2 as I64) }
+        let addr: I64 = buf as I64
+        lowlevel { ptr_write[I8](addr as *I8, b as I8) }
+        lowlevel { ptr_write[I8]((addr + 1) as *I8, 0 as I8) }
+        return addr as Str
+    }
+    return "?"
+}

@@ -1,0 +1,171 @@
+//! Linker symbol table — collects and resolves symbols from multiple COFF objects.
+//!
+//! Strong vs weak resolution per Microsoft PE/COFF spec §5.5:
+//! - Strong definition beats any weak definition
+//! - Two strong definitions = duplicate symbol error
+//! - Undefined references collected and reported together
+//!
+//! Phase 22a — items 2.1–2.4.
+
+use compiler::link::pe::coff_parser::*
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Symbol entry (item 2.1)
+// ============================================================================
+
+pub type SymbolEntry {
+    name: Str,
+    section_index: I64,   // index into merged section list
+    offset: I64,          // offset within section
+    size: I64,
+    is_strong: I64,       // 1 = strong definition, 0 = weak
+    object_index: I64,    // which .obj file defined this
+    is_defined: I64       // 1 = defined, 0 = undefined reference
+}
+
+pub type LinkerSymbolTable {
+    symbols: HashMap[Str, SymbolEntry],
+    errors: List[Str],
+    undefined: List[Str]
+}
+
+/// Create a new empty linker symbol table.
+pub func symtab_new() -> LinkerSymbolTable {
+    return LinkerSymbolTable {
+        symbols: HashMap[Str, SymbolEntry]::new(256),
+        errors: List[Str]::new(8),
+        undefined: List[Str]::new(16)
+    }
+}
+
+// ============================================================================
+// Symbol collection (item 2.2)
+// ============================================================================
+
+/// Add all symbols from a parsed COFF object into the symbol table.
+pub func symtab_add_object(st: LinkerSymbolTable, obj: CoffObject, obj_index: I64) {
+    let sc: I64 = obj.symbols.len() as I64
+    for i in 0 to sc {
+        let sym: CoffParsedSymbol = obj.symbols.get(i)
+        if sym.name == "" { continue }
+
+        let is_def: I64 = if sym.section_number > 0 { 1 } else { 0 }
+        let is_strong: I64 = if sym.storage_class == IMAGE_SYM_CLASS_EXTERNAL and is_def > 0 { 1 }
+            else if sym.storage_class == IMAGE_SYM_CLASS_STATIC { 1 }
+            else { 0 }
+
+        let entry: SymbolEntry = SymbolEntry {
+            name: sym.name,
+            section_index: sym.section_number,
+            offset: sym.value,
+            size: 0 as I64,
+            is_strong: is_strong,
+            object_index: obj_index,
+            is_defined: is_def
+        }
+
+        if st.symbols.has(sym.name) {
+            // (2.3) Resolve conflicts
+            let existing: SymbolEntry = st.symbols.get(sym.name)
+            resolve_conflict(st, existing, entry)
+        } else {
+            st.symbols.set(sym.name, entry)
+        }
+    }
+}
+
+// ============================================================================
+// Symbol resolution (item 2.3)
+// ============================================================================
+
+/// Resolve a conflict between two definitions of the same symbol.
+func resolve_conflict(st: LinkerSymbolTable, existing: SymbolEntry, incoming: SymbolEntry) {
+    // Undefined reference doesn't conflict with any definition
+    if incoming.is_defined == 0 { return }
+    if existing.is_defined == 0 {
+        // Replace undefined with definition
+        st.symbols.set(incoming.name, incoming)
+        return
+    }
+
+    // Both defined
+    if existing.is_strong > 0 and incoming.is_strong > 0 {
+        // Two strong definitions = error
+        st.errors.push("duplicate symbol: " + incoming.name + " (defined in object " + existing.object_index.to_string() + " and " + incoming.object_index.to_string() + ")")
+        return
+    }
+
+    // Strong beats weak
+    if incoming.is_strong > 0 and existing.is_strong == 0 {
+        st.symbols.set(incoming.name, incoming)
+    }
+    // else: existing is strong or both weak — keep existing
+}
+
+// ============================================================================
+// Undefined symbol detection (item 2.4)
+// ============================================================================
+
+/// After all objects are added, collect undefined symbols referenced in relocations.
+pub func symtab_collect_undefined(st: LinkerSymbolTable, objects: List[CoffObject]) {
+    let referenced = HashMap[Str, I64]::new(64)
+
+    // Collect all symbol names referenced in relocations
+    let oc: I64 = objects.len() as I64
+    for oi in 0 to oc {
+        let obj: CoffObject = objects.get(oi)
+        let sec_count: I64 = obj.sections.len() as I64
+        for si in 0 to sec_count {
+            let sec: CoffParsedSection = obj.sections.get(si)
+            let rc: I64 = sec.relocations.len() as I64
+            for ri in 0 to rc {
+                let rel: CoffParsedReloc = sec.relocations.get(ri)
+                if rel.symbol_index < (obj.symbols.len() as I64) {
+                    let sym_name: Str = obj.symbols.get(rel.symbol_index).name
+                    if sym_name != "" {
+                        referenced.set(sym_name, 1 as I64)
+                    }
+                }
+            }
+        }
+    }
+
+    // Check which referenced symbols are undefined
+    // Iterate referenced symbols by checking known names
+    let sym_count: I64 = st.symbols.len()
+    // We can check each object's symbols against the table
+    for oi in 0 to oc {
+        let obj: CoffObject = objects.get(oi)
+        let sc2: I64 = obj.sections.len() as I64
+        for si in 0 to sc2 {
+            let sec: CoffParsedSection = obj.sections.get(si)
+            let rc: I64 = sec.relocations.len() as I64
+            for ri in 0 to rc {
+                let rel: CoffParsedReloc = sec.relocations.get(ri)
+                if rel.symbol_index < (obj.symbols.len() as I64) {
+                    let sym_name: Str = obj.symbols.get(rel.symbol_index).name
+                    if sym_name != "" and not st.symbols.has(sym_name) {
+                        st.undefined.push(sym_name)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Check if the symbol table has any errors.
+pub func symtab_has_errors(st: LinkerSymbolTable) -> I64 {
+    if st.errors.len() as I64 > 0 { return 1 }
+    if st.undefined.len() as I64 > 0 { return 1 }
+    return 0
+}
+
+/// Look up a symbol by name. Returns its offset or -1 if not found.
+pub func symtab_lookup(st: LinkerSymbolTable, name: Str) -> I64 {
+    if st.symbols.has(name) {
+        return st.symbols.get(name).offset
+    }
+    return -1 as I64
+}

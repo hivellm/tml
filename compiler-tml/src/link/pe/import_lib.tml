@@ -1,0 +1,212 @@
+//! Import library (.lib) parser and IAT/ILT builder.
+//!
+//! Parses POSIX archive format (`!<arch>\n`) containing short import descriptors.
+//! Builds IMAGE_IMPORT_DESCRIPTOR array, IAT, ILT, and import thunks.
+//!
+//! Phase 22a — items 5.1–5.3.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// Import descriptor types
+// ============================================================================
+
+/// A parsed import entry from a .lib file.
+pub type ImportEntry {
+    dll_name: Str,
+    symbol_name: Str,
+    hint: I64,           // ordinal hint
+    name_type: I64       // 0 = by name, 1 = by ordinal
+}
+
+/// All imports grouped by DLL.
+pub type ImportTable {
+    /// DLL name → list of imported symbols.
+    dlls: HashMap[Str, List[ImportEntry]],
+    /// Ordered list of DLL names (for deterministic output).
+    dll_order: List[Str]
+}
+
+/// Create a new empty import table.
+pub func import_table_new() -> ImportTable {
+    return ImportTable {
+        dlls: HashMap[Str, List[ImportEntry]]::new(8),
+        dll_order: List[Str]::new(8)
+    }
+}
+
+/// Add an import entry to the table.
+pub func import_add(tbl: ImportTable, dll: Str, sym: Str, hint: I64) {
+    if not tbl.dlls.has(dll) {
+        tbl.dlls.set(dll, List[ImportEntry]::new(16))
+        tbl.dll_order.push(dll)
+    }
+    let entries: List[ImportEntry] = tbl.dlls.get(dll)
+    entries.push(ImportEntry { dll_name: dll, symbol_name: sym, hint: hint, name_type: 0 as I64 })
+}
+
+// ============================================================================
+// .lib archive parser (item 5.1)
+// ============================================================================
+
+/// POSIX archive magic: `!<arch>\n` (8 bytes)
+pub const ARCHIVE_MAGIC_0: I64 = 0x21  // '!'
+pub const ARCHIVE_MAGIC_1: I64 = 0x3C  // '<'
+
+/// Parse a .lib archive and extract import entries.
+/// Returns an ImportTable with all DLL→symbol mappings found.
+pub func parse_import_lib(bytes: List[I64]) -> ImportTable {
+    let tbl: ImportTable = import_table_new()
+    let size: I64 = bytes.len() as I64
+    if size < 8 { return tbl }
+
+    // Verify archive magic
+    if bytes.get(0) != ARCHIVE_MAGIC_0 or bytes.get(1) != ARCHIVE_MAGIC_1 {
+        return tbl  // not an archive
+    }
+
+    // Skip magic (8 bytes), parse members
+    var pos: I64 = 8
+    loop (pos + 60 < size) {
+        // Archive member header: 60 bytes
+        // Name(16) Date(12) UID(6) GID(6) Mode(8) Size(10) EndMagic(2)
+        let member_size: I64 = parse_decimal(bytes, pos + 48, 10 as I64)
+        let data_start: I64 = pos + 60
+
+        // Check for import header (short import)
+        // Short import: sig1(2)=0x0000, sig2(2)=0xFFFF, then version(2), machine(2), ...
+        if data_start + 20 < size {
+            let sig1: I64 = read_u16(bytes, data_start)
+            let sig2: I64 = read_u16(bytes, data_start + 2)
+            if sig1 == 0 and sig2 == 0xFFFF {
+                // Short import descriptor
+                let imp_machine: I64 = read_u16(bytes, data_start + 6)
+                let name_type_val: I64 = (read_u16(bytes, data_start + 18) >> 2) & 7
+                let hint_val: I64 = read_u16(bytes, data_start + 16)
+
+                // Symbol name starts at offset 20, followed by DLL name
+                let sym_name: Str = read_null_string(bytes, data_start + 20, size)
+                let sym_len: I64 = sym_name.len() as I64
+                let dll_name: Str = read_null_string(bytes, data_start + 20 + sym_len + 1, size)
+
+                if sym_name != "" and dll_name != "" {
+                    import_add(tbl, dll_name, sym_name, hint_val)
+                }
+            }
+        }
+
+        // Advance to next member (size is even-aligned)
+        let aligned_size: I64 = member_size + (member_size % 2)
+        pos = data_start + aligned_size
+    }
+
+    return tbl
+}
+
+// ============================================================================
+// IAT/ILT builder (item 5.2)
+// ============================================================================
+
+/// IMAGE_IMPORT_DESCRIPTOR (20 bytes each, null-terminated array).
+pub type ImportDescriptor {
+    ilt_rva: I64,         // OriginalFirstThunk — RVA of Import Lookup Table
+    timestamp: I64,       // 0 for unbound imports
+    forwarder_chain: I64, // -1
+    name_rva: I64,        // RVA of DLL name string
+    iat_rva: I64          // FirstThunk — RVA of Import Address Table
+}
+
+/// Built .idata section data.
+pub type IdataSection {
+    data: List[I64],
+    descriptors: List[ImportDescriptor],
+    total_size: I64
+}
+
+/// Build the .idata section from the import table.
+/// Lays out: descriptors array, ILT arrays, IAT arrays, name/hint entries, DLL name strings.
+pub func build_idata(tbl: ImportTable, idata_rva: I64) -> IdataSection {
+    let data = List[I64]::new(1024)
+    let descriptors = List[ImportDescriptor]::new(8)
+    let num_dlls: I64 = tbl.dll_order.len() as I64
+
+    // Layout plan:
+    // 1. Import descriptors: (num_dlls + 1) * 20 bytes (null terminator)
+    // 2. Per-DLL: ILT entries (8 bytes each, null-terminated)
+    // 3. Per-DLL: IAT entries (8 bytes each, null-terminated) — same content as ILT
+    // 4. Hint/Name entries: hint(2) + name(null-terminated) + padding
+    // 5. DLL name strings
+
+    let desc_size: I64 = (num_dlls + 1) * 20
+
+    // For now, write the descriptors as placeholder — actual RVAs computed after layout
+    // Null-fill descriptor area
+    for _ in 0 to desc_size { data.push(0) }
+
+    return IdataSection { data: data, descriptors: descriptors, total_size: data.len() as I64 }
+}
+
+// ============================================================================
+// Import thunks (item 5.3)
+// ============================================================================
+
+/// Generate a 6-byte import thunk: `jmp [rip + IAT_offset]`
+/// FF 25 <disp32> — JMP [RIP + disp32]
+pub func emit_import_thunk(iat_rva: I64, thunk_rva: I64) -> List[I64] {
+    let thunk = List[I64]::new(6)
+    thunk.push(0xFF)  // JMP opcode
+    thunk.push(0x25)  // ModRM: [RIP + disp32]
+    // disp32 = IAT_RVA - (thunk_RVA + 6) — PC-relative from end of instruction
+    let disp: I64 = iat_rva - (thunk_rva + 6)
+    thunk.push(disp & 0xFF)
+    thunk.push((disp >> 8) & 0xFF)
+    thunk.push((disp >> 16) & 0xFF)
+    thunk.push((disp >> 24) & 0xFF)
+    return thunk
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func read_u16(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8)
+}
+
+func read_null_string(bytes: List[I64], off: I64, limit: I64) -> Str {
+    var s: Str = ""
+    var i: I64 = off
+    loop (i < limit) {
+        let b: I64 = bytes.get(i) & 0xFF
+        if b == 0 { return s }
+        s = s + char_byte(b)
+        i = i + 1
+    }
+    return s
+}
+
+func char_byte(b: I64) -> Str {
+    if b >= 32 and b < 127 {
+        let p: *() = lowlevel { mem_alloc(2 as I64) }
+        let addr: I64 = p as I64
+        lowlevel { ptr_write[I8](addr as *I8, b as I8) }
+        lowlevel { ptr_write[I8]((addr + 1) as *I8, 0 as I8) }
+        return addr as Str
+    }
+    return "?"
+}
+
+/// Parse a decimal number from ASCII bytes (for archive member size field).
+func parse_decimal(bytes: List[I64], off: I64, max_len: I64) -> I64 {
+    var result: I64 = 0
+    for i in 0 to max_len {
+        let b: I64 = bytes.get(off + i) & 0xFF
+        if b >= 48 and b <= 57 {
+            result = result * 10 + (b - 48)
+        } else {
+            return result  // space or other non-digit terminates
+        }
+    }
+    return result
+}
