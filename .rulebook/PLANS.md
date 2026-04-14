@@ -13,8 +13,8 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-No active task. Last completed: phase0c_fix-n002-crypto-obj-linking — ARCHIVED (2026-04-14).
-Branch: feat/self-hosting-compiler. Version: 0.3.5.
+No active task. Last completed: phase0d_codegen-switch-when-dense — ARCHIVED (2026-04-14).
+Branch: feat/self-hosting-compiler. Version: 0.3.6.
 Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist).
 <!-- PLANS:CONTEXT:END -->
 
@@ -27,6 +27,28 @@ No active task.
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-14
+## phase0d_codegen-switch-when-dense — COMPLETE
+
+### Accomplished
+
+**LLVM switch optimization for integer `when` expressions (AST codegen)**:
+- Root cause: `gen_when` in `when.cpp` always emitted cascading `icmp eq` + `br` chains regardless of scrutinee type — 9.5x slower than Rust's `match` for integer dispatch.
+- Fix: pre-scan in `gen_when` detects integer scrutinees (i1/i8/i16/i32/i64) with ≥4 literal arms (`kMinSwitchArms=4`), no guards, no OrPatterns → emits single `switch` instruction before arm loop; comparison block skipped via `if (!can_use_switch)`.
+- Benchmark gate: When Dense 0 ns/op (<1.5 ns/op ✓), TML/Rust ratio 1:1.
+- No regressions: core 769/808, compiler 286/290 (all failures pre-existing).
+- Regression test: `compiler/tests/compiler/when_switch_dense.test.tml` (6 tests).
+- Bump: VERSION 0.3.5 → 0.3.6, CHANGELOG updated, docs/patches/v0.3.6.md.
+
+### Key Discovery
+
+`main_frontend.exe` is required by `mcp__tml__emit-ir` and `mcp__tml__run` but is NOT built → both MCP tools fail with "TML frontend binary not found". Workaround: `./build/debug/bin/tml.exe run <file> --stage=parser:cpp` (file must be argv[2], before any flags).
+
+The MIR codegen path already has switch lowering in `thir_mir_builder_control.cpp` via `WhenArmKind`/`SwitchDiscKind`, but it has a phi node bug for value-returning `when` expressions (pre-existing, tracked separately as K001).
+
+### Commits
+- 98f791af: perf(codegen): emit LLVM switch for integer when expressions (phase0d)
+
 ### 2026-04-14
 ## phase0c_fix-n002-crypto-obj-linking — COMPLETE
 
