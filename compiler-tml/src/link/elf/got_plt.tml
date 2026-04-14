@@ -18,21 +18,25 @@ use std::collections::hashmap::HashMap
 pub type Got {
     entries: List[Str],      // symbol name per slot (slots 0-2 are reserved)
     offsets: HashMap[Str, I64], // symbol name → byte offset in GOT
-    size: I64                // total GOT size in bytes
+    size_box: List[I64]      // [0] = total GOT size (boxed for mutation through copies)
 }
 
 pub func got_new() -> Got {
-    return Got { entries: List[Str]::new(32), offsets: HashMap[Str, I64]::new(32), size: 24 as I64 }
-    // 3 reserved slots × 8 bytes = 24 bytes
+    let sz = List[I64]::new(1 as I64)
+    sz.push(24 as I64)  // 3 reserved slots × 8 bytes
+    return Got { entries: List[Str]::new(32), offsets: HashMap[Str, I64]::new(32), size_box: sz }
 }
+
+/// Get current GOT size.
+pub func got_size(got: Got) -> I64 { return got.size_box.get(0) }
 
 /// Allocate a GOT slot for a dynamic symbol. Returns the byte offset.
 pub func got_alloc(got: Got, sym: Str) -> I64 {
     if got.offsets.has(sym) { return got.offsets.get(sym) }
-    let offset: I64 = got.size
+    let offset: I64 = got.size_box.get(0)
     got.offsets.set(sym, offset)
     got.entries.push(sym)
-    got.size = got.size + 8
+    got.size_box.set(0, offset + 8)
     return offset
 }
 
@@ -44,8 +48,9 @@ pub func got_offset_of(got: Got, sym: Str) -> I64 {
 
 /// Emit GOT bytes (all zeros initially — ld.so fills at runtime).
 pub func got_emit(got: Got) -> List[I64] {
-    let data = List[I64]::new(got.size)
-    for _ in 0 to got.size { data.push(0) }
+    let sz: I64 = got.size_box.get(0)
+    let data = List[I64]::new(sz)
+    for _ in 0 to sz { data.push(0) }
     return data
 }
 
@@ -55,7 +60,7 @@ pub func got_emit(got: Got) -> List[I64] {
 
 pub type Plt {
     stubs: List[PltStub],
-    size: I64
+    size_box: List[I64]    // [0] = total PLT size (boxed for mutation)
 }
 
 pub type PltStub {
@@ -65,21 +70,25 @@ pub type PltStub {
 }
 
 pub func plt_new() -> Plt {
-    return Plt { stubs: List[PltStub]::new(16), size: 16 as I64 }
-    // PLT[0] header = 16 bytes
+    let sz = List[I64]::new(1 as I64)
+    sz.push(16 as I64)  // PLT[0] header = 16 bytes
+    return Plt { stubs: List[PltStub]::new(16), size_box: sz }
 }
+
+/// Get current PLT size.
+pub func plt_size(plt: Plt) -> I64 { return plt.size_box.get(0) }
 
 /// Add a PLT entry for a dynamic symbol. Returns the PLT offset.
 pub func plt_add(plt: Plt, sym: Str, got_offset: I64) -> I64 {
-    let offset: I64 = plt.size
+    let offset: I64 = plt.size_box.get(0)
     plt.stubs.push(PltStub { sym_name: sym, got_offset: got_offset, plt_index: plt.stubs.len() as I64 })
-    plt.size = plt.size + 16  // 16 bytes per stub
+    plt.size_box.set(0, offset + 16)
     return offset
 }
 
 /// Emit PLT bytes.
 pub func plt_emit(plt: Plt, got_rva: I64, plt_rva: I64) -> List[I64] {
-    let data = List[I64]::new(plt.size)
+    let data = List[I64]::new(plt.size_box.get(0))
 
     // PLT[0] header: push [GOT+8], jmp [GOT+16]
     // FF 35 <disp32>  — push qword [rip + GOT+8 - (plt_rva + 6)]
