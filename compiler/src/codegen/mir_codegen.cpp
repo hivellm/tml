@@ -1448,6 +1448,54 @@ void MirCodegen::emit_function(const mir::Function& func) {
     block_exit_labels_.clear();
     bounds_check_counter_ = 0; // Reset per-function (see pre-scan below)
 
+    // NRVO: reset per-function state
+    current_func_has_sret_ = func.uses_sret;
+    current_func_sret_param_.clear();
+    current_func_sret_param_id_ = mir::INVALID_VALUE;
+    nrvo_call_results_.clear();
+
+    // NRVO pre-scan: for functions that use sret, find call results that flow
+    // directly to the sret return slot. Pattern: CallInst(result=v) followed by
+    // StoreInst(value=v, ptr=sret_param) in the same block. These calls can
+    // bypass the intermediate alloca by passing %sret directly to the callee.
+    if (func.uses_sret && func.sret_param_id != mir::INVALID_VALUE) {
+        // The sret parameter is always params[0] after SretConversionPass
+        if (!func.params.empty() && func.params[0].value_id == func.sret_param_id) {
+            current_func_sret_param_ = "%" + func.params[0].name;
+            current_func_sret_param_id_ = func.sret_param_id;
+        }
+
+        for (const auto& blk : func.blocks) {
+            // Collect sret call-result ValueIds in this block
+            std::unordered_set<mir::ValueId> sret_call_results;
+            for (const auto& inst_data : blk.instructions) {
+                if (auto* call = std::get_if<mir::CallInst>(&inst_data.inst)) {
+                    if (inst_data.result != mir::INVALID_VALUE) {
+                        // Sanitize :: -> __ to match sret_functions_ keys
+                        std::string fname = call->func_name;
+                        size_t p = 0;
+                        while ((p = fname.find("::", p)) != std::string::npos) {
+                            fname.replace(p, 2, "__");
+                            p += 2;
+                        }
+                        if (sret_functions_.count(fname)) {
+                            sret_call_results.insert(inst_data.result);
+                        }
+                    }
+                }
+            }
+            // Check if any sret call result is stored directly to the sret param
+            for (const auto& inst_data : blk.instructions) {
+                if (auto* store = std::get_if<mir::StoreInst>(&inst_data.inst)) {
+                    if (store->ptr.id == func.sret_param_id &&
+                        sret_call_results.count(store->value.id)) {
+                        nrvo_call_results_.insert(store->value.id);
+                    }
+                }
+            }
+        }
+    }
+
     // Setup block labels - use block ID, not index
     for (const auto& blk : func.blocks) {
         block_labels_[blk.id] = blk.name;

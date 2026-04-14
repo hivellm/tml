@@ -741,6 +741,31 @@ void MirCodegen::emit_llvm_intrinsic_call(const mir::CallInst& i, const std::str
 void MirCodegen::emit_sret_call(const std::string& func_name, const std::string& orig_ret_type,
                                 const std::vector<std::string>& processed_args,
                                 const std::string& result_reg, const mir::InstructionData& inst) {
+    // NRVO: when this call result flows directly to our function's sret return slot,
+    // pass %sret through to the callee instead of creating an intermediate alloca.
+    // This eliminates the alloca + load + store sequence for simple wrapper functions.
+    bool use_nrvo = current_func_has_sret_ &&
+                    inst.result != mir::INVALID_VALUE &&
+                    !current_func_sret_param_.empty() &&
+                    nrvo_call_results_.count(inst.result) > 0;
+
+    if (use_nrvo) {
+        // Pass our sret parameter directly to the callee — no intermediate copy needed
+        emit("    call void @" + quote_func_name(func_name) + "(ptr sret(" + orig_ret_type + ") " +
+             current_func_sret_param_);
+        for (const auto& arg : processed_args) {
+            emit(", " + arg);
+        }
+        emitln(")");
+        // Record the result as an address pointing to %sret.
+        // The downstream StoreInst (sret_param <- result) will be skipped.
+        cg_values_[inst.result] =
+            CGValue::address(current_func_sret_param_, orig_ret_type, nullptr);
+        value_regs_[inst.result] = current_func_sret_param_;
+        return;
+    }
+
+    // Normal path: intermediate alloca for the return value
     std::string sret_slot = "%sret.slot." + std::to_string(spill_counter_++);
     emitln("    " + sret_slot + " = alloca " + orig_ret_type + ", align 8");
 

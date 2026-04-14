@@ -100,6 +100,16 @@ private:
     std::string current_func_;
     std::string current_func_ret_type_; // LLVM return type of the current function
 
+    // NRVO (Named Return Value Optimization) tracking.
+    // When a sret-returning function calls another sret-returning function and
+    // returns that result directly, we can pass %sret through to the callee
+    // instead of creating an intermediate alloca+load+store sequence.
+    bool current_func_has_sret_ = false;          // true if current function uses sret convention
+    std::string current_func_sret_param_;         // LLVM register of sret param, e.g. "%sret"
+    mir::ValueId current_func_sret_param_id_ = mir::INVALID_VALUE; // value_id of sret param
+    // Set of call-result ValueIds that flow directly to the sret return slot (NRVO candidates)
+    std::unordered_set<mir::ValueId> nrvo_call_results_;
+
     // Profiler entry IR snippet to inject at the start of the entry block.
     // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
     std::string profiler_entry_ir_;

@@ -66,6 +66,15 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
 
             } else if constexpr (std::is_same_v<T, mir::StoreInst>) {
+                // NRVO: skip the sret store when the call result was already forwarded
+                // directly to %sret by emit_sret_call with NRVO. Without this, we would
+                // emit `store %struct.T %sret, ptr %sret` which is a no-op copy to itself.
+                if (current_func_has_sret_ &&
+                    current_func_sret_param_id_ != mir::INVALID_VALUE &&
+                    i.ptr.id == current_func_sret_param_id_ &&
+                    nrvo_call_results_.count(i.value.id) > 0) {
+                    return; // Value is already in %sret via NRVO — skip redundant store
+                }
                 std::string value = get_value_reg(i.value);
                 std::string ptr = get_value_reg(i.ptr);
                 mir::MirTypePtr type_ptr = i.value_type ? i.value_type : i.value.type;
