@@ -1,0 +1,81 @@
+// Regression test for K001 phase0b: bool/i32 mixed-type icmp in AST codegen.
+//
+// Bug: `let result: I32 = ...; Just(result == 1)` emitted
+//   %t = load i32, ptr %result
+//   icmp eq i1 %t, 1          -- INVALID: %t is i32, instruction requires i1
+//
+// Root cause: inside Just(Bool) enum constructor, `expected_literal_type_` was
+// set to "i1"; the literal `1` was then typed as i1; is_bool became true; int_type
+// was set to "i1"; but left operand (%t) was i32 → type mismatch.
+//
+// Fix: in BinaryOp::Eq and BinaryOp::Ne, when int_type=="i1" and one operand is a
+// wider integer, emit `zext i1 <narrow> to <T>` then `icmp eq <T> <wide>, <widened>`.
+//
+// Importing std::text::Text forces the AST codegen path (has_local_generics check).
+
+use test
+use std::text::Text
+
+// Simulate the C-int return pattern from json_get_bool / similar FFI calls
+func i32_to_maybe_bool(x: I32) -> Maybe[Bool] {
+    return Just(x == 1)
+}
+
+func i32_to_maybe_bool_ne(x: I32) -> Maybe[Bool] {
+    return Just(x != 0)
+}
+
+@test
+func test_bool_i32_eq_inside_just() -> I32 {
+    // The exact pattern from std::json::Json::as_bool:
+    //   let result: I32 = ffi_call(); return Just(result == 1)
+    let mb_one = i32_to_maybe_bool(1)
+    let mb_zero = i32_to_maybe_bool(0)
+    let mb_two = i32_to_maybe_bool(2)
+
+    let Just(b1) = mb_one  else { return 1 }
+    let Just(b0) = mb_zero else { return 1 }
+    let Just(b2) = mb_two  else { return 1 }
+
+    assert_eq(b1, true,  "i32==1 inside Just: x=1 -> true")
+    assert_eq(b0, false, "i32==1 inside Just: x=0 -> false")
+    assert_eq(b2, false, "i32==1 inside Just: x=2 -> false (not truthy, exact eq)")
+    return 0
+}
+
+@test
+func test_bool_i32_ne_inside_just() -> I32 {
+    // BinaryOp::Ne variant of the same pattern
+    let mb_one  = i32_to_maybe_bool_ne(1)
+    let mb_zero = i32_to_maybe_bool_ne(0)
+
+    let Just(b1) = mb_one  else { return 1 }
+    let Just(b0) = mb_zero else { return 1 }
+
+    assert_eq(b1, true,  "i32!=0 inside Just: x=1 -> true")
+    assert_eq(b0, false, "i32!=0 inside Just: x=0 -> false")
+    return 0
+}
+
+@test
+func test_bool_i32_eq_direct() -> I32 {
+    // Direct comparison without Just wrapper — sanity check
+    let x: I32 = 1
+    let y: I32 = 0
+    assert_eq(x == 1, true,  "direct i32==1: x=1 -> true")
+    assert_eq(y == 1, false, "direct i32==1: y=0 -> false")
+    assert_eq(x != 1, false, "direct i32!=1: x=1 -> false")
+    assert_eq(y != 1, true,  "direct i32!=1: y=0 -> true")
+    return 0
+}
+
+@test
+func test_bool_i32_in_ast_path() -> I32 {
+    // Ensure bool/i32 comparison works in the AST codegen path (Text forces it)
+    let t: Text = Text::new()
+    t.push_str("probe")
+    let x: I32 = 1
+    assert_eq(x == 1, true, "i32==1 works alongside Text in AST path")
+    t.drop()
+    return 0
+}

@@ -1007,7 +1007,28 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                 emit_line("  " + result + " = icmp eq ptr " + left + ", " + right);
             }
         } else {
-            emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
+            // Fix mixed i1/wider-integer comparisons (e.g., i32 operand vs i1 literal).
+            // When one side is i1 (bool) and the other is a wider integer, zext the i1
+            // to the wider type so LLVM gets a valid icmp instruction.
+            std::string lhs_eq = left;
+            std::string rhs_eq = right;
+            std::string cmp_type_eq = int_type;
+            if (cmp_type_eq == "i1") {
+                if (left_type != "i1" && left_type.size() > 1 && left_type[0] == 'i') {
+                    // left is wider int, right is i1: zext right to left_type
+                    std::string widened = fresh_reg();
+                    emit_line("  " + widened + " = zext i1 " + rhs_eq + " to " + left_type);
+                    rhs_eq = widened;
+                    cmp_type_eq = left_type;
+                } else if (right_type != "i1" && right_type.size() > 1 && right_type[0] == 'i') {
+                    // right is wider int, left is i1: zext left to right_type
+                    std::string widened = fresh_reg();
+                    emit_line("  " + widened + " = zext i1 " + lhs_eq + " to " + right_type);
+                    lhs_eq = widened;
+                    cmp_type_eq = right_type;
+                }
+            }
+            emit_line("  " + result + " = icmp eq " + cmp_type_eq + " " + lhs_eq + ", " + rhs_eq);
         }
         last_expr_type_ = "i1";
         break;
@@ -1088,7 +1109,24 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                 emit_line("  " + result + " = icmp ne ptr " + left + ", " + right);
             }
         } else {
-            emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
+            // Fix mixed i1/wider-integer comparisons (same as Eq above).
+            std::string lhs_ne = left;
+            std::string rhs_ne = right;
+            std::string cmp_type_ne = int_type;
+            if (cmp_type_ne == "i1") {
+                if (left_type != "i1" && left_type.size() > 1 && left_type[0] == 'i') {
+                    std::string widened = fresh_reg();
+                    emit_line("  " + widened + " = zext i1 " + rhs_ne + " to " + left_type);
+                    rhs_ne = widened;
+                    cmp_type_ne = left_type;
+                } else if (right_type != "i1" && right_type.size() > 1 && right_type[0] == 'i') {
+                    std::string widened = fresh_reg();
+                    emit_line("  " + widened + " = zext i1 " + lhs_ne + " to " + right_type);
+                    lhs_ne = widened;
+                    cmp_type_ne = right_type;
+                }
+            }
+            emit_line("  " + result + " = icmp ne " + cmp_type_ne + " " + lhs_ne + ", " + rhs_ne);
         }
         last_expr_type_ = "i1";
         break;
