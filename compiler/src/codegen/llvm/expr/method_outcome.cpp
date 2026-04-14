@@ -1376,11 +1376,82 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
         return receiver;
     }
 
-    // as_ref() / as_mut() — return self (refs and values share layout)
+    // as_ref() / as_mut() — Outcome[T,E] → Outcome[ref T, ref E]
+    // Each variant's payload is replaced with a pointer into the original allocation.
     if (method == "as_ref" || method == "as_mut") {
         emit_coverage("Outcome::" + method);
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        bool is_mut = (method == "as_mut");
+        // Construct ref_T and ref_E types
+        auto ref_ok_type =
+            std::make_shared<types::Type>(types::RefType{is_mut, ok_type, std::nullopt});
+        auto ref_err_type =
+            std::make_shared<types::Type>(types::RefType{is_mut, err_type, std::nullopt});
+        std::string ref_outcome_mangled =
+            require_enum_instantiation("Outcome", {ref_ok_type, ref_err_type});
+        std::string ref_outcome_type = "%struct." + ref_outcome_mangled;
+
+        // Store receiver on stack to get addressable memory
+        std::string src_alloca = fresh_reg();
+        emit_line("  " + src_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + src_alloca);
+
+        std::string aref_ok_label = fresh_label("as_ref_ok");
+        std::string aref_err_label = fresh_label("as_ref_err");
+        std::string aref_end_label = fresh_label("as_ref_end");
+
+        std::string is_ok_cmp = fresh_reg();
+        emit_line("  " + is_ok_cmp + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + is_ok_cmp + ", label %" + aref_ok_label + ", label %" +
+                  aref_err_label);
+
+        // OK branch: get pointer to ok field, pack in result with disc=0
+        emit_line(aref_ok_label + ":");
+        current_block_ = aref_ok_label;
+        std::string ok_field_ptr = fresh_reg();
+        emit_line("  " + ok_field_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  src_alloca + ", i32 0, i32 1");
+        std::string ok_ref_alloca = fresh_reg();
+        emit_line("  " + ok_ref_alloca + " = alloca " + ref_outcome_type);
+        std::string ok_disc_ptr = fresh_reg();
+        emit_line("  " + ok_disc_ptr + " = getelementptr inbounds " + ref_outcome_type + ", ptr " +
+                  ok_ref_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + ok_disc_ptr);
+        std::string ok_payload_ptr = fresh_reg();
+        emit_line("  " + ok_payload_ptr + " = getelementptr inbounds " + ref_outcome_type +
+                  ", ptr " + ok_ref_alloca + ", i32 0, i32 1");
+        emit_line("  store ptr " + ok_field_ptr + ", ptr " + ok_payload_ptr);
+        std::string ok_ref_val = fresh_reg();
+        emit_line("  " + ok_ref_val + " = load " + ref_outcome_type + ", ptr " + ok_ref_alloca);
+        emit_line("  br label %" + aref_end_label);
+
+        // ERR branch: get pointer to err field, pack in result with disc=1
+        emit_line(aref_err_label + ":");
+        current_block_ = aref_err_label;
+        std::string err_field_ptr = fresh_reg();
+        emit_line("  " + err_field_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  src_alloca + ", i32 0, i32 1");
+        std::string err_ref_alloca = fresh_reg();
+        emit_line("  " + err_ref_alloca + " = alloca " + ref_outcome_type);
+        std::string err_disc_ptr = fresh_reg();
+        emit_line("  " + err_disc_ptr + " = getelementptr inbounds " + ref_outcome_type + ", ptr " +
+                  err_ref_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + err_disc_ptr);
+        std::string err_payload_ptr = fresh_reg();
+        emit_line("  " + err_payload_ptr + " = getelementptr inbounds " + ref_outcome_type +
+                  ", ptr " + err_ref_alloca + ", i32 0, i32 1");
+        emit_line("  store ptr " + err_field_ptr + ", ptr " + err_payload_ptr);
+        std::string err_ref_val = fresh_reg();
+        emit_line("  " + err_ref_val + " = load " + ref_outcome_type + ", ptr " + err_ref_alloca);
+        emit_line("  br label %" + aref_end_label);
+
+        // Merge
+        emit_line(aref_end_label + ":");
+        current_block_ = aref_end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + ref_outcome_type + " [ " + ok_ref_val + ", %" +
+                  aref_ok_label + " ], [ " + err_ref_val + ", %" + aref_err_label + " ]");
+        last_expr_type_ = ref_outcome_type;
+        return result;
     }
 
     // copied() / duplicated() — return self
@@ -1398,17 +1469,246 @@ auto LLVMIRGen::gen_outcome_method(const parser::MethodCallExpr& call, const std
     }
 
     // transpose() — Outcome[Maybe[T],E] → Maybe[Outcome[T,E]]
+    // Ok(Just(x)) → Just(Ok(x)), Ok(Nothing) → Nothing, Err(e) → Just(Err(e))
     if (method == "transpose") {
         emit_coverage("Outcome::transpose");
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        // ok_type must be Maybe[T]
+        if (!ok_type->is<types::NamedType>() ||
+            ok_type->as<types::NamedType>().name != "Maybe" ||
+            ok_type->as<types::NamedType>().type_args.empty()) {
+            report_error("transpose requires Outcome[Maybe[T], E]", call.span, "C025");
+            last_expr_type_ = enum_type_name;
+            return receiver;
+        }
+        types::TypePtr inner_t = ok_type->as<types::NamedType>().type_args[0];
+        std::string inner_t_llvm = llvm_type_from_semantic(inner_t, true);
+        // outcome_inner_type = Outcome[T, E]
+        auto outcome_inner_ptr =
+            std::make_shared<types::Type>(types::NamedType{"Outcome", "", {inner_t, err_type}});
+        std::string outcome_inner_mangled =
+            require_enum_instantiation("Outcome", {inner_t, err_type});
+        std::string outcome_inner_type = "%struct." + outcome_inner_mangled;
+        // maybe_outcome_type = Maybe[Outcome[T, E]]
+        std::string maybe_outcome_mangled =
+            require_enum_instantiation("Maybe", {outcome_inner_ptr});
+        bool nullable_mo = nullable_maybe_types_.count(maybe_outcome_mangled) > 0;
+        std::string maybe_outcome_type =
+            nullable_mo ? "ptr" : "%struct." + maybe_outcome_mangled;
+
+        // Store outer receiver on stack
+        std::string outer_alloca = fresh_reg();
+        emit_line("  " + outer_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + outer_alloca);
+
+        std::string tp_ok_label = fresh_label("tp_ok");
+        std::string tp_err_label = fresh_label("tp_err");
+        std::string tp_end_label = fresh_label("tp_end");
+
+        std::string outer_is_ok = fresh_reg();
+        emit_line("  " + outer_is_ok + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + outer_is_ok + ", label %" + tp_ok_label + ", label %" +
+                  tp_err_label);
+
+        // ---- OK branch: inner value is Maybe[T] ----
+        emit_line(tp_ok_label + ":");
+        current_block_ = tp_ok_label;
+        // Load inner Maybe[T] from outer field 1
+        std::string inner_maybe_ptr = fresh_reg();
+        emit_line("  " + inner_maybe_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  outer_alloca + ", i32 0, i32 1");
+        std::string inner_maybe_val = fresh_reg();
+        emit_line("  " + inner_maybe_val + " = load " + ok_llvm_type + ", ptr " + inner_maybe_ptr);
+        // Extract inner Maybe disc
+        std::string inner_maybe_alloca = fresh_reg();
+        emit_line("  " + inner_maybe_alloca + " = alloca " + ok_llvm_type);
+        emit_line("  store " + ok_llvm_type + " " + inner_maybe_val + ", ptr " + inner_maybe_alloca);
+        std::string inner_disc_ptr = fresh_reg();
+        emit_line("  " + inner_disc_ptr + " = getelementptr inbounds " + ok_llvm_type + ", ptr " +
+                  inner_maybe_alloca + ", i32 0, i32 0");
+        std::string inner_disc = fresh_reg();
+        emit_line("  " + inner_disc + " = load i32, ptr " + inner_disc_ptr);
+
+        std::string tp_just_label = fresh_label("tp_just");
+        std::string tp_nothing_label = fresh_label("tp_nothing");
+        std::string tp_ok_end_label = fresh_label("tp_ok_end");
+
+        std::string inner_is_just = fresh_reg();
+        emit_line("  " + inner_is_just + " = icmp eq i32 " + inner_disc + ", 0");
+        emit_line("  br i1 " + inner_is_just + ", label %" + tp_just_label + ", label %" +
+                  tp_nothing_label);
+
+        // Just(x) → Just(Ok(x))
+        emit_line(tp_just_label + ":");
+        current_block_ = tp_just_label;
+        std::string inner_val_ptr = fresh_reg();
+        emit_line("  " + inner_val_ptr + " = getelementptr inbounds " + ok_llvm_type + ", ptr " +
+                  inner_maybe_alloca + ", i32 0, i32 1");
+        std::string inner_val = fresh_reg();
+        emit_line("  " + inner_val + " = load " + inner_t_llvm + ", ptr " + inner_val_ptr);
+        // Build Ok(inner_val) : Outcome[T, E]
+        std::string ok_of_t_alloca = fresh_reg();
+        emit_line("  " + ok_of_t_alloca + " = alloca " + outcome_inner_type);
+        emit_line("  store " + outcome_inner_type + " zeroinitializer, ptr " + ok_of_t_alloca);
+        std::string ok_of_t_disc_ptr = fresh_reg();
+        emit_line("  " + ok_of_t_disc_ptr + " = getelementptr inbounds " + outcome_inner_type +
+                  ", ptr " + ok_of_t_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + ok_of_t_disc_ptr);
+        std::string ok_of_t_payload_ptr = fresh_reg();
+        emit_line("  " + ok_of_t_payload_ptr + " = getelementptr inbounds " + outcome_inner_type +
+                  ", ptr " + ok_of_t_alloca + ", i32 0, i32 1");
+        emit_line("  store " + inner_t_llvm + " " + inner_val + ", ptr " + ok_of_t_payload_ptr);
+        std::string ok_of_t_val = fresh_reg();
+        emit_line("  " + ok_of_t_val + " = load " + outcome_inner_type + ", ptr " + ok_of_t_alloca);
+        // Build Just(Ok(inner_val)) : Maybe[Outcome[T, E]]
+        std::string just_ok_alloca = fresh_reg();
+        emit_line("  " + just_ok_alloca + " = alloca " + maybe_outcome_type);
+        emit_line("  store " + maybe_outcome_type + " zeroinitializer, ptr " + just_ok_alloca);
+        std::string just_ok_disc_ptr = fresh_reg();
+        emit_line("  " + just_ok_disc_ptr + " = getelementptr inbounds " + maybe_outcome_type +
+                  ", ptr " + just_ok_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + just_ok_disc_ptr);
+        std::string just_ok_payload_ptr = fresh_reg();
+        emit_line("  " + just_ok_payload_ptr + " = getelementptr inbounds " + maybe_outcome_type +
+                  ", ptr " + just_ok_alloca + ", i32 0, i32 1");
+        emit_line("  store " + outcome_inner_type + " " + ok_of_t_val + ", ptr " +
+                  just_ok_payload_ptr);
+        std::string just_ok_val = fresh_reg();
+        emit_line("  " + just_ok_val + " = load " + maybe_outcome_type + ", ptr " + just_ok_alloca);
+        emit_line("  br label %" + tp_ok_end_label);
+
+        // Nothing → Nothing : Maybe[Outcome[T, E]]
+        emit_line(tp_nothing_label + ":");
+        current_block_ = tp_nothing_label;
+        std::string nothing_alloca = fresh_reg();
+        emit_line("  " + nothing_alloca + " = alloca " + maybe_outcome_type);
+        emit_line("  store " + maybe_outcome_type + " zeroinitializer, ptr " + nothing_alloca);
+        std::string nothing_disc_ptr = fresh_reg();
+        emit_line("  " + nothing_disc_ptr + " = getelementptr inbounds " + maybe_outcome_type +
+                  ", ptr " + nothing_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + nothing_disc_ptr);
+        std::string nothing_val = fresh_reg();
+        emit_line("  " + nothing_val + " = load " + maybe_outcome_type + ", ptr " + nothing_alloca);
+        emit_line("  br label %" + tp_ok_end_label);
+
+        emit_line(tp_ok_end_label + ":");
+        current_block_ = tp_ok_end_label;
+        std::string ok_branch_result = fresh_reg();
+        emit_line("  " + ok_branch_result + " = phi " + maybe_outcome_type + " [ " + just_ok_val +
+                  ", %" + tp_just_label + " ], [ " + nothing_val + ", %" + tp_nothing_label + " ]");
+        emit_line("  br label %" + tp_end_label);
+
+        // ---- ERR branch: Err(e) → Just(Err(e)) ----
+        emit_line(tp_err_label + ":");
+        current_block_ = tp_err_label;
+        std::string outer_err_fptr = fresh_reg();
+        emit_line("  " + outer_err_fptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  outer_alloca + ", i32 0, i32 1");
+        std::string outer_err_val = fresh_reg();
+        emit_line("  " + outer_err_val + " = load " + err_llvm_type + ", ptr " + outer_err_fptr);
+        // Build Err(e) : Outcome[T, E]
+        std::string err_of_e_alloca = fresh_reg();
+        emit_line("  " + err_of_e_alloca + " = alloca " + outcome_inner_type);
+        emit_line("  store " + outcome_inner_type + " zeroinitializer, ptr " + err_of_e_alloca);
+        std::string err_of_e_disc_ptr = fresh_reg();
+        emit_line("  " + err_of_e_disc_ptr + " = getelementptr inbounds " + outcome_inner_type +
+                  ", ptr " + err_of_e_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + err_of_e_disc_ptr);
+        std::string err_of_e_payload_ptr = fresh_reg();
+        emit_line("  " + err_of_e_payload_ptr + " = getelementptr inbounds " + outcome_inner_type +
+                  ", ptr " + err_of_e_alloca + ", i32 0, i32 1");
+        emit_line("  store " + err_llvm_type + " " + outer_err_val + ", ptr " + err_of_e_payload_ptr);
+        std::string err_of_e_val = fresh_reg();
+        emit_line("  " + err_of_e_val + " = load " + outcome_inner_type + ", ptr " + err_of_e_alloca);
+        // Build Just(Err(e)) : Maybe[Outcome[T, E]]
+        std::string just_err_alloca = fresh_reg();
+        emit_line("  " + just_err_alloca + " = alloca " + maybe_outcome_type);
+        emit_line("  store " + maybe_outcome_type + " zeroinitializer, ptr " + just_err_alloca);
+        std::string just_err_disc_ptr = fresh_reg();
+        emit_line("  " + just_err_disc_ptr + " = getelementptr inbounds " + maybe_outcome_type +
+                  ", ptr " + just_err_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + just_err_disc_ptr);
+        std::string just_err_payload_ptr = fresh_reg();
+        emit_line("  " + just_err_payload_ptr + " = getelementptr inbounds " + maybe_outcome_type +
+                  ", ptr " + just_err_alloca + ", i32 0, i32 1");
+        emit_line("  store " + outcome_inner_type + " " + err_of_e_val + ", ptr " +
+                  just_err_payload_ptr);
+        std::string just_err_val = fresh_reg();
+        emit_line("  " + just_err_val + " = load " + maybe_outcome_type + ", ptr " + just_err_alloca);
+        emit_line("  br label %" + tp_end_label);
+
+        // ---- Merge ----
+        emit_line(tp_end_label + ":");
+        current_block_ = tp_end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + maybe_outcome_type + " [ " + ok_branch_result + ", %" +
+                  tp_ok_end_label + " ], [ " + just_err_val + ", %" + tp_err_label + " ]");
+        last_expr_type_ = maybe_outcome_type;
+        return result;
     }
 
-    // map_or_else(default_fn, f) — approximate by returning inner value or default
-    if (method == "map_or_else") {
-        emit_coverage("Outcome::map_or_else");
-        last_expr_type_ = enum_type_name;
-        return receiver;
+    // flatten() — Outcome[Outcome[T,E],E] → Outcome[T,E]
+    // Ok(inner) → inner, Err(e) → Err(e) wrapped in inner Outcome type
+    if (method == "flatten") {
+        emit_coverage("Outcome::flatten");
+        // ok_llvm_type IS the inner Outcome[T, E] struct type
+
+        std::string fl_ok_label = fresh_label("flatten_ok");
+        std::string fl_err_label = fresh_label("flatten_err");
+        std::string fl_end_label = fresh_label("flatten_end");
+
+        std::string fl_is_ok = fresh_reg();
+        emit_line("  " + fl_is_ok + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + fl_is_ok + ", label %" + fl_ok_label + ", label %" + fl_err_label);
+
+        // OK branch: extract inner Outcome[T, E] from field 1 of outer
+        emit_line(fl_ok_label + ":");
+        current_block_ = fl_ok_label;
+        std::string fl_outer_alloca = fresh_reg();
+        emit_line("  " + fl_outer_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + fl_outer_alloca);
+        std::string fl_inner_ptr = fresh_reg();
+        emit_line("  " + fl_inner_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  fl_outer_alloca + ", i32 0, i32 1");
+        std::string fl_inner_val = fresh_reg();
+        emit_line("  " + fl_inner_val + " = load " + ok_llvm_type + ", ptr " + fl_inner_ptr);
+        emit_line("  br label %" + fl_end_label);
+
+        // ERR branch: construct new inner Outcome[T, E] as Err with outer error
+        emit_line(fl_err_label + ":");
+        current_block_ = fl_err_label;
+        std::string fl_err_outer_alloca = fresh_reg();
+        emit_line("  " + fl_err_outer_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + fl_err_outer_alloca);
+        std::string fl_outer_err_fptr = fresh_reg();
+        emit_line("  " + fl_outer_err_fptr + " = getelementptr inbounds " + enum_type_name +
+                  ", ptr " + fl_err_outer_alloca + ", i32 0, i32 1");
+        std::string fl_outer_err_val = fresh_reg();
+        emit_line("  " + fl_outer_err_val + " = load " + err_llvm_type + ", ptr " +
+                  fl_outer_err_fptr);
+        // Build Err(outer_err) using the inner Outcome[T, E] layout
+        std::string fl_new_alloca = fresh_reg();
+        emit_line("  " + fl_new_alloca + " = alloca " + ok_llvm_type);
+        emit_line("  store " + ok_llvm_type + " zeroinitializer, ptr " + fl_new_alloca);
+        std::string fl_new_disc_ptr = fresh_reg();
+        emit_line("  " + fl_new_disc_ptr + " = getelementptr inbounds " + ok_llvm_type + ", ptr " +
+                  fl_new_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + fl_new_disc_ptr);
+        std::string fl_new_err_fptr = fresh_reg();
+        emit_line("  " + fl_new_err_fptr + " = getelementptr inbounds " + ok_llvm_type + ", ptr " +
+                  fl_new_alloca + ", i32 0, i32 1");
+        emit_line("  store " + err_llvm_type + " " + fl_outer_err_val + ", ptr " + fl_new_err_fptr);
+        std::string fl_new_err_val = fresh_reg();
+        emit_line("  " + fl_new_err_val + " = load " + ok_llvm_type + ", ptr " + fl_new_alloca);
+        emit_line("  br label %" + fl_end_label);
+
+        // Merge
+        emit_line(fl_end_label + ":");
+        current_block_ = fl_end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + ok_llvm_type + " [ " + fl_inner_val + ", %" +
+                  fl_ok_label + " ], [ " + fl_new_err_val + ", %" + fl_err_label + " ]");
+        last_expr_type_ = ok_llvm_type;
+        return result;
     }
 
     // Method not handled

@@ -567,10 +567,20 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         }
         struct_types_[mangled] = type_name;
 
-        // Register field 0 (discriminant = i32) for generic enums too (K001 fix).
+        // Register fields for generic enums (K001 fix): tag + payload based on max_size.
+        // This mirrors the llvm_types.cpp registration so calc_type_size() returns
+        // correct sizes for nested generic enums (e.g. Maybe[Maybe[I32]]).
         if (struct_fields_.find(mangled) == struct_fields_.end()) {
             std::vector<FieldInfo> fields;
             fields.push_back({"tag", 0, "i32", nullptr});
+            if (max_size > 8) {
+                size_t num_i64 = (max_size + 7) / 8;
+                fields.push_back({"payload", 1, "[" + std::to_string(num_i64) + " x i64]", nullptr});
+            } else if (max_size > 4) {
+                fields.push_back({"payload", 1, "i64", nullptr});
+            } else if (max_size > 0) {
+                fields.push_back({"payload", 1, "i32", nullptr});
+            }
             struct_fields_[mangled] = std::move(fields);
         }
 

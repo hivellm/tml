@@ -979,21 +979,128 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     // These match the type checker entries in expr_call_method_types.cpp
     // ============================================================================
 
-    // inspect(f) / also(f) / inspect_err(f) — call closure if Just, return self
+    // inspect(f) / inspect_err(f) — call closure if Just, return self
     // For codegen simplicity, we just return self (the side effect of calling f
     // is dropped — acceptable for tests that don't depend on the side effect)
-    if (method == "inspect" || method == "also" || method == "inspect_err") {
+    if (method == "inspect" || method == "inspect_err") {
         emit_coverage("Maybe::" + method);
         last_expr_type_ = enum_type_name;
         return receiver;
     }
 
-    // as_ref() / as_mut() — at runtime, ref types have same layout as values
-    // These methods are no-ops in codegen — return self
+    // also[U](other) → Maybe[U]: return other if Just, else Nothing of type Maybe[U]
+    if (method == "also") {
+        emit_coverage("Maybe::also");
+        if (call.args.empty()) {
+            last_expr_type_ = enum_type_name;
+            return receiver;
+        }
+        // Evaluate other: Maybe[U]
+        std::string other_val = gen_expr(*call.args[0]);
+        std::string other_type = last_expr_type_;
+
+        std::string also_just = fresh_label("also_just");
+        std::string also_nothing = fresh_label("also_nothing");
+        std::string also_end = fresh_label("also_end");
+
+        std::string is_just = fresh_reg();
+        emit_line("  " + is_just + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + is_just + ", label %" + also_just + ", label %" + also_nothing);
+
+        // Just branch: return other_val
+        emit_line(also_just + ":");
+        current_block_ = also_just;
+        emit_line("  br label %" + also_end);
+
+        // Nothing branch: build Nothing for Maybe[U] type
+        emit_line(also_nothing + ":");
+        current_block_ = also_nothing;
+        std::string nothing_val;
+        if (other_type == "ptr") {
+            // Nullable optimization: Nothing = null ptr
+            nothing_val = "null";
+        } else {
+            std::string nothing_alloca = fresh_reg();
+            emit_line("  " + nothing_alloca + " = alloca " + other_type);
+            emit_line("  store " + other_type + " zeroinitializer, ptr " + nothing_alloca);
+            // Set disc = 1 (Nothing)
+            std::string nothing_disc_ptr = fresh_reg();
+            emit_line("  " + nothing_disc_ptr + " = getelementptr inbounds " + other_type + ", ptr " +
+                      nothing_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_disc_ptr);
+            nothing_val = fresh_reg();
+            emit_line("  " + nothing_val + " = load " + other_type + ", ptr " + nothing_alloca);
+        }
+        emit_line("  br label %" + also_end);
+
+        emit_line(also_end + ":");
+        current_block_ = also_end;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + other_type + " [ " + other_val + ", %" + also_just +
+                  " ], [ " + nothing_val + ", %" + also_nothing + " ]");
+        last_expr_type_ = other_type;
+        return result;
+    }
+
+    // as_ref() → Maybe[ref T]: return null (Nothing) or ptr to payload (Just)
+    // Since ref T has LLVM type "ptr", Maybe[ref T] always uses nullable optimization → bare "ptr"
     if (method == "as_ref" || method == "as_mut") {
         emit_coverage("Maybe::" + method);
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        // Result is always nullable ptr (Maybe[ref T] = nullable optimization)
+        std::string asref_just = fresh_label("asref_just");
+        std::string asref_nothing = fresh_label("asref_nothing");
+        std::string asref_end = fresh_label("asref_end");
+
+        std::string just_result, nothing_result;
+        nothing_result = "null";
+
+        if (is_nullable) {
+            // Input is already a nullable ptr (Maybe[ref T]): non-null = Just, null = Nothing
+            // as_ref on Maybe[ref T] → Maybe[ref ref T] which is also nullable ptr
+            // Just: return receiver (the non-null ptr)
+            // Nothing: return null
+            std::string is_nonnull = fresh_reg();
+            emit_line("  " + is_nonnull + " = icmp ne ptr " + receiver + ", null");
+            emit_line("  br i1 " + is_nonnull + ", label %" + asref_just + ", label %" + asref_nothing);
+
+            emit_line(asref_just + ":");
+            current_block_ = asref_just;
+            just_result = receiver;
+            emit_line("  br label %" + asref_end);
+
+            emit_line(asref_nothing + ":");
+            current_block_ = asref_nothing;
+            emit_line("  br label %" + asref_end);
+        } else {
+            // Standard struct Maybe[T]: check discriminant, return ptr to payload or null
+            std::string is_just = fresh_reg();
+            emit_line("  " + is_just + " = icmp eq i32 " + tag_val + ", 0");
+            emit_line("  br i1 " + is_just + ", label %" + asref_just + ", label %" + asref_nothing);
+
+            // Just branch: GEP field 1 of stored struct → ptr to inner value
+            emit_line(asref_just + ":");
+            current_block_ = asref_just;
+            std::string orig_alloca = fresh_reg();
+            emit_line("  " + orig_alloca + " = alloca " + enum_type_name);
+            emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + orig_alloca);
+            just_result = fresh_reg();
+            emit_line("  " + just_result + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                      orig_alloca + ", i32 0, i32 1");
+            emit_line("  br label %" + asref_end);
+
+            // Nothing branch: return null ptr
+            emit_line(asref_nothing + ":");
+            current_block_ = asref_nothing;
+            emit_line("  br label %" + asref_end);
+        }
+
+        emit_line(asref_end + ":");
+        current_block_ = asref_end;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi ptr [ " + just_result + ", %" + asref_just +
+                  " ], [ " + nothing_result + ", %" + asref_nothing + " ]");
+        last_expr_type_ = "ptr";
+        return result;
     }
 
     // copied() / duplicated() — return self (value semantics already)
@@ -1042,12 +1149,53 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     }
 
     // flatten() — Maybe[Maybe[T]] → Maybe[T]
-    // The receiver IS the inner Maybe (one layer of wrapping is implicit)
-    // We just return the receiver (codegen treats nested Maybe as flat)
+    // Just(inner) → inner, Nothing → Nothing of type Maybe[T]
     if (method == "flatten") {
         emit_coverage("Maybe::flatten");
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        // inner_llvm_type IS the inner Maybe[T] struct type
+
+        std::string fl_just_label = fresh_label("fl_just");
+        std::string fl_nothing_label = fresh_label("fl_nothing");
+        std::string fl_end_label = fresh_label("fl_end");
+
+        std::string fl_is_just = fresh_reg();
+        emit_line("  " + fl_is_just + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + fl_is_just + ", label %" + fl_just_label + ", label %" +
+                  fl_nothing_label);
+
+        // Just branch: extract inner Maybe[T] from field 1
+        emit_line(fl_just_label + ":");
+        current_block_ = fl_just_label;
+        std::string just_val = extract_just_value(); // returns inner_llvm_type value
+        emit_line("  br label %" + fl_end_label);
+
+        // Nothing branch: return Nothing of type Maybe[T]
+        emit_line(fl_nothing_label + ":");
+        current_block_ = fl_nothing_label;
+        std::string nothing_val;
+        if (inner_llvm_type == "ptr") {
+            nothing_val = "null";
+        } else {
+            std::string n_alloca = fresh_reg();
+            emit_line("  " + n_alloca + " = alloca " + inner_llvm_type);
+            emit_line("  store " + inner_llvm_type + " zeroinitializer, ptr " + n_alloca);
+            std::string n_disc_ptr = fresh_reg();
+            emit_line("  " + n_disc_ptr + " = getelementptr inbounds " + inner_llvm_type + ", ptr " +
+                      n_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + n_disc_ptr);
+            nothing_val = fresh_reg();
+            emit_line("  " + nothing_val + " = load " + inner_llvm_type + ", ptr " + n_alloca);
+        }
+        emit_line("  br label %" + fl_end_label);
+
+        // Merge
+        emit_line(fl_end_label + ":");
+        current_block_ = fl_end_label;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + inner_llvm_type + " [ " + just_val + ", %" +
+                  fl_just_label + " ], [ " + nothing_val + ", %" + fl_nothing_label + " ]");
+        last_expr_type_ = inner_llvm_type;
+        return result;
     }
 
     // zip(other) / zip_with(other, f) — return self if Just, else Nothing
@@ -1066,11 +1214,182 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
     }
 
     // transpose() — Maybe[Outcome[T,E]] → Outcome[Maybe[T],E]
-    // We return self (the layout is similar enough for many tests)
+    // Nothing → Ok(Nothing), Just(Ok(x)) → Ok(Just(x)), Just(Err(e)) → Err(e)
     if (method == "transpose") {
         emit_coverage("Maybe::transpose");
-        last_expr_type_ = enum_type_name;
-        return receiver;
+        // Determine inner type: inner_type is Outcome[T, E], extract T and E
+        if (!inner_type || !inner_type->is<types::NamedType>() ||
+            inner_type->as<types::NamedType>().name != "Outcome" ||
+            inner_type->as<types::NamedType>().type_args.size() < 2) {
+            report_error("transpose requires Maybe[Outcome[T, E]]", call.span, "C026");
+            last_expr_type_ = enum_type_name;
+            return receiver;
+        }
+        types::TypePtr inner_t = inner_type->as<types::NamedType>().type_args[0];
+        types::TypePtr inner_e = inner_type->as<types::NamedType>().type_args[1];
+        std::string inner_t_llvm = llvm_type_from_semantic(inner_t, true);
+        std::string inner_e_llvm = llvm_type_from_semantic(inner_e, true);
+
+        // Result type: Outcome[Maybe[T], E]
+        auto maybe_t_ptr = std::make_shared<types::Type>(types::NamedType{"Maybe", "", {inner_t}});
+        std::string outcome_maybe_t_e_mangled = require_enum_instantiation("Outcome", {maybe_t_ptr, inner_e});
+        std::string outcome_maybe_t_e = "%struct." + outcome_maybe_t_e_mangled;
+        // Inner Outcome type: Outcome[T, E] = inner_llvm_type (the inner struct)
+        std::string inner_outcome_type = inner_llvm_type;
+        // Maybe[T] type — check nullable optimization (e.g. Maybe[ref T] = "ptr")
+        std::string maybe_t_mangled = require_enum_instantiation("Maybe", {inner_t});
+        bool maybe_t_nullable = nullable_maybe_types_.count(maybe_t_mangled) > 0;
+        std::string maybe_t_type = maybe_t_nullable ? "ptr" : "%struct." + maybe_t_mangled;
+
+        std::string tp_nothing = fresh_label("tp_nothing");
+        std::string tp_just = fresh_label("tp_just");
+        std::string tp_inner_ok = fresh_label("tp_inner_ok");
+        std::string tp_inner_err = fresh_label("tp_inner_err");
+        std::string tp_end = fresh_label("tp_end");
+
+        // Branch on outer discriminant (Just=0, Nothing=1)
+        std::string outer_is_just = fresh_reg();
+        emit_line("  " + outer_is_just + " = icmp eq i32 " + tag_val + ", 0");
+        emit_line("  br i1 " + outer_is_just + ", label %" + tp_just + ", label %" + tp_nothing);
+
+        // Nothing branch → Ok(Nothing): Outcome[Maybe[T],E] with disc=0, payload=Nothing(Maybe[T])
+        emit_line(tp_nothing + ":");
+        current_block_ = tp_nothing;
+        std::string nothing_mt_val;
+        if (maybe_t_type == "ptr") {
+            // Nullable optimization: Nothing of Maybe[T] = null ptr
+            nothing_mt_val = "null";
+        } else {
+            std::string nothing_mt_alloca = fresh_reg();
+            emit_line("  " + nothing_mt_alloca + " = alloca " + maybe_t_type);
+            emit_line("  store " + maybe_t_type + " zeroinitializer, ptr " + nothing_mt_alloca);
+            // disc=1 for Nothing
+            std::string nothing_mt_disc_ptr = fresh_reg();
+            emit_line("  " + nothing_mt_disc_ptr + " = getelementptr inbounds " + maybe_t_type +
+                      ", ptr " + nothing_mt_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 1, ptr " + nothing_mt_disc_ptr);
+            nothing_mt_val = fresh_reg();
+            emit_line("  " + nothing_mt_val + " = load " + maybe_t_type + ", ptr " + nothing_mt_alloca);
+        }
+        // Wrap in Ok(Nothing): Outcome[Maybe[T],E] with disc=0
+        std::string ok_nothing_alloca = fresh_reg();
+        emit_line("  " + ok_nothing_alloca + " = alloca " + outcome_maybe_t_e);
+        emit_line("  store " + outcome_maybe_t_e + " zeroinitializer, ptr " + ok_nothing_alloca);
+        std::string ok_nothing_disc_ptr = fresh_reg();
+        emit_line("  " + ok_nothing_disc_ptr + " = getelementptr inbounds " + outcome_maybe_t_e +
+                  ", ptr " + ok_nothing_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + ok_nothing_disc_ptr);
+        std::string ok_nothing_payload_ptr = fresh_reg();
+        emit_line("  " + ok_nothing_payload_ptr + " = getelementptr inbounds " + outcome_maybe_t_e +
+                  ", ptr " + ok_nothing_alloca + ", i32 0, i32 1");
+        emit_line("  store " + maybe_t_type + " " + nothing_mt_val + ", ptr " + ok_nothing_payload_ptr);
+        std::string tp_nothing_val = fresh_reg();
+        emit_line("  " + tp_nothing_val + " = load " + outcome_maybe_t_e + ", ptr " + ok_nothing_alloca);
+        emit_line("  br label %" + tp_end);
+
+        // Just branch: extract inner Outcome[T,E] value
+        emit_line(tp_just + ":");
+        current_block_ = tp_just;
+        std::string just_outer_alloca = fresh_reg();
+        emit_line("  " + just_outer_alloca + " = alloca " + enum_type_name);
+        emit_line("  store " + enum_type_name + " " + receiver + ", ptr " + just_outer_alloca);
+        std::string inner_ptr = fresh_reg();
+        emit_line("  " + inner_ptr + " = getelementptr inbounds " + enum_type_name + ", ptr " +
+                  just_outer_alloca + ", i32 0, i32 1");
+        std::string inner_outcome_val = fresh_reg();
+        emit_line("  " + inner_outcome_val + " = load " + inner_outcome_type + ", ptr " + inner_ptr);
+        // Get inner discriminant
+        std::string inner_disc_alloca = fresh_reg();
+        emit_line("  " + inner_disc_alloca + " = alloca " + inner_outcome_type);
+        emit_line("  store " + inner_outcome_type + " " + inner_outcome_val + ", ptr " + inner_disc_alloca);
+        std::string inner_disc_ptr = fresh_reg();
+        emit_line("  " + inner_disc_ptr + " = getelementptr inbounds " + inner_outcome_type + ", ptr " +
+                  inner_disc_alloca + ", i32 0, i32 0");
+        std::string inner_disc = fresh_reg();
+        emit_line("  " + inner_disc + " = load i32, ptr " + inner_disc_ptr);
+        std::string inner_is_ok = fresh_reg();
+        emit_line("  " + inner_is_ok + " = icmp eq i32 " + inner_disc + ", 0");
+        emit_line("  br i1 " + inner_is_ok + ", label %" + tp_inner_ok + ", label %" + tp_inner_err);
+
+        // Just(Ok(x)) → Ok(Just(x))
+        emit_line(tp_inner_ok + ":");
+        current_block_ = tp_inner_ok;
+        std::string t_val_ptr = fresh_reg();
+        emit_line("  " + t_val_ptr + " = getelementptr inbounds " + inner_outcome_type + ", ptr " +
+                  inner_disc_alloca + ", i32 0, i32 1");
+        std::string t_val = fresh_reg();
+        emit_line("  " + t_val + " = load " + inner_t_llvm + ", ptr " + t_val_ptr);
+        // Build Just(x): Maybe[T]
+        std::string just_t_val;
+        if (maybe_t_type == "ptr") {
+            // Nullable optimization: Just(ptr) = the ptr itself (non-null)
+            just_t_val = t_val;
+        } else {
+            std::string just_t_alloca = fresh_reg();
+            emit_line("  " + just_t_alloca + " = alloca " + maybe_t_type);
+            emit_line("  store " + maybe_t_type + " zeroinitializer, ptr " + just_t_alloca);
+            std::string just_t_disc_ptr = fresh_reg();
+            emit_line("  " + just_t_disc_ptr + " = getelementptr inbounds " + maybe_t_type + ", ptr " +
+                      just_t_alloca + ", i32 0, i32 0");
+            emit_line("  store i32 0, ptr " + just_t_disc_ptr);  // Just=0
+            if (inner_t_llvm != "void" && inner_t_llvm != "{}") {
+                std::string just_t_val_ptr = fresh_reg();
+                emit_line("  " + just_t_val_ptr + " = getelementptr inbounds " + maybe_t_type + ", ptr " +
+                          just_t_alloca + ", i32 0, i32 1");
+                emit_line("  store " + inner_t_llvm + " " + t_val + ", ptr " + just_t_val_ptr);
+            }
+            just_t_val = fresh_reg();
+            emit_line("  " + just_t_val + " = load " + maybe_t_type + ", ptr " + just_t_alloca);
+        }
+        // Build Ok(Just(x)): Outcome[Maybe[T],E]
+        std::string ok_just_alloca = fresh_reg();
+        emit_line("  " + ok_just_alloca + " = alloca " + outcome_maybe_t_e);
+        emit_line("  store " + outcome_maybe_t_e + " zeroinitializer, ptr " + ok_just_alloca);
+        std::string ok_just_disc_ptr = fresh_reg();
+        emit_line("  " + ok_just_disc_ptr + " = getelementptr inbounds " + outcome_maybe_t_e +
+                  ", ptr " + ok_just_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 0, ptr " + ok_just_disc_ptr);
+        std::string ok_just_payload_ptr = fresh_reg();
+        emit_line("  " + ok_just_payload_ptr + " = getelementptr inbounds " + outcome_maybe_t_e +
+                  ", ptr " + ok_just_alloca + ", i32 0, i32 1");
+        emit_line("  store " + maybe_t_type + " " + just_t_val + ", ptr " + ok_just_payload_ptr);
+        std::string tp_ok_val = fresh_reg();
+        emit_line("  " + tp_ok_val + " = load " + outcome_maybe_t_e + ", ptr " + ok_just_alloca);
+        emit_line("  br label %" + tp_end);
+
+        // Just(Err(e)) → Err(e)
+        emit_line(tp_inner_err + ":");
+        current_block_ = tp_inner_err;
+        std::string e_val_ptr = fresh_reg();
+        emit_line("  " + e_val_ptr + " = getelementptr inbounds " + inner_outcome_type + ", ptr " +
+                  inner_disc_alloca + ", i32 0, i32 1");
+        std::string e_val = fresh_reg();
+        emit_line("  " + e_val + " = load " + inner_e_llvm + ", ptr " + e_val_ptr);
+        // Build Err(e): Outcome[Maybe[T],E] with disc=1
+        std::string err_alloca = fresh_reg();
+        emit_line("  " + err_alloca + " = alloca " + outcome_maybe_t_e);
+        emit_line("  store " + outcome_maybe_t_e + " zeroinitializer, ptr " + err_alloca);
+        std::string err_disc_ptr = fresh_reg();
+        emit_line("  " + err_disc_ptr + " = getelementptr inbounds " + outcome_maybe_t_e + ", ptr " +
+                  err_alloca + ", i32 0, i32 0");
+        emit_line("  store i32 1, ptr " + err_disc_ptr);
+        std::string err_payload_ptr = fresh_reg();
+        emit_line("  " + err_payload_ptr + " = getelementptr inbounds " + outcome_maybe_t_e + ", ptr " +
+                  err_alloca + ", i32 0, i32 1");
+        emit_line("  store " + inner_e_llvm + " " + e_val + ", ptr " + err_payload_ptr);
+        std::string tp_err_val = fresh_reg();
+        emit_line("  " + tp_err_val + " = load " + outcome_maybe_t_e + ", ptr " + err_alloca);
+        emit_line("  br label %" + tp_end);
+
+        // Merge
+        emit_line(tp_end + ":");
+        current_block_ = tp_end;
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + outcome_maybe_t_e + " [ " + tp_nothing_val + ", %" +
+                  tp_nothing + " ], [ " + tp_ok_val + ", %" + tp_inner_ok + " ], [ " +
+                  tp_err_val + ", %" + tp_inner_err + " ]");
+        last_expr_type_ = outcome_maybe_t_e;
+        return result;
     }
 
     // ok_or(e) / ok_or_else(f) — convert Maybe[T] to Outcome[T, E]

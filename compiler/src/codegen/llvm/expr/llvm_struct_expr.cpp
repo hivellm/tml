@@ -1142,6 +1142,12 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
                     emit_line("  " + casted + " = fpext float " + field_val + " to double");
                     field_val = casted;
                     field_type = "double";
+                } else if (actual_type == "i1" && target_field_type == "i8") {
+                    // Bool (i1) promoted to i8 in struct fields — zext before insertvalue
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = zext i1 " + field_val + " to i8");
+                    field_val = casted;
+                    field_type = "i8";
                 } else {
                     // Unhandled type mismatch — keep actual_type so insertvalue
                     // uses the correct type for the value.
