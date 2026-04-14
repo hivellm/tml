@@ -1,0 +1,100 @@
+//! Full integration test for Mach-O linker — generates Mach-O .o via macho_emit,
+//! parses it back, tests code signing, and fat binary generation.
+
+use test::{assert, assert_eq}
+use compiler::native::macho_emit::*
+use compiler::link::macho::macho_parser::*
+use compiler::link::macho::codesign::*
+use compiler::link::macho::fat::*
+use std::collections::list::List
+
+@test func test_macho_roundtrip_codesign_and_fat() {
+    // === Step 1: Generate Mach-O .o using macho_emit ===
+    let text_data = List[I64]::new(8)
+    text_data.push(0xB8)  // mov eax, 42
+    text_data.push(42)
+    text_data.push(0)
+    text_data.push(0)
+    text_data.push(0)
+    text_data.push(0xC3)  // ret
+    text_data.push(0x90)
+    text_data.push(0x90)
+
+    let syms = List[MachoSymbol]::new(1)
+    syms.push(MachoSymbol { name: "_main", section: 1 as I64, value: 0 as I64, is_external: 1 as I64 })
+
+    let relocs = List[MachoReloc]::new(0)
+    let macho_obj: List[I64] = write_macho64_obj(CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_ALL, text_data, List[I64]::new(0), syms, relocs)
+
+    // Verify Mach-O magic (little-endian: CF FA ED FE)
+    assert_eq(macho_obj.get(0) as I32, 0xCF)
+    assert_eq(macho_obj.get(1) as I32, 0xFA)
+    assert_eq(macho_obj.get(2) as I32, 0xED)
+    assert_eq(macho_obj.get(3) as I32, 0xFE)
+
+    // === Step 2: Parse the Mach-O back ===
+    let parsed: MachoObject = parse_macho(macho_obj)
+    assert_eq(parsed.magic as I32, 0xFEEDFACF as I32)
+    assert_eq(parsed.cpu_type as I32, CPU_TYPE_ARM64 as I32)
+    assert_eq(parsed.file_type as I32, MH_OBJECT as I32)
+    assert(parsed.segments.len() as I64 >= 1)
+    let seg: MachoParsedSegment = parsed.segments.get(0)
+    assert(seg.sections.len() as I64 >= 1)
+
+    // Verify __text section data roundtrip
+    let text_sec: MachoParsedSection = seg.sections.get(0)
+    assert(text_sec.data.len() as I64 >= 6)
+    assert_eq(text_sec.data.get(0) as I32, 0xB8)
+    assert_eq(text_sec.data.get(1) as I32, 42)
+    assert_eq(text_sec.data.get(5) as I32, 0xC3)
+
+    // Verify symbols parsed
+    assert(parsed.symbols.len() as I64 >= 1)
+
+    // === Step 3: Code signing ===
+    let sign_text = List[I64]::new(8192 as I64)
+    for _ in 0 to 4096 { sign_text.push(0xCC) }
+    for _ in 0 to 4096 { sign_text.push(0x90) }
+
+    let cd: CodeDirectory = compute_code_directory(sign_text, "test_binary")
+    assert_eq(cd.n_code_slots as I32, 2)
+    assert_eq(cd.code_limit as I32, 8192)
+    assert_eq(cd.page_hashes.len() as I32, 2)
+    assert_eq(cd.page_hashes.get(0).len() as I32, 32)
+
+    // Page hashes should differ
+    let h0: List[I64] = cd.page_hashes.get(0)
+    let h1: List[I64] = cd.page_hashes.get(1)
+    var differs: I64 = 0
+    for i in 0 to 32 {
+        if h0.get(i) != h1.get(i) { differs = 1 }
+    }
+    assert_eq(differs as I32, 1)
+
+    // Signature blob
+    let blob: List[I64] = build_signature_blob(cd)
+    assert_eq(blob.get(0) as I32, 0xFA)
+    assert_eq(blob.get(1) as I32, 0xDE)
+    assert_eq(blob.get(2) as I32, 0x0C)
+    assert_eq(blob.get(3) as I32, 0xC0)
+
+    let expected_size: I64 = signature_blob_size(8192 as I64, 11 as I64)
+    assert_eq(blob.len() as I32, expected_size as I32)
+
+    // === Step 4: Fat binary ===
+    let slices = List[FatSlice]::new(2)
+    let arm_d = List[I64]::new(8)
+    for _ in 0 to 8 { arm_d.push(0xCF) }
+    slices.push(FatSlice { cpu_type: CPU_TYPE_ARM64 as I64, cpu_subtype: 0 as I64, data: arm_d })
+    let x86_d = List[I64]::new(8)
+    for _ in 0 to 8 { x86_d.push(0xCF) }
+    slices.push(FatSlice { cpu_type: CPU_TYPE_X86_64 as I64, cpu_subtype: 3 as I64, data: x86_d })
+
+    let fat: List[I64] = write_fat_binary(slices)
+    assert_eq(fat.get(0) as I32, 0xCA)
+    assert_eq(fat.get(1) as I32, 0xFE)
+    assert_eq(fat.get(2) as I32, 0xBA)
+    assert_eq(fat.get(3) as I32, 0xBE)
+    assert_eq(fat.get(7) as I32, 2)
+    assert(fat.len() as I64 >= 4096)
+}

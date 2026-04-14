@@ -1,0 +1,119 @@
+//! Full integration test for PE/COFF linker — generates COFF .obj, parses it back,
+//! builds PE .exe, verifies binary layout end-to-end.
+
+use test::{assert, assert_eq}
+use compiler::link::pe::coff_parser::*
+use compiler::link::pe::symbol_table::*
+use compiler::link::pe::pe_writer::*
+use compiler::link::pe::import_lib::*
+use compiler::native::obj_writer::write_coff
+use compiler::native::coff_emit::*
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+@test func test_coff_roundtrip_and_pe_generation() {
+    // === Step 1: Generate a real COFF .obj using the native backend's write_coff ===
+    let text_data = List[I64]::new(16)
+    // A tiny x86_64 function: mov eax, 42; ret
+    text_data.push(0xB8)  // mov eax, imm32
+    text_data.push(42)
+    text_data.push(0)
+    text_data.push(0)
+    text_data.push(0)
+    text_data.push(0xC3)  // ret
+    // Pad to 16 bytes
+    for _ in 0 to 10 { text_data.push(0x90) }  // NOP
+
+    let sections = List[CoffSection]::new(1)
+    sections.push(make_text_section(text_data))
+    let symbols = List[CoffSymbol]::new(2)
+    symbols.push(make_func_symbol("main", 0 as I64, 1 as I64))
+    symbols.push(make_extern_symbol("ExitProcess"))
+
+    let coff_bytes: List[I64] = write_coff(sections, symbols)
+
+    // Verify COFF is non-trivial
+    assert(coff_bytes.len() as I64 > 40)
+
+    // === Step 2: Parse the COFF back and verify header ===
+    let obj: CoffObject = parse_coff(coff_bytes)
+    assert_eq(obj.machine as I32, 0x8664 as I32)  // AMD64
+    assert(obj.num_sections as I64 >= 1)
+    assert(obj.sections.len() as I64 >= 1)
+
+    // Verify .text section data roundtrip
+    let text_sec: CoffParsedSection = obj.sections.get(0)
+    assert(text_sec.raw_data_size as I64 >= 6)
+    // First bytes should be our mov eax,42; ret
+    assert_eq(text_sec.data.get(0) as I32, 0xB8)   // mov eax
+    assert_eq(text_sec.data.get(1) as I32, 42)      // imm32 low byte = 42
+    assert_eq(text_sec.data.get(5) as I32, 0xC3)    // ret
+
+    // Verify symbols were parsed
+    assert(obj.symbols.len() as I64 >= 1)
+    let first_sym: CoffParsedSymbol = obj.symbols.get(0)
+    assert(first_sym.name.len() as I64 > 0)
+
+    // === Step 3: Build symbol table from parsed object ===
+    let st: LinkerSymbolTable = symtab_new()
+    symtab_add_object(st, obj, 0 as I64)
+    assert(st.symbols.len() > 0)
+    assert_eq(symtab_has_errors(st) as I32, 0)
+
+    // === Step 4: Generate PE .exe from the section data ===
+    let pe_sects = List[PeSection]::new(1)
+    pe_sects.push(PeSection {
+        name: ".text",
+        data: text_sec.data,
+        characteristics: IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ,
+        rva: 0x1000 as I64,
+        file_offset: 0x200 as I64
+    })
+    let opts: PeOptions = pe_options_console(0x1000 as I64)
+    let pe_bytes: List[I64] = write_pe(pe_sects, opts)
+
+    // === Step 5: Verify PE binary layout ===
+    // DOS magic: MZ
+    assert_eq(pe_bytes.get(0) as I32, 0x4D)
+    assert_eq(pe_bytes.get(1) as I32, 0x5A)
+
+    // e_lfanew at offset 0x3C points to PE signature
+    let lfanew: I64 = (pe_bytes.get(0x3C) & 0xFF) | ((pe_bytes.get(0x3D) & 0xFF) << 8)
+    assert_eq(lfanew as I32, 0x40)
+
+    // PE signature at offset 0x40: "PE\0\0"
+    assert_eq(pe_bytes.get(0x40) as I32, 0x50)
+    assert_eq(pe_bytes.get(0x41) as I32, 0x45)
+    assert_eq(pe_bytes.get(0x42) as I32, 0)
+    assert_eq(pe_bytes.get(0x43) as I32, 0)
+
+    // COFF header: Machine = AMD64 at offset 0x44
+    assert_eq(pe_bytes.get(0x44) as I32, 0x64)
+    assert_eq(pe_bytes.get(0x45) as I32, 0x86)
+
+    // Optional header magic at offset 0x58: PE32+ = 0x020B
+    assert_eq(pe_bytes.get(0x58) as I32, 0x0B)
+    assert_eq(pe_bytes.get(0x59) as I32, 0x02)
+
+    // PE should be at least 512 bytes (headers aligned to FileAlignment)
+    assert(pe_bytes.len() as I64 >= 512)
+
+    // === Step 6: PE checksum ===
+    let cs: I64 = pe_compute_checksum(pe_bytes)
+    assert(cs > 0)
+
+    // === Step 7: Import table construction ===
+    let tbl: ImportTable = import_table_new()
+    import_add(tbl, "kernel32.dll", "ExitProcess", 0 as I64)
+    import_add(tbl, "kernel32.dll", "GetStdHandle", 0 as I64)
+    import_add(tbl, "msvcrt.dll", "puts", 0 as I64)
+    assert_eq(tbl.dll_order.len() as I32, 2)
+    let k32: List[ImportEntry] = tbl.dlls.get("kernel32.dll")
+    assert_eq(k32.len() as I32, 2)
+
+    // === Step 8: Import thunk generation ===
+    let thunk: List[I64] = emit_import_thunk(0x3000 as I64, 0x1000 as I64)
+    assert_eq(thunk.len() as I32, 6)
+    assert_eq(thunk.get(0) as I32, 0xFF)
+    assert_eq(thunk.get(1) as I32, 0x25)
+}
