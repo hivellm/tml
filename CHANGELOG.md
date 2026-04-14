@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.5](docs/patches/v0.3.5.md) | 2026-04-14 | N002 fix: crypto/TLS C runtime compilation — `find_openssl()` now sets include path, all 9 crypto `.obj` files compile on first run |
 | [0.3.4](docs/patches/v0.3.4.md) | 2026-04-14 | K001 fix: bool/i32 mismatch in `icmp eq`/`ne` — `zext i1` widening for mixed-width boolean comparisons in AST codegen |
 | [0.3.3](docs/patches/v0.3.3.md) | 2026-04-14 | K001 fix: `core::str` methods (`len`, `is_empty`, `starts_with`, `ends_with`, `contains`, `trim`) in AST path — string benchmarks unblocked |
 | [0.3.2](docs/patches/v0.3.2.md) | 2026-04-12 | K001 codegen fixes, runtime crash fix (InferCtx shared counter), `tml cv` in-process — 27/28 tests pass |

@@ -241,8 +241,24 @@ OpenSSLPaths find_openssl() {
                 result.lib_dir = compiler_native;
                 result.crypto_lib = "libcrypto.lib";
                 result.ssl_lib = "libssl.lib";
+                // Tier 0 native dir only ships .lib files, not headers.
+                // Resolve include_dir from vcpkg or standalone so that
+                // ensure_c_compiled() can build crypto/*.c with -I<openssl_include>.
+                fs::path project_root = find_project_root();
+                fs::path vcpkg_inc =
+                    project_root / "vcpkg_installed" / "x64-windows" / "include";
+                if (fs::exists(vcpkg_inc / "openssl" / "evp.h")) {
+                    result.include_dir = vcpkg_inc;
+                } else {
+                    fs::path standalone_inc = "C:/Program Files/OpenSSL-Win64/include";
+                    if (fs::exists(standalone_inc / "openssl" / "evp.h")) {
+                        result.include_dir = standalone_inc;
+                    }
+                }
                 TML_LOG_DEBUG("build", "OpenSSL found via compiler-bundled native libs: "
-                                           << compiler_native.string());
+                                           << compiler_native.string()
+                                           << " (include: " << result.include_dir.string()
+                                           << ")");
                 return result;
             }
         }

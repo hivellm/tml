@@ -315,7 +315,8 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
         std::lock_guard<std::mutex> lock(compilation_mutex);
 
         // If another thread is compiling, wait by checking if file exists after lock
-        bool needs_compile = !fs::exists(obj_path);
+        bool obj_exists = fs::exists(obj_path);
+        bool needs_compile = !obj_exists;
         if (!needs_compile) {
             auto c_time = fs::last_write_time(c_path);
             auto obj_time = fs::last_write_time(obj_path);
@@ -347,6 +348,14 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
 #endif
                                   extra_flags + " -o \"" + obj_path_str + "\" \"" +
                                   to_forward_slashes(c_path.string()) + "\"";
+        // Log command to a diagnostics file for debugging failures
+        {
+            std::string log_path = obj_path.parent_path().string() + "/compile_diag.log";
+            std::ofstream diag(log_path, std::ios::app);
+            if (diag.is_open()) {
+                diag << "[CMD] " << compile_cmd << "\n";
+            }
+        }
         int ret = std::system(compile_cmd.c_str());
 
         // Mark compilation as done
@@ -356,6 +365,15 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
         }
 
         if (ret != 0) {
+            // Log the failure
+            {
+                std::string log_path = obj_path.parent_path().string() + "/compile_diag.log";
+                std::ofstream diag(log_path, std::ios::app);
+                if (diag.is_open()) {
+                    diag << "[FAIL] ret=" << ret << " file=" << c_path.filename().string() << "\n";
+                }
+            }
+            TML_LOG_WARN("build", "C compilation failed (ret=" << ret << "): " << compile_cmd);
             // Fallback to returning .c path on compile failure
             return c_path_str;
         }

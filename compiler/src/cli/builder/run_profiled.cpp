@@ -346,6 +346,22 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
             }
         }
 
+#ifdef _WIN32
+        // Always link OpenSSL libraries (tml_runtime.lib contains crypto objects)
+        {
+            auto openssl = find_openssl();
+            if (openssl.found) {
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.crypto_lib).string()));
+                link_options.link_flags.push_back(
+                    to_forward_slashes((openssl.lib_dir / openssl.ssl_lib).string()));
+                link_options.link_flags.push_back("/DEFAULTLIB:crypt32");
+                link_options.link_flags.push_back("/DEFAULTLIB:ws2_32");
+            }
+        }
+        link_options.link_flags.push_back("/STACK:67108864");
+#endif
+
         std::string temp_key = generate_cache_key(path);
         fs::path temp_exe = cache_dir / (exe_hash + "_" + temp_key + "_temp.exe");
 
