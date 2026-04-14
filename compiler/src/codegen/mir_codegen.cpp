@@ -1545,9 +1545,22 @@ void MirCodegen::emit_function(const mir::Function& func) {
                                   func.name.find("Windows__next") != std::string::npos ||
                                   func.name.find("ChunksExact__next") != std::string::npos;
 
+        // Honor explicit @inline / @always_inline / @noinline attributes
+        bool has_inline_attr = false;
+        bool has_noinline_attr = false;
+        for (const auto& attr : func.attributes) {
+            if (attr == "inline" || attr == "always_inline") {
+                has_inline_attr = true;
+            } else if (attr == "noinline" || attr == "never_inline") {
+                has_noinline_attr = true;
+            }
+        }
+
         // Small functions (<=10 instructions, single block) get inlinehint
         // drop_ functions and iterator methods get alwaysinline
-        if (func.name.rfind("drop_", 0) == 0 || is_iterator_method) {
+        if (has_noinline_attr) {
+            inline_attr = " noinline";
+        } else if (has_inline_attr || func.name.rfind("drop_", 0) == 0 || is_iterator_method) {
             inline_attr = " alwaysinline";
         } else if (total_instructions <= 10 && func.blocks.size() <= 2) {
             inline_attr = " inlinehint";

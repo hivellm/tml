@@ -141,12 +141,23 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         return;
     }
 
-    // Record @allocates decorator for Phase 4b Str temp tracking
+    // Record @allocates decorator for Phase 4b Str temp tracking and capture inline hints
+    bool has_inline_decorator = false;
+    bool has_noinline_decorator = false;
     for (const auto& decorator : method.decorators) {
         if (decorator.name == "allocates") {
             allocating_functions_.insert(method.name);
-            break;
+        } else if (decorator.name == "inline" || decorator.name == "always_inline") {
+            has_inline_decorator = true;
+        } else if (decorator.name == "noinline" || decorator.name == "never_inline") {
+            has_noinline_decorator = true;
         }
+    }
+    std::string method_inline_attr;
+    if (has_inline_decorator && !has_noinline_decorator) {
+        method_inline_attr = " alwaysinline";
+    } else if (has_noinline_decorator) {
+        method_inline_attr = " noinline";
     }
 
     std::string method_name = type_name + "_" + method.name;
@@ -433,7 +444,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // can export symbols for test objects to link against.
     std::string impl_linkage = options_.library_ir_only ? "" : "internal ";
     emit_line("define " + impl_linkage + ret_type + " @" + func_llvm_name + "(" + params +
-              ") #0 {");
+              ") #0" + method_inline_attr + " {");
     TML_LOG_TRACE("codegen", "[GEN_IMPL] " << func_llvm_name << " type_name=" << type_name);
     emit_line("entry:");
 
@@ -1136,8 +1147,26 @@ void LLVMIRGen::gen_impl_method_instantiation(
     // but avoids complex COMDAT merging issues with LLD on Windows.
     // In library_ir_only mode, use external linkage for the shared library object.
     std::string inst_linkage = options_.library_ir_only ? "" : "internal ";
+    // Honor explicit @inline / @noinline decorators for generic method instantiations
+    std::string inst_inline_attr;
+    {
+        bool inline_decorator = false;
+        bool noinline_decorator = false;
+        for (const auto& decorator : method.decorators) {
+            if (decorator.name == "inline" || decorator.name == "always_inline") {
+                inline_decorator = true;
+            } else if (decorator.name == "noinline" || decorator.name == "never_inline") {
+                noinline_decorator = true;
+            }
+        }
+        if (inline_decorator && !noinline_decorator) {
+            inst_inline_attr = " alwaysinline";
+        } else if (noinline_decorator) {
+            inst_inline_attr = " noinline";
+        }
+    }
     emit_line("define " + inst_linkage + ret_type + " @" + func_llvm_name + "(" + params +
-              ") #0 {");
+              ") #0" + inst_inline_attr + " {");
     emit_line("entry:");
 
     // Register 'this' in locals with proper semantic type for method resolution

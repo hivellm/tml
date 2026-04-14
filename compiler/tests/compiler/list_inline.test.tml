@@ -1,0 +1,94 @@
+// Regression tests for List.push/pop/get/set/len inlining (phase0e).
+//
+// After adding @inline to List hot methods, LLVM emits `alwaysinline` on
+// each generic instantiation. This verifies correctness of those methods
+// under the inlined path — any codegen regression would cause wrong results.
+
+use std::collections::List
+use test::assert_eq
+
+// --- push / len / get ---
+
+@test
+func test_push_len_basic() {
+    let list: List[I64] = List[I64].new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    assert_eq(list.len(), 3)
+    assert_eq(list.get(0), 10)
+    assert_eq(list.get(1), 20)
+    assert_eq(list.get(2), 30)
+    list.destroy()
+}
+
+// --- push triggers grow path ---
+
+@test
+func test_push_grows_capacity() {
+    let list: List[I64] = List[I64].new(2)
+    for i in 0 to 100 {
+        list.push(i as I64)
+    }
+    assert_eq(list.len(), 100)
+    assert_eq(list.get(0), 0)
+    assert_eq(list.get(99), 99)
+    list.destroy()
+}
+
+// --- set overwrites element ---
+
+@test
+func test_set_element() {
+    let list: List[I64] = List[I64].new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.set(1, 99)
+    assert_eq(list.get(0), 1)
+    assert_eq(list.get(1), 99)
+    assert_eq(list.get(2), 3)
+    list.destroy()
+}
+
+// --- pop removes last element ---
+
+@test
+func test_pop_returns_last() {
+    let list: List[I64] = List[I64].new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    let v: I64 = list.pop()
+    assert_eq(v, 30)
+    assert_eq(list.len(), 2)
+    list.destroy()
+}
+
+// --- push 1M elements (timing gate: must complete) ---
+
+@test
+func test_push_1m_elements() {
+    let list: List[I64] = List[I64].new(1000000)
+    for i in 0 to 1000000 {
+        list.push(i as I64)
+    }
+    assert_eq(list.len(), 1000000)
+    assert_eq(list.get(999999), 999999)
+    list.destroy()
+}
+
+// --- get/set with I32 (separate generic instantiation) ---
+
+@test
+func test_i32_list() {
+    let list: List[I32] = List[I32].new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    assert_eq(list.len(), 3)
+    assert_eq(list.get(2), 3)
+    list.set(0, 42)
+    assert_eq(list.get(0), 42)
+    list.destroy()
+}

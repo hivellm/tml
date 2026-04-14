@@ -597,11 +597,17 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Public functions, main, and @should_panic tests get external linkage
     // @should_panic tests need external linkage because they're called via function pointer
     bool has_should_panic = false;
+    bool has_inline_decorator = false;
+    bool has_noinline_decorator = false;
     for (const auto& decorator : func.decorators) {
         if (decorator.name == "should_panic") {
             has_should_panic = true;
         } else if (decorator.name == "allocates") {
             allocating_functions_.insert(func.name);
+        } else if (decorator.name == "inline" || decorator.name == "always_inline") {
+            has_inline_decorator = true;
+        } else if (decorator.name == "noinline" || decorator.name == "never_inline") {
+            has_noinline_decorator = true;
         }
     }
     // In suite mode (force_internal_linkage), all functions including main get internal linkage
@@ -628,6 +634,11 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // - mustprogress: function will eventually return (enables loop optimizations)
     // - willreturn: function will return (helps with dead code elimination)
     std::string attrs = " #0";
+    if (has_inline_decorator && !has_noinline_decorator) {
+        attrs += " alwaysinline";
+    } else if (has_noinline_decorator) {
+        attrs += " noinline";
+    }
     emit_line("");
 
     // In lazy_library_defs mode, skip emitting the function entirely and store
@@ -1149,6 +1160,23 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
 
     // 6. Emit function definition
     std::string attrs = " #0";
+    // Honor explicit @inline / @noinline decorators for generic instantiations
+    {
+        bool inline_decorator = false;
+        bool noinline_decorator = false;
+        for (const auto& decorator : func.decorators) {
+            if (decorator.name == "inline" || decorator.name == "always_inline") {
+                inline_decorator = true;
+            } else if (decorator.name == "noinline" || decorator.name == "never_inline") {
+                noinline_decorator = true;
+            }
+        }
+        if (inline_decorator && !noinline_decorator) {
+            attrs += " alwaysinline";
+        } else if (noinline_decorator) {
+            attrs += " noinline";
+        }
+    }
     // Public functions get external linkage for library export
     // In suite mode (force_internal_linkage), all functions are internal to avoid duplicate symbols
     std::string linkage =

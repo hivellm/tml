@@ -90,6 +90,7 @@ impl[T] List[T] {
     }
 
     /// Appends an element to the back of the list.
+    @inline
     pub func push(this, value: T) {
         let hdr: I64 = this.handle as I64
 
@@ -132,6 +133,7 @@ impl[T] List[T] {
     }
 
     /// Removes the last element from the list and returns it.
+    @inline
     pub func pop(this) -> T {
         let hdr: I64 = this.handle as I64
         let p_len: *I64 = (hdr + 8) as *I64
@@ -155,6 +157,7 @@ impl[T] List[T] {
     }
 
     /// Returns the element at the given index.
+    @inline
     pub func get(this, index: I64) -> T {
         let hdr: I64 = this.handle as I64
         let p_stride: *I64 = (hdr + 24) as *I64
@@ -171,6 +174,7 @@ impl[T] List[T] {
     }
 
     /// Sets the element at the given index.
+    @inline
     pub func set(this, index: I64, value: T) {
         let hdr: I64 = this.handle as I64
         let p_stride: *I64 = (hdr + 24) as *I64
@@ -186,6 +190,7 @@ impl[T] List[T] {
     }
 
     /// Returns the number of elements in the list.
+    @inline
     pub func len(this) -> I64 {
         let hdr: I64 = this.handle as I64
         let p_len: *I64 = (hdr + 8) as *I64
