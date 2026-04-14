@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.12](docs/patches/v0.3.12.md) | 2026-04-14 | perf(codegen): verified `insertvalue` chains for value-type struct construction — 1-5 ns/op (vs 16-32 ns/op old alloca path); created `struct_bench.tml` benchmark and 8 regression tests |
 | [0.3.11](docs/patches/v0.3.11.md) | 2026-04-14 | feat(compiler): `--release` flag now fully propagates to test runner — LLVM O3 pipeline active end-to-end for `build`, `run`, and `test` commands; `tml.toml` `[profile.release]` supported |
 | [0.3.10](docs/patches/v0.3.10.md) | 2026-04-14 | perf(codegen): emit LLVM `select` for branchless scalar if-else — chained if-else-if produces nested selects, eliminating branch mispredictions (CMOV on x86-64); +20% at debug, verified correct IR |
 | [0.3.9](docs/patches/v0.3.9.md) | 2026-04-14 | perf(codegen): emit `llvm.assume(i ult n)` at start of every `for i in 0 to n` loop body — enables LICM of loop-invariant header loads and LLVM auto-vectorization; List Iteration 0 ns/op |

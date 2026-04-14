@@ -1,0 +1,205 @@
+// Struct Construction Benchmarks (TML)
+//
+// Tests struct literal construction and field access using value types (plain `type`).
+// Value types emit `insertvalue` chains in the MIR path (no alloca, no memory traffic).
+// These benchmarks verify: struct creation < 5 ns/op, field access < 2 ns/op.
+
+use std::time::Instant
+
+// === Value-type structs (non-class, plain `type`) ===
+
+type Point { x: I64, y: I64 }
+type Rect { x: I64, y: I64, w: I64, h: I64 }
+type Point3D { x: I64, y: I64, z: I64 }
+type BigVal { a: I64, b: I64, c: I64, d: I64, e: I64, f: I64, g: I64, h: I64 }
+
+// === Constructor functions ===
+
+func make_point(x: I64, y: I64) -> Point {
+    Point { x: x, y: y }
+}
+
+func make_rect(x: I64, y: I64, w: I64, h: I64) -> Rect {
+    Rect { x: x, y: y, w: w, h: h }
+}
+
+func make_point3d(x: I64, y: I64, z: I64) -> Point3D {
+    Point3D { x: x, y: y, z: z }
+}
+
+func sum_point(p: Point) -> I64 {
+    p.x + p.y
+}
+
+func sum_rect(r: Rect) -> I64 {
+    r.x + r.y + r.w + r.h
+}
+
+func sum_point3d(p: Point3D) -> I64 {
+    p.x + p.y + p.z
+}
+
+// === Benchmark helpers ===
+
+func run_bench(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
+    let ops_sec: I64 = if total_ns > 0 {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    print("  {}:\n", name)
+    print("    {} ns/op\n", per_op)
+    print("    {} ops/sec\n\n", ops_sec)
+}
+
+// === Benchmarks ===
+
+// Point creation (2-field value struct)
+func bench_point_creation(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        let p: Point = make_point(i, i + 1)
+        sum = sum + p.x
+    }
+    sum
+}
+
+// Rect creation (4-field value struct)
+func bench_rect_creation(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        let r: Rect = make_rect(i, i + 1, i + 2, i + 3)
+        sum = sum + sum_rect(r)
+    }
+    sum
+}
+
+// Point3D creation (3-field value struct)
+func bench_point3d_creation(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        let p: Point3D = make_point3d(i, i + 1, i + 2)
+        sum = sum + sum_point3d(p)
+    }
+    sum
+}
+
+// Field access on pre-created struct
+func bench_field_access(iterations: I64) -> I64 {
+    let p: Point = make_point(42, 100)
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        sum = sum + p.x + p.y
+    }
+    sum
+}
+
+// Inline struct literal (tests AST insertvalue fast path)
+func bench_inline_literal(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        let p: Point = Point { x: i, y: i + 1 }
+        sum = sum + p.x
+    }
+    sum
+}
+
+// Struct passed by value through call chain
+func bench_pass_by_value(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    for i in 0 to iterations {
+        let p: Point = make_point(i, i * 2)
+        sum = sum + sum_point(p)
+    }
+    sum
+}
+
+pub func main() -> I32 {
+    print("\n")
+    print("================================================================\n")
+    print("  Struct Construction Benchmarks (TML)\n")
+    print("  (value types — insertvalue chain, no alloca)\n")
+    print("================================================================\n\n")
+
+    let ITERATIONS: I64 = 10000000  // 10M
+    let RUNS: I32 = 5
+
+    // Run each benchmark
+    var best: I64 = 0
+    var start: Instant = Instant::now()
+
+    // Point creation
+    best = 9223372036854775807
+    var run: I32 = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r1: I64 = bench_point_creation(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Point Creation (2-field)", ITERATIONS, best)
+
+    // Rect creation
+    best = 9223372036854775807
+    run = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r2: I64 = bench_rect_creation(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Rect Creation (4-field)", ITERATIONS, best)
+
+    // Point3D creation
+    best = 9223372036854775807
+    run = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r3: I64 = bench_point3d_creation(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Point3D Creation (3-field)", ITERATIONS, best)
+
+    // Field access
+    best = 9223372036854775807
+    run = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r4: I64 = bench_field_access(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Field Access (pre-created)", ITERATIONS, best)
+
+    // Inline literal
+    best = 9223372036854775807
+    run = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r5: I64 = bench_inline_literal(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Inline Literal Construction", ITERATIONS, best)
+
+    // Pass by value
+    best = 9223372036854775807
+    run = 0
+    loop (run < RUNS) {
+        start = Instant::now()
+        let _r6: I64 = bench_pass_by_value(ITERATIONS)
+        let ns: I64 = start.elapsed().as_nanos()
+        if ns < best { best = ns }
+        run = run + 1
+    }
+    run_bench("Pass by Value (Point->sum)", ITERATIONS, best)
+
+    0
+}

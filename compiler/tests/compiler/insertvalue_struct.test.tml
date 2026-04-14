@@ -1,0 +1,89 @@
+// Regression test for insertvalue struct construction (phase0j).
+//
+// Verifies that value-type struct literals are correctly constructed,
+// passed by value, and accessed. The MIR→LLVM path emits `insertvalue`
+// chains for non-class types (no alloca round-trip for the struct value).
+
+use test::assert_eq
+
+type Point { x: I64, y: I64 }
+type Rect { x: I64, y: I64, w: I64, h: I64 }
+type Point3D { x: I64, y: I64, z: I64 }
+type Nested { a: Point, b: Point }
+
+func make_point(x: I64, y: I64) -> Point { Point { x: x, y: y } }
+func make_rect(x: I64, y: I64, w: I64, h: I64) -> Rect { Rect { x: x, y: y, w: w, h: h } }
+func make_point3d(x: I64, y: I64, z: I64) -> Point3D { Point3D { x: x, y: y, z: z } }
+func sum_point(p: Point) -> I64 { p.x + p.y }
+func sum_rect(r: Rect) -> I64 { r.x + r.y + r.w + r.h }
+
+@test
+func test_point_construction() {
+    let p: Point = make_point(3, 7)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 7)
+    assert_eq(sum_point(p), 10)
+}
+
+@test
+func test_rect_construction() {
+    let r: Rect = make_rect(1, 2, 10, 20)
+    assert_eq(r.x, 1)
+    assert_eq(r.y, 2)
+    assert_eq(r.w, 10)
+    assert_eq(r.h, 20)
+    assert_eq(sum_rect(r), 33)
+}
+
+@test
+func test_point3d_construction() {
+    let p: Point3D = make_point3d(5, 10, 15)
+    assert_eq(p.x, 5)
+    assert_eq(p.y, 10)
+    assert_eq(p.z, 15)
+    assert_eq(p.x + p.y + p.z, 30)
+}
+
+@test
+func test_inline_struct_literal() {
+    let p: Point = Point { x: 42, y: 100 }
+    assert_eq(p.x, 42)
+    assert_eq(p.y, 100)
+}
+
+@test
+func test_struct_pass_by_value() {
+    let p1: Point = make_point(8, 9)
+    let s1: I64 = sum_point(p1)
+    assert_eq(s1, 17)
+    // p1 still valid after pass-by-value
+    assert_eq(p1.x, 8)
+    assert_eq(p1.y, 9)
+}
+
+@test
+func test_struct_in_loop() {
+    var total: I64 = 0
+    for i in 0 to 10 {
+        let p: Point = make_point(i, i * 2)
+        total = total + sum_point(p)
+    }
+    // sum of i + 2i = 3i for i in 0..9 = 3 * 45 = 135
+    assert_eq(total, 135)
+}
+
+@test
+func test_zero_fields() {
+    let p: Point = make_point(0, 0)
+    assert_eq(p.x, 0)
+    assert_eq(p.y, 0)
+    assert_eq(sum_point(p), 0)
+}
+
+@test
+func test_negative_fields() {
+    let p: Point = make_point(-5, -3)
+    assert_eq(p.x, -5)
+    assert_eq(p.y, -3)
+    assert_eq(sum_point(p), -8)
+}
