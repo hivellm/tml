@@ -1,0 +1,17 @@
+# Add this entry to lib/linguist/languages.yml in the github-linguist/linguist repo
+# Insert alphabetically under "T" (after "TOML", before "Tcl" or near "TypeScript")
+
+TML:
+  type: programming
+  color: "#5A3FBE"
+  extensions:
+    - ".tml"
+  tm_scope: source.tml
+  ace_mode: text
+  codemirror_mode: null
+  codemirror_mime_type: null
+  language_id: 0  # will be assigned by Linguist maintainers
+  aliases:
+    - tml
+  interpreters: []
+  filenames: []

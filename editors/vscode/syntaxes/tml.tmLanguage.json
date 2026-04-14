@@ -1,0 +1,378 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "TML",
+  "scopeName": "source.tml",
+  "fileTypes": ["tml"],
+  "patterns": [
+    { "include": "#block_comment" },
+    { "include": "#line_doc_comment" },
+    { "include": "#line_comment" },
+    { "include": "#decorator" },
+    { "include": "#preprocessor" },
+    { "include": "#string_template" },
+    { "include": "#string_raw" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#keywords_declaration" },
+    { "include": "#keywords_control" },
+    { "include": "#keywords_operator" },
+    { "include": "#keywords_other" },
+    { "include": "#types_primitive" },
+    { "include": "#types_builtin" },
+    { "include": "#constants" },
+    { "include": "#func_definition" },
+    { "include": "#type_definition" },
+    { "include": "#func_call" },
+    { "include": "#type_name" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "block_comment": {
+      "comment": "Block comment /* ... */",
+      "name": "comment.block.tml",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [{ "include": "#block_comment" }]
+    },
+    "line_doc_comment": {
+      "comment": "Doc comment /// or //!",
+      "name": "comment.line.documentation.tml",
+      "match": "//[!/].*$",
+      "captures": {
+        "0": { "name": "comment.line.documentation.tml" }
+      }
+    },
+    "line_comment": {
+      "comment": "Line comment //",
+      "name": "comment.line.double-slash.tml",
+      "match": "//.*$"
+    },
+    "decorator": {
+      "comment": "Decorator/attribute @name or @name(...)",
+      "name": "meta.decorator.tml",
+      "begin": "@",
+      "end": "(?=[^a-zA-Z0-9_()\"',\\s])|$",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.decorator.tml" }
+      },
+      "patterns": [
+        {
+          "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+          "name": "entity.name.decorator.tml"
+        },
+        {
+          "match": "0x[0-9a-fA-F]+",
+          "name": "constant.numeric.integer.hexadecimal.tml"
+        },
+        { "include": "#string" },
+        {
+          "begin": "\\(",
+          "end": "\\)",
+          "beginCaptures": { "0": { "name": "punctuation.brackets.round.tml" } },
+          "endCaptures": { "0": { "name": "punctuation.brackets.round.tml" } },
+          "patterns": [
+            { "include": "#string" },
+            { "include": "#keywords_other" },
+            {
+              "match": "[a-zA-Z_][a-zA-Z0-9_]*",
+              "name": "variable.parameter.tml"
+            }
+          ]
+        }
+      ]
+    },
+    "preprocessor": {
+      "comment": "C-style preprocessor directives",
+      "patterns": [
+        {
+          "name": "meta.preprocessor.tml",
+          "match": "^\\s*(#\\s*(?:if|ifdef|ifndef|elif|else|endif|define|undef|error|warning|include))\\b.*$",
+          "captures": {
+            "1": { "name": "keyword.control.preprocessor.tml" }
+          }
+        }
+      ]
+    },
+    "string_template": {
+      "comment": "Template literal string with {} interpolation",
+      "name": "string.quoted.other.template.tml",
+      "begin": "`",
+      "end": "`",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.tml" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.tml" } },
+      "patterns": [
+        {
+          "name": "meta.template.expression.tml",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.tml" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.tml" } },
+          "patterns": [{ "include": "$self" }]
+        },
+        {
+          "name": "constant.character.escape.tml",
+          "match": "\\\\(?:[nrt\\\\`\"0]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\})"
+        }
+      ]
+    },
+    "string_raw": {
+      "comment": "Raw string r\"...\", r#\"...\"# etc.",
+      "name": "string.quoted.other.raw.tml",
+      "begin": "r(#*)\"",
+      "end": "\"(\\1)",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.tml" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.tml" }
+      }
+    },
+    "string": {
+      "comment": "Double-quoted string",
+      "name": "string.quoted.double.tml",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.tml" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.tml" } },
+      "patterns": [
+        {
+          "name": "constant.character.escape.tml",
+          "match": "\\\\(?:[nrt\\\\\"'0]|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\})"
+        },
+        {
+          "comment": "String interpolation $var or ${expr}",
+          "name": "meta.interpolation.tml",
+          "match": "\\$(?:[a-zA-Z_][a-zA-Z0-9_]*|\\{[^}]*\\})",
+          "captures": {
+            "0": { "name": "variable.other.interpolated.tml" }
+          }
+        }
+      ]
+    },
+    "number": {
+      "comment": "Numeric literals",
+      "patterns": [
+        {
+          "comment": "Floating point",
+          "name": "constant.numeric.float.tml",
+          "match": "\\b(?:0|[1-9][0-9_]*)\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?(?:[fF](?:32|64))?\\b"
+        },
+        {
+          "comment": "Hexadecimal",
+          "name": "constant.numeric.integer.hexadecimal.tml",
+          "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*(?:[iuIU](?:8|16|32|64|128))?\\b"
+        },
+        {
+          "comment": "Binary",
+          "name": "constant.numeric.integer.binary.tml",
+          "match": "\\b0b[01][01_]*(?:[iuIU](?:8|16|32|64|128))?\\b"
+        },
+        {
+          "comment": "Octal",
+          "name": "constant.numeric.integer.octal.tml",
+          "match": "\\b0o[0-7][0-7_]*(?:[iuIU](?:8|16|32|64|128))?\\b"
+        },
+        {
+          "comment": "Decimal integer with optional type suffix",
+          "name": "constant.numeric.integer.decimal.tml",
+          "match": "\\b(?:0|[1-9][0-9_]*)(?:[iuIU](?:8|16|32|64|128))?\\b"
+        }
+      ]
+    },
+    "keywords_declaration": {
+      "comment": "Declaration keywords",
+      "name": "keyword.other.declaration.tml",
+      "match": "\\b(func|type|enum|union|behavior|impl|mod|pub|use|crate|super|decorator|namespace|class|interface)\\b",
+      "captures": {
+        "1": { "name": "keyword.other.declaration.tml" }
+      }
+    },
+    "keywords_control": {
+      "comment": "Control flow keywords",
+      "name": "keyword.control.tml",
+      "match": "\\b(if|then|else|when|loop|while|for|in|to|through|break|continue|return|do|throw|move|async|await|yield)\\b",
+      "captures": {
+        "1": { "name": "keyword.control.tml" }
+      }
+    },
+    "keywords_operator": {
+      "comment": "Keyword operators",
+      "name": "keyword.operator.word.tml",
+      "match": "\\b(and|or|not|xor|shl|shr|as|is|ref|mut)\\b",
+      "captures": {
+        "1": { "name": "keyword.operator.word.tml" }
+      }
+    },
+    "keywords_other": {
+      "comment": "Other keywords",
+      "name": "keyword.other.tml",
+      "match": "\\b(let|var|const|this|Self|with|where|dyn|lowlevel|quote|override|virtual|abstract|sealed|extends|implements|protected|private|static|new|prop|life|volatile|move)\\b",
+      "captures": {
+        "1": { "name": "keyword.other.tml" }
+      }
+    },
+    "types_primitive": {
+      "comment": "Primitive types",
+      "name": "storage.type.primitive.tml",
+      "match": "\\b(I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|Bool|Str|Char|Unit|Never|RawPtr)\\b",
+      "captures": {
+        "1": { "name": "storage.type.primitive.tml" }
+      }
+    },
+    "types_builtin": {
+      "comment": "Built-in generic types",
+      "name": "support.type.builtin.tml",
+      "match": "\\b(Maybe|Outcome|Result|Option|List|Vec|ArrayList|HashMap|HashSet|HashSetIter|HashMapIter|Buffer|Heap|Shared|Sync|Arc|Mutex|RwLock|BTreeMap|BTreeSet|BinaryHeap|Deque|Queue|Stack|LinkedList|Iterator|IntoIterator|FromIterator|Text|String|Regex|Uuid|Duration|Instant|DateTime|SystemTime|Layout|Allocator|Ordering|Stream|Future|Pin)\\b",
+      "captures": {
+        "1": { "name": "support.type.builtin.tml" }
+      }
+    },
+    "constants": {
+      "comment": "Language constants and well-known values",
+      "patterns": [
+        {
+          "name": "constant.language.boolean.tml",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.tml",
+          "match": "\\b(null|Nothing)\\b"
+        },
+        {
+          "name": "constant.language.maybe.tml",
+          "match": "\\b(Just|Ok|Err|Some|None)\\b"
+        },
+        {
+          "name": "constant.language.ordering.tml",
+          "match": "\\b(Less|Equal|Greater)\\b"
+        }
+      ]
+    },
+    "func_definition": {
+      "comment": "Function/method name in definition",
+      "name": "meta.function.definition.tml",
+      "match": "\\b(func)\\s+([a-z_][a-zA-Z0-9_]*)(?:\\[([^\\]]*)\\])?\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "keyword.other.declaration.tml" },
+        "2": { "name": "entity.name.function.tml" },
+        "3": { "name": "entity.name.type.parameter.tml" }
+      }
+    },
+    "type_definition": {
+      "comment": "Type/enum/behavior definition name",
+      "match": "\\b(type|enum|union|behavior|impl|class|interface|namespace)\\s+([A-Z][a-zA-Z0-9_]*)(?:\\[([^\\]]*)\\])?",
+      "captures": {
+        "1": { "name": "keyword.other.declaration.tml" },
+        "2": { "name": "entity.name.type.tml" },
+        "3": { "name": "entity.name.type.parameter.tml" }
+      }
+    },
+    "func_call": {
+      "comment": "Function call",
+      "match": "\\b([a-z_][a-zA-Z0-9_]*)(?:\\[([^\\]]*)\\])?\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.call.tml" },
+        "2": { "name": "entity.name.type.parameter.tml" }
+      }
+    },
+    "type_name": {
+      "comment": "Type names starting with uppercase",
+      "match": "\\b([A-Z][a-zA-Z0-9_]*)(?:\\[([^\\]]*)\\])?",
+      "captures": {
+        "1": { "name": "entity.name.type.tml" },
+        "2": { "name": "entity.name.type.parameter.tml" }
+      }
+    },
+    "operators": {
+      "comment": "Operators",
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.tml",
+          "match": "(?<![<>=!])=(?![>=])"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.tml",
+          "match": "(?:\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=)"
+        },
+        {
+          "name": "keyword.operator.comparison.tml",
+          "match": "(?:==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.arrow.tml",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.range.tml",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.optional-chaining.tml",
+          "match": "\\?\\."
+        },
+        {
+          "name": "keyword.operator.try.tml",
+          "match": "(?<![a-zA-Z0-9_])\\?(?!\\.)"
+        },
+        {
+          "name": "keyword.operator.propagate.tml",
+          "match": "!"
+        },
+        {
+          "name": "keyword.operator.pipe.tml",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.path.tml",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.arithmetic.tml",
+          "match": "(?:\\*\\*|\\+\\+|--|\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.bitwise.tml",
+          "match": "(?:<<|>>|&|\\|(?!>)|\\^|~)"
+        },
+        {
+          "name": "keyword.operator.logical.tml",
+          "match": "(?:&&|\\|\\|)"
+        }
+      ]
+    },
+    "punctuation": {
+      "comment": "Punctuation",
+      "patterns": [
+        {
+          "name": "punctuation.brackets.curly.tml",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.brackets.round.tml",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.brackets.square.tml",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.separator.comma.tml",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.semicolon.tml",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.colon.tml",
+          "match": "(?<!:):(?!:)"
+        },
+        {
+          "name": "punctuation.accessor.dot.tml",
+          "match": "(?<!\\.)\\.(?!\\.)"
+        }
+      ]
+    }
+  }
+}

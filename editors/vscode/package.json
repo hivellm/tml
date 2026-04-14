@@ -1,0 +1,33 @@
+{
+  "name": "tml-language",
+  "displayName": "TML Language Support",
+  "description": "Syntax highlighting and language support for TML (a systems programming language)",
+  "version": "0.1.0",
+  "publisher": "hivellm",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "keywords": ["tml", "systems programming", "hivellm"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hivellm/tml"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "tml",
+        "aliases": ["TML", "tml"],
+        "extensions": [".tml"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tml",
+        "scopeName": "source.tml",
+        "path": "./syntaxes/tml.tmLanguage.json"
+      }
+    ]
+  }
+}

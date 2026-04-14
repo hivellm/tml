@@ -1,0 +1,8 @@
+# Tell GitHub to treat .tml files as TML source code
+# This forces language detection and % stats before Linguist has TML natively
+*.tml linguist-language=TML
+*.tml linguist-detectable=true
+
+# Exclude generated/vendored files from language stats
+vendor/**  linguist-vendored=true
+docs/**    linguist-documentation=true
