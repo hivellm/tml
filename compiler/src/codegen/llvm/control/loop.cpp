@@ -418,6 +418,19 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // Push a lifetime scope for the loop body
     push_lifetime_scope();
 
+    // Emit llvm.assume(i ult n) for 0-based ranges: informs LLVM the index is
+    // always in [0, n), enabling LICM of loop-invariant header loads (stride,
+    // data_addr) and allowing the vectorizer to treat the loop as safe.
+    // Only applied when range starts at 0 and type is a machine integer.
+    if (range_start == "0" && range_type != "i1") {
+        std::string assume_i = fresh_reg();
+        emit_line("  " + assume_i + " = load " + range_type + ", ptr " + var_alloca);
+        std::string assume_cond = fresh_reg();
+        emit_line("  " + assume_cond + " = icmp ult " + range_type + " " + assume_i + ", " +
+                  range_end);
+        emit_line("  call void @llvm.assume(i1 " + assume_cond + ")");
+    }
+
     gen_expr(*for_expr.body);
 
     if (!block_terminated_) {

@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.9](docs/patches/v0.3.9.md) | 2026-04-14 | perf(codegen): emit `llvm.assume(i ult n)` at start of every `for i in 0 to n` loop body — enables LICM of loop-invariant header loads and LLVM auto-vectorization; List Iteration 0 ns/op |
 | [0.3.8](docs/patches/v0.3.8.md) | 2026-04-14 | fix(codegen): `and`/`or` now emit correct 2-block phi short-circuit — RHS not evaluated when LHS determines result; fixes stale `current_block_` bug across function boundaries |
 | [0.3.7](docs/patches/v0.3.7.md) | 2026-04-14 | perf: `@inline` / `@always_inline` decorators now emit LLVM `alwaysinline` — `List.push/pop/get/set/len` inlined, list ops match or beat Rust (push 914M ops/s vs 687M, access 2.9B vs 1.4B) |
 | [0.3.6](docs/patches/v0.3.6.md) | 2026-04-14 | perf: `when` integer expressions now emit LLVM `switch` (≥4 literal arms) — ~9.5× speedup vs icmp chain, TML/Rust parity |

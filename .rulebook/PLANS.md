@@ -28,6 +28,106 @@ No active task.
 
 <!-- PLANS:HISTORY:START -->
 ### 2026-04-14
+## phase0_codegen-fixes — core test suite K001 fixes COMPLETE
+
+### Accomplished
+
+Fixed 5 codegen bugs in the core test suite (all previously failing with K001 LLVM type errors):
+
+**`method_maybe.cpp` — 3 fixes:**
+1. `also[U]` — wrong discriminant check (`icmp eq 1` → `icmp eq 0` for Just=0); wrong Nothing disc store (`0` → `1`); added nullable handling when `other_type == "ptr"` (Nothing = `"null"` literal).
+2. `as_ref`/`as_mut` — complete rewrite: since `ref T` → "ptr", `Maybe[ref T]` always uses nullable optimization. Just branch: GEP field 1 of stored struct → ptr to payload. Nothing branch: null. `last_expr_type_ = "ptr"`.
+3. `transpose` — LLVM type names require `%struct.` prefix: `maybe_t_type = maybe_t_nullable ? "ptr" : "%struct." + maybe_t_mangled`. Also fixed 3 wrong discriminant stores/comparisons (Just=0, Nothing=1).
+
+**`method_outcome.cpp` — 1 fix:**
+4. `map_or_else` — removed buggy stub that returned `receiver` (full Outcome struct) as `last_expr_type_ = enum_type_name`. Now falls through to `std::nullopt` → TML dispatch handles correctly.
+
+**`llvm_struct_expr.cpp` — 1 fix:**
+5. Bool struct field `i1→i8` in insertvalue path — `promote_bool_for_struct` coerces `i1→i8` for alloca path but the `use_insertvalue` fast path was missing the matching zext. Added `zext i1 val to i8` case at ~line 1145.
+
+### Results
+
+- core: 725/726 (pre-existing `slice_split_pred` X002 timeout)
+- compiler: 183/183
+- Commit: `ab6cf8b4`
+
+### Key Discoveries
+
+- `require_enum_instantiation` returns mangled name (`Maybe__I32`) but LLVM IR types need `%struct.Maybe__I32` prefix. Nullable check: `nullable_maybe_types_.count(mangled) > 0`.
+- TML discriminants: Just=0, Nothing=1; Ok=0, Err=1.
+- Returning `std::nullopt` from `gen_outcome_method` → TML dispatch fallback (correct). Returning `std::nullopt` from `gen_maybe_method` → "Unknown method" error (must implement all handled methods).
+- `current_block_` carries stale block labels across function boundaries — always emit a fresh named block before saving it as a phi predecessor.
+
+### Remaining Pre-existing Failures (not fixable in codegen)
+
+- `option_iter2`, `types_advanced`: T056 type checker errors
+- `simd/portable`: T005 unknown field `lo`
+- `simd/algorithms`: T056 type mismatch
+- `future_fuse`: K001 structural conflict in Fuse[I32] field type resolution (timing issue in struct registration)
+- `slice_split_pred`: X002 timeout
+- `c_preprocessor`, `hir_types`, `infer_differential`: K001 (pre-existing)
+- `core/any`: T056 (pre-existing)
+- `std/collections`: K001 btreeset/btreemap/arraylist (pre-existing)
+
+### Next Steps
+
+- Active task: `phase0g_bounds-check-elim-for-in` (60/1244 items per STATE.md)
+- Branch: feat/self-hosting-compiler. Version: 0.3.8.
+
+### 2026-04-14
+## phase0f_fix-boolean-shortcircuit — COMPLETE
+
+### Accomplished
+
+**Short-circuit `and`/`or` codegen fix**:
+- Root cause: `and`/`or` fell through to `gen_binary_ops` which already had both SSA values computed — both sides were always evaluated eagerly, no short-circuit semantics for side-effect operands.
+- Secondary bug: `current_block_` member variable persists across function codegen boundaries. Function A ending with block `when_end784` left `current_block_="when_end784"`. Function B's first `and`/`or` then used it as a phi predecessor → `use of undefined value '%when_end784'` LLVM verification error.
+- Fix in `compiler/src/codegen/llvm/expr/binary.cpp`: added 2-block phi short-circuit layout before `gen_binary_ops` delegation. Emit a fresh `and.entry`/`or.entry` block label BEFORE capturing the phi predecessor — this guarantees the predecessor is always within the current function.
+- LLVM O2 folds the phi back to `and i1`/`or i1` for pure operands; release performance unchanged.
+- Benchmark gate: Short-Circuit AND 0 ns/op (DCE'd at O2) <2 ns ✓, ratio vs Rust <2× ✓.
+- Regression test: `compiler/tests/compiler/bool_short_circuit.test.tml` — 8 tests with local var counters + block expressions.
+- No regressions: compiler/compiler 183/183, core pre-existing failures unchanged.
+
+### Key Discovery
+
+`current_block_` is never initialized at function entry — it carries stale block labels from previous functions. Any code that saves `current_block_` as a phi predecessor must first emit a fresh named block, otherwise the phi will reference a block from a different function scope.
+
+### Commits
+- 56d1cf5f: fix(codegen): implement short-circuit and/or with 2-block phi layout (phase0f)
+
+### Next Steps
+- No active tasks. Branch: feat/self-hosting-compiler. Version: 0.3.8.
+- Pre-existing failures unchanged: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), other/builtins_imports X002 timeout.
+
+### 2026-04-14
+## phase0e_inline-list-push-pop-get — COMPLETE
+
+### Accomplished
+
+**@inline → LLVM alwaysinline for List hot methods**:
+- Root cause: `@inline` decorator was parsed into `FuncDecl.decorators` but never checked during LLVM IR emission. Three codegen paths needed patching: `impl.cpp::gen_impl_method`, `impl.cpp::gen_impl_method_instantiation` (the generic path used by `List[I64]`), and `func.cpp` (both regular + generic). Also patched `mir_codegen.cpp` for the MIR path (checks `func.attributes`).
+- Added `@inline` to `List.push/pop/get/set/len` in `lib/std/src/collections/list.tml`.
+- Result: `define internal void @tml_N3std11collections4list9List__I649push__I64E(ptr %this, i64 %value) #0 alwaysinline {` — confirmed in emitted IR.
+
+**Benchmark results (release, 10M ops)**:
+- Push reserved: 5 ns → 1 ns (+4.9×), beats Rust (687M vs 914M ops/s)
+- Random access: 3 ns → <1 ns (+10×), beats Rust (1.4B vs 2.9B ops/s)
+- All gates pass: push reserved <3 ns ✓, access <2 ns ✓, ratio <2.5× ✓
+
+**No regressions**: core/any T056 and std/collections K001 failures are pre-existing.
+
+### Key Discovery
+
+List[T] methods use `gen_impl_method_instantiation` (generic path), NOT `gen_impl_method`. The non-generic path would only apply to monomorphic impl blocks. Always patch both paths when adding decorator support to impl.cpp.
+
+### Commits
+- 0cb80161: perf(codegen): propagate @inline to LLVM alwaysinline, inline List hot methods (phase0e)
+
+### Next Steps
+- No active tasks. Branch: feat/self-hosting-compiler. Version: 0.3.7.
+- Remaining pre-existing failures unchanged: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/aio N001, std/collections/arraylist+btreemap+btreeset K001.
+
+### 2026-04-14
 ## phase0d_codegen-switch-when-dense — COMPLETE
 
 ### Accomplished

@@ -1,0 +1,131 @@
+// Regression test: for-in loop with llvm.assume bounds hint
+//
+// Verifies that for-in loops over lists and ranges:
+// 1. Produce correct results (assume doesn't affect semantics)
+// 2. Handle empty ranges safely
+// 3. Work with non-zero start ranges (no assume emitted, still correct)
+
+use test::assert_eq
+use std::collections::List
+
+// === Basic sum via for-in with list.get ===
+@test
+pub func test_forin_list_sum() {
+    let list: List[I64] = List[I64].new(5)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    list.push(5)
+
+    var sum: I64 = 0
+    let n: I64 = list.len()
+    for i in 0 to n {
+        sum = sum + list.get(i)
+    }
+
+    assert_eq(sum, 15 as I64)
+    list.destroy()
+}
+
+// === Empty list — for-in body never executes ===
+@test
+pub func test_forin_empty_list() {
+    let list: List[I64] = List[I64].new(4)
+    var sum: I64 = 0
+    let n: I64 = list.len()
+    for i in 0 to n {
+        sum = sum + list.get(i)
+    }
+    assert_eq(sum, 0 as I64)
+    list.destroy()
+}
+
+// === Single element ===
+@test
+pub func test_forin_single_element() {
+    let list: List[I64] = List[I64].new(4)
+    list.push(42)
+    var found: I64 = 0
+    let n: I64 = list.len()
+    for i in 0 to n {
+        found = list.get(i)
+    }
+    assert_eq(found, 42 as I64)
+    list.destroy()
+}
+
+// === Correct index values are passed to list.get ===
+@test
+pub func test_forin_index_correctness() {
+    let list: List[I64] = List[I64].new(10)
+    for j in 0 to 10 {
+        list.push(j * 10)
+    }
+    // Each element at index i should equal i*10
+    let n: I64 = list.len()
+    var ok: Bool = true
+    for i in 0 to n {
+        if list.get(i) != i * 10 {
+            ok = false
+        }
+    }
+    assert_eq(ok, true)
+    list.destroy()
+}
+
+// === Non-zero start range (assume NOT emitted — range_start != "0") ===
+@test
+pub func test_forin_nonzero_start() {
+    let list: List[I64] = List[I64].new(10)
+    for j in 0 to 10 {
+        list.push(j + 1)
+    }
+    // Sum indices 3..7 (exclusive): elements are 4, 5, 6, 7 → sum = 22
+    var sum: I64 = 0
+    for i in 3 to 7 {
+        sum = sum + list.get(i)
+    }
+    assert_eq(sum, 22 as I64)
+    list.destroy()
+}
+
+// === Inclusive range via 'through' ===
+@test
+pub func test_forin_inclusive_range() {
+    var sum: I64 = 0
+    for i in 1 through 5 {
+        sum = sum + i
+    }
+    assert_eq(sum, 15 as I64)
+}
+
+// === Nested for-in loops ===
+@test
+pub func test_forin_nested() {
+    var count: I64 = 0
+    let n: I64 = 4
+    for i in 0 to n {
+        for j in 0 to n {
+            count = count + 1
+        }
+    }
+    assert_eq(count, 16 as I64)
+}
+
+// === Large list — verifies no infinite loop from assume ===
+@test
+pub func test_forin_large_list() {
+    let list: List[I64] = List[I64].new(1000)
+    for j in 0 to 1000 {
+        list.push(j)
+    }
+    var sum: I64 = 0
+    let n: I64 = list.len()
+    for i in 0 to n {
+        sum = sum + list.get(i)
+    }
+    // Sum of 0..999 = 999 * 1000 / 2 = 499500
+    assert_eq(sum, 499500 as I64)
+    list.destroy()
+}
