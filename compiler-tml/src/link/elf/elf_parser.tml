@@ -1,0 +1,333 @@
+//! ELF64 object file parser — reads .o files for linking.
+//!
+//! Parses ELF header, section header table, symbol table (.symtab),
+//! string table (.strtab), and relocation sections (.rela.*).
+//! Reference: System V ABI §4 (Object Files), AMD64 ABI supplement.
+//!
+//! Phase 22b — items 1.1–1.4.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+// ============================================================================
+// ELF constants
+// ============================================================================
+
+pub const ELFMAG0: I64 = 0x7F
+pub const ELFMAG1: I64 = 0x45  // 'E'
+pub const ELFMAG2: I64 = 0x4C  // 'L'
+pub const ELFMAG3: I64 = 0x46  // 'F'
+
+pub const ELFCLASS64: I64 = 2
+pub const ELFDATA2LSB: I64 = 1
+pub const ET_REL: I64 = 1
+pub const ET_EXEC: I64 = 2
+pub const ET_DYN: I64 = 3
+pub const EM_X86_64: I64 = 62
+
+/// Section types
+pub const SHT_NULL: I64 = 0
+pub const SHT_PROGBITS: I64 = 1
+pub const SHT_SYMTAB: I64 = 2
+pub const SHT_STRTAB: I64 = 3
+pub const SHT_RELA: I64 = 4
+pub const SHT_DYNAMIC: I64 = 6
+pub const SHT_NOTE: I64 = 7
+pub const SHT_NOBITS: I64 = 8
+pub const SHT_DYNSYM: I64 = 11
+pub const SHT_GNU_VERSYM: I64 = 0x6FFFFFFF
+pub const SHT_GNU_VERNEED: I64 = 0x6FFFFFFE
+
+/// Section flags
+pub const SHF_WRITE: I64 = 1
+pub const SHF_ALLOC: I64 = 2
+pub const SHF_EXECINSTR: I64 = 4
+
+/// Symbol binding
+pub const STB_LOCAL: I64 = 0
+pub const STB_GLOBAL: I64 = 1
+pub const STB_WEAK: I64 = 2
+
+/// Symbol type
+pub const STT_NOTYPE: I64 = 0
+pub const STT_OBJECT: I64 = 1
+pub const STT_FUNC: I64 = 2
+pub const STT_SECTION: I64 = 3
+pub const STT_FILE: I64 = 4
+
+/// Special section indices
+pub const SHN_UNDEF: I64 = 0
+pub const SHN_ABS: I64 = 0xFFF1
+pub const SHN_COMMON: I64 = 0xFFF2
+
+/// x86_64 relocation types
+pub const R_X86_64_NONE: I64 = 0
+pub const R_X86_64_64: I64 = 1
+pub const R_X86_64_PC32: I64 = 2
+pub const R_X86_64_GOT32: I64 = 3
+pub const R_X86_64_PLT32: I64 = 4
+pub const R_X86_64_GOTPCREL: I64 = 9
+pub const R_X86_64_32: I64 = 10
+pub const R_X86_64_32S: I64 = 11
+pub const R_X86_64_GOTPCRELX: I64 = 41
+pub const R_X86_64_REX_GOTPCRELX: I64 = 42
+
+// ============================================================================
+// Parsed types (item 1.1)
+// ============================================================================
+
+pub type ElfObject {
+    elf_class: I64,
+    data_encoding: I64,
+    elf_type: I64,
+    machine: I64,
+    entry: I64,
+    shoff: I64,
+    shnum: I64,
+    shstrndx: I64,
+    sections: List[ElfParsedSection],
+    symbols: List[ElfParsedSymbol],
+    relocations: List[ElfParsedRela]
+}
+
+/// Parsed section header (item 1.2).
+pub type ElfParsedSection {
+    name: Str,
+    sh_type: I64,
+    flags: I64,
+    addr: I64,
+    offset: I64,
+    size: I64,
+    link: I64,
+    info: I64,
+    addralign: I64,
+    entsize: I64,
+    data: List[I64]
+}
+
+/// Parsed symbol (item 1.3).
+pub type ElfParsedSymbol {
+    name: Str,
+    value: I64,
+    size: I64,
+    binding: I64,
+    sym_type: I64,
+    shndx: I64
+}
+
+/// Parsed relocation with addend (item 1.4).
+pub type ElfParsedRela {
+    section_index: I64,   // which section this rela belongs to
+    offset: I64,
+    sym_index: I64,
+    rela_type: I64,
+    addend: I64
+}
+
+// ============================================================================
+// Parser (items 1.1–1.4)
+// ============================================================================
+
+/// Parse an ELF64 object file from raw bytes.
+pub func parse_elf(bytes: List[I64]) -> ElfObject {
+    let size: I64 = bytes.len() as I64
+
+    // (1.1) ELF header — 64 bytes
+    let elf_class: I64 = bytes.get(4) & 0xFF
+    let data_enc: I64 = bytes.get(5) & 0xFF
+    let elf_type: I64 = read_u16(bytes, 16 as I64)
+    let machine: I64 = read_u16(bytes, 18 as I64)
+    let entry: I64 = read_u64(bytes, 24 as I64)
+    let shoff: I64 = read_u64(bytes, 40 as I64)
+    let shnum: I64 = read_u16(bytes, 60 as I64)
+    let shstrndx: I64 = read_u16(bytes, 62 as I64)
+
+    // (1.2) Section headers — 64 bytes each at shoff
+    let sections = List[ElfParsedSection]::new(shnum)
+    for i in 0 to shnum {
+        let off: I64 = shoff + i * 64
+        if off + 64 > size { continue }
+        let sh_name_off: I64 = read_u32(bytes, off)
+        let sh_type: I64 = read_u32(bytes, off + 4)
+        let sh_flags: I64 = read_u64(bytes, off + 8)
+        let sh_addr: I64 = read_u64(bytes, off + 16)
+        let sh_offset: I64 = read_u64(bytes, off + 24)
+        let sh_size: I64 = read_u64(bytes, off + 32)
+        let sh_link: I64 = read_u32(bytes, off + 40)
+        let sh_info: I64 = read_u32(bytes, off + 44)
+        let sh_align: I64 = read_u64(bytes, off + 48)
+        let sh_entsize: I64 = read_u64(bytes, off + 56)
+
+        // Read section data
+        let data = List[I64]::new(sh_size)
+        if sh_type != SHT_NOBITS and sh_offset > 0 and sh_size > 0 and sh_offset + sh_size <= size {
+            for j in 0 to sh_size { data.push(bytes.get(sh_offset + j)) }
+        }
+
+        sections.push(ElfParsedSection {
+            name: "",  // resolved below
+            sh_type: sh_type,
+            flags: sh_flags,
+            addr: sh_addr,
+            offset: sh_offset,
+            size: sh_size,
+            link: sh_link,
+            info: sh_info,
+            addralign: sh_align,
+            entsize: sh_entsize,
+            data: data
+        })
+    }
+
+    // Resolve section names from .shstrtab
+    if shstrndx < shnum {
+        let shstrtab: ElfParsedSection = sections.get(shstrndx)
+        for i in 0 to shnum {
+            let sec: ElfParsedSection = sections.get(i)
+            let name_off: I64 = read_u32(bytes, shoff + i * 64)
+            let resolved: Str = read_strtab(shstrtab.data, name_off)
+            // Update section name — need to reconstruct since fields are immutable
+            sections.set(i, ElfParsedSection {
+                name: resolved,
+                sh_type: sec.sh_type,
+                flags: sec.flags,
+                addr: sec.addr,
+                offset: sec.offset,
+                size: sec.size,
+                link: sec.link,
+                info: sec.info,
+                addralign: sec.addralign,
+                entsize: sec.entsize,
+                data: sec.data
+            })
+        }
+    }
+
+    // (1.3) Find and parse symbol table
+    let symbols = List[ElfParsedSymbol]::new(32)
+    for i in 0 to shnum {
+        let sec: ElfParsedSection = sections.get(i)
+        if sec.sh_type == SHT_SYMTAB or sec.sh_type == SHT_DYNSYM {
+            let strtab_sec: ElfParsedSection = sections.get(sec.link)
+            let num_syms: I64 = sec.size / 24
+            for si in 0 to num_syms {
+                let soff: I64 = si * 24
+                if soff + 24 > (sec.data.len() as I64) { continue }
+                let st_name_off: I64 = read_u32_from(sec.data, soff)
+                let st_info: I64 = sec.data.get(soff + 4) & 0xFF
+                let st_shndx: I64 = read_u16_from(sec.data, soff + 6)
+                let st_value: I64 = read_u64_from(sec.data, soff + 8)
+                let st_size: I64 = read_u64_from(sec.data, soff + 16)
+
+                symbols.push(ElfParsedSymbol {
+                    name: read_strtab(strtab_sec.data, st_name_off),
+                    value: st_value,
+                    size: st_size,
+                    binding: (st_info >> 4) & 0xF,
+                    sym_type: st_info & 0xF,
+                    shndx: st_shndx
+                })
+            }
+        }
+    }
+
+    // (1.4) Parse relocation sections
+    let relas = List[ElfParsedRela]::new(32)
+    for i in 0 to shnum {
+        let sec: ElfParsedSection = sections.get(i)
+        if sec.sh_type == SHT_RELA {
+            let target_sec: I64 = sec.info  // section index this rela applies to
+            let num_relas: I64 = sec.size / 24
+            for ri in 0 to num_relas {
+                let roff: I64 = ri * 24
+                if roff + 24 > (sec.data.len() as I64) { continue }
+                let r_offset: I64 = read_u64_from(sec.data, roff)
+                let r_info: I64 = read_u64_from(sec.data, roff + 8)
+                let r_addend: I64 = read_i64_from(sec.data, roff + 16)
+
+                relas.push(ElfParsedRela {
+                    section_index: target_sec,
+                    offset: r_offset,
+                    sym_index: r_info >> 32,
+                    rela_type: r_info & 0xFFFFFFFF,
+                    addend: r_addend
+                })
+            }
+        }
+    }
+
+    return ElfObject {
+        elf_class: elf_class,
+        data_encoding: data_enc,
+        elf_type: elf_type,
+        machine: machine,
+        entry: entry,
+        shoff: shoff,
+        shnum: shnum,
+        shstrndx: shstrndx,
+        sections: sections,
+        symbols: symbols,
+        relocations: relas
+    }
+}
+
+// ============================================================================
+// String table reader
+// ============================================================================
+
+/// Read a null-terminated string from a section data buffer at offset.
+func read_strtab(data: List[I64], offset: I64) -> Str {
+    var s: Str = ""
+    let n: I64 = data.len() as I64
+    var i: I64 = offset
+    loop (i < n) {
+        let b: I64 = data.get(i) & 0xFF
+        if b == 0 { return s }
+        s = s + char_byte(b)
+        i = i + 1
+    }
+    return s
+}
+
+func char_byte(b: I64) -> Str {
+    if b >= 32 and b < 127 {
+        let p: *() = lowlevel { mem_alloc(2 as I64) }
+        let addr: I64 = p as I64
+        lowlevel { ptr_write[I8](addr as *I8, b as I8) }
+        lowlevel { ptr_write[I8]((addr + 1) as *I8, 0 as I8) }
+        return addr as Str
+    }
+    return "?"
+}
+
+// ============================================================================
+// Byte reading helpers
+// ============================================================================
+
+func read_u16(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8)
+}
+
+func read_u32(bytes: List[I64], off: I64) -> I64 {
+    return (bytes.get(off) & 0xFF) | ((bytes.get(off + 1) & 0xFF) << 8) | ((bytes.get(off + 2) & 0xFF) << 16) | ((bytes.get(off + 3) & 0xFF) << 24)
+}
+
+func read_u64(bytes: List[I64], off: I64) -> I64 {
+    return read_u32(bytes, off) | (read_u32(bytes, off + 4) << 32)
+}
+
+func read_u16_from(data: List[I64], off: I64) -> I64 {
+    return (data.get(off) & 0xFF) | ((data.get(off + 1) & 0xFF) << 8)
+}
+
+func read_u32_from(data: List[I64], off: I64) -> I64 {
+    return (data.get(off) & 0xFF) | ((data.get(off + 1) & 0xFF) << 8) | ((data.get(off + 2) & 0xFF) << 16) | ((data.get(off + 3) & 0xFF) << 24)
+}
+
+func read_u64_from(data: List[I64], off: I64) -> I64 {
+    return read_u32_from(data, off) | (read_u32_from(data, off + 4) << 32)
+}
+
+func read_i64_from(data: List[I64], off: I64) -> I64 {
+    return read_u64_from(data, off)  // same bits, TML I64 is signed
+}

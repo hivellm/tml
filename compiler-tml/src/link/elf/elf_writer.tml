@@ -1,0 +1,253 @@
+//! ELF64 executable writer — produces linked ELF binaries.
+//!
+//! Layouts: ELF header, program headers, sections (.text, .rodata, .data,
+//! .got, .plt, .dynamic, .interp), section headers.
+//! Non-PIE base address: 0x400000.
+//!
+//! Phase 22b — items 5.1–5.2.
+
+use std::collections::list::List
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+pub const ELF_BASE_ADDR: I64 = 0x400000
+pub const ELF_PAGE_SIZE: I64 = 0x200000  // 2MB huge-page alignment
+
+/// Program header types
+pub const PT_NULL: I64 = 0
+pub const PT_LOAD: I64 = 1
+pub const PT_DYNAMIC: I64 = 2
+pub const PT_INTERP: I64 = 3
+pub const PT_PHDR: I64 = 6
+pub const PT_GNU_STACK: I64 = 0x6474E551
+
+/// Segment flags
+pub const PF_X: I64 = 1
+pub const PF_W: I64 = 2
+pub const PF_R: I64 = 4
+
+/// Dynamic tags
+pub const DT_NULL: I64 = 0
+pub const DT_NEEDED: I64 = 1
+pub const DT_PLTGOT: I64 = 3
+pub const DT_STRTAB: I64 = 5
+pub const DT_SYMTAB: I64 = 6
+pub const DT_STRSZ: I64 = 10
+pub const DT_PLTREL: I64 = 20
+pub const DT_JMPREL: I64 = 23
+pub const DT_RELA: I64 = 7
+pub const DT_RELASZ: I64 = 8
+pub const DT_RELAENT: I64 = 9
+pub const DT_PLTRELSZ: I64 = 2
+
+/// ELF header constants
+pub const ELF_EHDR_SIZE: I64 = 64
+pub const ELF_PHDR_SIZE: I64 = 56
+pub const ELF_SHDR_SIZE: I64 = 64
+
+// ============================================================================
+// Section descriptor for output
+// ============================================================================
+
+pub type ElfOutputSection {
+    name: Str,
+    sh_type: I64,
+    flags: I64,
+    data: List[I64],
+    addr: I64,
+    file_offset: I64,
+    align_val: I64
+}
+
+pub type ElfExeOptions {
+    entry_addr: I64,
+    interp_path: Str,
+    needed_libs: List[Str]
+}
+
+pub func elf_exe_options_default(entry: I64) -> ElfExeOptions {
+    let libs = List[Str]::new(2)
+    return ElfExeOptions {
+        entry_addr: entry,
+        interp_path: "/lib64/ld-linux-x86-64.so.2",
+        needed_libs: libs
+    }
+}
+
+// ============================================================================
+// ELF writer (items 5.1–5.2)
+// ============================================================================
+
+/// Write a complete ELF64 executable.
+pub func write_elf_exe(sections: List[ElfOutputSection], opts: ElfExeOptions) -> List[I64] {
+    let buf = List[I64]::new(32768)
+    let num_sects: I64 = sections.len() as I64
+    let num_phdrs: I64 = 4  // PHDR, INTERP, LOAD(RX), LOAD(RW) — simplified
+
+    // --- ELF header (64 bytes) ---
+    // e_ident
+    buf.push(0x7F)
+    buf.push(0x45)  // 'E'
+    buf.push(0x4C)  // 'L'
+    buf.push(0x46)  // 'F'
+    buf.push(2)     // ELFCLASS64
+    buf.push(1)     // ELFDATA2LSB
+    buf.push(1)     // EV_CURRENT
+    buf.push(0)     // ELFOSABI_NONE
+    for _ in 0 to 8 { buf.push(0) }
+
+    write_u16(buf, 2 as I64)           // e_type = ET_EXEC
+    write_u16(buf, 62 as I64)          // e_machine = EM_X86_64
+    write_u32(buf, 1 as I64)           // e_version
+    write_u64(buf, opts.entry_addr)    // e_entry
+    write_u64(buf, ELF_EHDR_SIZE)      // e_phoff (program headers right after ehdr)
+    let shoff_patch: I64 = buf.len() as I64
+    write_u64(buf, 0 as I64)           // e_shoff (patched later)
+    write_u32(buf, 0 as I64)           // e_flags
+    write_u16(buf, ELF_EHDR_SIZE)      // e_ehsize
+    write_u16(buf, ELF_PHDR_SIZE)      // e_phentsize
+    write_u16(buf, num_phdrs)          // e_phnum
+    write_u16(buf, ELF_SHDR_SIZE)      // e_shentsize
+    write_u16(buf, num_sects + 1)      // e_shnum (+1 for null)
+    write_u16(buf, 0 as I64)           // e_shstrndx (simplified)
+
+    // --- Program headers ---
+    // PT_PHDR
+    write_phdr(buf, PT_PHDR, PF_R, ELF_EHDR_SIZE, ELF_BASE_ADDR + ELF_EHDR_SIZE, num_phdrs * ELF_PHDR_SIZE, 8 as I64)
+
+    // PT_INTERP
+    let interp_len: I64 = opts.interp_path.len() as I64 + 1
+    write_phdr(buf, PT_INTERP, PF_R, 0 as I64, 0 as I64, interp_len, 1 as I64)  // offset patched by layout
+
+    // PT_LOAD (RX) — code
+    write_phdr(buf, PT_LOAD, PF_R | PF_X, 0 as I64, ELF_BASE_ADDR, 0 as I64, ELF_PAGE_SIZE)
+
+    // PT_LOAD (RW) — data
+    write_phdr(buf, PT_LOAD, PF_R | PF_W, 0 as I64, 0 as I64, 0 as I64, ELF_PAGE_SIZE)
+
+    // Pad to page boundary
+    pad_to_align(buf, 0x1000 as I64)
+
+    // --- Section data ---
+    for i in 0 to num_sects {
+        let sec: ElfOutputSection = sections.get(i)
+        let dc: I64 = sec.data.len() as I64
+        for j in 0 to dc { buf.push(sec.data.get(j)) }
+        pad_to_align(buf, 16 as I64)
+    }
+
+    // Patch e_shoff
+    let shoff: I64 = buf.len() as I64
+    patch_u64(buf, shoff_patch, shoff)
+
+    // --- Section headers ---
+    // Null section
+    for _ in 0 to ELF_SHDR_SIZE { buf.push(0) }
+
+    // Section headers for each section
+    for i in 0 to num_sects {
+        let sec: ElfOutputSection = sections.get(i)
+        write_u32(buf, 0 as I64)       // sh_name
+        write_u32(buf, sec.sh_type)     // sh_type
+        write_u64(buf, sec.flags)       // sh_flags
+        write_u64(buf, sec.addr)        // sh_addr
+        write_u64(buf, sec.file_offset) // sh_offset
+        write_u64(buf, sec.data.len() as I64) // sh_size
+        write_u32(buf, 0 as I64)       // sh_link
+        write_u32(buf, 0 as I64)       // sh_info
+        write_u64(buf, sec.align_val)   // sh_addralign
+        write_u64(buf, 0 as I64)       // sh_entsize
+    }
+
+    return buf
+}
+
+// ============================================================================
+// .interp section (item 4.4)
+// ============================================================================
+
+/// Build .interp section data — null-terminated interpreter path.
+pub func build_interp(path: Str) -> List[I64] {
+    let data = List[I64]::new(path.len() as I64 + 1)
+    let n: I64 = path.len() as I64
+    let ptr: I64 = path as I64
+    for i in 0 to n {
+        let b: I64 = lowlevel { ptr_read[I8]((ptr + i) as *I8) } as I64
+        data.push((b + 256) % 256)
+    }
+    data.push(0)
+    return data
+}
+
+/// Build .dynamic section data (item 4.3).
+pub func build_dynamic(needed: List[Str], strtab_addr: I64, symtab_addr: I64, got_addr: I64) -> List[I64] {
+    let data = List[I64]::new(128)
+    let nc: I64 = needed.len() as I64
+    for i in 0 to nc {
+        write_u64(data, DT_NEEDED)
+        write_u64(data, i)  // index into .dynstr (simplified)
+    }
+    write_u64(data, DT_STRTAB)
+    write_u64(data, strtab_addr)
+    write_u64(data, DT_SYMTAB)
+    write_u64(data, symtab_addr)
+    write_u64(data, DT_PLTGOT)
+    write_u64(data, got_addr)
+    write_u64(data, DT_NULL)
+    write_u64(data, 0 as I64)
+    return data
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+func write_phdr(buf: List[I64], p_type: I64, flags: I64, offset: I64, vaddr: I64, filesz: I64, align_val: I64) {
+    write_u32(buf, p_type)
+    write_u32(buf, flags)
+    write_u64(buf, offset)    // p_offset
+    write_u64(buf, vaddr)     // p_vaddr
+    write_u64(buf, vaddr)     // p_paddr
+    write_u64(buf, filesz)    // p_filesz
+    write_u64(buf, filesz)    // p_memsz
+    write_u64(buf, align_val) // p_align
+}
+
+func write_u16(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+}
+
+func write_u32(buf: List[I64], v: I64) {
+    buf.push(v & 0xFF)
+    buf.push((v >> 8) & 0xFF)
+    buf.push((v >> 16) & 0xFF)
+    buf.push((v >> 24) & 0xFF)
+}
+
+func write_u64(buf: List[I64], v: I64) {
+    write_u32(buf, v)
+    write_u32(buf, v >> 32)
+}
+
+func patch_u64(buf: List[I64], offset: I64, val: I64) {
+    buf.set(offset, val & 0xFF)
+    buf.set(offset + 1, (val >> 8) & 0xFF)
+    buf.set(offset + 2, (val >> 16) & 0xFF)
+    buf.set(offset + 3, (val >> 24) & 0xFF)
+    buf.set(offset + 4, (val >> 32) & 0xFF)
+    buf.set(offset + 5, (val >> 40) & 0xFF)
+    buf.set(offset + 6, (val >> 48) & 0xFF)
+    buf.set(offset + 7, (val >> 56) & 0xFF)
+}
+
+func pad_to_align(buf: List[I64], alignment: I64) {
+    let current: I64 = buf.len() as I64
+    let rem: I64 = current % alignment
+    if rem > 0 {
+        let padding: I64 = alignment - rem
+        for _ in 0 to padding { buf.push(0) }
+    }
+}

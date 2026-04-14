@@ -1,0 +1,6 @@
+//! ELF linker module root — re-exports all ELF linker components.
+//! Phase 22b.
+
+pub use compiler::link::elf::elf_parser::*
+pub use compiler::link::elf::got_plt::*
+pub use compiler::link::elf::elf_writer::*

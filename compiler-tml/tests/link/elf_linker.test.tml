@@ -1,0 +1,140 @@
+//! Tests for ELF linker — parser, GOT/PLT, ELF writer.
+
+use test::{assert, assert_eq}
+use compiler::link::elf::elf_parser::*
+use compiler::link::elf::got_plt::*
+use compiler::link::elf::elf_writer::*
+use std::collections::list::List
+
+// --- ELF parser ---
+
+@test func test_parse_elf_header() {
+    // Build minimal ELF64 header (64 bytes) + no sections
+    let bytes = List[I64]::new(64)
+    // e_ident magic
+    bytes.push(0x7F)
+    bytes.push(0x45)
+    bytes.push(0x4C)
+    bytes.push(0x46)
+    bytes.push(2)     // ELFCLASS64
+    bytes.push(1)     // ELFDATA2LSB
+    bytes.push(1)     // EV_CURRENT
+    for _ in 0 to 9 { bytes.push(0) }  // pad to 16
+    // e_type = ET_REL (1)
+    bytes.push(1)
+    bytes.push(0)
+    // e_machine = EM_X86_64 (62 = 0x3E)
+    bytes.push(0x3E)
+    bytes.push(0)
+    // e_version
+    bytes.push(1)
+    bytes.push(0)
+    bytes.push(0)
+    bytes.push(0)
+    // e_entry (8 bytes)
+    for _ in 0 to 8 { bytes.push(0) }
+    // e_phoff (8 bytes)
+    for _ in 0 to 8 { bytes.push(0) }
+    // e_shoff (8 bytes) = 0 (no sections)
+    for _ in 0 to 8 { bytes.push(0) }
+    // e_flags (4 bytes)
+    for _ in 0 to 4 { bytes.push(0) }
+    // e_ehsize (2)
+    bytes.push(64)
+    bytes.push(0)
+    // e_phentsize (2)
+    bytes.push(0)
+    bytes.push(0)
+    // e_phnum (2)
+    bytes.push(0)
+    bytes.push(0)
+    // e_shentsize (2)
+    bytes.push(64)
+    bytes.push(0)
+    // e_shnum (2) = 0
+    bytes.push(0)
+    bytes.push(0)
+    // e_shstrndx (2) = 0
+    bytes.push(0)
+    bytes.push(0)
+
+    let obj: ElfObject = parse_elf(bytes)
+    assert_eq(obj.machine as I32, 62)
+    assert_eq(obj.elf_type as I32, 1)
+    assert_eq(obj.shnum as I32, 0)
+}
+
+// --- GOT ---
+
+@test func test_got_alloc() {
+    let g: Got = got_new()
+    assert_eq(g.size as I32, 24)  // 3 reserved slots
+    let off1: I64 = got_alloc(g, "puts")
+    assert_eq(off1 as I32, 24)
+    assert_eq(g.size as I32, 32)
+    let off2: I64 = got_alloc(g, "printf")
+    assert_eq(off2 as I32, 32)
+    // Duplicate returns same offset
+    assert_eq(got_alloc(g, "puts") as I32, 24)
+}
+
+// --- PLT ---
+
+@test func test_plt_emit() {
+    let g: Got = got_new()
+    let puts_off: I64 = got_alloc(g, "puts")
+    let p: Plt = plt_new()
+    let plt_off: I64 = plt_add(p, "puts", puts_off)
+    assert_eq(plt_off as I32, 16)  // after PLT[0] header
+
+    let code: List[I64] = plt_emit(p, 0x3000 as I64, 0x1000 as I64)
+    // PLT[0] starts with FF 35 (push [rip+disp32])
+    assert_eq(code.get(0) as I32, 0xFF)
+    assert_eq(code.get(1) as I32, 0x35)
+    // PLT[1] starts at offset 16 with FF 25 (jmp [rip+disp32])
+    assert_eq(code.get(16) as I32, 0xFF)
+    assert_eq(code.get(17) as I32, 0x25)
+}
+
+// --- ELF writer ---
+
+@test func test_elf_exe_magic() {
+    let sects = List[ElfOutputSection]::new(1)
+    let text = List[I64]::new(4)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    text.push(0xC3)
+    sects.push(ElfOutputSection {
+        name: ".text",
+        sh_type: 1 as I64,
+        flags: 6 as I64,
+        data: text,
+        addr: 0x401000 as I64,
+        file_offset: 0x1000 as I64,
+        align_val: 16 as I64
+    })
+    let opts: ElfExeOptions = elf_exe_options_default(0x401000 as I64)
+    let elf: List[I64] = write_elf_exe(sects, opts)
+    assert_eq(elf.get(0) as I32, 0x7F)
+    assert_eq(elf.get(1) as I32, 0x45)
+    assert_eq(elf.get(2) as I32, 0x4C)
+    assert_eq(elf.get(3) as I32, 0x46)
+}
+
+@test func test_build_interp() {
+    let interp: List[I64] = build_interp("/lib64/ld-linux-x86-64.so.2")
+    assert_eq(interp.get(0) as I32, 0x2F)  // '/'
+    // Last byte is null terminator
+    assert_eq(interp.get(interp.len() as I64 - 1) as I32, 0)
+}
+
+@test func test_build_dynamic() {
+    let needed = List[Str]::new(1)
+    needed.push("libc.so.6")
+    let dyn_data: List[I64] = build_dynamic(needed, 0x402000 as I64, 0x402100 as I64, 0x403000 as I64)
+    assert(dyn_data.len() as I64 > 0)
+    // First entry should be DT_NEEDED (tag=1)
+    let tag: I64 = (dyn_data.get(0) & 0xFF) | ((dyn_data.get(1) & 0xFF) << 8)
+    assert_eq(tag as I32, 1)
+}
