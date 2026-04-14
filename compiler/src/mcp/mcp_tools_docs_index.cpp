@@ -18,6 +18,7 @@ TML_MODULE("mcp")
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <map>
@@ -26,6 +27,13 @@ TML_MODULE("mcp")
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+
+#ifdef _WIN32
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#    endif
+#    include <windows.h>
+#endif
 
 namespace tml::mcp {
 
@@ -51,29 +59,54 @@ struct DocSearchCache {
 
 DocSearchCache g_doc_cache;
 
-/// Discovers the TML project root by walking up from cwd or executable location.
-/// Returns empty path if not found.
+/// Returns the directory containing the running executable, or empty on failure.
+static auto get_exe_dir() -> fs::path {
+#ifdef _WIN32
+    wchar_t buf[32768];
+    DWORD len = GetModuleFileNameW(nullptr, buf, static_cast<DWORD>(std::size(buf)));
+    if (len == 0 || len >= std::size(buf))
+        return {};
+    return fs::path(buf).parent_path();
+#else
+    std::error_code ec;
+    auto exe = fs::read_symlink("/proc/self/exe", ec);
+    if (!ec)
+        return exe.parent_path();
+    return {};
+#endif
+}
+
+/// Returns true when a directory looks like a TML project/install root.
+static auto is_tml_root(const fs::path& dir) -> bool {
+    return fs::exists(dir / "lib" / "core" / "src") &&
+           fs::exists(dir / "lib" / "std" / "src");
+}
+
+/// Discovers the TML project root by walking up from cwd, relative to the
+/// executable, or from the install location. Returns empty path if not found.
 auto find_tml_root() -> fs::path {
     // Strategy 1: Walk up from current working directory
     auto cwd = fs::current_path();
     for (auto dir = cwd; dir.has_parent_path() && dir != dir.root_path(); dir = dir.parent_path()) {
-        if (fs::exists(dir / "lib" / "core" / "src") && fs::exists(dir / "lib" / "std" / "src")) {
+        if (is_tml_root(dir))
             return dir;
-        }
     }
 
-    // Strategy 2: Check relative to executable common locations
-    std::vector<fs::path> candidates = {
-        cwd / ".." / "..",        // build/debug/ -> root
-        cwd / "..",               // build/ -> root
-        cwd / ".." / ".." / "..", // build/debug/subdir -> root
-    };
-
-    for (const auto& candidate : candidates) {
-        auto normalized = fs::weakly_canonical(candidate);
-        if (fs::exists(normalized / "lib" / "core" / "src") &&
-            fs::exists(normalized / "lib" / "std" / "src")) {
+    // Strategy 2: Walk up from CWD (common build sub-directory layouts)
+    for (const auto& rel : {fs::path("..") / "..", fs::path(".."), fs::path("..") / ".." / ".."}) {
+        auto normalized = fs::weakly_canonical(cwd / rel);
+        if (is_tml_root(normalized))
             return normalized;
+    }
+
+    // Strategy 3: Relative to the executable (handles installed layout where
+    //   lib/ is placed alongside tml_daemon.exe in the install directory)
+    auto exe_dir = get_exe_dir();
+    if (!exe_dir.empty()) {
+        for (const auto& rel : {fs::path("."), fs::path(".."), fs::path("..") / ".."}) {
+            auto normalized = fs::weakly_canonical(exe_dir / rel);
+            if (is_tml_root(normalized))
+                return normalized;
         }
     }
 
@@ -467,7 +500,28 @@ static auto compute_source_fingerprint(const std::vector<fs::path>& files) -> ui
 }
 
 /// Returns the cache directory for persisted indices.
+/// Uses %LOCALAPPDATA%\TML\.doc-index when the root is inside a system
+/// directory (e.g. Program Files) where the process may not have write access.
 static auto get_cache_dir(const fs::path& root) -> fs::path {
+    auto root_str = root.generic_string();
+    auto is_system_dir = root_str.find("Program Files") != std::string::npos ||
+                         root_str.find("program files") != std::string::npos;
+
+    if (is_system_dir) {
+#ifdef _WIN32
+        const char* appdata = std::getenv("LOCALAPPDATA");
+        if (appdata)
+            return fs::path(appdata) / "TML" / ".doc-index";
+        const char* tmp = std::getenv("TEMP");
+        if (tmp)
+            return fs::path(tmp) / "tml-doc-index";
+#else
+        const char* home = std::getenv("HOME");
+        if (home)
+            return fs::path(home) / ".cache" / "tml" / "doc-index";
+#endif
+    }
+
     return root / "build" / "debug" / ".doc-index";
 }
 
@@ -583,13 +637,203 @@ static auto load_cached_indices(DocSearchCache& cache, const fs::path& root, uin
     return true;
 }
 
+// ============================================================================
+// docs.json Loader (install-mode fallback)
+// ============================================================================
+
+static auto str_to_doc_kind(const std::string& s) -> doc::DocItemKind {
+    if (s == "function")        return doc::DocItemKind::Function;
+    if (s == "method")          return doc::DocItemKind::Method;
+    if (s == "struct")          return doc::DocItemKind::Struct;
+    if (s == "enum")            return doc::DocItemKind::Enum;
+    if (s == "variant")         return doc::DocItemKind::Variant;
+    if (s == "field")           return doc::DocItemKind::Field;
+    if (s == "behavior")        return doc::DocItemKind::Trait;
+    if (s == "trait")           return doc::DocItemKind::Trait;
+    if (s == "impl")            return doc::DocItemKind::Impl;
+    if (s == "trait_impl")      return doc::DocItemKind::TraitImpl;
+    if (s == "type_alias")      return doc::DocItemKind::TypeAlias;
+    if (s == "constant")        return doc::DocItemKind::Constant;
+    if (s == "associated_type") return doc::DocItemKind::AssociatedType;
+    if (s == "module")          return doc::DocItemKind::Module;
+    return doc::DocItemKind::Function;
+}
+
+static auto str_to_doc_vis(const std::string& s) -> doc::DocVisibility {
+    if (s == "public") return doc::DocVisibility::Public;
+    if (s == "crate")  return doc::DocVisibility::Crate;
+    return doc::DocVisibility::Private;
+}
+
+static auto str_field(const json::JsonValue& obj, const char* key) -> std::string {
+    if (auto* v = obj.get(key); v && v->is_string())
+        return v->as_string();
+    return {};
+}
+
+static auto parse_doc_item_json(const json::JsonValue& j) -> doc::DocItem {
+    doc::DocItem item;
+    item.id         = str_field(j, "id");
+    item.name       = str_field(j, "name");
+    item.path       = str_field(j, "path");
+    item.signature  = str_field(j, "signature");
+    item.summary    = str_field(j, "summary");
+    item.doc        = str_field(j, "doc");
+    item.kind       = str_to_doc_kind(str_field(j, "kind"));
+    item.visibility = str_to_doc_vis(str_field(j, "visibility"));
+    return item;
+}
+
+static auto parse_doc_module_json(const json::JsonValue& j) -> doc::DocModule {
+    doc::DocModule mod;
+    mod.name    = str_field(j, "name");
+    mod.path    = str_field(j, "path");
+    mod.doc     = str_field(j, "doc");
+    mod.summary = str_field(j, "summary");
+    mod.visibility = doc::DocVisibility::Public;
+
+    if (auto* items_v = j.get("items"); items_v && items_v->is_array()) {
+        for (const auto& item_j : items_v->as_array()) {
+            if (item_j.is_object())
+                mod.items.push_back(parse_doc_item_json(item_j));
+        }
+    }
+    return mod;
+}
+
+/// Tries to load documentation from a pre-built docs.json file.
+/// Searches exe_dir/docs/docs.json (works for both installed layout and
+/// development builds that copy docs alongside the binary). Returns true
+/// on success.
+static auto try_load_from_docs_json(DocSearchCache& cache) -> bool {
+    auto exe_dir = get_exe_dir();
+    if (exe_dir.empty())
+        return false;
+
+    // Primary: exe_dir/docs/docs.json
+    // Installed layout: C:\Program Files\TML\docs\docs.json (exe in TML root)
+    // Dev layout:       build/debug/bin/docs/docs.json (if docs copied there)
+    auto json_path = exe_dir / "docs" / "docs.json";
+    if (!fs::exists(json_path)) {
+        // Secondary: exe_dir/../docs/docs.json (exe in bin/ subdir)
+        json_path = exe_dir / ".." / "docs" / "docs.json";
+        if (!fs::exists(json_path))
+            return false;
+        json_path = fs::weakly_canonical(json_path);
+    }
+
+    // Read the file
+    FILE* fp = fopen(json_path.string().c_str(), "rb");
+    if (!fp)
+        return false;
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (sz <= 0) { fclose(fp); return false; }
+    std::string content(static_cast<size_t>(sz), '\0');
+    fread(content.data(), 1, static_cast<size_t>(sz), fp);
+    fclose(fp);
+
+    // Parse JSON
+    auto result = json::parse_json(content);
+    if (!tml::is_ok(result))
+        return false;
+    const auto& root_j = tml::unwrap(result);
+    if (!root_j.is_object())
+        return false;
+
+    // Walk modules[]
+    auto* modules_v = root_j.get("modules");
+    if (!modules_v || !modules_v->is_array())
+        return false;
+
+    cache.index = doc::DocIndex{};
+    for (const auto& mod_j : modules_v->as_array()) {
+        if (mod_j.is_object())
+            cache.index.modules.push_back(parse_doc_module_json(mod_j));
+    }
+
+    if (cache.index.modules.empty())
+        return false;
+
+    TML_LOG_INFO("mcp", "Loaded docs from " << json_path.string()
+                         << " (" << cache.index.modules.size() << " modules)");
+    return true;
+}
+
+// ============================================================================
+// Build doc index (shared BM25 step used by both paths)
+// ============================================================================
+
+static void build_bm25_from_items(DocSearchCache& cache, const fs::path& cache_dir,
+                                  uint64_t fingerprint) {
+    // Try loading persisted search indices
+    bool loaded = load_cached_indices(cache, cache_dir.parent_path().parent_path().parent_path(),
+                                      fingerprint);
+    if (loaded && cache.bm25.size() == cache.all_items.size() && cache.bm25.is_built()) {
+        cache.initialized = true;
+        return;
+    }
+
+    cache.bm25 = search::BM25Index{};
+    cache.vectorizer = std::make_unique<search::TfIdfVectorizer>(512);
+
+    uint32_t doc_id = 0;
+    for (const auto& [item, mod_path] : cache.all_items) {
+        std::string combined = item->name + " " + item->signature + " " + item->doc + " " +
+                               item->path + " " + mod_path;
+        cache.bm25.add_document(doc_id, item->name, item->signature, item->doc, item->path);
+        cache.vectorizer->add_document(doc_id, combined);
+        doc_id++;
+    }
+    cache.bm25.build();
+    cache.initialized = true;
+}
+
 /// Builds or rebuilds the documentation index from TML library sources.
+/// Falls back to loading from docs/docs.json when sources are not available.
 /// Uses persisted search indices when source files haven't changed.
 void build_doc_index(DocSearchCache& cache) {
     auto build_start = std::chrono::steady_clock::now();
 
     auto root = find_tml_root();
     if (root.empty()) {
+        // No source tree found — try loading from installed docs.json
+        if (!try_load_from_docs_json(cache))
+            return;
+
+        // Populate all_items from the loaded index
+        cache.all_items.clear();
+        std::function<void(const std::vector<doc::DocItem>&, const std::string&)> collect_items;
+        collect_items = [&](const std::vector<doc::DocItem>& items, const std::string& mod_path) {
+            for (const auto& item : items) {
+                cache.all_items.push_back({&item, mod_path});
+                collect_items(item.methods, mod_path);
+                collect_items(item.fields, mod_path);
+                collect_items(item.variants, mod_path);
+            }
+        };
+        for (const auto& mod : cache.index.modules)
+            collect_items(mod.items, mod.path);
+
+        // Build BM25 (no persistent cache in install mode — use LOCALAPPDATA)
+        cache.bm25 = search::BM25Index{};
+        cache.vectorizer = std::make_unique<search::TfIdfVectorizer>(512);
+        uint32_t doc_id = 0;
+        for (const auto& [item, mod_path] : cache.all_items) {
+            cache.bm25.add_document(doc_id, item->name, item->signature, item->doc, item->path);
+            cache.vectorizer->add_document(doc_id,
+                item->name + " " + item->signature + " " + item->doc + " " + item->path);
+            doc_id++;
+        }
+        cache.bm25.build();
+        cache.initialized = true;
+
+        auto build_end = std::chrono::steady_clock::now();
+        cache.build_time_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(build_end - build_start).count();
+        TML_LOG_INFO("mcp", "Doc index built from docs.json in " << cache.build_time_ms << "ms ("
+                             << cache.all_items.size() << " items)");
         return;
     }
 
