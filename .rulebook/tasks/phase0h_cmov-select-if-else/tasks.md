@@ -19,6 +19,6 @@
 - [x] 4.2 Run `tml test --suite=compiler` — no regressions
 
 ## 5. Tail (mandatory — enforced by rulebook v5.3.0)
-- [x] 5.1 Update CHANGELOG.md
+- [x] 5.1 Update CHANGELOG.md and create docs/patches/v0.3.10.md — documentation covering the implementation
 - [x] 5.2 Write test: if-else returning scalar values produces correct results
 - [x] 5.3 Run tests and confirm they pass
