@@ -26,6 +26,7 @@
 | [17-core-coverage-map.md](./17-core-coverage-map.md) | Core library — per-module benchmark coverage |
 | [18-std-coverage-map.md](./18-std-coverage-map.md) | Std library — per-module benchmark coverage |
 | [19-per-operation-heatmap.md](./19-per-operation-heatmap.md) | All operations ranked by speed |
+| [20-improvement-plan.md](./20-improvement-plan.md) | Plano de melhoria em 5 fases |
 | [manifest.json](./manifest.json) | Analysis metadata |
 
 ## Methodology
