@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.19](docs/patches/v0.3.19.md) | 2026-04-15 | feat(std): `File::sync()` and `File::datasync()` — fsync/fdatasync for WAL durability; `_commit(fd)` on Windows, `fsync`/`fdatasync` on Unix |
 | [0.3.18](docs/patches/v0.3.18.md) | 2026-04-15 | perf(compiler): remove embedded LLD — native OS linker via subprocess; `tml_codegen_x86.dll` 78→58 MB (−26%); link.exe (Windows) / ld (Unix) primary, lld fallback |
 | [0.3.17](docs/patches/v0.3.17.md) | 2026-04-15 | fix(parser): `match` keyword emits `error[S001]: use 'when' instead` — no more cascading parse errors for Rust/Swift/C# users |
 | [0.3.16](docs/patches/v0.3.16.md) | 2026-04-14 | feat(daemon): persistent compilation daemon — `tml daemon start/stop/status`, named-pipe IPC, in-process result cache (22ms vs 98ms `cargo check` on Windows), DLL staleness detection, TML_DAEMON env var |

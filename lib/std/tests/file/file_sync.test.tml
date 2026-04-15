@@ -1,0 +1,42 @@
+// Tests for File::sync() and File::datasync() (phase0q)
+use test
+use std::file::file::File
+use std::file::path::Path
+
+@test
+func test_file_sync_after_write() -> I32 {
+    let path: Str = "build/debug/test_sync_file.txt"
+    var f: File = File::open_write(path)
+    assert(f.is_open(), "file should be open for write")
+    f.write_str("WAL entry 1\n")
+    let ok: Bool = f.sync()
+    assert(ok, "sync should succeed on writable file")
+    f.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_file_datasync_after_write() -> I32 {
+    let path: Str = "build/debug/test_datasync_file.txt"
+    var f: File = File::open_write(path)
+    assert(f.is_open(), "file should be open for write")
+    f.write_str("WAL entry 2\n")
+    let ok: Bool = f.datasync()
+    assert(ok, "datasync should succeed on writable file")
+    f.close()
+    Path::remove(path)
+    return 0
+}
+
+@test
+func test_file_sync_on_closed_file() -> I32 {
+    let path: Str = "build/debug/test_sync_closed.txt"
+    var f: File = File::open_write(path)
+    f.write_str("data")
+    f.close()
+    let ok: Bool = f.sync()
+    assert(not ok, "sync on closed file should return false")
+    Path::remove(path)
+    return 0
+}
