@@ -48,7 +48,7 @@ pub type ProtoFile {
 // Tokenizer
 // ============================================================================
 
-type Token {
+pub type Token {
     kind: I64,   // 0=ident, 1=number, 2=string, 3=symbol, 4=eof
     text: Str,
     pos: I64
@@ -60,7 +60,7 @@ const TOK_STRING: I64 = 2
 const TOK_SYMBOL: I64 = 3
 const TOK_EOF: I64 = 4
 
-type Tokenizer {
+pub type Tokenizer {
     src: Str,
     pos: I64
 }
@@ -177,7 +177,7 @@ impl Tokenizer {
 // Parser
 // ============================================================================
 
-type ProtoParser {
+pub type ProtoParser {
     tokens: List[Token],
     pos: I64
 }
@@ -220,12 +220,13 @@ impl ProtoParser {
 
     func expect_number(mut this) -> I64 {
         let tok = this.advance()
-        return tok.text.parse_i64()
+        let Just(n) = tok.text.parse_i64() else { return 0 }
+        return n
     }
 
     // ---- Top-level parsing ----
 
-    func parse(mut this) -> ProtoFile {
+    func run(mut this) -> ProtoFile {
         var file = ProtoFile {
             syntax: "proto3",
             package: "",
@@ -476,5 +477,5 @@ impl ProtoParser {
 /// ```
 pub func parse_proto(src: Str) -> ProtoFile {
     var parser = ProtoParser::new(src)
-    return parser.parse()
+    return parser.run()
 }

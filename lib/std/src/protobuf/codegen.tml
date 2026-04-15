@@ -1,19 +1,7 @@
 /// TML code generator from parsed .proto file descriptors.
 ///
-/// Generates TML struct types + `impl ProtoMessage` for each message,
-/// and enum types for each proto enum. The generated code uses the
-/// `std::protobuf` writer/reader API.
-///
-/// # Example
-///
-/// ```tml
-/// use std::protobuf::proto_parser::parse_proto
-/// use std::protobuf::codegen::generate_tml
-///
-/// let proto = parse_proto(proto_source)
-/// let tml_code: Str = generate_tml(ref proto)
-/// println(tml_code)
-/// ```
+/// Generates TML struct types + encode/decode methods for each message,
+/// and enum types for each proto enum.
 
 use std::collections::List
 use std::protobuf::types::FieldType
@@ -25,14 +13,14 @@ use std::protobuf::proto_parser::{ProtoFile, EnumDescriptor, EnumValue}
 // ============================================================================
 
 func tml_type_for_field(fd: ref FieldDescriptor) -> Str {
-    let base = tml_scalar_type(fd.field_type)
+    let scalar_t = tml_scalar_type(fd.field_type)
     if fd.is_repeated and not fd.is_map {
-        return `List[{base}]`
+        return "List[" + scalar_t + "]"
     }
     if fd.is_optional {
-        return `Maybe[{base}]`
+        return "Maybe[" + scalar_t + "]"
     }
-    return base
+    return scalar_t
 }
 
 func tml_scalar_type(ft: FieldType) -> Str {
@@ -53,7 +41,7 @@ func tml_scalar_type(ft: FieldType) -> Str {
         FieldType::String   => "Str",
         FieldType::Bytes    => "Str",
         FieldType::Enum     => "I32",
-        FieldType::Message  => "Str", // placeholder for nested messages
+        FieldType::Message  => "Str",
     }
 }
 
@@ -102,7 +90,7 @@ func read_method_for_field(fd: ref FieldDescriptor) -> Str {
 }
 
 func default_value_for_field(fd: ref FieldDescriptor) -> Str {
-    if fd.is_repeated { return `List::new(4)` }
+    if fd.is_repeated { return "List::new(4)" }
     if fd.is_optional { return "Nothing" }
     when fd.field_type {
         FieldType::Double   => "0.0",
@@ -118,10 +106,10 @@ func default_value_for_field(fd: ref FieldDescriptor) -> Str {
         FieldType::Sfixed32 => "0",
         FieldType::Sfixed64 => "0",
         FieldType::Bool     => "false",
-        FieldType::String   => `""`,
-        FieldType::Bytes    => `""`,
+        FieldType::String   => "\"\"",
+        FieldType::Bytes    => "\"\"",
         FieldType::Enum     => "0",
-        FieldType::Message  => `""`,
+        FieldType::Message  => "\"\"",
     }
 }
 
@@ -130,11 +118,11 @@ func default_value_for_field(fd: ref FieldDescriptor) -> Str {
 // ============================================================================
 
 /// Generates complete TML source code from a parsed .proto file.
-/// Includes: use declarations, struct types, enum types, and
-/// impl ProtoMessage for each message with encode/decode methods.
 pub func generate_tml(proto: ref ProtoFile) -> Str {
-    var out: Str = "// Generated from .proto — do not edit\n"
-    out = out + "use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}\n"
+    var out: Str = "// Generated from .proto\n"
+    out = out + "use std::protobuf::ProtoWriter\n"
+    out = out + "use std::protobuf::ProtoReader\n"
+    out = out + "use std::protobuf::ProtoTag\n"
     out = out + "use std::collections::List\n\n"
 
     // Generate enums
@@ -157,22 +145,22 @@ pub func generate_tml(proto: ref ProtoFile) -> Str {
 }
 
 func generate_enum(en: ref EnumDescriptor) -> Str {
-    var out: Str = `pub enum {en.name} {\n`
+    var out: Str = "pub enum " + en.name + " {\n"
     for i in 0 to en.values.len() {
         let v: EnumValue = en.values.get(i)
         if i > 0 { out = out + ",\n" }
-        out = out + `    {v.name}`
+        out = out + "    " + v.name
     }
     out = out + "\n}\n"
     return out
 }
 
 func generate_message_struct(msg: ref MessageDescriptor) -> Str {
-    var out: Str = `pub type {msg.name} {\n`
+    var out: Str = "pub type " + msg.name + " {\n"
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
         let tml_type = tml_type_for_field(ref fd)
-        out = out + `    {fd.name}: {tml_type}`
+        out = out + "    " + fd.name + ": " + tml_type
         if i < msg.field_count() - 1 { out = out + "," }
         out = out + "\n"
     }
@@ -181,15 +169,15 @@ func generate_message_struct(msg: ref MessageDescriptor) -> Str {
 }
 
 func generate_message_impl(msg: ref MessageDescriptor) -> Str {
-    var out: Str = `impl {msg.name} {\n`
+    var out: Str = "impl " + msg.name + " {\n"
 
-    // new() constructor with defaults
-    out = out + `    pub func new() -> {msg.name} {\n`
-    out = out + `        {msg.name} {\n`
+    // new() constructor
+    out = out + "    pub func new() -> " + msg.name + " {\n"
+    out = out + "        " + msg.name + " {\n"
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
         let default_val = default_value_for_field(ref fd)
-        out = out + `            {fd.name}: {default_val}`
+        out = out + "            " + fd.name + ": " + default_val
         if i < msg.field_count() - 1 { out = out + "," }
         out = out + "\n"
     }
@@ -201,43 +189,43 @@ func generate_message_impl(msg: ref MessageDescriptor) -> Str {
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
         let wm = write_method_for_field(ref fd)
+        let fn_str = fd.number.to_string()
         if fd.is_optional {
-            out = out + `        when this.{fd.name} {\n`
-            out = out + `            Just(v) => writer.{wm}({fd.number}, v),\n`
+            out = out + "        when this." + fd.name + " {\n"
+            out = out + "            Just(v) => writer." + wm + "(" + fn_str + ", v),\n"
             out = out + "            Nothing => {}\n"
             out = out + "        }\n"
         } else if fd.is_repeated {
-            out = out + `        // repeated field {fd.name} — encode each element\n`
-            out = out + `        for j in 0 to this.{fd.name}.len() {\n`
-            out = out + `            let elem = this.{fd.name}.get(j)\n`
-            out = out + `            writer.{wm}({fd.number}, elem)\n`
+            out = out + "        for j in 0 to this." + fd.name + ".len() {\n"
+            out = out + "            let elem = this." + fd.name + ".get(j)\n"
+            out = out + "            writer." + wm + "(" + fn_str + ", elem)\n"
             out = out + "        }\n"
         } else {
-            out = out + `        writer.{wm}({fd.number}, this.{fd.name})\n`
+            out = out + "        writer." + wm + "(" + fn_str + ", this." + fd.name + ")\n"
         }
     }
     out = out + "    }\n\n"
 
     // decode()
-    out = out + `    pub func decode(reader: mut ref ProtoReader) -> Outcome[{msg.name}, Str] {\n`
-    out = out + `        var result = {msg.name}::new()\n`
+    out = out + "    pub func decode(reader: mut ref ProtoReader) -> Outcome[" + msg.name + ", Str] {\n"
+    out = out + "        var result = " + msg.name + "::new()\n"
     out = out + "        loop (reader.has_more()) {\n"
     out = out + "            let tag = when reader.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }\n"
 
-    // Field dispatch
-    var has_fields = false
+    var has_fields: Bool = false
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
         let rm = read_method_for_field(ref fd)
-        let prefix = if has_fields { "} else " } else { "            " }
-        out = out + `{prefix}if tag.field_num == {fd.number} {\n`
-        out = out + `                let v = when reader.{rm}() { Ok(v) => v, Err(e) => { return Err(e) } }\n`
+        let fn_str = fd.number.to_string()
+        let prefix: Str = if has_fields { "} else " } else { "            " }
+        out = out + prefix + "if tag.field_num == " + fn_str + " {\n"
+        out = out + "                let v = when reader." + rm + "() { Ok(v) => v, Err(e) => { return Err(e) } }\n"
         if fd.is_optional {
-            out = out + `                result.{fd.name} = Just(v)\n`
+            out = out + "                result." + fd.name + " = Just(v)\n"
         } else if fd.is_repeated {
-            out = out + `                result.{fd.name}.push(v)\n`
+            out = out + "                result." + fd.name + ".push(v)\n"
         } else {
-            out = out + `                result.{fd.name} = v\n`
+            out = out + "                result." + fd.name + " = v\n"
         }
         has_fields = true
     }
@@ -251,7 +239,6 @@ func generate_message_impl(msg: ref MessageDescriptor) -> Str {
     out = out + "        }\n"
     out = out + "        return Ok(result)\n"
     out = out + "    }\n"
-
     out = out + "}\n"
     return out
 }
