@@ -14,6 +14,7 @@ TML_MODULE("test")
 //!   6. get_runtime_objects() for CRT + runtime
 //!   7. link_objects() → .exe
 
+#include "backend/lld_linker.hpp"
 #include "cli/builder/build_script.hpp"
 #include "cli/builder/builder_internal.hpp"
 #include "cli/builder/compiler_setup.hpp"
@@ -239,59 +240,20 @@ std::string build_runtime_archive(const CompileConfig& config) {
         return "";
     }
 
-    // Build static archive using llvm-ar directly
-    // (LLDLinker's find_lld() may not find llvm-ar if lld-link is embedded)
-    std::string ar_path;
-    {
-        // Search for llvm-ar in common locations
-        std::vector<std::string> ar_search = {
-            "F:/LLVM/bin/llvm-ar.exe",
-            "C:/Program Files/LLVM/bin/llvm-ar.exe",
-            "C:/LLVM/bin/llvm-ar.exe",
-        };
-        // Also check PATH
-        for (const auto& p : ar_search) {
-            if (fs::exists(p)) {
-                ar_path = p;
-                break;
-            }
-        }
-        if (ar_path.empty()) {
-            // Try `where` on Windows
-            auto pipe = _popen("where llvm-ar.exe 2>nul", "r");
-            if (pipe) {
-                char buf[512];
-                if (fgets(buf, sizeof(buf), pipe)) {
-                    ar_path = buf;
-                    // Trim trailing newline
-                    while (!ar_path.empty() && (ar_path.back() == '\n' || ar_path.back() == '\r'))
-                        ar_path.pop_back();
-                }
-                _pclose(pipe);
-            }
-        }
-    }
-
-    if (ar_path.empty()) {
-        TML_LOG_ERROR("test", "llvm-ar not found — cannot build runtime archive");
+    // Build static archive using LLDLinker's archiver (finds llvm-ar or lib.exe via PATH)
+    backend::LLDLinker archiver;
+    if (!archiver.initialize()) {
+        TML_LOG_ERROR("test", "No linker/archiver found — cannot build runtime archive");
         return "";
     }
 
-    // llvm-ar rcs <output> <obj1> <obj2> ...
-    // Use native paths (backslashes on Windows) for std::system() via cmd.exe
-    std::ostringstream cmd;
-    cmd << "\"" << ar_path << "\" rcs " << fs::absolute(archive_path).string();
-    for (const auto& obj : runtime_objs) {
-        cmd << " " << fs::absolute(obj).string();
-    }
+    backend::LLDLinkOptions ar_opts;
+    ar_opts.output_type = backend::LLDOutputType::StaticLib;
+    ar_opts.verbose = config.verbose;
 
-    if (config.verbose) {
-        TML_LOG_DEBUG("test", "Archive command: " << cmd.str());
-    }
-
-    int ret = std::system(cmd.str().c_str());
-    if (ret != 0) {
-        TML_LOG_ERROR("test", "Failed to build runtime archive (exit " << ret << ")");
+    auto ar_result = archiver.link(runtime_objs, archive_path, ar_opts);
+    if (!ar_result.success) {
+        TML_LOG_ERROR("test", "Failed to build runtime archive: " << ar_result.error_message);
         return "";
     }
 

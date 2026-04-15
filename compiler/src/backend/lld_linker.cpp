@@ -77,70 +77,61 @@ auto LLDLinker::initialize() -> bool {
 }
 
 auto LLDLinker::find_lld() -> bool {
-#ifdef _WIN32
-    // Windows: prefer link.exe (MSVC native), fall back to lld-link.exe
-    // link.exe is always available in a VS Developer Command Prompt or
-    // when Visual Studio Build Tools are installed.
+    // Build search paths from environment only — no hardcoded absolute paths.
+    std::vector<fs::path> search_paths;
 
-    // First, try to find link.exe via PATH
-    // (available in VS Developer Command Prompt and CI environments)
+    // LLVM_DIR env var (highest priority)
+    if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
+        search_paths.push_back(fs::path(llvm_dir) / "bin");
+    }
+
+    // Project-relative LLVM install (for dev builds)
+    search_paths.push_back(fs::current_path() / "src" / "llvm-install" / "bin");
+
+    // PATH entries
     if (const char* path_env = std::getenv("PATH")) {
         std::string path_str(path_env);
+#ifdef _WIN32
+        char delimiter = ';';
+#else
+        char delimiter = ':';
+#endif
         std::istringstream iss(path_str);
         std::string dir;
-        while (std::getline(iss, dir, ';')) {
-            // Check for link.exe (MSVC native linker)
-            fs::path link_candidate = fs::path(dir) / "link.exe";
-            if (file_exists(link_candidate)) {
-                // Verify it's actually MSVC's link.exe, not some other link.exe
-                // by checking if the directory also contains cl.exe or lib.exe
-                fs::path cl_candidate = fs::path(dir) / "cl.exe";
-                fs::path lib_candidate = fs::path(dir) / "lib.exe";
-                if (file_exists(cl_candidate) || file_exists(lib_candidate)) {
-                    lld_path_ = link_candidate;
-                    is_msvc_linker_ = true;
-                    TML_LOG_DEBUG("linker", "Found MSVC link.exe: " << lld_path_);
+        while (std::getline(iss, dir, delimiter)) {
+            if (!dir.empty()) {
+                search_paths.push_back(dir);
+            }
+        }
+    }
 
-                    // Also look for lib.exe for static libraries
-                    if (file_exists(lib_candidate)) {
-                        llvm_ar_path_ = lib_candidate;
-                    }
-                    return true;
+#ifdef _WIN32
+    // Windows: prefer link.exe (MSVC native), fall back to lld-link.exe
+    for (const auto& dir : search_paths) {
+        fs::path link_candidate = dir / "link.exe";
+        if (file_exists(link_candidate)) {
+            // Verify it's MSVC's link.exe (not some other link.exe)
+            // by checking if cl.exe or lib.exe is in the same directory
+            fs::path cl_candidate = dir / "cl.exe";
+            fs::path lib_candidate = dir / "lib.exe";
+            if (file_exists(cl_candidate) || file_exists(lib_candidate)) {
+                lld_path_ = link_candidate;
+                is_msvc_linker_ = true;
+                if (file_exists(lib_candidate)) {
+                    llvm_ar_path_ = lib_candidate;
                 }
+                TML_LOG_DEBUG("linker", "Found MSVC link.exe: " << lld_path_);
+                return true;
             }
         }
     }
 
     // Fall back to lld-link.exe
-    std::vector<fs::path> search_paths = {
-        fs::current_path() / "build" / "llvm" / "Release" / "bin",
-        fs::current_path() / "src" / "llvm-install" / "bin",
-        "F:/LLVM/bin",
-        "C:/Program Files/LLVM/bin",
-        "C:/LLVM/bin",
-    };
-
-    if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
-        search_paths.insert(search_paths.begin(), fs::path(llvm_dir) / "bin");
-    }
-
-    // Also check PATH for lld-link
-    if (const char* path_env = std::getenv("PATH")) {
-        std::string path_str(path_env);
-        std::istringstream iss(path_str);
-        std::string dir;
-        while (std::getline(iss, dir, ';')) {
-            search_paths.push_back(dir);
-        }
-    }
-
     for (const auto& dir : search_paths) {
         fs::path lld_candidate = dir / "lld-link.exe";
         if (file_exists(lld_candidate)) {
             lld_path_ = lld_candidate;
             is_msvc_linker_ = false;
-
-            // Also look for llvm-ar in the same directory
             fs::path ar_candidate = dir / "llvm-ar.exe";
             if (file_exists(ar_candidate)) {
                 llvm_ar_path_ = ar_candidate;
@@ -148,35 +139,12 @@ auto LLDLinker::find_lld() -> bool {
             return true;
         }
     }
-
 #else
     // Unix: prefer system ld, fall back to ld.lld
-    std::vector<fs::path> search_paths = {
-        "/usr/bin",
-        "/usr/local/bin",
-    };
-
-    if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
-        search_paths.insert(search_paths.begin(), fs::path(llvm_dir) / "bin");
-    }
-
-    // Check PATH
-    if (const char* path_env = std::getenv("PATH")) {
-        std::string path_str(path_env);
-        std::istringstream iss(path_str);
-        std::string dir;
-        while (std::getline(iss, dir, ':')) {
-            search_paths.push_back(dir);
-        }
-    }
-
-    // Try ld first (system linker)
     for (const auto& dir : search_paths) {
         fs::path ld_candidate = dir / "ld";
         if (file_exists(ld_candidate)) {
             lld_path_ = ld_candidate;
-
-            // Look for ar in the same directory
             fs::path ar_candidate = dir / "ar";
             if (file_exists(ar_candidate)) {
                 llvm_ar_path_ = ar_candidate;
@@ -185,12 +153,10 @@ auto LLDLinker::find_lld() -> bool {
         }
     }
 
-    // Fall back to ld.lld
     for (const auto& dir : search_paths) {
         fs::path lld_candidate = dir / "ld.lld";
         if (file_exists(lld_candidate)) {
             lld_path_ = lld_candidate;
-
             fs::path ar_candidate = dir / "llvm-ar";
             if (file_exists(ar_candidate)) {
                 llvm_ar_path_ = ar_candidate;
@@ -200,17 +166,16 @@ auto LLDLinker::find_lld() -> bool {
     }
 #endif
 
-    last_error_ =
-        "No linker found. The TML compiler requires a system linker.\n"
-        "  Solutions:\n"
+    last_error_ = "No linker found. The TML compiler requires a system linker.\n"
+                  "  Solutions:\n"
 #ifdef _WIN32
-        "  1. Run from a Visual Studio Developer Command Prompt (provides link.exe)\n"
-        "  2. Install LLVM and ensure lld-link.exe is in PATH\n"
-        "  3. Set LLVM_DIR environment variable to your LLVM installation";
+                  "  1. Run from a Visual Studio Developer Command Prompt (provides link.exe)\n"
+                  "  2. Install LLVM and ensure lld-link.exe is in PATH\n"
+                  "  3. Set LLVM_DIR environment variable to your LLVM installation";
 #else
-        "  1. Install build-essential (provides ld)\n"
-        "  2. Install LLVM and ensure ld.lld is in PATH\n"
-        "  3. Set LLVM_DIR environment variable to your LLVM installation";
+                  "  1. Install build-essential (provides ld)\n"
+                  "  2. Install LLVM and ensure ld.lld is in PATH\n"
+                  "  3. Set LLVM_DIR environment variable to your LLVM installation";
 #endif
     return false;
 }
@@ -473,30 +438,118 @@ auto LLDLinker::build_static_lib_command(const std::vector<fs::path>& object_fil
                                          const fs::path& output_path) -> std::string {
     std::ostringstream cmd;
 
-    if (!llvm_ar_path_.empty() && file_exists(llvm_ar_path_)) {
-        cmd << quote_path(llvm_ar_path_);
-    } else {
-        // Fall back to system ar
+    // Find archiver: use cached path, or search PATH/project-relative locations
+    fs::path ar = llvm_ar_path_;
+    bool is_msvc_lib = false;
+
+    if (ar.empty() || !file_exists(ar)) {
+        // Search project-relative llvm-install
+        fs::path project_ar = fs::current_path() / "src" / "llvm-install" / "bin" /
 #ifdef _WIN32
-        cmd << "lib.exe";
+                              "llvm-ar.exe";
 #else
-        cmd << "ar";
+                              "llvm-ar";
 #endif
+        if (file_exists(project_ar)) {
+            ar = project_ar;
+        }
     }
 
 #ifdef _WIN32
-    // MSVC-style lib.exe / llvm-ar as lib
-    cmd << " /OUT:" << quote_path(output_path);
-    for (const auto& obj : object_files) {
-        cmd << " " << quote_path(obj);
+    // If still not found, search PATH for llvm-ar.exe then lib.exe
+    if (ar.empty() || !file_exists(ar)) {
+        if (const char* path_env = std::getenv("PATH")) {
+            std::string path_s(path_env);
+            std::istringstream iss(path_s);
+            std::string dir;
+            while (std::getline(iss, dir, ';')) {
+                if (dir.empty())
+                    continue;
+                fs::path candidate = fs::path(dir) / "llvm-ar.exe";
+                if (file_exists(candidate)) {
+                    ar = candidate;
+                    break;
+                }
+            }
+        }
+    }
+    if (ar.empty() || !file_exists(ar)) {
+        if (const char* path_env = std::getenv("PATH")) {
+            std::string path_s(path_env);
+            std::istringstream iss(path_s);
+            std::string dir;
+            while (std::getline(iss, dir, ';')) {
+                if (dir.empty())
+                    continue;
+                fs::path candidate = fs::path(dir) / "lib.exe";
+                // Verify it's MSVC lib.exe (same dir has cl.exe or link.exe)
+                if (file_exists(candidate)) {
+                    fs::path cl = fs::path(dir) / "cl.exe";
+                    fs::path link = fs::path(dir) / "link.exe";
+                    if (file_exists(cl) || file_exists(link)) {
+                        ar = candidate;
+                        is_msvc_lib = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 #else
-    // Unix ar style
-    cmd << " rcs " << quote_path(output_path);
-    for (const auto& obj : object_files) {
-        cmd << " " << quote_path(obj);
+    if (ar.empty() || !file_exists(ar)) {
+        if (const char* path_env = std::getenv("PATH")) {
+            std::string path_s(path_env);
+            std::istringstream iss(path_s);
+            std::string dir;
+            while (std::getline(iss, dir, ':')) {
+                if (dir.empty())
+                    continue;
+                for (const char* name : {"llvm-ar", "ar"}) {
+                    fs::path candidate = fs::path(dir) / name;
+                    if (file_exists(candidate)) {
+                        ar = candidate;
+                        break;
+                    }
+                }
+                if (!ar.empty())
+                    break;
+            }
+        }
     }
 #endif
+
+    if (ar.empty() || !file_exists(ar)) {
+        // Last resort: bare command names, hope they're in PATH
+#ifdef _WIN32
+        cmd << "llvm-ar.exe";
+#else
+        cmd << "ar";
+#endif
+    } else {
+        cmd << quote_path(ar);
+    }
+
+    // Determine if this is MSVC lib.exe by filename
+    if (!is_msvc_lib && !ar.empty()) {
+        std::string filename = ar.filename().string();
+        if (filename == "lib.exe" || filename == "LIB.EXE") {
+            is_msvc_lib = true;
+        }
+    }
+
+    if (is_msvc_lib) {
+        // MSVC lib.exe: /NOLOGO /OUT:<archive> <obj1> <obj2> ...
+        cmd << " /NOLOGO /OUT:" << quote_path(output_path);
+        for (const auto& obj : object_files) {
+            cmd << " " << quote_path(obj);
+        }
+    } else {
+        // llvm-ar / ar: rcs <archive> <obj1> <obj2> ...
+        cmd << " rcs " << quote_path(output_path);
+        for (const auto& obj : object_files) {
+            cmd << " " << quote_path(obj);
+        }
+    }
 
     return cmd.str();
 }

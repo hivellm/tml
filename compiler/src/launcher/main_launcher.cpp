@@ -88,18 +88,28 @@ static uint32_t crc32c_compute_old(const char* data, size_t len) {
         crc = (crc >> 8) ^ kTable[(crc ^ static_cast<uint8_t>(data[i])) & 0xFF];
     return ~crc;
 }
-#endif  // deleted crc32c_compute_old
+#endif // deleted crc32c_compute_old
 
 static std::string json_escape_simple(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 4);
     for (char c : s) {
         switch (c) {
-        case '"':  out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\n': out += "\\n";  break;
-        case '\r': out += "\\t";  break;
-        default:   out += c;      break;
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\t";
+            break;
+        default:
+            out += c;
+            break;
         }
     }
     return out;
@@ -107,27 +117,40 @@ static std::string json_escape_simple(const std::string& s) {
 
 static int json_get_exit(const std::string& json) {
     auto pos = json.find("\"exit\":");
-    if (pos == std::string::npos) return -1;
+    if (pos == std::string::npos)
+        return -1;
     pos += 7;
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t'))
+        ++pos;
     return std::stoi(json.substr(pos));
 }
 
 static std::string json_get_str_field(const std::string& json, const std::string& key) {
     auto k = '"' + key + "\":\"";
     auto pos = json.find(k);
-    if (pos == std::string::npos) return {};
+    if (pos == std::string::npos)
+        return {};
     pos += k.size();
     std::string out;
     while (pos < json.size() && json[pos] != '"') {
         if (json[pos] == '\\' && pos + 1 < json.size()) {
             ++pos;
             switch (json[pos]) {
-            case '"':  out += '"';  break;
-            case '\\': out += '\\'; break;
-            case 'n':  out += '\n'; break;
-            case 't':  out += '\t'; break;
-            default:   out += json[pos]; break;
+            case '"':
+                out += '"';
+                break;
+            case '\\':
+                out += '\\';
+                break;
+            case 'n':
+                out += '\n';
+                break;
+            case 't':
+                out += '\t';
+                break;
+            default:
+                out += json[pos];
+                break;
             }
         } else {
             out += json[pos];
@@ -142,23 +165,32 @@ static std::string json_get_str_field(const std::string& json, const std::string
 /// or the pipe connection failed (caller should fall through to normal DLL path).
 static int try_daemon_forward_launcher(int argc, char* argv[]) {
 #ifndef _WIN32
-    return -1;  // Only implemented for Windows named pipes currently
+    return -1; // Only implemented for Windows named pipes currently
 #else
     // Check TML_DAEMON env var
     const char* daemon_env = std::getenv("TML_DAEMON");
-    if (!daemon_env || std::string(daemon_env) != "1") return -1;
+    if (!daemon_env || std::string(daemon_env) != "1")
+        return -1;
 
     // Check command is forwardable
-    if (argc < 2) return -1;
+    if (argc < 2)
+        return -1;
     std::string cmd = argv[1];
-    if (cmd != "build" && cmd != "run" && cmd != "check") return -1;
+    if (cmd != "build" && cmd != "run" && cmd != "check")
+        return -1;
 
-    // Check PID file
+    // Check PID file in system temp dir (keyed by CRC32 of CWD)
     std::error_code ec;
     auto cwd = fs::current_path(ec);
-    if (ec) return -1;
-    auto pid_path = cwd / ".tml-daemon.pid";
-    if (!fs::exists(pid_path, ec)) return -1;
+    if (ec)
+        return -1;
+    std::string cwd_str = cwd.string();
+    uint32_t cwd_crc = tml::crc32c(cwd_str);
+    char crc_hex[16];
+    snprintf(crc_hex, sizeof(crc_hex), "%08x", cwd_crc);
+    auto pid_path = fs::temp_directory_path(ec) / (std::string("tml-daemon-") + crc_hex + ".pid");
+    if (ec || !fs::exists(pid_path, ec))
+        return -1;
 
     // Read PID via Win32 ReadFile.
     // NOTE: std::ifstream >> on Windows can block indefinitely when another
@@ -167,36 +199,38 @@ static int try_daemon_forward_launcher(int argc, char* argv[]) {
     char pid_buf[32] = {};
     {
         HANDLE hPid = CreateFileW(pid_path.wstring().c_str(), GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hPid == INVALID_HANDLE_VALUE) return -1;
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hPid == INVALID_HANDLE_VALUE)
+            return -1;
         DWORD nread = 0;
         ReadFile(hPid, pid_buf, sizeof(pid_buf) - 1, &nread, nullptr);
         CloseHandle(hPid);
     }
     uint32_t pid = static_cast<uint32_t>(std::strtoul(pid_buf, nullptr, 10));
-    if (!pid) return -1;
+    if (!pid)
+        return -1;
 
     // Check process alive
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return -1;
+    if (!hProc)
+        return -1;
     DWORD code = 0;
     bool alive = GetExitCodeProcess(hProc, &code) && code == STILL_ACTIVE;
     CloseHandle(hProc);
-    if (!alive) return -1;
+    if (!alive)
+        return -1;
 
     // Compute pipe name — must match cmd_daemon.cpp::make_pipe_name()
-    std::string cwd_str = cwd.string();
-    uint32_t crc = tml::crc32c(cwd_str);
-    char hex[9];
-    snprintf(hex, sizeof(hex), "%08x", crc);
+    // cwd_str and cwd_crc already computed above for PID path
     std::wstring pipe_name = L"\\\\.\\pipe\\tml-daemon-";
-    pipe_name += std::wstring(hex, hex + 8);
+    pipe_name += std::wstring(crc_hex, crc_hex + 8);
 
     // Build JSON argv (skip argv[0] = exe name, daemon prepends fake exe)
     std::string argv_json = "[";
     for (int i = 1; i < argc; ++i) {
-        if (i > 1) argv_json += ',';
+        if (i > 1)
+            argv_json += ',';
         argv_json += '"';
         argv_json += json_escape_simple(argv[i]);
         argv_json += '"';
@@ -204,22 +238,24 @@ static int try_daemon_forward_launcher(int argc, char* argv[]) {
     argv_json += ']';
 
     std::string cwd_esc = json_escape_simple(cwd_str);
-    std::string request = "{\"id\":1,\"cmd\":\"forward\",\"argv\":" + argv_json +
-                          ",\"cwd\":\"" + cwd_esc + "\"}\n";
+    std::string request =
+        "{\"id\":1,\"cmd\":\"forward\",\"argv\":" + argv_json + ",\"cwd\":\"" + cwd_esc + "\"}\n";
 
     // Connect to named pipe (retry a few times if busy)
     HANDLE hPipe = INVALID_HANDLE_VALUE;
     for (int attempt = 0; attempt < 5; ++attempt) {
-        hPipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE,
-                            0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hPipe != INVALID_HANDLE_VALUE) break;
+        hPipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hPipe != INVALID_HANDLE_VALUE)
+            break;
         if (GetLastError() == ERROR_PIPE_BUSY) {
             WaitNamedPipeW(pipe_name.c_str(), 2000);
         } else {
             break;
         }
     }
-    if (hPipe == INVALID_HANDLE_VALUE) return -1;
+    if (hPipe == INVALID_HANDLE_VALUE)
+        return -1;
 
     DWORD mode = PIPE_READMODE_MESSAGE;
     SetNamedPipeHandleState(hPipe, &mode, nullptr, nullptr);
@@ -237,23 +273,28 @@ static int try_daemon_forward_launcher(int argc, char* argv[]) {
     while (true) {
         DWORD nread = 0;
         BOOL ok = ReadFile(hPipe, buf, sizeof(buf), &nread, nullptr);
-        if (nread > 0) response.append(buf, nread);
+        if (nread > 0)
+            response.append(buf, nread);
         if (!ok) {
             DWORD err = GetLastError();
-            if (err == ERROR_MORE_DATA) continue;
+            if (err == ERROR_MORE_DATA)
+                continue;
             break;
         }
         break;
     }
     CloseHandle(hPipe);
 
-    if (response.empty()) return -1;
+    if (response.empty())
+        return -1;
 
     // Print captured output
     std::string out_str = json_get_str_field(response, "out");
     std::string err_str = json_get_str_field(response, "err");
-    if (!out_str.empty()) std::cout << out_str;
-    if (!err_str.empty()) std::cerr << err_str;
+    if (!out_str.empty())
+        std::cout << out_str;
+    if (!err_str.empty())
+        std::cerr << err_str;
 
     int exit_code = json_get_exit(response);
     return (exit_code >= 0) ? exit_code : 0;
@@ -334,7 +375,8 @@ int main(int argc, char* argv[]) {
     // DLL. This is the sub-10ms incremental-compile path.
     {
         int daemon_result = try_daemon_forward_launcher(argc, argv);
-        if (daemon_result >= 0) return daemon_result;
+        if (daemon_result >= 0)
+            return daemon_result;
         // -1 means daemon not running or not forwardable → fall through
     }
 

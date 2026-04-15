@@ -150,12 +150,12 @@ func test_alloc_write_read_free() -> I32 {
     let expected: *Unit = mem_alloc(size)
     mem_set(expected, 123, size)
     
-    let match: Bool = mem_eq(buffer, expected, size)
-    
+    let is_match: Bool = mem_eq(buffer, expected, size)
+
     mem_free(buffer)
     mem_free(expected)
-    
-    assert_eq(match, true, "buffer should match expected")
+
+    assert_eq(is_match, true, "buffer should match expected")
     return 0
 }
 

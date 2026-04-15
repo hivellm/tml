@@ -9,7 +9,7 @@ TML_MODULE("compiler")
 //! - One daemon per project directory, keyed by CRC32(cwd).
 //! - Windows named pipe in message mode for reliable framing.
 //! - Sequential request serving: LLVM context is not thread-safe.
-//! - PID file in `<cwd>/.tml-daemon.pid` for process tracking.
+//! - PID file in `<temp>/tml-daemon-<crc32>.pid` for process tracking.
 //! - Auto-shutdown after 30 minutes of inactivity.
 
 #include "cli/driver.hpp"
@@ -50,9 +50,9 @@ namespace tml::cli {
 // Constants
 // ============================================================================
 
-static constexpr auto kIdleTimeout = 30min;         // Auto-shutdown after 30min idle
-static constexpr DWORD kPipeBufferSize = 1 << 20;   // 1MB pipe buffer
-static constexpr DWORD kConnectTimeoutMs = 2000;    // Client connect timeout
+static constexpr auto kIdleTimeout = 30min;       // Auto-shutdown after 30min idle
+static constexpr DWORD kPipeBufferSize = 1 << 20; // 1MB pipe buffer
+static constexpr DWORD kConnectTimeoutMs = 2000;  // Client connect timeout
 
 // ============================================================================
 // Pipe name
@@ -86,8 +86,15 @@ static auto make_pipe_name_str(const fs::path& cwd) -> std::string {
 // PID file
 // ============================================================================
 
+/// PID file lives in the user's temp directory, keyed by CRC32 of the project
+/// path so it never pollutes the project root.
 static auto pid_file_path(const fs::path& cwd) -> fs::path {
-    return cwd / ".tml-daemon.pid";
+    std::string cwd_str = cwd.string();
+    uint32_t crc = tml::crc32c(cwd_str);
+    char hex[16];
+    snprintf(hex, sizeof(hex), "%08x", crc);
+    std::string filename = std::string("tml-daemon-") + hex + ".pid";
+    return fs::temp_directory_path() / filename;
 }
 
 static void write_pid_file(const fs::path& cwd) {
@@ -105,7 +112,8 @@ static void write_pid_file(const fs::path& cwd) {
 static auto read_pid_file(const fs::path& cwd) -> uint32_t {
     auto path = pid_file_path(cwd);
     std::ifstream f(path);
-    if (!f) return 0;
+    if (!f)
+        return 0;
     uint32_t pid = 0;
     f >> pid;
     return pid;
@@ -117,10 +125,12 @@ static void remove_pid_file(const fs::path& cwd) {
 }
 
 static auto is_process_alive(uint32_t pid) -> bool {
-    if (pid == 0) return false;
+    if (pid == 0)
+        return false;
 #ifdef _WIN32
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
-    if (!h) return false;
+    if (!h)
+        return false;
     DWORD exit_code = STILL_ACTIVE;
     GetExitCodeProcess(h, &exit_code);
     CloseHandle(h);
@@ -139,12 +149,17 @@ static auto json_escape(const std::string& s) -> std::string {
     std::string out;
     out.reserve(s.size() + 8);
     for (unsigned char c : s) {
-        if (c == '"')  { out += "\\\""; }
-        else if (c == '\\') { out += "\\\\"; }
-        else if (c == '\n')  { out += "\\n"; }
-        else if (c == '\r')  { out += "\\r"; }
-        else if (c == '\t')  { out += "\\t"; }
-        else if (c < 0x20)  {
+        if (c == '"') {
+            out += "\\\"";
+        } else if (c == '\\') {
+            out += "\\\\";
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\r') {
+            out += "\\r";
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (c < 0x20) {
             char buf[8];
             snprintf(buf, sizeof(buf), "\\u%04x", c);
             out += buf;
@@ -160,19 +175,26 @@ static auto json_escape(const std::string& s) -> std::string {
 static auto json_get_str(const std::string& json, const std::string& key) -> std::string {
     std::string search = "\"" + key + "\":\"";
     auto pos = json.find(search);
-    if (pos == std::string::npos) return "";
+    if (pos == std::string::npos)
+        return "";
     pos += search.size();
     std::string val;
     bool escape = false;
     for (; pos < json.size(); ++pos) {
         char c = json[pos];
         if (escape) {
-            if (c == '"')  val += '"';
-            else if (c == '\\') val += '\\';
-            else if (c == 'n')  val += '\n';
-            else if (c == 'r')  val += '\r';
-            else if (c == 't')  val += '\t';
-            else val += c;
+            if (c == '"')
+                val += '"';
+            else if (c == '\\')
+                val += '\\';
+            else if (c == 'n')
+                val += '\n';
+            else if (c == 'r')
+                val += '\r';
+            else if (c == 't')
+                val += '\t';
+            else
+                val += c;
             escape = false;
         } else if (c == '\\') {
             escape = true;
@@ -186,32 +208,44 @@ static auto json_get_str(const std::string& json, const std::string& key) -> std
 }
 
 /// Extract an array of strings from a flat JSON object by key.
-static auto json_get_str_array(const std::string& json, const std::string& key) -> std::vector<std::string> {
+static auto json_get_str_array(const std::string& json, const std::string& key)
+    -> std::vector<std::string> {
     std::string search = "\"" + key + "\":[";
     auto pos = json.find(search);
-    if (pos == std::string::npos) return {};
+    if (pos == std::string::npos)
+        return {};
     pos += search.size();
 
     std::vector<std::string> result;
     while (pos < json.size() && json[pos] != ']') {
-        if (json[pos] != '"') { ++pos; continue; }
+        if (json[pos] != '"') {
+            ++pos;
+            continue;
+        }
         ++pos;
         std::string val;
         bool escape = false;
         for (; pos < json.size(); ++pos) {
             char c = json[pos];
             if (escape) {
-                if (c == '"')  val += '"';
-                else if (c == '\\') val += '\\';
-                else if (c == 'n')  val += '\n';
-                else if (c == 'r')  val += '\r';
-                else if (c == 't')  val += '\t';
-                else val += c;
+                if (c == '"')
+                    val += '"';
+                else if (c == '\\')
+                    val += '\\';
+                else if (c == 'n')
+                    val += '\n';
+                else if (c == 'r')
+                    val += '\r';
+                else if (c == 't')
+                    val += '\t';
+                else
+                    val += c;
                 escape = false;
             } else if (c == '\\') {
                 escape = true;
             } else if (c == '"') {
-                ++pos; break;
+                ++pos;
+                break;
             } else {
                 val += c;
             }
@@ -225,12 +259,17 @@ static auto json_get_str_array(const std::string& json, const std::string& key) 
 static auto json_get_int(const std::string& json, const std::string& key) -> int {
     std::string search = "\"" + key + "\":";
     auto pos = json.find(search);
-    if (pos == std::string::npos) return 0;
+    if (pos == std::string::npos)
+        return 0;
     pos += search.size();
-    while (pos < json.size() && json[pos] == ' ') ++pos;
+    while (pos < json.size() && json[pos] == ' ')
+        ++pos;
     int val = 0;
     bool neg = false;
-    if (pos < json.size() && json[pos] == '-') { neg = true; ++pos; }
+    if (pos < json.size() && json[pos] == '-') {
+        neg = true;
+        ++pos;
+    }
     while (pos < json.size() && std::isdigit(static_cast<unsigned char>(json[pos]))) {
         val = val * 10 + (json[pos] - '0');
         ++pos;
@@ -245,11 +284,16 @@ static auto json_get_int(const std::string& json, const std::string& key) -> int
 class StreamCapture {
 public:
     explicit StreamCapture(std::ostream& s) : stream_(s), buf_(), old_buf_(s.rdbuf(buf_.rdbuf())) {}
-    ~StreamCapture() { stream_.rdbuf(old_buf_); }
-    auto str() const -> std::string { return buf_.str(); }
+    ~StreamCapture() {
+        stream_.rdbuf(old_buf_);
+    }
+    auto str() const -> std::string {
+        return buf_.str();
+    }
+
 private:
     std::ostream& stream_;
-    std::ostringstream buf_;    // MUST be declared before old_buf_ for init order
+    std::ostringstream buf_; // MUST be declared before old_buf_ for init order
     std::streambuf* old_buf_;
 };
 
@@ -271,7 +315,10 @@ static std::unordered_map<std::string, CacheEntry> s_result_cache;
 /// CRC32c of joined argv as a hex string (8 chars).
 static auto argv_cache_key(const std::vector<std::string>& argv) -> std::string {
     std::string joined;
-    for (const auto& a : argv) { joined += a; joined += '\0'; }
+    for (const auto& a : argv) {
+        joined += a;
+        joined += '\0';
+    }
     uint32_t crc = tml::crc32c(joined);
     char buf[16];
     snprintf(buf, sizeof(buf), "%08x", crc);
@@ -280,8 +327,7 @@ static auto argv_cache_key(const std::vector<std::string>& argv) -> std::string 
 
 /// Collect (canonical_path, mtime) for each argument that ends in ".tml".
 static auto collect_mtimes(const std::vector<std::string>& argv, const std::string& cwd_str)
-    -> std::vector<std::pair<std::string, fs::file_time_type>>
-{
+    -> std::vector<std::pair<std::string, fs::file_time_type>> {
     std::vector<std::pair<std::string, fs::file_time_type>> result;
     for (const auto& arg : argv) {
         if (arg.size() >= 4 && arg.rfind(".tml") == arg.size() - 4) {
@@ -290,27 +336,32 @@ static auto collect_mtimes(const std::vector<std::string>& argv, const std::stri
             if (p.is_relative() && !cwd_str.empty())
                 p = fs::path(cwd_str) / p;
             p = fs::weakly_canonical(p, ec);
-            if (ec) continue;
+            if (ec)
+                continue;
             auto mtime = fs::last_write_time(p, ec);
-            if (!ec) result.emplace_back(p.string(), mtime);
+            if (!ec)
+                result.emplace_back(p.string(), mtime);
         }
     }
     return result;
 }
 
 /// True if every (path, mtime) pair in the snapshot still matches disk.
-static auto mtimes_still_valid(const std::vector<std::pair<std::string, fs::file_time_type>>& snap) -> bool {
+static auto mtimes_still_valid(const std::vector<std::pair<std::string, fs::file_time_type>>& snap)
+    -> bool {
     for (const auto& [path, cached_mtime] : snap) {
         std::error_code ec;
         auto cur = fs::last_write_time(fs::path(path), ec);
-        if (ec || cur != cached_mtime) return false;
+        if (ec || cur != cached_mtime)
+            return false;
     }
     return true;
 }
 
 /// Commands whose output is a pure function of the source files (safe to cache).
 static auto is_cacheable(const std::vector<std::string>& argv) -> bool {
-    if (argv.empty()) return false;
+    if (argv.empty())
+        return false;
     const auto& cmd = argv[0];
     return cmd == "check" || cmd == "build" || cmd == "emit-ir" || cmd == "emit-mir";
 }
@@ -330,7 +381,8 @@ static auto compiler_dll_path() -> fs::path {
     // Linux/macOS: resolve /proc/self/exe or use dladdr
     char exe_buf[4096] = {};
     ssize_t n = readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
-    if (n <= 0) return {};
+    if (n <= 0)
+        return {};
     exe_buf[n] = '\0';
     fs::path exe(exe_buf);
     return exe.parent_path() / "plugins" / "libtml_compiler.so";
@@ -346,7 +398,8 @@ static auto record_dll_mtime() -> fs::file_time_type {
 
 /// True if the compiler DLL mtime matches the recorded startup mtime.
 static auto dll_still_fresh(const fs::file_time_type& recorded) -> bool {
-    if (recorded == fs::file_time_type{}) return true;  // unknown — don't block
+    if (recorded == fs::file_time_type{})
+        return true; // unknown — don't block
     std::error_code ec;
     auto cur = fs::last_write_time(compiler_dll_path(), ec);
     return ec || cur == recorded;
@@ -409,8 +462,8 @@ static auto handle_request(const std::string& request_json) -> std::string {
         fs::current_path(fs::path(cwd_str), ec);
         if (ec) {
             std::string err = "cannot chdir to " + cwd_str + ": " + ec.message();
-            return "{\"id\":" + std::to_string(id) + ",\"exit\":1,\"err\":\"" +
-                   json_escape(err) + "\"}\n";
+            return "{\"id\":" + std::to_string(id) + ",\"exit\":1,\"err\":\"" + json_escape(err) +
+                   "\"}\n";
         }
     }
 
@@ -429,18 +482,18 @@ static auto handle_request(const std::string& request_json) -> std::string {
             const auto& e = it->second;
             if (!cwd_str.empty() && !old_cwd.empty())
                 fs::current_path(old_cwd, ec);
-            return "{\"id\":" + std::to_string(id) +
-                   ",\"exit\":" + std::to_string(e.exit_code) +
-                   ",\"out\":\"" + json_escape(e.out) +
-                   "\",\"err\":\"" + json_escape(e.err) + "\"}\n";
+            return "{\"id\":" + std::to_string(id) + ",\"exit\":" + std::to_string(e.exit_code) +
+                   ",\"out\":\"" + json_escape(e.out) + "\",\"err\":\"" + json_escape(e.err) +
+                   "\"}\n";
         }
     }
 
     // Build a C-style argv — prepend fake exe name so tml_main sees argv[0]=exe, argv[1]=cmd
     std::vector<const char*> cargv;
     cargv.reserve(argv_strs.size() + 2);
-    cargv.push_back("tml");  // argv[0]: fake exe name
-    for (const auto& s : argv_strs) cargv.push_back(s.c_str());
+    cargv.push_back("tml"); // argv[0]: fake exe name
+    for (const auto& s : argv_strs)
+        cargv.push_back(s.c_str());
     cargv.push_back(nullptr);
 
     // Capture stdout + stderr during the compilation
@@ -473,10 +526,9 @@ static auto handle_request(const std::string& request_json) -> std::string {
     }
 
     // Build JSON response
-    std::string resp = "{\"id\":" + std::to_string(id) +
-                       ",\"exit\":" + std::to_string(exit_code) +
-                       ",\"out\":\"" + json_escape(out_str) +
-                       "\",\"err\":\"" + json_escape(err_str) + "\"}\n";
+    std::string resp = "{\"id\":" + std::to_string(id) + ",\"exit\":" + std::to_string(exit_code) +
+                       ",\"out\":\"" + json_escape(out_str) + "\",\"err\":\"" +
+                       json_escape(err_str) + "\"}\n";
     return resp;
 }
 
@@ -509,8 +561,8 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
     // so the next thin-launcher invocation starts a fresh daemon.
     const auto startup_dll_mtime = record_dll_mtime();
 
-    TML_LOG_INFO("daemon", "Server starting, pipe: "
-                               << std::string(pipe_name.begin(), pipe_name.end()));
+    TML_LOG_INFO("daemon",
+                 "Server starting, pipe: " << std::string(pipe_name.begin(), pipe_name.end()));
 
     auto last_request = std::chrono::steady_clock::now();
     bool shutdown_requested = false;
@@ -525,14 +577,11 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
         }
 
         // Create a new pipe instance for the next client
-        HANDLE hPipe = CreateNamedPipeW(
-            pipe_name.c_str(),
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            PIPE_UNLIMITED_INSTANCES,
-            kPipeBufferSize, kPipeBufferSize,
-            100,  // Default timeout 100ms for ConnectNamedPipe
-            nullptr);
+        HANDLE hPipe = CreateNamedPipeW(pipe_name.c_str(), PIPE_ACCESS_DUPLEX,
+                                        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                                        PIPE_UNLIMITED_INSTANCES, kPipeBufferSize, kPipeBufferSize,
+                                        100, // Default timeout 100ms for ConnectNamedPipe
+                                        nullptr);
 
         if (hPipe == INVALID_HANDLE_VALUE) {
             TML_LOG_ERROR("daemon", "CreateNamedPipe failed: " << GetLastError());
@@ -543,7 +592,10 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
         // Use overlapped I/O so we can poll for idle timeout
         OVERLAPPED ov = {};
         ov.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        if (!ov.hEvent) { CloseHandle(hPipe); break; }
+        if (!ov.hEvent) {
+            CloseHandle(hPipe);
+            break;
+        }
 
         BOOL connected = ConnectNamedPipe(hPipe, &ov);
         if (!connected) {
@@ -588,14 +640,15 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
                 int id = json_get_int(request, "id");
                 s_result_cache.clear();
                 TML_LOG_INFO("daemon", "Compiler DLL updated — restarting daemon");
-                std::string resp = "{\"id\":" + std::to_string(id) +
+                std::string resp =
+                    "{\"id\":" + std::to_string(id) +
                     ",\"exit\":1,\"err\":\"daemon: compiler updated, restarting\"}\n";
                 pipe_write(hPipe, resp);
                 FlushFileBuffers(hPipe);
                 DisconnectNamedPipe(hPipe);
                 CloseHandle(hPipe);
                 remove_pid_file(cwd);
-                return 0;  // Exit cleanly; next invocation starts a fresh daemon
+                return 0; // Exit cleanly; next invocation starts a fresh daemon
             }
 
             std::string response = handle_request(request);
@@ -650,10 +703,12 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
         FD_SET(server_fd, &fds);
         struct timeval tv = {5, 0};
         int ready = select(server_fd + 1, &fds, nullptr, nullptr, &tv);
-        if (ready <= 0) continue;
+        if (ready <= 0)
+            continue;
 
         int client_fd = accept(server_fd, nullptr, nullptr);
-        if (client_fd < 0) continue;
+        if (client_fd < 0)
+            continue;
 
         char buf[1 << 20] = {};
         ssize_t n = recv(client_fd, buf, sizeof(buf) - 1, 0);
@@ -665,7 +720,8 @@ auto cmd_daemon_server(const std::vector<std::string>& /*args*/) -> int {
                 int id = json_get_int(request, "id");
                 s_result_cache.clear();
                 TML_LOG_INFO("daemon", "Compiler DLL updated — restarting daemon");
-                std::string resp = "{\"id\":" + std::to_string(id) +
+                std::string resp =
+                    "{\"id\":" + std::to_string(id) +
                     ",\"exit\":1,\"err\":\"daemon: compiler updated, restarting\"}\n";
                 send(client_fd, resp.data(), resp.size(), 0);
                 close(client_fd);
@@ -725,23 +781,18 @@ static auto daemon_start() -> int {
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES;
     // Detach from console: redirect handles to NUL
-    HANDLE hNul = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_EXISTING, 0, nullptr);
+    HANDLE hNul =
+        CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    nullptr, OPEN_EXISTING, 0, nullptr);
     si.hStdInput = hNul;
     si.hStdOutput = hNul;
     si.hStdError = hNul;
 
     PROCESS_INFORMATION pi = {};
-    BOOL ok = CreateProcessW(
-        nullptr,
-        cmd_line.data(),
-        nullptr, nullptr,
-        FALSE,
-        DETACHED_PROCESS | CREATE_NO_WINDOW,
-        nullptr,
-        nullptr,  // inherit CWD from parent
-        &si, &pi);
+    BOOL ok = CreateProcessW(nullptr, cmd_line.data(), nullptr, nullptr, FALSE,
+                             DETACHED_PROCESS | CREATE_NO_WINDOW, nullptr,
+                             nullptr, // inherit CWD from parent
+                             &si, &pi);
 
     CloseHandle(hNul);
     if (!ok) {
@@ -804,11 +855,8 @@ static auto daemon_stop() -> int {
     auto pipe_name = make_pipe_name(cwd);
 
 #ifdef _WIN32
-    HANDLE hPipe = CreateFileW(
-        pipe_name.c_str(),
-        GENERIC_READ | GENERIC_WRITE,
-        0, nullptr, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE hPipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
     if (hPipe == INVALID_HANDLE_VALUE) {
         // Pipe not reachable — kill the process directly
@@ -867,11 +915,8 @@ static auto daemon_status() -> int {
     bool responsive = false;
 
 #ifdef _WIN32
-    HANDLE hPipe = CreateFileW(
-        pipe_name.c_str(),
-        GENERIC_READ | GENERIC_WRITE,
-        0, nullptr, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE hPipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hPipe != INVALID_HANDLE_VALUE) {
         DWORD mode = PIPE_READMODE_MESSAGE;
         SetNamedPipeHandleState(hPipe, &mode, nullptr, nullptr);
@@ -893,7 +938,8 @@ static auto daemon_status() -> int {
         send(fd, req.data(), req.size(), 0);
         char buf[256] = {};
         ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        responsive = n > 0 && std::string(buf, static_cast<size_t>(n)).find("pong") != std::string::npos;
+        responsive =
+            n > 0 && std::string(buf, static_cast<size_t>(n)).find("pong") != std::string::npos;
     }
     close(fd);
 #endif
@@ -914,14 +960,16 @@ static auto daemon_status() -> int {
 auto try_daemon_forward(int argc, char* argv[]) -> int {
     auto cwd = fs::current_path();
     uint32_t pid = read_pid_file(cwd);
-    if (!pid || !is_process_alive(pid)) return -1;
+    if (!pid || !is_process_alive(pid))
+        return -1;
 
     auto pipe_name = make_pipe_name(cwd);
 
     // Build JSON request
     std::string argv_json = "[";
-    for (int i = 1; i < argc; ++i) {  // skip argv[0] (exe name)
-        if (i > 1) argv_json += ',';
+    for (int i = 1; i < argc; ++i) { // skip argv[0] (exe name)
+        if (i > 1)
+            argv_json += ',';
         argv_json += '"';
         argv_json += json_escape(argv[i]);
         argv_json += '"';
@@ -929,28 +977,28 @@ auto try_daemon_forward(int argc, char* argv[]) -> int {
     argv_json += ']';
 
     std::string cwd_str = json_escape(cwd.string());
-    std::string request = "{\"id\":1,\"cmd\":\"forward\",\"argv\":" + argv_json +
-                          ",\"cwd\":\"" + cwd_str + "\"}\n";
+    std::string request =
+        "{\"id\":1,\"cmd\":\"forward\",\"argv\":" + argv_json + ",\"cwd\":\"" + cwd_str + "\"}\n";
 
 #ifdef _WIN32
     // Try to connect; if the pipe is busy (server handling another request),
     // wait briefly before giving up.
     HANDLE hPipe = INVALID_HANDLE_VALUE;
     for (int attempt = 0; attempt < 5; ++attempt) {
-        hPipe = CreateFileW(
-            pipe_name.c_str(),
-            GENERIC_READ | GENERIC_WRITE,
-            0, nullptr, OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hPipe != INVALID_HANDLE_VALUE) break;
+        hPipe = CreateFileW(pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hPipe != INVALID_HANDLE_VALUE)
+            break;
         if (GetLastError() == ERROR_PIPE_BUSY) {
-            if (!WaitNamedPipeW(pipe_name.c_str(), kConnectTimeoutMs)) break;
+            if (!WaitNamedPipeW(pipe_name.c_str(), kConnectTimeoutMs))
+                break;
         } else {
             break;
         }
     }
 
-    if (hPipe == INVALID_HANDLE_VALUE) return -1;  // Daemon not reachable
+    if (hPipe == INVALID_HANDLE_VALUE)
+        return -1; // Daemon not reachable
 
     DWORD mode = PIPE_READMODE_MESSAGE;
     SetNamedPipeHandleState(hPipe, &mode, nullptr, nullptr);
@@ -980,7 +1028,8 @@ auto try_daemon_forward(int argc, char* argv[]) -> int {
     char buf[1 << 20] = {};
     ssize_t n = recv(fd, buf, sizeof(buf) - 1, 0);
     close(fd);
-    if (n <= 0) return -1;
+    if (n <= 0)
+        return -1;
     std::string response(buf, static_cast<size_t>(n));
 #endif
 
@@ -989,8 +1038,10 @@ auto try_daemon_forward(int argc, char* argv[]) -> int {
     std::string out_str = json_get_str(response, "out");
     std::string err_str = json_get_str(response, "err");
 
-    if (!out_str.empty()) std::cout << out_str;
-    if (!err_str.empty()) std::cerr << err_str;
+    if (!out_str.empty())
+        std::cout << out_str;
+    if (!err_str.empty())
+        std::cerr << err_str;
 
     return exit_code;
 }
@@ -1026,7 +1077,7 @@ Usage:
   TML_DAEMON=1 tml build ...  # Use daemon if running (auto mode)
   tml daemon stop             # Shut down
 
-The daemon writes its PID to .tml-daemon.pid in the project directory.
+The daemon writes its PID to the system temp directory (e.g. %TEMP%/tml-daemon-<hash>.pid).
 It auto-shuts down after 30 minutes of inactivity.
 )";
         return 0;

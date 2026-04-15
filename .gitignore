@@ -19,6 +19,11 @@ src/vcpkg/
 .sandbox/
 .sandbox
 
+# Daemon artifacts (PID file now in temp dir, but catch stale ones)
+.tml-daemon.pid
+daemon_dbg.txt
+daemon_request.log
+
 # Common
 .claude/settings.local.json
 .claude/agent-memory/
