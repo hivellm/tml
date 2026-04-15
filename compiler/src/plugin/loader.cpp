@@ -50,6 +50,10 @@ static std::unordered_map<std::string, DllCacheEntry> g_dll_cache;
 // Preload state
 static std::atomic<int> g_preload_count{0};
 
+// Daemon mode: when true, unload_all() keeps DLLs resident in g_dll_cache
+// instead of calling FreeLibrary. Set by cmd_daemon_server() at startup.
+static std::atomic<bool> g_daemon_mode{false};
+
 /// Retrieve mtime for a path; returns default (epoch) on error.
 static auto get_path_mtime(const fs::path& p) -> fs::file_time_type {
     std::error_code ec;
@@ -373,24 +377,37 @@ auto Loader::load(const std::string& name) -> LoadedPlugin* {
     return &it->second;
 }
 
+void Loader::set_daemon_mode(bool enabled) {
+    g_daemon_mode.store(enabled, std::memory_order_relaxed);
+}
+
 void Loader::unload_all() {
+    bool daemon = g_daemon_mode.load(std::memory_order_relaxed);
     // Shutdown in reverse load order (approximation: just iterate)
     for (auto& [name, plugin] : loaded_) {
         if (plugin.initialized && plugin.shutdown) {
             plugin.shutdown();
         }
-        // Evict from process-level cache and release the OS handle so the DLL's
-        // DllMain(DLL_PROCESS_DETACH) fires now, under controlled conditions.
-        // This avoids static destructor ordering issues at process exit (LLVM
-        // global registry destructors crash if the DLL is unloaded by ExitProcess
-        // after the C runtime has already cleaned up).
         if (plugin.handle) {
-            std::string key = plugin.dll_path.string();
-            {
-                std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
-                g_dll_cache.erase(key);
+            if (daemon) {
+                // Daemon mode: keep DLL resident in g_dll_cache so the next
+                // request reuses the already-loaded handle. DLLs are only
+                // truly unloaded when the daemon process exits.
+                // (No FreeLibrary — the OS cleans up at process exit.)
+            } else {
+                // Normal mode: evict from process-level cache and release
+                // the OS handle so DllMain(DLL_PROCESS_DETACH) fires now,
+                // under controlled teardown. This avoids static destructor
+                // ordering issues at process exit (LLVM global registry
+                // destructors crash if the DLL is unloaded by ExitProcess
+                // after the C runtime has already cleaned up).
+                std::string key = plugin.dll_path.string();
+                {
+                    std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+                    g_dll_cache.erase(key);
+                }
+                platform_dl_close(plugin.handle);
             }
-            platform_dl_close(plugin.handle);
         }
         plugin.handle = nullptr;
         plugin.initialized = false;

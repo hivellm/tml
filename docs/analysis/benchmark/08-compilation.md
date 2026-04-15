@@ -46,6 +46,29 @@
 
 Rust with `cargo` incremental is ~0.5-1.5s for small changes. TML's incremental is 3-5s — still 3-5x slower.
 
+### Daemon Mode (v0.3.16+)
+
+`tml daemon start` keeps the compiler DLLs and LLVM context warm in a
+background process. Subsequent compiles are served from an in-memory result
+cache keyed on `(argv_hash, file_mtime)`.
+
+| Scenario | Windows (debug) | Notes |
+|----------|----------------|-------|
+| `cargo check` no-change | ~98ms | Rust reference on same machine |
+| TML daemon, first request (cache miss) | ~7.7s | Full compile |
+| TML daemon, second request, no changes (cache hit) | **22ms** | Result cache; 4.5× faster than `cargo check` |
+| TML daemon, compilation time (daemon-side only) | **<1ms** | Hash lookup + mtime check |
+
+> **Platform note (Windows):** Process creation is ~21ms on Windows 10
+> regardless of build mode (`tml --version` = 22ms baseline). The remaining
+> 1ms above baseline is the named-pipe IPC round-trip plus JSON framing.
+> On Linux/macOS the total would be ~3-5ms (fork ~1ms + pipe ~1ms).
+
+**DLL staleness detection:** if `tml_compiler.dll` is rebuilt while the
+daemon is running, the daemon exits cleanly on the next request with message
+`"daemon: compiler updated, restarting"`. The next invocation auto-starts
+a fresh daemon.
+
 ## Binary Size
 
 | Program | Rust (KB) | TML (KB) | Ratio |

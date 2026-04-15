@@ -62,6 +62,10 @@ public:
     /// Unload all plugins (calls shutdown on each).
     void unload_all();
 
+    /// In daemon mode, unload_all() keeps DLLs in the handle cache instead
+    /// of calling FreeLibrary. Call once at daemon startup.
+    static void set_daemon_mode(bool enabled);
+
     /// Get a previously loaded plugin by name.
     auto get(const std::string& name) -> LoadedPlugin*;
 

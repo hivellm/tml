@@ -50,6 +50,7 @@ TML_MODULE("compiler")
 #include "commands/cmd_build.hpp"
 #include "commands/cmd_cache.hpp"
 #include "commands/cmd_coverage.hpp"
+#include "commands/cmd_daemon.hpp"
 #include "commands/cmd_debug.hpp"
 #include "commands/cmd_doc.hpp"
 #include "commands/cmd_explain.hpp"
@@ -172,6 +173,17 @@ int tml_main(int argc, char* argv[]) {
             return 1;
         }
         return run_explain(argv[2], verbose);
+    }
+
+    // Daemon forwarding: if TML_DAEMON=1 is set and a daemon is running for
+    // this project directory, forward build/run/check requests to it.
+    // Falls through to direct compilation if no daemon is reachable.
+    if ((command == "build" || command == "run" || command == "check") &&
+        std::getenv("TML_DAEMON") != nullptr &&
+        std::string(std::getenv("TML_DAEMON")) == "1") {
+        int result = try_daemon_forward(argc, argv);
+        if (result >= 0) return result;
+        // Daemon not reachable — fall through to direct compilation
     }
 
     if (command == "build") {
@@ -925,6 +937,23 @@ int tml_main(int argc, char* argv[]) {
             args.push_back(argv[i]);
         }
         return cmd_mcp(args);
+    }
+
+    if (command == "daemon") {
+        std::vector<std::string> args;
+        for (int i = 2; i < argc; ++i) {
+            args.push_back(argv[i]);
+        }
+        return cmd_daemon(args);
+    }
+
+    // Hidden internal command: the daemon server spawns itself with this.
+    if (command == "__daemon_server") {
+        std::vector<std::string> args;
+        for (int i = 2; i < argc; ++i) {
+            args.push_back(argv[i]);
+        }
+        return cmd_daemon_server(args);
     }
 
     if (command == "demangle") {

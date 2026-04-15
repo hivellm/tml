@@ -1745,6 +1745,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
+    src/cli/commands/cmd_daemon.cpp
     src/cli/commands/cmd_mcp.cpp
     src/cli/commands/cmd_pkg.cpp
     src/cli/commands/cmd_inspect.cpp

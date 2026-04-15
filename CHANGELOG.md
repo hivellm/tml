@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.16](docs/patches/v0.3.16.md) | 2026-04-14 | feat(daemon): persistent compilation daemon — `tml daemon start/stop/status`, named-pipe IPC, in-process result cache (22ms vs 98ms `cargo check` on Windows), DLL staleness detection, TML_DAEMON env var |
 | [0.3.15](docs/patches/v0.3.15.md) | 2026-04-14 | build: add `scripts/build.bat release` — release DLLs compile 2.93× faster (6.9s→2.4s per file); `TML_COMPILER_BUILD=release` env var to use release DLLs from debug tml.exe; fix Clang `-Wdate-time` in release build |
 | [0.3.14](docs/patches/v0.3.14.md) | 2026-04-14 | perf(loader): process-level DLL handle cache with mtime invalidation + background preload thread — eliminates double-`LoadLibrary` on repeated invocations; fixes static-destructor ordering crash on exit |
 | [0.3.13](docs/patches/v0.3.13.md) | 2026-04-14 | perf(codegen): NRVO in MIR→LLVM path — sret wrapper calls forward `%sret` directly to callee, eliminating intermediate alloca+load+store; 10 regression tests added |
