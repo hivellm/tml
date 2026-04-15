@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 
-**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM+LLD backend, Tracy profiler integration, and self-documenting syntax designed for deterministic LLM code generation.
+**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM backend with native OS linker integration, a persistent compilation daemon (22ms cached builds), Tracy profiler integration, and self-documenting syntax designed for deterministic LLM code generation.
 
 One binary. Zero external tools. 11,000+ tests. 99% library coverage. Everything you need from code to production.
 
@@ -116,6 +116,8 @@ tml test --suite=core/str      # Run one module's tests
 tml test --coverage            # Tests + coverage report
 tml fmt src/                   # Format code
 tml lint src/                  # Lint code
+tml daemon start               # Start persistent compiler daemon
+tml daemon stop                # Stop daemon
 tml mcp                        # Start MCP server
 tml build app.tml --emit-ir    # Emit LLVM IR
 tml build app.tml --release    # Optimized build
@@ -167,7 +169,7 @@ Most languages require a constellation of separate tools. TML ships everything i
 
 | Capability | Traditional | TML |
 |-----------|-------------|-----|
-| **Compilation** | `gcc`/`clang` + `ld`/`lld` | Embedded LLVM + LLD (in-process) |
+| **Compilation** | `gcc`/`clang` + `ld`/`lld` | Embedded LLVM + native OS linker |
 | **Testing** | External frameworks (gtest, pytest, jest) | `@test` decorator + DLL-based runner |
 | **Coverage** | Separate tools (gcov, tarpaulin, istanbul) | `--coverage` flag |
 | **Benchmarking** | External (criterion, hyperfine) | `@bench` decorator + baseline comparison |
@@ -177,6 +179,7 @@ Most languages require a constellation of separate tools. TML ships everything i
 | **Documentation** | External (rustdoc, godoc, jsdoc) | `tml doc` (JSON, HTML, Markdown) |
 | **Profiling** | External (perf, valgrind, Instruments) | `--profile` (Chrome DevTools format) |
 | **Package management** | External (cargo, npm, pip) | `tml deps` / `tml add` |
+| **Compilation daemon** | External (ccache, sccache) | `tml daemon` (22ms cached, 4.5x faster than `cargo check`) |
 | **AI integration** | None / LSP workarounds | Native MCP server |
 
 ```bash

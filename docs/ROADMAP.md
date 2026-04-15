@@ -1,7 +1,7 @@
 # TML Roadmap
 
-**Last updated**: 2026-03-28
-**Current state**: Compiler functional, 1,700+ tests passing, 95%+ Rust core parity, 80%+ Rust std parity, HTTP server at 183K req/s, async network stack complete, reflection system complete, function contracts implemented, Phase 7 Rust parity 14/16 tasks done
+**Last updated**: 2026-04-15
+**Current state**: C++ compiler 100% functional (beta) — 11,000+ tests, 99% library coverage. Self-hosted TML compiler in development on `feat/self-hosting-compiler`. Persistent compilation daemon (22ms cached builds, 4.5x faster than `cargo check`). Embedded LLD removed in favor of native OS linker (−26% DLL size).
 
 ---
 
@@ -12,21 +12,22 @@ Phase 1  [DONE]         Codegen bug fixes (closures, generics, iterators)
 Phase 2  [DONE]         Test coverage 58% → 93%
 Phase 3  [DONE]         Stdlib essentials (Math, DateTime, Regex, BufIO, Process, etc.)
 Phase 4  [DONE]         C runtime migration → pure TML (0 migration candidates)
-Phase 5  [IN PROGRESS]  Networking + async I/O (HTTP 183K req/s, SQLite, TLS, WebSocket)
-Phase 6  [PLANNED]      Self-hosting compiler (C++ → TML)
-Phase 7  [PLANNED]      Rust parity — 16 tasks, 215 items (function-level completeness)
+Phase 5  [DONE]         Networking + async I/O (HTTP 183K req/s, SQLite, TLS, WebSocket)
+Phase 6  [IN PROGRESS]  Self-hosting compiler (C++ → TML) — parser ported, type checker WIP
+Phase 7  [DONE]         Rust parity — 16 tasks, 215 items (function-level completeness)
 ```
 
 ### Current Metrics
 
 | Metric | Value |
 |--------|-------|
-| TML tests passing | 1,700+ across 200+ test files |
-| Library coverage | 93.2%+ (5,918/6,352 functions) |
+| TML tests passing | 11,000+ across 1,400+ test files |
+| Library coverage | 99% (docs/API coverage) |
 | Rust core parity | 95%+ (Phase 7 sprints closed major gaps) |
 | Rust std parity | 80%+ module-level + 17 exclusive TML modules |
 | C++ compiler size | ~240,000 lines |
 | TML standard library | ~150,000+ lines |
+| Compilation (daemon cached) | 22ms (4.5x faster than `cargo check`) |
 | Core modules | 22 directories (traits, types, runtime, data, async, alloc, cell, fmt, iter, ops, ptr, slice, etc.) |
 | Std modules | 20 directories (collections, net, http, crypto, sync, file, stream, sqlite, zlib, events, etc.) |
 | HTTP performance | 183K req/s — beats Node.js cluster by 32% |

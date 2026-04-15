@@ -2,7 +2,7 @@
 
 Complete index of everything available in the TML language, standard library, and documentation.
 
-**Version**: 0.2.14 | **Status**: Phase 0 stabilization complete — 1845/1874 tests passing (86% of compile failures resolved). Single THIR→MIR pipeline (legacy HIR→MIR path removed in v0.2.13). See [specs/typechecker-invariants.md](specs/typechecker-invariants.md) for self-hosting invariant specification.
+**Version**: 0.3.18 | **Status**: C++ compiler 100% functional (beta) — 11,000+ tests, 99% library coverage. Self-hosted TML compiler in development on `feat/self-hosting-compiler`. Persistent compilation daemon (22ms cached builds). Single THIR→MIR pipeline. See [specs/typechecker-invariants.md](specs/typechecker-invariants.md) for self-hosting invariant specification.
 
 ---
 
