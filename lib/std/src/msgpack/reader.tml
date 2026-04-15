@@ -30,7 +30,7 @@ impl MsgPackReader {
     }
 
     /// Reads one byte and advances. Returns -1 on EOF.
-    func next_byte(mut this) -> I32 {
+    pub func next_byte(mut this) -> I32 {
         if this.pos >= this.buf.len() {
             return -1
         }

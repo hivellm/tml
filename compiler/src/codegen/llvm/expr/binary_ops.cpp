@@ -690,6 +690,8 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     std::string int_type = "i32";
     if (is_bool) {
         int_type = "i1";
+    } else if (left_type == "i128" || right_type == "i128") {
+        int_type = "i128";
     } else if (left_type == "i64" || right_type == "i64") {
         int_type = "i64";
     } else if (is_i16) {
