@@ -1,0 +1,115 @@
+// Tests for MsgPackWriter — MessagePack encoding
+use test
+use std::msgpack::writer::MsgPackWriter
+use std::collections::Buffer
+
+@test
+func test_write_nil() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_nil()
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "nil should be 1 byte")
+    assert_eq(buf.read_u8(0), 0xc0, "nil = 0xc0")
+    return 0
+}
+
+@test
+func test_write_bool_true() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_bool(true)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "bool true should be 1 byte")
+    assert_eq(buf.read_u8(0), 0xc3, "true = 0xc3")
+    return 0
+}
+
+@test
+func test_write_bool_false() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_bool(false)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "bool false should be 1 byte")
+    assert_eq(buf.read_u8(0), 0xc2, "false = 0xc2")
+    return 0
+}
+
+@test
+func test_write_positive_fixint() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_u64(42 as U64)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "fixint should be 1 byte")
+    assert_eq(buf.read_u8(0), 42, "42 as fixint")
+    return 0
+}
+
+@test
+func test_write_uint8() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_u64(200 as U64)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 2, "uint8 should be 2 bytes")
+    assert_eq(buf.read_u8(0), 0xcc, "uint8 prefix = 0xcc")
+    assert_eq(buf.read_u8(1), 200, "value = 200")
+    return 0
+}
+
+@test
+func test_write_uint16() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_u64(1000 as U64)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 3, "uint16 should be 3 bytes")
+    assert_eq(buf.read_u8(0), 0xcd, "uint16 prefix = 0xcd")
+    assert_eq(buf.read_u8(1), 3, "1000 >> 8 = 3")
+    assert_eq(buf.read_u8(2), 232, "1000 & 0xff = 232")
+    return 0
+}
+
+@test
+func test_write_negative_fixint() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_i64(-1)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "negative fixint should be 1 byte")
+    assert_eq(buf.read_u8(0), 0xff, "-1 as fixint = 0xff")
+    return 0
+}
+
+@test
+func test_write_fixstr() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_str("hello")
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 6, "fixstr 'hello' = 1 + 5 bytes")
+    assert_eq(buf.read_u8(0), 0xa5, "fixstr len 5 = 0xa5")
+    assert_eq(buf.read_u8(1), 104, "'h' = 104")
+    assert_eq(buf.read_u8(5), 111, "'o' = 111")
+    return 0
+}
+
+@test
+func test_write_fixarray() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_array_header(3)
+    w.write_u64(1 as U64)
+    w.write_u64(2 as U64)
+    w.write_u64(3 as U64)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0x93, "fixarray len 3 = 0x93")
+    assert_eq(buf.read_u8(1), 1, "element 0 = 1")
+    assert_eq(buf.read_u8(2), 2, "element 1 = 2")
+    assert_eq(buf.read_u8(3), 3, "element 2 = 3")
+    return 0
+}
+
+@test
+func test_write_fixmap() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_map_header(1)
+    w.write_str("key")
+    w.write_u64(42 as U64)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0x81, "fixmap len 1 = 0x81")
+    return 0
+}
