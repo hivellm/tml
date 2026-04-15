@@ -167,8 +167,10 @@ impl[T] List[T] {
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
 
-        // Read element at data[index]
-        let elem_ptr: *T = (data_addr + index * stride) as *T
+        // Read element at data[index] using GEP for pointer provenance
+        let data_ptr: *Unit = data_addr as *Unit
+        let byte_offset: I64 = index * stride
+        let elem_ptr: *T = lowlevel { ptr_offset(data_ptr, byte_offset) } as *T
         let val: T = lowlevel { ptr_read[T](elem_ptr) }
         val
     }
@@ -179,13 +181,11 @@ impl[T] List[T] {
         let hdr: I64 = this.handle as I64
         let p_stride: *I64 = (hdr + 24) as *I64
         let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
-
-        // Read data pointer
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
-
-        // Write value at data[index]
-        let elem_ptr: *T = (data_addr + index * stride) as *T
+        let data_ptr: *Unit = data_addr as *Unit
+        let byte_offset: I64 = index * stride
+        let elem_ptr: *T = lowlevel { ptr_offset(data_ptr, byte_offset) } as *T
         lowlevel { ptr_write[T](elem_ptr, value) }
     }
 

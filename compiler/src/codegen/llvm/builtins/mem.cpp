@@ -235,7 +235,7 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
                 offset64 = fresh_reg();
                 emit_line("  " + offset64 + " = sext i32 " + offset + " to i64");
             }
-            emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i64 " + offset64);
+            emit_line("  " + result + " = getelementptr i8, ptr " + ptr + ", i64 " + offset64);
             last_expr_type_ = "ptr";
             return result;
         }

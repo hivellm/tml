@@ -378,31 +378,38 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         range_type = last_expr_type_;
     }
 
-    // Preheader block - loop initialization (for loop-invariant code motion)
+    // Preheader block - loop initialization
     emit_line("  br label %" + label_preheader);
     emit_line(label_preheader + ":");
 
-    // Allocate and initialize loop variable
+    // Allocate loop variable for address-taking code in body
     std::string var_alloca = fresh_reg();
     emit_line("  " + var_alloca + " = alloca " + range_type);
     emit_line("  store " + range_type + " " + range_start + ", ptr " + var_alloca);
     locals_[var_name] = VarInfo{var_alloca, range_type, nullptr, std::nullopt};
 
-    // Jump to header
     emit_line("  br label %" + label_header);
 
-    // Header block - condition check
+    // Header block — PHI-based canonical loop form for LLVM vectorizer.
+    // Pre-allocate the next_val register name so the phi can reference it.
     emit_line(label_header + ":");
     current_block_ = label_header;
     block_terminated_ = false;
-    std::string current = fresh_reg();
-    emit_line("  " + current + " = load " + range_type + ", ptr " + var_alloca);
+
+    std::string phi_var = fresh_reg();
+    std::string next_val = fresh_reg(); // pre-allocate for latch increment
+    emit_line("  " + phi_var + " = phi " + range_type +
+        " [ " + range_start + ", %" + label_preheader +
+        " ], [ " + next_val + ", %" + label_latch + " ]");
+    // Sync alloca with phi so body code reading from alloca sees correct value
+    emit_line("  store " + range_type + " " + phi_var + ", ptr " + var_alloca);
+
     std::string cmp_result = fresh_reg();
     if (inclusive) {
-        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + current + ", " +
+        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + phi_var + ", " +
                   range_end);
     } else {
-        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + current + ", " +
+        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + phi_var + ", " +
                   range_end);
     }
     emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_exit);
@@ -411,22 +418,14 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line(label_body + ":");
     current_block_ = label_body;
     block_terminated_ = false;
-
-    // No stacksave/stackrestore — allocas are hoisted to entry block
     current_loop_stack_save_ = "";
 
-    // Push a lifetime scope for the loop body
     push_lifetime_scope();
 
-    // Emit llvm.assume(i ult n) for 0-based ranges: informs LLVM the index is
-    // always in [0, n), enabling LICM of loop-invariant header loads (stride,
-    // data_addr) and allowing the vectorizer to treat the loop as safe.
-    // Only applied when range starts at 0 and type is a machine integer.
+    // Emit llvm.assume(i ult n) for 0-based ranges
     if (range_start == "0" && range_type != "i1") {
-        std::string assume_i = fresh_reg();
-        emit_line("  " + assume_i + " = load " + range_type + ", ptr " + var_alloca);
         std::string assume_cond = fresh_reg();
-        emit_line("  " + assume_cond + " = icmp ult " + range_type + " " + assume_i + ", " +
+        emit_line("  " + assume_cond + " = icmp ult " + range_type + " " + phi_var + ", " +
                   range_end);
         emit_line("  call void @llvm.assume(i1 " + assume_cond + ")");
     }
@@ -434,24 +433,17 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     gen_expr(*for_expr.body);
 
     if (!block_terminated_) {
-        // Emit lifetime.end for allocas in this iteration
         emit_scope_lifetime_ends();
         emit_line("  br label %" + label_latch);
     }
-
-    // Clear the scope (lifetime.end already emitted)
     clear_lifetime_scope();
 
-    // Latch block - increment and backedge (single backedge for canonical form)
+    // Latch block — increment induction variable using pre-allocated register
     emit_line(label_latch + ":");
     current_block_ = label_latch;
     block_terminated_ = false;
-    std::string next_val = fresh_reg();
-    std::string current2 = fresh_reg();
-    emit_line("  " + current2 + " = load " + range_type + ", ptr " + var_alloca);
-    emit_line("  " + next_val + " = add nsw " + range_type + " " + current2 + ", 1");
+    emit_line("  " + next_val + " = add nsw " + range_type + " " + phi_var + ", 1");
     emit_line("  store " + range_type + " " + next_val + ", ptr " + var_alloca);
-    // Add loop metadata to back-edge for LLVM optimization hints
     std::string loop_meta = current_loop_metadata_id_ >= 0
                                 ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
                                 : "";

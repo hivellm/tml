@@ -1106,8 +1106,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string ptr = gen_expr(*call.args[0]);
 
             // Infer element type from Ptr[T] or ref T
-            // Default to i32 for *Unit (void*) to match I32-sized memory operations
-            std::string elem_type = "i32";
+            // Default to i8 for *Unit (void*) so offset counts bytes, not i32-sized slots
+            std::string elem_type = "i8";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
             if (arg_type) {
                 auto is_unit_type = [](const types::TypePtr& t) {
@@ -1119,7 +1119,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
                 if (arg_type->is<types::PtrType>()) {
                     auto inner = arg_type->as<types::PtrType>().inner;
-                    // For *Unit (void*), default to i32 (for I32 memory operations)
+                    // For *Unit (void*), keep i8 (byte-level offset)
                     if (!is_unit_type(inner)) {
                         elem_type = llvm_type_from_semantic(inner);
                     }

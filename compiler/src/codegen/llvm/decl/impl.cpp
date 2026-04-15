@@ -155,7 +155,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     }
     std::string method_inline_attr;
     if (has_inline_decorator && !has_noinline_decorator) {
-        method_inline_attr = " alwaysinline";
+        method_inline_attr = " alwaysinline nounwind willreturn";
     } else if (has_noinline_decorator) {
         method_inline_attr = " noinline";
     }
@@ -1160,7 +1160,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
             }
         }
         if (inline_decorator && !noinline_decorator) {
-            inst_inline_attr = " alwaysinline";
+            inst_inline_attr = " alwaysinline nounwind willreturn";
         } else if (noinline_decorator) {
             inst_inline_attr = " noinline";
         }
