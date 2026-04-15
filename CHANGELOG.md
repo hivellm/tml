@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.18](docs/patches/v0.3.18.md) | 2026-04-15 | perf(compiler): remove embedded LLD — native OS linker via subprocess; `tml_codegen_x86.dll` 78→58 MB (−26%); link.exe (Windows) / ld (Unix) primary, lld fallback |
 | [0.3.17](docs/patches/v0.3.17.md) | 2026-04-15 | fix(parser): `match` keyword emits `error[S001]: use 'when' instead` — no more cascading parse errors for Rust/Swift/C# users |
 | [0.3.16](docs/patches/v0.3.16.md) | 2026-04-14 | feat(daemon): persistent compilation daemon — `tml daemon start/stop/status`, named-pipe IPC, in-process result cache (22ms vs 98ms `cargo check` on Windows), DLL staleness detection, TML_DAEMON env var |
 | [0.3.15](docs/patches/v0.3.15.md) | 2026-04-14 | build: add `scripts/build.bat release` — release DLLs compile 2.93× faster (6.9s→2.4s per file); `TML_COMPILER_BUILD=release` env var to use release DLLs from debug tml.exe; fix Clang `-Wdate-time` in release build |

@@ -13,16 +13,16 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-Last completed: phase0n_daemon-compile-integration — ARCHIVED (2026-04-14).
-Branch: feat/self-hosting-compiler. Version: 0.3.16.
-Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout, slice_split_pred X002 timeout.
-Pending tasks: phase0o (match→when diagnostic), phase0p (BTreeMapIter for-in), phase0q (File::sync/datasync), phase0r (pipe hang CRITICAL), phase0s (U128.to_string).
+Last completed: phase0o_match-keyword-diagnostic — ARCHIVED (2026-04-15).
+Branch: feat/self-hosting-compiler. Version: 0.3.18.
+Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout, slice_split_pred X002 timeout, let_patterns X002 timeout.
+Pending tasks: phase0p (BTreeMapIter for-in), phase0q (File::sync/datasync), phase0r (pipe hang CRITICAL), phase0s (U128.to_string), phase0t (MessagePack), phase0u (Protobuf).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-Next task: phase0r_compiler-output-pipe-hang (CRITICAL — AI agents and MCP server can't capture compiler output).
+Next task: phase0p_btreemap-iterator-protocol (BTreeMapIter for-in support).
 <!-- PLANS:TASK:END -->
 
 ## Session History
