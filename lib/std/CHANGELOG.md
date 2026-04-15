@@ -5,6 +5,22 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.23] — 2026-04-15
+
+### Added
+
+- **`std::msgpack` module** — MessagePack binary serialization (pure TML, no C runtime)
+  - `MsgPackWriter` — full spec encoder: nil, bool, int8-64, uint8-64, float32/64, fixstr/str8-32, bin8-32, fixarray/array16/32, fixmap/map16/32
+  - `MsgPackReader` — decoder: `read_nil`, `read_bool`, `read_u64`, `read_i64`, `read_str`, `read_array_header`, `read_map_header`
+  - `MsgPackType` enum for value type identification
+  - `MsgPackError` enum for error handling
+  - 20 tests (10 writer encoding, 10 reader round-trip)
+
+- **`File::sync()` and `File::datasync()`** — fsync/fdatasync for WAL durability
+  - `sync()` — flushes data + metadata to permanent storage (`_commit` on Windows, `fsync` on Unix)
+  - `datasync()` — flushes data only (`fdatasync` on Linux, `fsync` fallback on macOS/Windows)
+  - C runtime functions: `file_sync()`, `file_datasync()` in `lib/std/runtime/file.c`
+
 ## [0.2.6] — 2026-04-12
 
 ### Changed

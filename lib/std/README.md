@@ -1,6 +1,6 @@
 # TML Standard Library
 
-Full-featured standard library with collections, networking, crypto, HTTP, JSON, database, compression, and more. Depends on `core`.
+Full-featured standard library with collections, networking, crypto, HTTP, JSON, MessagePack, database, compression, and more. Depends on `core`.
 
 [Changelog](CHANGELOG.md)
 
@@ -162,6 +162,7 @@ Full-featured standard library with collections, networking, crypto, HTTP, JSON,
 | Module | Path | Description |
 |--------|------|-------------|
 | json | `std::json` | `JsonValue` — parse, stringify |
+| msgpack | `std::msgpack` | MessagePack binary serialization — `MsgPackWriter`, `MsgPackReader` |
 | regex | `std::regex` | `Regex` — NFA engine, no backtracking |
 | random | `std::random` | `Rng` (xoshiro256**), `Random` trait, `random_range` |
 | text | `std::text` | `Text` — growable string builder with SSO |
