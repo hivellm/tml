@@ -5,6 +5,35 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.28] — 2026-04-15
+
+### Added
+
+- **`std::protobuf` module** — Protocol Buffers wire format (pure TML, 11 files, ~2300 lines)
+  - `ProtoWriter` — full proto3 encoder: all scalar types (int32/64, uint32/64, sint32/64, fixed32/64, sfixed32/64, float, double, bool, string, bytes, enum), nested messages, field helpers
+  - `ProtoReader` — full proto3 decoder: all scalar types, sub-message reader, skip unknown fields, tag decoding
+  - `varint.tml` — LEB128 encoding/decoding, zigzag for sint32/sint64, varint_size
+  - `wire.tml` — wire type constants (VARINT, FIXED64, LEN, FIXED32), tag manipulation helpers
+  - `types.tml` — `ProtoTag`, `FieldType` enum (17 variants), field-type-to-wire-type mapping
+  - `packed.tml` — packed repeated fields: varints, fixed32/64, float, double
+  - `descriptor.tml` — `FieldDescriptor`, `MessageDescriptor` for runtime reflection
+  - `message.tml` — `ProtoMessage` behavior, length-delimited encode/decode
+  - `proto_parser.tml` — .proto file lexer + parser (proto3 syntax: message, enum, field, map, oneof, optional, repeated, comments)
+  - `codegen.tml` — TML code generator from parsed .proto descriptors (struct types + encode/decode methods)
+  - 7 test suites: basic, fields, sint, spec_examples, scalars, messages, proto_parser
+  - 4 .proto schema files: person.proto, scalars.proto, packed.proto, nested.proto
+
+### Changed
+
+- **`@inline` on iterator hot path** — `into_iter()`, `iter()`, `next()` on `ListIter[T]` and `List[T]` now marked `@inline` for LLVM inlining (enables SIMD vectorization)
+- **`@inline` on `Heap::new`, `Heap::get`, `Heap::drop`** — enables LLVM to see malloc/free pairs for potential heap-to-stack promotion
+- **Allocator attributes** — `mem_alloc`, `mem_free`, `malloc`, `free` now have `noalias`, `allocsize`, `allockind`, `alloc-family` attributes for LLVM alias analysis
+- **Pointer-stepping `for x in list`** — bypasses `next() -> Maybe[T]`, emits direct phi-based pointer-stepping loop matching Rust's `slice::Iter` pattern
+- **Constant stride in for-in** — compile-time stride for primitive types (i8=1, i16=2, i32/f32=4, i64/f64/ptr=8)
+- **Remove MIR personality** — MIR functions no longer emit `personality ptr @__CxxFrameHandler3` (not needed since MIR uses `call` not `invoke`)
+- **Fix `List.iter()` struct mismatch** — was returning 4-field struct, now correctly returns 3-field `{ ptr, end, stride }` matching `ListIter` definition
+- **Fix encoding benchmark leaks** — added `free_str()` to free returned strings in encode/decode loops (200K leaks → 0)
+
 ## [0.3.23] — 2026-04-15
 
 ### Added
