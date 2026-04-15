@@ -46,6 +46,12 @@ scripts/test.bat
 # Run all tests
 ./tml test
 
+# Persistent daemon (22ms cached builds)
+./tml daemon start          # Start background daemon
+./tml daemon stop           # Stop daemon
+./tml daemon status         # Check daemon status
+TML_DAEMON=1 ./tml check file.tml  # Use daemon for fast check
+
 # Debug commands
 ./tml debug lex file.tml    # Show tokens
 ./tml debug parse file.tml  # Show AST
@@ -77,7 +83,7 @@ compiler/
 │   ├── codegen/        # LLVM IR backend
 │   │   └── core/       # Core codegen (classes, generics)
 │   ├── query/          # Query system (demand-driven compilation)
-│   ├── backend/        # LLVM backend + LLD linker (in-process)
+│   ├── backend/        # LLVM backend + OS linker (subprocess)
 │   ├── cli/            # Command line interface
 │   │   ├── commands/   # CLI commands (build, test, etc.)
 │   │   ├── builder/    # Build system
@@ -105,7 +111,8 @@ compiler/
 | HIR Generator | Complete |
 | MIR Passes | Complete |
 | **LLVM Backend** | Complete (embedded, in-process) |
-| **LLD Linker** | Complete (embedded COFF/ELF/MachO) |
+| **OS Linker** | Complete (native link.exe/ld via subprocess) |
+| **Compilation Daemon** | Complete (`tml daemon`, 22ms cached) |
 | **Query System** | Complete (demand-driven, 8 stages) |
 | **Incremental Compilation** | Complete (red-green, cross-session) |
 | CLI | Complete |
