@@ -873,12 +873,31 @@ auto LLVMIRGen::gen_for_pointer_stepping(
     std::string end_ptr = fresh_reg();
     emit_line("  " + end_ptr + " = load ptr, ptr " + end_field);
 
-    // Extract field 2: stride (bytes per element)
-    std::string stride_field = fresh_reg();
-    emit_line("  " + stride_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
-              iter_alloca + ", i32 0, i32 2");
-    std::string stride_val = fresh_reg();
-    emit_line("  " + stride_val + " = load i64, ptr " + stride_field);
+    // Stride: use compile-time constant when element size is known (enables SIMD).
+    // Rust always has constant stride because sizeof(T) is compile-time.
+    // For TML, primitive types and pointers have known sizes; structs need runtime stride.
+    std::string stride_val;
+    int known_stride = 0;
+    if (elem_llvm_type == "i64" || elem_llvm_type == "double" || elem_llvm_type == "ptr") {
+        known_stride = 8;
+    } else if (elem_llvm_type == "i32" || elem_llvm_type == "float") {
+        known_stride = 4;
+    } else if (elem_llvm_type == "i16") {
+        known_stride = 2;
+    } else if (elem_llvm_type == "i8" || elem_llvm_type == "i1") {
+        known_stride = 1;
+    }
+
+    if (known_stride > 0) {
+        stride_val = std::to_string(known_stride);
+    } else {
+        // Fall back to runtime stride from ListIter field 2
+        std::string stride_field = fresh_reg();
+        emit_line("  " + stride_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+                  iter_alloca + ", i32 0, i32 2");
+        stride_val = fresh_reg();
+        emit_line("  " + stride_val + " = load i64, ptr " + stride_field);
+    }
 
     emit_line("  br label %" + label_header);
 
