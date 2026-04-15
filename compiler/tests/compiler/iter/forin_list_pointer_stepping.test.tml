@@ -1,0 +1,80 @@
+/// Tests for pointer-stepping for-in loop optimization over List[T].
+/// The codegen emits direct phi-based pointer stepping instead of
+/// calling next() -> Maybe[T], eliminating the discriminant branch
+/// that blocks LLVM vectorization.
+
+use test::*
+use std::collections::List
+
+@test func test_forin_list_sum() {
+    let list = List[I64]::new(4)
+    list.push(10)
+    list.push(20)
+    list.push(30)
+    var total: I64 = 0
+    for x in list {
+        total = total + x
+    }
+    assert_eq(total, 60)
+}
+
+@test func test_forin_list_empty() {
+    let list = List[I64]::new(4)
+    var total: I64 = 0
+    for x in list {
+        total = total + x
+    }
+    assert_eq(total, 0)
+}
+
+@test func test_forin_list_single() {
+    let list = List[I64]::new(1)
+    list.push(42)
+    var total: I64 = 0
+    for x in list {
+        total = total + x
+    }
+    assert_eq(total, 42)
+}
+
+@test func test_forin_list_large() {
+    let n: I64 = 1000
+    let list = List[I64]::new(n)
+    for i in 0 to n {
+        list.push(i)
+    }
+    var total: I64 = 0
+    for x in list {
+        total = total + x
+    }
+    // sum of 0..999 = 999 * 1000 / 2 = 499500
+    assert_eq(total, 499500)
+}
+
+@test func test_forin_list_break() {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    var total: I64 = 0
+    for x in list {
+        if x == 3 { break }
+        total = total + x
+    }
+    assert_eq(total, 3) // 1 + 2
+}
+
+@test func test_forin_list_continue() {
+    let list = List[I64]::new(4)
+    list.push(1)
+    list.push(2)
+    list.push(3)
+    list.push(4)
+    var total: I64 = 0
+    for x in list {
+        if x == 2 { continue }
+        total = total + x
+    }
+    assert_eq(total, 8) // 1 + 3 + 4
+}

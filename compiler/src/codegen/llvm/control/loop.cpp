@@ -437,16 +437,40 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
                                           named.name, "", true});
                 }
 
-                // Now use gen_for_iterator with the iterator
-                // Store iter_val to alloca and set up as if gen_for_iterator was called
+                // ============================================================
+                // Pointer-stepping optimization for ListIter-based iterators.
+                // Instead of calling next() -> Maybe[T] per iteration (which
+                // prevents LLVM vectorization due to discriminant branch),
+                // emit a direct phi-based pointer-stepping loop:
+                //   %ptr = phi ptr [init, preheader], [next, body]
+                //   %done = icmp eq ptr %ptr, %end
+                //   br i1 %done, exit, body
+                //   body: %val = load T, ptr %ptr
+                //         %ptr.next = gep i8, ptr %ptr, i64 %stride
+                // This is the exact pattern Rust generates for slice::Iter.
+                // ============================================================
+                if (iter_type_name == "ListIter") {
+                    // Determine element LLVM type from collection type args
+                    std::string elem_llvm_type;
+                    if (!named.type_args.empty()) {
+                        elem_llvm_type = llvm_type_from_semantic(named.type_args[0]);
+                    }
+                    if (elem_llvm_type.empty()) {
+                        elem_llvm_type = "i64"; // safe default for List[I64]
+                    }
+
+                    return gen_for_pointer_stepping(
+                        for_expr, iter_val, iter_llvm_type, elem_llvm_type,
+                        saved_loop_start, saved_loop_end, saved_loop_stack_save,
+                        saved_loop_metadata_id);
+                }
+
+                // Fallback: use gen_for_iterator for non-ListIter iterators
                 current_loop_start_ = saved_loop_start;
                 current_loop_end_ = saved_loop_end;
                 current_loop_stack_save_ = saved_loop_stack_save;
                 current_loop_metadata_id_ = saved_loop_metadata_id;
 
-                // Override for_expr.iter to point to the iterator value
-                // We can't modify the AST, so we'll inline gen_for_iterator logic here
-                // with the already-computed iter_val
                 return gen_for_iterator_with_value(for_expr, iter_type_name, iter_val,
                                                    iter_llvm_type, named.type_args);
             }
@@ -776,6 +800,156 @@ auto LLVMIRGen::gen_for_iterator_with_value(
     precomputed_iter_val_.clear();
     precomputed_iter_type_.clear();
     return result;
+}
+
+auto LLVMIRGen::gen_for_pointer_stepping(
+    const parser::ForExpr& for_expr,
+    const std::string& iter_val,
+    const std::string& iter_llvm_type,
+    const std::string& elem_llvm_type,
+    const std::string& saved_loop_start,
+    const std::string& saved_loop_end,
+    const std::string& saved_loop_stack_save,
+    int saved_loop_metadata_id) -> std::string {
+    // =========================================================================
+    // Direct pointer-stepping for-in loop (SIMD-friendly).
+    //
+    // Emits the same loop structure as Rust's slice::Iter at O2:
+    //   preheader: extract ptr, end, stride from ListIter struct
+    //   header:    phi ptr [init, preheader], [next, body]
+    //              icmp eq ptr %ptr, %end → exit or body
+    //   body:      load T from ptr (direct, no Maybe wrapper)
+    //              ... user body ...
+    //              gep i8, ptr, stride → ptr.next
+    //              br header  (with !llvm.loop vectorize metadata)
+    //   exit:
+    //
+    // This bypasses next() → Maybe[T] entirely, eliminating the discriminant
+    // branch that blocks LLVM's LoopVectorizer.
+    // =========================================================================
+
+    std::string label_preheader = fresh_label("pstep.preheader");
+    std::string label_header = fresh_label("pstep.header");
+    std::string label_body = fresh_label("pstep.body");
+    std::string label_latch = fresh_label("pstep.latch");
+    std::string label_exit = fresh_label("pstep.exit");
+
+    // Set loop labels for break/continue
+    current_loop_start_ = label_latch; // continue → go to latch (advance pointer)
+    current_loop_end_ = label_exit;
+    current_loop_stack_save_ = "";
+
+    // Create aggressive vectorization metadata (width=0 means auto-select)
+    current_loop_metadata_id_ = create_loop_metadata(true, 0);
+
+    // Get loop variable name from pattern
+    std::string var_name = "_for_item";
+    if (for_expr.pattern->is<parser::IdentPattern>()) {
+        var_name = for_expr.pattern->as<parser::IdentPattern>().name;
+    }
+
+    // ---- Preheader: extract ptr, end, stride from ListIter ----
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+    current_block_ = label_preheader;
+    block_terminated_ = false;
+
+    // Store iter struct to alloca so we can GEP its fields
+    std::string iter_alloca = fresh_reg();
+    emit_line("  " + iter_alloca + " = alloca " + iter_llvm_type);
+    emit_line("  store " + iter_llvm_type + " " + iter_val + ", ptr " + iter_alloca);
+
+    // Extract field 0: ptr (current position)
+    std::string ptr_field = fresh_reg();
+    emit_line("  " + ptr_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+              iter_alloca + ", i32 0, i32 0");
+    std::string ptr_init = fresh_reg();
+    emit_line("  " + ptr_init + " = load ptr, ptr " + ptr_field);
+
+    // Extract field 1: end (one-past-end pointer)
+    std::string end_field = fresh_reg();
+    emit_line("  " + end_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+              iter_alloca + ", i32 0, i32 1");
+    std::string end_ptr = fresh_reg();
+    emit_line("  " + end_ptr + " = load ptr, ptr " + end_field);
+
+    // Extract field 2: stride (bytes per element)
+    std::string stride_field = fresh_reg();
+    emit_line("  " + stride_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+              iter_alloca + ", i32 0, i32 2");
+    std::string stride_val = fresh_reg();
+    emit_line("  " + stride_val + " = load i64, ptr " + stride_field);
+
+    emit_line("  br label %" + label_header);
+
+    // ---- Header: phi-based pointer comparison ----
+    emit_line(label_header + ":");
+    current_block_ = label_header;
+    block_terminated_ = false;
+
+    // Pre-allocate next pointer reg name for phi back-reference from latch
+    std::string phi_ptr = fresh_reg();
+    std::string ptr_next = fresh_reg();
+    emit_line("  " + phi_ptr + " = phi ptr [ " + ptr_init + ", %" + label_preheader +
+              " ], [ " + ptr_next + ", %" + label_latch + " ]");
+
+    std::string done_cmp = fresh_reg();
+    emit_line("  " + done_cmp + " = icmp eq ptr " + phi_ptr + ", " + end_ptr);
+    emit_line("  br i1 " + done_cmp + ", label %" + label_exit + ", label %" + label_body);
+
+    // ---- Body: direct element load + user code ----
+    emit_line(label_body + ":");
+    current_block_ = label_body;
+    block_terminated_ = false;
+
+    push_lifetime_scope();
+
+    // Load element directly from pointer — no Maybe wrapper, no discriminant
+    std::string elem_val = fresh_reg();
+    emit_line("  " + elem_val + " = load " + elem_llvm_type + ", ptr " + phi_ptr + ", align 8");
+
+    // Bind loop variable: store to alloca so body code can take address
+    std::string var_alloca = fresh_reg();
+    emit_line("  " + var_alloca + " = alloca " + elem_llvm_type);
+    emit_line("  store " + elem_llvm_type + " " + elem_val + ", ptr " + var_alloca);
+    locals_[var_name] = VarInfo{var_alloca, elem_llvm_type, nullptr, std::nullopt};
+
+    // Generate user body
+    gen_expr(*for_expr.body);
+
+    if (!block_terminated_) {
+        emit_scope_lifetime_ends();
+        // Fall through to latch
+        emit_line("  br label %" + label_latch);
+    }
+    clear_lifetime_scope();
+
+    // ---- Latch: advance pointer and branch back to header ----
+    // Separate latch block ensures the phi predecessor is always this block,
+    // regardless of how many blocks the body generates (overflow checks, etc.)
+    emit_line(label_latch + ":");
+    current_block_ = label_latch;
+    block_terminated_ = false;
+
+    emit_line("  " + ptr_next + " = getelementptr inbounds i8, ptr " + phi_ptr +
+              ", i64 " + stride_val);
+    std::string loop_meta = current_loop_metadata_id_ >= 0
+                                ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                : "";
+    emit_line("  br label %" + label_header + loop_meta);
+
+    // ---- Exit ----
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
+    block_terminated_ = false;
+
+    // Restore saved loop labels
+    current_loop_start_ = saved_loop_start;
+    current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
+
+    return "0";
 }
 
 auto LLVMIRGen::gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,

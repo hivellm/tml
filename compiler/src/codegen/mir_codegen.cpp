@@ -1671,14 +1671,11 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
     }
 
-    // Add personality for exception handling (cleanup destructors on panic)
-    std::string personality;
-#ifdef _WIN32
-    personality = " personality ptr @__CxxFrameHandler3";
-#else
-    personality = " personality ptr @__gxx_personality_v0";
-#endif
-    emitln(")" + inline_attr + personality + " {");
+    // Only add personality for exception handling when the function uses invoke/landingpad.
+    // The MIR codegen path emits `call` (not `invoke`), so personality is not needed
+    // for most functions. Omitting it lets LLVM be more aggressive with optimizations
+    // (nounwind inference, vectorization, etc.) — matching Rust's behavior at O2.
+    emitln(")" + inline_attr + " {");
 
     // Prepare profiler entry instrumentation for the entry block (item 2.4).
     // When instrument_profiler is enabled, we inject a tml_profiler_is_active() check

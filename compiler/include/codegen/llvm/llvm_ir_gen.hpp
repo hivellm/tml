@@ -1096,6 +1096,14 @@ private:
                                      const std::string& precomputed_iter_type,
                                      const std::vector<types::TypePtr>& collection_type_args)
         -> std::string;
+    auto gen_for_pointer_stepping(const parser::ForExpr& for_expr,
+                                  const std::string& iter_val,
+                                  const std::string& iter_llvm_type,
+                                  const std::string& elem_llvm_type,
+                                  const std::string& saved_loop_start,
+                                  const std::string& saved_loop_end,
+                                  const std::string& saved_loop_stack_save,
+                                  int saved_loop_metadata_id) -> std::string;
     auto gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
                           const std::string& type_name, size_t iteration_count) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
