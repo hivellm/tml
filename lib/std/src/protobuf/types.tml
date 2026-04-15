@@ -1,0 +1,77 @@
+//! Protocol Buffers type definitions: field tag, field types, and error types.
+
+use std::protobuf::wire::{WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_FIXED32}
+
+/// A decoded protobuf field tag containing the field number and wire type.
+pub type ProtoTag {
+    field_num: I64,
+    wire_type: I64
+}
+
+/// Protobuf field types corresponding to .proto type declarations.
+pub enum FieldType {
+    /// 64-bit IEEE 754 floating point (wire type 1: FIXED64)
+    Double,
+    /// 32-bit IEEE 754 floating point (wire type 5: FIXED32)
+    Float,
+    /// Signed 32-bit integer, variable-length encoding (wire type 0: VARINT)
+    Int32,
+    /// Signed 64-bit integer, variable-length encoding (wire type 0: VARINT)
+    Int64,
+    /// Unsigned 32-bit integer, variable-length encoding (wire type 0: VARINT)
+    Uint32,
+    /// Unsigned 64-bit integer, variable-length encoding (wire type 0: VARINT)
+    Uint64,
+    /// Signed 32-bit integer, zigzag-encoded varint (wire type 0: VARINT)
+    Sint32,
+    /// Signed 64-bit integer, zigzag-encoded varint (wire type 0: VARINT)
+    Sint64,
+    /// Unsigned 32-bit integer, always 4 bytes (wire type 5: FIXED32)
+    Fixed32,
+    /// Unsigned 64-bit integer, always 8 bytes (wire type 1: FIXED64)
+    Fixed64,
+    /// Signed 32-bit integer, always 4 bytes (wire type 5: FIXED32)
+    Sfixed32,
+    /// Signed 64-bit integer, always 8 bytes (wire type 1: FIXED64)
+    Sfixed64,
+    /// Boolean, encoded as varint 0 or 1 (wire type 0: VARINT)
+    Bool,
+    /// UTF-8 string, length-delimited (wire type 2: LEN)
+    String,
+    /// Arbitrary byte sequence, length-delimited (wire type 2: LEN)
+    Bytes,
+    /// Enum value, encoded as varint (wire type 0: VARINT)
+    Enum,
+    /// Embedded message, length-delimited (wire type 2: LEN)
+    Message
+}
+
+/// Returns the wire type for a given field type.
+pub func field_type_wire_type(ft: FieldType) -> I64 {
+    when ft {
+        FieldType::Double => WIRE_FIXED64,
+        FieldType::Float => WIRE_FIXED32,
+        FieldType::Int32 => WIRE_VARINT,
+        FieldType::Int64 => WIRE_VARINT,
+        FieldType::Uint32 => WIRE_VARINT,
+        FieldType::Uint64 => WIRE_VARINT,
+        FieldType::Sint32 => WIRE_VARINT,
+        FieldType::Sint64 => WIRE_VARINT,
+        FieldType::Fixed32 => WIRE_FIXED32,
+        FieldType::Fixed64 => WIRE_FIXED64,
+        FieldType::Sfixed32 => WIRE_FIXED32,
+        FieldType::Sfixed64 => WIRE_FIXED64,
+        FieldType::Bool => WIRE_VARINT,
+        FieldType::String => WIRE_LEN,
+        FieldType::Bytes => WIRE_LEN,
+        FieldType::Enum => WIRE_VARINT,
+        FieldType::Message => WIRE_LEN,
+    }
+}
+
+/// Returns the default I64 value for a field type.
+/// Numeric types default to 0, bool defaults to 0 (false).
+pub func field_type_default_i64(ft: FieldType) -> I64 {
+    // All protobuf numeric/bool defaults are 0
+    return 0
+}

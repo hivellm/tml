@@ -1,0 +1,308 @@
+//! Protocol Buffers encoder.
+//!
+//! Writes protobuf binary wire format to an internal byte buffer.
+//! Supports all protobuf field types including varint, fixed, zigzag,
+//! float/double, bool, string, bytes, enum, and nested messages.
+
+use std::collections::Buffer
+use std::protobuf::wire::{WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_FIXED32}
+use std::protobuf::varint::zigzag_encode
+
+/// A Protocol Buffers encoder that writes to an internal buffer.
+pub type ProtoWriter {
+    buf: Buffer
+}
+
+impl ProtoWriter {
+    /// Creates a new writer with default buffer capacity (256 bytes).
+    pub func new() -> ProtoWriter {
+        ProtoWriter { buf: Buffer::new(256) }
+    }
+
+    /// Creates a new writer with specified initial capacity.
+    pub func with_capacity(cap: I64) -> ProtoWriter {
+        ProtoWriter { buf: Buffer::new(cap) }
+    }
+
+    /// Returns the number of bytes written so far.
+    pub func len(this) -> I64 {
+        return this.buf.len()
+    }
+
+    /// Resets the writer, clearing all written data.
+    pub func clear(mut this) {
+        this.buf.clear()
+    }
+
+    /// Returns the encoded bytes as a string (binary data).
+    pub func to_bytes(this) -> Str {
+        return this.buf.to_string()
+    }
+
+    /// Returns the encoded bytes as a Buffer.
+    pub func to_buffer(this) -> Buffer {
+        return this.buf
+    }
+
+    // ==================================================================
+    // Low-level primitives
+    // ==================================================================
+
+    /// Writes an unsigned varint (LEB128 encoding).
+    pub func write_varint(mut this, value: I64) {
+        var v: U64 = value as U64
+        loop (true) {
+            let byte_val: I32 = (v & (127 as U64)) as I32
+            v = v >> 7
+            if v == (0 as U64) {
+                this.buf.write_byte(byte_val)
+                break
+            } else {
+                this.buf.write_byte(byte_val | 128)
+            }
+        }
+    }
+
+    /// Writes a 32-bit value in little-endian byte order.
+    pub func write_fixed32(mut this, value: I32) {
+        let v: I64 = value as I64
+        this.buf.write_byte((v as I32) & 0xFF)
+        this.buf.write_byte(((v >> 8) as I32) & 0xFF)
+        this.buf.write_byte(((v >> 16) as I32) & 0xFF)
+        this.buf.write_byte(((v >> 24) as I32) & 0xFF)
+    }
+
+    /// Writes a 64-bit value in little-endian byte order.
+    pub func write_fixed64(mut this, value: I64) {
+        for i in 0 to 8 {
+            let shift: I64 = i * 8
+            let byte_val: I32 = ((value >> shift) as I32) & 0xFF
+            this.buf.write_byte(byte_val)
+        }
+    }
+
+    /// Writes raw bytes (length-prefixed with a varint).
+    pub func write_bytes(mut this, data: Str) {
+        let n: I64 = data.len()
+        this.write_varint(n)
+        for i in 0 to n {
+            let ch: I32 = data.char_at(i) as I32
+            this.buf.write_byte(ch)
+        }
+    }
+
+    /// Writes a UTF-8 string (length-prefixed with a varint).
+    pub func write_string(mut this, value: Str) {
+        this.write_bytes(value)
+    }
+
+    /// Writes a field tag: (field_number << 3) | wire_type.
+    pub func write_tag(mut this, field_num: I64, wire_type: I64) {
+        let tag: I64 = (field_num << 3) | wire_type
+        this.write_varint(tag)
+    }
+
+    // ==================================================================
+    // Bool / Float / Double / Enum
+    // ==================================================================
+
+    /// Writes a boolean value as a varint (0 or 1).
+    pub func write_bool(mut this, value: Bool) {
+        if value {
+            this.write_varint(1)
+        } else {
+            this.write_varint(0)
+        }
+    }
+
+    /// Writes a 32-bit float in little-endian byte order (4 bytes).
+    pub func write_float(mut this, value: F32) {
+        let offset: I64 = this.buf.len()
+        // Reserve 4 bytes
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_f32_le(value, offset)
+    }
+
+    /// Writes a 64-bit double in little-endian byte order (8 bytes).
+    pub func write_double(mut this, value: F64) {
+        let offset: I64 = this.buf.len()
+        // Reserve 8 bytes
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_f64_le(value, offset)
+    }
+
+    /// Writes an enum value as a varint.
+    pub func write_enum(mut this, value: I32) {
+        this.write_varint(value as I64)
+    }
+
+    // ==================================================================
+    // Signed integers (zigzag encoding)
+    // ==================================================================
+
+    /// Writes a signed 32-bit integer using zigzag encoding.
+    pub func write_sint32(mut this, value: I32) {
+        this.write_varint(zigzag_encode(value as I64))
+    }
+
+    /// Writes a signed 64-bit integer using zigzag encoding.
+    pub func write_sint64(mut this, value: I64) {
+        this.write_varint(zigzag_encode(value))
+    }
+
+    // ==================================================================
+    // Field helpers — tag + value combined
+    // ==================================================================
+
+    /// Writes a varint field (tag + varint value).
+    pub func write_field_varint(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(value)
+    }
+
+    /// Writes an int32 field (tag + varint).
+    pub func write_field_int32(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(value as I64)
+    }
+
+    /// Writes an int64 field (tag + varint).
+    pub func write_field_int64(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(value)
+    }
+
+    /// Writes a uint32 field (tag + varint).
+    pub func write_field_uint32(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(value as I64)
+    }
+
+    /// Writes a uint64 field (tag + varint).
+    pub func write_field_uint64(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(value)
+    }
+
+    /// Writes a sint32 field (tag + zigzag-encoded varint).
+    pub func write_field_sint32(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(zigzag_encode(value as I64))
+    }
+
+    /// Writes a sint64 field (tag + zigzag-encoded varint).
+    pub func write_field_sint64(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(zigzag_encode(value))
+    }
+
+    /// Writes a bool field (tag + varint 0 or 1).
+    pub func write_field_bool(mut this, field_num: I64, value: Bool) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_bool(value)
+    }
+
+    /// Writes a float field (tag + 4 bytes little-endian).
+    pub func write_field_float(mut this, field_num: I64, value: F32) {
+        this.write_tag(field_num, WIRE_FIXED32)
+        this.write_float(value)
+    }
+
+    /// Writes a double field (tag + 8 bytes little-endian).
+    pub func write_field_double(mut this, field_num: I64, value: F64) {
+        this.write_tag(field_num, WIRE_FIXED64)
+        this.write_double(value)
+    }
+
+    /// Writes a fixed32 field (tag + 4 bytes little-endian).
+    pub func write_field_fixed32(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_FIXED32)
+        this.write_fixed32(value)
+    }
+
+    /// Writes a fixed64 field (tag + 8 bytes little-endian).
+    pub func write_field_fixed64(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_FIXED64)
+        this.write_fixed64(value)
+    }
+
+    /// Writes a sfixed32 field (tag + 4 bytes little-endian, signed).
+    pub func write_field_sfixed32(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_FIXED32)
+        this.write_fixed32(value)
+    }
+
+    /// Writes a sfixed64 field (tag + 8 bytes little-endian, signed).
+    pub func write_field_sfixed64(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_FIXED64)
+        this.write_fixed64(value)
+    }
+
+    /// Writes a string field (tag + length-prefixed UTF-8 string).
+    pub func write_field_string(mut this, field_num: I64, value: Str) {
+        this.write_tag(field_num, WIRE_LEN)
+        this.write_string(value)
+    }
+
+    /// Writes a bytes field (tag + length-prefixed bytes).
+    pub func write_field_bytes(mut this, field_num: I64, data: Str) {
+        this.write_tag(field_num, WIRE_LEN)
+        this.write_bytes(data)
+    }
+
+    /// Writes an enum field (tag + varint).
+    pub func write_field_enum(mut this, field_num: I64, value: I32) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_enum(value)
+    }
+
+    /// Writes a nested message field (tag + length-prefixed submessage bytes).
+    pub func write_field_message(mut this, field_num: I64, sub: ref ProtoWriter) {
+        this.write_tag(field_num, WIRE_LEN)
+        let sub_buf: Buffer = sub.to_buffer()
+        let n: I64 = sub_buf.len()
+        this.write_varint(n)
+        for i in 0 to n {
+            this.buf.write_byte(sub_buf.read_u8(i))
+        }
+    }
+
+    /// Writes a signed varint field using zigzag encoding (legacy alias for sint64).
+    pub func write_field_sint(mut this, field_num: I64, value: I64) {
+        this.write_tag(field_num, WIRE_VARINT)
+        this.write_varint(zigzag_encode(value))
+    }
+
+    // ==================================================================
+    // Raw buffer writing (for packed fields)
+    // ==================================================================
+
+    /// Writes raw bytes from a Buffer without length prefix.
+    /// Used internally by packed field encoders.
+    pub func write_raw_bytes(mut this, data: ref Buffer) {
+        let n: I64 = data.len()
+        for i in 0 to n {
+            this.buf.write_byte(data.read_u8(i))
+        }
+    }
+
+    /// Writes a length-delimited field from a Buffer (tag + varint length + raw bytes).
+    pub func write_field_raw_bytes(mut this, field_num: I64, data: ref Buffer) {
+        this.write_tag(field_num, WIRE_LEN)
+        let n: I64 = data.len()
+        this.write_varint(n)
+        for i in 0 to n {
+            this.buf.write_byte(data.read_u8(i))
+        }
+    }
+}

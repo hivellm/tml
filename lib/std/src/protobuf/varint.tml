@@ -1,0 +1,88 @@
+//! LEB128 varint encoding/decoding and zigzag signed integer encoding.
+//!
+//! Varints are the fundamental integer encoding in Protocol Buffers.
+//! Each byte uses 7 data bits and 1 continuation bit (MSB).
+//! Zigzag encoding maps signed integers to unsigned so that small
+//! absolute values produce small varints.
+
+use std::collections::Buffer
+
+/// Encodes a signed integer using zigzag encoding.
+/// Maps: 0->0, -1->1, 1->2, -2->3, 2->4, ...
+/// This makes small-magnitude negative numbers use fewer varint bytes.
+pub func zigzag_encode(n: I64) -> I64 {
+    let shifted_left: I64 = n << 1
+    let sign_bits: I64 = n >> 63
+    return shifted_left ^ sign_bits
+}
+
+/// Decodes a zigzag-encoded integer back to signed.
+/// Maps: 0->0, 1->-1, 2->1, 3->-2, 4->2, ...
+pub func zigzag_decode(n: I64) -> I64 {
+    let half: I64 = ((n as U64) >> 1) as I64
+    let sign: I64 = 0 - (n & 1)
+    return half ^ sign
+}
+
+/// Returns the number of bytes needed to encode a value as a varint.
+/// Unsigned interpretation: values 0-127 need 1 byte, 128-16383 need 2, etc.
+/// Maximum 10 bytes for 64-bit values.
+pub func varint_size(value: I64) -> I64 {
+    var v: U64 = value as U64
+    if v == (0 as U64) {
+        return 1
+    }
+    var count: I64 = 0
+    loop (v > (0 as U64)) {
+        v = v >> 7
+        count = count + 1
+    }
+    return count
+}
+
+/// Encodes a varint (LEB128) into a buffer.
+/// The value is treated as unsigned (U64) for encoding.
+pub func encode_varint(buf: mut ref Buffer, value: I64) {
+    var v: U64 = value as U64
+    loop (true) {
+        let byte_val: I32 = (v & (127 as U64)) as I32
+        v = v >> 7
+        if v == (0 as U64) {
+            buf.write_byte(byte_val)
+            break
+        } else {
+            buf.write_byte(byte_val | 128)
+        }
+    }
+}
+
+/// Result of decoding a varint: the decoded value and the new position.
+pub type VarintDecodeResult {
+    value: I64,
+    new_pos: I64
+}
+
+/// Decodes a varint (LEB128) from a buffer starting at the given position.
+/// On success, returns the decoded value and the new read position.
+/// Returns Err if the buffer is exhausted or the varint exceeds 10 bytes.
+pub func decode_varint(buf: ref Buffer, start_pos: I64) -> Outcome[VarintDecodeResult, Str] {
+    var result: I64 = 0
+    var shift: I64 = 0
+    var pos: I64 = start_pos
+    loop (true) {
+        if shift >= 70 {
+            return Err("varint too long (> 10 bytes)")
+        }
+        if pos >= buf.len() {
+            return Err("unexpected end of input while reading varint")
+        }
+        let b: I32 = buf.read_u8(pos)
+        pos = pos + 1
+        let value_bits: I64 = (b & 0x7F) as I64
+        result = result | (value_bits << shift)
+        if b < 128 {
+            return Ok(VarintDecodeResult { value: result, new_pos: pos })
+        }
+        shift = shift + 7
+    }
+}

@@ -1,0 +1,40 @@
+//! Protocol Buffers message behavior and encoding helpers.
+//!
+//! The `ProtoMessage` behavior defines the interface for types that can
+//! be serialized to and deserialized from protobuf wire format.
+
+use std::collections::Buffer
+use std::protobuf::writer::ProtoWriter
+use std::protobuf::reader::ProtoReader
+
+/// Behavior for types that can be encoded/decoded as Protocol Buffer messages.
+pub behavior ProtoMessage {
+    /// Encodes this message's fields into the writer.
+    func encode(this, writer: mut ref ProtoWriter)
+
+    /// Decodes a message from the reader. Returns Err on malformed input.
+    func decode(reader: mut ref ProtoReader) -> Outcome[Self, Str]
+
+    /// Computes the serialized size in bytes without actually encoding.
+    /// Used for length-prefixed embedded messages to know the size before writing.
+    func encoded_size(this) -> I64
+}
+
+/// Encodes a message with a varint length prefix and returns the result as a Buffer.
+/// This is the standard way to frame protobuf messages for streaming protocols.
+pub func encode_length_delimited(msg: ref ProtoWriter) -> Buffer {
+    let msg_buf: Buffer = msg.to_buffer()
+    let msg_len: I64 = msg_buf.len()
+    var out: ProtoWriter = ProtoWriter::with_capacity(msg_len + 10)
+    out.write_varint(msg_len)
+    for i in 0 to msg_len {
+        out.buf.write_byte(msg_buf.read_u8(i))
+    }
+    return out.to_buffer()
+}
+
+/// Decodes a length-delimited message from a reader.
+/// Reads the varint length prefix, then creates a sub-reader for the message body.
+pub func decode_length_delimited(reader: mut ref ProtoReader) -> Outcome[ProtoReader, Str] {
+    return reader.read_message_bytes()
+}
