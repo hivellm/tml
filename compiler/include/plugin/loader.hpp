@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -76,6 +77,15 @@ public:
     /// Look up a symbol from a loaded plugin handle.
     /// Use this to find exported C functions (e.g., compiler_main).
     static auto get_symbol(void* handle, const char* symbol) -> void*;
+
+    /// Start background loading of the named plugins in parallel.
+    /// Call this as early as possible in main() to overlap DLL loading with CLI parsing.
+    /// Subsequent Loader::load() calls for the same paths will return instantly (cache hit).
+    static void preload_async(const std::vector<std::string>& plugin_names);
+
+    /// Block until all background preload threads have finished.
+    /// Called automatically by the Loader constructor.
+    static void wait_preload_done();
 
 private:
     /// Discover plugin directories based on exe location.

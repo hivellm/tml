@@ -17,6 +17,7 @@ TML_MODULE("launcher")
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Version is generated at build time
 #ifndef TML_VERSION
@@ -67,7 +68,7 @@ static void print_version() {
 }
 
 int main(int argc, char* argv[]) {
-    // No arguments → show help
+    // No arguments → show help (no DLL needed)
     if (argc < 2) {
         print_usage();
         return 0;
@@ -75,7 +76,7 @@ int main(int argc, char* argv[]) {
 
     std::string command = argv[1];
 
-    // Handle --help and --version without loading any plugin
+    // Handle --help and --version without loading any plugin.
     if (command == "--help" || command == "-h") {
         print_usage();
         return 0;
@@ -85,7 +86,16 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Everything else requires the compiler plugin
+    // Real command: start loading the compiler DLL in the background NOW.
+    // The Loader constructor calls wait_preload_done(), so any remaining
+    // argument parsing in the compiler runs in parallel with the DLL load.
+    // On warm OS page cache, LoadLibrary completes before the Loader is
+    // even constructed, giving a near-zero DLL overhead.
+    tml::plugin::Loader::preload_async({"tml_compiler"});
+
+    // Everything else requires the compiler plugin.
+    // The Loader constructor calls wait_preload_done(), so by the time
+    // loader.load("tml_compiler") runs, the DLL is already in g_dll_cache.
     tml::plugin::Loader loader;
 
     if (!loader.load("tml_compiler")) {
