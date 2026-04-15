@@ -32,8 +32,8 @@
 // Display, Debug, Ordering are builtins - no import needed
 use core::fmt::num::{Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp}
 use core::fmt::helpers::{
-    i8_to_str, i16_to_str, i32_to_str, i64_to_str,
-    u8_to_str, u16_to_str, u32_to_str, u64_to_str,
+    i8_to_str, i16_to_str, i32_to_str, i64_to_str, i128_to_str,
+    u8_to_str, u16_to_str, u32_to_str, u64_to_str, u128_to_str,
     u8_to_binary_str, u16_to_binary_str, u32_to_binary_str, u64_to_binary_str,
     i8_to_binary_str, i16_to_binary_str, i32_to_binary_str, i64_to_binary_str,
     u64_to_octal_str, u64_to_hex_str,
@@ -113,6 +113,24 @@ impl Display for U64 {
     @allocates
     pub func to_string(this) -> Str {
         return u64_to_str(this)
+    }
+}
+
+/// Converts an `I128` to its decimal string representation.
+impl Display for I128 {
+    /// Converts the I128 value to its string representation.
+    @allocates
+    pub func to_string(this) -> Str {
+        return i128_to_str(this)
+    }
+}
+
+/// Converts a `U128` to its decimal string representation.
+impl Display for U128 {
+    /// Converts the U128 value to its string representation.
+    @allocates
+    pub func to_string(this) -> Str {
+        return u128_to_str(this)
     }
 }
 

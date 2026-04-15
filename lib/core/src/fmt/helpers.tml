@@ -530,3 +530,58 @@ pub func escape_char(c: Char) -> Str {
     // A full implementation would escape special characters
     return char_to_str(c)
 }
+
+// ============================================================================
+// 128-bit integer to string conversion
+// ============================================================================
+
+/// Converts a U128 to its decimal string representation.
+/// Uses repeated division by 10, writing digits backwards into a buffer.
+/// U128 max = 340282366920938463463374607431768211455 (39 digits).
+@allocates
+pub func u128_to_str(value: U128) -> Str {
+    if value == 0 as U128 {
+        return "0"
+    }
+    // Max 39 digits + null terminator
+    let buf: *U8 = lowlevel { mem_alloc(40) } as *U8
+    let buf_addr: I64 = buf as I64
+
+    // Write null terminator at position 39
+    lowlevel { ptr_write[U8]((buf_addr + 39) as *U8, 0 as U8) }
+
+    var pos: I64 = 38
+    var v: U128 = value
+    loop (v > 0 as U128) {
+        let digit: U128 = v % (10 as U128)
+        v = v / (10 as U128)
+        let ch: U8 = (digit as U8) + (48 as U8)
+        lowlevel { ptr_write[U8]((buf_addr + pos) as *U8, ch) }
+        pos = pos - 1
+    }
+
+    // Return pointer to first digit (skip leading unused bytes)
+    return (buf_addr + pos + 1) as Str
+}
+
+/// Converts an I128 to its decimal string representation.
+/// Handles sign, then delegates to U128 formatter.
+@allocates
+pub func i128_to_str(value: I128) -> Str {
+    if value == 0 as I128 {
+        return "0"
+    }
+    if value > 0 as I128 {
+        return u128_to_str(value as U128)
+    }
+    // Negative: for I128::min, (0 - value) overflows. Handle by converting
+    // the raw bits to U128 and computing the absolute value manually.
+    // I128::min as U128 = 170141183460469231731687303715884105728
+    // which is 2^127 = the correct absolute value.
+    let raw: U128 = value as U128
+    // For I128::min, raw == 2^127 (high bit set, rest zero).
+    // For other negatives, abs = (U128::max - raw) + 1 = two's complement.
+    let abs_val: U128 = (0 as U128 - raw)
+    let digits: Str = u128_to_str(abs_val)
+    return "-" + digits
+}
