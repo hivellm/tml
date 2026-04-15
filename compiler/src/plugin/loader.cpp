@@ -203,15 +203,45 @@ Loader::~Loader() {
 void Loader::discover_paths() {
     auto exe = exe_dir();
 
-    // Plugins live at plugins/ relative to exe dir (build/debug/bin/plugins/)
-    plugins_dir_ = exe / "plugins";
-
-    // Cache directory: cache/plugins/ next to executable
+    // Cache directory: always adjacent to the debug exe for consistency.
     cache_dir_ = exe / "cache" / "plugins";
-
-    // Create cache dir if it doesn't exist
     std::error_code ec;
     fs::create_directories(cache_dir_, ec);
+
+    // Priority 1: explicit override via TML_PLUGIN_DIR env var.
+    const char* plugin_dir_env = std::getenv("TML_PLUGIN_DIR");
+    if (plugin_dir_env && plugin_dir_env[0] != '\0') {
+        plugins_dir_ = fs::path(plugin_dir_env);
+        return;
+    }
+
+    // Priority 2: TML_COMPILER_BUILD=release — load DLLs from the release
+    // build directory so the debug tml.exe can use the optimized compiler
+    // without changing PATH.  Layout: build/<type>/bin/ (exe lives here),
+    // so release plugins are at build/release/bin/plugins/ or build/release/plugins/.
+    const char* build_override = std::getenv("TML_COMPILER_BUILD");
+    if (build_override && std::string(build_override) == "release") {
+        auto build_dir = exe.parent_path().parent_path(); // build/debug → build/
+        auto release_bin_plugins = build_dir / "release" / "bin" / "plugins";
+        auto release_plugins = build_dir / "release" / "plugins";
+        if (fs::exists(release_bin_plugins)) {
+            plugins_dir_ = release_bin_plugins;
+            return;
+        }
+        if (fs::exists(release_plugins)) {
+            plugins_dir_ = release_plugins;
+            return;
+        }
+        // Release build not found — warn and fall through to debug.
+        std::cerr << "warning: TML_COMPILER_BUILD=release set but no release plugins found at:\n"
+                  << "  " << release_bin_plugins.string() << "\n"
+                  << "  " << release_plugins.string() << "\n"
+                  << "  Run: scripts\\build.bat release\n"
+                  << "  Falling back to debug build.\n";
+    }
+
+    // Default: plugins next to the exe (build/debug/bin/plugins/).
+    plugins_dir_ = exe / "plugins";
 }
 
 auto Loader::plugins_dir() const -> const fs::path& {

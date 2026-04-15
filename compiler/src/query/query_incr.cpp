@@ -1,5 +1,14 @@
 TML_MODULE("compiler")
 
+// __DATE__/__TIME__ are used as a last-resort fallback hash when the binary
+// path is unavailable (non-Windows without /proc/self/exe). The warning
+// about non-reproducibility is intentional — we want the hash to change on
+// rebuild in that fallback path.
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdate-time"
+#endif
+
 #include "query/query_incr.hpp"
 
 #include "common.hpp"
@@ -68,6 +77,10 @@ uint32_t compiler_build_hash() {
     }();
     return hash;
 }
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 // ============================================================================
 // Binary Helpers
