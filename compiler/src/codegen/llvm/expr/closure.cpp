@@ -143,7 +143,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     std::vector<std::string> param_names;
     for (size_t i = 0; i < closure.params.size(); ++i) {
         // Get parameter type: prefer explicit annotation, then inferred type from type checker
-        std::string param_type = "i32"; // default
+        std::string param_type = "i64"; // TML default integer type
         if (closure.params[i].second.has_value()) {
             param_type = llvm_type(*closure.params[i].second.value());
         } else if (i < closure.inferred_param_types.size() && closure.inferred_param_types[i]) {

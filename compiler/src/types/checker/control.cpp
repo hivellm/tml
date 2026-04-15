@@ -203,6 +203,19 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
                 } else {
                     element_type = next_sig->return_type;
                 }
+                // Substitute generic type params from the concrete iterator type.
+                // E.g. BTreeMapIter[I64, I64]::next() -> Maybe[MapEntry[K, V]]
+                //   => substitute K->I64, V->I64 => MapEntry[I64, I64]
+                if (!named.type_args.empty()) {
+                    auto struct_def = env_.lookup_struct(named.name);
+                    if (struct_def && struct_def->type_params.size() == named.type_args.size()) {
+                        std::unordered_map<std::string, TypePtr> subs;
+                        for (size_t i = 0; i < struct_def->type_params.size(); ++i) {
+                            subs[struct_def->type_params[i]] = named.type_args[i];
+                        }
+                        element_type = substitute_type(element_type, subs);
+                    }
+                }
             } else {
                 element_type = make_unit();
             }

@@ -480,9 +480,14 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 // payload (field 1) from the Poll struct.
                 std::string poll_val = get_value_reg(i.poll_value);
                 // Determine the inner type from the AwaitInst's result_type
-                std::string inner_type = "i32"; // default
+                std::string inner_type;
                 if (i.result_type) {
                     inner_type = mir_type_to_llvm(i.result_type);
+                }
+                if (inner_type.empty()) {
+                    emit("  ; ERROR: AwaitInst has no result_type — cannot resolve inner type");
+                    emit("  unreachable");
+                    return;
                 }
                 // Determine the Poll struct type from the poll_value's type
                 std::string poll_type;

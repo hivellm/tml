@@ -165,7 +165,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // IMPORTANT: Don't use last_semantic_type_ here - it's from the RHS!
                 // We need to infer the type of the LHS operand specifically.
                 types::TypePtr operand_type = infer_expr_type(*unary.operand);
-                std::string inner_llvm_type = "i32"; // default
+                std::string inner_llvm_type;
                 TML_DEBUG_LN("[DEREF_ASSIGN] operand_type="
                              << (operand_type ? types::type_to_string(operand_type) : "null"));
 
@@ -256,6 +256,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     }
                 }
 
+                if (inner_llvm_type.empty()) {
+                    inner_llvm_type = last_expr_type_; // use RHS type as last resort
+                }
                 emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr);
                 last_expr_type_ = inner_llvm_type; // Assignment returns the assigned value's type
             }
@@ -801,11 +804,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Get element type from array type
                 // Array type is like "[5 x i32]", we need "i32"
-                std::string elem_type = "i32"; // default
+                std::string elem_type;
                 types::TypePtr semantic_type = infer_expr_type(*idx_expr.object);
                 if (semantic_type && semantic_type->is<types::ArrayType>()) {
                     const auto& arr = semantic_type->as<types::ArrayType>();
                     elem_type = llvm_type_from_semantic(arr.element);
+                }
+                if (elem_type.empty()) {
+                    // Extract element type from LLVM array type string "[N x T]"
+                    auto x_pos = arr_type.find(" x ");
+                    if (x_pos != std::string::npos) {
+                        elem_type = arr_type.substr(x_pos + 3, arr_type.size() - x_pos - 4);
+                    } else {
+                        elem_type = "i64"; // array element type unresolvable
+                    }
                 }
 
                 // Get element pointer

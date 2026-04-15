@@ -319,6 +319,21 @@ impl[K: Ord, V] Drop for BTreeMap[K, V] {
     }
 }
 
+/// A key-value pair yielded by BTreeMap iteration.
+///
+/// # Example
+///
+/// ```tml
+/// for entry in map.iter() {
+///     let k = entry.key
+///     let v = entry.value
+/// }
+/// ```
+pub type MapEntry[K, V] {
+    key: K,
+    value: V
+}
+
 /// An iterator over BTreeMap entries in sorted key order.
 pub type BTreeMapIter[K, V] {
     keys: List[K],
@@ -333,7 +348,7 @@ impl[K, V] BTreeMapIter[K, V] {
         return this.index < this.length
     }
 
-    /// Returns the key of the current entry.
+    /// Returns the key of the current entry (cursor API).
     pub func key(this) -> K {
         if this.index >= this.length {
             panic("BTreeMapIter::key: iterator exhausted")
@@ -341,7 +356,7 @@ impl[K, V] BTreeMapIter[K, V] {
         return this.keys.get(this.index)
     }
 
-    /// Returns the value of the current entry.
+    /// Returns the value of the current entry (cursor API).
     pub func value(this) -> V {
         if this.index >= this.length {
             panic("BTreeMapIter::value: iterator exhausted")
@@ -349,10 +364,27 @@ impl[K, V] BTreeMapIter[K, V] {
         return this.values.get(this.index)
     }
 
-    /// Advances the iterator to the next entry.
-    pub func next(mut this) {
+    /// Advances the iterator to the next entry (cursor API).
+    pub func advance(mut this) {
         if this.index < this.length {
             this.index = this.index + 1
         }
+    }
+}
+
+impl[K, V] Iterator for BTreeMapIter[K, V] {
+    type Item = MapEntry[K, V]
+
+    /// Advances the iterator and returns the next key-value pair.
+    ///
+    /// Returns `Nothing` when all entries have been visited.
+    pub func next(mut this) -> Maybe[MapEntry[K, V]] {
+        if this.index >= this.length {
+            return Nothing
+        }
+        let k: K = this.keys.get(this.index)
+        let v: V = this.values.get(this.index)
+        this.index = this.index + 1
+        return Just(MapEntry[K, V] { key: k, value: v })
     }
 }

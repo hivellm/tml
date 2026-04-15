@@ -649,7 +649,7 @@ auto LLVMIRGen::gen_primitive_method_ext(const parser::MethodCallExpr& call,
         // Add remaining arguments
         for (size_t i = 0; i < call.args.size(); ++i) {
             std::string val = gen_expr(*call.args[i]);
-            std::string arg_type = "i32"; // default fallback
+            std::string arg_type = last_expr_type_;
             if (i + 1 < func_sig->params.size()) {
                 arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
             }

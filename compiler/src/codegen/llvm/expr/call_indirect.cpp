@@ -39,7 +39,7 @@ auto LLVMIRGen::gen_call_indirect(const parser::CallExpr& call, const std::strin
 
         // Extract declared parameter types and return type from semantic type
         std::vector<types::TypePtr> declared_params;
-        std::string ret_type = "i32";
+        std::string ret_type = "void";
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
@@ -213,7 +213,7 @@ auto LLVMIRGen::gen_call_indirect(const parser::CallExpr& call, const std::strin
 
         // Extract declared parameter types and return type from semantic type
         std::vector<types::TypePtr> thin_declared_params;
-        std::string ret_type = "i32";
+        std::string ret_type = "void";
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();

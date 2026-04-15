@@ -2067,17 +2067,24 @@ if(TML_BUILD_TESTS)
         GTest::gtest_main
     )
 
+    set_target_properties(tml_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/tests"
+    )
+
     include(GoogleTest)
     gtest_discover_tests(tml_tests)
-endif()
 
-# Standalone serial reader round-trip tests (no GTest — uses own main)
-add_executable(serial_reader_test
-    tests/serial/serial_reader_test.cpp
-)
-target_link_libraries(serial_reader_test PRIVATE
-    tml_cli
-)
+    # Standalone serial reader round-trip tests (no GTest — uses own main)
+    add_executable(serial_reader_test
+        tests/serial/serial_reader_test.cpp
+    )
+    target_link_libraries(serial_reader_test PRIVATE
+        tml_cli
+    )
+    set_target_properties(serial_reader_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/tests"
+    )
+endif()
 
 # =============================================================================
 # SIMD Benchmark Harness

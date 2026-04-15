@@ -347,7 +347,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string range_start = "0";
     std::string range_end = "0";
     bool inclusive = false;
-    std::string range_type = "i32"; // Default type for range
+    std::string range_type = "i64"; // Default integer type (TML I64)
     if (for_expr.iter->is<parser::RangeExpr>()) {
         const auto& range = for_expr.iter->as<parser::RangeExpr>();
         inclusive = range.inclusive;
@@ -511,24 +511,82 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     std::string iter_val = gen_expr(*for_expr.iter);
     std::string iter_llvm_type = last_expr_type_;
 
+    // Build the mangled type name for generic iterators (e.g. BTreeMapIter__I64__I64).
+    std::string mangled_type_name = type_name;
+    {
+        auto iter_semantic_type = infer_expr_type(*for_expr.iter);
+        if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
+            const auto& iter_named = iter_semantic_type->as<types::NamedType>();
+            if (!iter_named.type_args.empty()) {
+                mangled_type_name = type_name + "__" + mangle_type_args(iter_named.type_args);
+            }
+        }
+    }
+
     // Look up next() return type to determine item type
-    std::string next_fn = mangle_impl_method(type_name, "next");
-    std::string item_llvm_type = "i32"; // fallback
+    std::string next_fn = mangle_impl_method(mangled_type_name, "next");
+    std::string item_llvm_type; // must be resolved — no i32 fallback
     auto next_sig = env_.lookup_func(type_name + "::next");
+
+    // Build generic substitution map for the iterator type.
+    // E.g. BTreeMapIter[I64, I64] => {K -> I64, V -> I64} so that
+    // MapEntry[K, V] becomes MapEntry[I64, I64] in LLVM type resolution.
+    std::unordered_map<std::string, types::TypePtr> iter_subs;
+    {
+        auto iter_semantic_type = infer_expr_type(*for_expr.iter);
+        if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
+            const auto& iter_named = iter_semantic_type->as<types::NamedType>();
+            if (!iter_named.type_args.empty()) {
+                auto struct_def = env_.lookup_struct(iter_named.name);
+                if (struct_def && struct_def->type_params.size() == iter_named.type_args.size()) {
+                    for (size_t i = 0; i < struct_def->type_params.size(); ++i) {
+                        iter_subs[struct_def->type_params[i]] = iter_named.type_args[i];
+                    }
+                }
+            }
+        }
+    }
+
     if (next_sig && next_sig->return_type) {
+        auto resolved_ret = iter_subs.empty()
+            ? next_sig->return_type
+            : types::substitute_type(next_sig->return_type, iter_subs);
         // next() returns Maybe[Item]; get the struct layout for item extraction
-        if (next_sig->return_type->is<types::NamedType>()) {
-            const auto& ret = next_sig->return_type->as<types::NamedType>();
+        if (resolved_ret->is<types::NamedType>()) {
+            const auto& ret = resolved_ret->as<types::NamedType>();
             if ((ret.name == "Maybe" || ret.name == "Option") && !ret.type_args.empty()) {
                 item_llvm_type = llvm_type_from_semantic(ret.type_args[0]);
             }
         }
     }
 
+    if (item_llvm_type.empty()) {
+        emit_line("  ; ERROR: could not resolve Iterator::Item type for " + type_name);
+        emit_line("  unreachable");
+        block_terminated_ = true;
+        current_loop_start_ = saved_loop_start;
+        current_loop_end_ = saved_loop_end;
+        current_loop_stack_save_ = saved_loop_stack_save;
+        current_loop_metadata_id_ = saved_loop_metadata_id;
+        return "0";
+    }
+
     // Determine the LLVM type for Maybe[Item] (the return type of next())
-    std::string maybe_llvm_type = iter_llvm_type; // fallback
+    std::string maybe_llvm_type = iter_llvm_type;
     if (next_sig && next_sig->return_type) {
-        maybe_llvm_type = llvm_type_from_semantic(next_sig->return_type);
+        auto resolved_ret = iter_subs.empty()
+            ? next_sig->return_type
+            : types::substitute_type(next_sig->return_type, iter_subs);
+        maybe_llvm_type = llvm_type_from_semantic(resolved_ret);
+    }
+
+    // Request instantiation of the next() method for this generic iterator.
+    // Without this, the generic impl Iterator for BTreeMapIter[K,V] won't
+    // emit the concrete next() body for BTreeMapIter__I64__I64 etc.
+    if (mangled_type_name != type_name) {
+        pending_impl_method_instantiations_.push_back(
+            PendingImplMethod{mangled_type_name, "next", iter_subs, type_name, "",
+                              /*is_library_type=*/true});
     }
 
     // Preheader: allocate iterator storage
@@ -588,14 +646,17 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
         block_terminated_ = false;
 
         push_lifetime_scope();
-        std::string item_val = fresh_reg();
-        emit_line("  " + item_val + " = extractvalue " + maybe_llvm_type + " " + next_result +
-                  ", 1");
 
-        // Store item to alloca so pattern binding works uniformly
+        // Store the entire Maybe result to memory, then GEP to the payload field.
+        // This avoids extractvalue type mismatches when the Maybe enum packs the
+        // payload as an array (e.g. MapEntry{i64,i64} stored as [2 x i64]).
+        std::string maybe_alloca = fresh_reg();
+        emit_line("  " + maybe_alloca + " = alloca " + maybe_llvm_type);
+        emit_line("  store " + maybe_llvm_type + " " + next_result + ", ptr " + maybe_alloca);
+        // GEP to field 1 (payload) — this ptr aliases the item data
         std::string item_alloca = fresh_reg();
-        emit_line("  " + item_alloca + " = alloca " + item_llvm_type);
-        emit_line("  store " + item_llvm_type + " " + item_val + ", ptr " + item_alloca);
+        emit_line("  " + item_alloca + " = getelementptr inbounds " + maybe_llvm_type + ", ptr " +
+                  maybe_alloca + ", i32 0, i32 1");
         locals_[var_name] = VarInfo{item_alloca, item_llvm_type, nullptr, std::nullopt};
     }
 

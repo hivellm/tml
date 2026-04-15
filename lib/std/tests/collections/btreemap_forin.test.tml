@@ -1,0 +1,52 @@
+// Tests for BTreeMap for-in iteration via Iterator behavior
+use test
+use std::collections::{BTreeMap, BTreeMapIter, MapEntry}
+
+@test
+func test_btreemap_forin_empty() -> Outcome[Unit, Str] {
+    let m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
+    var count: I64 = 0
+    for entry in m.iter() {
+        count = count + 1
+    }
+    assert_eq(count, 0 as I64, "empty map should yield 0 entries")
+    m.destroy()
+    Ok(())
+}
+
+@test
+func test_btreemap_forin_single() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
+    m.insert(42, 420)
+    var k: I64 = 0
+    var v: I64 = 0
+    for entry in m.iter() {
+        k = entry.key
+        v = entry.value
+    }
+    assert_eq(k, 42 as I64, "key should be 42")
+    assert_eq(v, 420 as I64, "value should be 420")
+    m.destroy()
+    Ok(())
+}
+
+@test
+func test_btreemap_forin_sorted_order() -> Outcome[Unit, Str] {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
+    m.insert(30, 300)
+    m.insert(10, 100)
+    m.insert(20, 200)
+    var key_sum: I64 = 0
+    var val_sum: I64 = 0
+    var count: I64 = 0
+    for entry in m.iter() {
+        key_sum = key_sum + entry.key
+        val_sum = val_sum + entry.value
+        count = count + 1
+    }
+    assert_eq(count, 3 as I64, "should iterate 3 entries")
+    assert_eq(key_sum, 60 as I64, "key sum should be 60")
+    assert_eq(val_sum, 600 as I64, "value sum should be 600")
+    m.destroy()
+    Ok(())
+}

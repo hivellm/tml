@@ -367,7 +367,7 @@ auto LLVMIRGen::try_gen_module_impl_method_call(const parser::MethodCallExpr& ca
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
         std::string actual_type = last_expr_type_;
-        std::string arg_type = "i32";
+        std::string arg_type = actual_type;
         types::TypePtr param_type_ptr;
         // func_sig usually has 'this' at index 0 (semantic params), so offset is 1.
         // However, default behavior methods from module binary cache may omit 'this'.

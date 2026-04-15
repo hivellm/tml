@@ -30,7 +30,7 @@ func main() -> I32 {
 
 ### Prerequisites
 
-- **Zig 0.14+** (recommended — fastest builds, no Visual Studio required)
+- **Zig 0.14–0.15.x** (recommended — fastest builds, no Visual Studio required; **Zig 0.16+ is NOT supported**, see note below)
 - **CMake 3.20+**
 - **Ninja** (required for Zig CC and Clang builds, recommended for MSVC)
 - **LLVM 15+** (pre-built static libraries)
@@ -42,18 +42,27 @@ func main() -> I32 {
 **Install Zig:**
 
 ```bash
-# Windows (winget)
-winget install zig.zig
+# Windows (winget — pin to 0.15.2)
+winget install zig.zig --version 0.15.2
 
 # Windows (scoop)
-scoop install zig
+scoop install zig@0.15.2
 
 # Linux
-# Download from https://ziglang.org/download/
+# Download 0.15.2 from https://ziglang.org/download/
 
 # macOS (Homebrew)
-brew install zig
+brew install zig@0.15
 ```
+
+> **Zig 0.16+ breaks the build.** Zig 0.16 changed how it links the Windows UCRT
+> (Universal C Runtime). When building executables with `-D_DLL -D_MT`, zig 0.16's
+> lld-link fails to resolve `__declspec(dllimport)` symbols like `strtol`, `fopen`,
+> `getenv` etc. — it finds them in `libucrt.lib` (static) but rejects them because
+> they are "not an import library". Additionally, the pre-built LLVM static libraries
+> use `/MT` (static CRT) which causes `lld-link: error: /failifmismatch` for
+> `RuntimeLibrary` when TML compiles with `/MD` (dynamic CRT). Since lld-link does
+> not support `/FORCE:MULTIPLE` (MSVC-only), there is no workaround. **Use Zig 0.15.2.**
 
 **Install Ninja:**
 
