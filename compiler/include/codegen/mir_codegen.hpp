@@ -95,6 +95,8 @@ private:
     IREmitter emitter_{output_, temp_counter_}; // Typed IR emission helper
     int spill_counter_ = 0;                     // Counter for struct-to-ptr spill allocas
     int bounds_check_counter_ = 0;              // Dedicated counter for bc.panic.N / bc.ok.N labels
+    int loop_metadata_counter_ = 9000;          // Metadata node IDs for !llvm.loop vectorization
+    std::vector<std::string> loop_metadata_;    // Deferred !N = ... metadata lines emitted at end
 
     // Current function context
     std::string current_func_;

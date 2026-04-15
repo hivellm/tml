@@ -369,6 +369,11 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     emitln("!llvm.ident = !{!0}");
     emitln("!0 = !{!\"tml version " + std::string(tml::VERSION) + "\"}");
 
+    // Loop vectorization metadata (emitted by back-edge detection in terminators.cpp)
+    for (const auto& meta : loop_metadata_) {
+        emitln(meta);
+    }
+
     return output_.str();
 }
 
@@ -599,6 +604,11 @@ auto MirCodegen::generate_cgu(const mir::Module& module,
     emitln();
     emitln("!llvm.ident = !{!0}");
     emitln("!0 = !{!\"tml version " + std::string(tml::VERSION) + "\"}");
+
+    // Loop vectorization metadata
+    for (const auto& meta : loop_metadata_) {
+        emitln(meta);
+    }
 
     return output_.str();
 }

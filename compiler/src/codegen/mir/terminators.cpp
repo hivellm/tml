@@ -83,7 +83,22 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
             } else if constexpr (std::is_same_v<T, mir::BranchTerm>) {
                 auto it = block_labels_.find(t.target);
                 if (it != block_labels_.end() && !it->second.empty()) {
-                    emitln("    br label %" + it->second);
+                    // Detect back-edge (loop): target block ID <= current block ID.
+                    // Attach !llvm.loop vectorization metadata to enable auto-vectorization.
+                    if (t.target <= current_block_id_) {
+                        int meta_id = loop_metadata_counter_++;
+                        int vec_id = loop_metadata_counter_++;
+                        loop_metadata_.push_back(
+                            "!" + std::to_string(meta_id) + " = distinct !{!" +
+                            std::to_string(meta_id) + ", !" + std::to_string(vec_id) + "}");
+                        loop_metadata_.push_back(
+                            "!" + std::to_string(vec_id) +
+                            " = !{!\"llvm.loop.vectorize.enable\", i1 true}");
+                        emitln("    br label %" + it->second + ", !llvm.loop !" +
+                               std::to_string(meta_id));
+                    } else {
+                        emitln("    br label %" + it->second);
+                    }
                 } else {
                     // Target block doesn't exist - fall through to next block
                     // or branch to function exit if no blocks remain
