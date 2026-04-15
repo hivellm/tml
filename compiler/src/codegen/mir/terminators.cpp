@@ -54,7 +54,12 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
                             type_str = it->second.llvm_type;
                         }
                     }
-                    if (type_str == "{}" || current_func_ret_type_ == "void") {
+                    if ((type_str == "{}" || type_str == "void") && current_func_ret_type_ != "void" &&
+                        !current_func_ret_type_.empty()) {
+                        // Value typed as Unit but function returns non-void (e.g. closure
+                        // body where MIR lost the return type). Use function return type.
+                        emitln("    ret " + current_func_ret_type_ + " " + val);
+                    } else if (type_str == "{}" || current_func_ret_type_ == "void") {
                         // Unit return (type is "{}" or function declared as void) —
                         // emit `ret void` since LLVM function signatures use void for Unit.
                         emitln("    ret void");

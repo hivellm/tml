@@ -314,6 +314,22 @@ auto ThirMirBuilder::build_closure(const thir::ThirClosureExpr& closure) -> Valu
         param_types = ft->params;
     }
 
+    // Fallback: if return_type is still Unit, extract from the semantic type directly.
+    if (return_type->is_unit() && closure.type) {
+        types::TypePtr sem_ret;
+        if (closure.type->is<types::FuncType>()) {
+            sem_ret = closure.type->as<types::FuncType>().return_type;
+        } else if (closure.type->is<types::ClosureType>()) {
+            sem_ret = closure.type->as<types::ClosureType>().return_type;
+        }
+        if (sem_ret) {
+            auto converted_ret = convert_type(sem_ret);
+            if (converted_ret && !converted_ret->is_unit()) {
+                return_type = converted_ret;
+            }
+        }
+    }
+
     // Fall back to individual param types if function type doesn't have them
     if (param_types.empty()) {
         for (const auto& param : closure.params) {
@@ -357,7 +373,19 @@ auto ThirMirBuilder::build_closure(const thir::ThirClosureExpr& closure) -> Valu
     ctx_.current_func = &closure_func;
     ctx_.current_block = 0;
     ctx_.variables.clear();
-    current_return_type_ = nullptr;
+    // Set the semantic return type for the closure so that `return` statements
+    // inside the body emit the correct `ret <type>` instead of `ret void`.
+    if (closure.type) {
+        if (closure.type->is<types::FuncType>()) {
+            current_return_type_ = closure.type->as<types::FuncType>().return_type;
+        } else if (closure.type->is<types::ClosureType>()) {
+            current_return_type_ = closure.type->as<types::ClosureType>().return_type;
+        } else {
+            current_return_type_ = nullptr;
+        }
+    } else {
+        current_return_type_ = nullptr;
+    }
 
     // Bind parameters to variables
     for (size_t i = 0; i < closure.params.size(); ++i) {

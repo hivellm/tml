@@ -184,7 +184,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     }
 
     // Determine return type from closure annotation or infer from body
-    std::string ret_type = "i32";
+    std::string ret_type = "void";
     if (closure.return_type.has_value()) {
         ret_type = llvm_type(*closure.return_type.value());
     } else if (closure.inferred_return_type) {
