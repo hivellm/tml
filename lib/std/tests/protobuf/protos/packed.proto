@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package examples;
+
+// Message with packed repeated fields (proto3 default)
+message PackedArrays {
+  repeated int32   values    = 1;  // packed varint
+  repeated int64   ids       = 2;  // packed varint
+  repeated sint32  deltas    = 3;  // packed zigzag varint
+  repeated fixed32 hashes    = 4;  // packed fixed32
+  repeated fixed64 timestamps = 5; // packed fixed64
+  repeated double  readings  = 6;  // packed fixed64
+  repeated float   weights   = 7;  // packed fixed32
+  repeated bool    flags     = 8;  // packed varint
+}
