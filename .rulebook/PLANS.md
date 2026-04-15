@@ -13,15 +13,16 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-No active task. Last completed: phase0h_cmov-select-if-else — ARCHIVED (2026-04-14).
-Branch: feat/self-hosting-compiler. Version: 0.3.10.
-Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), slice_split_pred X002 timeout.
+Last completed: phase0n_daemon-compile-integration — ARCHIVED (2026-04-14).
+Branch: feat/self-hosting-compiler. Version: 0.3.16.
+Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout, slice_split_pred X002 timeout.
+Pending tasks: phase0o (match→when diagnostic), phase0p (BTreeMapIter for-in), phase0q (File::sync/datasync), phase0r (pipe hang CRITICAL), phase0s (U128.to_string).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-No active task.
+Next task: phase0r_compiler-output-pipe-hang (CRITICAL — AI agents and MCP server can't capture compiler output).
 <!-- PLANS:TASK:END -->
 
 ## Session History
