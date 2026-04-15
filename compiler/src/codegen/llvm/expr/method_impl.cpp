@@ -330,6 +330,8 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
 
     if (!func_sig) {
+        // Diagnostic: log when impl method lookup fails (helps trace K001 "Unknown method" bugs)
+        TML_DEBUG_LN("[IMPL_METHOD] MISS: " << qualified_name);
         return std::nullopt;
     }
 
