@@ -1,0 +1,107 @@
+/// Protobuf spec wire-format examples from https://protobuf.dev/programming-guides/encoding/
+/// Tests varint encoding, string encoding, tag encoding, and edge cases.
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}
+use std::collections::Buffer
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+// Spec example: varint 150 = 08 96 01
+@test func test_spec_varint_150() {
+    var w = ProtoWriter::new()
+    w.write_field_varint(1, 150)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 3)
+    assert_eq(buf_byte(ref buf, 0), 0x08)
+    assert_eq(buf_byte(ref buf, 1), 0x96)
+    assert_eq(buf_byte(ref buf, 2), 0x01)
+}
+
+// Spec example: string "testing" = 12 07 74 65 73 74 69 6e 67
+@test func test_spec_string_testing() {
+    var w = ProtoWriter::new()
+    w.write_field_string(2, "testing")
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 9)
+    assert_eq(buf_byte(ref buf, 0), 0x12)
+    assert_eq(buf_byte(ref buf, 1), 0x07)
+    assert_eq(buf_byte(ref buf, 2), 0x74) // t
+    assert_eq(buf_byte(ref buf, 3), 0x65) // e
+    assert_eq(buf_byte(ref buf, 4), 0x73) // s
+    assert_eq(buf_byte(ref buf, 5), 0x74) // t
+    assert_eq(buf_byte(ref buf, 6), 0x69) // i
+    assert_eq(buf_byte(ref buf, 7), 0x6E) // n
+    assert_eq(buf_byte(ref buf, 8), 0x67) // g
+}
+
+// Tag: field 16 needs 2-byte varint tag
+@test func test_tag_field16_two_bytes() {
+    var w = ProtoWriter::new()
+    w.write_tag(16, 0) // VARINT
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 2)
+    assert_eq(buf_byte(ref buf, 0), 0x80)
+    assert_eq(buf_byte(ref buf, 1), 0x01)
+}
+
+// Varint 0 = single byte 0x00
+@test func test_varint_zero() {
+    var w = ProtoWriter::new()
+    w.write_varint(0)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 1)
+    assert_eq(buf_byte(ref buf, 0), 0x00)
+}
+
+// Varint 127 = single byte 0x7F
+@test func test_varint_127() {
+    var w = ProtoWriter::new()
+    w.write_varint(127)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 1)
+    assert_eq(buf_byte(ref buf, 0), 0x7F)
+}
+
+// Varint 128 = 80 01
+@test func test_varint_128() {
+    var w = ProtoWriter::new()
+    w.write_varint(128)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 2)
+    assert_eq(buf_byte(ref buf, 0), 0x80)
+    assert_eq(buf_byte(ref buf, 1), 0x01)
+}
+
+// Varint 300 = AC 02
+@test func test_varint_300() {
+    var w = ProtoWriter::new()
+    w.write_varint(300)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 2)
+    assert_eq(buf_byte(ref buf, 0), 0xAC)
+    assert_eq(buf_byte(ref buf, 1), 0x02)
+}
+
+// Varint max u32 = FF FF FF FF 0F
+@test func test_varint_max_u32() {
+    var w = ProtoWriter::new()
+    w.write_varint(4294967295)
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 5)
+    assert_eq(buf_byte(ref buf, 0), 0xFF)
+    assert_eq(buf_byte(ref buf, 1), 0xFF)
+    assert_eq(buf_byte(ref buf, 2), 0xFF)
+    assert_eq(buf_byte(ref buf, 3), 0xFF)
+    assert_eq(buf_byte(ref buf, 4), 0x0F)
+}
+
+// Empty message is valid protobuf (0 bytes)
+@test func test_empty_message() {
+    var w = ProtoWriter::new()
+    assert_eq(w.len(), 0)
+    var r = ProtoReader::new(w.to_bytes())
+    assert(not r.has_more(), "empty message")
+}

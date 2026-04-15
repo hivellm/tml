@@ -1,0 +1,160 @@
+/// Tests for protobuf messages: Person roundtrip, nested messages, skip unknown,
+/// field ordering, merge semantics, default value omission.
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}
+use std::collections::Buffer
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+// Person { name="Alice", id=123, email="alice@test.com" }
+@test func test_person_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_string(1, "Alice")
+    w.write_field_varint(2, 123)
+    w.write_field_string(3, "alice@test.com")
+    let buf = w.to_buffer()
+
+    assert_eq(buf_byte(ref buf, 0), 0x0A) // field 1 LEN
+    assert_eq(buf_byte(ref buf, 7), 0x10) // field 2 VARINT
+    assert_eq(buf_byte(ref buf, 8), 0x7B) // 123
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t1.field_num, 1)
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "Alice")
+
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 123)
+
+    let t3 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "alice@test.com")
+    assert(not r.has_more(), "should be at end")
+}
+
+// Nested: Person + PhoneNumber sub-message
+@test func test_nested_submessage() {
+    var phone = ProtoWriter::new()
+    phone.write_field_string(1, "555-1234")
+    phone.write_field_varint(2, 1) // MOBILE
+
+    var w = ProtoWriter::new()
+    w.write_field_string(1, "Bob")
+    w.write_field_varint(2, 456)
+    w.write_field_message(4, ref phone)
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "Bob")
+
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 456)
+
+    let t4 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t4.field_num, 4)
+    var sub = when r.read_message_bytes() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+
+    let st1 = when sub.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when sub.read_string() { Ok(v) => v, Err(e) => "" }, "555-1234")
+    let st2 = when sub.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when sub.read_varint() { Ok(v) => v, Err(e) => 0 }, 1)
+}
+
+// 3-level nesting: AddressBook -> Person -> PhoneNumber
+@test func test_three_level_nesting() {
+    var phone = ProtoWriter::new()
+    phone.write_field_string(1, "123")
+    phone.write_field_varint(2, 2)
+
+    var person = ProtoWriter::new()
+    person.write_field_string(1, "Eve")
+    person.write_field_varint(2, 1)
+    person.write_field_message(4, ref phone)
+
+    var book = ProtoWriter::new()
+    book.write_field_message(1, ref person)
+
+    var r = ProtoReader::new(book.to_bytes())
+    let tb = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var pr = when r.read_message_bytes() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+
+    let tp1 = when pr.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when pr.read_string() { Ok(v) => v, Err(e) => "" }, "Eve")
+    let tp2 = when pr.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when pr.read_varint() { Ok(v) => v, Err(e) => 0 }, 1)
+    let tp4 = when pr.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var phr = when pr.read_message_bytes() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+
+    let ph1 = when phr.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when phr.read_string() { Ok(v) => v, Err(e) => "" }, "123")
+    let ph2 = when phr.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when phr.read_varint() { Ok(v) => v, Err(e) => 0 }, 2)
+}
+
+// Skip unknown fields
+@test func test_skip_unknown_fields() {
+    var w = ProtoWriter::new()
+    w.write_field_varint(1, 42)
+    w.write_field_varint(99, 9999)  // unknown
+    w.write_field_string(2, "end")
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 42)
+
+    let t99 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t99.field_num, 99)
+    when r.skip_field(t99.wire_type) { Ok(v) => {}, Err(e) => { assert(false, e); return } }
+
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "end")
+}
+
+// Fields can appear in any order
+@test func test_fields_any_order() {
+    var w = ProtoWriter::new()
+    w.write_field_varint(3, 300)
+    w.write_field_string(1, "hello")
+    w.write_field_varint(2, 200)
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t3 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t3.field_num, 3)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 300)
+
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t1.field_num, 1)
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "hello")
+
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t2.field_num, 2)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 200)
+}
+
+// Merge semantics: concat two messages = merged fields
+@test func test_merge_semantics() {
+    var w1 = ProtoWriter::new()
+    w1.write_field_string(1, "Alice")
+    var w2 = ProtoWriter::new()
+    w2.write_field_varint(2, 42)
+
+    let merged = w1.to_bytes() + w2.to_bytes()
+    var r = ProtoReader::new(merged)
+
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_string() { Ok(v) => v, Err(e) => "" }, "Alice")
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 42)
+}
+
+// Default values: all-zero fields produce empty message
+@test func test_default_omission() {
+    var w = ProtoWriter::new()
+    let id: I64 = 0
+    if id != 0 { w.write_field_varint(2, id) }
+    let name: Str = ""
+    if name.len() > 0 { w.write_field_string(1, name) }
+    assert_eq(w.len(), 0)
+}

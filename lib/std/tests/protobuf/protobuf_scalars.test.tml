@@ -1,0 +1,119 @@
+/// Tests for all protobuf scalar types: int, sint, fixed, bool, string, bytes.
+/// Validates wire encoding and roundtrip decode per scalars.proto schema.
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag, zigzag_encode, zigzag_decode}
+use std::collections::Buffer
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+@test func test_int_types_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_varint(3, 100)
+    w.write_field_varint(4, 100000)
+    w.write_field_varint(5, 42)
+    w.write_field_varint(6, 99999)
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t3 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t3.field_num, 3)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 100)
+
+    let t4 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t4.field_num, 4)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 100000)
+
+    let t5 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t5.field_num, 5)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 42)
+
+    let t6 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t6.field_num, 6)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 99999)
+}
+
+@test func test_sint_zigzag_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_sint(7, -1)
+    w.write_field_sint(8, -100)
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t7 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t7.field_num, 7)
+    let raw7 = when r.read_varint() { Ok(v) => v, Err(e) => 0 }
+    assert_eq(zigzag_decode(raw7), -1)
+
+    let t8 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t8.field_num, 8)
+    let raw8 = when r.read_varint() { Ok(v) => v, Err(e) => 0 }
+    assert_eq(zigzag_decode(raw8), -100)
+}
+
+@test func test_fixed32_wire_bytes() {
+    var w = ProtoWriter::new()
+    w.write_field_fixed32(9, 0x12345678)
+    let buf = w.to_buffer()
+    assert_eq(buf_byte(ref buf, 0), 0x4D) // tag (9<<3)|5
+    assert_eq(buf_byte(ref buf, 1), 0x78) // LE
+    assert_eq(buf_byte(ref buf, 2), 0x56)
+    assert_eq(buf_byte(ref buf, 3), 0x34)
+    assert_eq(buf_byte(ref buf, 4), 0x12)
+}
+
+@test func test_fixed64_wire_bytes() {
+    var w = ProtoWriter::new()
+    w.write_field_fixed64(10, 0x0102030405060708)
+    let buf = w.to_buffer()
+    assert_eq(buf_byte(ref buf, 0), 0x51) // tag (10<<3)|1
+    assert_eq(buf_byte(ref buf, 1), 0x08) // LE
+    assert_eq(buf_byte(ref buf, 2), 0x07)
+    assert_eq(buf_byte(ref buf, 3), 0x06)
+    assert_eq(buf_byte(ref buf, 4), 0x05)
+}
+
+@test func test_bool_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_bool(13, true)
+    w.write_field_bool(13, false)
+
+    var r = ProtoReader::new(w.to_bytes())
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t1.field_num, 13)
+    let b1 = when r.read_bool() { Ok(v) => v, Err(e) => false }
+    assert(b1, "expected true")
+
+    let t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    let b2 = when r.read_bool() { Ok(v) => v, Err(e) => true }
+    assert(not b2, "expected false")
+}
+
+@test func test_string_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_string(14, "hello world")
+    var r = ProtoReader::new(w.to_bytes())
+    let t = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t.field_num, 14)
+    let s = when r.read_string() { Ok(v) => v, Err(e) => "" }
+    assert_eq(s, "hello world")
+}
+
+@test func test_bytes_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_bytes(15, "abc")
+    var r = ProtoReader::new(w.to_bytes())
+    let t = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t.field_num, 15)
+    let b = when r.read_bytes() { Ok(v) => v, Err(e) => "" }
+    assert_eq(b, "abc")
+}
+
+@test func test_large_field_number() {
+    var w = ProtoWriter::new()
+    w.write_field_varint(1000, 42)
+    var r = ProtoReader::new(w.to_bytes())
+    let t = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t.field_num, 1000)
+    assert_eq(when r.read_varint() { Ok(v) => v, Err(e) => 0 }, 42)
+}
