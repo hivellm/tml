@@ -1,10 +1,12 @@
 TML_MODULE("codegen_x86")
 
-//! # LLD Linker Implementation
+//! # Linker Implementation (subprocess-only)
 //!
-//! Wraps LLD for cross-platform linking. When TML_HAS_LLD_EMBEDDED is defined,
-//! uses the in-process LLD library API (no subprocess). Otherwise falls back to
-//! spawning lld-link.exe / ld.lld as a subprocess.
+//! Links object files using the native OS linker as a subprocess.
+//! On Windows: link.exe (MSVC) or lld-link.exe as fallback.
+//! On Linux/macOS: ld or ld.lld as fallback.
+//!
+//! LLD is no longer embedded — this eliminates ~30-40 MB from the codegen DLL.
 
 // Suppress MSVC warnings about getenv
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -21,31 +23,6 @@ TML_MODULE("codegen_x86")
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
-
-#ifdef TML_HAS_LLD_EMBEDDED
-#include "lld/Common/Driver.h"
-
-#include "llvm/Support/raw_ostream.h"
-
-// Declare the LLD drivers we link against
-LLD_HAS_DRIVER(coff)
-LLD_HAS_DRIVER(elf)
-LLD_HAS_DRIVER(mingw)
-LLD_HAS_DRIVER(macho)
-LLD_HAS_DRIVER(wasm)
-
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
-
-// Global state: LLD uses global mutable state internally (CommonLinkerContext).
-// If canRunAgain=false is ever returned, subsequent calls may crash.
-// We also serialize calls because LLD is NOT re-entrant.
-static std::atomic<bool> g_lld_poisoned{false};
-static std::mutex g_lld_mutex;
-#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -91,93 +68,150 @@ auto LLDLinker::initialize() -> bool {
         return true;
     }
 
-#ifdef TML_HAS_LLD_EMBEDDED
-    // With embedded LLD, we don't strictly need the executable.
-    // But we still search for llvm-ar (needed for static libraries).
-    // Mark as initialized even if find_lld fails — in-process linking
-    // doesn't need the executable path.
-    find_lld();
-    initialized_ = true;
-    return true;
-#else
     if (!find_lld()) {
         return false;
     }
 
     initialized_ = true;
     return true;
-#endif
 }
 
 auto LLDLinker::find_lld() -> bool {
-    // Common LLVM installation paths
-    // Priority: local build output > local install > system install
-    std::vector<fs::path> search_paths = {
-        // Local LLVM build output (raw build artifacts)
-        // Note: current_path() is the project root when running from there
-        fs::current_path() / "build" / "llvm" / "Release" / "bin",
-        // Local LLVM install (from scripts/build_llvm.bat)
-        fs::current_path() / "src" / "llvm-install" / "bin",
-        // System installations
-        "F:/LLVM/bin",
-        "C:/Program Files/LLVM/bin",
-        "C:/LLVM/bin",
-        "/usr/bin",
-        "/usr/local/bin",
-        "/usr/lib/llvm-18/bin",
-        "/usr/lib/llvm-17/bin",
-        "/usr/local/opt/llvm/bin",
-    };
+#ifdef _WIN32
+    // Windows: prefer link.exe (MSVC native), fall back to lld-link.exe
+    // link.exe is always available in a VS Developer Command Prompt or
+    // when Visual Studio Build Tools are installed.
 
-    // Also check PATH environment variable
+    // First, try to find link.exe via PATH
+    // (available in VS Developer Command Prompt and CI environments)
     if (const char* path_env = std::getenv("PATH")) {
         std::string path_str(path_env);
-#ifdef _WIN32
-        char delimiter = ';';
-#else
-        char delimiter = ':';
-#endif
         std::istringstream iss(path_str);
-        std::string path;
-        while (std::getline(iss, path, delimiter)) {
-            search_paths.push_back(path);
+        std::string dir;
+        while (std::getline(iss, dir, ';')) {
+            // Check for link.exe (MSVC native linker)
+            fs::path link_candidate = fs::path(dir) / "link.exe";
+            if (file_exists(link_candidate)) {
+                // Verify it's actually MSVC's link.exe, not some other link.exe
+                // by checking if the directory also contains cl.exe or lib.exe
+                fs::path cl_candidate = fs::path(dir) / "cl.exe";
+                fs::path lib_candidate = fs::path(dir) / "lib.exe";
+                if (file_exists(cl_candidate) || file_exists(lib_candidate)) {
+                    lld_path_ = link_candidate;
+                    is_msvc_linker_ = true;
+                    TML_LOG_DEBUG("linker", "Found MSVC link.exe: " << lld_path_);
+
+                    // Also look for lib.exe for static libraries
+                    if (file_exists(lib_candidate)) {
+                        llvm_ar_path_ = lib_candidate;
+                    }
+                    return true;
+                }
+            }
         }
     }
 
-    // Check LLVM_DIR environment variable
+    // Fall back to lld-link.exe
+    std::vector<fs::path> search_paths = {
+        fs::current_path() / "build" / "llvm" / "Release" / "bin",
+        fs::current_path() / "src" / "llvm-install" / "bin",
+        "F:/LLVM/bin",
+        "C:/Program Files/LLVM/bin",
+        "C:/LLVM/bin",
+    };
+
     if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
         search_paths.insert(search_paths.begin(), fs::path(llvm_dir) / "bin");
     }
 
-#ifdef _WIN32
-    const std::string lld_name = "lld-link.exe";
-    const std::string ar_name = "llvm-ar.exe";
-#else
-    const std::string lld_name = "ld.lld";
-    const std::string ar_name = "llvm-ar";
-#endif
+    // Also check PATH for lld-link
+    if (const char* path_env = std::getenv("PATH")) {
+        std::string path_str(path_env);
+        std::istringstream iss(path_str);
+        std::string dir;
+        while (std::getline(iss, dir, ';')) {
+            search_paths.push_back(dir);
+        }
+    }
 
     for (const auto& dir : search_paths) {
-        fs::path lld_candidate = dir / lld_name;
+        fs::path lld_candidate = dir / "lld-link.exe";
         if (file_exists(lld_candidate)) {
             lld_path_ = lld_candidate;
+            is_msvc_linker_ = false;
 
             // Also look for llvm-ar in the same directory
-            fs::path ar_candidate = dir / ar_name;
+            fs::path ar_candidate = dir / "llvm-ar.exe";
             if (file_exists(ar_candidate)) {
                 llvm_ar_path_ = ar_candidate;
             }
-
             return true;
         }
     }
 
+#else
+    // Unix: prefer system ld, fall back to ld.lld
+    std::vector<fs::path> search_paths = {
+        "/usr/bin",
+        "/usr/local/bin",
+    };
+
+    if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
+        search_paths.insert(search_paths.begin(), fs::path(llvm_dir) / "bin");
+    }
+
+    // Check PATH
+    if (const char* path_env = std::getenv("PATH")) {
+        std::string path_str(path_env);
+        std::istringstream iss(path_str);
+        std::string dir;
+        while (std::getline(iss, dir, ':')) {
+            search_paths.push_back(dir);
+        }
+    }
+
+    // Try ld first (system linker)
+    for (const auto& dir : search_paths) {
+        fs::path ld_candidate = dir / "ld";
+        if (file_exists(ld_candidate)) {
+            lld_path_ = ld_candidate;
+
+            // Look for ar in the same directory
+            fs::path ar_candidate = dir / "ar";
+            if (file_exists(ar_candidate)) {
+                llvm_ar_path_ = ar_candidate;
+            }
+            return true;
+        }
+    }
+
+    // Fall back to ld.lld
+    for (const auto& dir : search_paths) {
+        fs::path lld_candidate = dir / "ld.lld";
+        if (file_exists(lld_candidate)) {
+            lld_path_ = lld_candidate;
+
+            fs::path ar_candidate = dir / "llvm-ar";
+            if (file_exists(ar_candidate)) {
+                llvm_ar_path_ = ar_candidate;
+            }
+            return true;
+        }
+    }
+#endif
+
     last_error_ =
-        "LLD linker not found. The TML compiler requires LLD for self-contained linking.\n"
+        "No linker found. The TML compiler requires a system linker.\n"
         "  Solutions:\n"
-        "  1. Ensure tml_runtime.lib is in the same directory as tml.exe\n"
-        "  2. Set LLVM_DIR environment variable to your LLVM installation\n"
-        "  3. Use --use-external-tools flag to fall back to system clang";
+#ifdef _WIN32
+        "  1. Run from a Visual Studio Developer Command Prompt (provides link.exe)\n"
+        "  2. Install LLVM and ensure lld-link.exe is in PATH\n"
+        "  3. Set LLVM_DIR environment variable to your LLVM installation";
+#else
+        "  1. Install build-essential (provides ld)\n"
+        "  2. Install LLVM and ensure ld.lld is in PATH\n"
+        "  3. Set LLVM_DIR environment variable to your LLVM installation";
+#endif
     return false;
 }
 
@@ -190,8 +224,8 @@ auto LLDLinker::build_windows_args(const std::vector<fs::path>& object_files,
     -> std::vector<std::string> {
     std::vector<std::string> args;
 
-    // argv[0]: program name (LLD expects this even in-process)
-    args.push_back("lld-link");
+    // argv[0]: linker executable
+    args.push_back(lld_path_.string());
 
     // Output file
     args.push_back("/OUT:" + output_path.string());
@@ -258,7 +292,7 @@ auto LLDLinker::build_windows_args(const std::vector<fs::path>& object_files,
         }
     }
 
-    // Extra flags — convert Unix-style -l flags to /DEFAULTLIB: for lld-link
+    // Extra flags — convert Unix-style -l flags to /DEFAULTLIB: for COFF linkers
     for (const auto& flag : options.extra_flags) {
         if (flag.size() > 2 && flag[0] == '-' && flag[1] == 'l') {
             args.push_back("/DEFAULTLIB:" + flag.substr(2));
@@ -278,8 +312,8 @@ auto LLDLinker::build_unix_args(const std::vector<fs::path>& object_files,
     -> std::vector<std::string> {
     std::vector<std::string> args;
 
-    // argv[0]: program name
-    args.push_back("ld.lld");
+    // argv[0]: linker executable
+    args.push_back(lld_path_.string());
 
     // Output file
     args.push_back("-o");
@@ -341,149 +375,6 @@ auto LLDLinker::join_args(const std::vector<std::string>& args) -> std::string {
 }
 
 // ============================================================================
-// In-Process LLD Linking
-// ============================================================================
-
-#ifdef TML_HAS_LLD_EMBEDDED
-auto LLDLinker::link_in_process(const std::vector<std::string>& args, const LLDLinkOptions& options)
-    -> LLDLinkResult {
-    LLDLinkResult result;
-    result.success = false;
-
-    // Check if a previous call poisoned LLD's global state
-    if (g_lld_poisoned.load(std::memory_order_acquire)) {
-        result.error_message =
-            "[N003] LLD in-process unavailable (previous call corrupted global state)";
-        return result;
-    }
-
-    // LLD is NOT re-entrant — serialize all calls
-    std::lock_guard<std::mutex> lock(g_lld_mutex);
-
-    // Double-check after acquiring the lock
-    if (g_lld_poisoned.load(std::memory_order_acquire)) {
-        result.error_message =
-            "[N003] LLD in-process unavailable (previous call corrupted global state)";
-        return result;
-    }
-
-    // Build const char* argv from string storage
-    std::vector<const char*> argv;
-    argv.reserve(args.size());
-    for (const auto& arg : args) {
-        argv.push_back(arg.c_str());
-    }
-
-    if (options.verbose) {
-        TML_LOG_DEBUG("linker", "[in-process] " << join_args(args));
-    }
-
-    // Capture LLD stdout/stderr
-    std::string stdout_str, stderr_str;
-    llvm::raw_string_ostream stdout_os(stdout_str);
-    llvm::raw_string_ostream stderr_os(stderr_str);
-
-    // Select drivers based on platform
-    std::vector<lld::DriverDef> drivers = {
-#ifdef _WIN32
-        {lld::WinLink, &lld::coff::link},
-#else
-        {lld::Gnu, &lld::elf::link},
-        {lld::Darwin, &lld::macho::link},
-#endif
-    };
-
-    // Run lldMain with a timeout to prevent hangs from killing the process.
-    // Some large suites (e.g., core_iter_3) cause LLD to hang indefinitely.
-    // We use heap-allocated state so the background thread can safely outlive
-    // this function if we time out.
-    constexpr int LLD_TIMEOUT_SECONDS = 15;
-
-    struct LldState {
-        std::string stdout_str;
-        std::string stderr_str;
-        std::vector<std::string> args_storage;
-        std::vector<const char*> argv_ptrs;
-        std::vector<lld::DriverDef> drivers;
-        lld::Result lld_result{};
-        std::atomic<bool> done{false};
-    };
-    auto state = std::make_shared<LldState>();
-    state->stdout_str = std::move(stdout_str);
-    state->stderr_str = std::move(stderr_str);
-    state->args_storage = args;
-    state->argv_ptrs.reserve(state->args_storage.size());
-    for (const auto& a : state->args_storage)
-        state->argv_ptrs.push_back(a.c_str());
-    state->drivers = std::move(drivers);
-
-    std::thread lld_thread([state]() {
-        llvm::raw_string_ostream so(state->stdout_str);
-        llvm::raw_string_ostream se(state->stderr_str);
-        state->lld_result = lld::lldMain(state->argv_ptrs, so, se, state->drivers);
-        so.flush();
-        se.flush();
-        state->done.store(true, std::memory_order_release);
-    });
-    lld_thread.detach();
-
-    // Poll-based timeout (condition_variable::wait_for fails to wake on MSVC
-    // when lldMain deadlocks internally)
-    {
-        const auto deadline =
-            std::chrono::steady_clock::now() + std::chrono::seconds(LLD_TIMEOUT_SECONDS);
-        while (!state->done.load(std::memory_order_acquire)) {
-            if (std::chrono::steady_clock::now() >= deadline) {
-                TML_LOG_WARN("linker",
-                             "[lld] TIMEOUT after " << LLD_TIMEOUT_SECONDS << "s; poisoning LLD");
-                g_lld_poisoned.store(true, std::memory_order_release);
-                result.error_message =
-                    "In-process LLD timed out after " + std::to_string(LLD_TIMEOUT_SECONDS) + "s";
-                return result;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    }
-
-    // Move captured output back from the thread's state
-    stdout_str = std::move(state->stdout_str);
-    stderr_str = std::move(state->stderr_str);
-    lld::Result lld_result = state->lld_result;
-
-    // Check canRunAgain — if false, LLD's global state is corrupted
-    if (!lld_result.canRunAgain) {
-        g_lld_poisoned.store(true, std::memory_order_release);
-        TML_LOG_WARN("linker",
-                     "LLD reported canRunAgain=false; switching to subprocess for future calls");
-    }
-
-    if (lld_result.retCode != 0) {
-        result.error_message = "[N002] In-process LLD linking failed (exit code " +
-                               std::to_string(lld_result.retCode) + ")";
-        if (!stderr_str.empty()) {
-            result.error_message += ":\n" + stderr_str;
-        }
-        return result;
-    }
-
-    // Capture any warnings from stderr even on success
-    if (!stderr_str.empty()) {
-        // Split stderr into individual warnings
-        std::istringstream iss(stderr_str);
-        std::string line;
-        while (std::getline(iss, line)) {
-            if (!line.empty()) {
-                result.warnings.push_back(line);
-            }
-        }
-    }
-
-    result.success = true;
-    return result;
-}
-#endif
-
-// ============================================================================
 // Main Link Method
 // ============================================================================
 
@@ -494,7 +385,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
     result.success = false;
 
     if (!initialized_) {
-        result.error_message = "[N004] LLD linker not initialized";
+        result.error_message = "[N004] Linker not initialized";
         return result;
     }
 
@@ -511,7 +402,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
         return result;
     }
 
-    // Static libraries use llvm-ar (LLD doesn't do archiving)
+    // Static libraries use llvm-ar or lib.exe (linkers don't do archiving)
     if (options.output_type == LLDOutputType::StaticLib) {
         std::string cmd = build_static_lib_command(object_files, output_path);
         if (options.verbose) {
@@ -540,53 +431,17 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
     args = build_unix_args(object_files, output_path, options);
 #endif
 
-#ifdef TML_HAS_LLD_EMBEDDED
-    // Try in-process LLD linking first (fastest path, no subprocess)
-    if (!options.force_subprocess && !g_lld_poisoned.load(std::memory_order_acquire)) {
-        result = link_in_process(args, options);
-
-        // If in-process succeeded, we're done
-        if (result.success) {
-            // Fall through to output verification below
-        } else if (!g_lld_poisoned.load(std::memory_order_acquire)) {
-            // In-process failed but state is still good — return the error
-            return result;
-        }
-        // If poisoned, fall through to subprocess below
-    }
-
-    // Subprocess fallback (when in-process is poisoned or unavailable)
-    if (!result.success && !lld_path_.empty() && file_exists(lld_path_)) {
-        TML_LOG_DEBUG("linker", "[lld] Falling back to subprocess LLD");
-        args[0] = lld_path_.string();
-        std::string cmd = join_args(args);
-        if (options.verbose) {
-            TML_LOG_DEBUG("linker", "LLD command: " << cmd);
-        }
-        int ret = execute_command(cmd, options.verbose);
-        if (ret != 0) {
-            result.error_message = "[N001] Linking failed with exit code " + std::to_string(ret);
-            return result;
-        }
-        result.success = true;
-    } else if (!result.success) {
-        // No subprocess available either
-        return result;
-    }
-#else
-    // Subprocess only (no embedded LLD)
-    args[0] = lld_path_.string();
+    // Always use subprocess
     std::string cmd = join_args(args);
     if (options.verbose) {
-        TML_LOG_DEBUG("linker", "LLD command: " << cmd);
+        TML_LOG_DEBUG("linker", "Link command: " << cmd);
     }
     int ret = execute_command(cmd, options.verbose);
     if (ret != 0) {
-        result.error_message = "Linking failed with exit code " + std::to_string(ret);
+        result.error_message = "[N001] Linking failed with exit code " + std::to_string(ret);
         return result;
     }
     result.success = true;
-#endif
 
     if (result.success) {
         // Verify output was created
@@ -611,7 +466,7 @@ auto LLDLinker::link(const std::vector<fs::path>& object_files, const fs::path& 
 }
 
 // ============================================================================
-// Static Library Command (subprocess only — LLD doesn't do archiving)
+// Static Library Command (subprocess only — linkers don't do archiving)
 // ============================================================================
 
 auto LLDLinker::build_static_lib_command(const std::vector<fs::path>& object_files,
@@ -656,15 +511,11 @@ auto is_lld_available() -> bool {
 }
 
 auto get_lld_version() -> std::string {
-#ifdef TML_HAS_LLD_EMBEDDED
-    return "LLD (embedded, LLVM)";
-#else
     LLDLinker linker;
     if (!linker.initialize()) {
         return "unknown";
     }
-    return "LLD (compatible with LLVM)";
-#endif
+    return "Linker (subprocess: " + linker.get_lld_path().filename().string() + ")";
 }
 
 } // namespace tml::backend

@@ -1,22 +1,22 @@
-//! # LLD Linker Interface
+//! # Linker Interface
 //!
-//! This module provides a wrapper around LLD (LLVM's linker) for creating
-//! executables and shared libraries without external tool dependencies.
+//! Wraps the native OS linker for creating executables and shared libraries.
+//! Uses subprocess invocation (no embedded LLD) to minimize DLL size.
 //!
 //! ## Supported Platforms
 //!
-//! | Platform | Linker      | Format |
-//! |----------|-------------|--------|
-//! | Windows  | lld-link    | COFF   |
-//! | Linux    | ld.lld      | ELF    |
-//! | macOS    | ld64.lld    | Mach-O |
+//! | Platform | Primary     | Fallback    | Format |
+//! |----------|-------------|-------------|--------|
+//! | Windows  | link.exe    | lld-link    | COFF   |
+//! | Linux    | ld          | ld.lld      | ELF    |
+//! | macOS    | ld          | ld64.lld    | Mach-O |
 //!
 //! ## Usage
 //!
 //! ```cpp
 //! LLDLinker linker;
 //! if (!linker.initialize()) {
-//!     // Handle error - LLD not found
+//!     // Handle error - no linker found
 //! }
 //!
 //! LLDLinkOptions opts;
@@ -77,8 +77,6 @@ struct LLDLinkOptions {
     /// Generate import library for DLLs (Windows).
     bool generate_import_lib = true;
 
-    /// Force subprocess LLD (skip in-process to avoid deadlocks).
-    bool force_subprocess = false;
 };
 
 /// Result of LLD linking.
@@ -124,9 +122,8 @@ public:
 
     /// Link object files into an output.
     ///
-    /// When TML_HAS_LLD_EMBEDDED is defined, uses in-process LLD for
-    /// executables and shared libraries (no subprocess). Falls back to
-    /// subprocess for static libraries (which need llvm-ar).
+    /// Always uses the native OS linker as a subprocess.
+    /// Static libraries use llvm-ar or lib.exe.
     ///
     /// @param object_files List of object files to link
     /// @param output_path Path for the output file
@@ -147,8 +144,9 @@ public:
 
 private:
     bool initialized_ = false;
-    fs::path lld_path_;     ///< Path to lld-link (Windows) or ld.lld (Unix)
+    fs::path lld_path_;     ///< Path to linker: link.exe/lld-link (Windows) or ld/ld.lld (Unix)
     fs::path llvm_ar_path_; ///< Path to llvm-ar for static libraries
+    bool is_msvc_linker_ = false; ///< True if using link.exe (vs lld-link)
     std::string last_error_;
 
     /// Find LLD executables.
@@ -168,12 +166,6 @@ private:
 
     /// Join argv into a single command string for subprocess execution.
     static auto join_args(const std::vector<std::string>& args) -> std::string;
-
-#ifdef TML_HAS_LLD_EMBEDDED
-    /// Link using in-process LLD library API (no subprocess).
-    auto link_in_process(const std::vector<std::string>& args, const LLDLinkOptions& options)
-        -> LLDLinkResult;
-#endif
 };
 
 /// Check if LLD is available on this system.

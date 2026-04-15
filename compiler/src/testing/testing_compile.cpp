@@ -1047,9 +1047,6 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     link_opts.output_type = cli::LinkOptions::OutputType::Executable;
     link_opts.verbose = verbose;
     link_opts.coverage = config.coverage;
-    // Force subprocess LLD: in-process lldMain deadlocks after compiling
-    // many suites in a single process due to accumulated LLVM global state.
-    link_opts.force_subprocess_lld = true;
 
     // Add link libraries from @link() attributes
     for (const auto& lib : all_link_libs) {

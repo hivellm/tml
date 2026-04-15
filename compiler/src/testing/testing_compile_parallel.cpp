@@ -480,7 +480,6 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
     link_opts.output_type = cli::LinkOptions::OutputType::Executable;
     link_opts.verbose = verbose;
     link_opts.coverage = config.coverage;
-    link_opts.force_subprocess_lld = true;
 
     for (const auto& lib : all_link_libs) {
         link_opts.link_flags.push_back(lib);

@@ -836,8 +836,6 @@ static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_file
     lld_opts.debug_info = false; // Could be added to LinkOptions if needed
     lld_opts.target_triple = options.target_triple;
     lld_opts.extra_flags = options.link_flags;
-    lld_opts.force_subprocess = options.force_subprocess_lld;
-
     // Add library search paths from build.tml
     for (const auto& sp : options.library_search_paths) {
         lld_opts.library_paths.push_back(fs::path(sp));
