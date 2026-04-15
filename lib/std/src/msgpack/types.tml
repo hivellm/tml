@@ -1,0 +1,31 @@
+//! MessagePack type tags and error types.
+
+/// MessagePack format type identifiers.
+pub enum MsgPackType {
+    Nil,
+    Bool,
+    PosInt,
+    NegInt,
+    Float32,
+    Float64,
+    Str,
+    Bin,
+    Array,
+    Map,
+    Ext,
+    Unknown
+}
+
+/// Errors that can occur during MessagePack decoding.
+pub enum MsgPackError {
+    /// Unexpected end of input
+    UnexpectedEof,
+    /// Invalid format byte
+    InvalidFormat(I32),
+    /// Type mismatch (expected one type, got another)
+    TypeMismatch(Str),
+    /// String is not valid UTF-8
+    InvalidUtf8,
+    /// Value exceeds maximum supported size
+    Overflow
+}

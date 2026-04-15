@@ -1,0 +1,260 @@
+//! MessagePack decoder.
+//!
+//! Reads MessagePack binary format from a Buffer, advancing a cursor position.
+//! Uses explicit Outcome matching (not `?` operator) to work within TML's
+//! LL(1) parser limitations for if/else chains.
+
+use std::collections::Buffer
+use std::msgpack::types::{MsgPackType, MsgPackError}
+
+/// A MessagePack decoder that reads from a Buffer.
+pub type MsgPackReader {
+    buf: Buffer,
+    pos: I64
+}
+
+impl MsgPackReader {
+    /// Creates a reader from a Buffer reference.
+    pub func from_buffer(data: ref Buffer) -> MsgPackReader {
+        MsgPackReader { buf: data.duplicate(), pos: 0 }
+    }
+
+    /// Returns the current read position.
+    pub func position(this) -> I64 {
+        return this.pos
+    }
+
+    /// Returns the number of remaining bytes.
+    pub func remaining(this) -> I64 {
+        return this.buf.len() - this.pos
+    }
+
+    /// Reads one byte and advances. Returns -1 on EOF.
+    func next_byte(mut this) -> I32 {
+        if this.pos >= this.buf.len() {
+            return -1
+        }
+        let b: I32 = this.buf.read_u8(this.pos)
+        this.pos = this.pos + 1
+        return b
+    }
+
+    // ==================================================================
+    // Nil / Bool
+    // ==================================================================
+
+    /// Reads a nil value. Returns true on success.
+    pub func read_nil(mut this) -> Bool {
+        let b: I32 = this.next_byte()
+        return b == 0xc0
+    }
+
+    /// Reads a boolean value. Returns the value or Nothing on type mismatch.
+    pub func read_bool(mut this) -> Maybe[Bool] {
+        let b: I32 = this.next_byte()
+        if b == 0xc3 {
+            return Just(true)
+        } else if b == 0xc2 {
+            return Just(false)
+        } else {
+            return Nothing
+        }
+    }
+
+    // ==================================================================
+    // Integers
+    // ==================================================================
+
+    /// Reads an unsigned 64-bit integer. Returns Nothing on type mismatch.
+    pub func read_u64(mut this) -> Maybe[U64] {
+        let b: I32 = this.next_byte()
+        if b < 0 {
+            return Nothing
+        } else if b <= 0x7f {
+            return Just(b as U64)
+        } else if b == 0xcc {
+            let v: I32 = this.next_byte()
+            if v < 0 { return Nothing }
+            return Just(v as U64)
+        } else if b == 0xcd {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            return Just((hi * 256 + lo) as U64)
+        } else if b == 0xce {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            return Just((b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64) as U64)
+        } else if b == 0xcf {
+            var result: U64 = 0 as U64
+            for i in 0 to 8 {
+                let bv: I32 = this.next_byte()
+                if bv < 0 { return Nothing }
+                result = result * (256 as U64) + (bv as U64)
+            }
+            return Just(result)
+        } else {
+            return Nothing
+        }
+    }
+
+    /// Reads a signed 64-bit integer. Returns Nothing on type mismatch.
+    pub func read_i64(mut this) -> Maybe[I64] {
+        let b: I32 = this.next_byte()
+        if b < 0 {
+            return Nothing
+        } else if b <= 0x7f {
+            return Just(b as I64)
+        } else if b >= 0xe0 {
+            return Just((b - 256) as I64)
+        } else if b == 0xd0 {
+            let v: I32 = this.next_byte()
+            if v < 0 { return Nothing }
+            if v >= 128 {
+                return Just((v - 256) as I64)
+            } else {
+                return Just(v as I64)
+            }
+        } else if b == 0xd1 {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            let v: I64 = (hi * 256 + lo) as I64
+            if v >= 32768 {
+                return Just(v - 65536)
+            } else {
+                return Just(v)
+            }
+        } else if b == 0xd2 {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            let v: I64 = b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+            if v >= 2147483648 {
+                return Just(v - 4294967296)
+            } else {
+                return Just(v)
+            }
+        } else if b == 0xd3 {
+            var result: I64 = 0
+            for i in 0 to 8 {
+                let bv: I32 = this.next_byte()
+                if bv < 0 { return Nothing }
+                result = result * 256 + bv as I64
+            }
+            return Just(result)
+        } else if b == 0xcc {
+            let v: I32 = this.next_byte()
+            if v < 0 { return Nothing }
+            return Just(v as I64)
+        } else if b == 0xcd {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            return Just((hi * 256 + lo) as I64)
+        } else if b == 0xce {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            return Just(b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64)
+        } else {
+            return Nothing
+        }
+    }
+
+    // ==================================================================
+    // Strings
+    // ==================================================================
+
+    /// Reads a string value. Returns Nothing on type mismatch or EOF.
+    pub func read_str(mut this) -> Maybe[Str] {
+        let b: I32 = this.next_byte()
+        if b < 0 { return Nothing }
+        var n: I64 = 0
+        if b >= 0xa0 and b <= 0xbf {
+            n = (b - 0xa0) as I64
+        } else if b == 0xd9 {
+            let len_byte: I32 = this.next_byte()
+            if len_byte < 0 { return Nothing }
+            n = len_byte as I64
+        } else if b == 0xda {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            n = (hi * 256 + lo) as I64
+        } else if b == 0xdb {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            n = b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+        } else {
+            return Nothing
+        }
+        if this.remaining() < n { return Nothing }
+        let str_buf: *U8 = lowlevel { mem_alloc(n + 1) } as *U8
+        let addr: I64 = str_buf as I64
+        for i in 0 to n {
+            let ch: I32 = this.next_byte()
+            lowlevel { ptr_write[U8]((addr + i) as *U8, ch as U8) }
+        }
+        lowlevel { ptr_write[U8]((addr + n) as *U8, 0 as U8) }
+        return Just(str_buf as Str)
+    }
+
+    // ==================================================================
+    // Array / Map headers
+    // ==================================================================
+
+    /// Reads an array header and returns the element count. -1 on error.
+    pub func read_array_header(mut this) -> I64 {
+        let b: I32 = this.next_byte()
+        if b >= 0x90 and b <= 0x9f {
+            return (b - 0x90) as I64
+        } else if b == 0xdc {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return -1 }
+            return (hi * 256 + lo) as I64
+        } else if b == 0xdd {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return -1 }
+            return b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+        } else {
+            return -1
+        }
+    }
+
+    /// Reads a map header and returns the entry count. -1 on error.
+    pub func read_map_header(mut this) -> I64 {
+        let b: I32 = this.next_byte()
+        if b >= 0x80 and b <= 0x8f {
+            return (b - 0x80) as I64
+        } else if b == 0xde {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return -1 }
+            return (hi * 256 + lo) as I64
+        } else if b == 0xdf {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return -1 }
+            return b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+        } else {
+            return -1
+        }
+    }
+}

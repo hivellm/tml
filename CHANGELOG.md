@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.22](docs/patches/v0.3.22.md) | 2026-04-15 | feat(std): `std::msgpack` — MessagePack binary serialization; `MsgPackWriter` (full spec encoder) + `MsgPackReader` (decoder); pure TML, no C runtime |
 | [0.3.21](docs/patches/v0.3.21.md) | 2026-04-15 | feat(core): `U128::to_string()` and `I128::to_string()` — Display impl for 128-bit integers via pure TML division loop; requested by UzDB for ConnectionId logging |
 | [0.3.20](docs/patches/v0.3.20.md) | 2026-04-15 | fix(codegen): resolve K001 struct forward-reference — `llvm_type_name` now emits struct defs on-demand from module registry; fixes `EventEmitter`/`ReadableStream` undefined type blocking all `std::file` tests |
 | [0.3.19](docs/patches/v0.3.19.md) | 2026-04-15 | feat(std): `File::sync()` and `File::datasync()` — fsync/fdatasync for WAL durability; `_commit(fd)` on Windows, `fsync`/`fdatasync` on Unix |
