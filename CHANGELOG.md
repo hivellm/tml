@@ -10,8 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| [0.3.27](docs/patches/v0.3.27.md) | 2026-04-15 | Rust parity: @inline iterators + constant stride → AVX-512 vectorization (<8 x i64>), 1.18× Rust ratio |
-| [0.3.26](docs/patches/v0.3.26.md) | 2026-04-15 | SIMD list iteration: pointer-stepping for-in (1.7× checked, 20× unchecked), remove MIR personality |
+| [0.3.26–0.3.27](docs/patches/v0.3.26-0.3.27.md) | 2026-04-15 | **Rust parity for list iteration** — pointer-stepping for-in, @inline iterators, constant stride, AVX-512 `<8 x i64>` vectorization. TML 4.32B vs Rust 4.57B ops/s (1.06×, within noise) |
 | [0.3.20–0.3.25](docs/patches/v0.3.20-0.3.25.md) | 2026-04-15 | BTreeMap for-in, 13 i32 fallbacks removed, K001 struct forward-ref fix, U128 display, std::msgpack, i128 arithmetic, parallel CGU codegen |
 | [0.3.10–0.3.19](docs/patches/v0.3.10-0.3.19.md) | 2026-04-14–15 | LLVM select (CMOV), --release end-to-end, insertvalue structs, NRVO sret, DLL cache+preload, release DLLs (2.93×), daemon (22ms), match diagnostic, remove LLD (−26%), File::sync |
 | [0.3.0–0.3.9](docs/patches/v0.3.0-0.3.9.md) | 2026-04-11–14 | Language ergonomics sprint, self-hosting port, K001 fixes (str/bool/enum), crypto linking, switch codegen, @inline, short-circuit, bounds-check elim |
