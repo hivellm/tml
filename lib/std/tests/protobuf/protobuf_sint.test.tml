@@ -1,0 +1,199 @@
+// Tests for protobuf module — signed integer (zigzag) fields and edge cases
+use test
+use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag, zigzag_encode, zigzag_decode}
+use std::collections::Buffer
+
+// =============================================================================
+// Zigzag edge cases
+// =============================================================================
+
+@test
+func test_zigzag_large_positive() -> I32 {
+    let val: I64 = 2147483647  // I32 max
+    let encoded: I64 = zigzag_encode(val)
+    let decoded: I64 = zigzag_decode(encoded)
+    assert_eq(decoded, val, "roundtrip I32 max")
+    return 0
+}
+
+@test
+func test_zigzag_large_negative() -> I32 {
+    let val: I64 = -2147483648  // I32 min
+    let encoded: I64 = zigzag_encode(val)
+    let decoded: I64 = zigzag_decode(encoded)
+    assert_eq(decoded, val, "roundtrip I32 min")
+    return 0
+}
+
+// =============================================================================
+// write_field_sint roundtrip
+// =============================================================================
+
+@test
+func test_field_sint_positive() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_sint(1, 25)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 1, "field 1")
+    assert_eq(tag.wire_type, 0, "wire varint")
+
+    // Read the raw varint (zigzag-encoded)
+    let raw_r = r.read_varint()
+    let raw: I64 = when raw_r { Ok(v) => v, Err(e) => { return 1 } }
+    // zigzag_encode(25) = 50
+    assert_eq(raw, 50, "zigzag(25) = 50")
+    // Decode back
+    assert_eq(zigzag_decode(raw), 25, "decode back to 25")
+
+    return 0
+}
+
+@test
+func test_field_sint_negative() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_sint(1, -1)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    let raw_r = r.read_varint()
+    let raw: I64 = when raw_r { Ok(v) => v, Err(e) => { return 1 } }
+    // zigzag_encode(-1) = 1
+    assert_eq(raw, 1, "zigzag(-1) = 1")
+    assert_eq(zigzag_decode(raw), -1, "decode back to -1")
+
+    return 0
+}
+
+@test
+func test_field_sint_zero() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_sint(1, 0)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    let raw_r = r.read_varint()
+    let raw: I64 = when raw_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(raw, 0, "zigzag(0) = 0")
+    assert_eq(zigzag_decode(raw), 0, "decode back to 0")
+
+    return 0
+}
+
+// =============================================================================
+// Varint encoding of protobuf-spec well-known value (150)
+// =============================================================================
+
+@test
+func test_protobuf_spec_example() -> I32 {
+    // From the official protobuf encoding docs:
+    // message Test1 { optional int32 a = 1; }
+    // a = 150 encodes as: 08 96 01
+    //   08 = tag (field 1, wire type 0)
+    //   96 01 = varint 150
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_varint(1, 150)
+
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 3, "3 bytes total")
+    assert_eq(buf.read_u8(0), 0x08, "tag byte")
+    assert_eq(buf.read_u8(1), 0x96, "varint byte 1")
+    assert_eq(buf.read_u8(2), 0x01, "varint byte 2")
+
+    return 0
+}
+
+@test
+func test_protobuf_spec_string_example() -> I32 {
+    // From protobuf encoding docs:
+    // message Test2 { optional string b = 2; }
+    // b = "testing" encodes as: 12 07 74 65 73 74 69 6e 67
+    //   12 = tag (field 2, wire type 2)
+    //   07 = length 7
+    //   74 65 73 74 69 6e 67 = "testing"
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_string(2, "testing")
+
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 9, "9 bytes total")
+    assert_eq(buf.read_u8(0), 0x12, "tag = 0x12")
+    assert_eq(buf.read_u8(1), 0x07, "length = 7")
+    assert_eq(buf.read_u8(2), 0x74, "t")
+    assert_eq(buf.read_u8(3), 0x65, "e")
+    assert_eq(buf.read_u8(4), 0x73, "s")
+    assert_eq(buf.read_u8(5), 0x74, "t")
+    assert_eq(buf.read_u8(6), 0x69, "i")
+    assert_eq(buf.read_u8(7), 0x6e, "n")
+    assert_eq(buf.read_u8(8), 0x67, "g")
+
+    return 0
+}
+
+// =============================================================================
+// Writer length tracking
+// =============================================================================
+
+@test
+func test_writer_len() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    assert_eq(w.len(), 0, "empty writer len = 0")
+    w.write_varint(1)
+    assert_eq(w.len(), 1, "len after 1 varint")
+    w.write_field_string(1, "hi")
+    // tag(1 byte) + len(1 byte) + "hi"(2 bytes) = 4
+    assert_eq(w.len(), 5, "len after string field")
+    return 0
+}
+
+// =============================================================================
+// Full message roundtrip
+// =============================================================================
+
+@test
+func test_full_message_roundtrip() -> I32 {
+    // Simulate: message Person { string name = 1; int32 id = 2; string email = 3; }
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_string(1, "Alice")
+    w.write_field_varint(2, 12345)
+    w.write_field_string(3, "alice@example.com")
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    // Read field 1: name
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t1.field_num, 1, "name field")
+    let name_r = r.read_string()
+    let name: Str = when name_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(name, "Alice", "name = Alice")
+
+    // Read field 2: id
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "id field")
+    let id_r = r.read_varint()
+    let id: I64 = when id_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(id, 12345, "id = 12345")
+
+    // Read field 3: email
+    let t3_r = r.read_tag()
+    let t3: ProtoTag = when t3_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t3.field_num, 3, "email field")
+    let email_r = r.read_string()
+    let email: Str = when email_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(email, "alice@example.com", "email matches")
+
+    assert_true(not r.has_more(), "fully consumed")
+    return 0
+}
