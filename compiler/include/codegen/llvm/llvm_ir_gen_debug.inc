@@ -340,6 +340,12 @@
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
     auto gen_for_iterator(const parser::ForExpr& for_expr, const std::string& type_name)
         -> std::string;
+    auto gen_for_iterator_with_value(const parser::ForExpr& for_expr,
+                                     const std::string& type_name,
+                                     const std::string& precomputed_iter_val,
+                                     const std::string& precomputed_iter_type,
+                                     const std::vector<types::TypePtr>& collection_type_args)
+        -> std::string;
     auto gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
                           const std::string& type_name, size_t iteration_count) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;

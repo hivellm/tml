@@ -367,17 +367,88 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
             }
         }
     } else {
-        // Check if the iter expression is a type implementing Iterator behavior
         auto iter_semantic_type = infer_expr_type(*for_expr.iter);
         if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
             const auto& named = iter_semantic_type->as<types::NamedType>();
+            // Check if type implements Iterator directly
             if (env_.type_implements(named.name, "Iterator")) {
-                // Restore loop labels before delegating
                 current_loop_start_ = saved_loop_start;
                 current_loop_end_ = saved_loop_end;
                 current_loop_stack_save_ = saved_loop_stack_save;
                 current_loop_metadata_id_ = saved_loop_metadata_id;
                 return gen_for_iterator(for_expr, named.name);
+            }
+            // Check if type implements IntoIterator — call into_iter() first,
+            // then use the result as Iterator (like Rust's for-in desugaring).
+            if (env_.type_implements(named.name, "IntoIterator")) {
+                // Generate the collection expression
+                std::string collection_val = gen_expr(*for_expr.iter);
+                std::string collection_type = last_expr_type_;
+
+                // Look up the IntoIter associated type to find the iterator type name
+                auto into_iter_sig = env_.lookup_func(named.name + "::into_iter");
+                std::string iter_type_name;
+                if (into_iter_sig && into_iter_sig->return_type &&
+                    into_iter_sig->return_type->is<types::NamedType>()) {
+                    iter_type_name = into_iter_sig->return_type->as<types::NamedType>().name;
+                }
+                if (iter_type_name.empty()) {
+                    iter_type_name = "ListIter"; // fallback for List's IntoIterator
+                }
+
+                // Build mangled into_iter function name with type args
+                std::string mangled_collection = named.name;
+                if (!named.type_args.empty()) {
+                    mangled_collection = named.name + "__" + mangle_type_args(named.type_args);
+                }
+                std::string into_iter_fn = mangle_impl_method(mangled_collection, "into_iter");
+
+                // Call into_iter(this) — returns the iterator by value
+                std::string iter_val = fresh_reg();
+                std::string iter_llvm_type = "%struct." + iter_type_name;
+                if (!named.type_args.empty()) {
+                    iter_llvm_type = "%struct." + iter_type_name + "__" +
+                                    mangle_type_args(named.type_args);
+                }
+
+                // Store collection to alloca for into_iter (takes ptr to self)
+                std::string coll_alloca = fresh_reg();
+                emit_line("  " + coll_alloca + " = alloca " + collection_type);
+                emit_line("  store " + collection_type + " " + collection_val + ", ptr " +
+                          coll_alloca);
+
+                // Call into_iter
+                emit_line("  " + iter_val + " = call " + iter_llvm_type + " @" + into_iter_fn +
+                          "(ptr " + coll_alloca + ")");
+                last_expr_type_ = iter_llvm_type;
+
+                // Request instantiation of into_iter for this generic type
+                if (!named.type_args.empty()) {
+                    std::unordered_map<std::string, types::TypePtr> subs;
+                    auto struct_def = env_.lookup_struct(named.name);
+                    if (struct_def) {
+                        for (size_t i = 0; i < struct_def->type_params.size() &&
+                                           i < named.type_args.size(); ++i) {
+                            subs[struct_def->type_params[i]] = named.type_args[i];
+                        }
+                    }
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{mangled_collection, "into_iter", subs,
+                                          named.name, "", true});
+                }
+
+                // Now use gen_for_iterator with the iterator
+                // Store iter_val to alloca and set up as if gen_for_iterator was called
+                current_loop_start_ = saved_loop_start;
+                current_loop_end_ = saved_loop_end;
+                current_loop_stack_save_ = saved_loop_stack_save;
+                current_loop_metadata_id_ = saved_loop_metadata_id;
+
+                // Override for_expr.iter to point to the iterator value
+                // We can't modify the AST, so we'll inline gen_for_iterator logic here
+                // with the already-computed iter_val
+                return gen_for_iterator_with_value(for_expr, iter_type_name, iter_val,
+                                                   iter_llvm_type, named.type_args);
             }
         }
         // Treat as simple range 0 to iter
@@ -508,8 +579,15 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     }
 
     // Evaluate the iterable and store it to a mutable alloca so next() can take &mut self
-    std::string iter_val = gen_expr(*for_expr.iter);
-    std::string iter_llvm_type = last_expr_type_;
+    std::string iter_val;
+    std::string iter_llvm_type;
+    if (use_precomputed_iter_) {
+        iter_val = precomputed_iter_val_;
+        iter_llvm_type = precomputed_iter_type_;
+    } else {
+        iter_val = gen_expr(*for_expr.iter);
+        iter_llvm_type = last_expr_type_;
+    }
 
     // Build the mangled type name for generic iterators (e.g. BTreeMapIter__I64__I64).
     std::string mangled_type_name = type_name;
@@ -681,6 +759,23 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     current_loop_metadata_id_ = saved_loop_metadata_id;
 
     return "0";
+}
+
+auto LLVMIRGen::gen_for_iterator_with_value(
+    const parser::ForExpr& for_expr, const std::string& type_name,
+    const std::string& precomputed_iter_val, const std::string& precomputed_iter_type,
+    const std::vector<types::TypePtr>& collection_type_args) -> std::string {
+    // Temporarily override last_expr_type_ and set up state so gen_for_iterator
+    // skips the gen_expr(*for_expr.iter) call and uses our precomputed value.
+    // We achieve this by storing the iterator to a local and calling gen_for_iterator.
+    precomputed_iter_val_ = precomputed_iter_val;
+    precomputed_iter_type_ = precomputed_iter_type;
+    use_precomputed_iter_ = true;
+    auto result = gen_for_iterator(for_expr, type_name);
+    use_precomputed_iter_ = false;
+    precomputed_iter_val_.clear();
+    precomputed_iter_type_.clear();
+    return result;
 }
 
 auto LLVMIRGen::gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
