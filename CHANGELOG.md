@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.24](docs/patches/v0.3.24.md) | 2026-04-15 | perf(codegen): parallel IR generation across CGUs via `std::async` — each codegen unit emits IR on its own thread; combined with existing parallel OBJ compilation for full pipeline parallelism |
 | [0.3.23](docs/patches/v0.3.23.md) | 2026-04-15 | fix(codegen): add `i128` to binary ops int_type ladder — fixes all U128/I128 arithmetic and comparisons; msgpack tests now pass (2/2) |
 | [0.3.22](docs/patches/v0.3.22.md) | 2026-04-15 | feat(std): `std::msgpack` — MessagePack binary serialization; `MsgPackWriter` (full spec encoder) + `MsgPackReader` (decoder); pure TML, no C runtime |
 | [0.3.21](docs/patches/v0.3.21.md) | 2026-04-15 | feat(core): `U128::to_string()` and `I128::to_string()` — Display impl for 128-bit integers via pure TML division loop; requested by UzDB for ConnectionId logging |
