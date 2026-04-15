@@ -356,7 +356,15 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         }
         if (range.end.has_value()) {
             range_end = gen_expr(*range.end.value());
-            range_type = last_expr_type_; // Use type of end value
+            range_type = last_expr_type_;
+            // Promote to i64 — TML's native integer. Avoids i32 truncation
+            // when loop index is used in i64 contexts (pointer arithmetic, List access).
+            if (range_type == "i32" || range_type == "i16" || range_type == "i8") {
+                std::string ext_reg = fresh_reg();
+                emit_line("  " + ext_reg + " = sext " + range_type + " " + range_end + " to i64");
+                range_end = ext_reg;
+                range_type = "i64";
+            }
         }
     } else {
         // Check if the iter expression is a type implementing Iterator behavior
