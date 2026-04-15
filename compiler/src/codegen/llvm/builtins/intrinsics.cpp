@@ -117,6 +117,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "llvm_div", "llvm_rem", "llvm_neg", "llvm_and", "llvm_or", "llvm_xor", "llvm_not",
         "llvm_shl", "llvm_shr", "llvm_eq", "llvm_ne", "llvm_lt", "llvm_le", "llvm_gt", "llvm_ge",
         "transmute", "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
+        "unchecked_mul", "unchecked_add", "unchecked_sub",
         "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read",
         "volatile_write", "ptr_read_volatile", "ptr_write_volatile", "ptr_read_unaligned",
         "ptr_write_unaligned", "memcpy", "memmove", "memset", "atomic_load", "atomic_store",
@@ -1097,6 +1098,25 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             return "0";
         }
         return "0";
+    }
+
+    // unchecked_mul/add/sub — emit raw LLVM mul/add/sub without overflow checks.
+    // Critical for hot loops where the overflow branch blocks auto-vectorization.
+    if (intrinsic_name == "unchecked_mul" || intrinsic_name == "unchecked_add" ||
+        intrinsic_name == "unchecked_sub") {
+        if (call.args.size() >= 2) {
+            std::string lhs = gen_expr(*call.args[0]);
+            std::string lhs_type = last_expr_type_;
+            std::string rhs = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            std::string op;
+            if (intrinsic_name == "unchecked_mul") op = "mul";
+            else if (intrinsic_name == "unchecked_add") op = "add";
+            else op = "sub";
+            emit_line("  " + result + " = " + op + " " + lhs_type + " " + lhs + ", " + rhs);
+            last_expr_type_ = lhs_type;
+            return result;
+        }
     }
 
     // ptr_offset[T](ptr: Ptr[T], count: I64) -> Ptr[T]

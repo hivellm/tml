@@ -157,35 +157,28 @@ impl[T] List[T] {
     }
 
     /// Returns the element at the given index.
+    /// Uses GEP-based pointer arithmetic and unchecked multiply to preserve
+    /// pointer provenance and avoid overflow branches — enables LLVM LICM
+    /// and auto-vectorization for hot loops.
     @inline
     pub func get(this, index: I64) -> T {
-        let hdr: I64 = this.handle as I64
-        let p_stride: *I64 = (hdr + 24) as *I64
-        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
-
-        // Read data pointer
-        let p_data: *I64 = hdr as *I64
-        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
-
-        // Read element at data[index] using GEP for pointer provenance
-        let data_ptr: *Unit = data_addr as *Unit
-        let byte_offset: I64 = index * stride
-        let elem_ptr: *T = lowlevel { ptr_offset(data_ptr, byte_offset) } as *T
-        let val: T = lowlevel { ptr_read[T](elem_ptr) }
-        val
+        let stride_ptr: *I64 = lowlevel { ptr_offset(this.handle, 24) } as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](stride_ptr) }
+        let data: *Unit = lowlevel { ptr_read[*Unit](this.handle as *(*Unit)) }
+        // Unchecked multiply avoids overflow branch that blocks vectorization
+        let byte_offset: I64 = lowlevel { unchecked_mul(index, stride) }
+        let elem_ptr: *T = lowlevel { ptr_offset(data, byte_offset) } as *T
+        lowlevel { ptr_read[T](elem_ptr) }
     }
 
     /// Sets the element at the given index.
     @inline
     pub func set(this, index: I64, value: T) {
-        let hdr: I64 = this.handle as I64
-        let p_stride: *I64 = (hdr + 24) as *I64
-        let stride: I64 = lowlevel { ptr_read[I64](p_stride) }
-        let p_data: *I64 = hdr as *I64
-        let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
-        let data_ptr: *Unit = data_addr as *Unit
-        let byte_offset: I64 = index * stride
-        let elem_ptr: *T = lowlevel { ptr_offset(data_ptr, byte_offset) } as *T
+        let stride_ptr: *I64 = lowlevel { ptr_offset(this.handle, 24) } as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](stride_ptr) }
+        let data: *Unit = lowlevel { ptr_read[*Unit](this.handle as *(*Unit)) }
+        let byte_offset: I64 = lowlevel { unchecked_mul(index, stride) }
+        let elem_ptr: *T = lowlevel { ptr_offset(data, byte_offset) } as *T
         lowlevel { ptr_write[T](elem_ptr, value) }
     }
 
