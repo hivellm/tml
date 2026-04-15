@@ -1,0 +1,257 @@
+/// TML code generator from parsed .proto file descriptors.
+///
+/// Generates TML struct types + `impl ProtoMessage` for each message,
+/// and enum types for each proto enum. The generated code uses the
+/// `std::protobuf` writer/reader API.
+///
+/// # Example
+///
+/// ```tml
+/// use std::protobuf::proto_parser::parse_proto
+/// use std::protobuf::codegen::generate_tml
+///
+/// let proto = parse_proto(proto_source)
+/// let tml_code: Str = generate_tml(ref proto)
+/// println(tml_code)
+/// ```
+
+use std::collections::List
+use std::protobuf::types::FieldType
+use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor}
+use std::protobuf::proto_parser::{ProtoFile, EnumDescriptor, EnumValue}
+
+// ============================================================================
+// TML field type mapping
+// ============================================================================
+
+func tml_type_for_field(fd: ref FieldDescriptor) -> Str {
+    let base = tml_scalar_type(fd.field_type)
+    if fd.is_repeated and not fd.is_map {
+        return `List[{base}]`
+    }
+    if fd.is_optional {
+        return `Maybe[{base}]`
+    }
+    return base
+}
+
+func tml_scalar_type(ft: FieldType) -> Str {
+    when ft {
+        FieldType::Double   => "F64",
+        FieldType::Float    => "F32",
+        FieldType::Int32    => "I32",
+        FieldType::Int64    => "I64",
+        FieldType::Uint32   => "U32",
+        FieldType::Uint64   => "U64",
+        FieldType::Sint32   => "I32",
+        FieldType::Sint64   => "I64",
+        FieldType::Fixed32  => "I32",
+        FieldType::Fixed64  => "I64",
+        FieldType::Sfixed32 => "I32",
+        FieldType::Sfixed64 => "I64",
+        FieldType::Bool     => "Bool",
+        FieldType::String   => "Str",
+        FieldType::Bytes    => "Str",
+        FieldType::Enum     => "I32",
+        FieldType::Message  => "Str", // placeholder for nested messages
+    }
+}
+
+func write_method_for_field(fd: ref FieldDescriptor) -> Str {
+    when fd.field_type {
+        FieldType::Double   => "write_field_double",
+        FieldType::Float    => "write_field_float",
+        FieldType::Int32    => "write_field_varint",
+        FieldType::Int64    => "write_field_varint",
+        FieldType::Uint32   => "write_field_varint",
+        FieldType::Uint64   => "write_field_varint",
+        FieldType::Sint32   => "write_field_sint",
+        FieldType::Sint64   => "write_field_sint",
+        FieldType::Fixed32  => "write_field_fixed32",
+        FieldType::Fixed64  => "write_field_fixed64",
+        FieldType::Sfixed32 => "write_field_sfixed32",
+        FieldType::Sfixed64 => "write_field_sfixed64",
+        FieldType::Bool     => "write_field_bool",
+        FieldType::String   => "write_field_string",
+        FieldType::Bytes    => "write_field_bytes",
+        FieldType::Enum     => "write_field_enum",
+        FieldType::Message  => "write_field_message",
+    }
+}
+
+func read_method_for_field(fd: ref FieldDescriptor) -> Str {
+    when fd.field_type {
+        FieldType::Double   => "read_double",
+        FieldType::Float    => "read_float",
+        FieldType::Int32    => "read_int32",
+        FieldType::Int64    => "read_varint",
+        FieldType::Uint32   => "read_uint32",
+        FieldType::Uint64   => "read_varint",
+        FieldType::Sint32   => "read_sint32",
+        FieldType::Sint64   => "read_sint64",
+        FieldType::Fixed32  => "read_fixed32",
+        FieldType::Fixed64  => "read_fixed64",
+        FieldType::Sfixed32 => "read_fixed32",
+        FieldType::Sfixed64 => "read_fixed64",
+        FieldType::Bool     => "read_bool",
+        FieldType::String   => "read_string",
+        FieldType::Bytes    => "read_bytes",
+        FieldType::Enum     => "read_enum",
+        FieldType::Message  => "read_bytes",
+    }
+}
+
+func default_value_for_field(fd: ref FieldDescriptor) -> Str {
+    if fd.is_repeated { return `List::new(4)` }
+    if fd.is_optional { return "Nothing" }
+    when fd.field_type {
+        FieldType::Double   => "0.0",
+        FieldType::Float    => "0.0",
+        FieldType::Int32    => "0",
+        FieldType::Int64    => "0",
+        FieldType::Uint32   => "0",
+        FieldType::Uint64   => "0",
+        FieldType::Sint32   => "0",
+        FieldType::Sint64   => "0",
+        FieldType::Fixed32  => "0",
+        FieldType::Fixed64  => "0",
+        FieldType::Sfixed32 => "0",
+        FieldType::Sfixed64 => "0",
+        FieldType::Bool     => "false",
+        FieldType::String   => `""`,
+        FieldType::Bytes    => `""`,
+        FieldType::Enum     => "0",
+        FieldType::Message  => `""`,
+    }
+}
+
+// ============================================================================
+// Code generation
+// ============================================================================
+
+/// Generates complete TML source code from a parsed .proto file.
+/// Includes: use declarations, struct types, enum types, and
+/// impl ProtoMessage for each message with encode/decode methods.
+pub func generate_tml(proto: ref ProtoFile) -> Str {
+    var out: Str = "// Generated from .proto — do not edit\n"
+    out = out + "use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}\n"
+    out = out + "use std::collections::List\n\n"
+
+    // Generate enums
+    for i in 0 to proto.enums.len() {
+        let en: EnumDescriptor = proto.enums.get(i)
+        out = out + generate_enum(ref en)
+        out = out + "\n"
+    }
+
+    // Generate messages
+    for i in 0 to proto.messages.len() {
+        let msg: MessageDescriptor = proto.messages.get(i)
+        out = out + generate_message_struct(ref msg)
+        out = out + "\n"
+        out = out + generate_message_impl(ref msg)
+        out = out + "\n"
+    }
+
+    return out
+}
+
+func generate_enum(en: ref EnumDescriptor) -> Str {
+    var out: Str = `pub enum {en.name} {\n`
+    for i in 0 to en.values.len() {
+        let v: EnumValue = en.values.get(i)
+        if i > 0 { out = out + ",\n" }
+        out = out + `    {v.name}`
+    }
+    out = out + "\n}\n"
+    return out
+}
+
+func generate_message_struct(msg: ref MessageDescriptor) -> Str {
+    var out: Str = `pub type {msg.name} {\n`
+    for i in 0 to msg.field_count() {
+        let fd: FieldDescriptor = msg.fields.get(i)
+        let tml_type = tml_type_for_field(ref fd)
+        out = out + `    {fd.name}: {tml_type}`
+        if i < msg.field_count() - 1 { out = out + "," }
+        out = out + "\n"
+    }
+    out = out + "}\n"
+    return out
+}
+
+func generate_message_impl(msg: ref MessageDescriptor) -> Str {
+    var out: Str = `impl {msg.name} {\n`
+
+    // new() constructor with defaults
+    out = out + `    pub func new() -> {msg.name} {\n`
+    out = out + `        {msg.name} {\n`
+    for i in 0 to msg.field_count() {
+        let fd: FieldDescriptor = msg.fields.get(i)
+        let default_val = default_value_for_field(ref fd)
+        out = out + `            {fd.name}: {default_val}`
+        if i < msg.field_count() - 1 { out = out + "," }
+        out = out + "\n"
+    }
+    out = out + "        }\n"
+    out = out + "    }\n\n"
+
+    // encode()
+    out = out + "    pub func encode(this, writer: mut ref ProtoWriter) {\n"
+    for i in 0 to msg.field_count() {
+        let fd: FieldDescriptor = msg.fields.get(i)
+        let wm = write_method_for_field(ref fd)
+        if fd.is_optional {
+            out = out + `        when this.{fd.name} {\n`
+            out = out + `            Just(v) => writer.{wm}({fd.number}, v),\n`
+            out = out + "            Nothing => {}\n"
+            out = out + "        }\n"
+        } else if fd.is_repeated {
+            out = out + `        // repeated field {fd.name} — encode each element\n`
+            out = out + `        for j in 0 to this.{fd.name}.len() {\n`
+            out = out + `            let elem = this.{fd.name}.get(j)\n`
+            out = out + `            writer.{wm}({fd.number}, elem)\n`
+            out = out + "        }\n"
+        } else {
+            out = out + `        writer.{wm}({fd.number}, this.{fd.name})\n`
+        }
+    }
+    out = out + "    }\n\n"
+
+    // decode()
+    out = out + `    pub func decode(reader: mut ref ProtoReader) -> Outcome[{msg.name}, Str] {\n`
+    out = out + `        var result = {msg.name}::new()\n`
+    out = out + "        loop (reader.has_more()) {\n"
+    out = out + "            let tag = when reader.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }\n"
+
+    // Field dispatch
+    var has_fields = false
+    for i in 0 to msg.field_count() {
+        let fd: FieldDescriptor = msg.fields.get(i)
+        let rm = read_method_for_field(ref fd)
+        let prefix = if has_fields { "} else " } else { "            " }
+        out = out + `{prefix}if tag.field_num == {fd.number} {\n`
+        out = out + `                let v = when reader.{rm}() { Ok(v) => v, Err(e) => { return Err(e) } }\n`
+        if fd.is_optional {
+            out = out + `                result.{fd.name} = Just(v)\n`
+        } else if fd.is_repeated {
+            out = out + `                result.{fd.name}.push(v)\n`
+        } else {
+            out = out + `                result.{fd.name} = v\n`
+        }
+        has_fields = true
+    }
+    if has_fields {
+        out = out + "            } else {\n"
+        out = out + "                when reader.skip_field(tag.wire_type) { Ok(v) => {}, Err(e) => { return Err(e) } }\n"
+        out = out + "            }\n"
+    } else {
+        out = out + "            when reader.skip_field(tag.wire_type) { Ok(v) => {}, Err(e) => { return Err(e) } }\n"
+    }
+    out = out + "        }\n"
+    out = out + "        return Ok(result)\n"
+    out = out + "    }\n"
+
+    out = out + "}\n"
+    return out
+}

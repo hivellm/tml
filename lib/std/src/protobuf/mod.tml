@@ -61,3 +61,9 @@ pub use std::protobuf::packed::{
     read_packed_varints, read_packed_fixed32, read_packed_fixed64,
     read_packed_float, read_packed_double
 }
+
+// Proto file parser (.proto → descriptors)
+pub use std::protobuf::proto_parser::{parse_proto, ProtoFile, EnumDescriptor, EnumValue}
+
+// TML code generator (descriptors → TML source)
+pub use std::protobuf::codegen::generate_tml

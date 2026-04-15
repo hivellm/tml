@@ -1,0 +1,93 @@
+/// Tests for protobuf TML code generation from .proto definitions.
+/// Parses a .proto, generates TML code, and verifies the output
+/// contains correct struct definitions and encode/decode methods.
+
+use test::*
+use std::protobuf::proto_parser::parse_proto
+use std::protobuf::codegen::generate_tml
+
+@test func test_codegen_simple_message() {
+    let proto = parse_proto("syntax = \"proto3\";\nmessage Person {\n  string name = 1;\n  int32 id = 2;\n}")
+    let code = generate_tml(ref proto)
+
+    // Should contain struct definition
+    assert(code.contains("pub type Person"), "should have Person struct")
+    assert(code.contains("name: Str"), "should have name field")
+    assert(code.contains("id: I32"), "should have id field")
+
+    // Should contain new() constructor
+    assert(code.contains("pub func new()"), "should have new()")
+
+    // Should contain encode method
+    assert(code.contains("pub func encode"), "should have encode()")
+    assert(code.contains("write_field_string(1,"), "should encode name as field 1")
+    assert(code.contains("write_field_varint(2,"), "should encode id as field 2")
+
+    // Should contain decode method
+    assert(code.contains("pub func decode"), "should have decode()")
+    assert(code.contains("field_num == 1"), "should decode field 1")
+    assert(code.contains("field_num == 2"), "should decode field 2")
+}
+
+@test func test_codegen_enum() {
+    let proto = parse_proto("syntax = \"proto3\";\nenum Color {\n  RED = 0;\n  GREEN = 1;\n  BLUE = 2;\n}")
+    let code = generate_tml(ref proto)
+    assert(code.contains("pub enum Color"), "should have Color enum")
+    assert(code.contains("RED"), "should have RED variant")
+    assert(code.contains("GREEN"), "should have GREEN variant")
+    assert(code.contains("BLUE"), "should have BLUE variant")
+}
+
+@test func test_codegen_repeated_field() {
+    let proto = parse_proto("syntax = \"proto3\";\nmessage Numbers {\n  repeated int32 values = 1;\n}")
+    let code = generate_tml(ref proto)
+    assert(code.contains("values: List[I32]"), "repeated should be List[T]")
+}
+
+@test func test_codegen_optional_field() {
+    let proto = parse_proto("syntax = \"proto3\";\nmessage Wrapper {\n  optional string label = 1;\n}")
+    let code = generate_tml(ref proto)
+    assert(code.contains("label: Maybe[Str]"), "optional should be Maybe[T]")
+    assert(code.contains("Just(v)"), "encode should unwrap Maybe")
+}
+
+@test func test_codegen_all_scalar_types() {
+    let proto = parse_proto("syntax = \"proto3\";\nmessage S {\n  double a = 1;\n  float b = 2;\n  int32 c = 3;\n  int64 d = 4;\n  bool e = 5;\n  string f = 6;\n  bytes g = 7;\n  sint32 h = 8;\n  fixed32 i = 9;\n  fixed64 j = 10;\n}")
+    let code = generate_tml(ref proto)
+    assert(code.contains("a: F64"), "double -> F64")
+    assert(code.contains("b: F32"), "float -> F32")
+    assert(code.contains("c: I32"), "int32 -> I32")
+    assert(code.contains("d: I64"), "int64 -> I64")
+    assert(code.contains("e: Bool"), "bool -> Bool")
+    assert(code.contains("f: Str"), "string -> Str")
+    assert(code.contains("g: Str"), "bytes -> Str")
+    assert(code.contains("h: I32"), "sint32 -> I32")
+    assert(code.contains("write_field_double(1,"), "double uses write_field_double")
+    assert(code.contains("write_field_float(2,"), "float uses write_field_float")
+    assert(code.contains("write_field_bool(5,"), "bool uses write_field_bool")
+    assert(code.contains("write_field_sint(8,"), "sint32 uses write_field_sint")
+    assert(code.contains("write_field_fixed32(9,"), "fixed32 uses write_field_fixed32")
+}
+
+@test func test_codegen_skip_unknown() {
+    let proto = parse_proto("syntax = \"proto3\";\nmessage Msg {\n  int32 x = 1;\n}")
+    let code = generate_tml(ref proto)
+    // decode should skip unknown fields
+    assert(code.contains("skip_field"), "should skip unknown fields")
+}
+
+@test func test_codegen_person_proto() {
+    let proto = parse_proto("syntax = \"proto3\";\nenum PhoneType {\n  UNSPECIFIED = 0;\n  MOBILE = 1;\n}\nmessage Person {\n  string name = 1;\n  int32 id = 2;\n  string email = 3;\n}")
+    let code = generate_tml(ref proto)
+
+    // Enum
+    assert(code.contains("pub enum PhoneType"), "should have PhoneType")
+    assert(code.contains("UNSPECIFIED"), "should have UNSPECIFIED")
+    assert(code.contains("MOBILE"), "should have MOBILE")
+
+    // Person struct + methods
+    assert(code.contains("pub type Person"), "should have Person struct")
+    assert(code.contains("name: Str"), "name field")
+    assert(code.contains("email: Str"), "email field")
+    assert(code.contains("impl Person"), "should have impl block")
+}

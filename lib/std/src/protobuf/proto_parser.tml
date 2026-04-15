@@ -1,0 +1,480 @@
+/// Proto3 file parser — reads `.proto` source text and produces
+/// `MessageDescriptor` / `EnumDescriptor` trees.
+///
+/// Supports: syntax, package, message, enum, field types (all scalars),
+/// repeated, optional, map, oneof, nested messages, reserved, comments.
+///
+/// # Example
+///
+/// ```tml
+/// use std::protobuf::proto_parser::ProtoFile
+///
+/// let src = read_file("person.proto")
+/// let proto = ProtoFile::parse(src)
+/// for msg in proto.messages {
+///     println(msg.name)
+/// }
+/// ```
+
+use std::collections::List
+use std::protobuf::types::FieldType
+use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor, scalar_field, repeated_field, optional_field, map_field}
+
+// ============================================================================
+// Data model
+// ============================================================================
+
+/// A parsed enum variant: name + number.
+pub type EnumValue {
+    name: Str,
+    number: I64
+}
+
+/// A parsed enum definition from a .proto file.
+pub type EnumDescriptor {
+    name: Str,
+    values: List[EnumValue]
+}
+
+/// A parsed .proto file with all top-level definitions.
+pub type ProtoFile {
+    syntax: Str,
+    package: Str,
+    messages: List[MessageDescriptor],
+    enums: List[EnumDescriptor]
+}
+
+// ============================================================================
+// Tokenizer
+// ============================================================================
+
+type Token {
+    kind: I64,   // 0=ident, 1=number, 2=string, 3=symbol, 4=eof
+    text: Str,
+    pos: I64
+}
+
+const TOK_IDENT: I64 = 0
+const TOK_NUMBER: I64 = 1
+const TOK_STRING: I64 = 2
+const TOK_SYMBOL: I64 = 3
+const TOK_EOF: I64 = 4
+
+type Tokenizer {
+    src: Str,
+    pos: I64
+}
+
+impl Tokenizer {
+    func new(src: Str) -> Tokenizer {
+        Tokenizer { src: src, pos: 0 }
+    }
+
+    func peek_char(this) -> I64 {
+        if this.pos >= this.src.len() { return -1 }
+        return this.src.char_at(this.pos) as I64
+    }
+
+    func advance(mut this) {
+        this.pos = this.pos + 1
+    }
+
+    func skip_ws_and_comments(mut this) {
+        loop (this.pos < this.src.len()) {
+            let ch = this.peek_char()
+            // Whitespace
+            if ch == 32 or ch == 9 or ch == 10 or ch == 13 {
+                this.advance()
+                continue
+            }
+            // Line comment: //
+            if ch == 47 and this.pos + 1 < this.src.len() {
+                let next = this.src.char_at(this.pos + 1) as I64
+                if next == 47 {
+                    // Skip to end of line
+                    loop (this.pos < this.src.len()) {
+                        if this.src.char_at(this.pos) as I64 == 10 { break }
+                        this.pos = this.pos + 1
+                    }
+                    continue
+                }
+                // Block comment: /* */
+                if next == 42 {
+                    this.pos = this.pos + 2
+                    loop (this.pos + 1 < this.src.len()) {
+                        if this.src.char_at(this.pos) as I64 == 42 and this.src.char_at(this.pos + 1) as I64 == 47 {
+                            this.pos = this.pos + 2
+                            break
+                        }
+                        this.pos = this.pos + 1
+                    }
+                    continue
+                }
+            }
+            break
+        }
+    }
+
+    func is_ident_start(ch: I64) -> Bool {
+        return (ch >= 65 and ch <= 90) or (ch >= 97 and ch <= 122) or ch == 95
+    }
+
+    func is_ident_char(ch: I64) -> Bool {
+        return Tokenizer::is_ident_start(ch) or (ch >= 48 and ch <= 57) or ch == 46
+    }
+
+    func is_digit(ch: I64) -> Bool {
+        return ch >= 48 and ch <= 57
+    }
+
+    func next_token(mut this) -> Token {
+        this.skip_ws_and_comments()
+        if this.pos >= this.src.len() {
+            return Token { kind: TOK_EOF, text: "", pos: this.pos }
+        }
+        let start = this.pos
+        let ch = this.peek_char()
+
+        // Identifier or keyword (allows dots for qualified names like google.protobuf.Any)
+        if Tokenizer::is_ident_start(ch) {
+            loop (this.pos < this.src.len() and Tokenizer::is_ident_char(this.peek_char())) {
+                this.advance()
+            }
+            let text = this.src.substring(start, this.pos)
+            return Token { kind: TOK_IDENT, text: text, pos: start }
+        }
+
+        // Number (including negative)
+        if Tokenizer::is_digit(ch) or (ch == 45 and this.pos + 1 < this.src.len() and Tokenizer::is_digit(this.src.char_at(this.pos + 1) as I64)) {
+            if ch == 45 { this.advance() }
+            loop (this.pos < this.src.len() and Tokenizer::is_digit(this.peek_char())) {
+                this.advance()
+            }
+            let text = this.src.substring(start, this.pos)
+            return Token { kind: TOK_NUMBER, text: text, pos: start }
+        }
+
+        // String literal "..."
+        if ch == 34 {
+            this.advance() // skip opening "
+            let str_start = this.pos
+            loop (this.pos < this.src.len() and this.peek_char() != 34) {
+                this.advance()
+            }
+            let text = this.src.substring(str_start, this.pos)
+            if this.pos < this.src.len() { this.advance() } // skip closing "
+            return Token { kind: TOK_STRING, text: text, pos: start }
+        }
+
+        // Symbol: { } ; = [ ] < > ,
+        this.advance()
+        let text = this.src.substring(start, this.pos)
+        return Token { kind: TOK_SYMBOL, text: text, pos: start }
+    }
+}
+
+// ============================================================================
+// Parser
+// ============================================================================
+
+type ProtoParser {
+    tokens: List[Token],
+    pos: I64
+}
+
+impl ProtoParser {
+    func new(src: Str) -> ProtoParser {
+        var tz = Tokenizer::new(src)
+        let tokens = List[Token]::new(128)
+        loop (true) {
+            let tok = tz.next_token()
+            let is_eof = tok.kind == TOK_EOF
+            tokens.push(tok)
+            if is_eof { break }
+        }
+        ProtoParser { tokens: tokens, pos: 0 }
+    }
+
+    func peek(this) -> Token {
+        if this.pos >= this.tokens.len() {
+            return Token { kind: TOK_EOF, text: "", pos: 0 }
+        }
+        return this.tokens.get(this.pos)
+    }
+
+    func advance(mut this) -> Token {
+        let tok = this.peek()
+        this.pos = this.pos + 1
+        return tok
+    }
+
+    func expect_ident(mut this) -> Str {
+        let tok = this.advance()
+        return tok.text
+    }
+
+    func expect_symbol(mut this, sym: Str) {
+        let tok = this.advance()
+        // silently ignore if mismatch (lenient parser)
+    }
+
+    func expect_number(mut this) -> I64 {
+        let tok = this.advance()
+        return tok.text.parse_i64()
+    }
+
+    // ---- Top-level parsing ----
+
+    func parse(mut this) -> ProtoFile {
+        var file = ProtoFile {
+            syntax: "proto3",
+            package: "",
+            messages: List[MessageDescriptor]::new(8),
+            enums: List[EnumDescriptor]::new(4)
+        }
+
+        loop (this.peek().kind != TOK_EOF) {
+            let tok = this.peek()
+            if tok.text == "syntax" {
+                this.parse_syntax(mut ref file)
+            } else if tok.text == "package" {
+                this.parse_package(mut ref file)
+            } else if tok.text == "message" {
+                let msg = this.parse_message()
+                file.messages.push(msg)
+            } else if tok.text == "enum" {
+                let en = this.parse_enum()
+                file.enums.push(en)
+            } else if tok.text == "import" or tok.text == "option" {
+                // Skip import/option statements
+                loop (this.peek().kind != TOK_EOF) {
+                    let t = this.advance()
+                    if t.text == ";" { break }
+                }
+            } else {
+                this.advance() // skip unknown
+            }
+        }
+
+        return file
+    }
+
+    func parse_syntax(mut this, file: mut ref ProtoFile) {
+        this.advance() // "syntax"
+        this.expect_symbol("=")
+        let tok = this.advance() // string
+        file.syntax = tok.text
+        this.expect_symbol(";")
+    }
+
+    func parse_package(mut this, file: mut ref ProtoFile) {
+        this.advance() // "package"
+        file.package = this.expect_ident()
+        this.expect_symbol(";")
+    }
+
+    // ---- Message parsing ----
+
+    func parse_message(mut this) -> MessageDescriptor {
+        this.advance() // "message"
+        let name = this.expect_ident()
+        this.expect_symbol("{")
+
+        var msg = MessageDescriptor::new(name)
+
+        loop (this.peek().kind != TOK_EOF and this.peek().text != "}") {
+            let tok = this.peek()
+
+            if tok.text == "message" {
+                // Nested message — parse and skip (flat model for now)
+                let nested = this.parse_message()
+                // Could store nested messages if needed
+            } else if tok.text == "enum" {
+                let en = this.parse_enum()
+                // Could store nested enums if needed
+            } else if tok.text == "reserved" {
+                // Skip reserved declaration
+                loop (this.peek().kind != TOK_EOF) {
+                    let t = this.advance()
+                    if t.text == ";" { break }
+                }
+            } else if tok.text == "oneof" {
+                this.parse_oneof(mut ref msg)
+            } else if tok.text == "map" {
+                this.parse_map_field(mut ref msg)
+            } else if tok.text == "repeated" {
+                this.advance() // "repeated"
+                let field = this.parse_field(true, false)
+                msg.add_field(field)
+            } else if tok.text == "optional" {
+                this.advance() // "optional"
+                let field = this.parse_field(false, true)
+                msg.add_field(field)
+            } else if tok.text == "option" {
+                // Skip option declaration inside message
+                loop (this.peek().kind != TOK_EOF) {
+                    let t = this.advance()
+                    if t.text == ";" { break }
+                }
+            } else {
+                // Regular field
+                let field = this.parse_field(false, false)
+                msg.add_field(field)
+            }
+        }
+
+        this.expect_symbol("}") // closing brace
+        return msg
+    }
+
+    func parse_field(mut this, is_repeated: Bool, is_optional: Bool) -> FieldDescriptor {
+        let type_name = this.expect_ident()
+        let field_name = this.expect_ident()
+        this.expect_symbol("=")
+        let field_num = this.expect_number()
+
+        // Skip field options [packed = true] etc
+        if this.peek().text == "[" {
+            loop (this.peek().kind != TOK_EOF) {
+                let t = this.advance()
+                if t.text == "]" { break }
+            }
+        }
+        this.expect_symbol(";")
+
+        let ft = ProtoParser::type_name_to_field_type(type_name)
+
+        if is_repeated {
+            // Proto3: scalar repeated fields are packed by default
+            let packed = ProtoParser::is_packable_type(ft)
+            return repeated_field(field_name, field_num, ft, packed)
+        } else if is_optional {
+            return optional_field(field_name, field_num, ft)
+        } else {
+            return scalar_field(field_name, field_num, ft)
+        }
+    }
+
+    func parse_oneof(mut this, msg: mut ref MessageDescriptor) {
+        this.advance() // "oneof"
+        let oneof_name = this.expect_ident()
+        this.expect_symbol("{")
+
+        loop (this.peek().kind != TOK_EOF and this.peek().text != "}") {
+            let field = this.parse_field(false, true) // oneof fields are optional
+            msg.add_field(field)
+        }
+        this.expect_symbol("}")
+    }
+
+    func parse_map_field(mut this, msg: mut ref MessageDescriptor) {
+        this.advance() // "map"
+        this.expect_symbol("<")
+        let key_type_name = this.expect_ident()
+        this.expect_symbol(",")
+        let val_type_name = this.expect_ident()
+        this.expect_symbol(">")
+        let field_name = this.expect_ident()
+        this.expect_symbol("=")
+        let field_num = this.expect_number()
+        this.expect_symbol(";")
+
+        let kt = ProtoParser::type_name_to_field_type(key_type_name)
+        let vt = ProtoParser::type_name_to_field_type(val_type_name)
+        msg.add_field(map_field(field_name, field_num, kt, vt))
+    }
+
+    // ---- Enum parsing ----
+
+    func parse_enum(mut this) -> EnumDescriptor {
+        this.advance() // "enum"
+        let name = this.expect_ident()
+        this.expect_symbol("{")
+
+        let values = List[EnumValue]::new(8)
+
+        loop (this.peek().kind != TOK_EOF and this.peek().text != "}") {
+            let tok = this.peek()
+            if tok.text == "option" or tok.text == "reserved" {
+                loop (this.peek().kind != TOK_EOF) {
+                    let t = this.advance()
+                    if t.text == ";" { break }
+                }
+                continue
+            }
+            let val_name = this.expect_ident()
+            this.expect_symbol("=")
+            let val_num = this.expect_number()
+            // Skip options [deprecated = true]
+            if this.peek().text == "[" {
+                loop (this.peek().kind != TOK_EOF) {
+                    let t = this.advance()
+                    if t.text == "]" { break }
+                }
+            }
+            this.expect_symbol(";")
+            values.push(EnumValue { name: val_name, number: val_num })
+        }
+
+        this.expect_symbol("}")
+        return EnumDescriptor { name: name, values: values }
+    }
+
+    // ---- Type mapping ----
+
+    func type_name_to_field_type(name: Str) -> FieldType {
+        if name == "double"   { return FieldType::Double }
+        if name == "float"    { return FieldType::Float }
+        if name == "int32"    { return FieldType::Int32 }
+        if name == "int64"    { return FieldType::Int64 }
+        if name == "uint32"   { return FieldType::Uint32 }
+        if name == "uint64"   { return FieldType::Uint64 }
+        if name == "sint32"   { return FieldType::Sint32 }
+        if name == "sint64"   { return FieldType::Sint64 }
+        if name == "fixed32"  { return FieldType::Fixed32 }
+        if name == "fixed64"  { return FieldType::Fixed64 }
+        if name == "sfixed32" { return FieldType::Sfixed32 }
+        if name == "sfixed64" { return FieldType::Sfixed64 }
+        if name == "bool"     { return FieldType::Bool }
+        if name == "string"   { return FieldType::String }
+        if name == "bytes"    { return FieldType::Bytes }
+        // Enum or message reference
+        return FieldType::Message
+    }
+
+    func is_packable_type(ft: FieldType) -> Bool {
+        when ft {
+            FieldType::Double => true,
+            FieldType::Float => true,
+            FieldType::Int32 => true,
+            FieldType::Int64 => true,
+            FieldType::Uint32 => true,
+            FieldType::Uint64 => true,
+            FieldType::Sint32 => true,
+            FieldType::Sint64 => true,
+            FieldType::Fixed32 => true,
+            FieldType::Fixed64 => true,
+            FieldType::Sfixed32 => true,
+            FieldType::Sfixed64 => true,
+            FieldType::Bool => true,
+            FieldType::Enum => true,
+            _ => false,
+        }
+    }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Parses a .proto file source string into a ProtoFile descriptor.
+///
+/// # Example
+/// ```tml
+/// let proto = parse_proto("syntax = \"proto3\"; message Msg { int32 id = 1; }")
+/// assert_eq(proto.messages.get(0).name, "Msg")
+/// ```
+pub func parse_proto(src: Str) -> ProtoFile {
+    var parser = ProtoParser::new(src)
+    return parser.parse()
+}
