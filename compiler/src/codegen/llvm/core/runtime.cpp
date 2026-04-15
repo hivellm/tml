@@ -92,8 +92,8 @@ void LLVMIRGen::init_runtime_catalog() {
     add("printf", "declare dso_local i32 @printf(ptr, ...)");
     add("puts", "declare dso_local i32 @puts(ptr)");
     add("putchar", "declare dso_local i32 @putchar(i32)");
-    add("malloc", "declare dso_local ptr @malloc(i64)");
-    add("free", "declare dso_local void @free(ptr)");
+    add("malloc", "declare dso_local noalias ptr @malloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
+    add("free", "declare dso_local void @free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     add("tml_str_free", "declare dso_local void @tml_str_free(ptr)");
     add("exit", "declare dso_local void @exit(i32) noreturn");
     add("strlen", "declare dso_local i64 @strlen(ptr)");
@@ -171,10 +171,10 @@ void LLVMIRGen::init_runtime_catalog() {
     add("tml_profiler_is_active", "declare dso_local i32 @tml_profiler_is_active()");
 
     // --- Memory functions ---
-    add("mem_alloc", "declare dso_local ptr @mem_alloc(i64)");
-    add("mem_alloc_zeroed", "declare dso_local ptr @mem_alloc_zeroed(i64)");
-    add("mem_realloc", "declare dso_local ptr @mem_realloc(ptr, i64)");
-    add("mem_free", "declare dso_local void @mem_free(ptr)");
+    add("mem_alloc", "declare dso_local noalias ptr @mem_alloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
+    add("mem_alloc_zeroed", "declare dso_local noalias ptr @mem_alloc_zeroed(i64) allocsize(0) allockind(\"alloc,zeroed\") \"alloc-family\"=\"malloc\"");
+    add("mem_realloc", "declare dso_local noalias ptr @mem_realloc(ptr, i64) allocsize(1) allockind(\"realloc\") \"alloc-family\"=\"malloc\"");
+    add("mem_free", "declare dso_local void @mem_free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     add("mem_copy", "declare dso_local void @mem_copy(ptr, ptr, i64)");
     add("mem_move", "declare dso_local void @mem_move(ptr, ptr, i64)");
     add("mem_set", "declare dso_local void @mem_set(ptr, i32, i64)");

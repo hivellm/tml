@@ -1015,12 +1015,12 @@ void MirCodegen::emit_preamble() {
     emitln("declare i32 @__gxx_personality_v0(...)");
 #endif
     // str_concat/_3/_4 — removed (Phase 49); time_ns — removed (Phase 49, 0 MIR callers)
-    emitln("declare dso_local ptr @mem_alloc(i64)");
-    emitln("declare dso_local void @mem_free(ptr)");
+    emitln("declare dso_local noalias ptr @mem_alloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
+    emitln("declare dso_local void @mem_free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     emitln("declare dso_local void @tml_set_test_timeout(i32)");
     emitln("declare dso_local i32 @tml_run_test_with_catch(ptr)");
     emitln("declare dso_local i64 @strlen(ptr)");
-    emitln("declare dso_local ptr @malloc(i64)");
+    emitln("declare dso_local noalias ptr @malloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)");
