@@ -1,307 +1,176 @@
-# TML Compiler
+# TML Compiler (C++ Bootstrap)
 
-The TML (To Machine Language) bootstrap compiler, written in C++20.
+The TML bootstrap compiler, written in C++20. This is the first-stage compiler that compiles TML source code — including the self-hosting `compiler-tml` — to native binaries via LLVM.
 
 ## Building
 
 ### Requirements
 
 - CMake 3.20+
-- C++20 compatible compiler (GCC 12+, Clang 15+, MSVC 19.30+)
-- LLVM 17+ (required for code generation)
-- Clang (for linking generated code)
+- Zig CC (preferred, ADR-007) or C++20 compiler (GCC 12+, Clang 15+, MSVC 19.30+)
+- LLVM 17+ (linked as ~55 static libs, in-process)
 
 ### Build Steps
 
 ```bash
-# From project root (recommended)
+# From project root — NEVER run cmake directly
 scripts/build.bat              # Windows - Debug build
 scripts/build.bat release      # Windows - Release build
 scripts/build.bat --no-tests   # Skip tests
-
-# Run tests
-scripts/test.bat
 ```
 
-### Build Options
+### Build Outputs
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `TML_BUILD_TESTS` | ON | Build test suite |
-| `TML_ENABLE_ASAN` | OFF | Enable AddressSanitizer |
-| `TML_ENABLE_UBSAN` | OFF | Enable UndefinedBehaviorSanitizer |
+| Artifact | Size | Description |
+|----------|------|-------------|
+| `tml.exe` | — | Main compiler binary |
+| `tml_compiler.dll` | ~104 MB | Compiler core: lexer → parser → types → HIR → MIR → LLVM IR |
+| `tml_codegen_x86.dll` | ~78 MB | Backend: LLVM IR → object code + LLD linker |
 
 ## Usage
 
 ```bash
-# Check a file
-./tml check file.tml
+# Core commands
+tml check file.tml             # Type-check without compiling
+tml build file.tml             # Compile to executable
+tml run file.tml               # Compile and run
+tml test                       # Run test suite
+tml test --suite=core          # Run specific test suite
 
-# Build a file
-./tml build file.tml
+# Stage override (TML parser is default since v0.2.15)
+tml build file.tml --stage=parser:cpp   # Use C++ parser fallback
 
-# Run a file
-./tml run file.tml
+# Debug / diagnostics
+tml debug lex file.tml         # Show tokens
+tml debug parse file.tml       # Show AST
+tml debug check file.tml       # Show type info
+tml emit-ir file.tml           # Emit LLVM IR
+tml emit-mir file.tml          # Emit MIR
 
-# Run all tests
-./tml test
+# Code coverage
+tml cv                         # Project-scoped test coverage
 
-# Persistent daemon (22ms cached builds)
-./tml daemon start          # Start background daemon
-./tml daemon stop           # Stop daemon
-./tml daemon status         # Check daemon status
-TML_DAEMON=1 ./tml check file.tml  # Use daemon for fast check
-
-# Debug commands
-./tml debug lex file.tml    # Show tokens
-./tml debug parse file.tml  # Show AST
-./tml debug check file.tml  # Show type info
+# Daemon (22ms cached builds)
+tml daemon start
+tml daemon stop
+tml daemon status
 ```
 
-## Project Structure
+## Architecture
 
 ```
 compiler/
-├── include/            # Header files
-│   ├── common.hpp      # Common types and utilities
-│   ├── lexer/          # Lexer headers
-│   ├── parser/         # Parser headers (AST, OOP)
-│   ├── types/          # Type system headers
-│   ├── borrow/         # Borrow checker headers
-│   ├── hir/            # High-level IR
-│   ├── mir/            # Mid-level IR (SSA, passes)
-│   ├── codegen/        # LLVM codegen headers
-│   └── query/          # Query system headers (QueryContext, cache, keys, incremental)
+├── include/                # C++ headers
+│   ├── lexer/              # Tokenizer
+│   ├── parser/             # Parser (AST, OOP constructs)
+│   ├── types/              # Type system
+│   ├── borrow/             # Borrow checker
+│   ├── hir/                # High-level IR
+│   ├── mir/                # Mid-level IR (SSA)
+│   ├── codegen/            # LLVM codegen
+│   └── query/              # Query system (demand-driven, incremental)
 ├── src/
-│   ├── lexer/          # Tokenizer
-│   ├── parser/         # AST generation
-│   ├── preprocessor/   # Conditional compilation
-│   ├── types/          # Type checker with module system
-│   ├── borrow/         # Borrow checker
-│   ├── hir/            # HIR generation
-│   ├── mir/            # MIR passes (devirtualization, etc.)
-│   ├── codegen/        # LLVM IR backend
-│   │   └── core/       # Core codegen (classes, generics)
-│   ├── query/          # Query system (demand-driven compilation)
-│   ├── backend/        # LLVM backend + OS linker (subprocess)
-│   ├── cli/            # Command line interface
-│   │   ├── commands/   # CLI commands (build, test, etc.)
-│   │   ├── builder/    # Build system
-│   │   └── tester/     # Test runner
-│   └── main.cpp        # Entry point
-├── tests/              # C++ unit tests (GoogleTest)
-└── runtime/            # C runtime library (essential.c)
+│   ├── lexer/              # Tokenizer implementation
+│   ├── parser/             # AST generation (LL(1), ADR-008)
+│   ├── preprocessor/       # Conditional compilation
+│   ├── types/              # Type checker with module system
+│   ├── borrow/             # Borrow checker
+│   ├── hir/                # HIR generation
+│   ├── thir/               # Typed HIR (THIR→MIR is the single path, T5)
+│   ├── mir/                # MIR passes (devirt, escape analysis, DCE, etc.)
+│   ├── codegen/
+│   │   ├── llvm/           # AST→LLVM IR (legacy path)
+│   │   └── mir/            # MIR→LLVM IR (primary path)
+│   ├── query/              # Demand-driven query system (8 stages)
+│   ├── backend/            # LLVM backend + embedded LLD linker
+│   ├── cli/
+│   │   ├── commands/       # CLI commands (build, test, run, check, cv, etc.)
+│   │   ├── builder/        # Build system
+│   │   └── tester/         # Test runner (parallel, NDJSON protocol)
+│   ├── pipeline/           # Compilation pipeline orchestration
+│   ├── serial/             # Binary serialization (.tml.meta)
+│   └── main.cpp            # Entry point
+├── tests/                  # TML integration tests (~234 test files)
+└── runtime/                # C runtime library (essential.c)
 ```
 
-## Development Status
+## Compilation Pipeline
 
-| Component | Status |
-|-----------|--------|
-| Lexer | Complete |
-| Parser | Complete |
-| Type Checker | Complete |
-| Module System | Complete |
-| Pattern Matching | Complete |
-| Enum Support | Complete |
-| Trait Objects | Complete |
-| **OOP (Classes/Interfaces)** | Complete |
-| **@value Classes** | Complete |
-| **@pool Classes** | Validation Complete |
-| Borrow Checker | Basic |
-| HIR Generator | Complete |
-| MIR Passes | Complete |
-| **LLVM Backend** | Complete (embedded, in-process) |
-| **OS Linker** | Complete (native link.exe/ld via subprocess) |
-| **Compilation Daemon** | Complete (`tml daemon`, 22ms cached) |
-| **Query System** | Complete (demand-driven, 8 stages) |
-| **Incremental Compilation** | Complete (red-green, cross-session) |
-| CLI | Complete |
-| Test Framework | Complete |
+```
+Source → Lexer → Parser → AST → Type Checker → HIR → THIR → MIR → LLVM IR → Object → Executable
+                  ↑                                     ↑
+            TML parser (default)              Single path (T5)
+            C++ parser (--stage=parser:cpp)
+```
 
-## Features
+Key architectural decisions:
 
-### Language Features
-- Basic types (I8-I128, U8-U128, F32, F64, Bool, Char, Str)
-- Functions with type parameters
-- Structs with generics (monomorphization)
-- Enums (simple and with data variants)
-- Pattern matching (when expressions)
-- Trait objects (`dyn Behavior`) with vtables
-- Closures with capture
-- Operators (arithmetic, comparison, logical, bitwise)
-- Control flow (if/else, loop, for, while)
-- Module system (use declarations)
-- Async/await support
-- **C#-style OOP**:
-  - Classes with single inheritance (`extends`)
-  - Interfaces with multiple implementation (`implements`)
-  - Abstract and sealed classes
-  - Virtual, override, and abstract methods
-  - Constructors with base calls
-  - Properties (get/set)
-  - Member visibility (public, private, protected, internal)
-  - Namespaces
-- **@value classes** (no vtable, direct dispatch)
-- **@pool classes** (object pooling - validation only)
+- **THIR→MIR single path** (ADR-005, T5): legacy HIR→MIR removed; all MIR fixes go in `thir_mir_builder.cpp`
+- **LL(1) grammar** (ADR-008): single-token lookahead, no backtracking
+- **Demand-driven queries** (ADR-002): like rustc's `TyCtxt`, 8 memoized stages with red-green incremental
+- **In-process LLVM** (ADR-001): ~55 static libs linked, no clang/lld subprocess
+- **Zig CC toolchain** (ADR-007): preferred over MSVC for C/C++ compilation
 
-### Compiler Features
-- Full lexical analysis
-- Complete parser (all constructs including OOP)
-- Type checking with inference
-- Module registry and imports
-- **Class Hierarchy Analysis (CHA)**
-- **Devirtualization pass**
-- **Dead method elimination**
-- **Escape analysis**
-- **Demand-driven query system** (like rustc's TyCtxt) with 8 memoized stages
-- **Red-green incremental compilation** with cross-session persistence
-- **Embedded LLVM backend** (~55 static libs, in-process IR→obj, no clang subprocess)
-- **Embedded LLD linker** (in-process COFF/ELF/MachO, no linker subprocess)
-- LLVM IR code generation
-- Enum codegen (struct-based tagged unions)
-- Pattern matching codegen
-- Trait object vtable generation
-- Class vtable generation
-- Interface vtable generation
-- Test framework integration (@test, @bench)
-- Parallel test execution
-- Code coverage instrumentation
-- Debug info (DWARF)
+## Compiler Features
 
-### MIR Optimization Passes
+### Language Support
+- Types: I8–I128, U8–U128, F32, F64, Bool, Char, Str, RawPtr
+- Generics with monomorphization and behavior bounds
+- Enums (simple, data variants, tagged unions)
+- Pattern matching (`when` expressions with guards)
+- Behaviors (traits) with `dyn Behavior` vtable dispatch
+- Closures with environment capture
+- Async/await
+- For-in loops (`to`/`through`), let-else, optional chaining (`?.`)
+- `@auto`/`@derive`, `@repr`, `@packed`, `@inline` directives
+- Module system with `use` declarations and glob re-exports
+- C#-style OOP: classes, interfaces, inheritance, virtual dispatch, `@value`/`@pool`
+
+### Optimization Passes (MIR)
 - Devirtualization (final methods, sealed classes)
-- Virtual call inlining
-- Dead method elimination
+- Dead code elimination (DCE)
+- Dead function elimination (DFE)
+- Constant folding and propagation
+- Copy propagation
+- mem2reg (alloca → SSA)
+- SROA (scalar replacement of aggregates)
 - Escape analysis (stack promotion)
-- Vtable deduplication
-- Trivial destructor detection
+- Loop-invariant code motion (LICM)
+- Block merging and CFG simplification
+- Unreachable code elimination (UCE)
+- Tail call optimization
+- Return value optimization (RVO)
+- Instruction simplification
+- Inlining
+- Peephole optimizations
 
-## OOP Features
+### Codegen Optimizations
+- LLVM `select` for scalar if-else (CMOV, phase0h)
+- LLVM `switch` for dense integer `when` (phase0d)
+- Short-circuit `and`/`or` with 2-block phi layout (phase0f)
+- `@inline` → LLVM `alwaysinline` propagation (phase0e)
+- Bool `i1→i8` promotion for struct fields
 
-### Classes and Interfaces
-
-```tml
-interface IDrawable {
-    func draw(this) -> Unit
-}
-
-abstract class Shape implements IDrawable {
-    protected x: I32
-    protected y: I32
-
-    abstract func area(this) -> F64
-}
-
-class Circle extends Shape {
-    private radius: F64
-
-    func new(x: I32, y: I32, r: F64) : base(x, y) {
-        this.radius = r
-    }
-
-    override func area(this) -> F64 {
-        3.14159 * this.radius * this.radius
-    }
-
-    override func draw(this) -> Unit {
-        print("Drawing circle at ({this.x}, {this.y})")
-    }
-}
-```
-
-### Value Classes
-
-```tml
-@value
-class Point {
-    private x: I32
-    private y: I32
-
-    func new(x: I32, y: I32) {
-        this.x = x
-        this.y = y
-    }
-
-    func distance(this, other: ref Point) -> F64 {
-        // Direct dispatch, no vtable overhead
-        let dx = (this.x - other.x) as F64
-        let dy = (this.y - other.y) as F64
-        (dx * dx + dy * dy).sqrt()
-    }
-}
-```
-
-Value classes:
-- No vtable pointer (smaller memory footprint)
-- Direct method dispatch (faster calls)
-- Cannot have virtual methods
-- Can only extend other @value classes
-- Can implement interfaces
-
-## Module System
-
-The compiler supports a module system with `use` declarations:
-
-```tml
-use core::io
-use test
-
-@test
-func my_test() -> I32 {
-    assert_eq(2 + 2, 4, "math works")
-    0
-}
-```
-
-## Recent Updates
-
-### v0.7.0 (2026-02)
-- **Query-based build pipeline** - Default `tml build` uses demand-driven queries (like rustc)
-- **Red-green incremental compilation** - Cross-session persistence, GREEN path skips entire pipeline
-- **Embedded LLVM backend** - ~55 static libs linked, in-process IR→obj (50x faster)
-- **Embedded LLD linker** - In-process linking (COFF/ELF/MachO, no subprocess)
-- **Query system foundation** - 8 memoized stages with dependency tracking and cycle detection
-- **128-bit fingerprinting** - CRC32C-based fingerprints for incremental cache validation
-- `--legacy` flag to fall back to traditional pipeline
-- All 3,632 tests pass across 363 test files
-
-### v0.6.0 (2026-01)
-- **@value classes** - Value semantics with no vtable
-- **@pool classes** - Object pooling directive (validation)
-- Direct dispatch for value class methods
-- Value class codegen (no vtable pointer)
-
-### v0.5.5 (2025-12)
-- **C#-style OOP** - Classes, interfaces, inheritance
-- Virtual dispatch with vtables
-- Interface vtables for multiple implementation
-- Namespace support
-- Memory leak detection system
-
-### v0.5.0 (2025-12)
-- **Trait Objects** - `dyn Behavior` syntax for dynamic dispatch
-- Vtable generation for behavior implementations
-- Method resolution through generated vtables
-
-### v0.4.0 (2025-12)
-- **MIR Passes** - Devirtualization, escape analysis
-- Dead method elimination
-- Stack promotion for non-escaping objects
+### Infrastructure
+- Parallel test execution (NDJSON subprocess protocol, ADR-004)
+- Code coverage instrumentation (`tml cv`)
+- Debug info (DWARF)
+- Incremental compilation with cross-session persistence (red-green)
+- Compilation daemon (22ms cached builds)
 
 ## Test Status
 
-Run tests with:
 ```bash
-# All C++ unit tests
-./build/debug/tml_tests.exe
-
-# Specific test suite
-./build/debug/tml_tests.exe --gtest_filter="*ValueClass*"
-
 # TML integration tests
-./build/debug/tml.exe test
+tml test                                   # Full suite
+tml test --suite=compiler                  # Compiler-specific tests
+tml test --suite=core                      # Core library tests
+tml test --suite=std                       # Standard library tests
+
+# Specific file
+tml test compiler/tests/compiler/select_if_else.test.tml
 ```
 
 ## License
 
-Apache 2.0
+Apache-2.0
