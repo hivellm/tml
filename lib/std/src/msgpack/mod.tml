@@ -25,6 +25,10 @@
 //! let val1: Str = r.read_str()
 //! ```
 
+pub mod writer
+pub mod reader
+pub mod types
+
 pub use std::msgpack::writer::MsgPackWriter
 pub use std::msgpack::reader::MsgPackReader
 pub use std::msgpack::types::{MsgPackType, MsgPackError}

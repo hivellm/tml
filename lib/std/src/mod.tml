@@ -85,3 +85,5 @@ pub mod ia         // AI library — tensor operations, neural networks, ML prim
 pub mod ffi        // FFI types: CString (owned C string)
 pub mod debug      // Debug utilities for Reflect types (debug_print, debug_string)
 pub mod di         // Dependency Injection (pointer-based service registry, modules, config)
+pub mod msgpack    // MessagePack binary serialization
+pub mod protobuf   // Protocol Buffers wire format, .proto parser, TML codegen

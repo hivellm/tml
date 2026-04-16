@@ -17,6 +17,7 @@
 /// ```
 
 use std::collections::List
+use core::str::substring
 use std::protobuf::types::FieldType
 use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor, scalar_field, repeated_field, optional_field, map_field}
 
@@ -66,20 +67,20 @@ pub type Tokenizer {
 }
 
 impl Tokenizer {
-    func new(src: Str) -> Tokenizer {
+    pub func new(src: Str) -> Tokenizer {
         Tokenizer { src: src, pos: 0 }
     }
 
-    func peek_char(this) -> I64 {
+    pub func peek_char(this) -> I64 {
         if this.pos >= this.src.len() { return -1 }
         return this.src.char_at(this.pos) as I64
     }
 
-    func advance(mut this) {
+    pub func advance(mut this) {
         this.pos = this.pos + 1
     }
 
-    func skip_ws_and_comments(mut this) {
+    pub func skip_ws_and_comments(mut this) {
         loop (this.pos < this.src.len()) {
             let ch = this.peek_char()
             // Whitespace
@@ -115,19 +116,19 @@ impl Tokenizer {
         }
     }
 
-    func is_ident_start(ch: I64) -> Bool {
+    pub func is_ident_start(ch: I64) -> Bool {
         return (ch >= 65 and ch <= 90) or (ch >= 97 and ch <= 122) or ch == 95
     }
 
-    func is_ident_char(ch: I64) -> Bool {
+    pub func is_ident_char(ch: I64) -> Bool {
         return Tokenizer::is_ident_start(ch) or (ch >= 48 and ch <= 57) or ch == 46
     }
 
-    func is_digit(ch: I64) -> Bool {
+    pub func is_digit(ch: I64) -> Bool {
         return ch >= 48 and ch <= 57
     }
 
-    func next_token(mut this) -> Token {
+    pub func next_token(mut this) -> Token {
         this.skip_ws_and_comments()
         if this.pos >= this.src.len() {
             return Token { kind: TOK_EOF, text: "", pos: this.pos }
@@ -140,7 +141,7 @@ impl Tokenizer {
             loop (this.pos < this.src.len() and Tokenizer::is_ident_char(this.peek_char())) {
                 this.advance()
             }
-            let text = this.src.substring(start, this.pos)
+            let text = substring(this.src, start, this.pos)
             return Token { kind: TOK_IDENT, text: text, pos: start }
         }
 
@@ -150,7 +151,7 @@ impl Tokenizer {
             loop (this.pos < this.src.len() and Tokenizer::is_digit(this.peek_char())) {
                 this.advance()
             }
-            let text = this.src.substring(start, this.pos)
+            let text = substring(this.src, start, this.pos)
             return Token { kind: TOK_NUMBER, text: text, pos: start }
         }
 
@@ -161,14 +162,14 @@ impl Tokenizer {
             loop (this.pos < this.src.len() and this.peek_char() != 34) {
                 this.advance()
             }
-            let text = this.src.substring(str_start, this.pos)
+            let text = substring(this.src, str_start, this.pos)
             if this.pos < this.src.len() { this.advance() } // skip closing "
             return Token { kind: TOK_STRING, text: text, pos: start }
         }
 
         // Symbol: { } ; = [ ] < > ,
         this.advance()
-        let text = this.src.substring(start, this.pos)
+        let text = substring(this.src, start, this.pos)
         return Token { kind: TOK_SYMBOL, text: text, pos: start }
     }
 }
@@ -183,7 +184,7 @@ pub type ProtoParser {
 }
 
 impl ProtoParser {
-    func new(src: Str) -> ProtoParser {
+    pub func new(src: Str) -> ProtoParser {
         var tz = Tokenizer::new(src)
         let tokens = List[Token]::new(128)
         loop (true) {
@@ -195,30 +196,30 @@ impl ProtoParser {
         ProtoParser { tokens: tokens, pos: 0 }
     }
 
-    func peek(this) -> Token {
+    pub func peek(this) -> Token {
         if this.pos >= this.tokens.len() {
             return Token { kind: TOK_EOF, text: "", pos: 0 }
         }
         return this.tokens.get(this.pos)
     }
 
-    func advance(mut this) -> Token {
+    pub func advance(mut this) -> Token {
         let tok = this.peek()
         this.pos = this.pos + 1
         return tok
     }
 
-    func expect_ident(mut this) -> Str {
+    pub func expect_ident(mut this) -> Str {
         let tok = this.advance()
         return tok.text
     }
 
-    func expect_symbol(mut this, sym: Str) {
+    pub func expect_symbol(mut this, sym: Str) {
         let tok = this.advance()
         // silently ignore if mismatch (lenient parser)
     }
 
-    func expect_number(mut this) -> I64 {
+    pub func expect_number(mut this) -> I64 {
         let tok = this.advance()
         let Just(n) = tok.text.parse_i64() else { return 0 }
         return n
@@ -226,7 +227,7 @@ impl ProtoParser {
 
     // ---- Top-level parsing ----
 
-    func run(mut this) -> ProtoFile {
+    pub func run(mut this) -> ProtoFile {
         var file = ProtoFile {
             syntax: "proto3",
             package: "",
@@ -260,7 +261,7 @@ impl ProtoParser {
         return file
     }
 
-    func parse_syntax(mut this, file: mut ref ProtoFile) {
+    pub func parse_syntax(mut this, file: mut ref ProtoFile) {
         this.advance() // "syntax"
         this.expect_symbol("=")
         let tok = this.advance() // string
@@ -268,7 +269,7 @@ impl ProtoParser {
         this.expect_symbol(";")
     }
 
-    func parse_package(mut this, file: mut ref ProtoFile) {
+    pub func parse_package(mut this, file: mut ref ProtoFile) {
         this.advance() // "package"
         file.package = this.expect_ident()
         this.expect_symbol(";")
@@ -276,7 +277,7 @@ impl ProtoParser {
 
     // ---- Message parsing ----
 
-    func parse_message(mut this) -> MessageDescriptor {
+    pub func parse_message(mut this) -> MessageDescriptor {
         this.advance() // "message"
         let name = this.expect_ident()
         this.expect_symbol("{")
@@ -328,7 +329,7 @@ impl ProtoParser {
         return msg
     }
 
-    func parse_field(mut this, is_repeated: Bool, is_optional: Bool) -> FieldDescriptor {
+    pub func parse_field(mut this, is_repeated: Bool, is_optional: Bool) -> FieldDescriptor {
         let type_name = this.expect_ident()
         let field_name = this.expect_ident()
         this.expect_symbol("=")
@@ -356,7 +357,7 @@ impl ProtoParser {
         }
     }
 
-    func parse_oneof(mut this, msg: mut ref MessageDescriptor) {
+    pub func parse_oneof(mut this, msg: mut ref MessageDescriptor) {
         this.advance() // "oneof"
         let oneof_name = this.expect_ident()
         this.expect_symbol("{")
@@ -368,7 +369,7 @@ impl ProtoParser {
         this.expect_symbol("}")
     }
 
-    func parse_map_field(mut this, msg: mut ref MessageDescriptor) {
+    pub func parse_map_field(mut this, msg: mut ref MessageDescriptor) {
         this.advance() // "map"
         this.expect_symbol("<")
         let key_type_name = this.expect_ident()
@@ -387,7 +388,7 @@ impl ProtoParser {
 
     // ---- Enum parsing ----
 
-    func parse_enum(mut this) -> EnumDescriptor {
+    pub func parse_enum(mut this) -> EnumDescriptor {
         this.advance() // "enum"
         let name = this.expect_ident()
         this.expect_symbol("{")
@@ -423,7 +424,7 @@ impl ProtoParser {
 
     // ---- Type mapping ----
 
-    func type_name_to_field_type(name: Str) -> FieldType {
+    pub func type_name_to_field_type(name: Str) -> FieldType {
         if name == "double"   { return FieldType::Double }
         if name == "float"    { return FieldType::Float }
         if name == "int32"    { return FieldType::Int32 }
@@ -443,7 +444,7 @@ impl ProtoParser {
         return FieldType::Message
     }
 
-    func is_packable_type(ft: FieldType) -> Bool {
+    pub func is_packable_type(ft: FieldType) -> Bool {
         when ft {
             FieldType::Double => true,
             FieldType::Float => true,

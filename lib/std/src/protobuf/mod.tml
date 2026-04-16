@@ -24,6 +24,18 @@
 //! let id = r.read_varint()
 //! ```
 
+// Submodule declarations (required for meta preload discovery)
+pub mod wire
+pub mod varint
+pub mod types
+pub mod writer
+pub mod reader
+pub mod message
+pub mod descriptor
+pub mod packed
+pub mod proto_parser
+pub mod codegen
+
 // Wire type constants and tag helpers
 pub use std::protobuf::wire::{
     WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_SGROUP, WIRE_EGROUP, WIRE_FIXED32,
