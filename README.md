@@ -752,8 +752,25 @@ TML ships with a comprehensive standard library covering:
 | `std::os` | Environment variables, system info, CLI args |
 | `std::log` | Structured logging with levels and sinks |
 | `std::search` | BM25 text index, HNSW vector index, TF-IDF vectorizer, SIMD distance |
+| `std::msgpack` | MessagePack binary serialization — encoder, decoder, type system |
+| `std::protobuf` | Protocol Buffers wire format — full proto3, .proto parser, TML codegen |
 | `std::promise` | JavaScript-style Promise[T] with resolve/reject/then/catch/all/race |
 | `std::observable` | Reactive streams with 8 operators + Subject variants |
+
+---
+
+## Performance
+
+TML generates code competitive with Rust via LLVM optimization:
+
+| Benchmark | TML | Rust | Ratio |
+|-----------|-----|------|-------|
+| List iteration sum (10M I64, AVX-512) | 4.32B ops/s | 4.57B ops/s | **1.06×** |
+| Binary size (hello world) | 42 KB | 127 KB | **TML 3× smaller** |
+| Cold `tml check` (with meta cache) | 0.68s | — | — |
+
+The list iteration benchmark produces identical optimized IR to Rust: 5-instruction
+scalar loop, `<8 x i64>` AVX-512 SIMD with 4 accumulators (32 elements/iteration).
 
 ---
 
