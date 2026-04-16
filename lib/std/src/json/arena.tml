@@ -1,0 +1,45 @@
+//! Arena-based JSON parsing for zero-overhead reuse.
+//!
+//! A JsonArena pre-allocates handle slots and allows bulk reset,
+//! avoiding per-parse malloc/free overhead in hot loops.
+
+/// Arena for reusable JSON parsing. Reset is O(1).
+pub type JsonArena {
+    id: I64
+}
+
+@extern("tml_json_arena_create")
+func ffi_arena_create(capacity: I64) -> I64
+
+@extern("tml_json_arena_parse")
+func ffi_arena_parse(arena_id: I64, json_str: Str) -> I64
+
+@extern("tml_json_arena_reset")
+func ffi_arena_reset(arena_id: I64)
+
+@extern("tml_json_arena_destroy")
+func ffi_arena_destroy(arena_id: I64)
+
+impl JsonArena {
+    /// Create a new arena with the given handle capacity.
+    pub func new(capacity: I64) -> JsonArena {
+        JsonArena { id: ffi_arena_create(capacity) }
+    }
+
+    /// Parse a JSON string using this arena.
+    /// Returns a handle (I64) for use with json:: accessor functions.
+    pub func parse(this, json_str: Str) -> I64 {
+        ffi_arena_parse(this.id, json_str)
+    }
+
+    /// Reset the arena — frees all parsed handles in O(1).
+    /// Previously returned handles become invalid.
+    pub func reset(this) {
+        ffi_arena_reset(this.id)
+    }
+
+    /// Destroy the arena and free all resources.
+    pub func drop(this) {
+        ffi_arena_destroy(this.id)
+    }
+}

@@ -988,3 +988,72 @@ TML_EXPORT int64_t tml_json_object_value_at(int64_t handle, int64_t index) {
 
     return alloc_json_handle(it->second.clone());
 }
+
+// ============================================================================
+// Arena-based JSON Parsing
+// ============================================================================
+
+// Arena: holds a set of parsed JSON handles for bulk reset
+struct JsonArena {
+    std::vector<int64_t> handles;  // handles allocated in this arena
+    size_t capacity;
+
+    explicit JsonArena(size_t cap) : capacity(cap) {
+        handles.reserve(cap);
+    }
+};
+
+static std::vector<JsonArena*> json_arenas;
+
+TML_EXPORT int64_t tml_json_arena_create(int64_t capacity) {
+    auto* arena = new JsonArena(capacity > 0 ? static_cast<size_t>(capacity) : 64);
+    json_arenas.push_back(arena);
+    return static_cast<int64_t>(json_arenas.size() - 1);
+}
+
+TML_EXPORT int64_t tml_json_arena_parse(int64_t arena_id, const char* json_str) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return -1;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena || !json_str) return -1;
+
+    // Parse using fast parser
+    auto result = tml::json::fast::parse_json_fast(json_str);
+    if (!tml::is_ok(result)) return -1;
+
+    int64_t handle = alloc_json_handle(std::move(tml::unwrap(result)));
+    arena->handles.push_back(handle);
+    return handle;
+}
+
+TML_EXPORT void tml_json_arena_reset(int64_t arena_id) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena) return;
+
+    // Free all handles in this arena
+    for (int64_t h : arena->handles) {
+        if (h >= 0 && static_cast<size_t>(h) < json_values.size()) {
+            json_values[static_cast<size_t>(h)] = tml::json::JsonValue();
+            json_values_free[static_cast<size_t>(h)] = true;
+            if (static_cast<size_t>(h) < json_values_next_free)
+                json_values_next_free = static_cast<size_t>(h);
+        }
+    }
+    arena->handles.clear();
+}
+
+TML_EXPORT void tml_json_arena_destroy(int64_t arena_id) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena) return;
+
+    // Free all handles
+    tml_json_arena_reset(arena_id);
+
+    // Delete arena
+    delete arena;
+    json_arenas[static_cast<size_t>(arena_id)] = nullptr;
+}
