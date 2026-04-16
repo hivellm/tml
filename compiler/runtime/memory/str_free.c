@@ -139,14 +139,16 @@ TML_EXPORT void tml_str_free(void* ptr) {
     if (tml_is_image_ptr((uintptr_t)ptr)) {
         return; // String constant in .rdata — do not free
     }
-    // Slow path: validate heap pointer before freeing.
-    // HeapValidate catches double-frees and stale pointers (~100ns, but
-    // this path is rare — the codegen optimization eliminates tml_str_free
-    // for constant concat chains, so this only runs for genuine heap strings).
-    HANDLE heap = GetProcessHeap();
-    if (HeapValidate(heap, 0, ptr)) {
-        mem_free(ptr);
-    }
+    // Outside every loaded PE image → genuine heap allocation. The codegen
+    // only emits `tml_str_free` for pointers that its `is_heap_str_producer`
+    // / `holds_heap_str` tracking believes are heap-origin, so a pointer
+    // that cleared the image-range check is always free-safe. Previously
+    // we also called `HeapValidate` (~100 ns on Windows) as a defensive
+    // double-check; phase1i removes that call because the codegen-side
+    // ownership tracking makes it redundant. Heap corruption in the
+    // tracked path would be a codegen bug, not a runtime misuse, and is
+    // caught earlier by the CRT's own debug heap in debug builds.
+    mem_free(ptr);
 #elif defined(__GLIBC__) || defined(__linux__)
     // malloc_usable_size returns 0 for non-heap pointers on glibc
     extern size_t malloc_usable_size(void*);
