@@ -185,6 +185,13 @@ TML_EXPORT int64_t tml_json_parse_fast(const char* json_str) {
         g_json_stats.parse_count++;
     ScopedTimer timer(g_json_stats.parse_time_ns, g_json_stats.enabled);
 
+    // The `parse_json_fast(input, JsonArena*)` overload exists for callers
+    // that can also switch `JsonValue` to arena-backed string storage.
+    // Without that storage change, plumbing an arena through the parser
+    // only adds the per-parse intern-table overhead (reset +
+    // intern_common_keys) without any offsetting savings, so the FFI
+    // entry point keeps the non-arena path until phase1f refactors
+    // `JsonValue` to consume arena-backed `string_view`s.
     auto result = tml::json::fast::parse_json_fast(json_str);
     if (tml::is_ok(result)) {
         return alloc_json_handle(std::move(tml::unwrap(result)));

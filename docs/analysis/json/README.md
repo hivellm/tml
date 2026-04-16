@@ -54,6 +54,21 @@ residual overhead is the FFI handle-allocation cost and per-call
 dispatch, not the clone. Handle-pool amortization is the natural next
 step but is out of scope for phase1.
 
+## Phase 1e update (2026-04-16, arena parser overload)
+
+`FastJsonParser` gains a constructor that accepts an external
+`JsonArena*`, and `parse_json_fast` gains a matching overload so
+callers can share an arena across parses. The FFI entry point keeps
+the non-arena path — a direct `thread_local JsonArena arena; reset();`
+wiring regressed every benchmark by 30-60% because `reset()` rebuilds
+the common-keys intern table on every parse and those savings require
+`JsonValue` to consume arena-backed `string_view`s (a refactor out of
+phase1 scope).
+
+F-003 (arena dead code) is **partially resolved** — the arena is now
+reachable from the parser; the full wall-clock win is gated on the
+`JsonValue` storage refactor.
+
 ## Documents
 
 | File | Description |

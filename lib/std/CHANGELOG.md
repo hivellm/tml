@@ -5,6 +5,26 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.34] — 2026-04-16
+
+### Changed — `std::json` phase1e (arena parser overload)
+
+Threads `JsonArena` through `FastJsonParser` and adds a
+`parse_json_fast(input, JsonArena*)` overload so callers can now share a
+bump-allocated arena across parses.
+
+The FFI entry point (`tml_json_parse_fast`) intentionally keeps the
+non-arena path until `JsonValue`'s string storage is refactored. A
+direct experiment wiring `thread_local JsonArena arena; arena.reset();`
+into the FFI regressed every benchmark by 30-60% because the arena's
+`reset()` rebuilds the common-keys intern table on every parse and that
+cost is not offset by any allocation savings while `JsonValue` still
+stores `std::string` by value. The overload is in place so the follow-
+up `JsonValue`-refactor phase can switch in with a one-line change.
+
+Behaviour unchanged for all existing callers; all 23 std/json test
+suites pass.
+
 ## [0.3.33] — 2026-04-16
 
 ### Changed — `std::json` phase1d (borrowed handles for accessors)

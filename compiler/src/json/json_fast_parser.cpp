@@ -551,6 +551,14 @@ FastJsonParser::FastJsonParser(std::string_view input)
     string_buffer_.reserve(256); // Pre-allocate for typical strings
 }
 
+FastJsonParser::FastJsonParser(std::string_view input, JsonArena* arena)
+    : input_(input.data()),
+      pos_(input.data()),
+      end_(input.data() + input.size()),
+      arena_(arena) {
+    string_buffer_.reserve(256);
+}
+
 void FastJsonParser::skip_ws() {
     pos_ = skip_whitespace_simd(pos_, end_);
 }
@@ -1040,6 +1048,12 @@ auto FastJsonParser::parse_keyword() -> Result<JsonValue, JsonError> {
 
 auto parse_json_fast(std::string_view input) -> Result<JsonValue, JsonError> {
     FastJsonParser parser(input);
+    return parser.parse();
+}
+
+auto parse_json_fast(std::string_view input, JsonArena* arena)
+    -> Result<JsonValue, JsonError> {
+    FastJsonParser parser(input, arena);
     return parser.parse();
 }
 
