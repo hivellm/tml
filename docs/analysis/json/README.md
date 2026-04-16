@@ -16,6 +16,25 @@ flat `std::vector<std::pair<std::string, JsonValue>>` with `reserve(8)` in
 The remaining gap to serde_json is mostly in F-002/F-003/F-004 (Box
 indirection, value cloning, string allocation) — tracked in phase1c/d/e.
 
+## Phase 1c update (2026-04-16, `parse_string` fast path)
+
+| Operation | Baseline (phase1b) | After phase1c |
+|-----------|--------------------|---------------|
+| Parse Small (200B) | 9,494 ns | 9,949 ns |
+
+`parse_string()` now splits into two paths: a fast path that detects
+escape-free strings via a leading `find_string_special_simd` scan and
+constructs the result directly from the input view (bypassing
+`string_buffer_`), and a slow path that still uses `string_buffer_` for
+strings containing `\n`, `\t`, `\u`, etc. Correctness unchanged — all 22
+std/json test suites pass.
+
+The raw wall-clock improvement is not realized yet because `JsonValue`
+still stores `std::string` by value, so the fast path copies bytes into
+a fresh heap allocation. The structural refactor here is the prerequisite
+for phase1d (F-003), which changes `JsonValue`'s string storage so the
+fast path can return views without copying.
+
 ## Documents
 
 | File | Description |

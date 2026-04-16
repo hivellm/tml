@@ -5,6 +5,26 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.32] — 2026-04-16
+
+### Changed — `std::json` phase1c (parse_string fast path)
+
+`parse_string()` in `compiler/src/json/json_fast_parser.cpp` now has a
+two-path structure:
+
+* **Fast path**: run `find_string_special_simd` first. If the next
+  special byte is the closing quote, construct the result
+  `std::string(start, len)` directly from the input view, bypassing
+  `string_buffer_` entirely.
+* **Slow path**: unchanged — strings containing escape sequences or
+  control bytes still use the `string_buffer_` append loop.
+
+This is the structural prerequisite for phase1d (F-003), which changes
+`JsonValue`'s string storage so the fast path can return a view without
+copying. The raw benchmark wall-clock is unchanged (the path still
+allocates a new `std::string` because `JsonValue` stores strings by
+value), but correctness holds across all 22 std/json test suites.
+
 ## [0.3.31] — 2026-04-16
 
 ### Added — `std::msgpack` phase1b (spec completion)

@@ -632,6 +632,23 @@ auto FastJsonParser::parse_string() -> Result<std::string, JsonError> {
     ++pos_; // Skip opening quote
     ++column_;
 
+    // Fast path: scan for the closing quote without seeing any escape
+    // sequence. For the ~80% of JSON strings that contain no escapes we
+    // construct the std::string directly from the input view and skip
+    // the per-parse append into `string_buffer_` entirely (saves one
+    // allocation per string for small strings that fit in SSO, and keeps
+    // `string_buffer_`'s allocation intact for reuse on the slow path).
+    const char* fast_start = pos_;
+    const char* fast_special = find_string_special_simd(pos_, end_);
+    if (fast_special < end_ && *fast_special == '"') {
+        column_ += static_cast<size_t>(fast_special - pos_);
+        pos_ = fast_special + 1;  // step past closing quote
+        ++column_;
+        return std::string(fast_start, static_cast<size_t>(fast_special - fast_start));
+    }
+
+    // Slow path: at least one escape or control byte in the string.
+    // Reuse the pre-allocated `string_buffer_` (cleared, but capacity kept).
     string_buffer_.clear();
 
     while (pos_ < end_) {
