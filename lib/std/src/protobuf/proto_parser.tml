@@ -19,7 +19,8 @@
 use std::collections::List
 use core::str::substring
 use std::protobuf::types::FieldType
-use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor, scalar_field, repeated_field, optional_field, map_field}
+use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor, scalar_field, repeated_field, optional_field, map_field, oneof_field}
+use std::file::file::File
 
 // ============================================================================
 // Data model
@@ -362,9 +363,13 @@ impl ProtoParser {
         let oneof_name = this.expect_ident()
         this.expect_symbol("{")
 
+        let oneof_idx = msg.add_oneof(oneof_name)
+
         loop (this.peek().kind != TOK_EOF and this.peek().text != "}") {
-            let field = this.parse_field(false, true) // oneof fields are optional
-            msg.add_field(field)
+            let parsed = this.parse_field(false, true)
+            let member = oneof_field(parsed.name, parsed.number, parsed.field_type, oneof_idx)
+            msg.add_field(member)
+            msg.add_oneof_member(oneof_idx, parsed.number)
         }
         this.expect_symbol("}")
     }
@@ -479,4 +484,21 @@ impl ProtoParser {
 pub func parse_proto(src: Str) -> ProtoFile {
     var parser = ProtoParser::new(src)
     return parser.run()
+}
+
+/// Reads a `.proto` file from disk and parses it into a ProtoFile.
+/// Returns Err if the file cannot be opened or is empty.
+pub func parse_proto_file(path: Str) -> Outcome[ProtoFile, Str] {
+    let src = File::read_all(path)
+    // `File::read_all` returns a NULL string when the file cannot be opened.
+    // Compare the raw pointer against 0 before calling any Str methods to avoid
+    // a null-pointer deref in `len()`.
+    let ptr: I64 = lowlevel { src as I64 }
+    if ptr == 0 {
+        return Err("file not found: " + path)
+    }
+    if src.len() == 0 {
+        return Err("empty file: " + path)
+    }
+    return Ok(parse_proto(src))
 }

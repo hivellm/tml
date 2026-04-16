@@ -35,6 +35,7 @@ pub mod descriptor
 pub mod packed
 pub mod proto_parser
 pub mod codegen
+pub mod well_known
 
 // Wire type constants and tag helpers
 pub use std::protobuf::wire::{
@@ -48,21 +49,21 @@ pub use std::protobuf::varint::{
 }
 
 // Types
-pub use std::protobuf::types::{ProtoTag, FieldType, field_type_wire_type, field_type_default_i64}
+pub use std::protobuf::types::{ProtoTag, FieldType, ProtoError, proto_error_from_str, field_type_wire_type, field_type_default_i64}
 
 // Encoder
 pub use std::protobuf::writer::ProtoWriter
 
 // Decoder
-pub use std::protobuf::reader::ProtoReader
+pub use std::protobuf::reader::{ProtoReader, MapEntrySS, MapEntrySI, MapEntryIS, MapEntryII}
 
 // Message behavior
 pub use std::protobuf::message::{ProtoMessage, encode_length_delimited, decode_length_delimited}
 
 // Descriptors
 pub use std::protobuf::descriptor::{
-    FieldDescriptor, MessageDescriptor,
-    scalar_field, repeated_field, optional_field, map_field
+    FieldDescriptor, MessageDescriptor, OneofDescriptor,
+    scalar_field, repeated_field, optional_field, map_field, oneof_field
 }
 
 // Packed repeated fields
@@ -75,7 +76,10 @@ pub use std::protobuf::packed::{
 }
 
 // Proto file parser (.proto → descriptors)
-pub use std::protobuf::proto_parser::{parse_proto, ProtoFile, EnumDescriptor, EnumValue}
+pub use std::protobuf::proto_parser::{parse_proto, parse_proto_file, ProtoFile, EnumDescriptor, EnumValue}
 
 // TML code generator (descriptors → TML source)
-pub use std::protobuf::codegen::generate_tml
+pub use std::protobuf::codegen::{generate_tml, generate_to_file}
+
+// Well-known types (google.protobuf.*)
+pub use std::protobuf::well_known::{Timestamp, Duration, Any}

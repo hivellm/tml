@@ -8,6 +8,30 @@ use std::collections::Buffer
 use std::protobuf::types::ProtoTag
 use std::protobuf::varint::zigzag_decode
 
+/// Result of decoding a `map<string, string>` entry.
+pub type MapEntrySS {
+    key: Str,
+    value: Str,
+}
+
+/// Result of decoding a `map<string, int64>` entry.
+pub type MapEntrySI {
+    key: Str,
+    value: I64,
+}
+
+/// Result of decoding a `map<int64, string>` entry.
+pub type MapEntryIS {
+    key: I64,
+    value: Str,
+}
+
+/// Result of decoding a `map<int64, int64>` entry.
+pub type MapEntryII {
+    key: I64,
+    value: I64,
+}
+
 /// A Protocol Buffers decoder that reads from a byte buffer.
 pub type ProtoReader {
     buf: Buffer,
@@ -323,5 +347,109 @@ impl ProtoReader {
         let tag_r = this.read_tag()
         let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return Err(e) } }
         return this.skip_field(tag.wire_type)
+    }
+
+    // ==================================================================
+    // Map entry helpers
+    // ==================================================================
+    //
+    // proto3 map entries are submessages with field 1 = key, field 2 = value.
+    // Missing fields get the zero value per proto3 semantics.
+    //
+    // Usage: after `read_tag()` returns a tag whose `field_num` matches a
+    // map field, call `read_message_bytes()` to get a sub-reader and pass
+    // it to the appropriate `decode_map_entry_*` helper.
+
+    /// Decodes a map entry submessage with string key and string value.
+    /// Unknown fields in the entry are skipped. Missing fields default to "".
+    pub func decode_map_entry_ss(mut this) -> Outcome[MapEntrySS, Str] {
+        var key: Str = ""
+        var value: Str = ""
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 2 {
+                let k_r = this.read_string()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 2 {
+                let v_r = this.read_string()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntrySS { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with string key and int64 value.
+    pub func decode_map_entry_si(mut this) -> Outcome[MapEntrySI, Str] {
+        var key: Str = ""
+        var value: I64 = 0
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 2 {
+                let k_r = this.read_string()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v_r = this.read_varint()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntrySI { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with int64 key and string value.
+    pub func decode_map_entry_is(mut this) -> Outcome[MapEntryIS, Str] {
+        var key: I64 = 0
+        var value: Str = ""
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                let k_r = this.read_varint()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 2 {
+                let v_r = this.read_string()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntryIS { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with int64 key and int64 value.
+    pub func decode_map_entry_ii(mut this) -> Outcome[MapEntryII, Str] {
+        var key: I64 = 0
+        var value: I64 = 0
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                let k_r = this.read_varint()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v_r = this.read_varint()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntryII { key: key, value: value })
     }
 }

@@ -305,4 +305,46 @@ impl ProtoWriter {
             this.buf.write_byte(data.read_u8(i))
         }
     }
+
+    // ==================================================================
+    // Map entry helpers
+    // ==================================================================
+    //
+    // In proto3, `map<K, V>` is wire-equivalent to
+    //     repeated Entry { K key = 1; V value = 2; }
+    // Each map entry is an independent sub-message. These helpers build
+    // a single entry and emit it with the map field's tag.
+
+    /// Writes a single map entry with string key and string value
+    /// (tag + length-prefixed Entry submessage).
+    pub func write_field_map_entry_ss(mut this, field_num: I64, key: Str, value: Str) {
+        var sub: ProtoWriter = ProtoWriter::new()
+        sub.write_field_string(1, key)
+        sub.write_field_string(2, value)
+        this.write_field_message(field_num, ref sub)
+    }
+
+    /// Writes a single map entry with string key and int64 value.
+    pub func write_field_map_entry_si(mut this, field_num: I64, key: Str, value: I64) {
+        var sub: ProtoWriter = ProtoWriter::new()
+        sub.write_field_string(1, key)
+        sub.write_field_int64(2, value)
+        this.write_field_message(field_num, ref sub)
+    }
+
+    /// Writes a single map entry with int64 key and string value.
+    pub func write_field_map_entry_is(mut this, field_num: I64, key: I64, value: Str) {
+        var sub: ProtoWriter = ProtoWriter::new()
+        sub.write_field_int64(1, key)
+        sub.write_field_string(2, value)
+        this.write_field_message(field_num, ref sub)
+    }
+
+    /// Writes a single map entry with int64 key and int64 value.
+    pub func write_field_map_entry_ii(mut this, field_num: I64, key: I64, value: I64) {
+        var sub: ProtoWriter = ProtoWriter::with_capacity(24)
+        sub.write_field_int64(1, key)
+        sub.write_field_int64(2, value)
+        this.write_field_message(field_num, ref sub)
+    }
 }

@@ -5,6 +5,68 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.29] — 2026-04-16
+
+### Added — `std::protobuf` phase1a (production-readiness)
+
+- **Float/Double bitcast verified** — `write_float`/`read_float`/`write_double`/`read_double`
+  already delegated to `Buffer::write_f32_le`/`read_f32_le`/`write_f64_le`/`read_f64_le`
+  (IEEE 754 via type-punned memory). Added `protobuf_float.test.tml` covering
+  roundtrip + canonical wire bytes (`3.14f = 0xC3 0xF5 0x48 0x40` LE).
+- **Packed repeated end-to-end** — `write_packed_varints`/`read_packed_varints`,
+  `write_packed_fixed32`/`read_packed_fixed32` now have regression tests
+  (`protobuf_packed.test.tml`): encode `[1,2,3,150,300]`, decode, verify; empty
+  list emits zero bytes.
+- **Map fields** — added `write_field_map_entry_{ss,si,is,ii}` to `ProtoWriter`
+  and `decode_map_entry_{ss,si,is,ii}` to `ProtoReader`, returning
+  `MapEntrySS/SI/IS/II` structs (tuple returns cause codegen bugs with
+  mixed `Str+I64` payloads — see AGENTS.override.md T6). Codegen detects
+  `is_map` fields and generates `HashMap[K,V]` storage + per-entry encode/decode.
+- **Oneof support** — added `OneofDescriptor`, `MessageDescriptor.oneof_groups`,
+  and `FieldDescriptor.oneof_index`. `oneof_field()` constructor and
+  `parse_oneof` populate the group metadata. Tests cover descriptor shape,
+  parser behavior, and proto3 last-one-wins decode semantics.
+- **Proto3 default-value omission** — generated encoders now wrap scalar field
+  writes in `if this.field != default { writer.write_field_...(num, value) }`
+  so all-default messages serialize to 0 bytes.
+- **Interop validation** — `protobuf_interop.test.tml` checks encoded bytes
+  against canonical protobuf wire-format sequences (identical to what
+  `google.golang.org/protobuf`, C++, Python emit) for Person, packed repeated
+  int32, enum, and nested message.
+- **Well-known types** — new `lib/std/src/protobuf/well_known.tml` implements
+  `Timestamp { seconds: I64, nanos: I32 }`, `Duration { ... }`, and
+  `Any { type_url: Str, value: Str }` with encode/decode and proto3 default
+  omission. Constructors `Timestamp::from_unix`, `::from_parts`, `::now` and
+  matching `Duration::from_parts`.
+- **File I/O** — `parse_proto_file(path: Str) -> Outcome[ProtoFile, Str]` reads
+  a `.proto` from disk (with null-pointer guard against `file_read_all`
+  returning NULL), and `generate_to_file(proto, path)` writes the generated
+  TML source.
+- **Structured errors** — `ProtoError` enum (`Eof`, `InvalidWireType(I64)`,
+  `InvalidVarint`, `BufferOverflow`, `NegativeLength`, `InvalidUtf8`,
+  `UnexpectedField(I64)`, `Custom(Str)`) with `to_string()` and
+  `proto_error_from_str()` for incremental migration from the existing
+  `Outcome[T, Str]` reader API.
+
+### Test coverage added
+
+- `protobuf_float.test.tml` — 4 tests (roundtrip + wire bytes for F32/F64)
+- `protobuf_packed.test.tml` — 4 tests (varint/fixed32 packed, empty case)
+- `protobuf_map.test.tml` — 7 tests (ii/ss/si/is roundtrips, missing field defaults)
+- `protobuf_oneof.test.tml` — 4 tests (descriptor shape, parser, last-one-wins)
+- `protobuf_defaults.test.tml` — 4 tests (guards in generated code, omitted scalars)
+- `protobuf_interop.test.tml` — 6 tests (canonical wire bytes, nested, packed, enum)
+- `protobuf_well_known.test.tml` — 7 tests (Timestamp/Duration/Any roundtrip)
+- `protobuf_file_io.test.tml` — 2 tests (parse from disk, missing-file error)
+- `protobuf_errors.test.tml` — 10 tests (ProtoError variants + Str conversion)
+
+### Discovery
+
+- `ProtoWriter.to_bytes()` returns a `Str` which is NUL-terminated and truncates
+  at the first 0x00 byte. Binary wire bytes (fixed32/fixed64/float/double)
+  contain NULs. **Always** construct readers via `ProtoReader::from_buffer(ref buf)`
+  for roundtrip tests — `ProtoReader::new(w.to_bytes())` will silently drop data.
+
 ## [0.3.28] — 2026-04-15
 
 ### Added

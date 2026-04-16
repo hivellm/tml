@@ -1,0 +1,57 @@
+/// Tests for ProtoError enum (phase1a items 9.1-9.4).
+
+use test::*
+use std::protobuf::{ProtoError, proto_error_from_str}
+use std::events::EventEmitter
+
+@test func test_proto_error_to_string_eof() {
+    let e = ProtoError::Eof
+    assert_eq(e.to_string(), "unexpected end of input")
+}
+
+@test func test_proto_error_to_string_invalid_varint() {
+    let e = ProtoError::InvalidVarint
+    assert_eq(e.to_string(), "varint too long")
+}
+
+@test func test_proto_error_to_string_custom() {
+    let e = ProtoError::Custom("boom")
+    assert_eq(e.to_string(), "boom")
+}
+
+@test func test_proto_error_to_string_invalid_wire_type() {
+    let e = ProtoError::InvalidWireType(7)
+    assert_eq(e.to_string(), "invalid wire type")
+}
+
+@test func test_proto_error_to_string_buffer_overflow() {
+    let e = ProtoError::BufferOverflow
+    assert_eq(e.to_string(), "not enough bytes")
+}
+
+@test func test_proto_error_to_string_negative_length() {
+    let e = ProtoError::NegativeLength
+    assert_eq(e.to_string(), "negative length")
+}
+
+@test func test_proto_error_to_string_unexpected_field() {
+    let e = ProtoError::UnexpectedField(42)
+    assert_eq(e.to_string(), "unexpected field")
+}
+
+@test func test_proto_error_to_string_invalid_utf8() {
+    let e = ProtoError::InvalidUtf8
+    assert_eq(e.to_string(), "invalid UTF-8")
+}
+
+@test func test_proto_error_from_str_eof() {
+    let e = proto_error_from_str("unexpected end of input")
+    let s = e.to_string()
+    assert_eq(s, "unexpected end of input")
+}
+
+@test func test_proto_error_from_str_fallback_custom() {
+    let e = proto_error_from_str("something unusual")
+    let s = e.to_string()
+    assert_eq(s, "something unusual")
+}

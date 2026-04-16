@@ -25,7 +25,19 @@ pub type FieldDescriptor {
     /// For map fields, the key type.
     map_key_type: Maybe[FieldType],
     /// For map fields, the value type.
-    map_value_type: Maybe[FieldType]
+    map_value_type: Maybe[FieldType],
+    /// Index into `MessageDescriptor.oneof_groups` if this field belongs to a oneof.
+    /// -1 indicates the field is not part of any oneof group.
+    oneof_index: I64
+}
+
+/// Describes a `oneof` group within a message: a set of fields of which at most
+/// one may be set at a time. Proto3 decoders use last-one-wins semantics.
+pub type OneofDescriptor {
+    /// The oneof group name from the .proto definition.
+    name: Str,
+    /// Field numbers of the fields in this oneof group (in declaration order).
+    field_numbers: List[I64]
 }
 
 /// Creates a simple scalar field descriptor with common defaults.
@@ -39,7 +51,8 @@ pub func scalar_field(name: Str, number: I64, field_type: FieldType) -> FieldDes
         is_optional: false,
         is_map: false,
         map_key_type: Nothing,
-        map_value_type: Nothing
+        map_value_type: Nothing,
+        oneof_index: -1
     }
 }
 
@@ -54,7 +67,8 @@ pub func repeated_field(name: Str, number: I64, field_type: FieldType, packed: B
         is_optional: false,
         is_map: false,
         map_key_type: Nothing,
-        map_value_type: Nothing
+        map_value_type: Nothing,
+        oneof_index: -1
     }
 }
 
@@ -69,7 +83,8 @@ pub func optional_field(name: Str, number: I64, field_type: FieldType) -> FieldD
         is_optional: true,
         is_map: false,
         map_key_type: Nothing,
-        map_value_type: Nothing
+        map_value_type: Nothing,
+        oneof_index: -1
     }
 }
 
@@ -84,7 +99,24 @@ pub func map_field(name: Str, number: I64, key_type: FieldType, value_type: Fiel
         is_optional: false,
         is_map: true,
         map_key_type: Just(key_type),
-        map_value_type: Just(value_type)
+        map_value_type: Just(value_type),
+        oneof_index: -1
+    }
+}
+
+/// Creates a field descriptor belonging to a oneof group.
+pub func oneof_field(name: Str, number: I64, field_type: FieldType, oneof_index: I64) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: field_type,
+        is_repeated: false,
+        is_packed: false,
+        is_optional: true,
+        is_map: false,
+        map_key_type: Nothing,
+        map_value_type: Nothing,
+        oneof_index: oneof_index
     }
 }
 
@@ -93,7 +125,10 @@ pub type MessageDescriptor {
     /// The message name from the .proto definition.
     name: Str,
     /// The fields in this message.
-    fields: List[FieldDescriptor]
+    fields: List[FieldDescriptor],
+    /// The `oneof` groups declared in this message. A field is in oneof group
+    /// `i` when its `oneof_index == i`.
+    oneof_groups: List[OneofDescriptor]
 }
 
 impl MessageDescriptor {
@@ -101,8 +136,30 @@ impl MessageDescriptor {
     pub func new(name: Str) -> MessageDescriptor {
         MessageDescriptor {
             name: name,
-            fields: List[FieldDescriptor]::new()
+            fields: List[FieldDescriptor]::new(),
+            oneof_groups: List[OneofDescriptor]::new()
         }
+    }
+
+    /// Registers a new oneof group and returns its index.
+    pub func add_oneof(mut this, oneof_name: Str) -> I64 {
+        let idx: I64 = this.oneof_groups.len()
+        this.oneof_groups.push(OneofDescriptor {
+            name: oneof_name,
+            field_numbers: List[I64]::new()
+        })
+        return idx
+    }
+
+    /// Records that a field number belongs to the given oneof group.
+    /// Call after `add_field` and `add_oneof`.
+    pub func add_oneof_member(mut this, oneof_index: I64, field_number: I64) {
+        if oneof_index < 0 or oneof_index >= this.oneof_groups.len() {
+            return
+        }
+        var g: OneofDescriptor = this.oneof_groups.get(oneof_index)
+        g.field_numbers.push(field_number)
+        this.oneof_groups.set(oneof_index, g)
     }
 
     /// Adds a field to this message descriptor.

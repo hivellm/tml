@@ -7,20 +7,51 @@ use std::collections::List
 use std::protobuf::types::FieldType
 use std::protobuf::descriptor::{FieldDescriptor, MessageDescriptor}
 use std::protobuf::proto_parser::{ProtoFile, EnumDescriptor, EnumValue}
+use std::file::file::File
 
 // ============================================================================
 // TML field type mapping
 // ============================================================================
 
 func tml_type_for_field(fd: ref FieldDescriptor) -> Str {
+    if fd.is_map {
+        let kt = when fd.map_key_type { Just(v) => tml_scalar_type(v), Nothing => "Str" }
+        let vt = when fd.map_value_type { Just(v) => tml_scalar_type(v), Nothing => "Str" }
+        return "HashMap[" + kt + ", " + vt + "]"
+    }
     let scalar_t = tml_scalar_type(fd.field_type)
-    if fd.is_repeated and not fd.is_map {
+    if fd.is_repeated {
         return "List[" + scalar_t + "]"
     }
     if fd.is_optional {
         return "Maybe[" + scalar_t + "]"
     }
     return scalar_t
+}
+
+// Returns the map entry suffix (ss/si/is/ii) for a map field, or "" if unsupported.
+func map_entry_suffix(fd: ref FieldDescriptor) -> Str {
+    if not fd.is_map { return "" }
+    let k = when fd.map_key_type { Just(v) => v, Nothing => FieldType::String }
+    let v = when fd.map_value_type { Just(v) => v, Nothing => FieldType::String }
+    let ks: Str = when k {
+        FieldType::String => "s",
+        FieldType::Int32  => "i",
+        FieldType::Int64  => "i",
+        FieldType::Uint32 => "i",
+        FieldType::Uint64 => "i",
+        _ => "?",
+    }
+    let vs: Str = when v {
+        FieldType::String => "s",
+        FieldType::Int32  => "i",
+        FieldType::Int64  => "i",
+        FieldType::Uint32 => "i",
+        FieldType::Uint64 => "i",
+        _ => "?",
+    }
+    if ks == "?" or vs == "?" { return "" }
+    return ks + vs
 }
 
 func tml_scalar_type(ft: FieldType) -> Str {
@@ -90,9 +121,20 @@ func read_method_for_field(fd: ref FieldDescriptor) -> Str {
 }
 
 func default_value_for_field(fd: ref FieldDescriptor) -> Str {
+    if fd.is_map {
+        let kt = when fd.map_key_type { Just(v) => tml_scalar_type(v), Nothing => "Str" }
+        let vt = when fd.map_value_type { Just(v) => tml_scalar_type(v), Nothing => "Str" }
+        return "HashMap[" + kt + ", " + vt + "]::new()"
+    }
     if fd.is_repeated { return "List::new(4)" }
     if fd.is_optional { return "Nothing" }
-    when fd.field_type {
+    return scalar_default_literal(fd.field_type)
+}
+
+/// Scalar default value literal for a proto3 FieldType (used for struct-init
+/// defaults *and* default-value omission checks at encode time).
+func scalar_default_literal(ft: FieldType) -> Str {
+    when ft {
         FieldType::Double   => "0.0",
         FieldType::Float    => "0.0",
         FieldType::Int32    => "0",
@@ -111,6 +153,21 @@ func default_value_for_field(fd: ref FieldDescriptor) -> Str {
         FieldType::Enum     => "0",
         FieldType::Message  => "\"\"",
     }
+}
+
+// ============================================================================
+// File I/O
+// ============================================================================
+
+/// Generates TML source from a parsed .proto and writes it to `output_path`.
+/// Returns Err if the file cannot be written.
+pub func generate_to_file(proto: ref ProtoFile, output_path: Str) -> Outcome[Unit, Str] {
+    let code = generate_tml(ref proto)
+    let ok = File::write_all(output_path, code)
+    if ok {
+        return Ok(())
+    }
+    return Err("failed to write file: " + output_path)
 }
 
 // ============================================================================
@@ -188,20 +245,36 @@ func generate_message_impl(msg: ref MessageDescriptor) -> Str {
     out = out + "    pub func encode(this, writer: mut ref ProtoWriter) {\n"
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
-        let wm = write_method_for_field(ref fd)
         let fn_str = fd.number.to_string()
-        if fd.is_optional {
+        if fd.is_map {
+            let suffix = map_entry_suffix(ref fd)
+            if suffix == "" {
+                out = out + "        // TODO: unsupported map key/value type for field " + fd.name + "\n"
+            } else {
+                out = out + "        for kv in this." + fd.name + ".entries() {\n"
+                out = out + "            writer.write_field_map_entry_" + suffix + "(" + fn_str + ", kv.0, kv.1)\n"
+                out = out + "        }\n"
+            }
+        } else if fd.is_optional {
+            let wm = write_method_for_field(ref fd)
             out = out + "        when this." + fd.name + " {\n"
             out = out + "            Just(v) => writer." + wm + "(" + fn_str + ", v),\n"
             out = out + "            Nothing => {}\n"
             out = out + "        }\n"
         } else if fd.is_repeated {
+            let wm = write_method_for_field(ref fd)
             out = out + "        for j in 0 to this." + fd.name + ".len() {\n"
             out = out + "            let elem = this." + fd.name + ".get(j)\n"
             out = out + "            writer." + wm + "(" + fn_str + ", elem)\n"
             out = out + "        }\n"
         } else {
-            out = out + "        writer." + wm + "(" + fn_str + ", this." + fd.name + ")\n"
+            let wm = write_method_for_field(ref fd)
+            // Proto3 rule: scalar fields with default values must not be
+            // serialized. Wrap the write in an `if` guard comparing to default.
+            let def_lit = scalar_default_literal(fd.field_type)
+            out = out + "        if this." + fd.name + " != " + def_lit + " {\n"
+            out = out + "            writer." + wm + "(" + fn_str + ", this." + fd.name + ")\n"
+            out = out + "        }\n"
         }
     }
     out = out + "    }\n\n"
@@ -215,17 +288,29 @@ func generate_message_impl(msg: ref MessageDescriptor) -> Str {
     var has_fields: Bool = false
     for i in 0 to msg.field_count() {
         let fd: FieldDescriptor = msg.fields.get(i)
-        let rm = read_method_for_field(ref fd)
         let fn_str = fd.number.to_string()
         let prefix: Str = if has_fields { "} else " } else { "            " }
         out = out + prefix + "if tag.field_num == " + fn_str + " {\n"
-        out = out + "                let v = when reader." + rm + "() { Ok(v) => v, Err(e) => { return Err(e) } }\n"
-        if fd.is_optional {
-            out = out + "                result." + fd.name + " = Just(v)\n"
-        } else if fd.is_repeated {
-            out = out + "                result." + fd.name + ".push(v)\n"
+        if fd.is_map {
+            let suffix = map_entry_suffix(ref fd)
+            if suffix == "" {
+                out = out + "                // TODO: unsupported map key/value type for field " + fd.name + "\n"
+                out = out + "                when reader.skip_field(tag.wire_type) { Ok(_) => {}, Err(e) => { return Err(e) } }\n"
+            } else {
+                out = out + "                var entry = when reader.read_message_bytes() { Ok(s) => s, Err(e) => { return Err(e) } }\n"
+                out = out + "                let kv = when entry.decode_map_entry_" + suffix + "() { Ok(v) => v, Err(e) => { return Err(e) } }\n"
+                out = out + "                result." + fd.name + ".insert(kv.key, kv.value)\n"
+            }
         } else {
-            out = out + "                result." + fd.name + " = v\n"
+            let rm = read_method_for_field(ref fd)
+            out = out + "                let v = when reader." + rm + "() { Ok(v) => v, Err(e) => { return Err(e) } }\n"
+            if fd.is_optional {
+                out = out + "                result." + fd.name + " = Just(v)\n"
+            } else if fd.is_repeated {
+                out = out + "                result." + fd.name + ".push(v)\n"
+            } else {
+                out = out + "                result." + fd.name + " = v\n"
+            }
         }
         has_fields = true
     }

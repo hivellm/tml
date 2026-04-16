@@ -1,0 +1,124 @@
+/// Tests for protobuf map field encoding/decoding.
+///
+/// Covers phase1a items 3.1, 3.2, 3.4 (runtime helpers for map encode/decode).
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, MapEntrySS, MapEntrySI, MapEntryIS, MapEntryII}
+use std::collections::Buffer
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+@test func test_map_ii_wire_bytes() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_ii(9, 1, 100)
+    let buf = w.to_buffer()
+    assert_eq(buf_byte(ref buf, 0), 0x4A)  // tag (9<<3)|2
+    assert_eq(buf_byte(ref buf, 1), 4)     // sub length = 4
+    assert_eq(buf_byte(ref buf, 2), 0x08)  // key field tag
+    assert_eq(buf_byte(ref buf, 3), 0x01)  // key = 1
+    assert_eq(buf_byte(ref buf, 4), 0x10)  // value field tag
+    assert_eq(buf_byte(ref buf, 5), 0x64)  // value = 100
+}
+
+@test func test_map_ii_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_ii(9, 1, 100)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let _tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var entry = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv = when entry.decode_map_entry_ii() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(kv.key, 1)
+    assert_eq(kv.value, 100)
+}
+
+@test func test_map_ii_multiple_entries() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_ii(9, 1, 100)
+    w.write_field_map_entry_ii(9, 2, 200)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let _t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var e1 = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv1 = when e1.decode_map_entry_ii() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(kv1.key, 1)
+    assert_eq(kv1.value, 100)
+
+    let _t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var e2 = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv2 = when e2.decode_map_entry_ii() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(kv2.key, 2)
+    assert_eq(kv2.value, 200)
+}
+
+@test func test_map_ss_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_ss(5, "name", "Alice")
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let _tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var entry = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv = when entry.decode_map_entry_ss() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    let k: Str = kv.key
+    let v: Str = kv.value
+    assert_eq(k, "name")
+    assert_eq(v, "Alice")
+}
+
+@test func test_map_si_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_si(7, "score", 9001)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let _tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var entry = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv = when entry.decode_map_entry_si() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    let k: Str = kv.key
+    let v: I64 = kv.value
+    assert_eq(k, "score")
+    assert_eq(v, 9001)
+}
+
+@test func test_map_is_roundtrip() {
+    var w = ProtoWriter::new()
+    w.write_field_map_entry_is(8, 42, "answer")
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let _tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var entry = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv = when entry.decode_map_entry_is() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    let k: I64 = kv.key
+    let v: Str = kv.value
+    assert_eq(k, 42)
+    assert_eq(v, "answer")
+}
+
+@test func test_map_entry_missing_value_default_ss() {
+    // Build an Entry submessage with only the key set, no value field.
+    var entry_builder = ProtoWriter::new()
+    entry_builder.write_field_string(1, "lonely")
+    var outer = ProtoWriter::new()
+    outer.write_field_message(5, ref entry_builder)
+
+    let wb: Buffer = outer.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+    let _tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    var entry = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let kv = when entry.decode_map_entry_ss() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    let k: Str = kv.key
+    let v: Str = kv.value
+    assert_eq(k, "lonely")
+    assert_eq(v, "")
+}

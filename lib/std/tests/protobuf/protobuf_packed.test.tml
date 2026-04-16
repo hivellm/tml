@@ -1,0 +1,84 @@
+/// Tests for protobuf packed repeated fields.
+///
+/// Covers phase1a items 2.1-2.5: end-to-end packed varint / fixed32
+/// encode + decode, empty-list edge case.
+
+use test::*
+use std::protobuf::{
+    ProtoWriter, ProtoReader, ProtoTag,
+    write_packed_varints, read_packed_varints,
+    write_packed_fixed32, read_packed_fixed32,
+}
+use std::protobuf::wire::{WIRE_LEN}
+use std::collections::{Buffer, List}
+
+@test func test_packed_varints_roundtrip() {
+    var values: List[I64] = List[I64]::new()
+    values.push(1)
+    values.push(2)
+    values.push(3)
+    values.push(150)   // 2-byte varint
+    values.push(300)   // 2-byte varint
+
+    var w = ProtoWriter::new()
+    write_packed_varints(ref w, 7, ref values)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(tag.field_num, 7)
+    assert_eq(tag.wire_type, WIRE_LEN)
+
+    var sub = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let decoded = when read_packed_varints(ref sub) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+
+    assert_eq(decoded.len(), 5)
+    assert_eq(decoded.get(0), 1)
+    assert_eq(decoded.get(1), 2)
+    assert_eq(decoded.get(2), 3)
+    assert_eq(decoded.get(3), 150)
+    assert_eq(decoded.get(4), 300)
+}
+
+@test func test_packed_fixed32_roundtrip() {
+    var values: List[I32] = List[I32]::new()
+    values.push(0xDEADBEEF as I32)
+    values.push(0xCAFEBABE as I32)
+
+    var w = ProtoWriter::new()
+    write_packed_fixed32(ref w, 9, ref values)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(tag.field_num, 9)
+    assert_eq(tag.wire_type, WIRE_LEN)
+
+    var sub = when r.read_message_bytes() { Ok(s) => s, Err(e) => { assert(false, e); return } }
+    let decoded = when read_packed_fixed32(ref sub) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+
+    assert_eq(decoded.len(), 2)
+    assert_eq(decoded.get(0), 0xDEADBEEF as I32)
+    assert_eq(decoded.get(1), 0xCAFEBABE as I32)
+}
+
+@test func test_packed_varints_empty_emits_nothing() {
+    var values: List[I64] = List[I64]::new()
+
+    var w = ProtoWriter::new()
+    write_packed_varints(ref w, 7, ref values)
+
+    // Empty packed field: proto3 spec omits the field entirely.
+    assert_eq(w.len(), 0)
+}
+
+@test func test_packed_fixed32_empty_emits_nothing() {
+    var values: List[I32] = List[I32]::new()
+
+    var w = ProtoWriter::new()
+    write_packed_fixed32(ref w, 9, ref values)
+
+    assert_eq(w.len(), 0)
+}

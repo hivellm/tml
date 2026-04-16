@@ -1,0 +1,22 @@
+/// Tests for file I/O helpers in proto_parser and codegen (phase1a 8.1-8.4).
+
+use test::*
+use std::protobuf::{parse_proto_file, generate_to_file, generate_tml}
+use std::events::EventEmitter
+
+@test func test_parse_proto_file_missing_returns_err() {
+    let result = parse_proto_file(".sandbox/does_not_exist_qqz.proto")
+    when result {
+        Ok(_) => { assert(false, "expected Err for missing file"); return },
+        Err(_) => {}
+    }
+}
+
+@test func test_parse_proto_file_reads_disk() {
+    let parsed = when parse_proto_file("F:/Node/hivellm/tml/lib/std/tests/protobuf/protos/person.proto") {
+        Ok(v) => v,
+        Err(e) => { assert(false, e); return }
+    }
+    assert(parsed.messages.len() >= 1, "at least one message")
+}
+
