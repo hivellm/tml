@@ -948,7 +948,7 @@ TML_EXPORT const char* tml_json_object_key_at(int64_t handle, int64_t index) {
     if (index < 0 || static_cast<size_t>(index) >= obj.size())
         return nullptr;
 
-    // Iterate to the index (std::map is ordered)
+    // Iterate to the index (flat-vector preserves insertion order)
     auto it = obj.begin();
     std::advance(it, static_cast<std::ptrdiff_t>(index));
 

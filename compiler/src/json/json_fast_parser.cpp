@@ -867,7 +867,9 @@ auto FastJsonParser::parse_object() -> Result<JsonValue, JsonError> {
     ++column_;
 
     JsonObject obj;
-    // Note: std::map doesn't support reserve(), but unordered_map does
+    // Flat-vector object: reserve a typical size (8 fields) up front so most
+    // parses avoid any reallocation.
+    obj.reserve(8);
 
     skip_ws();
 
@@ -911,7 +913,7 @@ auto FastJsonParser::parse_object() -> Result<JsonValue, JsonError> {
             return value_result;
         }
 
-        obj.emplace(std::move(key), std::move(unwrap(value_result)));
+        obj.emplace_back(std::move(key), std::move(unwrap(value_result)));
 
         skip_ws();
 

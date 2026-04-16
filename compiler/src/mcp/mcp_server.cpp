@@ -433,9 +433,10 @@ auto McpServer::handle_initialize(json::JsonValue params, json::JsonValue id)
 
     // Build response
     json::JsonObject result;
-    result["protocolVersion"] = json::JsonValue(MCP_PROTOCOL_VERSION);
-    result["capabilities"] = capabilities_.to_json();
-    result["serverInfo"] = server_info_.to_json();
+    result.reserve(3);
+    result.emplace_back("protocolVersion", json::JsonValue(MCP_PROTOCOL_VERSION));
+    result.emplace_back("capabilities", capabilities_.to_json());
+    result.emplace_back("serverInfo", server_info_.to_json());
 
     initialized_ = true;
     return json::JsonRpcResponse::success(json::JsonValue(std::move(result)), std::move(id));
@@ -458,7 +459,7 @@ auto McpServer::handle_tools_list(json::JsonValue id) -> json::JsonRpcResponse {
     }
 
     json::JsonObject result;
-    result["tools"] = json::JsonValue(std::move(tools_arr));
+    result.emplace_back("tools", json::JsonValue(std::move(tools_arr)));
     return json::JsonRpcResponse::success(json::JsonValue(std::move(result)), std::move(id));
 }
 

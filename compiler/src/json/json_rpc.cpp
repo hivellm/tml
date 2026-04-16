@@ -114,10 +114,11 @@ auto JsonRpcError::make(int code, std::string message, std::optional<JsonValue> 
 /// A `JsonValue` object containing the error fields.
 auto JsonRpcError::to_json() const -> JsonValue {
     JsonObject obj;
-    obj["code"] = JsonValue(static_cast<int64_t>(code));
-    obj["message"] = JsonValue(message);
+    obj.reserve(3);
+    obj.emplace_back("code", JsonValue(static_cast<int64_t>(code)));
+    obj.emplace_back("message", JsonValue(message));
     if (data.has_value()) {
-        obj["data"] = data->clone();
+        obj.emplace_back("data", data->clone());
     }
     return JsonValue(std::move(obj));
 }
@@ -218,15 +219,16 @@ auto JsonRpcRequest::from_json(const JsonValue& json) -> Result<JsonRpcRequest, 
 /// A `JsonValue` object containing the request fields.
 auto JsonRpcRequest::to_json() const -> JsonValue {
     JsonObject obj;
-    obj["jsonrpc"] = JsonValue(jsonrpc);
-    obj["method"] = JsonValue(method);
+    obj.reserve(4);
+    obj.emplace_back("jsonrpc", JsonValue(jsonrpc));
+    obj.emplace_back("method", JsonValue(method));
 
     if (params.has_value()) {
-        obj["params"] = params->clone();
+        obj.emplace_back("params", params->clone());
     }
 
     if (id.has_value()) {
-        obj["id"] = id->clone();
+        obj.emplace_back("id", id->clone());
     }
 
     return JsonValue(std::move(obj));
@@ -417,15 +419,16 @@ auto JsonRpcResponse::from_json(const JsonValue& json) -> Result<JsonRpcResponse
 /// A `JsonValue` object containing the response fields.
 auto JsonRpcResponse::to_json() const -> JsonValue {
     JsonObject obj;
-    obj["jsonrpc"] = JsonValue(jsonrpc);
-    obj["id"] = id.clone();
+    obj.reserve(4);
+    obj.emplace_back("jsonrpc", JsonValue(jsonrpc));
+    obj.emplace_back("id", id.clone());
 
     if (result.has_value()) {
-        obj["result"] = result->clone();
+        obj.emplace_back("result", result->clone());
     }
 
     if (error.has_value()) {
-        obj["error"] = error->to_json();
+        obj.emplace_back("error", error->to_json());
     }
 
     return JsonValue(std::move(obj));

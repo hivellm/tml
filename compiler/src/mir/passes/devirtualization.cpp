@@ -837,26 +837,29 @@ auto TypeProfileFile::load(const std::string& path) -> std::optional<TypeProfile
 auto TypeProfileFile::save(const std::string& path) const -> bool {
     // Build JSON structure
     json::JsonObject root;
-    root["version"] = json::JsonValue(version);
-    root["module_name"] = json::JsonValue(module_name);
+    root.reserve(3);
+    root.emplace_back("version", json::JsonValue(version));
+    root.emplace_back("module_name", json::JsonValue(module_name));
 
     // Build call_sites array
     json::JsonArray sites_arr;
     for (const auto& site : call_sites) {
         json::JsonObject site_obj;
-        site_obj["call_site"] = json::JsonValue(site.call_site);
-        site_obj["method_name"] = json::JsonValue(site.method_name);
+        site_obj.reserve(3);
+        site_obj.emplace_back("call_site", json::JsonValue(site.call_site));
+        site_obj.emplace_back("method_name", json::JsonValue(site.method_name));
 
         // Build type_counts object
         json::JsonObject counts_obj;
+        counts_obj.reserve(site.type_counts.size());
         for (const auto& [type_name, count] : site.type_counts) {
-            counts_obj[type_name] = json::JsonValue(static_cast<int64_t>(count));
+            counts_obj.emplace_back(type_name, json::JsonValue(static_cast<int64_t>(count)));
         }
-        site_obj["type_counts"] = json::JsonValue(std::move(counts_obj));
+        site_obj.emplace_back("type_counts", json::JsonValue(std::move(counts_obj)));
 
         sites_arr.push_back(json::JsonValue(std::move(site_obj)));
     }
-    root["call_sites"] = json::JsonValue(std::move(sites_arr));
+    root.emplace_back("call_sites", json::JsonValue(std::move(sites_arr)));
 
     // Serialize to JSON string
     json::JsonValue root_val(std::move(root));

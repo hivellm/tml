@@ -4,6 +4,18 @@
 **Status**: TML JSON parsing is **13.6x slower** than Rust serde_json for small documents.
 **Root cause**: `std::map` per-node allocation + arena allocator sitting unused + value cloning on access.
 
+## Phase 1b update (2026-04-16, after `std::map → std::vector<std::pair>`)
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Parse Small (200B) | 11,175 ns | 9,494 ns | **-15%** |
+
+F-001 (std::map RB-tree per-node alloc) — **resolved**. `JsonObject` is now a
+flat `std::vector<std::pair<std::string, JsonValue>>` with `reserve(8)` in
+`parse_object()`. Insertion order is now preserved (previously sorted by key).
+The remaining gap to serde_json is mostly in F-002/F-003/F-004 (Box
+indirection, value cloning, string allocation) — tracked in phase1c/d/e.
+
 ## Documents
 
 | File | Description |
