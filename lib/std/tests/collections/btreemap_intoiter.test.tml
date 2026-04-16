@@ -1,0 +1,77 @@
+use test
+use std::collections::BTreeMap
+
+/// Regression: phase0p_btreemap-iterator-protocol.
+///
+/// `IntoIterator for BTreeMap[K, V]` lets `for entry in map { ... }` work
+/// without an explicit `.iter()` call, matching `List` and `HashMap`. The
+/// existing `Iterator for BTreeMapIter` already yields `MapEntry { key, value }`;
+/// this suite covers the for-in loop desugaring that consumes it.
+
+@test
+func test_btreemap_for_in_empty() -> I32 {
+    let m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    let mut count: I64 = 0
+    for entry in m {
+        count = count + 1
+        let _ = entry.key
+    }
+    assert(count == 0, "empty map: zero iterations")
+    return 0
+}
+
+@test
+func test_btreemap_for_in_iteration_order() -> I32 {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(30, 300)
+    m.insert(10, 100)
+    m.insert(20, 200)
+
+    let mut keys_sum: I64 = 0
+    let mut vals_sum: I64 = 0
+    let mut count: I64 = 0
+    for entry in m {
+        keys_sum = keys_sum + entry.key
+        vals_sum = vals_sum + entry.value
+        count = count + 1
+    }
+    assert(count == 3, "three entries visited")
+    assert(keys_sum == 60, "keys sum to 60")
+    assert(vals_sum == 600, "values sum to 600")
+    return 0
+}
+
+@test
+func test_btreemap_for_in_sorted_order() -> I32 {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(3, 0)
+    m.insert(1, 0)
+    m.insert(4, 0)
+    m.insert(2, 0)
+
+    let mut prev: I64 = -1
+    let mut ok: Bool = true
+    for entry in m {
+        if entry.key <= prev {
+            ok = false
+        }
+        prev = entry.key
+    }
+    assert(ok, "BTreeMap yields entries in sorted key order")
+    return 0
+}
+
+@test
+func test_btreemap_explicit_iter_still_works() -> I32 {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::new()
+    m.insert(1, 10)
+    m.insert(2, 20)
+
+    // Backwards compatibility: `.iter()` returns the same iterator.
+    let mut total: I64 = 0
+    for entry in m.iter() {
+        total = total + entry.value
+    }
+    assert(total == 30, "explicit .iter() still works")
+    return 0
+}

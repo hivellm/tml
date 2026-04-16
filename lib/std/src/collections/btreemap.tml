@@ -389,3 +389,19 @@ impl[K, V] Iterator for BTreeMapIter[K, V] {
         return Just(MapEntry[K, V] { key: k, value: v })
     }
 }
+
+/// IntoIterator lets `for entry in map { ... }` work without an explicit
+/// `.iter()` call, matching the ergonomics of List and HashMap.
+impl[K, V] IntoIterator for BTreeMap[K, V] {
+    type Item = MapEntry[K, V]
+    type IntoIter = BTreeMapIter[K, V]
+
+    pub func into_iter(this) -> BTreeMapIter[K, V] {
+        return BTreeMapIter[K, V] {
+            keys: this.keys,
+            values: this.values,
+            length: this.length,
+            index: 0
+        }
+    }
+}
