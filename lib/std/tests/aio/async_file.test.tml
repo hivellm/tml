@@ -1,0 +1,32 @@
+use test
+use std::aio::async_file
+
+/// Regression suite for phase1m_async-file-io.
+///
+/// Thread-pool-backed async file I/O — verifies that a worker can read
+/// and write files concurrently with the caller's main thread.
+
+@test
+func test_async_write_then_read() -> I32 {
+    let path: Str = "tml_async_file_test_1.txt"
+    let content: Str = "hello async"
+
+    let wh = async_file::write_all_async(path, content)
+    let ok: Bool = async_file::await_bool(wh)
+    assert(ok, "async write should succeed")
+
+    let rh = async_file::read_all_async(path)
+    let got: Str = async_file::await_str(rh)
+    assert(got == content, "async read should return written content")
+
+    return 0
+}
+
+@test
+func test_async_read_nonexistent() -> I32 {
+    let rh = async_file::read_all_async("nonexistent_async_test_file.xyz")
+    let got: Str = async_file::await_str(rh)
+    // file_read_all returns empty on missing file — just ensure no deadlock.
+    let _ = got
+    return 0
+}
