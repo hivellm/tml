@@ -518,6 +518,36 @@ auto LLDLinker::build_static_lib_command(const std::vector<fs::path>& object_fil
     }
 #endif
 
+    // Fallback: `zig ar` ships with the Zig toolchain, which is TML's
+    // preferred C/C++ compiler per ADR-007. It is LLVM-ar compatible and
+    // available on developer machines that do not have llvm-ar / lib.exe
+    // on PATH. Search for `zig` as a last resort before giving up.
+    bool is_zig_ar = false;
+    if (ar.empty() || !file_exists(ar)) {
+        if (const char* path_env = std::getenv("PATH")) {
+            std::string path_s(path_env);
+            std::istringstream iss(path_s);
+            std::string dir;
+#ifdef _WIN32
+            const char sep = ';';
+            const char* zig_name = "zig.exe";
+#else
+            const char sep = ':';
+            const char* zig_name = "zig";
+#endif
+            while (std::getline(iss, dir, sep)) {
+                if (dir.empty())
+                    continue;
+                fs::path candidate = fs::path(dir) / zig_name;
+                if (file_exists(candidate)) {
+                    ar = candidate;
+                    is_zig_ar = true;
+                    break;
+                }
+            }
+        }
+    }
+
     if (ar.empty() || !file_exists(ar)) {
         // Last resort: bare command names, hope they're in PATH
 #ifdef _WIN32
@@ -540,6 +570,13 @@ auto LLDLinker::build_static_lib_command(const std::vector<fs::path>& object_fil
     if (is_msvc_lib) {
         // MSVC lib.exe: /NOLOGO /OUT:<archive> <obj1> <obj2> ...
         cmd << " /NOLOGO /OUT:" << quote_path(output_path);
+        for (const auto& obj : object_files) {
+            cmd << " " << quote_path(obj);
+        }
+    } else if (is_zig_ar) {
+        // `zig ar` takes the same arg shape as llvm-ar, prefixed by the
+        // `ar` subcommand to select the archiver tool.
+        cmd << " ar rcs " << quote_path(output_path);
         for (const auto& obj : object_files) {
             cmd << " " << quote_path(obj);
         }

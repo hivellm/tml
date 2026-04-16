@@ -154,6 +154,20 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
             }
             return make_unit();
         }
+
+        // Lowlevel arithmetic intrinsics — emit raw LLVM add/sub/mul without
+        // overflow checks. Return type matches the first argument. These are
+        // only legal inside `lowlevel { ... }` blocks but the codegen also
+        // accepts them in generic library code that operates on integer
+        // offsets (e.g. `list.tml::get`), so we type-check them anywhere.
+        if (name == "unchecked_mul" || name == "unchecked_add" || name == "unchecked_sub") {
+            TypePtr result_ty;
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                auto arg_ty = check_expr(*call.args[i]);
+                if (i == 0) result_ty = arg_ty;
+            }
+            return result_ty ? result_ty : make_primitive(PrimitiveKind::I64);
+        }
     }
 
     // Check for compiler intrinsics called with generics (e.g., type_id[I32](), size_of[T]())
@@ -163,6 +177,7 @@ auto TypeChecker::check_call(const parser::CallExpr& call, TypePtr expected_type
             const std::string& name = path.path.segments[0];
             // Compiler intrinsics that take a type parameter [T] and return I64
             if (name == "type_id" || name == "size_of" || name == "align_of" ||
+                name == "sizeof_type" || name == "alignof_type" ||
                 name == "field_count" || name == "variant_count" || name == "field_type_id" ||
                 name == "field_offset" || name == "method_count" ||
                 name == "interface_method_count" || name == "impl_count") {

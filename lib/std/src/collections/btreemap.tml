@@ -258,7 +258,8 @@ impl[K: Ord, V] BTreeMap[K, V] {
 
     /// Remove key and value at index, shifting elements left.
     pub func remove_at(mut this, idx: I64) {
-        for i in idx to this.length - 1 {
+        let last: I64 = this.length - 1
+        for i in idx to last {
             this.keys.set(i, this.keys.get(i + 1))
             this.values.set(i, this.values.get(i + 1))
         }

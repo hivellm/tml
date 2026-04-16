@@ -351,8 +351,10 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     if (for_expr.iter->is<parser::RangeExpr>()) {
         const auto& range = for_expr.iter->as<parser::RangeExpr>();
         inclusive = range.inclusive;
+        std::string start_type = "";
         if (range.start.has_value()) {
             range_start = gen_expr(*range.start.value());
+            start_type = last_expr_type_;
         }
         if (range.end.has_value()) {
             range_end = gen_expr(*range.end.value());
@@ -364,6 +366,19 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
                 emit_line("  " + ext_reg + " = sext " + range_type + " " + range_end + " to i64");
                 range_end = ext_reg;
                 range_type = "i64";
+            }
+        }
+        // Symmetrically promote range_start so its LLVM type matches the
+        // final range_type. Without this, a range like `for i in start to end`
+        // where both are I32 would emit `store i64 %start_i32, ptr ...` and
+        // fail LLVM verification. Skip literal "0" (the default) — it parses
+        // as untyped and LLVM coerces it to any integer width automatically.
+        if (!start_type.empty() && start_type != range_type && range_start != "0") {
+            if (start_type == "i32" || start_type == "i16" || start_type == "i8") {
+                std::string ext_reg = fresh_reg();
+                emit_line("  " + ext_reg + " = sext " + start_type + " " + range_start +
+                          " to " + range_type);
+                range_start = ext_reg;
             }
         }
     } else {
