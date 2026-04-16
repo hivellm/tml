@@ -1,5 +1,41 @@
 //! MessagePack type tags and error types.
 
+use std::collections::Buffer
+
+/// A decoded extension value: the user-defined type id and its raw payload.
+pub type ExtValue {
+    type_id: I32,
+    data: Buffer
+}
+
+/// A decoded timestamp value (ext type -1): Unix seconds + nanosecond offset.
+///
+/// `nanos` is stored as `I64` (always in [0, 999_999_999]) rather than `U32`
+/// to work around a codegen bug that hangs when mixed I64+U32 struct fields
+/// are returned through `Maybe[...]`.
+pub type Timestamp {
+    seconds: I64,
+    nanos: I64
+}
+
+/// A dynamic MessagePack value covering scalar formats. Arrays, maps and
+/// extension payloads are intentionally excluded: recursive enums of the
+/// form `Array(List[MsgPackValue])` currently crash the TML codegen. Users
+/// needing schema-flexible decoding of compound values should compose
+/// `peek_type` + dedicated `read_array_header` / `read_map_header` calls.
+pub enum MsgPackValue {
+    Nil,
+    Bool(Bool),
+    Int(I64),
+    Float64(F64),
+    Str(Str),
+    Bin(Buffer),
+    /// A pre-decoded extension payload (type id + bytes).
+    Ext(ExtValue),
+    /// A pre-decoded Timestamp (ext type -1 already parsed).
+    Timestamp(Timestamp)
+}
+
 /// MessagePack format type identifiers.
 pub enum MsgPackType {
     Nil,
@@ -13,6 +49,7 @@ pub enum MsgPackType {
     Array,
     Map,
     Ext,
+    Timestamp,
     Unknown
 }
 

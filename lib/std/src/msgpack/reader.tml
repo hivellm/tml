@@ -5,7 +5,7 @@
 //! LL(1) parser limitations for if/else chains.
 
 use std::collections::Buffer
-use std::msgpack::types::{MsgPackType, MsgPackError}
+use std::msgpack::types::{MsgPackType, MsgPackError, ExtValue, Timestamp, MsgPackValue}
 
 /// A MessagePack decoder that reads from a Buffer.
 pub type MsgPackReader {
@@ -233,6 +233,440 @@ impl MsgPackReader {
             return b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
         } else {
             return -1
+        }
+    }
+
+    // ==================================================================
+    // Floats
+    // ==================================================================
+
+    /// Reads a 32-bit float (format 0xca, 4 bytes big-endian).
+    pub func read_f32(mut this) -> Maybe[F32] {
+        let b: I32 = this.next_byte()
+        if b != 0xca { return Nothing }
+        if this.remaining() < 4 { return Nothing }
+        let offset: I64 = this.pos
+        this.pos = this.pos + 4
+        return Just(this.buf.read_f32_be(offset))
+    }
+
+    /// Reads a 64-bit float (format 0xcb, 8 bytes big-endian).
+    pub func read_f64(mut this) -> Maybe[F64] {
+        let b: I32 = this.next_byte()
+        if b != 0xcb { return Nothing }
+        if this.remaining() < 8 { return Nothing }
+        let offset: I64 = this.pos
+        this.pos = this.pos + 8
+        return Just(this.buf.read_f64_be(offset))
+    }
+
+    // ==================================================================
+    // Binary data
+    // ==================================================================
+
+    /// Reads a binary blob (format 0xc4/0xc5/0xc6). Returns a newly-allocated
+    /// Buffer containing the payload bytes.
+    pub func read_bin(mut this) -> Maybe[Buffer] {
+        let b: I32 = this.next_byte()
+        var n: I64 = 0
+        if b == 0xc4 {
+            let len_byte: I32 = this.next_byte()
+            if len_byte < 0 { return Nothing }
+            n = len_byte as I64
+        } else if b == 0xc5 {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            n = (hi * 256 + lo) as I64
+        } else if b == 0xc6 {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            n = b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+        } else {
+            return Nothing
+        }
+        if this.remaining() < n { return Nothing }
+        var out: Buffer = Buffer::new(if n > 0 { n } else { 1 })
+        for i in 0 to n {
+            let ch: I32 = this.next_byte()
+            out.write_byte(ch)
+        }
+        return Just(out)
+    }
+
+    // ==================================================================
+    // Generic decode utilities
+    // ==================================================================
+
+    /// Peeks at the next format byte without advancing the cursor and
+    /// returns its category.
+    pub func peek_type(this) -> MsgPackType {
+        if this.pos >= this.buf.len() { return MsgPackType::Unknown }
+        let b: I32 = this.buf.read_u8(this.pos)
+        // Positive fixint
+        if b <= 0x7f { return MsgPackType::PosInt }
+        // Fixmap
+        if b >= 0x80 and b <= 0x8f { return MsgPackType::Map }
+        // Fixarray
+        if b >= 0x90 and b <= 0x9f { return MsgPackType::Array }
+        // Fixstr
+        if b >= 0xa0 and b <= 0xbf { return MsgPackType::Str }
+        // Negative fixint
+        if b >= 0xe0 { return MsgPackType::NegInt }
+        // Dispatch table for the rest
+        if b == 0xc0 { return MsgPackType::Nil }
+        if b == 0xc2 or b == 0xc3 { return MsgPackType::Bool }
+        if b == 0xc4 or b == 0xc5 or b == 0xc6 { return MsgPackType::Bin }
+        if b == 0xc7 or b == 0xc8 or b == 0xc9 { return MsgPackType::Ext }
+        if b == 0xca { return MsgPackType::Float32 }
+        if b == 0xcb { return MsgPackType::Float64 }
+        if b == 0xcc or b == 0xcd or b == 0xce or b == 0xcf { return MsgPackType::PosInt }
+        if b == 0xd0 or b == 0xd1 or b == 0xd2 or b == 0xd3 { return MsgPackType::NegInt }
+        if b == 0xd4 or b == 0xd5 or b == 0xd6 or b == 0xd7 or b == 0xd8 { return MsgPackType::Ext }
+        if b == 0xd9 or b == 0xda or b == 0xdb { return MsgPackType::Str }
+        if b == 0xdc or b == 0xdd { return MsgPackType::Array }
+        if b == 0xde or b == 0xdf { return MsgPackType::Map }
+        return MsgPackType::Unknown
+    }
+
+    /// Skips one complete value including nested arrays and maps.
+    /// Returns true on success, false on malformed input.
+    pub func advance_past_value(mut this) -> Bool {
+        if this.pos >= this.buf.len() { return false }
+        let b: I32 = this.buf.read_u8(this.pos)
+        // Positive / negative fixint
+        if b <= 0x7f or b >= 0xe0 {
+            this.pos = this.pos + 1
+            return true
+        }
+        // Fixmap
+        if b >= 0x80 and b <= 0x8f {
+            this.pos = this.pos + 1
+            let count: I64 = (b - 0x80) as I64
+            let pair_count: I64 = count * 2
+            for i in 0 to pair_count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        // Fixarray
+        if b >= 0x90 and b <= 0x9f {
+            this.pos = this.pos + 1
+            let count: I64 = (b - 0x90) as I64
+            for i in 0 to count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        // Fixstr
+        if b >= 0xa0 and b <= 0xbf {
+            this.pos = this.pos + 1
+            let n: I64 = (b - 0xa0) as I64
+            if this.remaining() < n { return false }
+            this.pos = this.pos + n
+            return true
+        }
+        // Dispatch on single-byte tags.
+        if b == 0xc0 or b == 0xc2 or b == 0xc3 {
+            this.pos = this.pos + 1
+            return true
+        }
+        if b == 0xcc or b == 0xd0 {
+            if this.remaining() < 2 { return false }
+            this.pos = this.pos + 2
+            return true
+        }
+        if b == 0xcd or b == 0xd1 {
+            if this.remaining() < 3 { return false }
+            this.pos = this.pos + 3
+            return true
+        }
+        if b == 0xce or b == 0xd2 or b == 0xca {
+            if this.remaining() < 5 { return false }
+            this.pos = this.pos + 5
+            return true
+        }
+        if b == 0xcf or b == 0xd3 or b == 0xcb {
+            if this.remaining() < 9 { return false }
+            this.pos = this.pos + 9
+            return true
+        }
+        // str 8/16/32
+        if b == 0xd9 {
+            if this.remaining() < 2 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64
+            if this.remaining() < 2 + n { return false }
+            this.pos = this.pos + 2 + n
+            return true
+        }
+        if b == 0xda {
+            if this.remaining() < 3 { return false }
+            let n: I64 = (this.buf.read_u8(this.pos + 1) * 256 + this.buf.read_u8(this.pos + 2)) as I64
+            if this.remaining() < 3 + n { return false }
+            this.pos = this.pos + 3 + n
+            return true
+        }
+        if b == 0xdb {
+            if this.remaining() < 5 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64 * 16777216
+                + this.buf.read_u8(this.pos + 2) as I64 * 65536
+                + this.buf.read_u8(this.pos + 3) as I64 * 256
+                + this.buf.read_u8(this.pos + 4) as I64
+            if this.remaining() < 5 + n { return false }
+            this.pos = this.pos + 5 + n
+            return true
+        }
+        // bin 8/16/32
+        if b == 0xc4 {
+            if this.remaining() < 2 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64
+            if this.remaining() < 2 + n { return false }
+            this.pos = this.pos + 2 + n
+            return true
+        }
+        if b == 0xc5 {
+            if this.remaining() < 3 { return false }
+            let n: I64 = (this.buf.read_u8(this.pos + 1) * 256 + this.buf.read_u8(this.pos + 2)) as I64
+            if this.remaining() < 3 + n { return false }
+            this.pos = this.pos + 3 + n
+            return true
+        }
+        if b == 0xc6 {
+            if this.remaining() < 5 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64 * 16777216
+                + this.buf.read_u8(this.pos + 2) as I64 * 65536
+                + this.buf.read_u8(this.pos + 3) as I64 * 256
+                + this.buf.read_u8(this.pos + 4) as I64
+            if this.remaining() < 5 + n { return false }
+            this.pos = this.pos + 5 + n
+            return true
+        }
+        // fixext 1/2/4/8/16 — 2 + size bytes after the tag
+        if b == 0xd4 { if this.remaining() < 3  { return false } this.pos = this.pos + 3  return true }
+        if b == 0xd5 { if this.remaining() < 4  { return false } this.pos = this.pos + 4  return true }
+        if b == 0xd6 { if this.remaining() < 6  { return false } this.pos = this.pos + 6  return true }
+        if b == 0xd7 { if this.remaining() < 10 { return false } this.pos = this.pos + 10 return true }
+        if b == 0xd8 { if this.remaining() < 18 { return false } this.pos = this.pos + 18 return true }
+        // ext 8/16/32 — length byte(s) + type byte + payload
+        if b == 0xc7 {
+            if this.remaining() < 3 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64
+            if this.remaining() < 3 + n { return false }
+            this.pos = this.pos + 3 + n
+            return true
+        }
+        if b == 0xc8 {
+            if this.remaining() < 4 { return false }
+            let n: I64 = (this.buf.read_u8(this.pos + 1) * 256 + this.buf.read_u8(this.pos + 2)) as I64
+            if this.remaining() < 4 + n { return false }
+            this.pos = this.pos + 4 + n
+            return true
+        }
+        if b == 0xc9 {
+            if this.remaining() < 6 { return false }
+            let n: I64 = this.buf.read_u8(this.pos + 1) as I64 * 16777216
+                + this.buf.read_u8(this.pos + 2) as I64 * 65536
+                + this.buf.read_u8(this.pos + 3) as I64 * 256
+                + this.buf.read_u8(this.pos + 4) as I64
+            if this.remaining() < 6 + n { return false }
+            this.pos = this.pos + 6 + n
+            return true
+        }
+        // array 16/32 and map 16/32
+        if b == 0xdc {
+            if this.remaining() < 3 { return false }
+            let count: I64 = (this.buf.read_u8(this.pos + 1) * 256 + this.buf.read_u8(this.pos + 2)) as I64
+            this.pos = this.pos + 3
+            for i in 0 to count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        if b == 0xdd {
+            if this.remaining() < 5 { return false }
+            let count: I64 = this.buf.read_u8(this.pos + 1) as I64 * 16777216
+                + this.buf.read_u8(this.pos + 2) as I64 * 65536
+                + this.buf.read_u8(this.pos + 3) as I64 * 256
+                + this.buf.read_u8(this.pos + 4) as I64
+            this.pos = this.pos + 5
+            for i in 0 to count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        if b == 0xde {
+            if this.remaining() < 3 { return false }
+            let count: I64 = (this.buf.read_u8(this.pos + 1) * 256 + this.buf.read_u8(this.pos + 2)) as I64
+            this.pos = this.pos + 3
+            let pair_count: I64 = count * 2
+            for i in 0 to pair_count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        if b == 0xdf {
+            if this.remaining() < 5 { return false }
+            let count: I64 = this.buf.read_u8(this.pos + 1) as I64 * 16777216
+                + this.buf.read_u8(this.pos + 2) as I64 * 65536
+                + this.buf.read_u8(this.pos + 3) as I64 * 256
+                + this.buf.read_u8(this.pos + 4) as I64
+            this.pos = this.pos + 5
+            let pair_count: I64 = count * 2
+            for i in 0 to pair_count {
+                if not this.advance_past_value() { return false }
+            }
+            return true
+        }
+        return false
+    }
+
+    // ==================================================================
+    // Extension types
+    // ==================================================================
+
+    /// A decoded extension value.
+    pub func read_ext(mut this) -> Maybe[ExtValue] {
+        let b: I32 = this.next_byte()
+        var n: I64 = 0
+        if b == 0xd4 { n = 1 }
+        else if b == 0xd5 { n = 2 }
+        else if b == 0xd6 { n = 4 }
+        else if b == 0xd7 { n = 8 }
+        else if b == 0xd8 { n = 16 }
+        else if b == 0xc7 {
+            let len_byte: I32 = this.next_byte()
+            if len_byte < 0 { return Nothing }
+            n = len_byte as I64
+        } else if b == 0xc8 {
+            let hi: I32 = this.next_byte()
+            let lo: I32 = this.next_byte()
+            if hi < 0 or lo < 0 { return Nothing }
+            n = (hi * 256 + lo) as I64
+        } else if b == 0xc9 {
+            let b3: I32 = this.next_byte()
+            let b2: I32 = this.next_byte()
+            let b1: I32 = this.next_byte()
+            let b0: I32 = this.next_byte()
+            if b3 < 0 or b0 < 0 { return Nothing }
+            n = b3 as I64 * 16777216 + b2 as I64 * 65536 + b1 as I64 * 256 + b0 as I64
+        } else {
+            return Nothing
+        }
+        let type_byte: I32 = this.next_byte()
+        if type_byte < 0 { return Nothing }
+        // type_byte is int8; reinterpret via subtract.
+        let tid: I32 = if type_byte >= 128 { type_byte - 256 } else { type_byte }
+        if this.remaining() < n { return Nothing }
+        var out: Buffer = Buffer::new(if n > 0 { n } else { 1 })
+        for i in 0 to n {
+            let ch: I32 = this.next_byte()
+            out.write_byte(ch)
+        }
+        return Just(ExtValue { type_id: tid, data: out })
+    }
+
+    // ==================================================================
+    // Timestamp (ext type -1)
+    // ==================================================================
+
+    /// Reads a timestamp value (ext type -1). Decodes timestamp 32/64/96.
+    pub func read_timestamp(mut this) -> Maybe[Timestamp] {
+        let ext = this.read_ext()
+        let v = when ext {
+            Just(e) => e,
+            Nothing => { return Nothing },
+        }
+        if v.type_id != -1 { return Nothing }
+        let n: I64 = v.data.len()
+        if n == 4 {
+            let secs: I64 = v.data.read_u32_be(0)
+            return Just(Timestamp { seconds: secs, nanos: 0 })
+        }
+        if n == 8 {
+            // top 30 bits = nanos, bottom 34 bits = seconds
+            let raw: I64 = v.data.read_u64_be(0)
+            let nanos: I64 = (raw >> 34) & 1073741823
+            let secs: I64 = raw & 17179869183
+            return Just(Timestamp { seconds: secs, nanos: nanos })
+        }
+        if n == 12 {
+            let n3: I64 = v.data.read_u8(0) as I64
+            let n2: I64 = v.data.read_u8(1) as I64
+            let n1: I64 = v.data.read_u8(2) as I64
+            let n0: I64 = v.data.read_u8(3) as I64
+            let nanos_i: I64 = n3 * 16777216 + n2 * 65536 + n1 * 256 + n0
+            var secs: I64 = 0
+            for i in 0 to 8 {
+                secs = (secs * 256) | (v.data.read_u8(i + 4) as I64)
+            }
+            return Just(Timestamp { seconds: secs, nanos: nanos_i })
+        }
+        return Nothing
+    }
+
+    // ==================================================================
+    // Dynamic (scalar) value decoding
+    // ==================================================================
+
+    /// Reads the next value as a `MsgPackValue`, dispatching on the format
+    /// byte. Scalars only — array/map headers return `Nothing` because the
+    /// current MsgPackValue enum does not carry recursive payloads. Use
+    /// `peek_type` + `read_array_header` / `read_map_header` for those.
+    pub func read_value(mut this) -> Maybe[MsgPackValue] {
+        let kind = this.peek_type()
+        when kind {
+            MsgPackType::Nil => {
+                let _ = this.next_byte()
+                return Just(MsgPackValue::Nil)
+            },
+            MsgPackType::Bool => {
+                let Just(b) = this.read_bool() else { return Nothing }
+                return Just(MsgPackValue::Bool(b))
+            },
+            MsgPackType::PosInt => {
+                let Just(v) = this.read_i64() else { return Nothing }
+                return Just(MsgPackValue::Int(v))
+            },
+            MsgPackType::NegInt => {
+                let Just(v) = this.read_i64() else { return Nothing }
+                return Just(MsgPackValue::Int(v))
+            },
+            MsgPackType::Float32 => {
+                let v: F32 = when this.read_f32() { Just(x) => x, Nothing => { return Nothing } }
+                return Just(MsgPackValue::Float64(v as F64))
+            },
+            MsgPackType::Float64 => {
+                let v: F64 = when this.read_f64() { Just(x) => x, Nothing => { return Nothing } }
+                return Just(MsgPackValue::Float64(v))
+            },
+            MsgPackType::Str => {
+                let Just(s) = this.read_str() else { return Nothing }
+                return Just(MsgPackValue::Str(s))
+            },
+            MsgPackType::Bin => {
+                let Just(buf) = this.read_bin() else { return Nothing }
+                return Just(MsgPackValue::Bin(buf))
+            },
+            MsgPackType::Ext => {
+                // Peek ahead: ext type -1 means Timestamp.
+                let save_pos: I64 = this.pos
+                let Just(ext) = this.read_ext() else { return Nothing }
+                if ext.type_id == -1 {
+                    // Replay as timestamp by rewinding and calling read_timestamp.
+                    this.pos = save_pos
+                    let Just(ts) = this.read_timestamp() else { return Nothing }
+                    return Just(MsgPackValue::Timestamp(ts))
+                }
+                return Just(MsgPackValue::Ext(ext))
+            },
+            MsgPackType::Timestamp => {
+                let Just(ts) = this.read_timestamp() else { return Nothing }
+                return Just(MsgPackValue::Timestamp(ts))
+            },
+            _ => { return Nothing },
         }
     }
 

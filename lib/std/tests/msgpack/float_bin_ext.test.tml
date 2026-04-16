@@ -1,0 +1,250 @@
+/// Tests for the phase1b MessagePack spec completions:
+///   - read_f32 / read_f64 / read_bin
+///   - peek_type / advance_past_value
+///   - write_ext / read_ext
+///   - write_timestamp / read_timestamp (ext type -1)
+
+use test::*
+use std::msgpack::{MsgPackWriter, MsgPackReader, MsgPackType, ExtValue, Timestamp}
+use std::collections::Buffer
+
+@test func test_f32_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_f32(1.5 as F32)
+    let buf: Buffer = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let v: F32 = when r.read_f32() {
+        Just(x) => x,
+        Nothing => { assert(false, "read_f32 failed"); return },
+    }
+    assert(v == (1.5 as F32), "1.5 f32 roundtrip")
+}
+
+@test func test_f64_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_f64(-0.25)
+    let buf: Buffer = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let v: F64 = when r.read_f64() {
+        Just(x) => x,
+        Nothing => { assert(false, "read_f64 failed"); return },
+    }
+    assert(v == -0.25, "-0.25 f64 roundtrip")
+}
+
+@test func test_bin_roundtrip_short() {
+    var payload = Buffer::new(4)
+    payload.write_byte(0xDE)
+    payload.write_byte(0xAD)
+    payload.write_byte(0xBE)
+    payload.write_byte(0xEF)
+
+    var w = MsgPackWriter::new()
+    w.write_bin(ref payload)
+
+    let buf: Buffer = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(got) = r.read_bin() else {
+        assert(false, "read_bin failed")
+        return
+    }
+    assert_eq(got.len(), 4)
+    assert_eq(got.read_u8(0) as I64, 0xDE)
+    assert_eq(got.read_u8(3) as I64, 0xEF)
+}
+
+@test func test_peek_type_primitives() {
+    var w = MsgPackWriter::new()
+    w.write_nil()
+    let buf = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    when r.peek_type() {
+        MsgPackType::Nil => {},
+        _ => { assert(false, "expected Nil") },
+    }
+    let b = r.next_byte()
+    assert_eq(b, 0xc0)
+}
+
+@test func test_peek_type_string_and_array() {
+    var w = MsgPackWriter::new()
+    w.write_str("hi")
+    let buf1 = w.to_buffer()
+    var r1 = MsgPackReader::from_buffer(ref buf1)
+    when r1.peek_type() {
+        MsgPackType::Str => {},
+        _ => { assert(false, "expected Str") },
+    }
+
+    var w2 = MsgPackWriter::new()
+    w2.write_array_header(3)
+    let buf2 = w2.to_buffer()
+    var r2 = MsgPackReader::from_buffer(ref buf2)
+    when r2.peek_type() {
+        MsgPackType::Array => {},
+        _ => { assert(false, "expected Array") },
+    }
+}
+
+@test func test_advance_past_value_nested() {
+    var w = MsgPackWriter::new()
+    w.write_array_header(3)
+    w.write_i64(1)
+    w.write_str("two")
+    w.write_array_header(2)
+    w.write_i64(3)
+    w.write_i64(4)
+
+    let buf = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let ok: Bool = r.advance_past_value()
+    assert(ok, "advance_past_value consumed the whole nested array")
+    assert_eq(r.remaining(), 0)
+}
+
+@test func test_ext_fixext_roundtrip() {
+    var payload = Buffer::new(4)
+    payload.write_byte(0x01)
+    payload.write_byte(0x02)
+    payload.write_byte(0x03)
+    payload.write_byte(0x04)
+
+    var w = MsgPackWriter::new()
+    w.write_ext(42, ref payload)
+
+    let buf = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0xd6)
+    assert_eq(buf.read_u8(1), 42)
+
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(ext) = r.read_ext() else {
+        assert(false, "read_ext failed")
+        return
+    }
+    assert_eq(ext.type_id, 42)
+    assert_eq(ext.data.len(), 4)
+    assert_eq(ext.data.read_u8(0), 1)
+    assert_eq(ext.data.read_u8(3), 4)
+}
+
+@test func test_ext_ext8_roundtrip() {
+    var payload = Buffer::new(5)
+    for i in 0 to 5 {
+        payload.write_byte((i * 7) as I32)
+    }
+
+    var w = MsgPackWriter::new()
+    w.write_ext(-1, ref payload)
+
+    let buf = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0xc7)
+    assert_eq(buf.read_u8(1), 5)
+    assert_eq(buf.read_u8(2), 0xff)
+
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(ext) = r.read_ext() else {
+        assert(false, "read_ext ext8 failed")
+        return
+    }
+    assert_eq(ext.type_id, -1)
+    assert_eq(ext.data.len(), 5)
+    assert_eq(ext.data.read_u8(4), 28)
+}
+
+@test func test_timestamp32_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_timestamp(1_700_000_000, 0)
+    let buf = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0xd6)
+    assert_eq(buf.read_u8(1), 0xff)
+
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(ts) = r.read_timestamp() else {
+        assert(false, "read_timestamp failed")
+        return
+    }
+    assert_eq(ts.seconds, 1_700_000_000)
+    assert_eq(ts.nanos, 0)
+}
+
+@test func test_timestamp64_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_timestamp(1_700_000_000, 123_456_789)
+    let buf = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0xd7)
+    assert_eq(buf.read_u8(1), 0xff)
+
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(ts) = r.read_timestamp() else {
+        assert(false, "read_timestamp 64 failed")
+        return
+    }
+    assert_eq(ts.seconds, 1_700_000_000)
+    assert_eq(ts.nanos, 123_456_789)
+}
+
+@test func test_msgpack_value_str_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_value(MsgPackValue::Str("hi"))
+    let buf = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(v) = r.read_value() else {
+        assert(false, "read_value failed")
+        return
+    }
+    when v {
+        MsgPackValue::Str(s) => { assert_eq(s, "hi") },
+        _ => { assert(false, "expected Str variant") },
+    }
+}
+
+@test func test_msgpack_value_int_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_value(MsgPackValue::Int(42))
+    let buf = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(v) = r.read_value() else {
+        assert(false, "read_value int failed")
+        return
+    }
+    when v {
+        MsgPackValue::Int(n) => { assert_eq(n, 42) },
+        _ => { assert(false, "expected Int variant") },
+    }
+}
+
+@test func test_msgpack_value_nil_and_bool_roundtrip() {
+    var w = MsgPackWriter::new()
+    w.write_value(MsgPackValue::Nil)
+    w.write_value(MsgPackValue::Bool(true))
+    let buf = w.to_buffer()
+    var r = MsgPackReader::from_buffer(ref buf)
+
+    let Just(v1) = r.read_value() else { assert(false, "nil read failed"); return }
+    when v1 {
+        MsgPackValue::Nil => {},
+        _ => { assert(false, "expected Nil variant") },
+    }
+    let Just(v2) = r.read_value() else { assert(false, "bool read failed"); return }
+    when v2 {
+        MsgPackValue::Bool(b) => { assert(b, "expected true") },
+        _ => { assert(false, "expected Bool variant") },
+    }
+}
+
+@test func test_timestamp96_roundtrip_negative_seconds() {
+    var w = MsgPackWriter::new()
+    w.write_timestamp(-500, 1_500_000)
+    let buf = w.to_buffer()
+    assert_eq(buf.read_u8(0), 0xc7)
+    assert_eq(buf.read_u8(1), 12)
+    assert_eq(buf.read_u8(2), 0xff)
+
+    var r = MsgPackReader::from_buffer(ref buf)
+    let Just(ts) = r.read_timestamp() else {
+        assert(false, "read_timestamp 96 failed")
+        return
+    }
+    assert_eq(ts.seconds, -500)
+    assert_eq(ts.nanos, 1_500_000)
+}

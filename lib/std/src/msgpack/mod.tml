@@ -31,4 +31,4 @@ pub mod types
 
 pub use std::msgpack::writer::MsgPackWriter
 pub use std::msgpack::reader::MsgPackReader
-pub use std::msgpack::types::{MsgPackType, MsgPackError}
+pub use std::msgpack::types::{MsgPackType, MsgPackError, ExtValue, Timestamp, MsgPackValue}

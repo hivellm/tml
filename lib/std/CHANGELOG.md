@@ -5,6 +5,51 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.31] — 2026-04-16
+
+### Added — `std::msgpack` phase1b (spec completion)
+
+Completes the asymmetric reader gaps and adds extension-type + timestamp
+support, bringing the module from ~61% to ~95% MessagePack spec coverage.
+
+* **Reader symmetry** — `read_f32`, `read_f64`, `read_bin` mirror the
+  existing writer methods. Uses `Buffer::read_f32_be`/`read_f64_be` for
+  IEEE 754 decoding and manual byte loops for bin 8/16/32.
+* **Generic decode utilities** — `peek_type()` inspects the next format
+  byte without advancing the cursor; `advance_past_value()` skips one
+  complete value (recursively descending into nested arrays/maps and
+  handling all fixext/ext sizes). `MsgPackType` enum gained a `Timestamp`
+  variant.
+* **Extension types** — `write_ext(type_id: I32, data: ref Buffer)`
+  auto-selects the most compact form (fixext 1/2/4/8/16 for those
+  specific sizes, ext 8/16/32 for everything else). `read_ext()` decodes
+  all 8 ext formats and returns `Maybe[ExtValue { type_id, data }]`.
+* **Timestamp (ext type -1)** — `write_timestamp(seconds, nanos)`
+  auto-selects timestamp 32 (when `nanos == 0` and seconds fits U32),
+  timestamp 64 (seconds in [0, 2^34) and nanos < 2^30, packed as
+  `(nanos << 34) | seconds`), or timestamp 96 (4-byte nanos + 8-byte
+  signed seconds). `read_timestamp()` decodes all three encodings.
+
+New public types exported from `std::msgpack`:
+  `ExtValue { type_id: I32, data: Buffer }` and
+  `Timestamp { seconds: I64, nanos: I64 }`.
+
+### Test coverage added
+
+- `lib/std/tests/msgpack/float_bin_ext.test.tml` — 11 tests covering
+  F32/F64 roundtrip, binary short payload, peek_type on Nil/Str/Array,
+  advance_past_value on nested arrays, fixext + ext 8 roundtrips, and
+  all three timestamp encodings (including negative-seconds → ts96).
+
+### Codegen note
+
+`Timestamp.nanos` is stored as `I64` rather than `U32` because the TML
+codegen currently hangs when a struct with mixed `I64+U32` fields is
+returned via `Maybe[...]` and pattern-matched with `when`. `let-else`
+destructuring works regardless — use that to unwrap `Maybe[Timestamp]`.
+This is the same K001 pattern captured in earlier phase work and is
+tracked as a follow-up codegen fix.
+
 ## [0.3.29] — 2026-04-16
 
 ### Added — `std::protobuf` phase1a (production-readiness)
