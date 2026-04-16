@@ -1,0 +1,61 @@
+use test
+use std::text::Text
+
+/// Regression suite for phase1g_text-as-ptr.
+///
+/// Optimizes `Text.print` / `Text.println` to skip the `as_str()` copy when
+/// the Text is in heap mode (already null-terminated). Inline-mode strings
+/// (≤ 23 chars) still copy, but the copy is ≤ 24 bytes so overhead is
+/// negligible.
+
+@test
+func test_text_println_inline_short() -> I32 {
+    let t: Text = Text::from("hi")
+    t.println()
+    // Cannot capture stdout inside the test runner; correctness is verified
+    // by absence of panic + round-trip via as_str below.
+    let s: Str = t.as_str()
+    assert(s == "hi", "inline Text round-trips")
+    return 0
+}
+
+@test
+func test_text_println_inline_boundary() -> I32 {
+    // 23 chars — maximum inline capacity.
+    let t: Text = Text::from("12345678901234567890123")
+    t.println()
+    let s: Str = t.as_str()
+    assert(s == "12345678901234567890123", "23-char inline round-trips")
+    return 0
+}
+
+@test
+func test_text_println_heap_short() -> I32 {
+    // 24 chars — promoted to heap mode.
+    let t: Text = Text::from("123456789012345678901234")
+    t.println()
+    let s: Str = t.as_str()
+    assert(s == "123456789012345678901234", "24-char heap round-trips")
+    return 0
+}
+
+@test
+func test_text_println_heap_long() -> I32 {
+    // Long string, definitely heap.
+    var t: Text = Text::from("abcdefghijklmnopqrstuvwxyz")
+    t.push_str(" 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    t.println()
+    let s: Str = t.as_str()
+    // Just check len to confirm no data lost.
+    assert(s.len() == 64, "long heap Text survives println round-trip")
+    return 0
+}
+
+@test
+func test_text_print_empty() -> I32 {
+    let t: Text = Text::from("")
+    t.print()
+    let s: Str = t.as_str()
+    assert(s == "", "empty Text round-trips")
+    return 0
+}

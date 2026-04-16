@@ -1198,15 +1198,30 @@ impl Text {
     // Output
     // ========================================================================
 
-    /// Print the Text to stdout (no newline)
+    /// Print the Text to stdout (no newline).
+    ///
+    /// Fast path: heap-mode strings are already null-terminated in their
+    /// backing buffer (`text_from_raw` / `concat` / `push_str` all allocate
+    /// `len + 1` and write a trailing 0), so we can pass `_w0` straight to
+    /// `print_str` without allocating and copying a fresh buffer. Only
+    /// inline-mode strings (≤ 23 chars) fall back to `as_str()`, which is
+    /// cheap because the copy is at most 24 bytes. phase1g optimization.
     pub func print(this) {
-        let s: Str = this.as_str()
-        lowlevel { print_str(s) }
+        if this._w2 >= 0 {
+            lowlevel { print_str(this._w0 as Str) }
+        } else {
+            let s: Str = this.as_str()
+            lowlevel { print_str(s) }
+        }
     }
 
-    /// Print the Text to stdout with a newline
+    /// Print the Text to stdout with a newline. Same fast path as `print`.
     pub func println(this) {
-        let s: Str = this.as_str()
-        lowlevel { println_str(s) }
+        if this._w2 >= 0 {
+            lowlevel { println_str(this._w0 as Str) }
+        } else {
+            let s: Str = this.as_str()
+            lowlevel { println_str(s) }
+        }
     }
 }
