@@ -1064,58 +1064,94 @@ void MirCodegen::emit_preamble() {
     emitln();
 
     // Inline to_string implementations for template literal support.
-    // These use snprintf to convert primitives to heap-allocated strings,
-    // eliminating the dependency on TML library functions (which aren't
-    // available in standalone MIR builds).
+    //
+    // phase1f: replaced `malloc(24) + snprintf("%lld", v)` (41 ns/op) with a
+    // hand-coded digit-extraction loop that avoids snprintf entirely — no
+    // format-string parsing, no locale handling, no padding/precision. The
+    // integer variants all share the same i64 fast path; the smaller widths
+    // just sign-extend up. Floating-point still uses snprintf because `%g`
+    // formatting is non-trivial to hand-roll without a bug-prone edge-case
+    // matrix.
     emitln("declare dso_local i32 @snprintf(ptr, i64, ptr, ...)");
     emitln("declare dso_local void @tml_str_free(ptr)");
-    emitln("@.fmt.i64 = private constant [5 x i8] c\"%lld\\00\"");
-    emitln("@.fmt.i32 = private constant [3 x i8] c\"%d\\00\"");
     emitln("@.fmt.f64 = private constant [3 x i8] c\"%g\\00\"");
     emitln();
 
-    // I64::to_string — snprintf into malloc'd buffer
+    // I64::to_string — digit extraction into stack buffer, then copy to heap.
+    // Uses udiv/urem so INT_MIN (whose arithmetic negation overflows signed i64)
+    // works correctly via unsigned wrapping: `sub i64 0, INT_MIN == 2^63` and
+    // urem/udiv interpret that as 9223372036854775808 unsigned, producing the
+    // correct digits.
     emitln("define internal ptr @tml_N4core3I649to_stringE(i64 %v) {");
     emitln("entry:");
-    emitln("  %buf = call ptr @malloc(i64 24)");
-    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 24, ptr @.fmt.i64, i64 %v)");
-    emitln("  ret ptr %buf");
+    emitln("  %buf = alloca [24 x i8], align 1");
+    emitln("  %end = getelementptr inbounds [24 x i8], ptr %buf, i64 0, i64 23");
+    emitln("  store i8 0, ptr %end");
+    emitln("  %neg_v = sub i64 0, %v");
+    emitln("  %is_neg = icmp slt i64 %v, 0");
+    emitln("  %abs = select i1 %is_neg, i64 %neg_v, i64 %v");
+    emitln("  br label %loop");
+    emitln("loop:");
+    emitln("  %cur = phi i64 [ %abs, %entry ], [ %next, %loop ]");
+    emitln("  %pos = phi ptr [ %end, %entry ], [ %new_pos, %loop ]");
+    emitln("  %digit = urem i64 %cur, 10");
+    emitln("  %next = udiv i64 %cur, 10");
+    emitln("  %digit_i8 = trunc i64 %digit to i8");
+    emitln("  %digit_char = add i8 %digit_i8, 48");
+    emitln("  %new_pos = getelementptr inbounds i8, ptr %pos, i64 -1");
+    emitln("  store i8 %digit_char, ptr %new_pos");
+    emitln("  %done = icmp eq i64 %next, 0");
+    emitln("  br i1 %done, label %after_loop, label %loop");
+    emitln("after_loop:");
+    emitln("  br i1 %is_neg, label %add_sign, label %copy");
+    emitln("add_sign:");
+    emitln("  %sign_pos = getelementptr inbounds i8, ptr %new_pos, i64 -1");
+    emitln("  store i8 45, ptr %sign_pos");
+    emitln("  br label %copy");
+    emitln("copy:");
+    emitln("  %start = phi ptr [ %new_pos, %after_loop ], [ %sign_pos, %add_sign ]");
+    emitln("  %end_int = ptrtoint ptr %end to i64");
+    emitln("  %start_int = ptrtoint ptr %start to i64");
+    emitln("  %len = sub i64 %end_int, %start_int");
+    emitln("  %total = add i64 %len, 1");
+    emitln("  %heap = call ptr @malloc(i64 %total)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %heap, ptr %start, i64 %total, i1 false)");
+    emitln("  ret ptr %heap");
     emitln("}");
+    emitln();
 
-    // I32::to_string
+    // I32::to_string — sign-extend to i64 and share the fast path.
     emitln("define internal ptr @tml_N4core3I329to_stringE(i32 %v) {");
     emitln("entry:");
-    emitln("  %buf = call ptr @malloc(i64 16)");
-    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 16, ptr @.fmt.i32, i32 %v)");
-    emitln("  ret ptr %buf");
+    emitln("  %ext = sext i32 %v to i64");
+    emitln("  %r = call ptr @tml_N4core3I649to_stringE(i64 %ext)");
+    emitln("  ret ptr %r");
     emitln("}");
 
-    // I16::to_string — extend to i32
+    // I16::to_string — sign-extend to i64 and share the fast path.
     emitln("define internal ptr @tml_N4core3I169to_stringE(i16 %v) {");
     emitln("entry:");
-    emitln("  %ext = sext i16 %v to i32");
-    emitln("  %buf = call ptr @malloc(i64 8)");
-    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 8, ptr @.fmt.i32, i32 %ext)");
-    emitln("  ret ptr %buf");
+    emitln("  %ext = sext i16 %v to i64");
+    emitln("  %r = call ptr @tml_N4core3I649to_stringE(i64 %ext)");
+    emitln("  ret ptr %r");
     emitln("}");
 
-    // I8::to_string — extend to i32
+    // I8::to_string — sign-extend to i64 and share the fast path.
     emitln("define internal ptr @tml_N4core2I89to_stringE(i8 %v) {");
     emitln("entry:");
-    emitln("  %ext = sext i8 %v to i32");
-    emitln("  %buf = call ptr @malloc(i64 8)");
-    emitln("  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 8, ptr @.fmt.i32, i32 %ext)");
-    emitln("  ret ptr %buf");
+    emitln("  %ext = sext i8 %v to i64");
+    emitln("  %r = call ptr @tml_N4core3I649to_stringE(i64 %ext)");
+    emitln("  ret ptr %r");
     emitln("}");
 
-    // I128::to_string — truncate to i64 (approx)
+    // I128::to_string — truncate to i64 and share the fast path. Full i128
+    // formatting would need a dedicated digit loop; this approximation is
+    // kept for parity with the previous snprintf implementation.
     emitln("define internal ptr @tml_N4core4I1289to_stringE(i128 %v) {");
     emitln("entry:");
     emitln("  %trunc = trunc i128 %v to i64");
-    emitln("  %buf = call ptr @malloc(i64 24)");
-    emitln(
-        "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr %buf, i64 24, ptr @.fmt.i64, i64 %trunc)");
-    emitln("  ret ptr %buf");
+    emitln("  %r = call ptr @tml_N4core3I649to_stringE(i64 %trunc)");
+    emitln("  ret ptr %r");
     emitln("}");
 
     // F64::to_string

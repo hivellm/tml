@@ -1,0 +1,90 @@
+use test
+
+/// Regression suite for phase1f_i64-tostring-fast.
+///
+/// Replaces `snprintf("%lld", v)` with an inline digit-extraction loop that
+/// handles negative numbers and INT_MIN via unsigned wrapping. These tests
+/// exercise the corner cases that would catch a bad digit loop: zero, small
+/// positives/negatives, INT_MAX, INT_MIN, and round-trip via interpolation.
+
+@test
+func test_i64_zero() -> I32 {
+    let s: Str = (0 as I64).to_string()
+    assert(s == "0", "0 -> \"0\"")
+    return 0
+}
+
+@test
+func test_i64_small_positive() -> I32 {
+    let s: Str = (42 as I64).to_string()
+    assert(s == "42", "42 -> \"42\"")
+    return 0
+}
+
+@test
+func test_i64_small_negative() -> I32 {
+    let s: Str = (-7 as I64).to_string()
+    assert(s == "-7", "-7 -> \"-7\"")
+    return 0
+}
+
+@test
+func test_i64_single_digit_boundary() -> I32 {
+    let nine: Str = (9 as I64).to_string()
+    let ten: Str = (10 as I64).to_string()
+    assert(nine == "9", "9")
+    assert(ten == "10", "10")
+    return 0
+}
+
+@test
+func test_i64_large_positive() -> I32 {
+    let s: Str = (1234567890 as I64).to_string()
+    assert(s == "1234567890", "large positive")
+    return 0
+}
+
+@test
+func test_i64_large_negative() -> I32 {
+    let s: Str = (-9876543210 as I64).to_string()
+    assert(s == "-9876543210", "large negative")
+    return 0
+}
+
+@test
+func test_i64_max() -> I32 {
+    let s: Str = (9223372036854775807 as I64).to_string()
+    assert(s == "9223372036854775807", "I64::MAX")
+    return 0
+}
+
+@test
+func test_i64_min() -> I32 {
+    // INT_MIN is the trickiest case: arithmetic negation overflows signed
+    // i64, but the fast path uses udiv/urem on the unsigned wrap-around
+    // value so it should print "-9223372036854775808" correctly.
+    let s: Str = (-9223372036854775808 as I64).to_string()
+    assert(s == "-9223372036854775808", "I64::MIN")
+    return 0
+}
+
+@test
+func test_i32_round_trip() -> I32 {
+    let s: Str = (-12345 as I32).to_string()
+    assert(s == "-12345", "I32 negative")
+    return 0
+}
+
+@test
+func test_i16_round_trip() -> I32 {
+    let s: Str = (-32768 as I16).to_string()
+    assert(s == "-32768", "I16::MIN")
+    return 0
+}
+
+@test
+func test_i8_round_trip() -> I32 {
+    let s: Str = (-128 as I8).to_string()
+    assert(s == "-128", "I8::MIN")
+    return 0
+}
