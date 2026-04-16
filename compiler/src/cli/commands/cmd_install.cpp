@@ -9,6 +9,7 @@ TML_MODULE("compiler")
 #include "cli/commands/cmd_install.hpp"
 
 #include "cli/builder/build_config.hpp"
+#include "cli/builder/dependency_resolver.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
 #include "log/log.hpp"
 
@@ -55,9 +56,86 @@ static void write_cache_manifest(const fs::path& cache_dir, const std::string& l
     ofs << "installed = \"" << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S") << "\"\n";
 }
 
+/// Resolve TML dependencies declared in tml.toml and clone/build them into
+/// the user cache (~/.tml/cache). Writes tml.lock on success so subsequent
+/// builds can reproduce the exact dependency graph.
+///
+/// Follows the same flow the build system uses internally, but exposes it
+/// as an explicit `tml install` step so CI / package scripts can prepare
+/// the dependency graph before any compilation happens.
+static int install_tml_deps(bool verbose) {
+    fs::path manifest_path = fs::current_path() / "tml.toml";
+    if (!fs::exists(manifest_path)) {
+        // No tml.toml is perfectly fine for a lib/ scan scenario — just
+        // report no TML deps and let the native-deps pass continue.
+        if (verbose) {
+            std::cout << "No tml.toml in current directory — skipping TML dependency resolution.\n";
+        }
+        return 0;
+    }
+
+    auto manifest = Manifest::load(manifest_path);
+    if (!manifest) {
+        TML_LOG_ERROR("install", "Could not parse tml.toml");
+        return 1;
+    }
+    if (manifest->dependencies.empty()) {
+        if (verbose) {
+            std::cout << "No [dependencies] in tml.toml — skipping.\n";
+        }
+        return 0;
+    }
+
+    DependencyResolverOptions opts;
+    opts.verbose = verbose;
+    opts.cache_dir = get_default_cache_dir();
+    DependencyResolver resolver(opts);
+
+    std::cout << "Resolving " << manifest->dependencies.size() << " TML dependencies...\n";
+    auto result = resolver.resolve(*manifest, fs::current_path());
+    if (!result.success) {
+        TML_LOG_ERROR("install", result.error_message);
+        return 1;
+    }
+
+    // Write tml.lock so reproducible builds can replay the exact graph.
+    Lockfile lock;
+    lock.version = "1";
+    for (const auto& r : result.resolved) {
+        LockfileEntry entry;
+        entry.name = r.name;
+        entry.version = r.version;
+        if (r.is_path_dependency) {
+            entry.source = "path";
+            entry.source_detail = r.source_path.string();
+        } else {
+            // Cached git/registry deps — record the cache path so downstream
+            // tooling can locate the sources without re-resolving.
+            entry.source = "cache";
+            entry.source_detail = r.source_path.string();
+        }
+        entry.dependencies = r.dependencies;
+        lock.packages.push_back(entry);
+    }
+    fs::path lock_path = fs::current_path() / "tml.lock";
+    if (!lock.save(lock_path)) {
+        TML_LOG_WARN("install", "Could not write tml.lock (continuing anyway)");
+    } else if (verbose) {
+        std::cout << "Wrote tml.lock with " << lock.packages.size() << " entries.\n";
+    }
+
+    for (const auto& r : result.resolved) {
+        std::cout << "  " << r.name << " v" << r.version
+                  << (r.is_path_dependency ? " (path)" : "") << "\n";
+    }
+    std::cout << "Installed " << result.resolved.size() << " TML dependencies.\n";
+    return 0;
+}
+
 int run_install(int argc, char* argv[]) {
     bool verbose = false;
     bool native_only = false;
+    bool deps_only = false;
 
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
@@ -65,12 +143,28 @@ int run_install(int argc, char* argv[]) {
             verbose = true;
         } else if (arg == "--native-only") {
             native_only = true;
+        } else if (arg == "--deps-only") {
+            deps_only = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: tml install [options]\n"
-                      << "\nInstall native dependencies for all packages.\n"
+                      << "\nInstall TML + native dependencies for the current project.\n"
                       << "\nOptions:\n"
+                      << "  --deps-only    Only resolve TML deps (skip native libs)\n"
                       << "  --native-only  Only install native libs (skip TML deps)\n"
                       << "  --verbose, -v  Show detailed output\n";
+            return 0;
+        }
+    }
+
+    // TML dependency resolution (path/git/version). Runs first because the
+    // native-deps pass scans lib/ for local packages, which may themselves
+    // be dependencies just cloned into the cache.
+    if (!native_only) {
+        int rc = install_tml_deps(verbose);
+        if (rc != 0) {
+            return rc;
+        }
+        if (deps_only) {
             return 0;
         }
     }
