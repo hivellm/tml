@@ -96,9 +96,14 @@ void LLVMIRGen::init_runtime_catalog() {
     add("free", "declare dso_local void @free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     add("tml_str_free", "declare dso_local void @tml_str_free(ptr)");
     add("exit", "declare dso_local void @exit(i32) noreturn");
-    add("strlen", "declare dso_local i64 @strlen(ptr)");
-    add("strcmp", "declare dso_local i32 @strcmp(ptr, ptr)");
-    add("memcmp", "declare dso_local i32 @memcmp(ptr, ptr, i64)");
+    // strlen/strcmp/memcmp carry the attribute set LLVM's SimplifyLibCalls
+    // uses to recognize them as canonical libc functions. `readonly` +
+    // `nounwind` + `willreturn` is enough for the optimizer to constant-
+    // fold `strlen` of a compile-time literal (phase1h) and keeps
+    // backward compatibility with older LLVM attribute syntax.
+    add("strlen", "declare dso_local i64 @strlen(ptr) readonly nounwind willreturn");
+    add("strcmp", "declare dso_local i32 @strcmp(ptr, ptr) readonly nounwind willreturn");
+    add("memcmp", "declare dso_local i32 @memcmp(ptr, ptr, i64) readonly nounwind willreturn");
     add("getenv", "declare dso_local ptr @getenv(ptr)");
     add("tml_coverage_write_file", "declare dso_local void @tml_coverage_write_file(ptr)");
 

@@ -5,6 +5,35 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.35] — 2026-04-16
+
+### Changed — `std::text` phase1h (strlen constant-folding for literals)
+
+Adds LLVM libc-canonical attributes to the `strlen`, `strcmp`, and
+`memcmp` declarations in the runtime catalog so LLVM's SimplifyLibCalls
+pass recognizes them and constant-folds calls with compile-time
+string-literal arguments. The attribute set is
+`readonly nounwind willreturn`.
+
+Text `push_str("literal")` — the hot path inside `Text.push_str` now
+has its `text_str_len("literal")` call constant-folded at -O1+, cutting
+one FFI round-trip per call.
+
+Benchmarks (`benchmarks/profile_tml/text_bench.tml`, release build):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Small Appends push_str() | 4 ns/op | 2 ns/op | **-50%** |
+
+`push_str(non_literal_str)` is unchanged — the strlen call stays
+because the length isn't known at compile time. The same optimization
+applies transparently to every other site that calls
+`text_str_len("literal")` (concat, starts_with, ends_with, contains,
+split with literal delim).
+
+All 5 passing std/text test suites continue to pass; the pre-existing
+`text_search_transform` K001 codegen bug is unaffected.
+
 ## [0.3.34] — 2026-04-16
 
 ### Changed — `std::json` phase1e (arena parser overload)

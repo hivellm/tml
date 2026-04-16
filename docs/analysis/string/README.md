@@ -3,6 +3,20 @@
 **Date**: 2026-04-16
 **Status**: TML `Text` is **1.15x** Rust for log building (near parity). `Str +=` is **1,098x** slower (fundamentally O(n^2)). `I64.to_string()` is **5.9x** slower (malloc + snprintf).
 
+## Phase 1h update (2026-04-16)
+
+`Text.push_str` literal handling improved from **4 ns → 2 ns** by
+declaring `strlen` / `strcmp` / `memcmp` with
+`readonly nounwind willreturn` attributes. LLVM's SimplifyLibCalls pass
+now recognizes them as canonical libc functions and constant-folds
+`strlen(string_literal)` at -O1+, eliminating the FFI call for every
+`push_str("literal")` site (and for `Text.starts_with` / `ends_with` /
+`contains` when the needle is a literal).
+
+F-003 (FFI strlen overhead on literals) is **resolved** for the common
+case. Non-literal `push_str(some_str)` still pays the strlen cost —
+that's load-bearing because the length isn't known at compile time.
+
 ## Documents
 
 | File | Description |
@@ -17,7 +31,7 @@
 | Operation | TML | Rust | Ratio | Notes |
 |-----------|-----|------|-------|-------|
 | Concat Small (literals) | 0 ns | 180 ns | **TML wins** | Compile-time folding |
-| Text push_str (100K) | 4 ns | 1 ns | 4x | FFI strlen overhead |
+| Text push_str (100K) | 2 ns | 1 ns | 2x | phase1h LLVM libc attrs |
 | Str += loop (10K) | 3,293 ns | 3 ns | **1,098x** | O(n^2) vs O(n) |
 | Int to String | 41 ns | 7 ns | **5.9x** | malloc + snprintf vs stack |
 | Log building Text (10K) | 60 ns | 52 ns | **1.15x** | Near parity |
