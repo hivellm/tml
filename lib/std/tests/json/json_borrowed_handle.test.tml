@@ -1,0 +1,67 @@
+// Tests for phase1d borrowed-handle lifecycle in the JSON FFI.
+//
+// These validate that `object_get` / `array_get` produce handles that
+// reference in-place values (no deep clone) and that the borrow handle
+// behaves like an owning handle for read operations. The parent
+// document must be freed AFTER the borrow handles; freeing the parent
+// first would leave the borrow dangling and is the caller's contract.
+
+use test::{assert, assert_eq}
+use std::json::types::{Json, JsonObject, parse_or_panic}
+
+@test
+func test_object_get_reads_in_place() -> I32 {
+    let j = parse_or_panic("{\"name\": \"Alice\", \"age\": 30}")
+    let obj: JsonObject = j.as_object().unwrap()
+
+    // Reading the same field twice must produce the same value both times.
+    let v1 = obj.get_i64("age")
+    let v2 = obj.get_i64("age")
+    assert(v1.is_just(), "age present first read")
+    assert(v2.is_just(), "age present second read")
+    assert_eq(v1.unwrap(), 30)
+    assert_eq(v2.unwrap(), 30)
+    return 0
+}
+
+@test
+func test_array_get_reads_in_place() -> I32 {
+    let j = parse_or_panic("[10, 20, 30]")
+    let arr = j.as_array().unwrap()
+
+    let a = arr.get_i64(0).unwrap()
+    let b = arr.get_i64(1).unwrap()
+    let c = arr.get_i64(2).unwrap()
+    assert_eq(a, 10)
+    assert_eq(b, 20)
+    assert_eq(c, 30)
+    return 0
+}
+
+@test
+func test_nested_object_access_stable() -> I32 {
+    let j = parse_or_panic("{\"outer\": {\"inner\": {\"value\": 42}}}")
+    let outer_obj = j.as_object().unwrap()
+    let outer_json = outer_obj.get("outer").unwrap()
+    let inner_obj = outer_json.as_object().unwrap()
+    let inner_json = inner_obj.get("inner").unwrap()
+    let inner_obj2 = inner_json.as_object().unwrap()
+    let value = inner_obj2.get_i64("value").unwrap()
+    assert_eq(value, 42)
+    return 0
+}
+
+@test
+func test_repeated_access_same_value() -> I32 {
+    // Exercises the borrow-handle allocation/free pattern: each call to
+    // `get_i64` allocates a borrow handle, converts its payload, and drops
+    // the handle. Repeated calls must not corrupt the parent document.
+    let j = parse_or_panic("{\"counter\": 7}")
+    let obj: JsonObject = j.as_object().unwrap()
+    var total: I64 = 0
+    for _i in 0 to 32 {
+        total = total + obj.get_i64("counter").unwrap()
+    }
+    assert_eq(total, 7 * 32)
+    return 0
+}

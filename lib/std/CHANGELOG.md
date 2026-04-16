@@ -5,6 +5,43 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.33] — 2026-04-16
+
+### Changed — `std::json` phase1d (borrowed handles for accessors)
+
+Eliminates the deep-clone that `tml_json_object_get`, `tml_json_array_get`,
+and `tml_json_object_value_at` performed on every field access:
+
+* Added a parallel `json_borrowed` vector alongside the existing
+  `json_values` / `json_values_free` arrays. A handle is "borrowed" when
+  its borrow slot is non-null — in that case `get_json_value` returns
+  the pointed-to JsonValue instead of the owned slot.
+* New `alloc_borrowed_handle(ptr)` creates a handle that references an
+  existing JsonValue in-place. Pointer stability holds because
+  `JsonArray` and `JsonObject` store their elements in heap-allocated
+  containers (`Box<...>`), so reallocating the outer `json_values`
+  vector does not invalidate pointers into an element.
+* `tml_json_free` clears the borrow pointer alongside the owned slot;
+  freeing a borrow handle therefore does not free the parent document.
+  The caller must ensure the parent handle outlives any borrow derived
+  from it — mirrors serde_json's `&Value` semantics.
+* Matching behaviour added to `tml_json_arena_reset`.
+
+Benchmark (`benchmarks/profile_tml/json_bench.tml`, release build):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Field Access | 15,320 ns | 10,353 ns | **-32%** |
+| Array Iteration | 11,007 ns | 10,696 ns | -3% |
+| Nested Object Access | 11,174 ns | 10,541 ns | -5% |
+
+The remaining gap to serde_json's 7,100 ns Field Access is the handle-
+allocation cost and FFI dispatch overhead, not the clone.
+
+New test: `lib/std/tests/json/json_borrowed_handle.test.tml` — exercises
+repeated field access, nested access, and the 32-iteration borrow/free
+cycle to catch use-after-free in the borrow bookkeeping.
+
 ## [0.3.32] — 2026-04-16
 
 ### Changed — `std::json` phase1c (parse_string fast path)

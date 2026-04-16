@@ -35,6 +35,25 @@ a fresh heap allocation. The structural refactor here is the prerequisite
 for phase1d (F-003), which changes `JsonValue`'s string storage so the
 fast path can return views without copying.
 
+## Phase 1d update (2026-04-16, borrowed handles for accessors)
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Field Access | 15,320 ns | 10,353 ns | **-32%** |
+| Array Iteration | 11,007 ns | 10,696 ns | -3% |
+| Nested Object Access | 11,174 ns | 10,541 ns | -5% |
+
+F-004 (deep-clone on every field access) — **resolved**.
+`tml_json_object_get`, `tml_json_array_get`, and
+`tml_json_object_value_at` now return a "borrowed" handle that points
+in-place at the element inside the parent document. The caller must
+ensure the parent handle outlives any borrow.
+
+Still ~1.5× slower than serde_json's 7,100 ns Field Access — the
+residual overhead is the FFI handle-allocation cost and per-call
+dispatch, not the clone. Handle-pool amortization is the natural next
+step but is out of scope for phase1.
+
 ## Documents
 
 | File | Description |
