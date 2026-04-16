@@ -1,0 +1,78 @@
+//! String interning table for the TML compiler.
+//!
+//! Maps each unique string to an integer ID. Comparing interned strings
+//! becomes O(1) integer comparison instead of O(n) byte comparison.
+//!
+//! # Usage
+//!
+//! ```tml
+//! var table: InternTable = InternTable::new()
+//! let id1: I64 = table.intern("hello")
+//! let id2: I64 = table.intern("hello")
+//! assert(id1 == id2)  // same string → same ID
+//! let s: Str = table.lookup(id1)  // "hello"
+//! ```
+
+use std::collections::HashMap
+use std::collections::List
+
+/// A string interning table.
+///
+/// Stores each unique string once and assigns it a sequential integer ID.
+/// `intern(s)` returns the ID; `lookup(id)` returns the string.
+pub type InternTable {
+    /// Maps string → integer ID
+    map: HashMap[Str, I64],
+    /// Maps integer ID → string (index = ID)
+    strings: List[Str],
+}
+
+impl InternTable {
+    /// Create a new empty intern table with default capacity.
+    pub func new() -> InternTable {
+        InternTable {
+            map: HashMap[Str, I64]::new(256),
+            strings: List[Str]::new(),
+        }
+    }
+
+    /// Create a new intern table with the given initial capacity.
+    pub func with_capacity(cap: I64) -> InternTable {
+        InternTable {
+            map: HashMap[Str, I64]::new(cap),
+            strings: List[Str]::new(),
+        }
+    }
+
+    /// Intern a string: returns its integer ID.
+    /// If the string was already interned, returns the existing ID.
+    /// If not, assigns a new sequential ID and stores the string.
+    pub func intern(this, s: Str) -> I64 {
+        if this.map.has(s) {
+            return this.map.get(s)
+        }
+        let id: I64 = this.strings.len()
+        this.map.set(s, id)
+        this.strings.push(s as I64)
+        id
+    }
+
+    /// Look up the string for a given intern ID.
+    /// Returns the interned string, or "" if the ID is out of range.
+    pub func lookup(this, id: I64) -> Str {
+        if id < 0 or id >= this.strings.len() {
+            return ""
+        }
+        this.strings.get(id) as Str
+    }
+
+    /// Returns the number of unique interned strings.
+    pub func len(this) -> I64 {
+        this.strings.len()
+    }
+
+    /// Check if a string has been interned.
+    pub func contains(this, s: Str) -> Bool {
+        this.map.has(s)
+    }
+}

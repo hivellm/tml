@@ -9,6 +9,7 @@
 
 use compiler::source::*
 use compiler::token::*
+use compiler::intern::InternTable
 use core::str::basic::{len, char_at, substring}
 use std::collections::list::List
 
@@ -28,7 +29,8 @@ pub type Lexer {
     start_col: I64,
     start_offset: I64,
     interp_depth: I64,
-    template_depth: I64
+    template_depth: I64,
+    intern: InternTable
 }
 
 pub func lexer_new(source: Str, filename: Str) -> Lexer {
@@ -44,7 +46,8 @@ pub func lexer_new(source: Str, filename: Str) -> Lexer {
         start_col: 1,
         start_offset: 0,
         interp_depth: 0,
-        template_depth: 0
+        template_depth: 0,
+        intern: InternTable::new()
     }
 }
 
@@ -98,8 +101,10 @@ func make_span(filename: Str, start_line: I64, start_col: I64, start_offset: I64
 // ============================================================================
 
 /// Tokenize source text into a list of tokens.
+/// Identifiers are interned: tokens with the same name share the same Str.
 pub func tokenize(source: Str, filename: Str) -> List[Token] {
     var tokens: List[Token] = List::new(0)
+    var intern: InternTable = InternTable::new()
     let src_len: I64 = len(source)
     var pos: I64 = 0
     var line: I64 = 1
@@ -236,7 +241,10 @@ pub func tokenize(source: Str, filename: Str) -> List[Token] {
                 pos = pos + 1
                 col = col + 1
             }
-            let ident: Str = substring(source, id_start, pos)
+            let ident_raw: Str = substring(source, id_start, pos)
+            // Intern the identifier: all tokens with the same name share the same Str
+            let intern_id: I64 = intern.intern(ident_raw)
+            let ident: Str = intern.lookup(intern_id)
             let sp: SourceSpan = make_span(filename, tok_line, tok_col, tok_start, line, col, pos)
             // Check keywords
             when keyword_lookup(ident) {

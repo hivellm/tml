@@ -10,6 +10,7 @@ All notable changes to the TML project are documented in the patch notes directo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.3.29](docs/patches/v0.3.29.md) | 2026-04-16 | **SSO for Text** (≤23 chars inline, zero malloc — 48→0 ns/op), string interning for compiler identifiers, io.cpp SSO-aware printing |
 | [0.3.28](docs/patches/v0.3.28.md) | 2026-04-16 | **std::protobuf** complete (11 modules, .proto parser + TML codegen), **4.4× faster cold check** (meta cache persistence), module discovery fix, allocator attributes, encoding leak fix |
 | [0.3.26–0.3.27](docs/patches/v0.3.26-0.3.27.md) | 2026-04-15 | **Rust parity for list iteration** — pointer-stepping for-in, @inline iterators, constant stride, AVX-512 `<8 x i64>` vectorization. TML 4.32B vs Rust 4.57B ops/s (1.06×, within noise) |
 | [0.3.20–0.3.25](docs/patches/v0.3.20-0.3.25.md) | 2026-04-15 | BTreeMap for-in, 13 i32 fallbacks removed, K001 struct forward-ref fix, U128 display, std::msgpack, i128 arithmetic, parallel CGU codegen |
