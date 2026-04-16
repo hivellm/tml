@@ -1323,6 +1323,19 @@ static int generate_all_meta_from_source() {
                     auto mod_info = registry->get_module(mod_path);
                     if (mod_info) {
                         GlobalModuleCache::instance().put(mod_path, *mod_info);
+
+                        // Persist to .tml.meta binary cache for faster subsequent loads.
+                        // This avoids re-parsing 400+ library modules from source on every run.
+                        auto build_root = find_build_root();
+                        auto cache_path = get_module_cache_path(mod_path, build_root);
+                        fs::create_directories(cache_path.parent_path());
+                        std::ofstream meta_out(cache_path, std::ios::binary);
+                        if (meta_out) {
+                            uint64_t source_hash = compute_module_source_hash(
+                                resolve_module_source_path(mod_path, lib_root).string());
+                            ModuleBinaryWriter writer(meta_out);
+                            writer.write_module(*mod_info, source_hash);
+                        }
                     }
                 }
                 TML_LOG_INFO("meta", "  [GENERATED] " << mod_path << " (" << elapsed << "ms)");
