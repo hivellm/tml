@@ -1691,6 +1691,7 @@ add_library(tml_cli STATIC
     src/cli/utils.cpp
     src/cli/diagnostic.cpp
     src/cli/dispatcher.cpp
+    src/cli/tty_output.cpp
     # Commands (cmd_*.cpp)
     src/cli/commands/cmd_build.cpp
     src/cli/commands/cmd_cache.cpp
@@ -2042,6 +2043,7 @@ if(TML_BUILD_TESTS)
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
         tests/cli/builder_test.cpp
+        tests/cli/tty_output_test.cpp
         # Integration
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp

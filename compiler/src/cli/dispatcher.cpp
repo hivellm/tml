@@ -67,6 +67,7 @@ TML_MODULE("compiler")
 #include "common.hpp"
 #include "log/log.hpp"
 #include "query/query_context.hpp"
+#include "tty_output.hpp"
 #include "utils.hpp"
 
 #include <filesystem>
@@ -100,6 +101,20 @@ namespace tml::cli {
 /// tml fmt src/*.tml               # Format source files
 /// ```
 int tml_main(int argc, char* argv[]) {
+    // Detect TTY and wire line buffering + atexit flush BEFORE anything emits
+    // output. This is what prevents `tml check file.tml > out.txt` from
+    // deadlocking on the 64 KB Windows pipe buffer (reported by UzDB/MCP).
+    {
+        bool force_no_color = false;
+        bool force_non_interactive = false;
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--no-color") force_no_color = true;
+            else if (arg == "--non-interactive") force_non_interactive = true;
+        }
+        tty::init_runtime_mode(force_no_color, force_non_interactive);
+    }
+
     if (argc < 2) {
         print_usage();
         return 0;
