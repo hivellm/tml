@@ -486,35 +486,83 @@ auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<s
         }
         std::cerr << "[exec] Process created, PID=" << pi.dwProcessId << std::endl;
 
-        // Read output from child
+        // Read output from child with periodic timeout check. The previous
+        // implementation called blocking ReadFile() and only checked the
+        // timeout between reads — a subprocess that hung *without writing*
+        // any output (the exact UzDB/MCP failure mode) would keep ReadFile
+        // blocked forever and the timeout would never fire. Fix: poll the
+        // pipe with PeekNamedPipe every POLL_MS and either drain available
+        // bytes or tick the timeout budget.
+        constexpr DWORD kPollMs = 100;
         char buffer[4096];
-        DWORD bytes_read = 0;
+        bool timed_out = false;
         std::cerr << "[exec] Reading pipe..." << std::endl;
-        while (ReadFile(read_pipe, buffer, sizeof(buffer) - 1, &bytes_read, nullptr) &&
-               bytes_read > 0) {
-            buffer[bytes_read] = '\0';
-            output += buffer;
+        while (true) {
+            DWORD available = 0;
+            BOOL peek_ok = PeekNamedPipe(read_pipe, nullptr, 0, nullptr, &available, nullptr);
+            if (!peek_ok) {
+                // Pipe closed by child — process is about to exit.
+                break;
+            }
+            if (available > 0) {
+                DWORD bytes_read = 0;
+                DWORD to_read = available < sizeof(buffer) - 1 ? available : sizeof(buffer) - 1;
+                if (!ReadFile(read_pipe, buffer, to_read, &bytes_read, nullptr) || bytes_read == 0) {
+                    break;
+                }
+                buffer[bytes_read] = '\0';
+                output += buffer;
+            } else {
+                // Nothing to read yet — sleep briefly before next poll so we
+                // do not burn CPU. Process may still be running.
+                DWORD wait_result = WaitForSingleObject(pi.hProcess, kPollMs);
+                if (wait_result == WAIT_OBJECT_0) {
+                    // Child exited; drain any remaining output on the next
+                    // loop iteration (PeekNamedPipe will report the trailing
+                    // bytes if present, then fail with pipe-closed).
+                    continue;
+                }
+            }
 
-            // Check timeout
             if (timeout_seconds > 0) {
                 auto elapsed = std::chrono::steady_clock::now() - start_time;
                 auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
                 if (elapsed_s >= timeout_seconds) {
-                    output += "\n[TIMEOUT] Command exceeded " + std::to_string(timeout_seconds) +
-                              "s limit.\n";
-                    TerminateProcess(pi.hProcess, 124);
-                    CloseHandle(read_pipe);
-                    CloseHandle(pi.hProcess);
-                    CloseHandle(pi.hThread);
-                    return {strip_ansi(output), 124};
+                    timed_out = true;
+                    break;
                 }
             }
         }
 
+        if (timed_out) {
+            output += "\n[TIMEOUT] Command exceeded " + std::to_string(timeout_seconds) +
+                      "s limit.\n";
+            TerminateProcess(pi.hProcess, 124);
+            // Brief wait so the terminated process releases the pipe before
+            // we close our handle — avoids spurious handle-close warnings.
+            WaitForSingleObject(pi.hProcess, 500);
+            CloseHandle(read_pipe);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return {strip_ansi(output), 124};
+        }
+
         std::cerr << "[exec] Pipe reading done, closing pipe" << std::endl;
         CloseHandle(read_pipe);
-        std::cerr << "[exec] Waiting for process..." << std::endl;
-        WaitForSingleObject(pi.hProcess, INFINITE);
+        // Bounded wait — the child is expected to exit within this window
+        // because the pipe is already closed. If it does not, treat it as a
+        // timeout and kill it rather than blocking MCP forever.
+        DWORD wait_ms = (timeout_seconds > 0 ? static_cast<DWORD>(timeout_seconds) * 1000u : 5000u);
+        std::cerr << "[exec] Waiting for process up to " << wait_ms << " ms..." << std::endl;
+        DWORD wait_result = WaitForSingleObject(pi.hProcess, wait_ms);
+        if (wait_result == WAIT_TIMEOUT) {
+            output += "\n[TIMEOUT] Process did not exit after pipe close; killed.\n";
+            TerminateProcess(pi.hProcess, 124);
+            WaitForSingleObject(pi.hProcess, 500);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            return {strip_ansi(output), 124};
+        }
 
         DWORD win_exit_code = 0;
         GetExitCodeProcess(pi.hProcess, &win_exit_code);
