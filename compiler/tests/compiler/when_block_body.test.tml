@@ -1,0 +1,133 @@
+use test
+
+// Regression suite for phase1l_when-block-body-ice.
+//
+// UzDB (phase0 primitives verification) reported that `when` arms with
+// `{ ... }` block bodies triggered an ICE in certain user-code patterns.
+// Audit on 2026-04-16 could not reproduce the ICE: every combination the
+// report flagged (guards, enum destructuring, or-patterns, nested when,
+// when inside a loop) now compiles and runs correctly. These tests are
+// kept as a regression guard against future codegen changes that might
+// bring the bug back.
+
+enum Op {
+    Add(I32, I32),
+    Mul(I32, I32),
+    Neg(I32),
+}
+
+/// Block body in return position with a binding + computation.
+@test
+func test_when_block_body_returns_value() -> I32 {
+    let x: I32 = 5
+    let result: I32 = when x {
+        1 => { 10 },
+        5 => {
+            let y: I32 = 100
+            y + x
+        },
+        _ => 0,
+    }
+    assert(result == 105, "block body + binding should evaluate to tail expression")
+    return 0
+}
+
+/// Multiple statements in a block body, no trailing expression.
+@test
+func test_when_block_multi_stmt() -> I32 {
+    let mut sum: I32 = 0
+    let x: I32 = 2
+    when x {
+        1 => { sum = sum + 1 },
+        2 => {
+            sum = sum + 10
+            sum = sum + 20
+            sum = sum + 30
+        },
+        _ => { sum = 0 },
+    }
+    assert(sum == 60, "block body should run every statement in order")
+    return 0
+}
+
+/// Nested when expression inside another when arm's block body.
+@test
+func test_when_nested_block() -> I32 {
+    let outer: I32 = 1
+    let inner: I32 = 2
+    let result: I32 = when outer {
+        1 => {
+            when inner {
+                2 => { 100 },
+                _ => { 0 },
+            }
+        },
+        _ => { 999 },
+    }
+    assert(result == 100, "nested when with block bodies")
+    return 0
+}
+
+/// Pattern guard on a block-body arm.
+@test
+func test_when_guard_with_block() -> I32 {
+    let x: I32 = 10
+    let result: I32 = when x {
+        n if n > 5 => {
+            let bonus: I32 = 50
+            n + bonus
+        },
+        n => { n },
+    }
+    assert(result == 60, "guard + block body should evaluate block")
+    return 0
+}
+
+/// Enum payload destructuring followed by a block body with local bindings.
+@test
+func test_when_enum_payload_with_block() -> I32 {
+    let op: Op = Op::Add(3, 4)
+    let result: I32 = when op {
+        Op::Add(a, b) => {
+            let s: I32 = a + b
+            s * 2
+        },
+        Op::Mul(a, b) => { a * b },
+        Op::Neg(a) => { -a },
+    }
+    assert(result == 14, "enum payload + block body")
+    return 0
+}
+
+/// Or-pattern (`1 | 2 | 3`) with a block body.
+@test
+func test_when_or_pattern_with_block() -> I32 {
+    let x: I32 = 3
+    let result: I32 = when x {
+        1 | 2 | 3 => {
+            let tripled: I32 = x * 3
+            tripled
+        },
+        _ => { 0 },
+    }
+    assert(result == 9, "or pattern arm with block body")
+    return 0
+}
+
+/// `when` used as a statement inside a for-in loop body.
+@test
+func test_when_inside_loop() -> I32 {
+    let mut total: I32 = 0
+    for i in 0 to 5 {
+        when i {
+            0 => { total = total + 10 },
+            _ => {
+                let v: I32 = i * 2
+                total = total + v
+            },
+        }
+    }
+    // 10 + 2 + 4 + 6 + 8 = 30
+    assert(total == 30, "when inside loop body")
+    return 0
+}
