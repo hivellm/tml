@@ -517,6 +517,8 @@ public:
         bool is_direct_param = false; ///< True if reg is a direct parameter (not an alloca).
         bool is_capturing_closure =
             false; ///< True if this is a capturing closure (fat ptr with env).
+        bool holds_heap_str =
+            false; ///< True if this Str var holds a heap-allocated string (for free-on-reassign).
     };
 
     /// Drop tracking information for RAII.

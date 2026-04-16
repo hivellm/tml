@@ -82,6 +82,50 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             }
         }
 
+        // Detect augmented Str concat: result = result + expr
+        // When holds_heap_str is true, use str_concat_reuse (realloc in-place)
+        if (bin.left->is<parser::IdentExpr>() && bin.right->is<parser::BinaryExpr>()) {
+            const auto& lhs_name = bin.left->as<parser::IdentExpr>().name;
+            const auto& rhs_bin = bin.right->as<parser::BinaryExpr>();
+            if (rhs_bin.op == parser::BinaryOp::Add &&
+                rhs_bin.left->is<parser::IdentExpr>() &&
+                rhs_bin.left->as<parser::IdentExpr>().name == lhs_name) {
+                auto var_it = locals_.find(lhs_name);
+                if (var_it != locals_.end() && var_it->second.type == "ptr") {
+                    // Pattern matched: result = result + expr
+                    // Restore expected types before generating RHS expr
+                    expected_enum_type_ = saved_expected_enum_type;
+                    expected_literal_type_ = saved_expected_literal_type;
+                    expected_literal_is_unsigned_ = saved_expected_literal_is_unsigned;
+
+                    std::string old_val = fresh_reg();
+                    emit_line("  " + old_val + " = load ptr, ptr " + var_it->second.reg);
+                    std::string rhs_val = gen_expr(*rhs_bin.right);
+                    std::string new_val = fresh_reg();
+
+                    if (var_it->second.holds_heap_str) {
+                        // Old value is heap — safe to realloc
+                        emit_line("  " + new_val + " = call ptr @str_concat_reuse(ptr " +
+                                  old_val + ", ptr " + rhs_val + ")");
+                        // realloc consumed old_val — no free needed
+                    } else {
+                        // First assignment (literal) — allocate fresh
+                        emit_line("  " + new_val + " = call ptr @str_concat_opt(ptr " +
+                                  old_val + ", ptr " + rhs_val + ")");
+                    }
+                    // Free right operand if heap temp
+                    if (is_heap_str_producer(*rhs_bin.right)) {
+                        emit_line("  call void @tml_str_free(ptr " + rhs_val + ")");
+                    }
+                    emit_line("  store ptr " + new_val + ", ptr " + var_it->second.reg);
+                    var_it->second.holds_heap_str = true;
+                    if (!pending_str_temps_.empty())
+                        consume_last_str_temp();
+                    return new_val;
+                }
+            }
+        }
+
         std::string right = gen_expr(*bin.right);
 
         // Restore expected types
@@ -148,8 +192,22 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                         }
                     }
 
+                    // For Str vars: free old heap string before overwriting to prevent leaks.
+                    // This enables O(n) total allocation in `result = result + "x"` loops
+                    // (instead of O(n²) from leaked intermediates).
+                    if (target_type == "ptr" && it->second.holds_heap_str) {
+                        std::string old_val = fresh_reg();
+                        emit_line("  " + old_val + " = load ptr, ptr " + it->second.reg);
+                        emit_line("  call void @tml_str_free(ptr " + old_val + ")");
+                    }
+
                     emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
                               it->second.reg);
+
+                    // Track whether this var now holds a heap Str
+                    if (target_type == "ptr") {
+                        it->second.holds_heap_str = is_heap_str_producer(*bin.right);
+                    }
 
                     // If assigning a heap Str to a var, consume the pending Str temp
                     // so it won't be double-freed at statement end.

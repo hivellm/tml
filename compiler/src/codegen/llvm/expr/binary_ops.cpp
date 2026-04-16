@@ -753,15 +753,10 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                       ptr_operand + ", i64 " + idx_operand);
             last_expr_type_ = "ptr";
         } else if (is_string) {
-            // String concatenation using str_concat_opt (O(1) amortized)
+            // String concatenation using str_concat_opt
             emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
                       ")");
             // Free consumed operands that are heap-allocated Str temporaries.
-            // This prevents leaks in chains like "0x" + to_hex_str(x) where the
-            // to_hex_str result is consumed by concat but never freed.
-            // Literals and identifiers return false — safe to skip.
-            // Also remove freed operands from pending_str_temps_ to avoid double-free
-            // (gen_expr() for sub-expressions may have already tracked them).
             if (is_heap_str_producer(*bin.left)) {
                 emit_line("  call void @tml_str_free(ptr " + left + ")");
                 auto it = std::find(pending_str_temps_.begin(), pending_str_temps_.end(), left);

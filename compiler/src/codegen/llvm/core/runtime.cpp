@@ -519,6 +519,41 @@ void LLVMIRGen::init_runtime_catalog() {
         "}",
         {"strlen", "mem_alloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
 
+    // str_concat_reuse: reallocs the left operand's buffer with exponential growth.
+    // Used for augmented concat (result = result + expr) when left is known heap-allocated.
+    // Allocates total*2+1 bytes to amortize future appends (O(1) amortized per iteration).
+    // The extra capacity is preserved by realloc — strlen still returns the actual length.
+    add("str_concat_reuse",
+        "define internal ptr @str_concat_reuse(ptr %a, ptr %b) {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  br i1 %a_null, label %fallback, label %check_b\n"
+        "check_b:\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_a = call i64 @strlen(ptr %a)\n"
+        "  %len_b = call i64 @strlen(ptr %b_safe)\n"
+        "  %total = add i64 %len_a, %len_b\n"
+        "  %double = shl i64 %total, 1\n"
+        "  %alloc = add i64 %double, 1\n"
+        "  %buf = call ptr @mem_realloc(ptr %a, i64 %alloc)\n"
+        "  %dst = getelementptr i8, ptr %buf, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end = getelementptr i8, ptr %buf, i64 %total\n"
+        "  store i8 0, ptr %end\n"
+        "  ret ptr %buf\n"
+        "fallback:\n"
+        "  %b2 = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_b2 = call i64 @strlen(ptr %b2)\n"
+        "  %alloc2 = add i64 %len_b2, 1\n"
+        "  %buf2 = call ptr @mem_alloc(i64 %alloc2)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf2, ptr %b2, i64 %len_b2, i1 false)\n"
+        "  %end2 = getelementptr i8, ptr %buf2, i64 %len_b2\n"
+        "  store i8 0, ptr %end2\n"
+        "  ret ptr %buf2\n"
+        "}",
+        {"strlen", "mem_alloc", "mem_realloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
     // Black box functions (no dependencies)
     add("black_box_i32", "; Black box (inline IR)\n"
                          "define internal i32 @black_box_i32(i32 %val) noinline {\n"
