@@ -1,0 +1,88 @@
+//! # C17 Expression Parser (phase 23b Phase 3)
+//!
+//! Module-level summary of the C expression parser. The implementation
+//! lives in `parser.tml` alongside declarator / type-name / initializer
+//! parsing because the four grammar fragments are mutually recursive in
+//! C — type-names need declarators, declarators need expressions (array
+//! sizes), expressions need type-names (casts, `sizeof(T)`, compound
+//! literals, `_Generic`), and initializers need both expressions and
+//! declarators. Splitting them across files would introduce a circular
+//! `use` import that TML doesn't support; keeping the shared surface in
+//! one file is the same pattern the TML frontend's own parser uses (see
+//! `compiler-tml/src/parser/common.tml` vs `parse_expr.tml`).
+//!
+//! This file exists as the public entry point called out in the phase23b
+//! task spec — it re-exports the expression-parsing API that lives in
+//! `compiler::cc::parser` so downstream passes can import `parse_expr`
+//! and get a focused surface (no declaration helpers leak through).
+//!
+//! ## Entry points
+//! - `cp_parse_expr(parser, pos) -> Outcome[CParsedExpr, CParseError]` —
+//!   full C expression (comma-separated).
+//! - `cp_parse_assign_expr(parser, pos) -> Outcome[CParsedExpr, CParseError]` —
+//!   a single assignment-expression (no top-level comma).
+//! - `cp_parse_initializer(parser, pos) -> Outcome[CParsedInit, CParseError]` —
+//!   scalar, brace, or designated initializer.
+//! - `cp_parse_type_name(parser, pos) -> Outcome[CParsedTypeName, CParseError]` —
+//!   a C type-name (specifiers + abstract declarator) used in casts,
+//!   `sizeof(T)`, `_Alignof(T)`, compound literals, and `_Generic`.
+//!
+//! ## Coverage
+//!
+//! All 15 C17 operator precedence levels (C17 §6.5) are implemented in
+//! `parser.tml`:
+//!
+//! | Level | Operators                                  | Assoc   | Status |
+//! |-------|--------------------------------------------|---------|--------|
+//! | 15    | `()` call, `[]`, `.`, `->`, postfix ++/--  | left    | ✓      |
+//! | 14    | prefix ++/--, unary +/-/!/~/*/&, sizeof    | right   | ✓      |
+//! | 13    | `(type)` cast                              | right   | ✓      |
+//! | 12    | `*  /  %`                                  | left    | ✓      |
+//! | 11    | `+  -`                                     | left    | ✓      |
+//! | 10    | `<<  >>`                                   | left    | ✓      |
+//! |  9    | `<  <=  >  >=`                             | left    | ✓      |
+//! |  8    | `==  !=`                                   | left    | ✓      |
+//! |  7    | `&`                                        | left    | ✓      |
+//! |  6    | `^`                                        | left    | ✓      |
+//! |  5    | `|`                                        | left    | ✓      |
+//! |  4    | `&&`                                       | left    | ✓      |
+//! |  3    | `||`                                       | left    | ✓      |
+//! |  2    | `? :`                                      | right   | ✓      |
+//! |  1    | `= += -= ... <<= >>= &= ^= |=`             | right   | ✓      |
+//! |  0    | `,` (comma)                                | left    | ✓      |
+//!
+//! Pointer / memory operators: `*p`, `&p`, `p->f`, `p[i]`, cast `(T)e`,
+//! `sizeof(e)`, `sizeof(T)`, `_Alignof(T)`, compound literal `(T){...}`.
+//!
+//! C11 selection: `_Generic (ctrl, T1: e1, T2: e2, default: ed)` — the
+//! controlling expression is parsed as an assignment-expression, each
+//! association is a type-name (or `default`) followed by `:` and an
+//! assignment-expression. The type checker resolves the match later.
+//!
+//! String literal concatenation: adjacent `StringLit` tokens in the input
+//! stream are glued into a single `CExpr::StringLit` at parse time (translation
+//! phase 6 per C17 §5.1.1.2). Mismatched encodings are deferred to the
+//! type checker for diagnostic so the error can point at the exact
+//! literal that disagrees.
+
+use compiler::cc::parser::{
+    cp_parse_expr,
+    cp_parse_assign_expr,
+    cp_parse_initializer,
+    cp_parse_type_name,
+    cp_at_type_start,
+    CParsedExpr,
+    CParsedInit,
+    CParsedTypeName,
+    CParseError
+}
+
+// Re-export type names so downstream code can `use compiler::cc::parse_expr::*`.
+pub type ReExports {
+    // This struct is never constructed — its only purpose is to anchor the
+    // module's public surface area in a way that lets other `use` imports
+    // reference `compiler::cc::parse_expr` without needing any runtime
+    // object. TML modules must have at least one public item to be worth
+    // importing; the imports above serve that purpose.
+    _placeholder: I64
+}

@@ -555,8 +555,97 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
             }
             return Err(c_parse_err("expected expression", tok))
         },
+        Keyword(k) => {
+            // C11 `_Generic ( assignment-expr , generic-assoc-list )`. The
+            // controlling expression is never evaluated at run-time; its
+            // type at compile time selects the matching association.
+            if (k as I64) == (CKeyword::KwGeneric as I64) {
+                return cp_parse_generic(parser, pos)
+            }
+            return Err(c_parse_err("unexpected keyword in primary expression", tok))
+        },
         _ => return Err(c_parse_err("expected expression", tok))
     }
+}
+
+// `_Generic` selection (C11 §6.5.1.1). `_Generic` is a primary expression
+// that evaluates to the association value whose `type-name` matches the
+// controlling expression's type (after the usual arithmetic conversions for
+// integer promotion). `default` is a catch-all and may appear at most once.
+func cp_parse_generic(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    // `_Generic` already verified by caller.
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after _Generic")
+    let Ok(after_lp) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: generic lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_lp
+    let ctrl_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+    let Ok(ctrl) = ctrl_res else {
+        let Err(e) = ctrl_res else { return Err(c_parse_err("internal: generic ctrl", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = ctrl.pos
+    let comma: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Comma, "expected ',' after controlling expression")
+    let Ok(after_comma) = comma else {
+        let Err(e) = comma else { return Err(c_parse_err("internal: generic comma", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_comma
+    var assocs: List[CGenericAssoc] = List[CGenericAssoc]::new(2 as I64)
+    var cont: I64 = 1 as I64
+    loop (cont == 1 as I64) {
+        var is_default: I64 = 0 as I64
+        // Dummy type-name used for `default:` associations.
+        var ty: CTypeName = CTypeName {
+            specifiers: CDeclSpecifiers {
+                storage: CStorageClass::None,
+                base_type: CBaseType::Void,
+                quals: c_quals_none(),
+                funcspec: c_funcspec_none(),
+                alignas_bytes: 0 as I64
+            },
+            declarator: CDeclarator::Abstract
+        }
+        if cp_check_kw(parser.tokens, p, CKeyword::Default) {
+            is_default = 1 as I64
+            p = p + 1
+        } else {
+            let tn: Outcome[CParsedTypeName, CParseError] = cp_parse_type_name(parser, p)
+            let Ok(tnp) = tn else {
+                let Err(e) = tn else { return Err(c_parse_err("internal: generic assoc ty", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            ty = tnp.ty
+            p = tnp.pos
+        }
+        let colon: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Colon, "expected ':' in _Generic association")
+        let Ok(after_colon) = colon else {
+            let Err(e) = colon else { return Err(c_parse_err("internal: generic colon", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = after_colon
+        let val_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+        let Ok(val) = val_res else {
+            let Err(e) = val_res else { return Err(c_parse_err("internal: generic val", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = val.pos
+        assocs.push(CGenericAssoc { is_default: is_default, ty: ty, value: val.expr })
+        if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+            p = p + 1
+            continue
+        }
+        cont = 0 as I64
+    }
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close _Generic")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: generic rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let gen: Heap[CExpr] = Heap[CExpr]::new(CExpr::Generic(ctrl.expr, assocs))
+    return Ok(CParsedExpr { expr: gen, pos: after_rp })
 }
 
 func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
