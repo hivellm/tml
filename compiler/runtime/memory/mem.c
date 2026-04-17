@@ -44,6 +44,7 @@
 
 #ifdef _WIN32
 #include <malloc.h>
+#include <crtdbg.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <psapi.h>
@@ -209,6 +210,31 @@ TML_EXPORT void* mem_realloc(void* ptr, int64_t new_size) {
  * to append in place (avoiding a malloc+memcpy on every concat and turning
  * `s = s + x` loops from O(n²) into amortized O(1)).
  */
+#ifdef _WIN32
+// Silent invalid-parameter handler for `_msize`. MSVC's default handler
+// calls `abort()` in the debug CRT when passed a pointer that isn't
+// owned by the heap; we install this no-op handler only when explicitly
+// probing and then restore.
+#include <stdlib.h>
+static void tml_mem_silent_invalid_param(const wchar_t* expr, const wchar_t* fn,
+                                          const wchar_t* file, unsigned line,
+                                          uintptr_t reserved) {
+    (void)expr; (void)fn; (void)file; (void)line; (void)reserved;
+}
+
+// Safe `_msize` wrapper — returns (size_t)-1 for any pointer that isn't
+// owned by the CRT heap, without aborting. Installs a silent
+// invalid_parameter_handler across the call so MSVC's debug CRT doesn't
+// invoke `abort()`.
+static inline size_t tml_safe_msize(void* ptr) {
+    _invalid_parameter_handler old = _set_thread_local_invalid_parameter_handler(
+        tml_mem_silent_invalid_param);
+    size_t sz = _msize(ptr);
+    _set_thread_local_invalid_parameter_handler(old);
+    return sz;
+}
+#endif
+
 TML_EXPORT int64_t mem_usable_size(void* ptr) {
     if (!ptr) return 0;
 #ifdef _WIN32
@@ -243,6 +269,236 @@ TML_EXPORT void mem_free(void* ptr) {
     tml_mem_track_free(ptr);
 #endif
     free(ptr);
+}
+
+// ============================================================================
+// Length-prefixed String Buffers (phase1k)
+// ============================================================================
+//
+// TML's `Str` is a null-terminated `ptr`. Literals live in `.rdata`; heap
+// strings used to live in raw `malloc` blocks, so every `Str.len()` and
+// every `str_append` had to `strlen(buf)` — O(|buf|) — making
+// `s = s + "x"` loops O(n²) in total time (even after phase1i's amortized
+// growth). Phase 1k caches the length in a 24-byte header:
+//
+//   [magic:i64 | cap:i64 | len:i64 | data[cap] | NUL]
+//
+// The pointer handed to user code points at `data`. The header lives at
+// `ptr[-24..0)`. The underlying `malloc` pointer is `ptr - 24`.
+// NUL-termination at `data[len]` is preserved so the buffer remains a
+// valid C string — printf, strlen, strcmp all still work.
+//
+// **Discriminator (the crucial part).** TML code calls `str_append` with
+// mixed-provenance pointers: literals in `.rdata`, buffers we allocated
+// via `tml_str_alloc`, and legacy heap buffers from raw `mem_alloc` /
+// `malloc` that predate this ABI. Reading `ptr - 24` blindly would be
+// wrong for literals (different section) and dangerous for legacy heap
+// buffers (could land on another allocation's user data and pass
+// plausibility checks by accident — we observed STATUS_HEAP_CORRUPTION
+// in practice before adding the magic).
+//
+// We solve this with a three-step check:
+//   1. Image-range guard — literals in `.rdata`/`.text` return fast.
+//   2. `_msize(ptr - 24)` — MSVC's `_msize` calls `HeapSize(heap, 0, p)`
+//      which returns `(SIZE_T)-1` on any pointer not owned by the CRT
+//      heap. This rejects arbitrary addresses without UB.
+//   3. Magic sentinel — we write `TML_STR_MAGIC` at the start of every
+//      allocation. If the first 8 bytes of the candidate header don't
+//      equal the magic, the buffer wasn't ours; fall back to `strlen`.
+
+#define TML_STR_HEADER_BYTES 24  // 8 magic + 8 cap + 8 len
+
+// Arbitrary but distinctive 64-bit value — ASCII "TMLstrK1" (phase1K).
+// Chance of a false positive on an 8-byte slice of random heap data is
+// ~1/2^64, and the bytes are non-printable-mix enough to never appear in
+// a source literal by accident.
+#define TML_STR_MAGIC 0x314B7274735F4C4DULL  // "ML_strK1" little-endian
+
+typedef struct {
+    uint64_t magic;
+    int64_t cap;
+    int64_t len;
+} TmlStrHeader;
+
+// Fetch header pointer if `ptr` is one of our length-prefixed buffers.
+// Returns NULL for literals, non-heap pointers, heap pointers not owned
+// by us, or corrupted headers. Zero-UB on arbitrary input.
+//
+// On Windows we call `HeapSize(GetProcessHeap(), 0, raw)` directly
+// instead of `_msize(raw)`. `_msize` invokes MSVC's
+// `invalid_parameter_handler` when the pointer is not owned by the CRT
+// heap — in the debug CRT that handler calls `abort()`, which is why
+// phase1k's first iteration crashed with STATUS_HEAP_CORRUPTION the
+// instant `str_append` received a legacy (non-prefixed) heap pointer.
+// `HeapSize` has the same semantics but returns `(SIZE_T)-1` on invalid
+// pointers without raising or aborting.
+static inline TmlStrHeader* tml_str_header(void* ptr) {
+    if (!ptr) return NULL;
+#ifdef _WIN32
+    if (!g_mem_image_ranges_initialized) mem_init_image_ranges();
+    if (mem_is_image_ptr((uintptr_t)ptr)) return NULL;
+    void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
+    size_t block = tml_safe_msize(raw);
+    if (block == (size_t)-1 || block < (size_t)TML_STR_HEADER_BYTES + 1) {
+        return NULL;
+    }
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    if (hdr->magic != TML_STR_MAGIC) return NULL;
+    if (hdr->cap < 0 || hdr->len < 0 || hdr->len > hdr->cap) return NULL;
+    if ((size_t)hdr->cap + TML_STR_HEADER_BYTES + 1 > block) return NULL;
+    return hdr;
+#else
+    void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
+#if defined(__APPLE__)
+    size_t block = malloc_size(raw);
+#elif defined(__GLIBC__) || defined(__linux__)
+    size_t block = malloc_usable_size(raw);
+#else
+    size_t block = 0;
+#endif
+    if (block < (size_t)TML_STR_HEADER_BYTES + 1) return NULL;
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    if (hdr->magic != TML_STR_MAGIC) return NULL;
+    if (hdr->cap < 0 || hdr->len < 0 || hdr->len > hdr->cap) return NULL;
+    if ((size_t)hdr->cap + TML_STR_HEADER_BYTES + 1 > block) return NULL;
+    return hdr;
+#endif
+}
+
+/**
+ * @brief Allocates a length-prefixed Str buffer.
+ *
+ * Layout: `[magic | cap | len | data... | NUL]`. Returns a pointer to
+ * `data`. The buffer is sized for `cap` data bytes plus the trailing NUL;
+ * the caller is expected to write at most `cap` bytes and then call
+ * `tml_str_set_len` to record the written length. The initial len is 0
+ * and `data[0]` is written as NUL so the buffer is already a valid empty
+ * C string.
+ */
+TML_EXPORT void* tml_str_alloc(int64_t cap) {
+    if (cap < 0) cap = 0;
+    size_t total = (size_t)cap + TML_STR_HEADER_BYTES + 1;
+    void* raw = mem_alloc((int64_t)total);
+    if (!raw) return NULL;
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    hdr->magic = TML_STR_MAGIC;
+    hdr->cap = cap;
+    hdr->len = 0;
+    char* data = (char*)raw + TML_STR_HEADER_BYTES;
+    data[0] = '\0';
+    return data;
+}
+
+/**
+ * @brief Allocates with a pre-filled length (producers that know the exact
+ * size and will fill the buffer before returning). `cap == len` on return.
+ */
+TML_EXPORT void* tml_str_alloc_len(int64_t len) {
+    if (len < 0) len = 0;
+    size_t total = (size_t)len + TML_STR_HEADER_BYTES + 1;
+    void* raw = mem_alloc((int64_t)total);
+    if (!raw) return NULL;
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    hdr->magic = TML_STR_MAGIC;
+    hdr->cap = len;
+    hdr->len = len;
+    char* data = (char*)raw + TML_STR_HEADER_BYTES;
+    data[len] = '\0';
+    return data;
+}
+
+/**
+ * @brief Allocates with explicit capacity and initial length (builder pattern).
+ */
+TML_EXPORT void* tml_str_alloc_with_cap(int64_t len, int64_t cap) {
+    if (len < 0) len = 0;
+    if (cap < len) cap = len;
+    size_t total = (size_t)cap + TML_STR_HEADER_BYTES + 1;
+    void* raw = mem_alloc((int64_t)total);
+    if (!raw) return NULL;
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    hdr->magic = TML_STR_MAGIC;
+    hdr->cap = cap;
+    hdr->len = len;
+    char* data = (char*)raw + TML_STR_HEADER_BYTES;
+    data[len] = '\0';
+    return data;
+}
+
+/**
+ * @brief Reads the cached length of a Str in O(1) for our heap strings.
+ *
+ * Literals and legacy raw-heap strings (magic check fails) fall back to
+ * `strlen`. The `tml_str_header` helper performs all the UB-safe gating.
+ */
+TML_EXPORT int64_t tml_str_len(void* ptr) {
+    if (!ptr) return 0;
+    TmlStrHeader* hdr = tml_str_header(ptr);
+    if (hdr) return hdr->len;
+    return (int64_t)strlen((const char*)ptr);
+}
+
+/**
+ * @brief Updates the cached length after the caller wrote new data.
+ * No-op for literals / legacy heap strings.
+ */
+TML_EXPORT void tml_str_set_len(void* ptr, int64_t new_len) {
+    if (!ptr || new_len < 0) return;
+    TmlStrHeader* hdr = tml_str_header(ptr);
+    if (!hdr) return;
+    if (new_len > hdr->cap) return;
+    hdr->len = new_len;
+}
+
+/**
+ * @brief Reads the capacity. Returns 0 for anything that isn't one of our
+ * length-prefixed buffers — callers use `cap > 0` as a discriminator.
+ */
+TML_EXPORT int64_t tml_str_cap(void* ptr) {
+    if (!ptr) return 0;
+    TmlStrHeader* hdr = tml_str_header(ptr);
+    if (!hdr) return 0;
+    return hdr->cap;
+}
+
+/**
+ * @brief Reallocates a length-prefixed Str to a larger capacity.
+ *
+ * For non-prefixed inputs, promotes them into a fresh prefixed buffer:
+ * reads the current length via `strlen`, allocates a new prefixed
+ * buffer, memcpys the data, and returns the new pointer. The old buffer
+ * is NOT freed — the caller retains ownership of it (the common case
+ * is `a` is a literal or a buffer we'll free separately).
+ */
+TML_EXPORT void* tml_str_realloc(void* ptr, int64_t new_cap) {
+    if (!ptr) return tml_str_alloc(new_cap);
+    if (new_cap < 0) new_cap = 0;
+
+    TmlStrHeader* hdr = tml_str_header(ptr);
+    if (!hdr) {
+        // Non-prefixed: literal or legacy heap buffer. Promote.
+        size_t cur_len = strlen((const char*)ptr);
+        if (new_cap < (int64_t)cur_len) new_cap = (int64_t)cur_len;
+        void* fresh = tml_str_alloc_with_cap((int64_t)cur_len, new_cap);
+        if (!fresh) return NULL;
+        if (cur_len > 0) memcpy(fresh, ptr, cur_len);
+        ((char*)fresh)[cur_len] = '\0';
+        return fresh;
+    }
+
+    int64_t cur_len = hdr->len;
+    if (new_cap < cur_len) new_cap = cur_len;
+    void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
+    size_t total = (size_t)new_cap + TML_STR_HEADER_BYTES + 1;
+    void* new_raw = mem_realloc(raw, (int64_t)total);
+    if (!new_raw) return NULL;
+    TmlStrHeader* new_hdr = (TmlStrHeader*)new_raw;
+    // magic is preserved by realloc's memcpy; just bump cap.
+    new_hdr->cap = new_cap;
+    // len preserved.
+    char* data = (char*)new_raw + TML_STR_HEADER_BYTES;
+    data[cur_len] = '\0';
+    return data;
 }
 
 // ============================================================================

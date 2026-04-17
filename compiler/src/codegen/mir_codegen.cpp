@@ -1079,19 +1079,37 @@ void MirCodegen::emit_preamble() {
     // O(n²) to O(n) total / O(1) amortized per iteration.
     emitln("declare dso_local i64 @mem_usable_size(ptr) readonly nounwind willreturn");
     emitln("declare dso_local noalias ptr @mem_realloc(ptr, i64)");
+    // phase1k length-prefixed Str buffers.
+    emitln("declare dso_local noalias ptr @tml_str_alloc(i64) nounwind");
+    emitln("declare dso_local noalias ptr @tml_str_alloc_len(i64) nounwind");
+    emitln("declare dso_local noalias ptr @tml_str_alloc_with_cap(i64, i64) nounwind");
+    emitln("declare dso_local i64 @tml_str_len(ptr) nounwind");
+    emitln("declare dso_local void @tml_str_set_len(ptr, i64) nounwind");
+    emitln("declare dso_local i64 @tml_str_cap(ptr) nounwind");
+    emitln("declare dso_local ptr @tml_str_realloc(ptr, i64) nounwind");
+    // phase1k — str_append using length-prefixed buffers.
+    //
+    // `tml_str_len(a)` is O(1) for heap strings (reads ptr[-8]) and falls
+    // back to `strlen` for literals — the O(n) scan of the accumulator
+    // that dominated phase1i's 462 ns/op is gone for the heap-fast-path.
+    // `tml_str_cap(a)` returns the pre-reserved capacity (0 for literals
+    // or legacy malloc-ptr strings), driving the in-place / grow / fresh
+    // three-way branch. Fresh and grown buffers are allocated via
+    // `tml_str_alloc*` so the result is always length-prefixed — the
+    // caller's next `str_append` on the returned pointer hits the fast
+    // path.
     emitln("define internal ptr @str_append(ptr %a, ptr %b) alwaysinline {");
     emitln("entry:");
     emitln("  %a_null = icmp eq ptr %a, null");
     emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
     emitln("  %b_null = icmp eq ptr %b, null");
     emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
-    emitln("  %len_a = call i64 @strlen(ptr %a_safe)");
-    emitln("  %len_b = call i64 @strlen(ptr %b_safe)");
+    emitln("  %len_a = call i64 @tml_str_len(ptr %a_safe)");
+    emitln("  %len_b = call i64 @tml_str_len(ptr %b_safe)");
     emitln("  %total = add i64 %len_a, %len_b");
-    emitln("  %needed = add i64 %total, 1");
-    emitln("  %cap = call i64 @mem_usable_size(ptr %a_safe)");
+    emitln("  %cap = call i64 @tml_str_cap(ptr %a_safe)");
     emitln("  %is_heap = icmp ugt i64 %cap, 0");
-    emitln("  %fits = icmp uge i64 %cap, %needed");
+    emitln("  %fits = icmp uge i64 %cap, %total");
     emitln("  %inplace_ok = and i1 %is_heap, %fits");
     emitln("  br i1 %inplace_ok, label %app_inplace, label %app_check");
     emitln("app_inplace:");
@@ -1099,26 +1117,28 @@ void MirCodegen::emit_preamble() {
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)");
     emitln("  %end_ip = getelementptr i8, ptr %a_safe, i64 %total");
     emitln("  store i8 0, ptr %end_ip");
+    emitln("  call void @tml_str_set_len(ptr %a_safe, i64 %total)");
     emitln("  ret ptr %a_safe");
     emitln("app_check:");
     emitln("  br i1 %is_heap, label %app_grow, label %app_fresh");
     emitln("app_grow:");
     emitln("  %cap2 = shl i64 %cap, 1");
     emitln("  %grow_hint = add i64 %cap2, 16");
-    emitln("  %grow_cmp = icmp ugt i64 %needed, %grow_hint");
-    emitln("  %grow_sz = select i1 %grow_cmp, i64 %needed, i64 %grow_hint");
-    emitln("  %buf_g = call ptr @mem_realloc(ptr %a_safe, i64 %grow_sz)");
+    emitln("  %grow_cmp = icmp ugt i64 %total, %grow_hint");
+    emitln("  %grow_sz = select i1 %grow_cmp, i64 %total, i64 %grow_hint");
+    emitln("  %buf_g = call ptr @tml_str_realloc(ptr %a_safe, i64 %grow_sz)");
     emitln("  %dst_g = getelementptr i8, ptr %buf_g, i64 %len_a");
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_g, ptr %b_safe, i64 %len_b, i1 false)");
     emitln("  %end_g = getelementptr i8, ptr %buf_g, i64 %total");
     emitln("  store i8 0, ptr %end_g");
+    emitln("  call void @tml_str_set_len(ptr %buf_g, i64 %total)");
     emitln("  ret ptr %buf_g");
     emitln("app_fresh:");
     emitln("  %la2 = shl i64 %len_a, 1");
     emitln("  %slack_hint = add i64 %la2, 32");
-    emitln("  %fresh_cmp = icmp ugt i64 %needed, %slack_hint");
-    emitln("  %alloc_fresh = select i1 %fresh_cmp, i64 %needed, i64 %slack_hint");
-    emitln("  %buf_f = call ptr @malloc(i64 %alloc_fresh)");
+    emitln("  %fresh_cmp = icmp ugt i64 %total, %slack_hint");
+    emitln("  %alloc_fresh = select i1 %fresh_cmp, i64 %total, i64 %slack_hint");
+    emitln("  %buf_f = call ptr @tml_str_alloc_with_cap(i64 %total, i64 %alloc_fresh)");
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %buf_f, ptr %a_safe, i64 %len_a, i1 false)");
     emitln("  %dst_f = getelementptr i8, ptr %buf_f, i64 %len_a");
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_f, ptr %b_safe, i64 %len_b, i1 false)");
@@ -1178,9 +1198,10 @@ void MirCodegen::emit_preamble() {
     emitln("  %end_int = ptrtoint ptr %end to i64");
     emitln("  %start_int = ptrtoint ptr %start to i64");
     emitln("  %len = sub i64 %end_int, %start_int");
-    emitln("  %total = add i64 %len, 1");
-    emitln("  %heap = call ptr @malloc(i64 %total)");
-    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %heap, ptr %start, i64 %total, i1 false)");
+    // phase1k — allocate a length-prefixed buffer so subsequent
+    // `Str.len()` is O(1) and downstream `str_append` hits the fast path.
+    emitln("  %heap = call ptr @tml_str_alloc_len(i64 %len)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %heap, ptr %start, i64 %len, i1 false)");
     emitln("  ret ptr %heap");
     emitln("}");
     emitln();

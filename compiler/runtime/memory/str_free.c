@@ -122,6 +122,14 @@ static inline int tml_is_image_ptr(uintptr_t addr) {
 }
 #endif
 
+// Phase 1k: heap Str buffers are allocated with a 24-byte header
+// ([magic | cap | len]) at `ptr[-24..0)`. `tml_str_free` detects the
+// convention via `tml_str_cap(ptr) > 0` (which internally checks the
+// magic, protecting us from false-positive frees). Legacy raw-malloc
+// heap strings (cap == 0) are freed at `ptr` directly.
+#define TML_STR_HEADER_BYTES 24
+extern int64_t tml_str_cap(void* ptr);
+
 TML_EXPORT void tml_str_free(void* ptr) {
     if (!ptr)
         return;
@@ -131,38 +139,39 @@ TML_EXPORT void tml_str_free(void* ptr) {
     // leak reports in coverage/debug mode.
     extern void mem_free(void*);
 #ifdef _WIN32
-    // Fast path: check if pointer is within any loaded module's image (~1-3ns).
-    // String constants live in .rdata sections of PE images.
     if (!tml_image_ranges_initialized) {
         tml_str_free_init_image_ranges();
     }
     if (tml_is_image_ptr((uintptr_t)ptr)) {
         return; // String constant in .rdata — do not free
     }
-    // Outside every loaded PE image → genuine heap allocation. The codegen
-    // only emits `tml_str_free` for pointers that its `is_heap_str_producer`
-    // / `holds_heap_str` tracking believes are heap-origin, so a pointer
-    // that cleared the image-range check is always free-safe. Previously
-    // we also called `HeapValidate` (~100 ns on Windows) as a defensive
-    // double-check; phase1i removes that call because the codegen-side
-    // ownership tracking makes it redundant. Heap corruption in the
-    // tracked path would be a codegen bug, not a runtime misuse, and is
-    // caught earlier by the CRT's own debug heap in debug builds.
-    mem_free(ptr);
+    int64_t cap = tml_str_cap(ptr);
+    if (cap > 0) {
+        mem_free((char*)ptr - TML_STR_HEADER_BYTES);
+    } else {
+        mem_free(ptr);
+    }
 #elif defined(__GLIBC__) || defined(__linux__)
-    // malloc_usable_size returns 0 for non-heap pointers on glibc
     extern size_t malloc_usable_size(void*);
     if (malloc_usable_size(ptr) > 0) {
-        mem_free(ptr);
+        int64_t cap = tml_str_cap(ptr);
+        if (cap > 0) {
+            mem_free((char*)ptr - TML_STR_HEADER_BYTES);
+        } else {
+            mem_free(ptr);
+        }
     }
 #elif defined(__APPLE__)
-    // On macOS, malloc_size returns 0 for non-heap pointers
     extern size_t malloc_size(const void*);
     if (malloc_size(ptr) > 0) {
-        mem_free(ptr);
+        int64_t cap = tml_str_cap(ptr);
+        if (cap > 0) {
+            mem_free((char*)ptr - TML_STR_HEADER_BYTES);
+        } else {
+            mem_free(ptr);
+        }
     }
 #else
-    // Fallback: don't free (leak is safer than crash)
     (void)ptr;
 #endif
 }
