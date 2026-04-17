@@ -75,8 +75,11 @@ TEST_F(OOPLexerTest, SealedKeyword) {
     EXPECT_EQ(lex_one("sealed").kind, TokenKind::KwSealed);
 }
 
-TEST_F(OOPLexerTest, BaseKeyword) {
-    EXPECT_EQ(lex_one("base").kind, TokenKind::KwBase);
+TEST_F(OOPLexerTest, BaseIsContextualIdentifier) {
+    // `base` is a contextual keyword (bug #1 phase0v): lexed as Identifier,
+    // the parser only treats it as the super-reference keyword in specific
+    // positions (class-inheritance colon, `base.method()`).
+    EXPECT_EQ(lex_one("base").kind, TokenKind::Identifier);
 }
 
 TEST_F(OOPLexerTest, ProtectedKeyword) {
@@ -304,7 +307,9 @@ sealed class GermanShepherd extends Dog {
             private_count++;
         if (token.kind == TokenKind::KwProtected)
             protected_count++;
-        if (token.kind == TokenKind::KwBase)
+        // `base` is a contextual keyword (bug #1 phase0v): lexed as
+        // Identifier, recognised by lexeme in OOP-specific positions.
+        if (token.kind == TokenKind::Identifier && token.lexeme == "base")
             base_count++;
     }
 

@@ -127,7 +127,12 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"abstract", TokenKind::KwAbstract},
     {"sealed", TokenKind::KwSealed},
     {"namespace", TokenKind::KwNamespace},
-    {"base", TokenKind::KwBase},
+    // `base` is a contextual keyword — recognised only in class-inheritance
+    // and `base.member` positions by the parser (see parser_oop.cpp,
+    // parser_expr_complex.cpp). Tokenising as a regular identifier here
+    // lets local variables, struct fields and parameters named `base` work
+    // normally (bug #1 from phase0v).
+    // {"base", TokenKind::KwBase},
     {"protected", TokenKind::KwProtected},
     {"private", TokenKind::KwPrivate},
     {"static", TokenKind::KwStatic},

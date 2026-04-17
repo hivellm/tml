@@ -636,9 +636,20 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return make_ident_expr("this", span);
     }
 
-    // 'base' expression (parent class access in methods)
-    if (check(lexer::TokenKind::KwBase)) {
-        return parse_base_expr();
+    // 'base' expression (parent class access in methods). `base` is a
+    // contextual keyword — tokenised as Identifier; we detect it here by
+    // lexeme and only in the parse_primary_expr entry position, so
+    // locals / fields / parameters named `base` don't clash (bug #1).
+    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "base") {
+        // Only treat as the super-reference keyword when followed by `.`
+        // — otherwise it's a normal identifier (variable / field access).
+        size_t saved = pos_;
+        advance();
+        bool is_base_expr = check(lexer::TokenKind::Dot);
+        pos_ = saved;
+        if (is_base_expr) {
+            return parse_base_expr();
+        }
     }
 
     // Parenthesized expression or tuple

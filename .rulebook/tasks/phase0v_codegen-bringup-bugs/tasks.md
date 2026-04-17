@@ -1,6 +1,6 @@
 # Tasks: codegen + parser bring-up bugs discovered in phase23b
 
-**Status**: In progress (6/12 — Phase 1+2 complete; unblocks phase24)
+**Status**: In progress (8/12 — Phase 1+2+3 complete; unblocks phase24)
 **Depends on**: phase23b (C frontend — complete)
 **Blocks**: phase24 (cc CLI integration) — items 1.1–1.3 of this task
 **Duration**: 2–3 weeks (bugs #7, #8, #9 are the hardest)
@@ -71,18 +71,32 @@ all three Phase 2 bugs.
   `compiler/tests/compiler/maybe_f64_parse.test.tml` (4 cases: valid
   decimal, integer-only, negative, invalid-is-nothing).
 
-## Phase 3: Parser / Language Bugs (2 items)
+## Phase 3: Parser / Language Bugs (2 items — COMPLETE)
 
-- [ ] 3.1 Bug #1 — `base` is reserved as `KwBase` everywhere. Promote
-  to contextual keyword: recognise only in inheritance / trait-impl
-  positions. Elsewhere it lexes as `Ident`. Update the lexer in
-  `compiler/src/lexer/` + every parser site that currently special-cases
-  `KwBase`.
-- [ ] 3.2 Bug #2 — `return StructName { ... }` parses `{` as trailing
-  block. Fix in `compiler/src/parser/stmt.cpp` return-statement handler:
-  if the return expression is a type-name-looking identifier followed
-  by `{`, try struct-literal parsing first and only fall back to
-  block-expression parsing if the struct-literal parse fails.
+- [x] 3.1 Bug #1 — `base` demoted to a contextual keyword. Removed from
+  the lexer keyword table in `compiler/src/lexer/lexer_core.cpp` (it
+  now tokenises as `Identifier`). The three parser sites that need to
+  recognise `base` for its super-reference semantics — inheritance
+  `: base(args)` (`parser_oop.cpp`), expression entry in
+  `parse_primary_expr`, and the `parse_base_expr` helper
+  (`parser_expr_complex.cpp`) — now detect it by identifier lexeme
+  match (`check(Identifier) && peek().lexeme == "base"`). The
+  primary-expr detection additionally requires a following `.` so
+  plain `base` identifiers don't silently become super-references.
+  Regression: `compiler/tests/compiler/base_as_local_name.test.tml`
+  with 5 cases (local var, arithmetic, struct field, function
+  parameter, var assignment). Tests in `compiler/tests/codegen/oop_test.cpp`
+  updated to reflect the new contextual lexing (count by lexeme not
+  by KwBase token kind). Commit `TBD-bug1`.
+- [x] 3.2 Bug #2 — `return StructName { ... }` inside an `if` / `when`
+  / `loop`. Not reproducible in the current tree — 6 variants
+  (top-level, if, when, loop, nested with U64 fields, in-if-with-else)
+  all parse and type-check cleanly. Either the bug was fixed by a
+  previous commit or only manifested under a very specific
+  combination of tokens we can't isolate. Regression test added as a
+  guard against future reappearance:
+  `compiler/tests/compiler/return_struct_literal.test.tml` with 6
+  cases covering every control-flow context. All pass.
 
 ## Phase 4: Stdlib API (1 item — breaking change)
 
