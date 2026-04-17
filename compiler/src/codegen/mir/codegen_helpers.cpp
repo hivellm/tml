@@ -19,9 +19,11 @@ auto MirCodegen::quote_func_name(const std::string& name) -> std::string {
     // Internal helpers emitted by the preamble are already safe LLVM identifiers.
     // Don't quote them — they use well-known names that never collide with keywords.
     if (name.starts_with("llvm.") || name.starts_with("str_concat_opt") ||
+        name.starts_with("str_append") ||
         name.starts_with("assert") || name.starts_with("drop_") || name == "printf" ||
         name == "print" || name == "println" || name == "abort" || name == "mem_alloc" ||
-        name == "mem_free" || name == "strlen" || name == "malloc" || name == "memcpy" ||
+        name == "mem_free" || name == "mem_realloc" || name == "mem_usable_size" ||
+        name == "strlen" || name == "malloc" || name == "memcpy" ||
         name == "black_box_i32" || name == "black_box_i64" || name == "black_box_f64" ||
         name == "main" || name == "tml_main") {
         return name;

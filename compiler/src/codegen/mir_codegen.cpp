@@ -1063,6 +1063,71 @@ void MirCodegen::emit_preamble() {
     emitln("}");
     emitln();
 
+    // str_append (phase1i): amortized O(1) string append.
+    //
+    // MIR codegen lowers every `ptr + ptr` Add (e.g. `s = s + x`) to a call
+    // to this function. Query `mem_usable_size(%a)` to see whether the
+    // left operand is a heap block with slack — if yes, append in place
+    // and return `%a` unchanged (zero alloc, single memcpy + NUL store).
+    // When the block is too small we realloc with exponential growth so
+    // subsequent appends keep hitting the fast path. Literals (`cap == 0`)
+    // take a `fresh` path that allocates with initial slack (`2*len_a+32`)
+    // so the next concat on the returned buffer amortizes.
+    //
+    // The result is a new SSA value in MIR, so aliasing between input and
+    // output is transparent to callers. Turns `s = s + "x"` loops from
+    // O(n²) to O(n) total / O(1) amortized per iteration.
+    emitln("declare dso_local i64 @mem_usable_size(ptr) nounwind");
+    emitln("declare dso_local noalias ptr @mem_realloc(ptr, i64)");
+    emitln("define internal ptr @str_append(ptr %a, ptr %b) {");
+    emitln("entry:");
+    emitln("  %a_null = icmp eq ptr %a, null");
+    emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
+    emitln("  %b_null = icmp eq ptr %b, null");
+    emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
+    emitln("  %len_a = call i64 @strlen(ptr %a_safe)");
+    emitln("  %len_b = call i64 @strlen(ptr %b_safe)");
+    emitln("  %total = add i64 %len_a, %len_b");
+    emitln("  %needed = add i64 %total, 1");
+    emitln("  %cap = call i64 @mem_usable_size(ptr %a_safe)");
+    emitln("  %is_heap = icmp ugt i64 %cap, 0");
+    emitln("  %fits = icmp uge i64 %cap, %needed");
+    emitln("  %inplace_ok = and i1 %is_heap, %fits");
+    emitln("  br i1 %inplace_ok, label %app_inplace, label %app_check");
+    emitln("app_inplace:");
+    emitln("  %dst_ip = getelementptr i8, ptr %a_safe, i64 %len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)");
+    emitln("  %end_ip = getelementptr i8, ptr %a_safe, i64 %total");
+    emitln("  store i8 0, ptr %end_ip");
+    emitln("  ret ptr %a_safe");
+    emitln("app_check:");
+    emitln("  br i1 %is_heap, label %app_grow, label %app_fresh");
+    emitln("app_grow:");
+    emitln("  %cap2 = shl i64 %cap, 1");
+    emitln("  %grow_hint = add i64 %cap2, 16");
+    emitln("  %grow_cmp = icmp ugt i64 %needed, %grow_hint");
+    emitln("  %grow_sz = select i1 %grow_cmp, i64 %needed, i64 %grow_hint");
+    emitln("  %buf_g = call ptr @mem_realloc(ptr %a_safe, i64 %grow_sz)");
+    emitln("  %dst_g = getelementptr i8, ptr %buf_g, i64 %len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_g, ptr %b_safe, i64 %len_b, i1 false)");
+    emitln("  %end_g = getelementptr i8, ptr %buf_g, i64 %total");
+    emitln("  store i8 0, ptr %end_g");
+    emitln("  ret ptr %buf_g");
+    emitln("app_fresh:");
+    emitln("  %la2 = shl i64 %len_a, 1");
+    emitln("  %slack_hint = add i64 %la2, 32");
+    emitln("  %fresh_cmp = icmp ugt i64 %needed, %slack_hint");
+    emitln("  %alloc_fresh = select i1 %fresh_cmp, i64 %needed, i64 %slack_hint");
+    emitln("  %buf_f = call ptr @malloc(i64 %alloc_fresh)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %buf_f, ptr %a_safe, i64 %len_a, i1 false)");
+    emitln("  %dst_f = getelementptr i8, ptr %buf_f, i64 %len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_f, ptr %b_safe, i64 %len_b, i1 false)");
+    emitln("  %end_f = getelementptr i8, ptr %buf_f, i64 %total");
+    emitln("  store i8 0, ptr %end_f");
+    emitln("  ret ptr %buf_f");
+    emitln("}");
+    emitln();
+
     // Inline to_string implementations for template literal support.
     //
     // phase1f: replaced `malloc(24) + snprintf("%lld", v)` (41 ns/op) with a

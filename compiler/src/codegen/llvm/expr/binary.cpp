@@ -103,16 +103,13 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     std::string rhs_val = gen_expr(*rhs_bin.right);
                     std::string new_val = fresh_reg();
 
-                    if (var_it->second.holds_heap_str) {
-                        // Old value is heap — safe to realloc
-                        emit_line("  " + new_val + " = call ptr @str_concat_reuse(ptr " +
-                                  old_val + ", ptr " + rhs_val + ")");
-                        // realloc consumed old_val — no free needed
-                    } else {
-                        // First assignment (literal) — allocate fresh
-                        emit_line("  " + new_val + " = call ptr @str_concat_opt(ptr " +
-                                  old_val + ", ptr " + rhs_val + ")");
-                    }
+                    // `str_append` (phase1i) handles both heap and literal
+                    // left operands and amortizes to O(1) per iteration via
+                    // `mem_usable_size` + exponential growth. No need for
+                    // the holds_heap_str split — `str_append` detects the
+                    // heap case at runtime.
+                    emit_line("  " + new_val + " = call ptr @str_append(ptr " +
+                              old_val + ", ptr " + rhs_val + ")");
                     // Free right operand if heap temp
                     if (is_heap_str_producer(*rhs_bin.right)) {
                         emit_line("  call void @tml_str_free(ptr " + rhs_val + ")");

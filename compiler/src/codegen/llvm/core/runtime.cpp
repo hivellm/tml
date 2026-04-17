@@ -180,6 +180,11 @@ void LLVMIRGen::init_runtime_catalog() {
     add("mem_alloc_zeroed", "declare dso_local noalias ptr @mem_alloc_zeroed(i64) allocsize(0) allockind(\"alloc,zeroed\") \"alloc-family\"=\"malloc\"");
     add("mem_realloc", "declare dso_local noalias ptr @mem_realloc(ptr, i64) allocsize(1) allockind(\"realloc\") \"alloc-family\"=\"malloc\"");
     add("mem_free", "declare dso_local void @mem_free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
+    // mem_usable_size: wraps `_msize` (Windows) / `malloc_usable_size` (glibc)
+    // / `malloc_size` (macOS). Guarded against non-heap pointers — returns 0
+    // for `.rdata` literals. Used by `str_append` (phase1i) to amortize
+    // repeated string concatenation to O(1) per append.
+    add("mem_usable_size", "declare dso_local i64 @mem_usable_size(ptr) nounwind");
     add("mem_copy", "declare dso_local void @mem_copy(ptr, ptr, i64)");
     add("mem_move", "declare dso_local void @mem_move(ptr, ptr, i64)");
     add("mem_set", "declare dso_local void @mem_set(ptr, i32, i64)");
@@ -523,6 +528,71 @@ void LLVMIRGen::init_runtime_catalog() {
         "  ret ptr %buf\n"
         "}",
         {"strlen", "mem_alloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
+    // str_append — amortized O(1) string append (phase1i).
+    //
+    // Semantics: consumes `%a`, produces a result that may alias `%a`. MIR
+    // codegen emits this for `ptr + ptr` `Add` instructions — the result is
+    // a fresh SSA value, so aliasing with the input is transparent to the
+    // caller. When the input is a heap allocation with enough capacity, we
+    // append in place (single memcpy + NUL store, zero alloc). When the
+    // block must grow, we realloc with exponential doubling so subsequent
+    // appends keep hitting the fast path. Literals (`.rdata`) take a
+    // `fresh` path that allocates with initial slack so the next concat on
+    // the returned buffer starts amortizing.
+    //
+    // Result: `s = s + "x"` in a loop goes from O(n²) (fresh alloc + full
+    // copy per iter) to O(n) total, matching Rust's `String::push_str`.
+    add("str_append",
+        "define internal ptr @str_append(ptr %a, ptr %b) {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_a = call i64 @strlen(ptr %a_safe)\n"
+        "  %len_b = call i64 @strlen(ptr %b_safe)\n"
+        "  %total = add i64 %len_a, %len_b\n"
+        "  %needed = add i64 %total, 1\n"
+        "  %cap = call i64 @mem_usable_size(ptr %a_safe)\n"
+        "  %is_heap = icmp ugt i64 %cap, 0\n"
+        "  %fits = icmp uge i64 %cap, %needed\n"
+        "  %inplace_ok = and i1 %is_heap, %fits\n"
+        "  br i1 %inplace_ok, label %app_inplace, label %app_check\n"
+        "app_inplace:\n"
+        "  %dst_ip = getelementptr i8, ptr %a_safe, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_ip = getelementptr i8, ptr %a_safe, i64 %total\n"
+        "  store i8 0, ptr %end_ip\n"
+        "  ret ptr %a_safe\n"
+        "app_check:\n"
+        "  br i1 %is_heap, label %app_grow, label %app_fresh\n"
+        "app_grow:\n"
+        "  %cap2 = shl i64 %cap, 1\n"
+        "  %grow_hint = add i64 %cap2, 16\n"
+        "  %grow_cmp = icmp ugt i64 %needed, %grow_hint\n"
+        "  %grow_sz = select i1 %grow_cmp, i64 %needed, i64 %grow_hint\n"
+        "  %buf_g = call ptr @mem_realloc(ptr %a_safe, i64 %grow_sz)\n"
+        "  %dst_g = getelementptr i8, ptr %buf_g, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_g, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_g = getelementptr i8, ptr %buf_g, i64 %total\n"
+        "  store i8 0, ptr %end_g\n"
+        "  ret ptr %buf_g\n"
+        "app_fresh:\n"
+        "  %la2 = shl i64 %len_a, 1\n"
+        "  %slack_hint = add i64 %la2, 32\n"
+        "  %fresh_cmp = icmp ugt i64 %needed, %slack_hint\n"
+        "  %alloc_fresh = select i1 %fresh_cmp, i64 %needed, i64 %slack_hint\n"
+        "  %buf_f = call ptr @mem_alloc(i64 %alloc_fresh)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf_f, ptr %a_safe, i64 %len_a, i1 false)\n"
+        "  %dst_f = getelementptr i8, ptr %buf_f, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_f, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_f = getelementptr i8, ptr %buf_f, i64 %total\n"
+        "  store i8 0, ptr %end_f\n"
+        "  ret ptr %buf_f\n"
+        "}",
+        {"strlen", "mem_alloc", "mem_realloc", "mem_usable_size",
+         "llvm.memcpy.p0.p0.i64", ".str.empty"});
 
     // str_concat_reuse: reallocs the left operand's buffer with exponential growth.
     // Used for augmented concat (result = result + expr) when left is known heap-allocated.

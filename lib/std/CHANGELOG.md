@@ -5,6 +5,54 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.36] — 2026-04-16
+
+### Changed — `Str` phase1i (amortized O(1) `str_append`)
+
+`Str + Str` (and `Str +=` loops) now lowers to a new runtime function
+`str_append(left, right)` that appends in place when the left buffer
+has allocator slack. Growth is exponential, matching Rust's `String`.
+
+Three-branch IR:
+
+1. **In-place** — `mem_usable_size(left)` reports ≥ `len(left) + len(right) + 1`
+   available; `memcpy` past the NUL terminator and return the same
+   pointer.
+2. **Grow in place** — heap buffer too small; `mem_realloc` to
+   `max(capacity * 2, needed)` and append.
+3. **Fresh** — left operand is a `.rdata` literal (detected via a
+   Windows image-range check on module segments — `_msize` on a
+   literal is UB) or lives outside the C heap; allocate a new buffer
+   with `len(a) + len(b) + 1` bytes.
+
+`mem_usable_size` is a new `@extern("c")` runtime export that wraps the
+platform allocator query (`_msize` Windows / `malloc_usable_size` glibc
+/ `malloc_size` macOS). The Windows variant initializes once per
+process with `EnumProcessModules` and rejects any pointer inside a
+loaded PE image range to prevent UB on string literals.
+
+Benchmarks (`benchmarks/profile_tml/string_bench.tml`, release):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Str Naive Append 10K (100-byte pieces) | 3,044 ns/op | 462 ns/op | **-85%** |
+
+Ratio vs Rust `String::push_str` closed from 1,098x → 154x. The
+remaining gap is per-call `strlen` + `tml_str_free` overhead, not
+algorithmic.
+
+Both AST codegen (`binary_ops.cpp` — `Str + Str` Add) and MIR codegen
+(`instructions.cpp` — `ptr + ptr` Add) emit `@str_append`. The augmented
+concat pattern (`let s2 = s + …` where `s` was an augmented assign)
+also switches to `str_append`. The left operand is consumed by
+`str_append` (no free emitted after the call since the return pointer
+may alias the input), while the right operand is freed as before when
+it's a heap producer.
+
+All 23/23 `std/json` tests, 32/32 `core/str` tests, and 5/6 `std/text`
+tests pass (the one failure is the pre-existing `text_search_transform`
+K001 codegen bug).
+
 ## [0.3.35] — 2026-04-16
 
 ### Changed — `std::text` phase1h (strlen constant-folding for literals)

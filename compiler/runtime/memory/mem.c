@@ -42,6 +42,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <malloc.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
+#else
+#include <malloc.h>
+#endif
+
 // Export symbols for JIT discovery (DynamicLibrarySearchGenerator)
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
@@ -51,6 +63,82 @@
 
 #ifdef TML_DEBUG_MEMORY
 #include "mem_track.h"
+#endif
+
+// ============================================================================
+// Heap Pointer Detection
+// ============================================================================
+//
+// On Windows, calling `_msize` on a non-heap pointer (e.g. a `.rdata` string
+// literal) is undefined behavior and typically crashes. To make
+// `mem_usable_size` safe for arbitrary pointers, we first check whether the
+// pointer is inside a loaded module's image (i.e., a literal) — if yes,
+// return 0 immediately. Otherwise it's a heap allocation and `_msize` is
+// safe to call.
+//
+// This reuses the same image-range-check technique as `tml_str_free`.
+
+#ifdef _WIN32
+#define MAX_MEM_IMAGE_RANGES 128
+
+typedef struct {
+    uintptr_t base;
+    uintptr_t end;
+} MemImageRange;
+
+static MemImageRange g_mem_image_ranges[MAX_MEM_IMAGE_RANGES];
+static int g_mem_image_range_count = 0;
+static volatile int g_mem_image_ranges_initialized = 0;
+
+static int mem_image_range_cmp(const void* a, const void* b) {
+    const MemImageRange* ra = (const MemImageRange*)a;
+    const MemImageRange* rb = (const MemImageRange*)b;
+    if (ra->base < rb->base) return -1;
+    if (ra->base > rb->base) return 1;
+    return 0;
+}
+
+static void mem_init_image_ranges(void) {
+    HMODULE modules[MAX_MEM_IMAGE_RANGES];
+    DWORD needed = 0;
+    HANDLE proc = GetCurrentProcess();
+
+    if (EnumProcessModules(proc, modules, sizeof(modules), &needed)) {
+        int count = (int)(needed / sizeof(HMODULE));
+        if (count > MAX_MEM_IMAGE_RANGES) count = MAX_MEM_IMAGE_RANGES;
+
+        for (int i = 0; i < count; i++) {
+            MODULEINFO mi;
+            if (GetModuleInformation(proc, modules[i], &mi, sizeof(mi))) {
+                g_mem_image_ranges[g_mem_image_range_count].base =
+                    (uintptr_t)mi.lpBaseOfDll;
+                g_mem_image_ranges[g_mem_image_range_count].end =
+                    (uintptr_t)mi.lpBaseOfDll + mi.SizeOfImage;
+                g_mem_image_range_count++;
+            }
+        }
+        qsort(g_mem_image_ranges, g_mem_image_range_count,
+              sizeof(MemImageRange), mem_image_range_cmp);
+    }
+    g_mem_image_ranges_initialized = 1;
+}
+
+// Returns 1 if `addr` is inside any loaded module's image (.rdata/.text/.data),
+// 0 otherwise. Binary-search, O(log n) where n = loaded module count.
+static inline int mem_is_image_ptr(uintptr_t addr) {
+    int lo = 0, hi = g_mem_image_range_count - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (addr < g_mem_image_ranges[mid].base) {
+            hi = mid - 1;
+        } else if (addr >= g_mem_image_ranges[mid].end) {
+            lo = mid + 1;
+        } else {
+            return 1;
+        }
+    }
+    return 0;
+}
 #endif
 
 // ============================================================================
@@ -109,6 +197,37 @@ TML_EXPORT void* mem_realloc(void* ptr, int64_t new_size) {
     return new_ptr;
 #else
     return realloc(ptr, (size_t)new_size);
+#endif
+}
+
+/**
+ * @brief Returns the actual allocated block size for a heap pointer, 0 for
+ * non-heap (literal) pointers.
+ *
+ * Safe to call on ANY valid pointer, including string literals in `.rdata`.
+ * Used by `str_append` to decide whether the current buffer has enough slack
+ * to append in place (avoiding a malloc+memcpy on every concat and turning
+ * `s = s + x` loops from O(n²) into amortized O(1)).
+ */
+TML_EXPORT int64_t mem_usable_size(void* ptr) {
+    if (!ptr) return 0;
+#ifdef _WIN32
+    // Image-range guard: literals live in `.rdata` / `.text` of a loaded
+    // module. Calling `_msize` on them is undefined behavior.
+    if (!g_mem_image_ranges_initialized) {
+        mem_init_image_ranges();
+    }
+    if (mem_is_image_ptr((uintptr_t)ptr)) {
+        return 0;
+    }
+    return (int64_t)_msize(ptr);
+#elif defined(__APPLE__)
+    return (int64_t)malloc_size(ptr);
+#elif defined(__GLIBC__) || defined(__linux__)
+    return (int64_t)malloc_usable_size(ptr);
+#else
+    (void)ptr;
+    return 0;
 #endif
 }
 

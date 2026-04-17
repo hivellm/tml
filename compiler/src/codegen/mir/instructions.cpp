@@ -705,10 +705,16 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
             cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
         }
     } else {
-        // Special case: string concatenation when adding two pointers (strings)
-        // Use str_concat_opt for O(1) amortized complexity
+        // Special case: string concatenation when adding two pointers (strings).
+        // Uses `str_append` (phase1i) for truly amortized O(1) — when the
+        // left operand is a heap allocation with slack, the append lands in
+        // place without a realloc. Falls back to a fresh allocation with
+        // initial slack for literal inputs so subsequent concats hit the
+        // fast path. The MIR result is a new SSA value, so the aliasing
+        // between `result` and `left` introduced by `str_append`'s in-place
+        // path is transparent to the caller.
         if (type_str == "ptr" && i.op == mir::BinOp::Add) {
-            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " +
+            emitln("    " + result_reg + " = call ptr @str_append(ptr " + left + ", ptr " +
                    right + ")");
             if (inst.result != mir::INVALID_VALUE) {
                 cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
