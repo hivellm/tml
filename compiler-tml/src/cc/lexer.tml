@@ -413,6 +413,553 @@ pub func c_lexer(input: List[PpToken]) -> CLexer {
     }
 }
 
+// ============================================================================
+// Byte helpers — all decoders work on raw bytes since TML `Str` is a
+// null-terminated buffer and the preprocessor feeds us the exact source
+// spelling (prefix + body + suffix, including surrounding quotes on
+// char/string literals).
+// ============================================================================
+
+// Read the byte at offset `i` as an I64 — avoids Str char iteration
+// overhead in the hot decoder loops. Caller guarantees `0 <= i < len`.
+func byte_at(s: Str, i: I64) -> I64 {
+    let addr: I64 = s as I64
+    return lowlevel { ptr_read[I8]((addr + i) as *I8) } as I64
+}
+
+// `c` is a single ASCII byte (0..127).
+func is_digit(c: I64) -> I64 {
+    if c >= 48 and c <= 57 { return 1 as I64 }
+    return 0 as I64
+}
+
+func is_hex_digit(c: I64) -> I64 {
+    if c >= 48 and c <= 57 { return 1 as I64 }
+    if c >= 97 and c <= 102 { return 1 as I64 }   // a-f
+    if c >= 65 and c <= 70 { return 1 as I64 }    // A-F
+    return 0 as I64
+}
+
+func is_oct_digit(c: I64) -> I64 {
+    if c >= 48 and c <= 55 { return 1 as I64 }
+    return 0 as I64
+}
+
+// Decode one hex digit 0..F → 0..15. Caller must have verified is_hex_digit.
+func hex_val(c: I64) -> I64 {
+    if c >= 48 and c <= 57 { return c - 48 }
+    if c >= 97 and c <= 102 { return c - 87 }   // a=97 → 10
+    return c - 55                                // A=65 → 10
+}
+
+// Lowercase an ASCII byte — used for suffix matching so we accept
+// `0xFFull`, `0xFFuLL`, `0XFFULL`, `3.14F`, etc. uniformly.
+func to_lower_byte(c: I64) -> I64 {
+    if c >= 65 and c <= 90 { return c + 32 }
+    return c
+}
+
+// ============================================================================
+// Integer literal decoder (phase 23b item 1.2)
+// ============================================================================
+//
+// Input is the raw source text of the preprocessor's `IntLit` token —
+// base prefix (`0`, `0x`, `0b`), digit run, optional suffix (`u`, `l`,
+// `ul`, `ll`, `ull` in any case combination). Returns a `CIntLit` with
+// the value as u64 plus the canonical suffix enum. The type checker
+// later applies C17 §6.4.4.1 to pick `int` / `long` / `long long`
+// based on magnitude and the `is_hex_or_octal` flag.
+
+pub func decode_int(text: Str) -> CIntLit {
+    let n: I64 = text.len() as I64
+    if n == 0 {
+        let empty: CIntLit = CIntLit { value: 0 as U64, suffix: CIntSuffix::None, is_hex_or_octal: 0 as I64 }
+        return empty
+    }
+
+    // --- base detection ---
+    var radix: I64 = 10
+    var start: I64 = 0
+    var is_hex_or_octal: I64 = 0
+    if n >= 2 and byte_at(text, 0) == 48 {     // leading '0'
+        let c1: I64 = byte_at(text, 1)
+        if c1 == 120 or c1 == 88 {             // 0x / 0X
+            radix = 16
+            start = 2
+            is_hex_or_octal = 1 as I64
+        } else if c1 == 98 or c1 == 66 {       // 0b / 0B (GCC extension)
+            radix = 2
+            start = 2
+            // treat binary as hex-like for sign promotion rules
+            is_hex_or_octal = 1 as I64
+        } else if is_oct_digit(c1) == 1 as I64 {
+            radix = 8
+            start = 1
+            is_hex_or_octal = 1 as I64
+        }
+    }
+
+    // --- digits ---
+    var value: U64 = 0 as U64
+    var i: I64 = start
+    loop (i < n) {
+        let c: I64 = byte_at(text, i)
+        let v: I64 = if radix == 16 {
+            if is_hex_digit(c) == 1 as I64 { hex_val(c) } else { -1 as I64 }
+        } else if radix == 2 {
+            if c == 48 or c == 49 { c - 48 } else { -1 as I64 }
+        } else if radix == 8 {
+            if is_oct_digit(c) == 1 as I64 { c - 48 } else { -1 as I64 }
+        } else {
+            if is_digit(c) == 1 as I64 { c - 48 } else { -1 as I64 }
+        }
+        if v < 0 { break }
+        value = value * (radix as U64) + (v as U64)
+        i = i + 1
+    }
+
+    // --- suffix ---
+    // C17 allows any case/order combination of `u`, `l`, `ll`. Count
+    // `u`s and `l`s; `l` or `ll` distinguished by consecutive lower-or-
+    // equal case.
+    var has_u: I64 = 0
+    var l_count: I64 = 0
+    loop (i < n) {
+        let c: I64 = to_lower_byte(byte_at(text, i))
+        if c == 117 {                          // u
+            has_u = 1 as I64
+            i = i + 1
+        } else if c == 108 {                   // l or ll
+            l_count = l_count + 1
+            i = i + 1
+            // greedy consume a second `l` if present to get `ll`
+            if i < n and to_lower_byte(byte_at(text, i)) == 108 {
+                l_count = l_count + 1
+                i = i + 1
+            }
+        } else {
+            break
+        }
+    }
+
+    let suffix: CIntSuffix = if has_u == 1 as I64 and l_count == 0 {
+        CIntSuffix::U
+    } else if has_u == 0 and l_count == 1 {
+        CIntSuffix::L
+    } else if has_u == 1 as I64 and l_count == 1 {
+        CIntSuffix::UL
+    } else if has_u == 0 and l_count == 2 {
+        CIntSuffix::LL
+    } else if has_u == 1 as I64 and l_count == 2 {
+        CIntSuffix::ULL
+    } else {
+        CIntSuffix::None
+    }
+
+    return CIntLit {
+        value: value,
+        suffix: suffix,
+        is_hex_or_octal: is_hex_or_octal,
+    }
+}
+
+// ============================================================================
+// Float literal decoder (phase 23b item 1.2)
+// ============================================================================
+//
+// Handles decimal forms (`3.14`, `1.`, `.5`, `1e10`, `1.5e-3`) and C99
+// hex floats (`0x1.8p3` where `p` is the required binary exponent).
+// Suffix: `f`, `F`, `l`, `L`. The body-without-suffix is fed to the
+// stdlib's `Str.parse_f64` for decimal parsing; hex floats are parsed
+// inline because libc's `strtod` support varies on Windows.
+
+pub func decode_float(text: Str) -> CFloatLit {
+    let n: I64 = text.len() as I64
+    if n == 0 {
+        return CFloatLit { value: 0.0, suffix: CFloatSuffix::None, is_hex: 0 as I64 }
+    }
+
+    // --- strip suffix from the end ---
+    var end: I64 = n
+    var suffix: CFloatSuffix = CFloatSuffix::None
+    if end > 0 {
+        let last: I64 = to_lower_byte(byte_at(text, end - 1))
+        if last == 102 {                        // f
+            suffix = CFloatSuffix::F
+            end = end - 1
+        } else if last == 108 {                 // l
+            suffix = CFloatSuffix::L
+            end = end - 1
+        }
+    }
+
+    // --- detect hex float (`0x...p...`) ---
+    var is_hex: I64 = 0 as I64
+    if end >= 2 and byte_at(text, 0) == 48 {
+        let c1: I64 = byte_at(text, 1)
+        if c1 == 120 or c1 == 88 { is_hex = 1 as I64 }
+    }
+
+    // --- parse body ---
+    //
+    // Decimal float parser, inline. Deliberately avoids the stdlib's
+    // `Str.parse_f64 -> Maybe[F64]` because the K001 codegen bug on
+    // `Maybe[F64]` causes the `let Just(v) = parsed` pattern to loop
+    // forever at runtime (observed in phase 23b test bring-up).
+    //
+    // Grammar: [sign] digits [ `.` digits ] [ (`e`|`E`) [sign] digits ]
+    if is_hex == 0 {
+        var dec_i: I64 = 0
+        var dec_sign: F64 = 1.0
+        if dec_i < end {
+            let c: I64 = byte_at(text, dec_i)
+            if c == 43 { dec_i = dec_i + 1 }
+            else if c == 45 { dec_sign = -1.0; dec_i = dec_i + 1 }
+        }
+        var int_part: F64 = 0.0
+        loop (dec_i < end) {
+            let c: I64 = byte_at(text, dec_i)
+            if is_digit(c) == 0 { break }
+            int_part = int_part * 10.0 + ((c - 48) as F64)
+            dec_i = dec_i + 1
+        }
+        var frac_part: F64 = 0.0
+        var frac_scale: F64 = 1.0
+        if dec_i < end and byte_at(text, dec_i) == 46 {             // .
+            dec_i = dec_i + 1
+            loop (dec_i < end) {
+                let c: I64 = byte_at(text, dec_i)
+                if is_digit(c) == 0 { break }
+                frac_scale = frac_scale / 10.0
+                frac_part = frac_part + ((c - 48) as F64) * frac_scale
+                dec_i = dec_i + 1
+            }
+        }
+        var exp_val: I64 = 0
+        var exp_sign: I64 = 1
+        if dec_i < end {
+            let e: I64 = byte_at(text, dec_i)
+            if e == 101 or e == 69 {                                // e / E
+                dec_i = dec_i + 1
+                if dec_i < end {
+                    let s: I64 = byte_at(text, dec_i)
+                    if s == 43 { dec_i = dec_i + 1 }
+                    else if s == 45 { exp_sign = -1; dec_i = dec_i + 1 }
+                }
+                loop (dec_i < end) {
+                    let d: I64 = byte_at(text, dec_i)
+                    if is_digit(d) == 0 { break }
+                    exp_val = exp_val * 10 + (d - 48)
+                    dec_i = dec_i + 1
+                }
+                exp_val = exp_val * exp_sign
+            }
+        }
+        // Apply 10^exp_val iteratively — simple while loop keeps the
+        // F64 phi types consistent across the back-edge (see the
+        // hex-float path for the same K001 workaround).
+        var scale: F64 = 1.0
+        var ecount: I64 = if exp_val >= 0 { exp_val } else { 0 - exp_val }
+        let is_pos: I64 = if exp_val >= 0 { 1 as I64 } else { 0 as I64 }
+        loop (ecount > 0) {
+            if is_pos == 1 as I64 {
+                scale = scale * 10.0
+            } else {
+                scale = scale / 10.0
+            }
+            ecount = ecount - 1
+        }
+        let value: F64 = dec_sign * (int_part + frac_part) * scale
+        let ok: CFloatLit = CFloatLit { value: value, suffix: suffix, is_hex: 0 as I64 }
+        return ok
+    }
+
+    // Hex float: `0x` <hex_digits> [ `.` <hex_digits> ] `p` [ `+` | `-` ] <decimal_digits>
+    // Value = (mantissa) * 2 ^ exponent, where mantissa is the hex digits
+    // interpreted as a fractional number and exponent is the decimal `p` value.
+    var mantissa: F64 = 0.0
+    var frac_scale: F64 = 1.0
+    var i: I64 = 2
+    var saw_dot: I64 = 0 as I64
+    loop (i < end) {
+        let c: I64 = byte_at(text, i)
+        if c == 46 {                            // .
+            saw_dot = 1 as I64
+            i = i + 1
+            continue
+        }
+        if c == 112 or c == 80 { break }        // p / P
+        if is_hex_digit(c) == 0 { break }
+        if saw_dot == 1 as I64 {
+            frac_scale = frac_scale / 16.0
+            mantissa = mantissa + (hex_val(c) as F64) * frac_scale
+        } else {
+            mantissa = mantissa * 16.0 + (hex_val(c) as F64)
+        }
+        i = i + 1
+    }
+    // Exponent sign + digits
+    var exp_sign: I64 = 1
+    if i < end and (byte_at(text, i) == 112 or byte_at(text, i) == 80) { i = i + 1 }
+    if i < end {
+        let c: I64 = byte_at(text, i)
+        if c == 43 { i = i + 1 }
+        else if c == 45 { exp_sign = -1; i = i + 1 }
+    }
+    var exp_val: I64 = 0
+    loop (i < end) {
+        let c: I64 = byte_at(text, i)
+        if is_digit(c) == 0 { break }
+        exp_val = exp_val * 10 + (c - 48)
+        i = i + 1
+    }
+    exp_val = exp_val * exp_sign
+    // Apply 2^exp_val without relying on libm's `pow`. Uses a simple
+    // while-loop over a mutable F64 accumulator to dodge a K001 codegen
+    // bug where a `for _ in 0 to n` loop producing a F64 phi emits
+    // integer `0` constants in the phi node (type mismatch).
+    var scale: F64 = 1.0
+    var ecount: I64 = if exp_val >= 0 { exp_val } else { 0 - exp_val }
+    let is_pos: I64 = if exp_val >= 0 { 1 as I64 } else { 0 as I64 }
+    loop (ecount > 0) {
+        if is_pos == 1 as I64 {
+            scale = scale * 2.0
+        } else {
+            scale = scale / 2.0
+        }
+        ecount = ecount - 1
+    }
+    let hex_result: CFloatLit = CFloatLit { value: mantissa * scale, suffix: suffix, is_hex: 1 as I64 }
+    return hex_result
+}
+
+// ============================================================================
+// String / char helpers
+// ============================================================================
+
+// Extract substring `[start, end)` byte slice. Falls back to the
+// stdlib's substring which handles NUL termination on the returned
+// `Str`. A local helper so decoders don't have to import from
+// `core::str::basic`.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len_buf(len: I64) -> *U8
+
+func substr_ascii(s: Str, start: I64, end: I64) -> Str {
+    let sub_len: I64 = end - start
+    if sub_len <= 0 { return "" }
+    let buf: *U8 = c_tml_str_alloc_len_buf(sub_len)
+    let src: I64 = s as I64
+    lowlevel { copy_nonoverlapping((src + start) as *U8, buf, sub_len) }
+    return buf as Str
+}
+
+// Scan a literal's leading encoding prefix. Handles the five C11
+// string-literal prefixes (`L`, `u`, `U`, `u8`, plain) and the
+// three valid char-literal prefixes (`L`, `u`, `U`) — `u8` on a
+// char literal is a C23 feature that C17 rejects; we accept it but
+// the parser's type checker should warn.
+// Returns (encoding, prefix_length).
+func scan_encoding(text: Str) -> CStringEncoding {
+    let n: I64 = text.len() as I64
+    if n == 0 { return CStringEncoding::Plain }
+    let c0: I64 = byte_at(text, 0)
+    if c0 == 76 { return CStringEncoding::Wide }       // L
+    if c0 == 117 {                                     // u or u8
+        if n >= 2 and byte_at(text, 1) == 56 {         // u8
+            return CStringEncoding::Utf8
+        }
+        return CStringEncoding::Utf16
+    }
+    if c0 == 85 { return CStringEncoding::Utf32 }      // U
+    return CStringEncoding::Plain
+}
+
+// Length of the encoding prefix so the decoder can skip past it to
+// the opening quote.
+func encoding_prefix_len(enc: CStringEncoding) -> I64 {
+    when enc {
+        CStringEncoding::Plain => { return 0 as I64 },
+        CStringEncoding::Wide => { return 1 as I64 },       // L
+        CStringEncoding::Utf8 => { return 2 as I64 },       // u8
+        CStringEncoding::Utf16 => { return 1 as I64 },      // u
+        CStringEncoding::Utf32 => { return 1 as I64 },      // U
+    }
+}
+
+// Escape decode result — a plain struct avoids TML tuple indexing
+// (`.0` / `.1`) which was looping forever at runtime in practice.
+pub type CEscape {
+    codepoint: U32,
+    next_i: I64
+}
+
+// Decode a single C escape sequence starting at text[i] (which must
+// be the backslash). Returns the decoded codepoint and the index of
+// the byte after the last consumed character. Handles:
+//   - single-char escapes (`\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\?`,
+//     `\a`, `\b`, `\f`, `\v`, bare `\0`)
+//   - hex escapes `\xHH...` (greedy — all contiguous hex digits)
+//   - octal escapes `\NNN` (up to 3 digits)
+//   - universal character names `\uHHHH` / `\UHHHHHHHH` (exactly
+//     4 / 8 hex digits)
+func decode_escape(text: Str, i: I64) -> CEscape {
+    let n: I64 = text.len() as I64
+    if i + 1 >= n {
+        let eof: CEscape = CEscape { codepoint: 0 as U32, next_i: i + 1 }
+        return eof
+    }
+    let c: I64 = byte_at(text, i + 1)
+    // Single-character escapes per C17 §6.4.4.4
+    if c == 110 { let r: CEscape = CEscape { codepoint: 10 as U32, next_i: i + 2 }; return r }   // \n
+    if c == 116 { let r: CEscape = CEscape { codepoint: 9 as U32, next_i: i + 2 }; return r }    // \t
+    if c == 114 { let r: CEscape = CEscape { codepoint: 13 as U32, next_i: i + 2 }; return r }   // \r
+    if c == 48 and (i + 2 >= n or is_oct_digit(byte_at(text, i + 2)) == 0) {
+        let r: CEscape = CEscape { codepoint: 0 as U32, next_i: i + 2 }
+        return r                                 // bare \0
+    }
+    if c == 92 { let r: CEscape = CEscape { codepoint: 92 as U32, next_i: i + 2 }; return r }    // \\
+    if c == 39 { let r: CEscape = CEscape { codepoint: 39 as U32, next_i: i + 2 }; return r }    // \'
+    if c == 34 { let r: CEscape = CEscape { codepoint: 34 as U32, next_i: i + 2 }; return r }    // \"
+    if c == 63 { let r: CEscape = CEscape { codepoint: 63 as U32, next_i: i + 2 }; return r }    // \?
+    if c == 97 { let r: CEscape = CEscape { codepoint: 7 as U32, next_i: i + 2 }; return r }     // \a
+    if c == 98 { let r: CEscape = CEscape { codepoint: 8 as U32, next_i: i + 2 }; return r }     // \b
+    if c == 102 { let r: CEscape = CEscape { codepoint: 12 as U32, next_i: i + 2 }; return r }   // \f
+    if c == 118 { let r: CEscape = CEscape { codepoint: 11 as U32, next_i: i + 2 }; return r }   // \v
+    // Hex escape \xHH...
+    if c == 120 or c == 88 {
+        var j: I64 = i + 2
+        var val: U32 = 0 as U32
+        loop (j < n and is_hex_digit(byte_at(text, j)) == 1 as I64) {
+            val = val * (16 as U32) + (hex_val(byte_at(text, j)) as U32)
+            j = j + 1
+        }
+        let r: CEscape = CEscape { codepoint: val, next_i: j }
+        return r
+    }
+    // Octal escape \NNN (1..3 octal digits)
+    if is_oct_digit(c) == 1 as I64 {
+        var j: I64 = i + 1
+        var count: I64 = 0
+        var val: U32 = 0 as U32
+        loop (j < n and count < 3 and is_oct_digit(byte_at(text, j)) == 1 as I64) {
+            val = val * (8 as U32) + ((byte_at(text, j) - 48) as U32)
+            j = j + 1
+            count = count + 1
+        }
+        let r: CEscape = CEscape { codepoint: val, next_i: j }
+        return r
+    }
+    // Universal character names \uHHHH and \UHHHHHHHH
+    if c == 117 or c == 85 {
+        let want: I64 = if c == 117 { 4 as I64 } else { 8 as I64 }
+        var j: I64 = i + 2
+        var val: U32 = 0 as U32
+        var count: I64 = 0
+        loop (count < want and j < n and is_hex_digit(byte_at(text, j)) == 1 as I64) {
+            val = val * (16 as U32) + (hex_val(byte_at(text, j)) as U32)
+            j = j + 1
+            count = count + 1
+        }
+        let r: CEscape = CEscape { codepoint: val, next_i: j }
+        return r
+    }
+    // Unknown escape — preserve the character after the backslash, which
+    // matches GCC's -Wunknown-escape-sequence behavior (warn but accept).
+    let r: CEscape = CEscape { codepoint: c as U32, next_i: i + 2 }
+    return r
+}
+
+// ============================================================================
+// Character literal decoder (phase 23b item 1.2)
+// ============================================================================
+
+pub func decode_char(text: Str) -> CCharLit {
+    let encoding: CStringEncoding = scan_encoding(text)
+    let prefix_len: I64 = encoding_prefix_len(encoding)
+    let n: I64 = text.len() as I64
+    // text = [prefix] ' <body> '
+    var i: I64 = prefix_len + 1                    // skip prefix + opening '
+    let end: I64 = n - 1                            // closing '
+
+    // Multi-character constants: fold left-shift per GCC convention.
+    // Empty char literals are syntactically rejected by the preprocessor,
+    // but defend against them with a zero fallback.
+    var value: U32 = 0 as U32
+    loop (i < end) {
+        let ch: I64 = byte_at(text, i)
+        if ch == 92 {                               // backslash → escape
+            let result: CEscape = decode_escape(text, i)
+            value = (value << (8 as U32)) | result.codepoint
+            i = result.next_i
+        } else {
+            value = (value << (8 as U32)) | (ch as U32)
+            i = i + 1
+        }
+    }
+    let out: CCharLit = CCharLit { value: value, encoding: encoding }
+    return out
+}
+
+// ============================================================================
+// String literal decoder (phase 23b item 1.2)
+// ============================================================================
+
+pub func decode_string(text: Str) -> CStringLit {
+    let encoding: CStringEncoding = scan_encoding(text)
+    let prefix_len: I64 = encoding_prefix_len(encoding)
+    let n: I64 = text.len() as I64
+    // text = [prefix] " <body> "
+    var i: I64 = prefix_len + 1                     // skip prefix + opening "
+    let end: I64 = n - 1                             // closing "
+
+    // Pre-size: most strings have no escape sequences, so reserve the
+    // full body length up front.
+    let bytes: List[U8] = List[U8]::new(end - i)
+    loop (i < end) {
+        let ch: I64 = byte_at(text, i)
+        if ch == 92 {                                // backslash → escape
+            let result: CEscape = decode_escape(text, i)
+            let cp: U32 = result.codepoint
+            // Encoding-specific byte emission. `Plain` / `Utf8` store
+            // the low byte; wider encodings serialize little-endian so
+            // the lowering pass can emit raw bytes into `.rdata`
+            // without extra re-encoding.
+            when encoding {
+                CStringEncoding::Plain => {
+                    bytes.push((cp & (255 as U32)) as U8)
+                },
+                CStringEncoding::Utf8 => {
+                    bytes.push((cp & (255 as U32)) as U8)
+                },
+                CStringEncoding::Wide => {
+                    // wchar_t is 2 bytes on Windows, 4 on System V — we
+                    // store 4 bytes LE and let the target ABI truncate.
+                    bytes.push((cp & (255 as U32)) as U8)
+                    bytes.push(((cp >> (8 as U32)) & (255 as U32)) as U8)
+                    bytes.push(((cp >> (16 as U32)) & (255 as U32)) as U8)
+                    bytes.push(((cp >> (24 as U32)) & (255 as U32)) as U8)
+                },
+                CStringEncoding::Utf16 => {
+                    bytes.push((cp & (255 as U32)) as U8)
+                    bytes.push(((cp >> (8 as U32)) & (255 as U32)) as U8)
+                },
+                CStringEncoding::Utf32 => {
+                    bytes.push((cp & (255 as U32)) as U8)
+                    bytes.push(((cp >> (8 as U32)) & (255 as U32)) as U8)
+                    bytes.push(((cp >> (16 as U32)) & (255 as U32)) as U8)
+                    bytes.push(((cp >> (24 as U32)) & (255 as U32)) as U8)
+                },
+            }
+            i = result.next_i
+        } else {
+            bytes.push(ch as U8)
+            i = i + 1
+        }
+    }
+    let out: CStringLit = CStringLit { bytes: bytes, encoding: encoding }
+    return out
+}
+
 /// Classify a single PpToken into a CToken. Integer/float/char/string
 /// literal *payload* parsing lives in later items (1.2); this function
 /// handles the shape: keyword-vs-ident, spelling-to-CPunct, and the
@@ -444,33 +991,16 @@ pub func classify(lex: CLexer, p: PpToken) -> CToken {
             return c_token(CTokenKind::Eof, p)
         },
         PpTokenKind::IntLit => {
-            // Payload parsing (suffix + base detection) is item 1.2. For
-            // the skeleton we emit a placeholder with value 0; follow-up
-            // item decodes the text.
-            return c_token(CTokenKind::IntLit(CIntLit {
-                value: 0 as U64,
-                suffix: CIntSuffix::None,
-                is_hex_or_octal: 0 as I64,
-            }), p)
+            return c_token(CTokenKind::IntLit(decode_int(p.text)), p)
         },
         PpTokenKind::FloatLit => {
-            return c_token(CTokenKind::FloatLit(CFloatLit {
-                value: 0.0,
-                suffix: CFloatSuffix::None,
-                is_hex: 0 as I64,
-            }), p)
+            return c_token(CTokenKind::FloatLit(decode_float(p.text)), p)
         },
         PpTokenKind::CharLit => {
-            return c_token(CTokenKind::CharLit(CCharLit {
-                value: 0 as U32,
-                encoding: CStringEncoding::Plain,
-            }), p)
+            return c_token(CTokenKind::CharLit(decode_char(p.text)), p)
         },
         PpTokenKind::StringLit => {
-            return c_token(CTokenKind::StringLit(CStringLit {
-                bytes: List[U8]::new(0 as I64),
-                encoding: CStringEncoding::Plain,
-            }), p)
+            return c_token(CTokenKind::StringLit(decode_string(p.text)), p)
         },
         // Preprocessor strips Whitespace / Newline before handing the
         // token list to the C frontend, so these branches are dead in
