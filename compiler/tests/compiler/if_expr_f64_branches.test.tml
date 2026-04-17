@@ -1,0 +1,51 @@
+//! Regression test for codegen bug #4 (phase0v):
+//! if-expr with F64 branches emits phi with integer-typed zero incoming,
+//! triggering LLVM verifier K001 "invalid type for constant" because
+//! `phi double [ i64 0, ... ]` is malformed.
+
+use test::{assert, assert_eq}
+
+@test func test_if_expr_f64_both_branches() {
+    let cond: Bool = true
+    let x: F64 = if cond { 1.0 } else { 2.0 }
+    assert(x > 0.5)
+}
+
+@test func test_if_expr_f64_false_branch() {
+    let cond: Bool = false
+    let x: F64 = if cond { 1.0 } else { 2.0 }
+    assert(x > 1.5)
+}
+
+@test func test_if_expr_f64_arithmetic() {
+    let flag: Bool = true
+    let scale: F64 = if flag { 10.0 } else { 0.1 }
+    let result: F64 = scale * 2.5
+    assert(result > 20.0)
+}
+
+@test func test_if_expr_f64_inside_func() {
+    // The original phase23b trigger: an F64 if-expr whose result is
+    // used as the initial value of an accumulator that participates in
+    // subsequent arithmetic loops.
+    let n: I64 = 5 as I64
+    let seed: F64 = if n > 0 as I64 { 1.0 } else { -1.0 }
+    var acc: F64 = seed
+    var i: I64 = 0 as I64
+    loop (i < 3 as I64) {
+        acc = acc * 10.0
+        i = i + 1
+    }
+    assert(acc > 500.0)
+    assert(acc < 1500.0)
+}
+
+@test func test_if_expr_f64_expr_arg() {
+    // F64 if-expr as a function-call argument — another phi shape.
+    let cond: Bool = true
+    assert_f64_pos(if cond { 3.14 } else { -3.14 })
+}
+
+func assert_f64_pos(x: F64) {
+    assert(x > 0.0)
+}

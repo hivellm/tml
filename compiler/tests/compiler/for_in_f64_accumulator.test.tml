@@ -1,0 +1,40 @@
+//! Regression test for codegen bug #5 (phase0v):
+//! Before the precedence fix, `for _ in 0 as I64 to 3 as I64` parsed as
+//! `for _ in (0 as (I64 to 3)) as I64` because `to` had HIGHER precedence
+//! than `as`. That produced a malformed range (I64 to 3 as a type) and the
+//! for-in codegen fell through to treating the whole cast-expression as a
+//! scalar range-end, generating `icmp slt i64 %iter, %range_struct` which
+//! LLVM rejected as a type mismatch.
+//!
+//! Fix: swap CAST and RANGE precedences in compiler/include/parser/parser.hpp
+//! (CAST=14, RANGE=13) so `as` binds tighter than `to`. The idiomatic form
+//! `for _ in 0 as I64 to n as I64` now parses as `(0 as I64) to (n as I64)`
+//! without requiring parens.
+
+use test::{assert, assert_eq}
+
+@test func test_for_in_cast_in_range_no_parens() {
+    var n: I64 = 0 as I64
+    for _ in 0 as I64 to 3 as I64 {
+        n = n + 1 as I64
+    }
+    assert_eq(n as I32, 3)
+}
+
+@test func test_for_in_f64_multiply_accumulator() {
+    var acc: F64 = 1.0
+    for _ in 0 as I64 to 3 as I64 {
+        acc = acc * 10.0
+    }
+    assert(acc > 990.0)
+    assert(acc < 1010.0)
+}
+
+@test func test_for_in_f64_add_accumulator() {
+    var sum: F64 = 0.0
+    for _ in 0 as I64 to 5 as I64 {
+        sum = sum + 2.5
+    }
+    assert(sum > 12.4)
+    assert(sum < 12.6)
+}
