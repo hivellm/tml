@@ -1,7 +1,67 @@
 # String Performance Analysis
 
-**Date**: 2026-04-16
-**Status**: TML `Text` is **1.15x** Rust for log building (near parity). `Str +=` is **154x** slower (phase1i amortized O(1) append; was 1,098x). `I64.to_string()` is **5.9x** slower (malloc + snprintf).
+**Date**: 2026-04-17
+**Status**: TML `Text` matches Rust's `String::push_str` at **1 ns/op**. `Str +=` is **13x** slower than Rust after phase 1k (was 1,098x); the remaining gap is structural — `Str` is a null-terminated `ptr`, so length/capacity live in heap memory (not SSA registers like Rust's `String`). `I64.to_string()` is **5.9x** slower (malloc + snprintf).
+
+## Phase 1k update (2026-04-17)
+
+`Str +=` dropped from phase1i's 462 ns/op to **27 ns/op** via a
+length-prefix header on heap-allocated Str buffers.
+
+**Layout**: every heap Str buffer is allocated as
+`[magic:u64 | cap:i64 | len:i64 | data... | NUL]` with the pointer
+handed out pointing at `data`. The 24-byte header lives at
+`ptr[-24..0)`. Legacy raw-`malloc` Str (e.g. `i64_to_str` output) and
+`.rdata` literals are transparently detected via a magic-sentinel
+check (`0x314B7274735F4C4D` = "ML_strK1") that falls back to `strlen`.
+
+**Hot-path IR** inside `str_append` (all inline, no FFI):
+```llvm
+%magic = load i64, ptr (a - 24)
+%is_ours = icmp eq i64 %magic, 3552126293525794637
+br i1 %is_ours, label %has_hdr, label %literal
+has_hdr:
+  %len_a = load i64, ptr (a - 8), !range !str_len_range
+  %cap = load i64, ptr (a - 16), !range !str_len_range
+  ; ... in-place path: memcpy + store i16 NUL + store new len
+  store i64 %total, ptr (a - 8)
+  ret a
+```
+
+With `alwaysinline` on `str_append` propagating this into the caller's
+loop body, LLVM:
+- SROA-promotes the `result` alloca into a phi node
+- Sees the memcpy's destination (`a + len_a`) doesn't alias the header
+  (`a - 8`), enabling store-to-load forwarding across iterations
+- Constant-folds `strlen("ab") -> 2` via `readonly nounwind willreturn`
+  on the `strlen` declaration
+
+**Results (10K iters, release)**:
+
+| Op | Pre-phase1i | Phase 1i | **Phase 1k** | Rust | Gap |
+|----|-------------|----------|--------------|------|-----|
+| Str += loop | 3,044 ns | 462 ns | **27 ns** | 2 ns | 13x |
+
+**112x faster than the original baseline. 17x faster than phase 1i.**
+
+The remaining 13x gap vs Rust is structural: Rust's `String` keeps
+`{ptr, len, cap}` as three SSA values in registers across loop
+iterations. TML's `Str = ptr` forces len/cap access to go through
+heap memory on every iteration (one load, one store per call). To
+close the last 25 ns either:
+
+- **Use `Text`** — TML's `Text` is a `{ptr, len, cap}` struct, already
+  matches Rust's `String::push_str` at 1 ns/op. The `Str +=` pattern
+  is documented (see `Concat Loop (Str - O(n^2))` in
+  `benchmarks/profile_tml/string_bench.tml`) as the slow case; the
+  fast case is `Text::with_capacity(n) + push_str(...)`.
+- **Promote `Str` to a fat pointer at the language level** — would
+  change the ABI (`Str` no longer interops directly with C `char*`);
+  deferred as a backward-incompatible change.
+- **MIR-level rewrite of the `var s: Str = ""; loop { s = s + x }`
+  pattern** — detect the accumulator pattern and transparently
+  rewrite to a hidden `Text` builder. Feasible but complex AST
+  analysis; deferred.
 
 ## Phase 1i update (2026-04-16)
 
@@ -56,7 +116,7 @@ that's load-bearing because the length isn't known at compile time.
 |-----------|-----|------|-------|-------|
 | Concat Small (literals) | 0 ns | 180 ns | **TML wins** | Compile-time folding |
 | Text push_str (100K) | 2 ns | 1 ns | 2x | phase1h LLVM libc attrs |
-| Str += loop (10K) | 462 ns | 3 ns | 154x | phase1i amortized append (was 3,293 ns / 1,098x) |
+| Str += loop (10K) | **27 ns** | 2 ns | 13x | phase1k length-prefix header (112x faster than original) |
 | Int to String | 41 ns | 7 ns | **5.9x** | malloc + snprintf vs stack |
 | Log building Text (10K) | 60 ns | 52 ns | **1.15x** | Near parity |
 | Log building Str (1K) | 4,155 ns | 93 ns | 44.7x | O(n^2) |
