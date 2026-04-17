@@ -369,6 +369,12 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     emitln("!llvm.ident = !{!0}");
     emitln("!0 = !{!\"tml version " + std::string(tml::VERSION) + "\"}");
 
+    // phase1k — range metadata for Str length/capacity loads.
+    // Tells LLVM the values are in [0, 2^63) so the alias analyzer can
+    // prove `ptr + len` never wraps back to `ptr - 8` (the header) —
+    // unlocks store-to-load forwarding across loop iterations.
+    emitln("!str_len_range = !{i64 0, i64 9223372036854775807}");
+
     // Loop vectorization metadata (emitted by back-edge detection in terminators.cpp)
     for (const auto& meta : loop_metadata_) {
         emitln(meta);
@@ -1121,15 +1127,19 @@ void MirCodegen::emit_preamble() {
     // never occurs as heap metadata or natural literal content; a
     // false-positive is 1/2^64 per probe — zero in practice. Skipping
     // the image-range check saves two FFI calls per `str_append`.
+    // !range metadata on len/cap loads tells LLVM these values are
+    // always in [0, 2^63) — lets the alias analyzer prove that
+    // `ptr + len` never wraps back to `ptr - 8` (the header), so the
+    // store-to-load forwarding across loop iterations is legal.
     emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
     emitln("  %a_magic = load i64, ptr %a_magic_p");
     emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
     emitln("  br i1 %a_is_ours, label %a_has_hdr, label %a_literal");
     emitln("a_has_hdr:");
     emitln("  %a_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  %a_len_hdr = load i64, ptr %a_len_p");
+    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range");
     emitln("  %a_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
-    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p");
+    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range");
     emitln("  br label %a_done");
     emitln("a_literal:");
     emitln("  %a_len_slow = call i64 @strlen(ptr %a_safe)");
@@ -1144,7 +1154,7 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %b_is_ours, label %b_has_hdr, label %b_literal");
     emitln("b_has_hdr:");
     emitln("  %b_len_p = getelementptr i8, ptr %b_safe, i64 -8");
-    emitln("  %b_len_hdr = load i64, ptr %b_len_p");
+    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range");
     emitln("  br label %b_done");
     emitln("b_literal:");
     emitln("  %b_len_slow = call i64 @strlen(ptr %b_safe)");
