@@ -1,0 +1,847 @@
+//! # C17 Type System (phase 23b Phase 5)
+//!
+//! Type representation + sizeof/alignof + the C17 promotion and conversion
+//! rules. This module is the source of truth for "what type does this
+//! expression have" — consumed by the MIR lowering pass (phase 23b Phase 6)
+//! and by any future semantic-check pass.
+//!
+//! ## CType vs CBaseType
+//!
+//! `ast.tml::CBaseType` captures the set of specifier-level base types the
+//! parser sees (`int`, `struct Foo`, typedef-name, etc.). `CType` in this
+//! module is the *resolved* type: typedefs are expanded, aggregates carry
+//! their field list, arrays carry a resolved element type and size, and
+//! qualifiers are explicit. Every parsed `CTypeName` feeds through
+//! `resolve_type_name` to produce a `CType` before any size / promotion
+//! computation runs.
+//!
+//! ## Platform ABI
+//!
+//! TML currently targets:
+//! - Windows x64 (LLP64): `long` = 32 bits, `long long` = 64 bits.
+//! - System V AMD64 (Linux / macOS, LP64): `long` = 64 bits.
+//!
+//! We pick the size table at init time via the `target: CAbiTarget` field
+//! on `CTypeEnv`. Callers that want host behaviour pass
+//! `CAbiTarget::WindowsX64` on Windows and `CAbiTarget::SysvAmd64`
+//! elsewhere. The enum values are computed at compile time and are used
+//! throughout sizeof / alignof.
+//!
+//! ## Flow
+//!
+//! 1. Parser produces a `CTypeName` (`ast.tml`) containing specifiers +
+//!    an abstract declarator.
+//! 2. `resolve_type_name(env, type_name) -> CType` walks the declarator
+//!    spine, looks up typedef-names in the env, and folds the result into
+//!    a single `CType` tree.
+//! 3. `sizeof_type(env, t)` and `alignof_type(env, t)` compute layout.
+//! 4. Expression checking calls `promote_integer`, `usual_arith_conv`,
+//!    `decay_lvalue`, `ptr_add_scale`, etc. to apply the C rules.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+use compiler::cc::ast::{
+    CBaseType, CQualifiers, CDeclSpecifiers, CDeclarator, CFuncDeclPart,
+    CTypeName, CStructDef, CUnionDef, CEnumDef, CTypedefDef, CStructField,
+    CEnumVariantDef, c_quals_none
+}
+
+// ============================================================================
+// Platform ABI
+// ============================================================================
+
+pub enum CAbiTarget {
+    WindowsX64,
+    SysvAmd64
+}
+
+// ============================================================================
+// Resolved CType
+// ============================================================================
+
+pub type CFuncType {
+    ret: Heap[CType],
+    params: List[Heap[CType]],
+    is_variadic: I64
+}
+
+pub type CArrayType {
+    elem: Heap[CType],
+    // `size = -1` for unsized / incomplete arrays (function parameters,
+    // extern declarations). Otherwise the explicit element count.
+    size: I64
+}
+
+pub type CAggregateField {
+    name: Str,
+    ty: Heap[CType],
+    // Byte offset from the start of the aggregate. Computed by
+    // `layout_struct` / `layout_union`.
+    offset: I64,
+    // Bit-field width in bits, or -1 for a regular field.
+    bit_width: I64
+}
+
+pub type CAggregate {
+    tag: Str,
+    fields: List[CAggregateField],
+    // Cached size / alignment so sizeof() is O(1) after first computation.
+    size: I64,
+    align: I64,
+    // `kind = 0` for struct, `1` for union. Keeping both in one shape
+    // avoids a circular-heap variant split in CType.
+    kind: I64
+}
+
+pub type CEnumValue {
+    name: Str,
+    value: I64
+}
+
+pub type CEnumType {
+    tag: Str,
+    values: List[CEnumValue],
+    // Underlying integer type — the type checker maps the min/max value
+    // range to one of Char..LongLong per §6.7.2.2. Stored as a CType
+    // discriminant int code (see ctype_kind).
+    underlying_kind: I64
+}
+
+/// The resolved C type. Each constructor either holds the type directly
+/// (primitive) or a `Heap` indirection to break recursion and avoid the
+/// large-variant codegen issues seen throughout phase 23b.
+pub enum CType {
+    Void,
+    Bool,
+    Char,
+    SChar,
+    UChar,
+    Short,
+    UShort,
+    Int,
+    UInt,
+    Long,
+    ULong,
+    LongLong,
+    ULongLong,
+    Float,
+    Double,
+    LongDouble,
+    Ptr(Heap[CType]),
+    Array(Heap[CArrayType]),
+    Struct(Heap[CAggregate]),
+    Union(Heap[CAggregate]),
+    Enum(Heap[CEnumType]),
+    Func(Heap[CFuncType]),
+    /// Qualified wrapper — the qualifiers apply to the payload type for
+    /// compatibility and lvalue-conversion rules. Structurally identical
+    /// to the underlying type for sizeof / alignof.
+    Qualified(Heap[CType], CQualifiers),
+    /// An unresolved typedef name — the env ran without a registered
+    /// definition. Kept as a placeholder so diagnostics can name it.
+    UnresolvedTypedef(Str)
+}
+
+// ============================================================================
+// Type environment
+// ============================================================================
+//
+// Owns the registered typedefs, tag types (struct / union / enum), and
+// a reverse lookup from typedef name → resolved CType. Populated as the
+// type checker walks the `CTranslationUnit`.
+
+pub type CTypeEnv {
+    target: CAbiTarget,
+    // Typedef resolution map: `typedef T name;` → name → CType(T).
+    // Heap-wrapped so the map's value type is pointer-sized and doesn't
+    // blow up codegen.
+    typedefs: HashMap[Str, Heap[CType]],
+    // Tag types — separate namespaces for struct/union vs enum because
+    // C treats them independently (`struct X` and `union X` can coexist).
+    structs: HashMap[Str, Heap[CAggregate]],
+    unions: HashMap[Str, Heap[CAggregate]],
+    enums: HashMap[Str, Heap[CEnumType]]
+}
+
+pub func c_type_env(target: CAbiTarget) -> CTypeEnv {
+    return CTypeEnv {
+        target: target,
+        typedefs: HashMap[Str, Heap[CType]]::new(32 as I64),
+        structs: HashMap[Str, Heap[CAggregate]]::new(16 as I64),
+        unions: HashMap[Str, Heap[CAggregate]]::new(8 as I64),
+        enums: HashMap[Str, Heap[CEnumType]]::new(8 as I64)
+    }
+}
+
+// ============================================================================
+// Classification helpers
+// ============================================================================
+//
+// `ctype_kind` maps a CType to a numeric tag so arithmetic conversions
+// can compare two types by category without re-pattern-matching. The
+// numbers roughly follow C's integer rank (§6.3.1.1): larger values
+// represent larger / higher-rank types.
+
+pub const CT_KIND_BOOL: I64 = 0 as I64
+pub const CT_KIND_CHAR: I64 = 1 as I64
+pub const CT_KIND_SCHAR: I64 = 2 as I64
+pub const CT_KIND_UCHAR: I64 = 3 as I64
+pub const CT_KIND_SHORT: I64 = 4 as I64
+pub const CT_KIND_USHORT: I64 = 5 as I64
+pub const CT_KIND_INT: I64 = 6 as I64
+pub const CT_KIND_UINT: I64 = 7 as I64
+pub const CT_KIND_LONG: I64 = 8 as I64
+pub const CT_KIND_ULONG: I64 = 9 as I64
+pub const CT_KIND_LONGLONG: I64 = 10 as I64
+pub const CT_KIND_ULONGLONG: I64 = 11 as I64
+pub const CT_KIND_FLOAT: I64 = 12 as I64
+pub const CT_KIND_DOUBLE: I64 = 13 as I64
+pub const CT_KIND_LONGDOUBLE: I64 = 14 as I64
+pub const CT_KIND_PTR: I64 = 20 as I64
+pub const CT_KIND_ARRAY: I64 = 21 as I64
+pub const CT_KIND_STRUCT: I64 = 22 as I64
+pub const CT_KIND_UNION: I64 = 23 as I64
+pub const CT_KIND_ENUM: I64 = 24 as I64
+pub const CT_KIND_FUNC: I64 = 25 as I64
+pub const CT_KIND_VOID: I64 = 26 as I64
+pub const CT_KIND_OTHER: I64 = 100 as I64
+
+pub func ctype_kind(t: CType) -> I64 {
+    when t {
+        Void => return CT_KIND_VOID,
+        Bool => return CT_KIND_BOOL,
+        Char => return CT_KIND_CHAR,
+        SChar => return CT_KIND_SCHAR,
+        UChar => return CT_KIND_UCHAR,
+        Short => return CT_KIND_SHORT,
+        UShort => return CT_KIND_USHORT,
+        Int => return CT_KIND_INT,
+        UInt => return CT_KIND_UINT,
+        Long => return CT_KIND_LONG,
+        ULong => return CT_KIND_ULONG,
+        LongLong => return CT_KIND_LONGLONG,
+        ULongLong => return CT_KIND_ULONGLONG,
+        Float => return CT_KIND_FLOAT,
+        Double => return CT_KIND_DOUBLE,
+        LongDouble => return CT_KIND_LONGDOUBLE,
+        Ptr(_) => return CT_KIND_PTR,
+        Array(_) => return CT_KIND_ARRAY,
+        Struct(_) => return CT_KIND_STRUCT,
+        Union(_) => return CT_KIND_UNION,
+        Enum(_) => return CT_KIND_ENUM,
+        Func(_) => return CT_KIND_FUNC,
+        Qualified(_, _) => return CT_KIND_OTHER,
+        UnresolvedTypedef(_) => return CT_KIND_OTHER
+    }
+}
+
+pub func is_integer(t: CType) -> Bool {
+    let k: I64 = ctype_kind(t)
+    if k >= CT_KIND_BOOL and k <= CT_KIND_ULONGLONG { return true }
+    if k == CT_KIND_ENUM { return true }
+    return false
+}
+
+pub func is_signed_integer(t: CType) -> Bool {
+    when t {
+        Bool => return false,
+        Char => return true,   // implementation-defined; default to signed
+        SChar => return true,
+        UChar => return false,
+        Short => return true,
+        UShort => return false,
+        Int => return true,
+        UInt => return false,
+        Long => return true,
+        ULong => return false,
+        LongLong => return true,
+        ULongLong => return false,
+        Enum(_) => return true, // C enums default to int-compatible
+        _ => return false
+    }
+}
+
+pub func is_floating(t: CType) -> Bool {
+    let k: I64 = ctype_kind(t)
+    if k >= CT_KIND_FLOAT and k <= CT_KIND_LONGDOUBLE { return true }
+    return false
+}
+
+pub func is_arithmetic(t: CType) -> Bool {
+    return is_integer(t) or is_floating(t)
+}
+
+pub func is_pointer(t: CType) -> Bool {
+    return ctype_kind(t) == CT_KIND_PTR
+}
+
+pub func is_scalar(t: CType) -> Bool {
+    return is_arithmetic(t) or is_pointer(t)
+}
+
+// Unwrap Qualified wrapper — the rules mostly care about the unqualified
+// structural shape, and qualifiers are tracked separately by callers that
+// need them (e.g. assignment compatibility).
+pub func unqualified(t: CType) -> CType {
+    when t {
+        Qualified(inner, _) => return unqualified_heap(inner),
+        _ => return t
+    }
+}
+
+func unqualified_heap(t: Heap[CType]) -> CType {
+    return unqualified(t.get())
+}
+
+// ============================================================================
+// sizeof / alignof (item 5.1)
+// ============================================================================
+//
+// Returns the size in bytes per the target ABI. Pointer / size_t / long
+// all follow the target rule-set:
+// - Windows x64 (LLP64): pointer = 8, long = 4, long long = 8
+// - System V AMD64 (LP64): pointer = 8, long = 8, long long = 8
+//
+// The sizes below match those two ABIs; update together with the
+// `CAbiTarget` enum when adding support for 32-bit or ILP32-on-64-bit
+// targets.
+
+pub func sizeof_type(env: CTypeEnv, t: CType) -> I64 {
+    when t {
+        Void => return 1 as I64,          // GCC extension; `sizeof(void) == 1`
+        Bool => return 1 as I64,
+        Char => return 1 as I64,
+        SChar => return 1 as I64,
+        UChar => return 1 as I64,
+        Short => return 2 as I64,
+        UShort => return 2 as I64,
+        Int => return 4 as I64,
+        UInt => return 4 as I64,
+        Long => {
+            when env.target {
+                WindowsX64 => return 4 as I64,
+                SysvAmd64 => return 8 as I64
+            }
+        },
+        ULong => {
+            when env.target {
+                WindowsX64 => return 4 as I64,
+                SysvAmd64 => return 8 as I64
+            }
+        },
+        LongLong => return 8 as I64,
+        ULongLong => return 8 as I64,
+        Float => return 4 as I64,
+        Double => return 8 as I64,
+        LongDouble => {
+            when env.target {
+                WindowsX64 => return 8 as I64,   // MSVC treats long double as double
+                SysvAmd64 => return 16 as I64    // x87 80-bit, padded to 16
+            }
+        },
+        Ptr(_) => return 8 as I64,
+        Array(at) => {
+            let at_val: CArrayType = at.get()
+            let elem_sz: I64 = sizeof_heap(env, at_val.elem)
+            if at_val.size < 0 as I64 { return 0 as I64 }
+            return elem_sz * at_val.size
+        },
+        Struct(agg) => return agg.get().size,
+        Union(agg) => return agg.get().size,
+        Enum(et) => {
+            // Enum uses its underlying integer type's size.
+            return size_for_kind(env, et.get().underlying_kind)
+        },
+        Func(_) => return 1 as I64,       // function types have no size; 1 is a placeholder
+        Qualified(inner, _) => return sizeof_heap(env, inner),
+        UnresolvedTypedef(_) => return 0 as I64
+    }
+}
+
+func sizeof_heap(env: CTypeEnv, t: Heap[CType]) -> I64 {
+    return sizeof_type(env, t.get())
+}
+
+pub func alignof_type(env: CTypeEnv, t: CType) -> I64 {
+    // For scalars, alignment equals size per both supported ABIs.
+    // For arrays, alignment of the element type. For aggregates, the
+    // precomputed `align` field.
+    when t {
+        Array(at) => return alignof_heap(env, at.get().elem),
+        Struct(agg) => return agg.get().align,
+        Union(agg) => return agg.get().align,
+        Qualified(inner, _) => return alignof_heap(env, inner),
+        _ => return sizeof_type(env, t)
+    }
+}
+
+func alignof_heap(env: CTypeEnv, t: Heap[CType]) -> I64 {
+    return alignof_type(env, t.get())
+}
+
+func size_for_kind(env: CTypeEnv, kind: I64) -> I64 {
+    if kind == CT_KIND_BOOL or kind == CT_KIND_CHAR or kind == CT_KIND_SCHAR or kind == CT_KIND_UCHAR { return 1 as I64 }
+    if kind == CT_KIND_SHORT or kind == CT_KIND_USHORT { return 2 as I64 }
+    if kind == CT_KIND_INT or kind == CT_KIND_UINT { return 4 as I64 }
+    if kind == CT_KIND_LONG or kind == CT_KIND_ULONG {
+        when env.target {
+            WindowsX64 => return 4 as I64,
+            SysvAmd64 => return 8 as I64
+        }
+    }
+    if kind == CT_KIND_LONGLONG or kind == CT_KIND_ULONGLONG { return 8 as I64 }
+    return 4 as I64
+}
+
+// Round `n` up to the next multiple of `align` (align must be a power of 2).
+pub func align_up(n: I64, align: I64) -> I64 {
+    let mask: I64 = align - 1 as I64
+    return (n + mask) & ~mask
+}
+
+// ============================================================================
+// Struct / union layout
+// ============================================================================
+
+/// Compute field offsets and total size for a struct. Uses the standard
+/// layout rule: each field rounds the running offset up to its own
+/// alignment, then contributes its size. The struct's alignment is the
+/// max of any field's alignment; the final size rounds up to that.
+pub func layout_struct(env: CTypeEnv, tag: Str, fields_in: List[CAggregateField]) -> CAggregate {
+    var offset: I64 = 0 as I64
+    var max_align: I64 = 1 as I64
+    var fields_out: List[CAggregateField] = List[CAggregateField]::new(fields_in.len())
+    var i: I64 = 0 as I64
+    let n: I64 = fields_in.len() as I64
+    loop (i < n) {
+        let f_in: CAggregateField = fields_in.get(i)
+        let fty: CType = f_in.ty.get()
+        let fa: I64 = alignof_type(env, fty)
+        let fs: I64 = sizeof_type(env, fty)
+        let aligned: I64 = align_up(offset, fa)
+        let laid: CAggregateField = CAggregateField {
+            name: f_in.name,
+            ty: f_in.ty,
+            offset: aligned,
+            bit_width: f_in.bit_width
+        }
+        fields_out.push(laid)
+        offset = aligned + fs
+        if fa > max_align { max_align = fa }
+        i = i + 1
+    }
+    let total: I64 = align_up(offset, max_align)
+    return CAggregate {
+        tag: tag,
+        fields: fields_out,
+        size: total,
+        align: max_align,
+        kind: 0 as I64
+    }
+}
+
+/// Union layout: every field starts at offset 0. Total size is the max
+/// field size rounded up to the max field alignment.
+pub func layout_union(env: CTypeEnv, tag: Str, fields_in: List[CAggregateField]) -> CAggregate {
+    var max_size: I64 = 0 as I64
+    var max_align: I64 = 1 as I64
+    var fields_out: List[CAggregateField] = List[CAggregateField]::new(fields_in.len())
+    var i: I64 = 0 as I64
+    let n: I64 = fields_in.len() as I64
+    loop (i < n) {
+        let f_in: CAggregateField = fields_in.get(i)
+        let fty: CType = f_in.ty.get()
+        let fa: I64 = alignof_type(env, fty)
+        let fs: I64 = sizeof_type(env, fty)
+        let laid: CAggregateField = CAggregateField {
+            name: f_in.name, ty: f_in.ty,
+            offset: 0 as I64, bit_width: f_in.bit_width
+        }
+        fields_out.push(laid)
+        if fs > max_size { max_size = fs }
+        if fa > max_align { max_align = fa }
+        i = i + 1
+    }
+    let total: I64 = align_up(max_size, max_align)
+    return CAggregate {
+        tag: tag,
+        fields: fields_out,
+        size: total,
+        align: max_align,
+        kind: 1 as I64
+    }
+}
+
+// ============================================================================
+// Integer promotion (item 5.2, C11 §6.3.1.1)
+// ============================================================================
+//
+// Every integer type whose rank is less than `int` (i.e. Char/SChar/UChar/
+// Short/UShort/Bool) is promoted to `int` in arithmetic expressions — or
+// to `unsigned int` if `int` cannot represent all values of the source
+// type (unsigned short on platforms with `sizeof(int) == sizeof(short)`,
+// which we do not currently target — always promotes to `int` here).
+// Enums are treated as their underlying integer kind.
+
+pub func promote_integer(t: CType) -> CType {
+    let k: I64 = ctype_kind(t)
+    if k == CT_KIND_BOOL or k == CT_KIND_CHAR or k == CT_KIND_SCHAR or
+       k == CT_KIND_UCHAR or k == CT_KIND_SHORT or k == CT_KIND_USHORT {
+        return CType::Int
+    }
+    when t {
+        Enum(_) => return CType::Int,
+        _ => return t
+    }
+}
+
+/// Usual arithmetic conversions (C11 §6.3.1.8). Given two arithmetic
+/// types, return the common type both operands convert to. Rules:
+/// - If either is long double, both convert to long double.
+/// - Else if either is double, both convert to double.
+/// - Else if either is float, both convert to float.
+/// - Otherwise, integer promotions are performed on both, then the
+///   result is the operand of higher rank / signedness per §6.3.1.8.
+pub func usual_arith_conv(l: CType, r: CType) -> CType {
+    let lk: I64 = ctype_kind(l)
+    let rk: I64 = ctype_kind(r)
+
+    if lk == CT_KIND_LONGDOUBLE or rk == CT_KIND_LONGDOUBLE { return CType::LongDouble }
+    if lk == CT_KIND_DOUBLE or rk == CT_KIND_DOUBLE { return CType::Double }
+    if lk == CT_KIND_FLOAT or rk == CT_KIND_FLOAT { return CType::Float }
+
+    let lp: CType = promote_integer(l)
+    let rp: CType = promote_integer(r)
+    let lpk: I64 = ctype_kind(lp)
+    let rpk: I64 = ctype_kind(rp)
+
+    // Same type → done.
+    if lpk == rpk { return lp }
+
+    // Split signed vs unsigned path (§6.3.1.8 bullet points).
+    let l_signed: Bool = is_signed_integer(lp)
+    let r_signed: Bool = is_signed_integer(rp)
+
+    // Same signedness: take the higher-rank one.
+    if l_signed == r_signed {
+        if lpk > rpk { return lp }
+        return rp
+    }
+
+    // Mixed signedness. Normalize so `u` is the unsigned, `s` is the
+    // signed operand.
+    var u: CType = CType::Int
+    var s: CType = CType::Int
+    var uk: I64 = 0 as I64
+    var sk: I64 = 0 as I64
+    if l_signed {
+        s = lp; sk = lpk
+        u = rp; uk = rpk
+    } else {
+        u = lp; uk = lpk
+        s = rp; sk = rpk
+    }
+    // If unsigned rank ≥ signed rank, result is unsigned.
+    if uk >= sk { return u }
+    // If signed can represent all values of unsigned (rank strictly
+    // greater, which on our ABI always means strictly larger type), use
+    // signed.
+    return s
+}
+
+// ============================================================================
+// Implicit conversions (item 5.3)
+// ============================================================================
+//
+// `decay_lvalue` removes the cv-qualifiers when an lvalue is used as a
+// value (except when the operand of & or sizeof). `decay_array` converts
+// `T[N]` to `T*`. `decay_function` converts `F` to `*F`. Together these
+// are the "usual conversions" that turn a declaration-shaped type into
+// the shape expected by most expression contexts.
+
+pub func decay_lvalue(t: CType) -> CType {
+    // lvalue-to-rvalue strips qualifiers only.
+    when t {
+        Qualified(inner, _) => return inner.get(),
+        _ => return t
+    }
+}
+
+pub func decay_array(t: CType) -> CType {
+    when t {
+        Array(at) => {
+            let elem: Heap[CType] = at.get().elem
+            return CType::Ptr(elem)
+        },
+        Qualified(inner, _) => return decay_array(inner.get()),
+        _ => return t
+    }
+}
+
+pub func decay_function(t: CType) -> CType {
+    when t {
+        Func(_) => {
+            let boxed: Heap[CType] = Heap[CType]::new(t)
+            return CType::Ptr(boxed)
+        },
+        _ => return t
+    }
+}
+
+/// Apply all three decays in sequence — array → pointer, function →
+/// pointer, then lvalue → rvalue. This is what most expression contexts
+/// (arguments, operands, returns) implicitly do.
+pub func apply_expr_decays(t: CType) -> CType {
+    let t1: CType = decay_array(t)
+    let t2: CType = decay_function(t1)
+    return decay_lvalue(t2)
+}
+
+/// Null pointer constant (§6.3.2.3): an integer constant expression with
+/// value 0, or such an expression cast to `(void*)`. We can only check
+/// value 0 at the type-checker level; the cast form is recognised by
+/// `is_null_ptr_cast`.
+pub func is_null_ptr_const_int(lit_value: I64) -> Bool {
+    return lit_value == 0 as I64
+}
+
+pub func is_null_ptr_cast(target: CType) -> Bool {
+    when target {
+        Ptr(inner) => {
+            when inner.get() {
+                Void => return true,
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+// ============================================================================
+// Pointer arithmetic (item 5.4, C11 §6.5.6)
+// ============================================================================
+//
+// `ptr_add_scale(env, pt)` returns the byte stride for `ptr + n` where
+// `pt` is the pointer's pointee type: `n * sizeof(*pt)`. For `void *`,
+// GCC extension treats arithmetic as if `sizeof(char)`, i.e. stride 1.
+
+pub func ptr_add_scale(env: CTypeEnv, pointee: CType) -> I64 {
+    let sz: I64 = sizeof_type(env, pointee)
+    if sz == 0 as I64 { return 1 as I64 }    // void* extension
+    return sz
+}
+
+/// Type of `ptr1 - ptr2` when both point to the same array: `ptrdiff_t`,
+/// which is the signed integer type that can represent an address
+/// difference. On both our ABIs that's `long long`.
+pub func ptrdiff_type() -> CType {
+    return CType::LongLong
+}
+
+/// Size type used by `sizeof`: `size_t`, the unsigned counterpart of
+/// `ptrdiff_t`. On both our ABIs that's `unsigned long long`.
+pub func size_type() -> CType {
+    return CType::ULongLong
+}
+
+// ============================================================================
+// Tentative definitions (item 5.4 tail)
+// ============================================================================
+//
+// C allows a global `int x;` without initializer to be a *tentative*
+// definition. If no other translation-unit-level declaration of `x`
+// follows with an initializer, the tentative becomes a full definition
+// of `x` with implicit zero-init. We track per-name state:
+//   - kind = 0: unseen
+//   - kind = 1: tentative (extern-compatible, no initializer yet)
+//   - kind = 2: defined (with initializer, or final tentative-resolved)
+
+pub type CTentativeState {
+    // Map from global variable name → tentative kind code above.
+    states: HashMap[Str, I64]
+}
+
+pub func c_tentative_state() -> CTentativeState {
+    return CTentativeState {
+        states: HashMap[Str, I64]::new(16 as I64)
+    }
+}
+
+/// Record a `T x;` declaration at file scope. Returns the resulting
+/// kind (1 = tentative, 2 = defined if already had initializer).
+pub func tentative_declare(state: CTentativeState, name: Str) -> I64 {
+    if state.states.has(name) {
+        let prior: I64 = state.states.get(name)
+        if prior == 2 as I64 { return 2 as I64 }
+        // Previously tentative; still tentative.
+        state.states.set(name, 1 as I64)
+        return 1 as I64
+    }
+    state.states.set(name, 1 as I64)
+    return 1 as I64
+}
+
+/// Record a `T x = init;` declaration at file scope. Marks the name as
+/// fully defined.
+pub func tentative_define(state: CTentativeState, name: Str) -> I64 {
+    state.states.set(name, 2 as I64)
+    return 2 as I64
+}
+
+// ============================================================================
+// Base type resolution
+// ============================================================================
+//
+// `base_to_ctype` maps an AST `CBaseType` to a first-pass `CType` without
+// walking the declarator. Struct / union / enum references require the
+// env to be populated. Typedefs resolve through the env.
+
+pub func base_to_ctype(env: CTypeEnv, b: CBaseType) -> CType {
+    when b {
+        Void => return CType::Void,
+        Bool => return CType::Bool,
+        Char => return CType::Char,
+        SChar => return CType::SChar,
+        UChar => return CType::UChar,
+        Short => return CType::Short,
+        UShort => return CType::UShort,
+        Int => return CType::Int,
+        UInt => return CType::UInt,
+        Long => return CType::Long,
+        ULong => return CType::ULong,
+        LongLong => return CType::LongLong,
+        ULongLong => return CType::ULongLong,
+        Float => return CType::Float,
+        Double => return CType::Double,
+        LongDouble => return CType::LongDouble,
+        Complex => return CType::Double,   // approximate: `_Complex` treated as double-rank
+        StructRef(tag) => {
+            if env.structs.has(tag) { return CType::Struct(env.structs.get(tag)) }
+            // Forward reference — produce an empty struct entry so later
+            // definitions can patch.
+            let empty: CAggregate = CAggregate {
+                tag: tag,
+                fields: List[CAggregateField]::new(0 as I64),
+                size: 0 as I64, align: 1 as I64, kind: 0 as I64
+            }
+            let h: Heap[CAggregate] = Heap[CAggregate]::new(empty)
+            return CType::Struct(h)
+        },
+        UnionRef(tag) => {
+            if env.unions.has(tag) { return CType::Union(env.unions.get(tag)) }
+            let empty: CAggregate = CAggregate {
+                tag: tag,
+                fields: List[CAggregateField]::new(0 as I64),
+                size: 0 as I64, align: 1 as I64, kind: 1 as I64
+            }
+            let h: Heap[CAggregate] = Heap[CAggregate]::new(empty)
+            return CType::Union(h)
+        },
+        EnumRef(tag) => {
+            if env.enums.has(tag) { return CType::Enum(env.enums.get(tag)) }
+            let empty: CEnumType = CEnumType {
+                tag: tag,
+                values: List[CEnumValue]::new(0 as I64),
+                underlying_kind: CT_KIND_INT
+            }
+            let h: Heap[CEnumType] = Heap[CEnumType]::new(empty)
+            return CType::Enum(h)
+        },
+        Typedef(name) => {
+            if env.typedefs.has(name) {
+                let t: Heap[CType] = env.typedefs.get(name)
+                return t.get()
+            }
+            return CType::UnresolvedTypedef(name)
+        }
+    }
+}
+
+/// Apply declarator layers (pointer / array / function) to a base type,
+/// producing the final resolved `CType`.
+pub func apply_declarator(env: CTypeEnv, base_ty: CType, decl: CDeclarator) -> CType {
+    when decl {
+        Ident(_) => return base_ty,
+        Abstract => return base_ty,
+        Pointer(inner, quals) => {
+            // Apply inner first, then wrap in pointer.
+            let inner_ty: CType = apply_declarator(env, base_ty, inner.get())
+            let boxed: Heap[CType] = Heap[CType]::new(inner_ty)
+            let pt: CType = CType::Ptr(boxed)
+            // The qualifiers apply to the *pointer*, not the pointee.
+            return wrap_qualifiers(pt, quals)
+        },
+        Array(inner, size_expr_opt) => {
+            let inner_ty: CType = apply_declarator(env, base_ty, inner.get())
+            let elem_heap: Heap[CType] = Heap[CType]::new(inner_ty)
+            // Constant-expression evaluation for array sizes is deferred
+            // to the type checker's `const_eval` pass; at this point we
+            // record -1 for unknown / unsized arrays.
+            var sz: I64 = -1 as I64
+            let Just(_) = size_expr_opt else {
+                let at: CArrayType = CArrayType { elem: elem_heap, size: sz }
+                return CType::Array(Heap[CArrayType]::new(at))
+            }
+            let at: CArrayType = CArrayType { elem: elem_heap, size: sz }
+            return CType::Array(Heap[CArrayType]::new(at))
+        },
+        Func(part) => {
+            let inner_ty: CType = apply_declarator(env, base_ty, part.inner.get())
+            // inner_ty is the return type.
+            let ret: Heap[CType] = Heap[CType]::new(inner_ty)
+            // Resolve each parameter into a CType.
+            var params_out: List[Heap[CType]] = List[Heap[CType]]::new(part.params.len())
+            var i: I64 = 0 as I64
+            let n: I64 = part.params.len() as I64
+            loop (i < n) {
+                let p: CParam = part.params.get(i)
+                let p_base: CType = base_to_ctype(env, p.specifiers.base_type)
+                let p_ty: CType = apply_declarator(env, p_base, p.declarator)
+                // Parameter type undergoes implicit decay (array / function).
+                let p_final: CType = apply_param_decays(p_ty)
+                let p_heap: Heap[CType] = Heap[CType]::new(p_final)
+                params_out.push(p_heap)
+                i = i + 1
+            }
+            let ft: CFuncType = CFuncType {
+                ret: ret,
+                params: params_out,
+                is_variadic: part.is_variadic
+            }
+            let ft_heap: Heap[CFuncType] = Heap[CFuncType]::new(ft)
+            return CType::Func(ft_heap)
+        }
+    }
+}
+
+// In a parameter declaration, `int arr[10]` decays to `int *` and
+// `int f(int)` decays to `int (*)(int)`. Other types pass through.
+pub func apply_param_decays(t: CType) -> CType {
+    let t1: CType = decay_array(t)
+    return decay_function(t1)
+}
+
+func wrap_qualifiers(t: CType, q: CQualifiers) -> CType {
+    if q.is_const == 0 as I64 and q.is_volatile == 0 as I64 and
+       q.is_restrict == 0 as I64 and q.is_atomic == 0 as I64 {
+        return t
+    }
+    return CType::Qualified(Heap[CType]::new(t), q)
+}
+
+/// Resolve a parsed `CTypeName` (specifier + abstract declarator bundle)
+/// into a `CType`.
+pub func resolve_type_name(env: CTypeEnv, tn: CTypeName) -> CType {
+    let base_ty: CType = base_to_ctype(env, tn.specifiers.base_type)
+    // Apply top-level specifier qualifiers to the base before the
+    // declarator wraps anything around it (the inner declarator's
+    // pointers / arrays / funcs come between qualifiers and the base).
+    let qual_base: CType = wrap_qualifiers(base_ty, tn.specifiers.quals)
+    return apply_declarator(env, qual_base, tn.declarator)
+}
+
+// Import CParam at the bottom to keep the module header brief; TML's
+// `use` statements are processed together, so placement is purely for
+// readability.
+use compiler::cc::ast::CParam
