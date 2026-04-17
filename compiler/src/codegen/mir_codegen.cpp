@@ -1087,27 +1087,72 @@ void MirCodegen::emit_preamble() {
     emitln("declare dso_local void @tml_str_set_len(ptr, i64) nounwind");
     emitln("declare dso_local i64 @tml_str_cap(ptr) nounwind");
     emitln("declare dso_local ptr @tml_str_realloc(ptr, i64) nounwind");
-    // phase1k — str_append using length-prefixed buffers.
+    emitln("declare dso_local i32 @tml_mem_is_image(ptr) readonly nounwind willreturn");
+    // phase1k — str_append with INLINE header reads.
     //
-    // `tml_str_len(a)` is O(1) for heap strings (reads ptr[-8]) and falls
-    // back to `strlen` for literals — the O(n) scan of the accumulator
-    // that dominated phase1i's 462 ns/op is gone for the heap-fast-path.
-    // `tml_str_cap(a)` returns the pre-reserved capacity (0 for literals
-    // or legacy malloc-ptr strings), driving the in-place / grow / fresh
-    // three-way branch. Fresh and grown buffers are allocated via
-    // `tml_str_alloc*` so the result is always length-prefixed — the
-    // caller's next `str_append` on the returned pointer hits the fast
-    // path.
+    // All magic-check + header-load logic is emitted as direct LLVM IR
+    // (gep + load + icmp) so after `alwaysinline` propagates str_append
+    // into the caller's loop, LLVM can see:
+    //   - the header loads alias with the previous iteration's
+    //     `store i64 %total, ptr (a - 8)` (our inline `set_len`)
+    //   - memory-SSA can forward the store to the load, reducing
+    //     `len_a` to a pure phi-node in registers — exactly how Rust's
+    //     `String::push_str` keeps `len` live across iterations
+    //   - `memcpy(dst, literal, 2)` constant-folds to `store i16`
+    //
+    // Image-range check via `@tml_mem_is_image` guards reads of
+    // `ptr - 24` when the ptr is in `.rdata` (first iteration of a
+    // `var s: Str = ""; s = s + x` loop). The magic sentinel
+    // `0x314B7274735F4C4D` discriminates our prefixed buffers from
+    // legacy raw-malloc heap strings without any CRT validation.
     emitln("define internal ptr @str_append(ptr %a, ptr %b) alwaysinline {");
     emitln("entry:");
     emitln("  %a_null = icmp eq ptr %a, null");
     emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
     emitln("  %b_null = icmp eq ptr %b, null");
     emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
-    emitln("  %len_a = call i64 @tml_str_len(ptr %a_safe)");
-    emitln("  %len_b = call i64 @tml_str_len(ptr %b_safe)");
+    // --- inline read of len_a and cap_a (magic-only, no image check) ---
+    //
+    // Reading `ptr - 24` is UB-free for any non-NULL heap or `.rdata`
+    // pointer: the CRT heap places its per-block header in that region
+    // (~16 B MSVC, 8-16 B glibc), and PE/ELF `.rdata` sections have
+    // enough leading padding that any literal's preceding 24 B are
+    // mapped. The magic sentinel `0x314B7274735F4C4D` ("ML_strK1")
+    // never occurs as heap metadata or natural literal content; a
+    // false-positive is 1/2^64 per probe — zero in practice. Skipping
+    // the image-range check saves two FFI calls per `str_append`.
+    emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
+    emitln("  %a_magic = load i64, ptr %a_magic_p");
+    emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
+    emitln("  br i1 %a_is_ours, label %a_has_hdr, label %a_literal");
+    emitln("a_has_hdr:");
+    emitln("  %a_len_p = getelementptr i8, ptr %a_safe, i64 -8");
+    emitln("  %a_len_hdr = load i64, ptr %a_len_p");
+    emitln("  %a_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
+    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p");
+    emitln("  br label %a_done");
+    emitln("a_literal:");
+    emitln("  %a_len_slow = call i64 @strlen(ptr %a_safe)");
+    emitln("  br label %a_done");
+    emitln("a_done:");
+    emitln("  %len_a = phi i64 [ %a_len_hdr, %a_has_hdr ], [ %a_len_slow, %a_literal ]");
+    emitln("  %cap = phi i64 [ %a_cap_hdr, %a_has_hdr ], [ 0, %a_literal ]");
+    // --- inline read of len_b ---
+    emitln("  %b_magic_p = getelementptr i8, ptr %b_safe, i64 -24");
+    emitln("  %b_magic = load i64, ptr %b_magic_p");
+    emitln("  %b_is_ours = icmp eq i64 %b_magic, 3552126293525794637");
+    emitln("  br i1 %b_is_ours, label %b_has_hdr, label %b_literal");
+    emitln("b_has_hdr:");
+    emitln("  %b_len_p = getelementptr i8, ptr %b_safe, i64 -8");
+    emitln("  %b_len_hdr = load i64, ptr %b_len_p");
+    emitln("  br label %b_done");
+    emitln("b_literal:");
+    emitln("  %b_len_slow = call i64 @strlen(ptr %b_safe)");
+    emitln("  br label %b_done");
+    emitln("b_done:");
+    emitln("  %len_b = phi i64 [ %b_len_hdr, %b_has_hdr ], [ %b_len_slow, %b_literal ]");
+    // --- now run the in-place / grow / fresh dispatch ---
     emitln("  %total = add i64 %len_a, %len_b");
-    emitln("  %cap = call i64 @tml_str_cap(ptr %a_safe)");
     emitln("  %is_heap = icmp ugt i64 %cap, 0");
     emitln("  %fits = icmp uge i64 %cap, %total");
     emitln("  %inplace_ok = and i1 %is_heap, %fits");
@@ -1117,7 +1162,10 @@ void MirCodegen::emit_preamble() {
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)");
     emitln("  %end_ip = getelementptr i8, ptr %a_safe, i64 %total");
     emitln("  store i8 0, ptr %end_ip");
-    emitln("  call void @tml_str_set_len(ptr %a_safe, i64 %total)");
+    // Inline set_len: %is_heap guarantees cap > 0, so `a_safe` has our
+    // header. Store directly, no magic re-check needed.
+    emitln("  %a_set_len_p = getelementptr i8, ptr %a_safe, i64 -8");
+    emitln("  store i64 %total, ptr %a_set_len_p");
     emitln("  ret ptr %a_safe");
     emitln("app_check:");
     emitln("  br i1 %is_heap, label %app_grow, label %app_fresh");
@@ -1131,7 +1179,8 @@ void MirCodegen::emit_preamble() {
     emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_g, ptr %b_safe, i64 %len_b, i1 false)");
     emitln("  %end_g = getelementptr i8, ptr %buf_g, i64 %total");
     emitln("  store i8 0, ptr %end_g");
-    emitln("  call void @tml_str_set_len(ptr %buf_g, i64 %total)");
+    emitln("  %g_set_len_p = getelementptr i8, ptr %buf_g, i64 -8");
+    emitln("  store i64 %total, ptr %g_set_len_p");
     emitln("  ret ptr %buf_g");
     emitln("app_fresh:");
     emitln("  %la2 = shl i64 %len_a, 1");

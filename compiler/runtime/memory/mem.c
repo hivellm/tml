@@ -141,6 +141,21 @@ static inline int mem_is_image_ptr(uintptr_t addr) {
     }
     return 0;
 }
+
+// Exported wrapper for use from LLVM-generated IR (phase 1k hot path).
+// Called from the inlined `tml_str_len`/`tml_str_cap` helpers to decide
+// whether a pointer's `ptr - 24` offset is safe to read as a prefix
+// header. Initializes the image-range table on first call.
+TML_EXPORT int tml_mem_is_image(void* ptr) {
+    if (!ptr) return 0;
+    if (!g_mem_image_ranges_initialized) mem_init_image_ranges();
+    return mem_is_image_ptr((uintptr_t)ptr);
+}
+#else
+TML_EXPORT int tml_mem_is_image(void* ptr) {
+    (void)ptr;
+    return 0;  // POSIX: no image-range table; rely on magic check alone.
+}
 #endif
 
 // ============================================================================
