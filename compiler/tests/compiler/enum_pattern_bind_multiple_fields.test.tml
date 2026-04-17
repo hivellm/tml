@@ -1,0 +1,54 @@
+//! Regression test for codegen bug #7 (phase0v):
+//! Enum-variant pattern-binding on non-heap fields of a variant whose
+//! first payload is a `Heap[T]`.
+//!
+//! The bug: the multi-field binding branch in
+//! `compiler/src/codegen/llvm/control/when.cpp::gen_when` required
+//! `payload[0]->is<IdentPattern>()`, so a pattern like `V(_, b, _)`
+//! where payload[0] is `WildcardPattern` fell through to the no-binding
+//! path and `b` surfaced as "Unknown variable" at codegen time.
+//!
+//! Fix: use `multi_field_pattern_eligible(payload)` which allows any
+//! mix of `IdentPattern` and `WildcardPattern` at any position as long
+//! as at least one element is a real binding.
+
+use test::{assert, assert_eq}
+use core::alloc::heap::Heap
+
+pub enum BugEnum {
+    V(Heap[I64], Str, I64)
+}
+
+@test func test_enum_bind_all_named() {
+    let boxed: Heap[I64] = Heap[I64]::new(42 as I64)
+    let e: BugEnum = BugEnum::V(boxed, "hello", 7 as I64)
+    when e {
+        V(_h, s, n) => {
+            assert_eq(s, "hello")
+            assert_eq(n as I32, 7)
+        }
+    }
+}
+
+@test func test_enum_bind_wildcard_leading() {
+    // Pre-fix: `V(_, s, _)` crashed codegen with "Unknown variable: s"
+    // because the outer multi-field branch required payload[0] to be
+    // IdentPattern (it is WildcardPattern here).
+    let boxed: Heap[I64] = Heap[I64]::new(9 as I64)
+    let e: BugEnum = BugEnum::V(boxed, "world", 3 as I64)
+    when e {
+        V(_, s, _) => {
+            assert_eq(s, "world")
+        }
+    }
+}
+
+@test func test_enum_bind_wildcard_middle() {
+    let boxed: Heap[I64] = Heap[I64]::new(1 as I64)
+    let e: BugEnum = BugEnum::V(boxed, "x", 11 as I64)
+    when e {
+        V(_h, _, n) => {
+            assert_eq(n as I32, 11)
+        }
+    }
+}
