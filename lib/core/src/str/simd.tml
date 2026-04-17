@@ -12,6 +12,10 @@ use core::runtime::intrinsics::{sse2_cmpeq_epi8, sse2_movemask_epi8, simd_load_p
 use std::collections::list::List
 use core::simd::detect
 
+// phase1k: length-prefix allocator for Str producers.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len(len: I64) -> *U8
+
 @extern("memcmp")
 func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
 
@@ -625,7 +629,8 @@ pub func trim_end_simd(s: Str) -> I64 {
 pub func to_uppercase_simd(s: Str) -> Str {
     let s_len: I64 = len(s)
     let s_base: I64 = s as I64
-    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    // phase1k — length-prefix buffer; NUL written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(s_len)
     let dst: I64 = buf as I64
 
     // Threshold splats for lowercase detection: 'a'-1=96, 'z'+1=123, case offset=32.
@@ -667,8 +672,6 @@ pub func to_uppercase_simd(s: Str) -> Str {
         pos = pos + 1
     }
 
-    let null_p: *U8 = (dst + s_len) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
     return buf as Str
 }
 
@@ -694,7 +697,8 @@ pub func to_uppercase_simd(s: Str) -> Str {
 pub func to_lowercase_simd(s: Str) -> Str {
     let s_len: I64 = len(s)
     let s_base: I64 = s as I64
-    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    // phase1k — length-prefix buffer; NUL written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(s_len)
     let dst: I64 = buf as I64
 
     // Threshold splats for uppercase detection: 'A'-1=64, 'Z'+1=91, case offset=32.
@@ -996,11 +1000,10 @@ func substring_raw(s: Str, start: I64, end: I64) -> Str {
     if sub_len <= 0 {
         return ""
     }
-    let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
+    // phase1k — length-prefix buffer; NUL written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(sub_len)
     let src: I64 = s as I64
-    lowlevel { copy_nonoverlapping((src + start) as *U8, buf as *U8, sub_len) }
-    let null_p: *U8 = (buf as I64 + sub_len) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
+    lowlevel { copy_nonoverlapping((src + start) as *U8, buf, sub_len) }
     return buf as Str
 }
 

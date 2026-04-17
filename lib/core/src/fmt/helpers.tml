@@ -3,6 +3,13 @@
 //! This module provides helper functions used by the formatting implementations.
 //! These are internal utilities and should not be used directly.
 
+// phase1k — length-prefix allocator for Str producers. Returns a
+// pointer to a buffer with the 24-byte header
+// `[magic | cap | len | data]` set up so `Str.len()` is O(1) on the
+// result and subsequent `str_append` calls hit the in-place fast path.
+@extern("tml_str_alloc_len")
+func tml_str_alloc_len(len: I64) -> *U8
+
 // ============================================================================
 // Integer to string conversion (pure TML)
 // ============================================================================
@@ -58,12 +65,12 @@ pub func i64_to_str(value: I64) -> Str {
     // Count digits with comparisons (no divisions needed for counting)
     let num_digits: I64 = count_digits_u64(v as U64)
     let total_len: I64 = if is_negative { num_digits + 1 } else { num_digits }
-    let buf: *U8 = lowlevel { mem_alloc(total_len + 1) } as *U8
+    // phase1k — allocate with length-prefix header so `.len()` is O(1)
+    // on the returned Str. `tml_str_alloc_len` writes the NUL byte at
+    // `data[total_len]` itself, so we skip the manual terminator write.
+    let buf: *U8 = tml_str_alloc_len(total_len)
     let buf_addr: I64 = buf as I64
     let table_addr: I64 = DIGIT_PAIRS as I64
-
-    // Write null terminator
-    lowlevel { ptr_write[U8]((buf_addr + total_len) as *U8, 0 as U8) }
 
     // Write digits backwards, two at a time using lookup table
     var pos: I64 = total_len - 1
@@ -108,12 +115,10 @@ pub func u64_to_str(value: U64) -> Str {
     }
 
     let num_digits: I64 = count_digits_u64(value)
-    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    // phase1k — length-prefix Str buffer; NUL already written by allocator.
+    let buf: *U8 = tml_str_alloc_len(num_digits)
     let buf_addr: I64 = buf as I64
     let table_addr: I64 = DIGIT_PAIRS as I64
-
-    // Write null terminator
-    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
 
     // Write digits backwards, two at a time
     var pos: I64 = num_digits - 1
@@ -226,11 +231,9 @@ pub func u64_to_binary_str(n: U64) -> Str {
         tmp = tmp >> 1
     }
 
-    let buf: *U8 = lowlevel { mem_alloc(num_bits + 1) } as *U8
+    // phase1k — length-prefix Str buffer.
+    let buf: *U8 = tml_str_alloc_len(num_bits)
     let buf_addr: I64 = buf as I64
-
-    // Write null terminator
-    lowlevel { ptr_write[U8]((buf_addr + num_bits) as *U8, 0 as U8) }
 
     // Write digits backwards
     var pos: I64 = num_bits - 1
@@ -287,11 +290,9 @@ pub func u64_to_octal_str(n: U64) -> Str {
         tmp = tmp >> 3
     }
 
-    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    // phase1k — length-prefix Str buffer.
+    let buf: *U8 = tml_str_alloc_len(num_digits)
     let buf_addr: I64 = buf as I64
-
-    // Write null terminator
-    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
 
     // Write digits backwards
     var pos: I64 = num_digits - 1
@@ -328,11 +329,9 @@ pub func u64_to_hex_str(n: U64, upper: Bool) -> Str {
         tmp = tmp >> 4
     }
 
-    let buf: *U8 = lowlevel { mem_alloc(num_digits + 1) } as *U8
+    // phase1k — length-prefix Str buffer.
+    let buf: *U8 = tml_str_alloc_len(num_digits)
     let buf_addr: I64 = buf as I64
-
-    // Write null terminator
-    lowlevel { ptr_write[U8]((buf_addr + num_digits) as *U8, 0 as U8) }
 
     // Write digits backwards using lookup table
     var pos: I64 = num_digits - 1
@@ -410,12 +409,10 @@ pub func string_len(s: Str) -> I64 {
 pub func char_to_str(c: Char) -> Str {
     let code: U32 = c as U32
     let byte: U8 = code as U8
-    let buf: *Unit = lowlevel { mem_alloc(2) }
-    let p0: *U8 = buf as *U8
+    // phase1k — length-prefix Str buffer; NUL written by allocator.
+    let p0: *U8 = tml_str_alloc_len(1)
     lowlevel { ptr_write[U8](p0, byte) }
-    let p1: *U8 = (buf as I64 + 1) as *U8
-    lowlevel { ptr_write[U8](p1, 0 as U8) }
-    return buf as Str
+    return p0 as Str
 }
 
 /// Repeats a string n times.
@@ -543,14 +540,21 @@ pub func u128_to_str(value: U128) -> Str {
     if value == 0 as U128 {
         return "0"
     }
-    // Max 39 digits + null terminator
-    let buf: *U8 = lowlevel { mem_alloc(40) } as *U8
+    // phase1k — count digits first so we can allocate exactly the right
+    // size with a length-prefix header. This gives `Str.len()` O(1) on
+    // the result instead of the previous variant that returned a
+    // pointer into a fixed 40-byte scratch buffer.
+    var num_digits: I64 = 0
+    var tmp: U128 = value
+    loop (tmp > 0 as U128) {
+        num_digits = num_digits + 1
+        tmp = tmp / (10 as U128)
+    }
+
+    let buf: *U8 = tml_str_alloc_len(num_digits)
     let buf_addr: I64 = buf as I64
 
-    // Write null terminator at position 39
-    lowlevel { ptr_write[U8]((buf_addr + 39) as *U8, 0 as U8) }
-
-    var pos: I64 = 38
+    var pos: I64 = num_digits - 1
     var v: U128 = value
     loop (v > 0 as U128) {
         let digit: U128 = v % (10 as U128)
@@ -560,8 +564,7 @@ pub func u128_to_str(value: U128) -> Str {
         pos = pos - 1
     }
 
-    // Return pointer to first digit (skip leading unused bytes)
-    return (buf_addr + pos + 1) as Str
+    return buf as Str
 }
 
 /// Converts an I128 to its decimal string representation.

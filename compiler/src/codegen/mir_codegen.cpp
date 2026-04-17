@@ -375,28 +375,11 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     // unlocks store-to-load forwarding across loop iterations.
     emitln("!str_len_range = !{i64 0, i64 9223372036854775807}");
 
-    // phase1k — alias-scope/noalias metadata for Str buffers.
-    //
-    // We split every heap Str allocation into two disjoint regions:
-    //   - `!str_hdr_scope` — the 24-byte header at `ptr[-24..0)`
-    //     (magic, cap, len)
-    //   - `!str_data_scope` — the payload at `ptr[0..cap]` plus the
-    //     trailing NUL byte
-    //
-    // All header loads/stores are tagged `!alias.scope !str_hdr_scope,
-    // !noalias !str_data_scope`; the memcpy into the data region and
-    // the NUL store get the mirror. LLVM's scoped AA can then prove
-    // that the header `load i64, ptr (a - 8)` on iteration N+1 cannot
-    // be invalidated by the memcpy or NUL-store of iteration N, so the
-    // `store i64 %total, ptr (a - 8)` at the end of iteration N can be
-    // forwarded to iteration N+1's load. That collapses the hot loop
-    // into pure SSA-tracked `len` updates — the same shape rustc
-    // produces for `String::push_str`.
-    emitln("!str_alias_domain = !{!\"tml_str\"}");
-    emitln("!str_hdr_scope_id = !{!\"tml_str_hdr\", !str_alias_domain}");
-    emitln("!str_data_scope_id = !{!\"tml_str_data\", !str_alias_domain}");
-    emitln("!str_hdr_scope = !{!str_hdr_scope_id}");
-    emitln("!str_data_scope = !{!str_data_scope_id}");
+    // phase1k — alias-scope metadata was removed after the
+    // incremental-cache crash it caused when the AST codegen path
+    // re-emitted str_append without the matching scope definitions.
+    // The simpler `!range` metadata on len/cap loads still gives LLVM
+    // enough info to do store-to-load forwarding for trivial cases.
 
     // Loop vectorization metadata (emitted by back-edge detection in terminators.cpp)
     for (const auto& meta : loop_metadata_) {
@@ -1155,14 +1138,14 @@ void MirCodegen::emit_preamble() {
     // `ptr + len` never wraps back to `ptr - 8` (the header), so the
     // store-to-load forwarding across loop iterations is legal.
     emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
-    emitln("  %a_magic = load i64, ptr %a_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %a_magic = load i64, ptr %a_magic_p");
     emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
     emitln("  br i1 %a_is_ours, label %a_has_hdr, label %a_literal");
     emitln("a_has_hdr:");
     emitln("  %a_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range");
     emitln("  %a_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
-    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range");
     emitln("  br label %a_done");
     emitln("a_literal:");
     emitln("  %a_len_slow = call i64 @strlen(ptr %a_safe)");
@@ -1172,12 +1155,12 @@ void MirCodegen::emit_preamble() {
     emitln("  %cap = phi i64 [ %a_cap_hdr, %a_has_hdr ], [ 0, %a_literal ]");
     // --- inline read of len_b ---
     emitln("  %b_magic_p = getelementptr i8, ptr %b_safe, i64 -24");
-    emitln("  %b_magic = load i64, ptr %b_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %b_magic = load i64, ptr %b_magic_p");
     emitln("  %b_is_ours = icmp eq i64 %b_magic, 3552126293525794637");
     emitln("  br i1 %b_is_ours, label %b_has_hdr, label %b_literal");
     emitln("b_has_hdr:");
     emitln("  %b_len_p = getelementptr i8, ptr %b_safe, i64 -8");
-    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range");
     emitln("  br label %b_done");
     emitln("b_literal:");
     emitln("  %b_len_slow = call i64 @strlen(ptr %b_safe)");
@@ -1192,13 +1175,13 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %inplace_ok, label %app_inplace, label %app_check");
     emitln("app_inplace:");
     emitln("  %dst_ip = getelementptr i8, ptr %a_safe, i64 %len_a");
-    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false), !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)");
     emitln("  %end_ip = getelementptr i8, ptr %a_safe, i64 %total");
-    emitln("  store i8 0, ptr %end_ip, !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  store i8 0, ptr %end_ip");
     // Inline set_len: %is_heap guarantees cap > 0, so `a_safe` has our
     // header. Store directly, no magic re-check needed.
     emitln("  %a_set_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  store i64 %total, ptr %a_set_len_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  store i64 %total, ptr %a_set_len_p");
     emitln("  ret ptr %a_safe");
     emitln("app_check:");
     emitln("  br i1 %is_heap, label %app_grow, label %app_fresh");

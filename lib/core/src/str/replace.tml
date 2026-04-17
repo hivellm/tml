@@ -10,6 +10,10 @@ use core::str::search::find
 @extern("memcmp")
 func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
 
+// phase1k: length-prefix allocator for Str producers.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len(len: I64) -> *U8
+
 // ============================================================================
 // Replacement
 // ============================================================================
@@ -53,9 +57,9 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
     if count == 0 {
         return s
     }
-    // Allocate result
+    // phase1k — length-prefix buffer; NUL written by allocator.
     let new_len: I64 = s_len + count * (r_len - p_len)
-    let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+    let buf: *U8 = c_tml_str_alloc_len(new_len)
     let dst: I64 = buf as I64
     var si: I64 = 0
     var di: I64 = 0
@@ -80,10 +84,7 @@ pub func replace(s: Str, pattern: Str, replacement: Str) -> Str {
     if si < s_len {
         let remaining: I64 = s_len - si
         lowlevel { copy_nonoverlapping((s_base + si) as *U8, (dst + di) as *U8, remaining) }
-        di = di + remaining
     }
-    let null_p: *U8 = (dst + di) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
     return buf as Str
 }
 
@@ -110,7 +111,8 @@ pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
         let p_len: I64 = len(pattern)
         let r_len: I64 = len(replacement)
         let new_len: I64 = s_len - p_len + r_len
-        let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+        // phase1k — length-prefix buffer; NUL written by allocator.
+        let buf: *U8 = c_tml_str_alloc_len(new_len)
         let dst: I64 = buf as I64
         // Copy before match
         if pos > 0 {
@@ -125,7 +127,6 @@ pub func replace_first(s: Str, pattern: Str, replacement: Str) -> Str {
         if after_len > 0 {
             lowlevel { copy_nonoverlapping((s as I64 + pos + p_len) as *U8, (dst + pos + r_len) as *U8, after_len) }
         }
-        lowlevel { ptr_write[U8]((dst + new_len) as *U8, 0 as U8) }
         return buf as Str
     }
     return s
@@ -168,9 +169,9 @@ pub func replacen(s: Str, pat: Str, repl: Str, count: I64) -> Str {
     if hits == 0 {
         return s
     }
-    // Allocate output buffer
+    // Allocate output buffer — phase1k length-prefix.
     let new_len: I64 = s_len + hits * (r_len - p_len)
-    let buf: *Unit = lowlevel { mem_alloc(new_len + 1) }
+    let buf: *U8 = c_tml_str_alloc_len(new_len)
     let dst: I64 = buf as I64
     let r_ptr: *U8 = repl as *U8
     var si: I64 = 0
@@ -197,10 +198,7 @@ pub func replacen(s: Str, pat: Str, repl: Str, count: I64) -> Str {
     if si < s_len {
         let remaining: I64 = s_len - si
         lowlevel { copy_nonoverlapping((s_base + si) as *U8, (dst + di) as *U8, remaining) }
-        di = di + remaining
     }
-    // Null-terminate
-    let nullp: *U8 = (dst + di) as *U8
-    lowlevel { ptr_write[U8](nullp, 0) }
+    // NUL already written by tml_str_alloc_len.
     return buf as Str
 }

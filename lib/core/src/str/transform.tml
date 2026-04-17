@@ -3,6 +3,10 @@
 use core::str::basic::{len, substring}
 use core::str::simd
 
+// phase1k: length-prefix allocator for Str producers.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len(len: I64) -> *U8
+
 // ============================================================================
 // Whitespace helper
 // ============================================================================
@@ -245,8 +249,8 @@ pub func to_uppercase(s: Str) -> Str {
     if s_len >= 32 {
         return simd::to_uppercase_simd(s)
     }
-    // Scalar path for short strings
-    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    // Scalar path for short strings — phase1k length-prefix buffer.
+    let buf: *U8 = c_tml_str_alloc_len(s_len)
     let src: I64 = s as I64
     let dst: I64 = buf as I64
     for i in 0 to s_len {
@@ -260,8 +264,6 @@ pub func to_uppercase(s: Str) -> Str {
         let dp: *U8 = (dst + i) as *U8
         lowlevel { ptr_write[U8](dp, ch as U8) }
     }
-    let null_p: *U8 = (dst + s_len) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
     return buf as Str
 }
 
@@ -283,8 +285,8 @@ pub func to_lowercase(s: Str) -> Str {
     if s_len >= 32 {
         return simd::to_lowercase_simd(s)
     }
-    // Scalar path for short strings
-    let buf: *Unit = lowlevel { mem_alloc(s_len + 1) }
+    // Scalar path for short strings — phase1k length-prefix buffer.
+    let buf: *U8 = c_tml_str_alloc_len(s_len)
     let src: I64 = s as I64
     let dst: I64 = buf as I64
     for i in 0 to s_len {
@@ -298,8 +300,6 @@ pub func to_lowercase(s: Str) -> Str {
         let dp: *U8 = (dst + i) as *U8
         lowlevel { ptr_write[U8](dp, ch as U8) }
     }
-    let null_p: *U8 = (dst + s_len) as *U8
-    lowlevel { ptr_write[U8](null_p, 0 as U8) }
     return buf as Str
 }
 

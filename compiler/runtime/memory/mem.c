@@ -431,10 +431,6 @@ TML_EXPORT void* tml_str_alloc_len(int64_t len) {
     hdr->len = len;
     char* data = (char*)raw + TML_STR_HEADER_BYTES;
     data[len] = '\0';
-    {
-        FILE* f = fopen("F:/Node/hivellm/tml/.sandbox/alloc_trace.log", "a");
-        if (f) { fprintf(f, "[alloc_len] len=%lld data=%p raw=%p\n", (long long)len, data, raw); fclose(f); }
-    }
     return data;
 }
 

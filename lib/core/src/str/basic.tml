@@ -7,11 +7,25 @@
 @extern("strlen")
 func c_strlen(s: Str) -> I64
 
+// phase1k: reads the cached length from the length-prefix header for
+// heap-allocated Str buffers (O(1)); transparently falls back to
+// strlen for literals and legacy raw-malloc strings via an image-range
+// + magic-sentinel check inside the runtime.
+@extern("tml_str_len")
+func c_tml_str_len(s: Str) -> I64
+
 @extern("memcmp")
 func c_memcmp(a: *U8, b: *U8, n: I64) -> I32
 
 @extern("memchr")
 func c_memchr(s: *U8, c: I32, n: I64) -> *U8
+
+// phase1k: length-prefix allocator — returned buffer has the
+// `[magic | cap | len | data | NUL]` header, so the caller's `Str.len()`
+// is O(1) and subsequent `str_append` on this buffer hits the in-place
+// fast path.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len(len: I64) -> *U8
 
 // ============================================================================
 // String Length and Emptiness
@@ -22,6 +36,12 @@ func c_memchr(s: *U8, c: I32, n: I64) -> *U8
 /// Note: This returns the byte length, not the character count. For UTF-8
 /// strings with multi-byte characters, this may differ from the visible
 /// character count.
+///
+/// Binds to `tml_str_len` (phase1k), which is O(1) for heap-allocated
+/// `Str` buffers (reads the cached length from the length-prefix
+/// header). Falls back to `strlen` for `.rdata` literals and any
+/// legacy heap string allocated without the header — so the result
+/// is identical to the previous `strlen`-only implementation.
 ///
 /// # Examples
 ///
@@ -34,7 +54,7 @@ pub func len(s: Str) -> I64 {
     if addr == 0 {
         return 0
     }
-    return c_strlen(s)
+    return c_tml_str_len(s)
 }
 
 /// Returns `true` if the string is empty.
@@ -136,9 +156,9 @@ pub func substring(s: Str, start: I64, end: I64) -> Str {
         en = s_len
     }
     let sub_len: I64 = en - st
-    let buf: *Unit = lowlevel { mem_alloc(sub_len + 1) }
-    lowlevel { copy_nonoverlapping((s as I64 + st) as *U8, buf as *U8, sub_len) }
-    lowlevel { ptr_write[U8]((buf as I64 + sub_len) as *U8, 0 as U8) }
+    // phase1k — length-prefix Str buffer; NUL already written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(sub_len)
+    lowlevel { copy_nonoverlapping((s as I64 + st) as *U8, buf, sub_len) }
     return buf as Str
 }
 
