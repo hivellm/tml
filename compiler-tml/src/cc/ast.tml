@@ -1,0 +1,411 @@
+//! # C17 AST (phase 23b Phase 2)
+//!
+//! The parsed representation of a C translation unit. Every node type the
+//! parser produces lives here so `parser.tml`, `parse_expr.tml`,
+//! `parse_stmt.tml` and the type-checker / lowerer all import from a single
+//! source of truth. The AST is intentionally close to the C17 grammar —
+//! promotions, implicit conversions and decay rules are *not* applied here;
+//! that's the type-checker's job (phase 5).
+//!
+//! ## Declarator model
+//!
+//! C declarations are split into declaration specifiers (`int const`,
+//! `static unsigned long`) and declarators (`*x`, `arr[10]`, `(*fp)(int)`).
+//! The declarator is a spine that wraps a base type; we model it as a
+//! recursive `CDeclarator` enum with pointer/array/function constructors
+//! that nest outwards from the eventual identifier. When a declarator is
+//! anonymous (function parameter, type-name in `sizeof((int*)0)`), the
+//! leaf becomes `Abstract` instead of `Ident`.
+//!
+//! ## Typedef-name ambiguity
+//!
+//! Recognising `foo *x;` as `foo` being a typedef (declaration) vs a
+//! multiplication (expression-statement) requires knowing the set of
+//! typedef names currently in scope. `CParser` tracks a typedef table;
+//! this file only defines the shape of nodes, not the lexing decision.
+
+use std::collections::list::List
+use core::alloc::heap::Heap
+
+// ============================================================================
+// Declaration specifiers (C17 §6.7)
+// ============================================================================
+
+/// Storage-class specifier. `None` means the declaration inherited the
+/// default linkage / storage for its scope (global → static, block → auto).
+pub enum CStorageClass {
+    None,
+    Auto,
+    Register,
+    Static,
+    Extern,
+    Typedef,
+    KwThreadLocal
+}
+
+/// Built-in arithmetic and aggregate base types. Signedness is already baked
+/// into the enum — the parser canonicalises `signed int`/`int`/`int signed`
+/// to the same variant. Aggregate specifiers (`struct X`, `union U`,
+/// `enum E`) keep the tag name so the type checker can look them up.
+pub enum CBaseType {
+    Void,
+    Bool,
+    Char,            // plain char, signedness implementation-defined
+    SChar,           // signed char
+    UChar,           // unsigned char
+    Short,           // signed short
+    UShort,          // unsigned short
+    Int,             // signed int (default for `long`, `short` unless otherwise)
+    UInt,            // unsigned int
+    Long,            // signed long
+    ULong,           // unsigned long
+    LongLong,        // signed long long
+    ULongLong,       // unsigned long long
+    Float,
+    Double,
+    LongDouble,
+    Complex,         // _Complex (double by default)
+    // Aggregate references by tag — the definition lives in a separate CDecl.
+    StructRef(Str),
+    UnionRef(Str),
+    EnumRef(Str),
+    // A named typedef — resolved by the type checker.
+    Typedef(Str)
+}
+
+/// Type qualifiers. A bitfield disguised as a struct because TML doesn't have
+/// bitfield types and a pack of four `I64` fields is what compiles cleanly
+/// through the current codegen.
+pub type CQualifiers {
+    is_const: I64,
+    is_volatile: I64,
+    is_restrict: I64,
+    is_atomic: I64
+}
+
+pub func c_quals_none() -> CQualifiers {
+    return CQualifiers { is_const: 0 as I64, is_volatile: 0 as I64, is_restrict: 0 as I64, is_atomic: 0 as I64 }
+}
+
+/// Function specifiers (C17 §6.7.4). `inline` is hint-only; `_Noreturn`
+/// affects control-flow analysis and attribute propagation.
+pub type CFuncSpec {
+    is_inline: I64,
+    is_noreturn: I64
+}
+
+pub func c_funcspec_none() -> CFuncSpec {
+    return CFuncSpec { is_inline: 0 as I64, is_noreturn: 0 as I64 }
+}
+
+/// All declaration specifiers collected from the leading run of a
+/// declaration (`static const unsigned long`). A parsed specifier list is
+/// one of these per declaration regardless of how many declarators follow.
+pub type CDeclSpecifiers {
+    storage: CStorageClass,
+    base_type: CBaseType,
+    quals: CQualifiers,
+    funcspec: CFuncSpec,
+    // `_Alignas(N)` alignment override, or 0 if not specified.
+    alignas_bytes: I64
+}
+
+// ============================================================================
+// Declarator spine
+// ============================================================================
+
+/// Function-declarator layer. Split out of the enum so pattern-binding a
+/// single struct arg avoids the codegen bug that hits when a Func variant
+/// is declared as `Func(Heap[CDeclarator], List[CParam], I64)`.
+pub type CFuncDeclPart {
+    inner: Heap[CDeclarator],
+    params: List[CParam],
+    is_variadic: I64
+}
+
+/// The declarator syntax tree. Each level wraps the `inner` declarator with
+/// a pointer/array/function layer until the leaf (`Ident` or `Abstract`).
+/// Parenthesized declarators like `(*fp)(int)` are represented as nested
+/// declarators: outermost is Func, wrapping a Pointer, wrapping Ident.
+pub enum CDeclarator {
+    /// Named identifier — the declarator "bottoms out" here.
+    Ident(Str),
+    /// Abstract declarator — unnamed. Used in function-parameter type-only
+    /// positions (`int(*)(int,int)` as a type name) and in `sizeof(T)`.
+    Abstract,
+    /// `*` pointer with qualifiers applied to the pointer itself.
+    Pointer(Heap[CDeclarator], CQualifiers),
+    /// `[N]` array. `size = Nothing` means unsized / incomplete (`int arr[];`
+    /// or a VLA, both of which we only allow on function parameters).
+    Array(Heap[CDeclarator], Maybe[Heap[CExpr]]),
+    /// Function declarator. See `CFuncDeclPart` for field layout.
+    Func(CFuncDeclPart)
+}
+
+pub type CParam {
+    // Parameter name. Empty Str for unnamed parameters in prototypes
+    // (`void foo(int, int);`).
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator
+}
+
+// ============================================================================
+// Expressions (stubs filled in by parse_expr.tml)
+// ============================================================================
+//
+// We declare a complete CExpr enum here because the parser needs to produce
+// expression trees for initializers and declarator array sizes even while
+// parse_expr.tml is still a stub. Each variant corresponds to one productions
+// in C17 §6.5. The binary/unary operators are an enum each so downstream
+// passes do integer compares instead of string dispatch.
+
+pub enum CExpr {
+    // Literals
+    IntLit(U64, I64),              // value, is_unsigned_or_long_flag (from suffix)
+    FloatLit(F64, I64),            // value, is_float_suffix (1 = `f`, 0 = double/long-double)
+    CharLit(U32),                  // codepoint after decoding
+    StringLit(List[U8]),           // bytes (encoding handled at type-check)
+    // Identifiers
+    Ident(Str),
+    // Compound
+    Paren(Heap[CExpr]),
+    Binary(CBinaryOp, Heap[CExpr], Heap[CExpr]),
+    Unary(CUnaryOp, Heap[CExpr]),
+    PostInc(Heap[CExpr]),
+    PostDec(Heap[CExpr]),
+    Assign(CAssignOp, Heap[CExpr], Heap[CExpr]),
+    Cond(Heap[CExpr], Heap[CExpr], Heap[CExpr]),
+    Comma(Heap[CExpr], Heap[CExpr]),
+    Call(Heap[CExpr], List[Heap[CExpr]]),
+    Member(Heap[CExpr], Str),      // expr.field
+    Arrow(Heap[CExpr], Str),       // expr->field
+    Index(Heap[CExpr], Heap[CExpr]),
+    Cast(Heap[CTypeName], Heap[CExpr]),
+    SizeofExpr(Heap[CExpr]),
+    SizeofType(Heap[CTypeName]),
+    AlignofType(Heap[CTypeName]),
+    Compound(Heap[CTypeName], Heap[CInit]),   // (T){...}  C99
+    Generic(Heap[CExpr], List[CGenericAssoc]) // _Generic(ctrl, T1: e1, default: e2)
+}
+
+pub enum CBinaryOp {
+    Add, Sub, Mul, Div, Mod,
+    Shl, Shr,
+    Lt, Gt, Le, Ge, Eq, Ne,
+    BitAnd, BitOr, BitXor,
+    LogAnd, LogOr
+}
+
+pub enum CUnaryOp {
+    Plus,                         // +x
+    Neg,                          // -x
+    BitNot,                       // ~x
+    LogNot,                       // !x
+    PreInc,                       // ++x
+    PreDec,                       // --x
+    AddrOf,                       // &x
+    Deref                         // *x
+}
+
+pub enum CAssignOp {
+    Assign,
+    AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
+    ShlAssign, ShrAssign,
+    BitAndAssign, BitOrAssign, BitXorAssign
+}
+
+/// A C type-name used in cast, sizeof(T), _Alignof(T), compound literals,
+/// and function prototypes. It's a decl-spec + abstract declarator bundle
+/// — the grammar calls this a "type-name".
+pub type CTypeName {
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator
+}
+
+/// `_Generic` association: `type: expr` or `default: expr`.
+pub type CGenericAssoc {
+    // `is_default = 1` → the `default:` arm; ty is unused in that case.
+    is_default: I64,
+    ty: CTypeName,
+    value: Heap[CExpr]
+}
+
+// ============================================================================
+// Initializers
+// ============================================================================
+
+/// C initializer: either a scalar expression or a brace-enclosed list.
+/// Designated initializers are encoded as elements with non-empty designator
+/// chains.
+pub enum CInit {
+    Scalar(Heap[CExpr]),
+    Brace(List[CInitElement])
+}
+
+pub type CInitElement {
+    /// Designator chain. Empty = positional. `.field` or `[expr]`, possibly
+    /// nested: `.inner[3].x`.
+    designators: List[CDesignator],
+    init: Heap[CInit]
+}
+
+pub enum CDesignator {
+    Field(Str),                // .name
+    Index(Heap[CExpr])         // [expr]  (constant expression at type-check)
+}
+
+// ============================================================================
+// Statements (stubs — parse_stmt.tml fills these in)
+// ============================================================================
+//
+// Declared here so function-declaration bodies can carry a statement block
+// even before parse_stmt.tml implements everything.
+
+pub enum CStmt {
+    Empty,                                  // ;
+    Expr(Heap[CExpr]),                      // expr;
+    Compound(List[CBlockItem]),             // { decls; stmts; }
+    If(Heap[CExpr], Heap[CStmt], Maybe[Heap[CStmt]]),
+    For(Maybe[Heap[CBlockItem]], Maybe[Heap[CExpr]], Maybe[Heap[CExpr]], Heap[CStmt]),
+    While(Heap[CExpr], Heap[CStmt]),
+    DoWhile(Heap[CStmt], Heap[CExpr]),
+    Switch(Heap[CExpr], Heap[CStmt]),
+    Case(Heap[CExpr], Heap[CStmt]),
+    Default(Heap[CStmt]),
+    Break,
+    Continue,
+    Return(Maybe[Heap[CExpr]]),
+    Goto(Str),
+    Label(Str, Heap[CStmt]),
+    StaticAssert(Heap[CExpr], Str)          // _Static_assert(expr, "msg")
+}
+
+/// Item inside a compound statement: C99 permits declarations and statements
+/// to interleave, so a block is a list of either.
+pub enum CBlockItem {
+    DeclItem(Heap[CDecl]),
+    StmtItem(Heap[CStmt])
+}
+
+// ============================================================================
+// Top-level declarations
+// ============================================================================
+
+pub enum CDecl {
+    /// One variable from a declaration (`int a, *b;` → two VarDecls).
+    /// Heap-indirected to keep the enum payload small — TML's codegen is
+    /// slow on large-variant enums, and Var/Func/*Def all carry multi-field
+    /// records.
+    Var(Heap[CVarDecl]),
+    /// Function definition (body = Just) or prototype (body = Nothing).
+    Func(Heap[CFuncDecl]),
+    /// Struct or union definition `struct X { ... };`.
+    StructDef(Heap[CStructDef]),
+    UnionDef(Heap[CUnionDef]),
+    /// Enum definition `enum Color { ... };`.
+    EnumDef(Heap[CEnumDef]),
+    /// A typedef declaration `typedef T name;`.
+    TypedefDef(Heap[CTypedefDef]),
+    /// `_Static_assert` at file scope (C11).
+    StaticAssert(Heap[CExpr], Str)
+}
+
+pub type CVarDecl {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    init: Maybe[Heap[CInit]],
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CFuncDecl {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    /// Declarator spine *around* the name. The outermost layer is always
+    /// `Func(inner, params, variadic)` when this is a valid function decl;
+    /// `return_spec` + the non-func layers together give the return type.
+    declarator: CDeclarator,
+    params: List[CParam],
+    is_variadic: I64,
+    // K&R-style declarations: `int f(a, b) int a; char b; { ... }` — the
+    // declaration lines between `)` and `{` carry the parameter types.
+    kr_decls: List[CVarDecl],
+    body: Maybe[Heap[CStmt]],
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CStructField {
+    name: Str,                              // empty for anonymous struct/union members (C11)
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    // Non-negative bit-field width, or -1 if this is a regular field.
+    bit_width: I64
+}
+
+pub type CStructDef {
+    tag: Str,                               // empty for anonymous `struct {} x;`
+    fields: List[CStructField],
+    // Forward declaration (`struct Foo;`) carries an empty `fields` list AND
+    // `is_forward = 1` to distinguish from `struct Foo {};`.
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CUnionDef {
+    tag: Str,
+    fields: List[CStructField],
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CEnumVariantDef {
+    name: Str,
+    // Explicit value `= N` as a constant expression, or Nothing for the
+    // auto-increment default (previous + 1, or 0 for the first).
+    value: Maybe[Heap[CExpr]]
+}
+
+pub type CEnumDef {
+    tag: Str,
+    variants: List[CEnumVariantDef],
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CTypedefDef {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+// ============================================================================
+// Translation unit
+// ============================================================================
+
+pub type CTranslationUnit {
+    decls: List[Heap[CDecl]],
+    // File name of the primary source (for diagnostics and the eventual
+    // MIR `#file` directive).
+    file: Str
+}
+
+pub func c_tu(file: Str) -> CTranslationUnit {
+    return CTranslationUnit {
+        decls: List[Heap[CDecl]]::new(0 as I64),
+        file: file
+    }
+}

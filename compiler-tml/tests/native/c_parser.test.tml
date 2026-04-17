@@ -1,0 +1,50 @@
+//! Smoke tests for the C17 parser (phase 23b Phase 2). Tests the parser at
+//! the sub-translation-unit level: specifier folding, declarator shape and
+//! initializer parsing. Full `cp_parse_translation_unit` integration is
+//! exercised in phase 23b item 7 (self-compilation of essential.c / mem.c)
+//! once supporting phases land.
+
+use test::{assert, assert_eq}
+use compiler::cc::parser::*
+use compiler::cc::lexer::*
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+use std::collections::list::List
+
+@test func test_parser_constructs_from_empty_tokens() {
+    let pp = List[PpToken]::new(0 as I64)
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    // 0 source + 1 synthetic EOF
+    assert_eq(parser.tokens.len() as I32, 1)
+}
+
+@test func test_parser_specifiers_for_int() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let sp: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, 0 as I64)
+    when sp {
+        Ok(parsed) => assert_eq(parsed.pos as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+@test func test_parser_declarator_for_ident() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let dr: Outcome[CParsedDeclarator, CParseError] = cp_parse_declarator(parser, 1 as I64)
+    when dr {
+        Ok(parsed) => assert_eq(parsed.pos as I32, 2),
+        Err(_) => assert(false)
+    }
+}

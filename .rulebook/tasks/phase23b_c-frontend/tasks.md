@@ -1,6 +1,6 @@
 # Tasks: C17 Frontend — Parser, Type Checker, C→MIR Lowering
 
-**Status**: In progress (3/24 — lexer complete)
+**Status**: In progress (8/24 — lexer + parser declaration phase complete)
 **Depends on**: phase23a (C preprocessor), phase15c (MIR builder as target)
 **Blocks**: phase23c (C++ subset frontend extends the C frontend)
 **Duration**: 12–16 weeks
@@ -15,13 +15,13 @@
 - [x] 1.2 Implemented literal payload decoders in the same file. `decode_int`: hex (`0x`) / octal (`0`) / binary (`0b` GCC ext) / decimal with `u`/`l`/`ll`/`ul`/`ull` suffixes in any case order, into a `U64` with an `is_hex_or_octal` flag for sign promotion. `decode_float`: decimal parser inline (stdlib `parse_f64 -> Maybe[F64]` hit K001) + C99 hex-float path (`0x1.8p3`) with `f`/`l` suffix. `decode_char`: single-char escapes, hex (`\xHH`), octal (`\NNN`), UCN (`\uHHHH`, `\UHHHHHHHH`), encoding prefixes (`L`, `u`, `U`, `u8`) — multi-char constants fold via left-shift. `decode_string`: same escape engine + per-encoding byte layout (Plain/Utf8 = low byte, Utf16 = LE pair, Wide/Utf32 = LE quad). Commit `7ae539b5`.
 - [x] 1.3 C17 punctuator scanning — all 47 operators in the punct table in item 1.1: `->`, `.`, `++`, `--`, `<<`, `>>`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `+=`, `-=`, `*=`, `/=`, `%=`, `==`, `!=`, `<=`, `>=`, `&&`, `||`, `...`, plus all 6 digraphs (`<:` `:>` `<%` `%>` `%:` `%:%:`) normalized to their primary spelling. Trigraph removal and line splicing live in the preprocessor (phase23a, translation phases 1–2); the C lexer is translation phase 7 and never sees them.
 
-## Phase 2: C Parser — Declarations (5 items)
+## Phase 2: C Parser — Declarations (5 items — COMPLETE)
 
-- [ ] 2.1 Create `compiler-tml/src/cc/parser.tml` — C parser infrastructure: `CParser` type with `parse_translation_unit() -> CTranslationUnit`; `CTranslationUnit` holds `List[CDecl]` (functions and global variables); implement declaration specifier parsing: storage class (auto, extern, register, static, typedef), type specifiers (void, char, short, int, long, float, double, _Bool, _Complex, signed, unsigned), type qualifiers (const, volatile, restrict, _Atomic), function specifiers (inline, _Noreturn)
-- [ ] 2.2 Implement variable declarations: `int x = 5;`, `const char *s = "hello";`, `int arr[10] = {1,2,3};`, `static int count = 0;`; handle multiple declarators in one declaration (`int a, b, *c;`); implement initializer expressions (scalar, array `{1,2,3}`, struct `{.field = val}` designated initializers per C99)
-- [ ] 2.3 Implement function declarations: `int foo(int a, int b) { ... }` (ANSI style); `int foo(a, b) int a; int b; { ... }` (K&R style, for compatibility with legacy system headers); function prototypes `int foo(int, int);`; variadic functions `int printf(const char *fmt, ...)`;  inline functions; `extern` and `static` linkage
-- [ ] 2.4 Implement struct/union/enum declarations: `struct Foo { int x; char y[8]; };` with field declarations, bit fields (`int flags : 4`), anonymous struct/union members (C11); `union { int i; float f; } u;`; `enum Color { RED = 0, GREEN, BLUE };` with explicit values; forward declarations `struct Foo;`; typedef'd structs `typedef struct { ... } Foo;`
-- [ ] 2.5 Implement typedef: `typedef unsigned long long uint64_t;`, `typedef struct Node { int val; struct Node *next; } Node;`, `typedef int (*FuncPtr)(int, int);` (function pointer typedefs); typedef'd types must be recognized as type names during subsequent parsing (the typedef-name ambiguity with identifiers in C parsing)
+- [x] 2.1 Created `compiler-tml/src/cc/ast.tml` (C AST node types) and `compiler-tml/src/cc/parser.tml` (parser infrastructure). `CParser` owns a `List[CToken]` cursor plus a `typedefs: HashMap[Str, I64]` for the typedef-name ambiguity. `CTranslationUnit` holds `List[Heap[CDecl]]`. `cp_parse_specifiers` accepts the 6 C17 specifier categories in any order, folds scalar counts (`unsigned long long` → `ULongLong`, `signed int` → `Int`, etc.), and rejects contradictions (e.g. `signed unsigned`). Aggregate specifiers (`struct Foo`) emit a `CBaseType::StructRef(tag)` reference. Commit `TBD`.
+- [x] 2.2 Implemented declarator parsing (`cp_parse_declarator`, `cp_parse_abstract_declarator`) with pointer/array/function layers wrapping outwards from the leaf `Ident`/`Abstract`. `cp_parse_initializer` handles scalar (`= 5`), brace (`= {1,2,3}`), and designated (`= {[0] = 7, .field = val}`) forms with nested designator chains. Multiple declarators per declaration (`int a, *b, c;`) expand to separate `CVarDecl`s sharing the specifier.
+- [x] 2.3 Implemented function declarator with full ANSI-style prototype + definition support. `cp_parse_param_list` recognises empty `()`, explicit `(void)`, regular prototypes, and variadic `(..., ...)`. Function bodies parse via `cp_parse_compound_stmt` (a brace-matching consumer for Phase 2; Phase 4 replaces with full statement parsing). K&R-style `int f(a,b) int a; int b; { ... }` parameter declarations hold a `kr_decls: List[CVarDecl]` slot for Phase 4 expansion. `CFuncDecl` carries `is_variadic`, `body: Maybe[Heap[CStmt]]`, and the full declarator spine.
+- [x] 2.4 Implemented struct/union/enum bodies via `cp_parse_struct_body` and `cp_parse_enum_body`. Struct/union fields support plain declarators, bit fields (`int flags : 4`), anonymous bit fields (`int : 2`) and anonymous aggregate members (C11 `struct { ... };`). Enum variants support optional `= expr` explicit values. Forward declarations (`struct Foo;`) emit a `CStructDef` with `is_forward = 1` and empty fields.
+- [x] 2.5 Implemented typedef via the shared declarator path: when `CStorageClass::Typedef` appears in the specifier list, each declarator's name is added to `parser.typedefs` immediately and a `CDecl::TypedefDef` is emitted. Subsequent declarations resolve the name via `cp_parse_specifiers`'s typedef-name branch, which yields `CBaseType::Typedef(name)`. Function pointer typedefs (`typedef int (*F)(int);`) fall out naturally — the declarator wraps a function layer inside a pointer.
 
 ## Phase 3: C Parser — Expressions (4 items)
 
@@ -66,6 +66,17 @@ before it bites the parser phases:
 4. `if-expr` with F64 branches emits phi nodes that contain integer `0` (K001 codegen) — decompose into `var` + imperative `if`
 5. `for _ in 0 to n { acc = acc * 10.0 }` has the same F64-phi K001 issue — replace with `loop (count > 0)` over a separate counter
 6. `Str.parse_f64 -> Maybe[F64]` loops forever at runtime (K001 on `Maybe[F64]`) — inline the decimal parser rather than using stdlib
+
+## Parser bring-up notes (phase 2 — already banked)
+
+Three additional TML codegen bugs surfaced while bringing up the
+declaration parser and were worked around inline. Each is a candidate
+for a dedicated follow-up before it bites the expression/statement
+phases:
+
+7. Enum variants holding a `Heap[T]` followed by other fields fail codegen on pattern-binding the non-heap fields ("Unknown variable: ..." — e.g. `Func(Heap[CDeclarator], List[CParam], I64)` rejects `Func(_, ps, _)`). Workaround: collapse the multi-arg variant into a single named struct (`CFuncDeclPart { inner, params, is_variadic }`) and match `Func(part)` to read `part.params` / `part.is_variadic`.
+8. Deeply-nested constructor expressions in a single statement — e.g. `decls.push(Heap[CDecl]::new(CDecl::Var(Heap[CVarDecl]::new(vd))))` — hang or crash at runtime because TML's duplicate codegen recursively walks each nested enum/struct payload. Workaround: introduce named local bindings for every heap allocation step so the constructor tree is flat (`let vd_heap = Heap[CVarDecl]::new(vd); let decl_val = CDecl::Var(vd_heap); let decl_heap = Heap[CDecl]::new(decl_val); decls.push(decl_heap)`).
+9. Large enums whose variants carry whole structs by value (e.g. `CDecl::Var(CVarDecl)` where `CVarDecl` has 7 nested fields) produce runtime crashes in the duplicate path. Workaround: wrap each CDecl variant payload in `Heap[T]` so the enum payload is pointer-sized (`Var(Heap[CVarDecl])`, `Func(Heap[CFuncDecl])`, `StructDef(Heap[CStructDef])`, etc.). This mirrors what the TML parser already does for `Decl::Impl(Heap[ImplDecl])`.
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
 - [ ] 1.1 Update or create documentation covering the implementation
