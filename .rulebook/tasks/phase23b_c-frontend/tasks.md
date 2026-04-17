@@ -1,6 +1,6 @@
 # Tasks: C17 Frontend — Parser, Type Checker, C→MIR Lowering
 
-**Status**: Planned (0/24)
+**Status**: In progress (3/24 — lexer complete)
 **Depends on**: phase23a (C preprocessor), phase15c (MIR builder as target)
 **Blocks**: phase23c (C++ subset frontend extends the C frontend)
 **Duration**: 12–16 weeks
@@ -9,11 +9,11 @@
 
 ---
 
-## Phase 1: C Lexer (3 items)
+## Phase 1: C Lexer (3 items — COMPLETE)
 
-- [ ] 1.1 Create `compiler-tml/src/cc/lexer.tml` — C token types: all 44 C17 keywords (auto, break, case, char, const, continue, default, do, double, else, enum, extern, float, for, goto, if, inline, int, long, register, restrict, return, short, signed, sizeof, static, struct, switch, typedef, union, unsigned, void, volatile, while, _Alignas, _Alignof, _Atomic, _Bool, _Complex, _Generic, _Imaginary, _Noreturn, _Static_assert, _Thread_local); implement `CLexer` type with `next_token() -> CToken` method
-- [ ] 1.2 Implement C literal scanning: integer literals (decimal, hex `0x`, octal `0`, binary `0b` as GCC extension) with suffixes (u, l, ul, ll, ull); float literals (decimal, hex) with suffixes (f, l); character literals ('a', '\n', '\x41', '\u0041') including wide chars (L'a'); string literals ("hello") including wide (L""), UTF-8 (u8""), UTF-16 (u""), UTF-32 (U"") prefixes
-- [ ] 1.3 Implement C operator scanning: all C17 operators including `->`, `.`, `++`, `--`, `<<`, `>>`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `+=`, `-=`, `*=`, `/=`, `%=`, `==`, `!=`, `<=`, `>=`, `&&`, `||`, `...` (ellipsis for variadics); implement trigraph removal and line splicing (backslash-newline) as the first two translation phases
+- [x] 1.1 Created `compiler-tml/src/cc/lexer.tml` — C token types and classifier. All 44 C17 keywords in a HashMap-backed table (Auto … _Thread_local). `CLexer` with `c_lexer(input)` constructor and `tokenize(lex) -> List[CToken]` driver that drops Whitespace/Newline (translation phase 7). Commit `1970439f`.
+- [x] 1.2 Implemented literal payload decoders in the same file. `decode_int`: hex (`0x`) / octal (`0`) / binary (`0b` GCC ext) / decimal with `u`/`l`/`ll`/`ul`/`ull` suffixes in any case order, into a `U64` with an `is_hex_or_octal` flag for sign promotion. `decode_float`: decimal parser inline (stdlib `parse_f64 -> Maybe[F64]` hit K001) + C99 hex-float path (`0x1.8p3`) with `f`/`l` suffix. `decode_char`: single-char escapes, hex (`\xHH`), octal (`\NNN`), UCN (`\uHHHH`, `\UHHHHHHHH`), encoding prefixes (`L`, `u`, `U`, `u8`) — multi-char constants fold via left-shift. `decode_string`: same escape engine + per-encoding byte layout (Plain/Utf8 = low byte, Utf16 = LE pair, Wide/Utf32 = LE quad). Commit `7ae539b5`.
+- [x] 1.3 C17 punctuator scanning — all 47 operators in the punct table in item 1.1: `->`, `.`, `++`, `--`, `<<`, `>>`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `+=`, `-=`, `*=`, `/=`, `%=`, `==`, `!=`, `<=`, `>=`, `&&`, `||`, `...`, plus all 6 digraphs (`<:` `:>` `<%` `%>` `%:` `%:%:`) normalized to their primary spelling. Trigraph removal and line splicing live in the preprocessor (phase23a, translation phases 1–2); the C lexer is translation phase 7 and never sees them.
 
 ## Phase 2: C Parser — Declarations (5 items)
 
@@ -53,6 +53,19 @@
 
 - [ ] 7.1 Test: `tml cc compiler/runtime/core/essential.c` compiles TML's own C runtime successfully — the compiled object must pass all runtime behavior tests (I/O, panic, assert, test harness entry point); this is the primary correctness gate for the C frontend
 - [ ] 7.2 Test: `tml cc compiler/runtime/memory/mem.c` compiles successfully; link with `essential.o`; run the TML test suite against binaries linked with the TML-compiled runtime objects instead of Clang-compiled objects — all tests must pass, proving the C frontend produces ABI-compatible code
+
+## Lexer bring-up notes (phase 1 — already banked)
+
+Six pre-existing compiler bugs surfaced during lexer bring-up and were
+worked around inline; each is a candidate for a dedicated follow-up
+before it bites the parser phases:
+
+1. `base` is a reserved TML keyword (`KwBase`) — local variable had to be renamed `radix`
+2. `return StructName { ... }` inside an `if` confuses the parser (reads `{` as trailing block) — bind result to a typed local before `return`
+3. `HashMap.get(k)` returns `V` directly (zero-value on miss), NOT `Maybe[V]` as the signature suggests — use `.has(k) + .get(k)` pair
+4. `if-expr` with F64 branches emits phi nodes that contain integer `0` (K001 codegen) — decompose into `var` + imperative `if`
+5. `for _ in 0 to n { acc = acc * 10.0 }` has the same F64-phi K001 issue — replace with `loop (count > 0)` over a separate counter
+6. `Str.parse_f64 -> Maybe[F64]` loops forever at runtime (K001 on `Maybe[F64]`) — inline the decimal parser rather than using stdlib
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
 - [ ] 1.1 Update or create documentation covering the implementation
