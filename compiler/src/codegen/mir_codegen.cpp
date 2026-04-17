@@ -1198,10 +1198,9 @@ void MirCodegen::emit_preamble() {
     emitln("  %end_int = ptrtoint ptr %end to i64");
     emitln("  %start_int = ptrtoint ptr %start to i64");
     emitln("  %len = sub i64 %end_int, %start_int");
-    // phase1k — allocate a length-prefixed buffer so subsequent
-    // `Str.len()` is O(1) and downstream `str_append` hits the fast path.
-    emitln("  %heap = call ptr @tml_str_alloc_len(i64 %len)");
-    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %heap, ptr %start, i64 %len, i1 false)");
+    emitln("  %total = add i64 %len, 1");
+    emitln("  %heap = call ptr @malloc(i64 %total)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %heap, ptr %start, i64 %total, i1 false)");
     emitln("  ret ptr %heap");
     emitln("}");
     emitln();

@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdio.h>
+
 #ifdef _WIN32
 #define TML_EXPORT __declspec(dllexport)
 #define WIN32_LEAN_AND_MEAN

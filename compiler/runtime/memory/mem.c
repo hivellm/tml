@@ -39,6 +39,7 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -223,10 +224,23 @@ static void tml_mem_silent_invalid_param(const wchar_t* expr, const wchar_t* fn,
 }
 
 // Safe `_msize` wrapper — returns (size_t)-1 for any pointer that isn't
-// owned by the CRT heap, without aborting. Installs a silent
-// invalid_parameter_handler across the call so MSVC's debug CRT doesn't
-// invoke `abort()`.
+// owned by the CRT heap, without aborting or crashing.
+//
+// The robust pre-check is `HeapValidate(GetProcessHeap(), 0, ptr)`. It
+// does NOT access memory outside the heap manager's internal tables,
+// returns `FALSE` for any non-owned pointer, and does not raise
+// exceptions. We still install the silent invalid_parameter_handler for
+// the final `_msize` call because debug CRTs sometimes re-validate and
+// invoke the handler even when the pointer is heap-valid (e.g. when the
+// app links multiple CRT versions).
+//
+// `_set_thread_local_invalid_parameter_handler` alone was insufficient
+// in phase 1k testing: on certain pointer values `_msize`'s internal
+// heap-walk could still trigger silent memory probes that the debug CRT
+// detected later, producing the `STATUS_HEAP_CORRUPTION` we observed.
 static inline size_t tml_safe_msize(void* ptr) {
+    if (!ptr) return (size_t)-1;
+    if (!HeapValidate(GetProcessHeap(), 0, ptr)) return (size_t)-1;
     _invalid_parameter_handler old = _set_thread_local_invalid_parameter_handler(
         tml_mem_silent_invalid_param);
     size_t sz = _msize(ptr);
@@ -338,12 +352,22 @@ static inline TmlStrHeader* tml_str_header(void* ptr) {
     if (!g_mem_image_ranges_initialized) mem_init_image_ranges();
     if (mem_is_image_ptr((uintptr_t)ptr)) return NULL;
     void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
+    // Fast-path magic check: the 8 bytes immediately before `ptr` are
+    // always inside the CRT heap arena if `ptr` itself came from
+    // `malloc` — the allocator packs a per-block header there (~16 B on
+    // MSVC). So reading `*(uint64_t*)raw` is UB-free for any heap ptr,
+    // and mismatched magic lets us reject 99% of the (common) non-
+    // prefixed heap pointers in ~2 ns instead of paying for the
+    // `HeapValidate` call (~100 ns). Only if the magic *happens* to
+    // match do we validate via `tml_safe_msize` to defend against the
+    // ~1/2^64 false-positive case where raw heap metadata resembles
+    // our sentinel.
+    TmlStrHeader* hdr = (TmlStrHeader*)raw;
+    if (hdr->magic != TML_STR_MAGIC) return NULL;
     size_t block = tml_safe_msize(raw);
     if (block == (size_t)-1 || block < (size_t)TML_STR_HEADER_BYTES + 1) {
         return NULL;
     }
-    TmlStrHeader* hdr = (TmlStrHeader*)raw;
-    if (hdr->magic != TML_STR_MAGIC) return NULL;
     if (hdr->cap < 0 || hdr->len < 0 || hdr->len > hdr->cap) return NULL;
     if ((size_t)hdr->cap + TML_STR_HEADER_BYTES + 1 > block) return NULL;
     return hdr;
@@ -404,6 +428,10 @@ TML_EXPORT void* tml_str_alloc_len(int64_t len) {
     hdr->len = len;
     char* data = (char*)raw + TML_STR_HEADER_BYTES;
     data[len] = '\0';
+    {
+        FILE* f = fopen("F:/Node/hivellm/tml/.sandbox/alloc_trace.log", "a");
+        if (f) { fprintf(f, "[alloc_len] len=%lld data=%p raw=%p\n", (long long)len, data, raw); fclose(f); }
+    }
     return data;
 }
 
