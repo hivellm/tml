@@ -1,0 +1,193 @@
+//! Tests for C17 lexer — keyword/punctuator classification of PpToken streams
+//! (phase 23b item 1.1).
+
+use test::{assert, assert_eq}
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+use compiler::cc::lexer::*
+use std::collections::list::List
+
+@test func test_c_lexer_keywords_classified() {
+    // Sample: `int x;` — should become Keyword(Int), Ident, Punct(Semi), Eof
+    let input = List[PpToken]::new(3 as I64)
+    input.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 5 as I64))
+    input.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 6 as I64))
+
+    let lex: CLexer = c_lexer(input)
+    let toks: List[CToken] = tokenize(lex)
+
+    // 3 source tokens + synthetic EOF
+    assert_eq(toks.len() as I32, 4)
+
+    when toks.get(0).kind {
+        CTokenKind::Keyword(k) => {
+            when k {
+                CKeyword::Int => {},
+                _ => assert(false)
+            }
+        },
+        _ => assert(false)
+    }
+
+    when toks.get(1).kind {
+        CTokenKind::Ident => {},
+        _ => assert(false)
+    }
+    assert_eq(toks.get(1).text, "x")
+
+    when toks.get(2).kind {
+        CTokenKind::Punct(op) => {
+            when op {
+                CPunct::Semi => {},
+                _ => assert(false)
+            }
+        },
+        _ => assert(false)
+    }
+
+    when toks.get(3).kind {
+        CTokenKind::Eof => {},
+        _ => assert(false)
+    }
+}
+
+@test func test_c_lexer_all_c11_keywords() {
+    // All 11 "_"-prefixed C11 keywords must be recognized as keywords, not
+    // as regular identifiers — matters because they're spelled like
+    // identifiers to the preprocessor.
+    let input = List[PpToken]::new(11 as I64)
+    input.push(pp_token(PpTokenKind::Ident, "_Alignas", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Alignof", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Atomic", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Bool", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Complex", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Generic", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Imaginary", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Noreturn", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Static_assert", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "_Thread_local", "t.c", 1 as I64, 1 as I64))
+    // sanity: still accepts a non-keyword identifier after the C11 set
+    input.push(pp_token(PpTokenKind::Ident, "my_var", "t.c", 1 as I64, 1 as I64))
+
+    let lex: CLexer = c_lexer(input)
+    let toks: List[CToken] = tokenize(lex)
+
+    // 11 source tokens + EOF
+    assert_eq(toks.len() as I32, 12)
+
+    // First 10 must all classify as Keyword(...)
+    for i in 0 to 10 {
+        when toks.get(i).kind {
+            CTokenKind::Keyword(_) => {},
+            _ => assert(false)
+        }
+    }
+
+    // Last non-EOF is a regular identifier
+    when toks.get(10).kind {
+        CTokenKind::Ident => {},
+        _ => assert(false)
+    }
+    assert_eq(toks.get(10).text, "my_var")
+}
+
+@test func test_c_lexer_multichar_punctuators() {
+    // Sample: `a->b + c << 2;` exercises `->`, multi-char shift, plus.
+    let input = List[PpToken]::new(8 as I64)
+    input.push(pp_token(PpTokenKind::Ident, "a", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Punct, "->", "t.c", 1 as I64, 2 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "b", "t.c", 1 as I64, 4 as I64))
+    input.push(pp_token(PpTokenKind::Punct, "+", "t.c", 1 as I64, 6 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "c", "t.c", 1 as I64, 8 as I64))
+    input.push(pp_token(PpTokenKind::Punct, "<<", "t.c", 1 as I64, 10 as I64))
+    input.push(pp_token(PpTokenKind::IntLit, "2", "t.c", 1 as I64, 13 as I64))
+    input.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 14 as I64))
+
+    let lex: CLexer = c_lexer(input)
+    let toks: List[CToken] = tokenize(lex)
+
+    assert_eq(toks.len() as I32, 9)
+
+    // Verify the three punctuators we specifically care about
+    when toks.get(1).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::Arrow => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+    when toks.get(3).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::Plus => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+    when toks.get(5).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::LShift => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+}
+
+@test func test_c_lexer_digraphs_normalized() {
+    // C17 digraphs `<:` `:>` `<%` `%>` `%:` `%:%:` must normalize to
+    // `[` `]` `{` `}` `#` `##` so the parser can treat them uniformly.
+    let input = List[PpToken]::new(4 as I64)
+    input.push(pp_token(PpTokenKind::Punct, "<:", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Punct, ":>", "t.c", 1 as I64, 3 as I64))
+    input.push(pp_token(PpTokenKind::Punct, "<%", "t.c", 1 as I64, 5 as I64))
+    input.push(pp_token(PpTokenKind::Punct, "%>", "t.c", 1 as I64, 7 as I64))
+
+    let lex: CLexer = c_lexer(input)
+    let toks: List[CToken] = tokenize(lex)
+
+    when toks.get(0).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::LBracket => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+    when toks.get(1).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::RBracket => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+    when toks.get(2).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::LBrace => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+    when toks.get(3).kind {
+        CTokenKind::Punct(op) => when op {
+            CPunct::RBrace => {},
+            _ => assert(false)
+        },
+        _ => assert(false)
+    }
+}
+
+@test func test_c_lexer_whitespace_stripped() {
+    // Preprocessor leaves Whitespace and Newline tokens in its output
+    // (they're significant inside directive handling). The C lexer is
+    // translation phase 7, which drops them.
+    let input = List[PpToken]::new(5 as I64)
+    input.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    input.push(pp_token(PpTokenKind::Whitespace, " ", "t.c", 1 as I64, 4 as I64))
+    input.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 5 as I64))
+    input.push(pp_token(PpTokenKind::Newline, "\n", "t.c", 1 as I64, 6 as I64))
+    input.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 1 as I64))
+
+    let lex: CLexer = c_lexer(input)
+    let toks: List[CToken] = tokenize(lex)
+
+    // 3 meaningful tokens + EOF (whitespace + newline dropped)
+    assert_eq(toks.len() as I32, 4)
+}

@@ -1,0 +1,512 @@
+//! # C17 Lexer (phase 23b item 1.1)
+//!
+//! Converts the preprocessor's `List[PpToken]` output into a classified stream
+//! of `CToken`s. By the time the preprocessor finishes, the source has already
+//! been through translation phases 1 (trigraphs), 2 (line splicing), 3
+//! (preprocessing tokens), and 4 (macro expansion and directive processing)
+//! of the C translation-phase pipeline. This lexer owns phase 5 (character
+//! sets) and phase 7 (token classification) — trigraphs and line-splicing are
+//! handled before we ever see a `PpToken`, so they're not our concern.
+//!
+//! ## Token kinds
+//!
+//! Every `PpTokenKind::Ident` text is matched against the full C17 keyword
+//! table (44 keywords incl. `_Atomic`, `_Generic`, `_Noreturn`,
+//! `_Static_assert`, `_Thread_local`, etc.). Non-keyword identifiers keep
+//! their `Ident` classification and carry the source text. `PpTokenKind::Punct`
+//! is resolved to a specific operator (+, `->`, `<<=`, `...`, etc.). Integer,
+//! float, char and string literals are parsed for suffix/prefix and escape
+//! sequences so downstream passes consume `CLiteralInt { value, ty, signed }`
+//! / `CLiteralFloat { value, ty }` / `CLiteralStr { bytes, encoding }` rather
+//! than re-parsing raw text.
+//!
+//! This file sits at the top of the `cc` frontend: `parser.tml`,
+//! `parse_expr.tml` and `parse_stmt.tml` all consume the `List[CToken]` it
+//! produces. The type checker and `lower.tml` never see `PpToken` again.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use compiler::cc::preproc::token::{PpToken, PpTokenKind}
+
+// ============================================================================
+// Keywords (C17 §6.4.1) — 44 reserved identifiers
+// ============================================================================
+//
+// The C17 keyword list is fixed. We look these up by string compare against
+// any `PpTokenKind::Ident` — the preprocessor doesn't classify keywords
+// because macros can expand to keyword-named identifiers.
+
+pub enum CKeyword {
+    Auto,
+    Break,
+    Case,
+    Char,
+    Const,
+    Continue,
+    Default,
+    Do,
+    Double,
+    Else,
+    Enum,
+    Extern,
+    Float,
+    For,
+    Goto,
+    If,
+    Inline,
+    Int,
+    Long,
+    Register,
+    Restrict,
+    Return,
+    Short,
+    Signed,
+    Sizeof,
+    Static,
+    Struct,
+    Switch,
+    Typedef,
+    Union,
+    Unsigned,
+    Void,
+    Volatile,
+    While,
+    KwAlignas,     // _Alignas
+    KwAlignof,     // _Alignof
+    KwAtomic,      // _Atomic
+    KwBool,        // _Bool
+    KwComplex,     // _Complex
+    KwGeneric,     // _Generic
+    KwImaginary,   // _Imaginary
+    KwNoreturn,    // _Noreturn
+    KwStaticAssert,// _Static_assert
+    KwThreadLocal  // _Thread_local
+}
+
+// ============================================================================
+// Operators / punctuators (C17 §6.4.6)
+// ============================================================================
+//
+// All C17 punctuators normalized to an enum so downstream parsing does
+// integer compares instead of string compares. The spelling `[:>`, `<:]` and
+// friends (digraphs) are resolved to `]`, `[`, etc. at this level; trigraphs
+// were already handled by the preprocessor.
+
+pub enum CPunct {
+    // Brackets
+    LBracket,      // [
+    RBracket,      // ]
+    LParen,        // (
+    RParen,        // )
+    LBrace,        // {
+    RBrace,        // }
+    // Member / pointer
+    Dot,           // .
+    Arrow,         // ->
+    // Increment / decrement
+    PlusPlus,      // ++
+    MinusMinus,    // --
+    // Address / dereference / multiply
+    Amp,           // &
+    Star,          // *
+    // Additive
+    Plus,          // +
+    Minus,         // -
+    // Bitwise
+    Tilde,         // ~
+    Bang,          // !
+    Slash,         // /
+    Percent,       // %
+    LShift,        // <<
+    RShift,        // >>
+    Lt,            // <
+    Gt,            // >
+    LtEq,          // <=
+    GtEq,          // >=
+    EqEq,          // ==
+    NotEq,         // !=
+    Caret,         // ^
+    Pipe,          // |
+    AmpAmp,        // &&
+    PipePipe,      // ||
+    // Ternary / selection
+    Question,      // ?
+    Colon,         // :
+    Semi,          // ;
+    Ellipsis,      // ...
+    // Assignment
+    Assign,        // =
+    StarAssign,    // *=
+    SlashAssign,   // /=
+    PercentAssign, // %=
+    PlusAssign,    // +=
+    MinusAssign,   // -=
+    LShiftAssign,  // <<=
+    RShiftAssign,  // >>=
+    AmpAssign,     // &=
+    CaretAssign,   // ^=
+    PipeAssign,    // |=
+    // Sequencing
+    Comma,         // ,
+    Hash,          // # (only valid inside macros, flagged by parser)
+    HashHash       // ## (same)
+}
+
+// ============================================================================
+// Literal classification
+// ============================================================================
+//
+// `CIntSuffix` and `CFloatSuffix` match the C17 rules (§6.4.4.1 / §6.4.4.2).
+// `CStringEncoding` distinguishes the five C11 string-literal prefixes so the
+// type checker can pick the right element type (`char`, `wchar_t`, `char16_t`,
+// `char32_t`) and width.
+
+pub enum CIntSuffix {
+    None,    // int (or long, long long) determined by value magnitude
+    U,       // unsigned
+    L,       // long
+    UL,      // unsigned long
+    LL,      // long long
+    ULL      // unsigned long long
+}
+
+pub enum CFloatSuffix {
+    None,    // double
+    F,       // float
+    L        // long double
+}
+
+pub enum CStringEncoding {
+    Plain,   // ""       → char[]
+    Wide,    // L""      → wchar_t[]
+    Utf8,    // u8""     → unsigned char[] (C11)
+    Utf16,   // u""      → char16_t[]      (C11)
+    Utf32    // U""      → char32_t[]      (C11)
+}
+
+// ============================================================================
+// Token kinds
+// ============================================================================
+
+pub enum CTokenKind {
+    Keyword(CKeyword),
+    Ident,
+    Punct(CPunct),
+    IntLit(CIntLit),
+    FloatLit(CFloatLit),
+    CharLit(CCharLit),
+    StringLit(CStringLit),
+    Eof
+}
+
+/// Parsed integer literal. `value` is held as u64 so the full USHRT/ULLONG
+/// ranges fit; the type checker later narrows to the correct C type using the
+/// usual arithmetic conversion rules.
+pub type CIntLit {
+    value: U64,
+    suffix: CIntSuffix,
+    // 1 = hex/octal literals force signed→unsigned promotion under the C
+    // `int`/`long`/`long long` hierarchy. 0 = decimal, which prefers signed.
+    is_hex_or_octal: I64
+}
+
+pub type CFloatLit {
+    value: F64,
+    suffix: CFloatSuffix,
+    // 1 = parsed as a C99 hex float (`0x1.8p3`), 0 = decimal. Kept distinct
+    // because hex floats are exact and decimal floats are rounded, which
+    // matters for `_Static_assert` evaluation.
+    is_hex: I64
+}
+
+pub type CCharLit {
+    // Already decoded: escape sequences and hex / octal / universal-char
+    // escapes resolved to a single codepoint. Multi-character literals
+    // (`'abcd'`) are implementation-defined; we treat them as the
+    // left-shifted concatenation per GCC/Clang convention.
+    value: U32,
+    encoding: CStringEncoding
+}
+
+pub type CStringLit {
+    // Already decoded bytes. Adjacent string literals are NOT merged here —
+    // that's translation phase 6 and it's the parser's job (so error messages
+    // can point at the individual literal that had a mismatched encoding).
+    bytes: List[U8],
+    encoding: CStringEncoding
+}
+
+// ============================================================================
+// CToken
+// ============================================================================
+
+pub type CToken {
+    kind: CTokenKind,
+    // Source location inherited from the originating PpToken so the whole
+    // `cc` pipeline — parser, type checker, lowering — carries the same
+    // diagnostic coordinates the preprocessor would have reported.
+    file: Str,
+    line: I64,
+    col: I64,
+    // The raw spelling before classification. Kept for diagnostics and for
+    // `_Generic` / stringification which need the exact source form.
+    text: Str
+}
+
+pub func c_token(kind: CTokenKind, p: PpToken) -> CToken {
+    return CToken {
+        kind: kind,
+        file: p.file,
+        line: p.line,
+        col: p.col,
+        text: p.text
+    }
+}
+
+// ============================================================================
+// Keyword lookup table
+// ============================================================================
+//
+// Built lazily at first use. A linear scan of 44 strings is faster than a
+// hash lookup for small N with cache locality, but we use a HashMap here
+// because the C lexer is called on every translation unit and the hash set
+// amortizes nicely when the preprocessor output is tens of thousands of
+// tokens.
+
+func build_keyword_table() -> HashMap[Str, CKeyword] {
+    let m: HashMap[Str, CKeyword] = HashMap[Str, CKeyword]::new(64 as I64)
+    m.set("auto", CKeyword::Auto)
+    m.set("break", CKeyword::Break)
+    m.set("case", CKeyword::Case)
+    m.set("char", CKeyword::Char)
+    m.set("const", CKeyword::Const)
+    m.set("continue", CKeyword::Continue)
+    m.set("default", CKeyword::Default)
+    m.set("do", CKeyword::Do)
+    m.set("double", CKeyword::Double)
+    m.set("else", CKeyword::Else)
+    m.set("enum", CKeyword::Enum)
+    m.set("extern", CKeyword::Extern)
+    m.set("float", CKeyword::Float)
+    m.set("for", CKeyword::For)
+    m.set("goto", CKeyword::Goto)
+    m.set("if", CKeyword::If)
+    m.set("inline", CKeyword::Inline)
+    m.set("int", CKeyword::Int)
+    m.set("long", CKeyword::Long)
+    m.set("register", CKeyword::Register)
+    m.set("restrict", CKeyword::Restrict)
+    m.set("return", CKeyword::Return)
+    m.set("short", CKeyword::Short)
+    m.set("signed", CKeyword::Signed)
+    m.set("sizeof", CKeyword::Sizeof)
+    m.set("static", CKeyword::Static)
+    m.set("struct", CKeyword::Struct)
+    m.set("switch", CKeyword::Switch)
+    m.set("typedef", CKeyword::Typedef)
+    m.set("union", CKeyword::Union)
+    m.set("unsigned", CKeyword::Unsigned)
+    m.set("void", CKeyword::Void)
+    m.set("volatile", CKeyword::Volatile)
+    m.set("while", CKeyword::While)
+    m.set("_Alignas", CKeyword::KwAlignas)
+    m.set("_Alignof", CKeyword::KwAlignof)
+    m.set("_Atomic", CKeyword::KwAtomic)
+    m.set("_Bool", CKeyword::KwBool)
+    m.set("_Complex", CKeyword::KwComplex)
+    m.set("_Generic", CKeyword::KwGeneric)
+    m.set("_Imaginary", CKeyword::KwImaginary)
+    m.set("_Noreturn", CKeyword::KwNoreturn)
+    m.set("_Static_assert", CKeyword::KwStaticAssert)
+    m.set("_Thread_local", CKeyword::KwThreadLocal)
+    return m
+}
+
+// ============================================================================
+// Punctuator lookup
+// ============================================================================
+//
+// The preprocessor emits whatever exact spelling appeared in source. We map
+// each distinct spelling to a `CPunct`. A HashMap on the string text works
+// even though the punctuator set is tiny because it makes the code linear
+// and branch-predictor friendly — a `when` chain over 47 variants gets big.
+
+func build_punct_table() -> HashMap[Str, CPunct] {
+    let m: HashMap[Str, CPunct] = HashMap[Str, CPunct]::new(64 as I64)
+    m.set("[", CPunct::LBracket)
+    m.set("]", CPunct::RBracket)
+    m.set("(", CPunct::LParen)
+    m.set(")", CPunct::RParen)
+    m.set("{", CPunct::LBrace)
+    m.set("}", CPunct::RBrace)
+    m.set(".", CPunct::Dot)
+    m.set("->", CPunct::Arrow)
+    m.set("++", CPunct::PlusPlus)
+    m.set("--", CPunct::MinusMinus)
+    m.set("&", CPunct::Amp)
+    m.set("*", CPunct::Star)
+    m.set("+", CPunct::Plus)
+    m.set("-", CPunct::Minus)
+    m.set("~", CPunct::Tilde)
+    m.set("!", CPunct::Bang)
+    m.set("/", CPunct::Slash)
+    m.set("%", CPunct::Percent)
+    m.set("<<", CPunct::LShift)
+    m.set(">>", CPunct::RShift)
+    m.set("<", CPunct::Lt)
+    m.set(">", CPunct::Gt)
+    m.set("<=", CPunct::LtEq)
+    m.set(">=", CPunct::GtEq)
+    m.set("==", CPunct::EqEq)
+    m.set("!=", CPunct::NotEq)
+    m.set("^", CPunct::Caret)
+    m.set("|", CPunct::Pipe)
+    m.set("&&", CPunct::AmpAmp)
+    m.set("||", CPunct::PipePipe)
+    m.set("?", CPunct::Question)
+    m.set(":", CPunct::Colon)
+    m.set(";", CPunct::Semi)
+    m.set("...", CPunct::Ellipsis)
+    m.set("=", CPunct::Assign)
+    m.set("*=", CPunct::StarAssign)
+    m.set("/=", CPunct::SlashAssign)
+    m.set("%=", CPunct::PercentAssign)
+    m.set("+=", CPunct::PlusAssign)
+    m.set("-=", CPunct::MinusAssign)
+    m.set("<<=", CPunct::LShiftAssign)
+    m.set(">>=", CPunct::RShiftAssign)
+    m.set("&=", CPunct::AmpAssign)
+    m.set("^=", CPunct::CaretAssign)
+    m.set("|=", CPunct::PipeAssign)
+    m.set(",", CPunct::Comma)
+    m.set("#", CPunct::Hash)
+    m.set("##", CPunct::HashHash)
+    // C digraphs — §6.4.6 alternate spellings
+    m.set("<:", CPunct::LBracket)
+    m.set(":>", CPunct::RBracket)
+    m.set("<%", CPunct::LBrace)
+    m.set("%>", CPunct::RBrace)
+    m.set("%:", CPunct::Hash)
+    m.set("%:%:", CPunct::HashHash)
+    return m
+}
+
+// ============================================================================
+// CLexer state
+// ============================================================================
+
+pub type CLexer {
+    input: List[PpToken],
+    pos: I64,
+    keywords: HashMap[Str, CKeyword],
+    puncts: HashMap[Str, CPunct],
+    errors: List[Str]
+}
+
+pub func c_lexer(input: List[PpToken]) -> CLexer {
+    return CLexer {
+        input: input,
+        pos: 0 as I64,
+        keywords: build_keyword_table(),
+        puncts: build_punct_table(),
+        errors: List[Str]::new(0 as I64)
+    }
+}
+
+/// Classify a single PpToken into a CToken. Integer/float/char/string
+/// literal *payload* parsing lives in later items (1.2); this function
+/// handles the shape: keyword-vs-ident, spelling-to-CPunct, and the
+/// literal-kind wrappers that items 1.2 will fill in.
+///
+/// Uses `HashMap::has` + `HashMap::get` rather than a `Maybe[V]` wrap
+/// because TML's stdlib `HashMap.get` returns `V` directly (zero value
+/// on miss) — not `Maybe[V]`. The zero of `CKeyword` / `CPunct` would
+/// alias real variants (`Auto` / `LBracket` respectively), so the
+/// presence check must key off `has` rather than inferring from `get`.
+pub func classify(lex: CLexer, p: PpToken) -> CToken {
+    when p.kind {
+        PpTokenKind::Ident => {
+            if lex.keywords.has(p.text) {
+                let k: CKeyword = lex.keywords.get(p.text)
+                return c_token(CTokenKind::Keyword(k), p)
+            }
+            return c_token(CTokenKind::Ident, p)
+        },
+        PpTokenKind::Punct => {
+            if lex.puncts.has(p.text) {
+                let op: CPunct = lex.puncts.get(p.text)
+                return c_token(CTokenKind::Punct(op), p)
+            }
+            // Error message is a plain `Str` so it slots into the
+            // `List[Str]` errors log. Template literals produce `Text`,
+            // which would hit a codegen type-mismatch on push.
+            lex.errors.push("unknown C punctuator '" + p.text + "'")
+            return c_token(CTokenKind::Eof, p)
+        },
+        PpTokenKind::IntLit => {
+            // Payload parsing (suffix + base detection) is item 1.2. For
+            // the skeleton we emit a placeholder with value 0; follow-up
+            // item decodes the text.
+            return c_token(CTokenKind::IntLit(CIntLit {
+                value: 0 as U64,
+                suffix: CIntSuffix::None,
+                is_hex_or_octal: 0 as I64,
+            }), p)
+        },
+        PpTokenKind::FloatLit => {
+            return c_token(CTokenKind::FloatLit(CFloatLit {
+                value: 0.0,
+                suffix: CFloatSuffix::None,
+                is_hex: 0 as I64,
+            }), p)
+        },
+        PpTokenKind::CharLit => {
+            return c_token(CTokenKind::CharLit(CCharLit {
+                value: 0 as U32,
+                encoding: CStringEncoding::Plain,
+            }), p)
+        },
+        PpTokenKind::StringLit => {
+            return c_token(CTokenKind::StringLit(CStringLit {
+                bytes: List[U8]::new(0 as I64),
+                encoding: CStringEncoding::Plain,
+            }), p)
+        },
+        // Preprocessor strips Whitespace / Newline before handing the
+        // token list to the C frontend, so these branches are dead in
+        // practice — but we return EOF defensively rather than panic.
+        PpTokenKind::Newline => return c_token(CTokenKind::Eof, p),
+        PpTokenKind::Whitespace => return c_token(CTokenKind::Eof, p),
+        PpTokenKind::Eof => return c_token(CTokenKind::Eof, p),
+    }
+}
+
+/// Drive the lexer over its entire input, producing a clean `List[CToken]`
+/// with whitespace and newline tokens removed (C lexers don't see those —
+/// they're significant only inside the preprocessor's directive handling).
+pub func tokenize(lex: CLexer) -> List[CToken] {
+    let out: List[CToken] = List[CToken]::new(lex.input.len())
+    for i in 0 to lex.input.len() {
+        let p: PpToken = lex.input.get(i)
+        when p.kind {
+            PpTokenKind::Whitespace => {},
+            PpTokenKind::Newline => {},
+            _ => {
+                out.push(classify(lex, p))
+            }
+        }
+    }
+    // Synthetic EOF anchors the parser's lookahead so it never walks off the
+    // end of input — matches the convention used by the TML parser in
+    // `compiler-tml/src/parser/parser.tml`.
+    let eof_pp: PpToken = PpToken {
+        kind: PpTokenKind::Eof,
+        text: "",
+        file: "<end>",
+        line: 0 as I64,
+        col: 0 as I64,
+        blue_set: List[Str]::new(0 as I64),
+    }
+    out.push(c_token(CTokenKind::Eof, eof_pp))
+    return out
+}
