@@ -1,6 +1,6 @@
 # Tasks: codegen + parser bring-up bugs discovered in phase23b
 
-**Status**: In progress (3/12 — Phase 1 complete; unblocks phase24)
+**Status**: In progress (6/12 — Phase 1+2 complete; unblocks phase24)
 **Depends on**: phase23b (C frontend — complete)
 **Blocks**: phase24 (cc CLI integration) — items 1.1–1.3 of this task
 **Duration**: 2–3 weeks (bugs #7, #8, #9 are the hardest)
@@ -44,26 +44,32 @@ All three phase24 blockers turned out to share a single root cause.
   phase23b `ast.tml`/`parser.tml`/`lower.tml` un-apply of the Heap
   workarounds is included in this task's commit.
 
-## Phase 2: F64 Phi Bugs (3 items)
+## Phase 2: F64 Phi Bugs (3 items — COMPLETE)
 
-All three have the same root cause: the phi-node incoming from the
-fallback/entry path is typed `i64 0` when the phi result is `double`.
+Phase 2's "F64 phi" framing turned out to be misleading. All three bugs
+shared a single root cause with Phase 1's pattern-binding bug (#7) and
+with a parser precedence mistake: `CAST=13, RANGE=16` made `to` bind
+tighter than `as`, so `0 as I64 to n as I64` parsed as
+`(0 as (I64 to n)) as I64`. The resulting malformed IR cascaded through
+the for-in / if-expr / parse_f64 code paths and each bug presented as a
+different symptom (phi-incoming type mismatch, infinite loop, bad
+icmp). Fixing the precedence (swap to CAST=14, RANGE=13) in commit
+`a7fee3ce` alongside the bug #7 enum-pattern fix (`880dfbba`) resolved
+all three Phase 2 bugs.
 
-- [ ] 2.1 Bug #4 — `if-expr` with F64 branches emits phi with integer
-  zero. Reproducer: `let x = if cond { 1.0 } else { 2.0 }` produces
-  `phi double [i64 0, ...] ; type mismatch`. Fix in
-  `compiler/src/codegen/llvm/control/if.cpp`: track result type and
-  emit `double 0.0` for the implicit fallback.
-- [ ] 2.2 Bug #5 — `for _ in 0 to n { acc = acc * 10.0 }` has the
-  same F64-phi K001 issue via the loop header's accumulator phi. Fix
-  in the for-in lowering path to use the correct zero constant per
-  result type.
-- [ ] 2.3 Bug #6 — `Str.parse_f64 -> Maybe[F64]` loops forever at
-  runtime. Likely a manifestation of the same F64-phi issue inside
-  the stdlib's `Maybe[F64]` codegen. Isolate with a minimal reproducer
-  that just calls `let Just(v) = parse_f64(s) else { return 0.0 }`
-  and traces through the infinite loop. Once the minimal repro exists,
-  fix the underlying codegen.
+- [x] 2.1 Bug #4 — `if-expr` with F64 branches. Now works: commit
+  `a7fee3ce` (precedence fix). Regression:
+  `compiler/tests/compiler/if_expr_f64_branches.test.tml` (5 cases
+  including F64 arithmetic in `var` accumulator after an if-expr seed).
+- [x] 2.2 Bug #5 — for-in F64 accumulator. Same root cause, same fix.
+  Regression: `compiler/tests/compiler/for_in_f64_accumulator.test.tml`
+  (3 cases: cast-in-range, F64 multiply accumulator, F64 add accumulator).
+- [x] 2.3 Bug #6 — `Str.parse_f64 -> Maybe[F64]` infinite loop. Same
+  root cause (the stdlib parse_f64 internally uses `for _ in 0 as I64
+  to n as I64` — once that stopped parsing as a broken cast, the
+  function works). Regression:
+  `compiler/tests/compiler/maybe_f64_parse.test.tml` (4 cases: valid
+  decimal, integer-only, negative, invalid-is-nothing).
 
 ## Phase 3: Parser / Language Bugs (2 items)
 
