@@ -710,8 +710,7 @@ func pop_break(lw: CLower) {
 
 pub func lower_local_decl(lw: CLower, mfunc: MirFunc, d: CDecl) {
     when d {
-        Var(vd_h) => {
-            let vd: CVarDecl = vd_h.get()
+        Var(vd) => {
             let resolved: CType = apply_declarator(
                 lw.env,
                 base_to_ctype(lw.env, vd.specifiers.base_type),
@@ -728,10 +727,10 @@ pub func lower_local_decl(lw: CLower, mfunc: MirFunc, d: CDecl) {
                 Brace(_) => return
             }
         },
-        TypedefDef(td_h) => { lower_typedef(lw, td_h.get()); return },
-        StructDef(sd_h) => { lower_struct_def(lw, sd_h.get()); return },
-        UnionDef(ud_h) => { lower_union_def(lw, ud_h.get()); return },
-        EnumDef(ed_h) => { lower_enum_def(lw, ed_h.get()); return },
+        TypedefDef(td) => { lower_typedef(lw, td); return },
+        StructDef(sd) => { lower_struct_def(lw, sd); return },
+        UnionDef(ud) => { lower_union_def(lw, ud); return },
+        EnumDef(ed) => { lower_enum_def(lw, ed); return },
         _ => return
     }
 }
@@ -845,12 +844,12 @@ pub func lower_translation_unit(lw: CLower, tu: CTranslationUnit) {
 
 pub func lower_top_decl(lw: CLower, d: CDecl) {
     when d {
-        Var(vd_h) => lower_global_var(lw, vd_h.get()),
-        Func(fd_h) => lower_func_decl(lw, fd_h.get()),
-        StructDef(sd_h) => lower_struct_def(lw, sd_h.get()),
-        UnionDef(ud_h) => lower_union_def(lw, ud_h.get()),
-        EnumDef(ed_h) => lower_enum_def(lw, ed_h.get()),
-        TypedefDef(td_h) => lower_typedef(lw, td_h.get()),
+        Var(vd) => lower_global_var(lw, vd),
+        Func(fd) => lower_func_decl(lw, fd),
+        StructDef(sd) => lower_struct_def(lw, sd),
+        UnionDef(ud) => lower_union_def(lw, ud),
+        EnumDef(ed) => lower_enum_def(lw, ed),
+        TypedefDef(td) => lower_typedef(lw, td),
         StaticAssert(_, _) => return
     }
 }

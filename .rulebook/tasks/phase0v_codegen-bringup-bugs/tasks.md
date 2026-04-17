@@ -1,6 +1,6 @@
 # Tasks: codegen + parser bring-up bugs discovered in phase23b
 
-**Status**: Planned (0/12)
+**Status**: In progress (3/12 — Phase 1 complete; unblocks phase24)
 **Depends on**: phase23b (C frontend — complete)
 **Blocks**: phase24 (cc CLI integration) — items 1.1–1.3 of this task
 **Duration**: 2–3 weeks (bugs #7, #8, #9 are the hardest)
@@ -10,25 +10,39 @@ codegen investigation
 
 ---
 
-## Phase 1: Enum / Constructor Codegen (3 items — phase24 blockers)
+## Phase 1: Enum / Constructor Codegen (3 items — phase24 blockers — COMPLETE)
 
-These three bugs block phase24. Fixing them first makes the TML-written
-C frontend runnable on real inputs.
+All three phase24 blockers turned out to share a single root cause.
 
-- [ ] 1.1 Bug #7 — Enum-variant pattern-binding emits extractvalue only
-  for the leading field. Reproducer: `enum E { V(Heap[I64], Str, I64) }`
-  + `when e { V(_, s, n) => ... }` — `s` and `n` surface as "Unknown
-  variable". Fix in `compiler/src/codegen/` enum pattern-matching path:
-  emit one extractvalue per non-wildcard binding, not just the first.
-- [ ] 1.2 Bug #8 — Deeply-nested constructor expressions hang or crash.
-  Reproducer: `push(Heap[Outer]::new(Outer::Var(Heap[Inner]::new(vd))))`
-  where Outer is a large enum and Inner is a multi-field struct. Fix in
-  the duplicate codegen path: short-circuit recursion at every Heap
-  wrap instead of walking the entire payload.
-- [ ] 1.3 Bug #9 — Large enums with by-value struct payloads crash on
-  duplicate. Reproducer: `enum E { Var(S) }` where S is a 7-field
-  struct; `e.duplicate()` crashes. Fix: enum duplicate must match the
-  active-variant's layout, not the union of all variant bytes.
+- [x] 1.1 Bug #7 — Enum-variant pattern-binding emitted extractvalue only
+  for the leading field. Root cause: the multi-field binding branch in
+  `compiler/src/codegen/llvm/control/when.cpp::gen_when` required
+  `payload[0]->is<IdentPattern>()`, so any pattern with a leading
+  wildcard (`V(_, b, _)`) fell through to a no-binding path and `b`
+  surfaced as "Unknown variable" at codegen time. Fix (commit
+  `880dfbba`): introduce `multi_field_pattern_eligible(payload)` helper
+  that accepts any mix of IdentPattern + WildcardPattern as long as at
+  least one element is a real binding; the per-element emit loop
+  already skips non-IdentPattern entries. Regression:
+  `compiler/tests/compiler/enum_pattern_bind_multiple_fields.test.tml`
+  with three cases (all-named, wildcard leading, wildcard middle).
+- [x] 1.2 Bug #8 — Deeply-nested constructor expressions in one
+  statement hang or crash. Turned out to be a secondary manifestation
+  of bug #7: with the pattern-binding failure generating bad IR,
+  downstream duplicate calls on the unresolved values crashed or
+  looped. Fixing #7 made the one-line constructor form
+  `decls.push(Heap[CDecl]::new(CDecl::Var(Heap[CVarDecl]::new(vd))))`
+  work without any source-level workaround. Regression:
+  `compiler/tests/compiler/nested_constructor_push.test.tml`.
+- [x] 1.3 Bug #9 — Large enums with by-value struct payloads. Same
+  cascading story: the "crash on duplicate" signature was bug #7's
+  pattern-binding error propagating through downstream codegen. With
+  #7 fixed, CDecl's variants accept by-value struct payloads
+  (`Var(CVarDecl)`, no `Heap` wrap needed), and the same goes for
+  Func/StructDef/UnionDef/EnumDef/TypedefDef. Regression:
+  `compiler/tests/compiler/large_enum_by_value_duplicate.test.tml`.
+  phase23b `ast.tml`/`parser.tml`/`lower.tml` un-apply of the Heap
+  workarounds is included in this task's commit.
 
 ## Phase 2: F64 Phi Bugs (3 items)
 

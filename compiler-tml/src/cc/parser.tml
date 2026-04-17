@@ -1486,10 +1486,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 tag: tag, fields: bp.fields, is_forward: 0 as I64,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let def_heap: Heap[CStructDef] = Heap[CStructDef]::new(def)
-            let decl_val: CDecl = CDecl::StructDef(def_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::StructDef(def)))
         } else if agg_kind == 2 as I64 {
             let body: Outcome[CParsedFields, CParseError] = cp_parse_struct_body(parser, p)
             let Ok(bp) = body else {
@@ -1501,10 +1498,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 tag: tag, fields: bp.fields, is_forward: 0 as I64,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let def_heap: Heap[CUnionDef] = Heap[CUnionDef]::new(def)
-            let decl_val: CDecl = CDecl::UnionDef(def_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::UnionDef(def)))
         } else {
             // enum
             let body: Outcome[CParsedVariants, CParseError] = cp_parse_enum_body(parser, p)
@@ -1517,10 +1511,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 tag: tag, variants: bp.variants, is_forward: 0 as I64,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let def_heap: Heap[CEnumDef] = Heap[CEnumDef]::new(def)
-            let decl_val: CDecl = CDecl::EnumDef(def_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::EnumDef(def)))
         }
     }
 
@@ -1535,30 +1526,21 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                     is_forward: 1 as I64,
                     file: start_tok.file, line: start_tok.line, col: start_tok.col
                 }
-                let def_heap: Heap[CStructDef] = Heap[CStructDef]::new(def)
-                let decl_val: CDecl = CDecl::StructDef(def_heap)
-                let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-                decls.push(decl_heap)
+                decls.push(Heap[CDecl]::new(CDecl::StructDef(def)))
             } else if agg_kind == 2 as I64 {
                 let def: CUnionDef = CUnionDef {
                     tag: tag, fields: List[CStructField]::new(0 as I64),
                     is_forward: 1 as I64,
                     file: start_tok.file, line: start_tok.line, col: start_tok.col
                 }
-                let def_heap: Heap[CUnionDef] = Heap[CUnionDef]::new(def)
-                let decl_val: CDecl = CDecl::UnionDef(def_heap)
-                let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-                decls.push(decl_heap)
+                decls.push(Heap[CDecl]::new(CDecl::UnionDef(def)))
             } else {
                 let def: CEnumDef = CEnumDef {
                     tag: tag, variants: List[CEnumVariantDef]::new(0 as I64),
                     is_forward: 1 as I64,
                     file: start_tok.file, line: start_tok.line, col: start_tok.col
                 }
-                let def_heap: Heap[CEnumDef] = Heap[CEnumDef]::new(def)
-                let decl_val: CDecl = CDecl::EnumDef(def_heap)
-                let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-                decls.push(decl_heap)
+                decls.push(Heap[CDecl]::new(CDecl::EnumDef(def)))
             }
         }
         return Ok(CParsedDecls { decls: decls, pos: p + 1 })
@@ -1596,10 +1578,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 body: Just(bp.stmt),
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let fd_heap: Heap[CFuncDecl] = Heap[CFuncDecl]::new(fd)
-            let decl_val: CDecl = CDecl::Func(fd_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::Func(fd)))
             return Ok(CParsedDecls { decls: decls, pos: p })
         }
 
@@ -1610,10 +1589,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 name: name, specifiers: specs, declarator: dp.decl,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let td_heap: Heap[CTypedefDef] = Heap[CTypedefDef]::new(td)
-            let decl_val: CDecl = CDecl::TypedefDef(td_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::TypedefDef(td)))
         } else if declarator_is_func(dp.decl) and not cp_check_punct(parser.tokens, p, CPunct::Assign) {
             // Prototype (no body) — emit a Func with body=Nothing.
             let params: List[CParam] = declarator_func_params(dp.decl)
@@ -1625,10 +1601,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 body: Nothing,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let fd_heap: Heap[CFuncDecl] = Heap[CFuncDecl]::new(fd)
-            let decl_val: CDecl = CDecl::Func(fd_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            decls.push(Heap[CDecl]::new(CDecl::Func(fd)))
         } else {
             // Variable declaration, possibly with initializer.
             var init_opt: Maybe[Heap[CInit]] = Nothing
@@ -1646,10 +1619,9 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 init: init_opt,
                 file: start_tok.file, line: start_tok.line, col: start_tok.col
             }
-            let vd_heap: Heap[CVarDecl] = Heap[CVarDecl]::new(vd)
-            let decl_val: CDecl = CDecl::Var(vd_heap)
-            let decl_heap: Heap[CDecl] = Heap[CDecl]::new(decl_val)
-            decls.push(decl_heap)
+            // Natural form after bug #7 fix — no Heap wrapping needed, no
+            // stepwise let bindings. Keep as regression guard for bugs #7/#8/#9.
+            decls.push(Heap[CDecl]::new(CDecl::Var(vd)))
         }
 
         if cp_check_punct(parser.tokens, p, CPunct::Comma) {

@@ -294,19 +294,16 @@ pub enum CBlockItem {
 
 pub enum CDecl {
     /// One variable from a declaration (`int a, *b;` → two VarDecls).
-    /// Heap-indirected to keep the enum payload small — TML's codegen is
-    /// slow on large-variant enums, and Var/Func/*Def all carry multi-field
-    /// records.
-    Var(Heap[CVarDecl]),
+    Var(CVarDecl),
     /// Function definition (body = Just) or prototype (body = Nothing).
-    Func(Heap[CFuncDecl]),
+    Func(CFuncDecl),
     /// Struct or union definition `struct X { ... };`.
-    StructDef(Heap[CStructDef]),
-    UnionDef(Heap[CUnionDef]),
+    StructDef(CStructDef),
+    UnionDef(CUnionDef),
     /// Enum definition `enum Color { ... };`.
-    EnumDef(Heap[CEnumDef]),
+    EnumDef(CEnumDef),
     /// A typedef declaration `typedef T name;`.
-    TypedefDef(Heap[CTypedefDef]),
+    TypedefDef(CTypedefDef),
     /// `_Static_assert` at file scope (C11).
     StaticAssert(Heap[CExpr], Str)
 }
