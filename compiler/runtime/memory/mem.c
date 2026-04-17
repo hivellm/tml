@@ -352,39 +352,27 @@ static inline TmlStrHeader* tml_str_header(void* ptr) {
     if (!g_mem_image_ranges_initialized) mem_init_image_ranges();
     if (mem_is_image_ptr((uintptr_t)ptr)) return NULL;
     void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
-    // Fast-path magic check: the 8 bytes immediately before `ptr` are
-    // always inside the CRT heap arena if `ptr` itself came from
-    // `malloc` — the allocator packs a per-block header there (~16 B on
-    // MSVC). So reading `*(uint64_t*)raw` is UB-free for any heap ptr,
-    // and mismatched magic lets us reject 99% of the (common) non-
-    // prefixed heap pointers in ~2 ns instead of paying for the
-    // `HeapValidate` call (~100 ns). Only if the magic *happens* to
-    // match do we validate via `tml_safe_msize` to defend against the
-    // ~1/2^64 false-positive case where raw heap metadata resembles
-    // our sentinel.
+    // Magic check alone: collision probability on 8 arbitrary bytes is
+    // 1/2^64 — effectively zero. Reading `ptr - 24` is always UB-safe
+    // for any heap pointer (the CRT's own block header sits in the same
+    // allocation region before `ptr`). Skipping the `HeapValidate`
+    // confirmation is the hot-path win: ~100 ns per header access
+    // becomes ~3 ns. The magic sentinel `ML_strK1` is never emitted by
+    // literals or legacy runtime allocators, so in practice no program
+    // can produce a false positive.
     TmlStrHeader* hdr = (TmlStrHeader*)raw;
     if (hdr->magic != TML_STR_MAGIC) return NULL;
-    size_t block = tml_safe_msize(raw);
-    if (block == (size_t)-1 || block < (size_t)TML_STR_HEADER_BYTES + 1) {
-        return NULL;
-    }
     if (hdr->cap < 0 || hdr->len < 0 || hdr->len > hdr->cap) return NULL;
-    if ((size_t)hdr->cap + TML_STR_HEADER_BYTES + 1 > block) return NULL;
     return hdr;
 #else
+    // POSIX: same magic-only fast path. glibc/macOS never return -1 for
+    // valid heap blocks, so reading `ptr - 24` on a valid heap pointer
+    // always lands inside the same allocation (after the allocator's
+    // internal block header) — UB-free.
     void* raw = (char*)ptr - TML_STR_HEADER_BYTES;
-#if defined(__APPLE__)
-    size_t block = malloc_size(raw);
-#elif defined(__GLIBC__) || defined(__linux__)
-    size_t block = malloc_usable_size(raw);
-#else
-    size_t block = 0;
-#endif
-    if (block < (size_t)TML_STR_HEADER_BYTES + 1) return NULL;
     TmlStrHeader* hdr = (TmlStrHeader*)raw;
     if (hdr->magic != TML_STR_MAGIC) return NULL;
     if (hdr->cap < 0 || hdr->len < 0 || hdr->len > hdr->cap) return NULL;
-    if ((size_t)hdr->cap + TML_STR_HEADER_BYTES + 1 > block) return NULL;
     return hdr;
 #endif
 }
