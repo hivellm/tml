@@ -1,6 +1,6 @@
 # Tasks: codegen + parser bring-up bugs discovered in phase23b
 
-**Status**: In progress (8/12 — Phase 1+2+3 complete; unblocks phase24)
+**Status**: In progress (9/12 — Phase 1-4 complete; unblocks phase24)
 **Depends on**: phase23b (C frontend — complete)
 **Blocks**: phase24 (cc CLI integration) — items 1.1–1.3 of this task
 **Duration**: 2–3 weeks (bugs #7, #8, #9 are the hardest)
@@ -98,15 +98,19 @@ all three Phase 2 bugs.
   `compiler/tests/compiler/return_struct_literal.test.tml` with 6
   cases covering every control-flow context. All pass.
 
-## Phase 4: Stdlib API (1 item — breaking change)
+## Phase 4: Stdlib API (1 item — COMPLETE; non-breaking)
 
-- [ ] 4.1 Bug #3 — `HashMap.get(k)` signature mismatch: declared
-  `Maybe[V]`, actually returns `V`. Recommended fix: make the
-  implementation match the signature (return `Maybe[V]`). Breaking
-  change — requires updating every call site currently using
-  `.get(k)` as "return zero-value on miss" to either use `.has(k) +
-  .get(k)` or the new `.get_or(k, default)` helper. Land in a
-  dedicated commit with a clear migration note.
+- [x] 4.1 Bug #3 — re-analysis showed there was no signature/impl
+  mismatch: `HashMap.get(k) -> V` with zero-value-on-miss was the
+  documented convention and matched the implementation. The original
+  phase23b bring-up note was a misreading. The real gap was no
+  `Maybe[V]`-returning sibling for callers that want explicit
+  "present vs absent" handling. Fix (non-breaking): added
+  `HashMap.get_opt(k) -> Maybe[V]` in `lib/std/src/collections/hashmap.tml`,
+  mirroring `get`'s probe structure but returning `Just(v)` / `Nothing`.
+  `get` stays put. Regression:
+  `compiler/tests/compiler/hashmap_get_maybe.test.tml` covering all
+  three API ergonomics (get + zero-on-miss, has+get pattern, get_opt).
 
 ## Phase 5: Cleanup and Regression Tests (3 items)
 

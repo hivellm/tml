@@ -1,0 +1,67 @@
+//! Regression test for phase0v bug #3:
+//! `HashMap.get(k)` is documented to return `V` with zero-value on miss.
+//! The phase23b bring-up note initially read this as a mismatch ("signature
+//! says Maybe[V] but returns V") — on closer inspection the signature and
+//! implementation agree. The real gap was no `Maybe[V]`-returning sibling
+//! for callers that want explicit "present vs absent" handling.
+//!
+//! Fix: add `HashMap.get_opt(k) -> Maybe[V]` alongside the existing
+//! `get(k) -> V`. Callers can pick whichever ergonomics fit:
+//!   - `m.get(k)` when the zero-value-on-miss convention is fine
+//!   - `m.has(k) + m.get(k)` to distinguish "maps to zero" from "absent"
+//!     (two lookups)
+//!   - `m.get_opt(k)` for a single Maybe-returning lookup
+
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+
+@test func test_get_returns_value() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(8 as I64)
+    m.set("a", 42 as I64)
+    assert_eq(m.get("a") as I32, 42)
+}
+
+@test func test_get_returns_zero_on_miss() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(8 as I64)
+    m.set("a", 42 as I64)
+    // Key absent → zero-value-of-V, documented convention.
+    assert_eq(m.get("missing") as I32, 0)
+}
+
+@test func test_has_then_get_pattern() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(8 as I64)
+    m.set("a", 42 as I64)
+    assert(m.has("a"))
+    assert_eq(m.get("a") as I32, 42)
+    assert(not m.has("b"))
+}
+
+@test func test_get_opt_just_on_hit() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(8 as I64)
+    m.set("a", 42 as I64)
+    let opt: Maybe[I64] = m.get_opt("a")
+    let Just(v) = opt else {
+        assert(false)
+        return
+    }
+    assert_eq(v as I32, 42)
+}
+
+@test func test_get_opt_nothing_on_miss() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(8 as I64)
+    m.set("a", 42 as I64)
+    let opt: Maybe[I64] = m.get_opt("missing")
+    when opt {
+        Just(_) => assert(false),
+        Nothing => {}
+    }
+}
+
+@test func test_get_opt_on_empty_map() {
+    let m: HashMap[Str, I64] = HashMap[Str, I64]::new(4 as I64)
+    let opt: Maybe[I64] = m.get_opt("anything")
+    when opt {
+        Just(_) => assert(false),
+        Nothing => {}
+    }
+}
