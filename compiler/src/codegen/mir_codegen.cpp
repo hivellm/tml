@@ -1019,7 +1019,7 @@ void MirCodegen::emit_preamble() {
     emitln("declare dso_local void @mem_free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     emitln("declare dso_local void @tml_set_test_timeout(i32)");
     emitln("declare dso_local i32 @tml_run_test_with_catch(ptr)");
-    emitln("declare dso_local i64 @strlen(ptr)");
+    emitln("declare dso_local i64 @strlen(ptr) readonly nounwind willreturn");
     emitln("declare dso_local noalias ptr @malloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
     emitln("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)");
     emitln("declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)");
@@ -1077,9 +1077,9 @@ void MirCodegen::emit_preamble() {
     // The result is a new SSA value in MIR, so aliasing between input and
     // output is transparent to callers. Turns `s = s + "x"` loops from
     // O(n²) to O(n) total / O(1) amortized per iteration.
-    emitln("declare dso_local i64 @mem_usable_size(ptr) nounwind");
+    emitln("declare dso_local i64 @mem_usable_size(ptr) readonly nounwind willreturn");
     emitln("declare dso_local noalias ptr @mem_realloc(ptr, i64)");
-    emitln("define internal ptr @str_append(ptr %a, ptr %b) {");
+    emitln("define internal ptr @str_append(ptr %a, ptr %b) alwaysinline {");
     emitln("entry:");
     emitln("  %a_null = icmp eq ptr %a, null");
     emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");

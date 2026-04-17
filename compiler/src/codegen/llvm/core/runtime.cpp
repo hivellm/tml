@@ -184,7 +184,7 @@ void LLVMIRGen::init_runtime_catalog() {
     // / `malloc_size` (macOS). Guarded against non-heap pointers — returns 0
     // for `.rdata` literals. Used by `str_append` (phase1i) to amortize
     // repeated string concatenation to O(1) per append.
-    add("mem_usable_size", "declare dso_local i64 @mem_usable_size(ptr) nounwind");
+    add("mem_usable_size", "declare dso_local i64 @mem_usable_size(ptr) readonly nounwind willreturn");
     add("mem_copy", "declare dso_local void @mem_copy(ptr, ptr, i64)");
     add("mem_move", "declare dso_local void @mem_move(ptr, ptr, i64)");
     add("mem_set", "declare dso_local void @mem_set(ptr, i32, i64)");
@@ -544,7 +544,7 @@ void LLVMIRGen::init_runtime_catalog() {
     // Result: `s = s + "x"` in a loop goes from O(n²) (fresh alloc + full
     // copy per iter) to O(n) total, matching Rust's `String::push_str`.
     add("str_append",
-        "define internal ptr @str_append(ptr %a, ptr %b) {\n"
+        "define internal ptr @str_append(ptr %a, ptr %b) alwaysinline {\n"
         "entry:\n"
         "  %a_null = icmp eq ptr %a, null\n"
         "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
