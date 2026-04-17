@@ -714,6 +714,23 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
         // between `result` and `left` introduced by `str_append`'s in-place
         // path is transparent to the caller.
         if (type_str == "ptr" && i.op == mir::BinOp::Add) {
+            // phase1k — accumulator pattern: emit a tracked-length
+            // variant that reads/writes the shadow i64 alloca set up
+            // by emit_function(). LLVM SROA promotes that alloca into
+            // a phi across loop iterations, giving us SSA-tracked len
+            // like Rust's String::push_str.
+            auto acc_it = str_accumulator_add_to_alloca_.find(inst.result);
+            if (acc_it != str_accumulator_add_to_alloca_.end()) {
+                auto shadow_it = str_accumulator_allocas_.find(acc_it->second);
+                if (shadow_it != str_accumulator_allocas_.end()) {
+                    emitln("    " + result_reg + " = call ptr @str_append_tracked(ptr " +
+                           left + ", ptr " + right + ", ptr " + shadow_it->second + ")");
+                    if (inst.result != mir::INVALID_VALUE) {
+                        cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+                    }
+                    return;
+                }
+            }
             emitln("    " + result_reg + " = call ptr @str_append(ptr " + left + ", ptr " +
                    right + ")");
             if (inst.result != mir::INVALID_VALUE) {

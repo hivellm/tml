@@ -103,11 +103,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     std::string rhs_val = gen_expr(*rhs_bin.right);
                     std::string new_val = fresh_reg();
 
-                    // `str_append` (phase1i) handles both heap and literal
-                    // left operands and amortizes to O(1) per iteration via
-                    // `mem_usable_size` + exponential growth. No need for
-                    // the holds_heap_str split — `str_append` detects the
-                    // heap case at runtime.
+                    // `str_append` (phase1i + 1k) handles both heap and
+                    // literal left operands, uses the length-prefix
+                    // header for O(1) `len`/`cap` access, and amortizes
+                    // to O(1) per iteration via exponential growth.
                     emit_line("  " + new_val + " = call ptr @str_append(ptr " +
                               old_val + ", ptr " + rhs_val + ")");
                     // Free right operand if heap temp

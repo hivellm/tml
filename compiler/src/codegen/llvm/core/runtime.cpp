@@ -616,6 +616,98 @@ void LLVMIRGen::init_runtime_catalog() {
          "tml_str_alloc_with_cap", "tml_str_realloc",
          "llvm.memcpy.p0.p0.i64", ".str.empty"});
 
+    // phase1k — str_append_tracked: the augmented-concat call site emits
+    // this variant (instead of str_append) when a shadow i64 alloca is
+    // available for the accumulator's length. The caller pre-allocates
+    // the shadow in its own stack frame; `str_append_tracked` reads
+    // `len_a` from the shadow (SSA-promoted by LLVM SROA across loop
+    // iterations) and writes the updated length back, skipping the
+    // O(n) `strlen(a)` and the heap-header load/store that otherwise
+    // keep `len` in memory every iteration. This is the same shape
+    // rustc's `String::push_str` produces — `len` lives in a register
+    // / phi-node for the duration of the loop.
+    add("str_append_tracked",
+        "define internal ptr @str_append_tracked(ptr %a, ptr %b, ptr %len_slot) alwaysinline {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %shadow_len = load i64, ptr %len_slot, align 8\n"
+        "  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24\n"
+        "  %a_magic = load i64, ptr %a_magic_p\n"
+        "  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637\n"
+        "  br i1 %a_is_ours, label %at_has_hdr, label %at_literal\n"
+        "at_has_hdr:\n"
+        "  %at_cap_p = getelementptr i8, ptr %a_safe, i64 -16\n"
+        "  %at_cap_hdr = load i64, ptr %at_cap_p\n"
+        "  br label %at_done_a\n"
+        "at_literal:\n"
+        "  %at_lit_len = call i64 @strlen(ptr %a_safe)\n"
+        "  br label %at_done_a\n"
+        "at_done_a:\n"
+        "  %at_len_a = phi i64 [ %shadow_len, %at_has_hdr ], [ %at_lit_len, %at_literal ]\n"
+        "  %at_cap = phi i64 [ %at_cap_hdr, %at_has_hdr ], [ 0, %at_literal ]\n"
+        "  %bt_magic_p = getelementptr i8, ptr %b_safe, i64 -24\n"
+        "  %bt_magic = load i64, ptr %bt_magic_p\n"
+        "  %bt_is_ours = icmp eq i64 %bt_magic, 3552126293525794637\n"
+        "  br i1 %bt_is_ours, label %bt_has_hdr, label %bt_literal\n"
+        "bt_has_hdr:\n"
+        "  %bt_len_p = getelementptr i8, ptr %b_safe, i64 -8\n"
+        "  %bt_len_hdr = load i64, ptr %bt_len_p\n"
+        "  br label %bt_done\n"
+        "bt_literal:\n"
+        "  %bt_len_slow = call i64 @strlen(ptr %b_safe)\n"
+        "  br label %bt_done\n"
+        "bt_done:\n"
+        "  %at_len_b = phi i64 [ %bt_len_hdr, %bt_has_hdr ], [ %bt_len_slow, %bt_literal ]\n"
+        "  %at_total = add i64 %at_len_a, %at_len_b\n"
+        "  %at_is_heap = icmp ugt i64 %at_cap, 0\n"
+        "  %at_fits = icmp uge i64 %at_cap, %at_total\n"
+        "  %at_inplace_ok = and i1 %at_is_heap, %at_fits\n"
+        "  br i1 %at_inplace_ok, label %at_app_inplace, label %at_app_check\n"
+        "at_app_inplace:\n"
+        "  %at_dst_ip = getelementptr i8, ptr %a_safe, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_ip, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_ip = getelementptr i8, ptr %a_safe, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_ip\n"
+        "  %at_hdr_len_p = getelementptr i8, ptr %a_safe, i64 -8\n"
+        "  store i64 %at_total, ptr %at_hdr_len_p\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %a_safe\n"
+        "at_app_check:\n"
+        "  br i1 %at_is_heap, label %at_app_grow, label %at_app_fresh\n"
+        "at_app_grow:\n"
+        "  %at_cap2 = shl i64 %at_cap, 1\n"
+        "  %at_grow_hint = add i64 %at_cap2, 16\n"
+        "  %at_grow_cmp = icmp ugt i64 %at_total, %at_grow_hint\n"
+        "  %at_grow_sz = select i1 %at_grow_cmp, i64 %at_total, i64 %at_grow_hint\n"
+        "  %at_buf_g = call ptr @tml_str_realloc(ptr %a_safe, i64 %at_grow_sz)\n"
+        "  %at_dst_g = getelementptr i8, ptr %at_buf_g, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_g, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_g = getelementptr i8, ptr %at_buf_g, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_g\n"
+        "  %at_g_hdr_len_p = getelementptr i8, ptr %at_buf_g, i64 -8\n"
+        "  store i64 %at_total, ptr %at_g_hdr_len_p\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %at_buf_g\n"
+        "at_app_fresh:\n"
+        "  %at_la2 = shl i64 %at_len_a, 1\n"
+        "  %at_slack_hint = add i64 %at_la2, 32\n"
+        "  %at_fresh_cmp = icmp ugt i64 %at_total, %at_slack_hint\n"
+        "  %at_alloc_fresh = select i1 %at_fresh_cmp, i64 %at_total, i64 %at_slack_hint\n"
+        "  %at_buf_f = call ptr @tml_str_alloc_with_cap(i64 %at_total, i64 %at_alloc_fresh)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_buf_f, ptr %a_safe, i64 %at_len_a, i1 false)\n"
+        "  %at_dst_f = getelementptr i8, ptr %at_buf_f, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_f, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_f = getelementptr i8, ptr %at_buf_f, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_f\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %at_buf_f\n"
+        "}",
+        {"strlen", "tml_str_alloc_with_cap", "tml_str_realloc",
+         "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
     // str_concat_reuse: reallocs the left operand's buffer with exponential growth.
     // Used for augmented concat (result = result + expr) when left is known heap-allocated.
     // Allocates total*2+1 bytes to amortize future appends (O(1) amortized per iteration).

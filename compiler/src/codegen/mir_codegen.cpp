@@ -375,6 +375,29 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     // unlocks store-to-load forwarding across loop iterations.
     emitln("!str_len_range = !{i64 0, i64 9223372036854775807}");
 
+    // phase1k — alias-scope/noalias metadata for Str buffers.
+    //
+    // We split every heap Str allocation into two disjoint regions:
+    //   - `!str_hdr_scope` — the 24-byte header at `ptr[-24..0)`
+    //     (magic, cap, len)
+    //   - `!str_data_scope` — the payload at `ptr[0..cap]` plus the
+    //     trailing NUL byte
+    //
+    // All header loads/stores are tagged `!alias.scope !str_hdr_scope,
+    // !noalias !str_data_scope`; the memcpy into the data region and
+    // the NUL store get the mirror. LLVM's scoped AA can then prove
+    // that the header `load i64, ptr (a - 8)` on iteration N+1 cannot
+    // be invalidated by the memcpy or NUL-store of iteration N, so the
+    // `store i64 %total, ptr (a - 8)` at the end of iteration N can be
+    // forwarded to iteration N+1's load. That collapses the hot loop
+    // into pure SSA-tracked `len` updates — the same shape rustc
+    // produces for `String::push_str`.
+    emitln("!str_alias_domain = !{!\"tml_str\"}");
+    emitln("!str_hdr_scope_id = !{!\"tml_str_hdr\", !str_alias_domain}");
+    emitln("!str_data_scope_id = !{!\"tml_str_data\", !str_alias_domain}");
+    emitln("!str_hdr_scope = !{!str_hdr_scope_id}");
+    emitln("!str_data_scope = !{!str_data_scope_id}");
+
     // Loop vectorization metadata (emitted by back-edge detection in terminators.cpp)
     for (const auto& meta : loop_metadata_) {
         emitln(meta);
@@ -1132,14 +1155,14 @@ void MirCodegen::emit_preamble() {
     // `ptr + len` never wraps back to `ptr - 8` (the header), so the
     // store-to-load forwarding across loop iterations is legal.
     emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
-    emitln("  %a_magic = load i64, ptr %a_magic_p");
+    emitln("  %a_magic = load i64, ptr %a_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
     emitln("  br i1 %a_is_ours, label %a_has_hdr, label %a_literal");
     emitln("a_has_hdr:");
     emitln("  %a_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range");
+    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  %a_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
-    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range");
+    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  br label %a_done");
     emitln("a_literal:");
     emitln("  %a_len_slow = call i64 @strlen(ptr %a_safe)");
@@ -1149,12 +1172,12 @@ void MirCodegen::emit_preamble() {
     emitln("  %cap = phi i64 [ %a_cap_hdr, %a_has_hdr ], [ 0, %a_literal ]");
     // --- inline read of len_b ---
     emitln("  %b_magic_p = getelementptr i8, ptr %b_safe, i64 -24");
-    emitln("  %b_magic = load i64, ptr %b_magic_p");
+    emitln("  %b_magic = load i64, ptr %b_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  %b_is_ours = icmp eq i64 %b_magic, 3552126293525794637");
     emitln("  br i1 %b_is_ours, label %b_has_hdr, label %b_literal");
     emitln("b_has_hdr:");
     emitln("  %b_len_p = getelementptr i8, ptr %b_safe, i64 -8");
-    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range");
+    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  br label %b_done");
     emitln("b_literal:");
     emitln("  %b_len_slow = call i64 @strlen(ptr %b_safe)");
@@ -1169,13 +1192,13 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %inplace_ok, label %app_inplace, label %app_check");
     emitln("app_inplace:");
     emitln("  %dst_ip = getelementptr i8, ptr %a_safe, i64 %len_a");
-    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false), !alias.scope !str_data_scope, !noalias !str_hdr_scope");
     emitln("  %end_ip = getelementptr i8, ptr %a_safe, i64 %total");
-    emitln("  store i8 0, ptr %end_ip");
+    emitln("  store i8 0, ptr %end_ip, !alias.scope !str_data_scope, !noalias !str_hdr_scope");
     // Inline set_len: %is_heap guarantees cap > 0, so `a_safe` has our
     // header. Store directly, no magic re-check needed.
     emitln("  %a_set_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  store i64 %total, ptr %a_set_len_p");
+    emitln("  store i64 %total, ptr %a_set_len_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
     emitln("  ret ptr %a_safe");
     emitln("app_check:");
     emitln("  br i1 %is_heap, label %app_grow, label %app_fresh");
@@ -1204,6 +1227,103 @@ void MirCodegen::emit_preamble() {
     emitln("  %end_f = getelementptr i8, ptr %buf_f, i64 %total");
     emitln("  store i8 0, ptr %end_f");
     emitln("  ret ptr %buf_f");
+    emitln("}");
+    emitln();
+
+    // phase1k — str_append_tracked: called from accumulator call sites.
+    // Takes a pointer to a caller-owned i64 "shadow" length alloca.
+    // Reads `len_a` from the shadow (promoted to SSA by LLVM SROA)
+    // instead of from the heap header, so across loop iterations len
+    // lives in a register — matching Rust's `String::push_str` shape.
+    // Still falls back to reading the heap header on iter 1 when the
+    // shadow is stale (initialized to 0 but `a` is a literal of
+    // non-zero length, e.g. `var s: Str = "seed"`); in that case we
+    // trust the header's magic-checked len and refresh the shadow.
+    emitln("define internal ptr @str_append_tracked(ptr %a, ptr %b, ptr %len_slot) alwaysinline {");
+    emitln("entry:");
+    emitln("  %a_null = icmp eq ptr %a, null");
+    emitln("  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a");
+    emitln("  %b_null = icmp eq ptr %b, null");
+    emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
+    // --- fast path: read len_a from shadow alloca ---
+    emitln("  %shadow_len = load i64, ptr %len_slot, align 8, !range !str_len_range");
+    // --- check if `a` has our magic header (to get cap and validate shadow) ---
+    emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
+    emitln("  %a_magic = load i64, ptr %a_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
+    emitln("  br i1 %a_is_ours, label %at_has_hdr, label %at_literal");
+    emitln("at_has_hdr:");
+    emitln("  %at_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
+    emitln("  %at_cap_hdr = load i64, ptr %at_cap_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  br label %at_done_a");
+    emitln("at_literal:");
+    // Shadow-based read-ahead fails for a literal: `var s: Str = \"seed\"`
+    // case. strlen gives the real len; cap=0 sends us through fresh path.
+    emitln("  %at_lit_len = call i64 @strlen(ptr %a_safe)");
+    emitln("  br label %at_done_a");
+    emitln("at_done_a:");
+    emitln("  %at_len_a = phi i64 [ %shadow_len, %at_has_hdr ], [ %at_lit_len, %at_literal ]");
+    emitln("  %at_cap = phi i64 [ %at_cap_hdr, %at_has_hdr ], [ 0, %at_literal ]");
+    // --- read len_b (same inline magic check as str_append) ---
+    emitln("  %bt_magic_p = getelementptr i8, ptr %b_safe, i64 -24");
+    emitln("  %bt_magic = load i64, ptr %bt_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %bt_is_ours = icmp eq i64 %bt_magic, 3552126293525794637");
+    emitln("  br i1 %bt_is_ours, label %bt_has_hdr, label %bt_literal");
+    emitln("bt_has_hdr:");
+    emitln("  %bt_len_p = getelementptr i8, ptr %b_safe, i64 -8");
+    emitln("  %bt_len_hdr = load i64, ptr %bt_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  br label %bt_done");
+    emitln("bt_literal:");
+    emitln("  %bt_len_slow = call i64 @strlen(ptr %b_safe)");
+    emitln("  br label %bt_done");
+    emitln("bt_done:");
+    emitln("  %at_len_b = phi i64 [ %bt_len_hdr, %bt_has_hdr ], [ %bt_len_slow, %bt_literal ]");
+    // --- dispatch ---
+    emitln("  %at_total = add i64 %at_len_a, %at_len_b");
+    emitln("  %at_is_heap = icmp ugt i64 %at_cap, 0");
+    emitln("  %at_fits = icmp uge i64 %at_cap, %at_total");
+    emitln("  %at_inplace_ok = and i1 %at_is_heap, %at_fits");
+    emitln("  br i1 %at_inplace_ok, label %at_app_inplace, label %at_app_check");
+    emitln("at_app_inplace:");
+    emitln("  %at_dst_ip = getelementptr i8, ptr %a_safe, i64 %at_len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_ip, ptr %b_safe, i64 %at_len_b, i1 false), !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  %at_end_ip = getelementptr i8, ptr %a_safe, i64 %at_total");
+    emitln("  store i8 0, ptr %at_end_ip, !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  %at_hdr_len_p = getelementptr i8, ptr %a_safe, i64 -8");
+    emitln("  store i64 %at_total, ptr %at_hdr_len_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    // Update shadow — this is the KEY store that LLVM's mem2reg will
+    // promote to a phi update across loop iterations.
+    emitln("  store i64 %at_total, ptr %len_slot, align 8");
+    emitln("  ret ptr %a_safe");
+    emitln("at_app_check:");
+    emitln("  br i1 %at_is_heap, label %at_app_grow, label %at_app_fresh");
+    emitln("at_app_grow:");
+    emitln("  %at_cap2 = shl i64 %at_cap, 1");
+    emitln("  %at_grow_hint = add i64 %at_cap2, 16");
+    emitln("  %at_grow_cmp = icmp ugt i64 %at_total, %at_grow_hint");
+    emitln("  %at_grow_sz = select i1 %at_grow_cmp, i64 %at_total, i64 %at_grow_hint");
+    emitln("  %at_buf_g = call ptr @tml_str_realloc(ptr %a_safe, i64 %at_grow_sz)");
+    emitln("  %at_dst_g = getelementptr i8, ptr %at_buf_g, i64 %at_len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_g, ptr %b_safe, i64 %at_len_b, i1 false)");
+    emitln("  %at_end_g = getelementptr i8, ptr %at_buf_g, i64 %at_total");
+    emitln("  store i8 0, ptr %at_end_g");
+    emitln("  %at_g_hdr_len_p = getelementptr i8, ptr %at_buf_g, i64 -8");
+    emitln("  store i64 %at_total, ptr %at_g_hdr_len_p");
+    emitln("  store i64 %at_total, ptr %len_slot, align 8");
+    emitln("  ret ptr %at_buf_g");
+    emitln("at_app_fresh:");
+    emitln("  %at_la2 = shl i64 %at_len_a, 1");
+    emitln("  %at_slack_hint = add i64 %at_la2, 32");
+    emitln("  %at_fresh_cmp = icmp ugt i64 %at_total, %at_slack_hint");
+    emitln("  %at_alloc_fresh = select i1 %at_fresh_cmp, i64 %at_total, i64 %at_slack_hint");
+    emitln("  %at_buf_f = call ptr @tml_str_alloc_with_cap(i64 %at_total, i64 %at_alloc_fresh)");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_buf_f, ptr %a_safe, i64 %at_len_a, i1 false)");
+    emitln("  %at_dst_f = getelementptr i8, ptr %at_buf_f, i64 %at_len_a");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_f, ptr %b_safe, i64 %at_len_b, i1 false)");
+    emitln("  %at_end_f = getelementptr i8, ptr %at_buf_f, i64 %at_total");
+    emitln("  store i8 0, ptr %at_end_f");
+    emitln("  store i64 %at_total, ptr %len_slot, align 8");
+    emitln("  ret ptr %at_buf_f");
     emitln("}");
     emitln();
 
@@ -1686,6 +1806,87 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
     }
 
+    // phase1k — Str accumulator pattern pre-scan.
+    //
+    // After MIR's mem2reg/SROA passes, `var s: Str = init; loop { s = s + rhs }`
+    // is already in pure SSA phi form:
+    //
+    //     loop.header:
+    //       %s = phi ptr [%init, entry], [%new_s, loop.body]
+    //     loop.body:
+    //       %new_s = add ptr %s, %rhs
+    //       br loop.header
+    //
+    // We detect this by scanning each BinaryInst(Add, ptr, ptr):
+    //   - its `left` operand must be a PhiInst result
+    //   - that PhiInst must have an incoming edge whose value is the
+    //     BinaryInst's OWN result (self-referential loop-carried phi)
+    //
+    // When matched, we reserve a shadow i64 alloca keyed by the PHI's
+    // value ID. LLVM SROA promotes the shadow into a parallel phi node
+    // across the loop's back edge, which is what gives us SSA-tracked
+    // `len` — matching the shape rustc produces for `String::push_str`.
+    str_accumulator_allocas_.clear();
+    str_accumulator_adds_.clear();
+    str_accumulator_add_to_alloca_.clear();
+
+    // DEBUG
+    int debug_bin_count = 0;
+    int debug_bin_ptr_count = 0;
+    int debug_phi_match_count = 0;
+
+    // Build a map: phi result id → the PhiInst reference
+    std::unordered_map<mir::ValueId, const mir::PhiInst*> phi_results;
+    for (const auto& blk : func.blocks) {
+        for (const auto& inst_data : blk.instructions) {
+            if (auto* phi = std::get_if<mir::PhiInst>(&inst_data.inst)) {
+                if (inst_data.result != mir::INVALID_VALUE) {
+                    phi_results[inst_data.result] = phi;
+                }
+            }
+        }
+    }
+
+    for (const auto& blk : func.blocks) {
+        for (const auto& inst_data : blk.instructions) {
+            auto* bin = std::get_if<mir::BinaryInst>(&inst_data.inst);
+            if (!bin || bin->op != mir::BinOp::Add) continue;
+            debug_bin_count++;
+            if (!inst_data.type) continue;
+            std::string ty = mir_type_to_llvm(inst_data.type);
+            if (ty != "ptr") continue;
+            debug_bin_ptr_count++;
+            if (inst_data.result == mir::INVALID_VALUE) continue;
+
+            // `bin->left` should be a phi's result.
+            auto phi_it = phi_results.find(bin->left.id);
+            if (phi_it == phi_results.end()) continue;
+            debug_phi_match_count++;
+
+            // The phi should have an incoming edge = this Add's result
+            // (self-loop back edge).
+            bool is_accumulator = false;
+            for (const auto& [val, blk_id] : phi_it->second->incoming) {
+                if (val.id == inst_data.result) {
+                    is_accumulator = true;
+                    break;
+                }
+            }
+            if (!is_accumulator) continue;
+
+            // Key shadow by the phi's value id (stable across the loop).
+            std::string shadow_reg =
+                "%str_len_shadow_" + std::to_string(bin->left.id);
+            str_accumulator_allocas_[bin->left.id] = shadow_reg;
+            str_accumulator_adds_.insert(inst_data.result);
+            str_accumulator_add_to_alloca_[inst_data.result] = bin->left.id;
+        }
+    }
+
+    (void)debug_bin_count;
+    (void)debug_bin_ptr_count;
+    (void)debug_phi_match_count;
+
     // Setup block labels - use block ID, not index
     for (const auto& blk : func.blocks) {
         block_labels_[blk.id] = blk.name;
@@ -1901,6 +2102,24 @@ void MirCodegen::emit_function(const mir::Function& func) {
         }
     }
 
+    // phase1k — prepare shadow-length allocas for Str accumulators
+    // detected earlier. These need to be emitted inside the entry
+    // block (any `alloca` must appear in entry for LLVM SROA/mem2reg
+    // to promote it). Defer the IR injection to emit_block().
+    str_shadow_entry_ir_.clear();
+    for (const auto& [alloca_id, shadow_reg] : str_accumulator_allocas_) {
+        str_shadow_entry_ir_ +=
+            "  " + shadow_reg + " = alloca i64, align 8\n";
+        // Initialize the shadow to 0 — `var s: Str = ""` produces the
+        // empty literal, which has length 0, so we don't need to
+        // strlen(init). The str_append fast path's `%is_heap = cap > 0`
+        // check sends empty literal through the fresh-alloc branch on
+        // iter 1, which correctly initializes the buffer's real len.
+        // From iter 2 onward, the shadow tracks the cumulative length.
+        str_shadow_entry_ir_ +=
+            "  store i64 0, ptr " + shadow_reg + ", align 8\n";
+    }
+
     // Emit basic blocks
     for (const auto& block : func.blocks) {
         emit_block(block);
@@ -1925,6 +2144,14 @@ void MirCodegen::emit_block(const mir::BasicBlock& block) {
     if (!coverage_entry_ir_.empty()) {
         emit(coverage_entry_ir_);
         coverage_entry_ir_.clear();
+    }
+
+    // phase1k — inject shadow-length allocas for Str accumulators.
+    // Must be emitted in the entry block so LLVM's SROA can promote
+    // them to SSA phi values across loop iterations.
+    if (!str_shadow_entry_ir_.empty()) {
+        emit(str_shadow_entry_ir_);
+        str_shadow_entry_ir_.clear();
     }
 
     // Track current block ID for exit label updates (bounds check injection etc.)

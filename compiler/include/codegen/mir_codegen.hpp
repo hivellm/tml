@@ -112,6 +112,35 @@ private:
     // Set of call-result ValueIds that flow directly to the sret return slot (NRVO candidates)
     std::unordered_set<mir::ValueId> nrvo_call_results_;
 
+    // phase1k — Str accumulator pattern detection.
+    //
+    // For each `var s: Str = ...; s = s + expr` accumulator in a loop,
+    // we emit a shadow i64 length alloca (LLVM SROA promotes it to a
+    // phi node) so the inner str_append can read/write the cached
+    // length from an SSA register instead of loading from the heap
+    // header — the key optimization that closes the gap vs Rust's
+    // `String::push_str` (which keeps len in a struct field / SSA).
+    //
+    // `str_accumulator_allocas_`: maps the alloca ValueId that holds
+    // the Str var to the LLVM register name of its shadow i64 alloca
+    // (e.g. `%str_len_shadow_42`). Populated by a pre-scan of each
+    // function's MIR before emission.
+    //
+    // `str_accumulator_adds_`: result ValueIds of BinaryInst(Add) nodes
+    // that matched the accumulator pattern. When `emit_binary_inst`
+    // sees these, it emits an SSA-tracked str_append path instead of
+    // the generic call.
+    std::unordered_map<mir::ValueId, std::string> str_accumulator_allocas_;
+    std::unordered_set<mir::ValueId> str_accumulator_adds_;
+    // Per-add mapping: result value ID → alloca ID whose shadow-len
+    // this add updates. Needed to find the shadow register for the
+    // store on the Add's hot path.
+    std::unordered_map<mir::ValueId, mir::ValueId> str_accumulator_add_to_alloca_;
+    // IR snippet emitted at the start of each function's entry block —
+    // declares the shadow alloca(s). Prepared by emit_function(),
+    // consumed by emit_block() once per function.
+    std::string str_shadow_entry_ir_;
+
     // Profiler entry IR snippet to inject at the start of the entry block.
     // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
     std::string profiler_entry_ir_;
