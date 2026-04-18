@@ -28,6 +28,7 @@
 
 use test::{assert, assert_eq}
 use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+use compiler::cc::preproc::tokenize::pp_tokenize_source
 use compiler::cc::lexer::*
 use compiler::cc::parser::*
 use compiler::cc::ast::*
@@ -133,15 +134,20 @@ func abi_for_target(target: Str) -> CAbiTarget {
 /// `preprocess_source(text) -> List[PpToken]` lands, this function
 /// feeds it the file contents.
 func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
-    // Stage 0 — read the file. We don't consume the bytes yet, but
-    // touching them here surfaces IO errors early and mirrors what the
-    // real driver will do once the preprocessor entry point exists.
-    let _bytes = File::read_all(input_path)
+    // Stage 0 — read the file.
+    let source: Str = File::read_all(input_path)
 
-    // Stage 1 — tokenise. Empty pp-stream is the phase23b harness
-    // default; extending this to real C sources is the next
-    // preprocessor milestone.
-    let pp: List[PpToken] = List[PpToken]::new(0 as I64)
+    // Stage 1a — pp-tokenise the source text. This is the minimum-
+    // viable scanner shipped with phase24 Phase 2.2; it covers the
+    // common C17 §6.4 lexical classes (identifiers, pp-numbers,
+    // char/string literals, multi-char punctuators, line + block
+    // comments). Directive processing (`#include`, `#define`,
+    // etc.) is still handled by the macros/conditionals passes on
+    // top of this stream — not yet wired in the driver.
+    let pp: List[PpToken] = pp_tokenize_source(source, input_path)
+
+    // Stage 1b — C token classifier. Turns the pp-token stream into
+    // CToken records (keyword resolution, literal decoding).
     let lex: CLexer = c_lexer(pp)
     let toks: List[CToken] = tokenize(lex)
 

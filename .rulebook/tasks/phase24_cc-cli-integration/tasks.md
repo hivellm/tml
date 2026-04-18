@@ -74,10 +74,19 @@ so the natural forms are now the regression guard.
     `drop`/`mem_free` still reclaims the outer allocation). Fix in
     `compiler/src/codegen/llvm/core/drop.cpp`.
 
-  Text→`List[PpToken]` entry point still missing from
-  `compiler-tml/src/cc/preproc/`; cc_driver runs the pipeline on an
-  empty pp-stream today (0 decls / 0 functions). Phase 4
-  self-compile requires that entry point.
+  Text→`List[PpToken]` entry point shipped as
+  `compiler-tml/src/cc/preproc/tokenize.tml::pp_tokenize_source`.
+  Covers the common C17 §6.4 lexical classes (identifiers,
+  pp-numbers, char/string literals, multi-char punctuators, line +
+  block comments, whitespace / newline tracking). cc_driver now
+  calls `pp_tokenize_source(File::read_all(path), path)` before
+  handing off to `c_lexer` — `tml cc foo.c` really tokenises real
+  C sources. The phase23b parser still crashes on non-trivial
+  declarations (isolated repro: `int x` segfaults in
+  `cp_parse_translation_unit`); that's a pre-existing parser bug
+  tracked separately and not part of this task's scope. Empty
+  files, isolated keyword + semicolon, and the existing
+  `c_frontend.test.tml` smoke all still work.
 - [ ] 2.3 Register the cc_bridge ffi symbols in the runtime-modules library
   so the TML-compiled parser and lowerer can be invoked through them.
   Add the three entry points to `compiler/src/codegen/llvm/core/runtime.cpp`'s
