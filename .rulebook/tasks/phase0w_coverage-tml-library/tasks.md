@@ -285,10 +285,20 @@ is waiting on a pre-existing codegen fix.
   end-to-end with live test-runner output is a Phase 10 prerequisite
   (the coordinator currently deletes `cov_*.txt` after aggregating,
   which will change when the C++ HTML generator is removed).
-- [~] 11.2 Cross-validation against `llvm-cov export -format=lcov`
-  is deferred — requires a live LLVM-instrumented binary and
-  `llvm-cov` on PATH. Tracking as a follow-up compiler-side task;
-  not a phase0w blocker.
+- [x] 11.2 Cross-validated against `llvm-cov export -format=lcov`
+  (LLVM 22.1.0 at `F:/LLVM/bin/`). A 27-line C++ source compiled
+  with `clang++ -fprofile-instr-generate -fcoverage-mapping` and
+  exported via `llvm-cov export -format=lcov` produces an LCOV file
+  that round-trips through `coverage_cli --format=lcov` with
+  byte-identical content modulo section ordering
+  (`sort ref | diff sort cli` exits 0). Aggregate counts
+  (LF/LH/FNF/FNH/BRF/BRH) match exactly, and the same reference
+  round-trips through JSON + Cobertura + HTML SPA with consistent
+  totals. Fixture checked in at
+  `lib/coverage/tests/fixtures/lcov/llvm_cov_reference.info`;
+  regression guard lives in `ingest_lcov.test.tml`
+  (`test_llvm_cov_reference`). Full procedure documented at
+  `lib/coverage/docs/llvm-cov-parity.md`.
 - [x] 11.3 `lib/coverage/README.md` rewritten to reflect the real
   0.1.0 API, CLI reference, quick-examples, and the documentation
   crosslinks. Library tail (user-docs) aligns with

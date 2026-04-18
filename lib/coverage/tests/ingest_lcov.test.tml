@@ -115,3 +115,47 @@ func test_comma_in_fn_name() {
     assert_eq(f.functions.get(0).name, "fn_impl<T,U>", "FN name with comma preserved")
     assert_eq(f.functions.get(0).hit_count, 7, "FNDA correlation by full name")
 }
+
+// ---------------------------------------------------------------------------
+// phase0w 11.2 cross-validation — LCOV produced by
+// `llvm-cov export -format=lcov` (LLVM 22) round-trips through our
+// ingest without loss.
+//
+// The fixture was produced from a 27-line C++ source with 3 functions,
+// 1 branch (50 % taken), and 2 unhit lines. The reference file
+// contains every section type the TML writer supports (SF, FN,
+// FNDA, FNF/FNH, BRDA, BRF/BRH, DA, LF/LH, end_of_record) with
+// counts matching llvm-cov's aggregate figures.
+// ---------------------------------------------------------------------------
+@test("llvm-cov reference — FN/FNDA/BRDA/DA preserved")
+func test_llvm_cov_reference() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/llvm_cov_reference.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed on llvm-cov reference`)
+            return
+        }
+    }
+    assert_eq(r.files.len(), 1, "single SF section")
+    let f = r.files.get(0)
+    assert_eq(f.functions.len(), 3, "three FN records (main + add + branch_demo)")
+    // Every FN has FNDA hit_count = 1 in the reference.
+    var fn_hits: I64 = 0
+    for i in 0 to f.functions.len() {
+        let fh = f.functions.get(i)
+        if fh.hit_count > 0 {
+            fn_hits = fn_hits + 1
+        }
+    }
+    assert_eq(fn_hits, 3, "FNH=3 — all three functions covered")
+    assert_eq(f.branches.len(), 4, "BRDA count matches BRF=4")
+    // Line totals mirror the llvm-cov LF=16 / LH=14 pair.
+    assert_eq(f.lines.len(), 16, "LF=16 — every executable line recorded")
+    var da_hits: I64 = 0
+    for i in 0 to f.lines.len() {
+        if f.lines.get(i).count > 0 {
+            da_hits = da_hits + 1
+        }
+    }
+    assert_eq(da_hits, 14, "LH=14 — two lines inside the unhit else-branch")
+}
