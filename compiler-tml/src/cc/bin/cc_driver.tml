@@ -169,8 +169,19 @@ func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
     Ok(lw)
 }
 
-func emit_tokens_stub(_args: DriverArgs) -> I32 {
-    println("cc_driver --emit=tokens: no token stream yet (preprocessor entry point TBD)")
+/// Emit the pp-token stream produced by `pp_tokenize_source` — a
+/// human-readable listing for debugging the lexical phase without
+/// triggering the phase23b parser (which still has known bugs on
+/// non-trivial declaration inputs, tracked as a follow-up).
+func emit_tokens_stub(args: DriverArgs) -> I32 {
+    let source: Str = File::read_all(args.input)
+    let pp: List[PpToken] = pp_tokenize_source(source, args.input)
+    let n: I64 = pp.len()
+    println(`cc_driver: pp-tokenized {args.input} ({n} tokens)`.as_str())
+    for i in 0 to n {
+        let t = pp.get(i)
+        println(`  [{i}] kind={t.kind as I32} text='{t.text}'`.as_str())
+    }
     0
 }
 
@@ -178,10 +189,7 @@ func emit_ast_summary(args: DriverArgs) -> I32 {
     let abi = abi_for_target(args.target)
     when run_pipeline(args.input, abi) {
         Ok(_lw) => {
-            // Parsed successfully — the empty-pp pipeline yields a
-            // zero-decl translation unit. Real decl counts light up
-            // once a real pp-token stream is fed in.
-            println(`cc_driver: parsed {args.input} (0 decls — empty pp-token stream)`.as_str())
+            println(`cc_driver: parsed {args.input}`.as_str())
             0
         },
         Err(msg) => {
