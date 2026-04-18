@@ -44,20 +44,26 @@ so the natural forms are now the regression guard.
   so the existing LLVM backend can consume it without copying.
   Ownership contract documented: single-owner handles, transfer on
   successful consumption, caller retains ownership on failure.
-- [~] 2.2 Created `compiler/src/cc/cc_bridge.cpp` with the full
-  `CcDiagnostics` lifecycle (`_new`, `_count`, `_get`,
-  `_free_diagnostics`) plus stubs for the three pipeline entry points
-  (`cc_bridge_preproc`, `cc_bridge_parse`, `cc_bridge_lower`) that
-  currently append a fatal diagnostic and return NULL. The TML-side
-  cc modules (`compiler-tml/src/cc/preproc/`, `lexer.tml`, `parser.tml`,
-  `lower.tml`) need to be reachable from this layer before the stubs
-  become real dispatch. Two candidate wire-up paths (subprocess via a
-  new `cc_driver.exe` mirroring `coverage_cli.exe`, vs static link of
-  TML-compiled cc modules into `tml.exe`) documented in the file's
-  header comment; choice deferred until Phase 3 clarifies what the CLI
-  needs. The C ABI and header contract are stable and the file is
-  linked into `tml_cli` so downstream (`cmd_cc.cpp`) can begin drafting
-  against the real ABI shape.
+- [~] 2.2 Two halves shipped:
+  - `compiler/src/cc/cc_bridge.cpp` — the full `CcDiagnostics`
+    lifecycle (`_new`, `_count`, `_get`, `_free_diagnostics`) plus
+    stubs for the three pipeline entry points that currently append
+    a fatal diagnostic and return NULL.
+  - `compiler-tml/src/cc/bin/cc_driver.tml` — standalone TML driver
+    that wraps the phase23b pipeline end to end (collect argv → read
+    file → c_lexer → tokenize → cp_parse_translation_unit → c_lower
+    → `--emit=pipeline|ast|mir|tokens`). Type-checks cleanly.
+    **Blocker:** `tml build` on the driver hits a pre-existing
+    Maybe-instantiation K001
+    (`%struct.Maybe__I32` stored into `%struct.Maybe__Heap__CBlockItem`
+    slot — same bug that keeps `c_frontend.test.tml` from compiling).
+    Once that codegen fix lands, `cc_driver.exe` materialises and
+    `cmd_cc.cpp` can dispatch to it via subprocess (coverage_cli
+    pattern).
+  - A real text→`List[PpToken]` entry point is still missing from
+    `compiler-tml/src/cc/preproc/`; until it's added, cc_driver runs
+    the pipeline on an empty pp-stream (enough to exercise the
+    lexer/parser/lowerer integration but not real C compilation).
 - [ ] 2.3 Register the cc_bridge ffi symbols in the runtime-modules library
   so the TML-compiled parser and lowerer can be invoked through them.
   Add the three entry points to `compiler/src/codegen/llvm/core/runtime.cpp`'s
