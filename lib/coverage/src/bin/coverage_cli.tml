@@ -101,7 +101,8 @@ func parse_argv(argv: List[Str]) -> Outcome[CliArgs, Str] {
             continue
         }
         if a.starts_with("--baseline=") {
-            baseline = Just(core::str::basic::substring_from(a, 11))
+            let bv: Str = core::str::basic::substring_from(a, 11)
+            baseline = Just(bv)
             i = i + 1
             continue
         }
