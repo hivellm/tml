@@ -225,9 +225,13 @@
 - [~] 9.5 End-to-end verification partially validated: `tml coverage
   --input=foo --format=lcov` correctly routes to the new-mode
   dispatcher and reports the missing binary with the exact build
-  command to produce it. Full end-to-end run requires building
-  `coverage_cli.exe` (waiting on pre-existing codegen K001 in the
-  stdlib, unrelated to this task).
+  command to produce it. `tml build` now compiles the CLI through
+  type-check + IR emission after the `TemplateLiteralExpr` fix in
+  `infer.cpp`; a second codegen K001 (`%struct.Args` vs
+  `%struct.List__Str` on `let argv: List[Str] = os::args()`) is the
+  remaining gap before the binary materializes. Same pattern works in
+  `compiler-tml/src/main.tml`, so the fix is a codegen tweak not a
+  rewrite; tracked separately from this task.
 
 ## Phase 10: Remove the C++ HTML generator (3 items — pending runtime parity)
 
@@ -287,9 +291,10 @@ is waiting on a pre-existing codegen fix.
   a smoke test of the stub API). 14 fixtures under
   `tests/fixtures/{lcov,llvm_json,legacy_json}/`.
 - [~] 1.3 `tml check` passes cleanly on all 26 `.tml` files under
-  `lib/coverage/`. `tml test` execution on the suite currently fails
-  in the codegen path (pre-existing `Unknown method: as_str` K001
-  when template literals transitively reach the test binary) —
-  this is not regressing any existing test suite and the library's
-  logic is verified via `tml check` + structural review until the
-  upstream codegen fix lands.
+  `lib/coverage/`. The template-literal `.as_str()` codegen K001 was
+  fixed in commit `7b59fea3` (`compiler/src/codegen/llvm/expr/infer.cpp`
+  now infers `Text` for `TemplateLiteralExpr`); the compiler now
+  walks the full library source during `tml build`. A second
+  codegen K001 surfaces on `os::args()` vs `List[Str]` type
+  conversion — tracked as a follow-up compiler fix; the library
+  itself is ready.
