@@ -761,6 +761,48 @@ void LLVMIRGen::init_runtime_catalog() {
                          "  ret double %val\n"
                          "}");
 
+    // --- C frontend FFI bridge (phase24 Phase 2.3) ---
+    //
+    // Declared in compiler/include/cc/cc_bridge.hpp, implemented in
+    // compiler/src/cc/cc_bridge.cpp. Every handle type
+    // (`CcTokenStream`, `CcTranslationUnit`, `CcMirModule`,
+    // `CcDiagnostics`) is an opaque forward-declared struct, so at
+    // the ABI level all handles are plain `ptr`s. `CcAbiTarget` is a
+    // plain `int32_t` enum — see the header for the encoded values.
+    // `CcDiagnostic` is a POD aggregate of two pointers and three
+    // int32s (32 bytes with trailing pad); on x86_64 (both SysV and
+    // Windows x64) it's returned via an sret slot. LLVM's backend
+    // handles the ABI lowering from the direct-aggregate return
+    // shape declared here, matching what the C++ side emits.
+    //
+    // Registering these names in the catalogue means the TML-
+    // compiled cc_driver and any future in-process consumer can
+    // reference them through `@extern("c")` without the name being
+    // dropped as unresolved at link time.
+    add("cc_bridge_diagnostics_new",
+        "declare dso_local ptr @cc_bridge_diagnostics_new()");
+    add("cc_bridge_diagnostics_count",
+        "declare dso_local i64 @cc_bridge_diagnostics_count(ptr)");
+    add("cc_bridge_diagnostics_get",
+        "declare dso_local { ptr, i32, i32, i32, ptr } "
+        "@cc_bridge_diagnostics_get(ptr, i64)");
+    add("cc_bridge_free_diagnostics",
+        "declare dso_local void @cc_bridge_free_diagnostics(ptr)");
+    add("cc_bridge_preproc",
+        "declare dso_local ptr @cc_bridge_preproc(ptr, ptr, ptr, ptr, ptr)");
+    add("cc_bridge_free_token_stream",
+        "declare dso_local void @cc_bridge_free_token_stream(ptr)");
+    add("cc_bridge_parse",
+        "declare dso_local ptr @cc_bridge_parse(ptr, ptr)");
+    add("cc_bridge_free_translation_unit",
+        "declare dso_local void @cc_bridge_free_translation_unit(ptr)");
+    add("cc_bridge_lower",
+        "declare dso_local ptr @cc_bridge_lower(ptr, i32, ptr, ptr)");
+    add("cc_bridge_free_mir_module",
+        "declare dso_local void @cc_bridge_free_mir_module(ptr)");
+    add("cc_bridge_mir_borrow",
+        "declare dso_local ptr @cc_bridge_mir_borrow(ptr)");
+
     // --- Format string globals ---
     add(".fmt.int", "@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");
     add(".fmt.int.no_nl", "@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");

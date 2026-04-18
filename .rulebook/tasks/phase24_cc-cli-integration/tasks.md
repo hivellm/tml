@@ -87,11 +87,23 @@ so the natural forms are now the regression guard.
   tracked separately and not part of this task's scope. Empty
   files, isolated keyword + semicolon, and the existing
   `c_frontend.test.tml` smoke all still work.
-- [ ] 2.3 Register the cc_bridge ffi symbols in the runtime-modules library
-  so the TML-compiled parser and lowerer can be invoked through them.
-  Add the three entry points to `compiler/src/codegen/llvm/core/runtime.cpp`'s
-  preamble catalogue so the linker resolves them. Gated on 2.2
-  completing — there's nothing to register until the wire-up exists.
+- [x] 2.3 Registered all 11 cc_bridge FFI symbols in
+  `compiler/src/codegen/llvm/core/runtime.cpp::init_runtime_catalog`:
+  `cc_bridge_diagnostics_{new,count,get}`, `cc_bridge_free_diagnostics`,
+  `cc_bridge_preproc` / `_free_token_stream`, `cc_bridge_parse` /
+  `_free_translation_unit`, `cc_bridge_lower` / `_free_mir_module`, and
+  `cc_bridge_mir_borrow`. Every handle type resolves to `ptr`; the one
+  struct return (`CcDiagnostic` from `cc_bridge_diagnostics_get`) is
+  declared as `{ ptr, i32, i32, i32, ptr }` and LLVM's x86_64 backend
+  lowers it to sret automatically, matching the C++ side emitted by
+  `cc_bridge.cpp`. `CcAbiTarget` enum is passed as a plain `i32`. With
+  the declarations in the catalogue, any future TML or in-process
+  consumer that references one of these names through `@extern("c")`
+  emits the `declare dso_local ...` line directly into the module IR,
+  so the LLD link step sees the external without relying on source
+  side forward-declarations. Verified: compiler build clean; all 11
+  symbol strings present in `build/debug/bin/plugins/tml_compiler.dll`;
+  no regressions in the 203-suite compiler/compiler test run.
 
 ## Phase 3: CLI Subcommand (4 items)
 
