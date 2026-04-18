@@ -13,16 +13,33 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-Last completed: phase0o_match-keyword-diagnostic — ARCHIVED (2026-04-15).
-Branch: feat/self-hosting-compiler. Version: 0.3.18.
-Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout, slice_split_pred X002 timeout, let_patterns X002 timeout.
-Pending tasks: phase0p (BTreeMapIter for-in), phase0q (File::sync/datasync), phase0r (pipe hang CRITICAL), phase0s (U128.to_string), phase0t (MessagePack), phase0u (Protobuf).
+Last completed (2026-04-18): phase0v_codegen-bringup-bugs ARCHIVED,
+phase23b_c-frontend ARCHIVED. Only phase0w_coverage-tml-library remains
+in-progress; everything it has left is either external-tool-gated
+(genhtml, llvm-cov, browser verify) or the Phase 10 C++ HTML generator
+removal (destructive, awaits user green light).
+Branch: feat/self-hosting-compiler. Version: 0.3.38.
+coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
+golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
+SPA and exits 0.
+Pre-existing failures (unchanged, pre-session): c_preprocessor K001,
+hir_types K001, infer_differential K001, core/any T056, std/collections
+K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout,
+slice_split_pred X002 timeout, let_patterns X002 timeout,
+other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-Next task: phase0p_btreemap-iterator-protocol (BTreeMapIter for-in support).
+Next task: phase24_cc-cli-integration Phase 2 (FFI bridge, ~500 LOC
+C++) + Phase 3 (cmd_cc.cpp CLI subcommand) + Phase 4 (self-compile
+essential.c / mem.c via `tml cc`). Phase 1 of phase24 was already done
+under phase0v (all 9 codegen bring-up bugs fixed).
+Secondary option: phase0w Phase 10 (delete the C++ HTML generator —
+~900 LOC shrink). Coverage_cli now covers the same feature set so the
+C++ fallback is safe to remove, but it's a destructive change and
+should be confirmed with the user first.
 <!-- PLANS:TASK:END -->
 
 ## Session History
@@ -482,5 +499,57 @@ Phase 5 (Switchover) + Tail items fully implemented.
 
 ### Next Steps
 - phase13d: wire TML parser into compiler pipeline — create `main_frontend.tml` binary, add `ParseModuleTml` query in C++, implement `--stage=parser:tml` flag.
+
+### 2026-04-18
+## phase0v + phase23b ARCHIVED + coverage_cli end-to-end
+
+### Accomplished
+Fixed `%struct.EventEmitter = type { }` empty-body emission bug that
+prevented `coverage_cli.exe` (and any other consumer of `std::stream`)
+from building. Three interacting root causes:
+
+1. **Iterator UB in `llvm_types.cpp::llvm_type_name`** — the struct-
+   resolution loop reassigned `it` from `mod.internal_structs.find()`
+   and then compared against `mod.structs.end()`, which is UB per the
+   C++ standard. On MSVC the comparison returned true for end-
+   iterators of different containers, and the subsequent `it->second`
+   dereferenced `end()`, producing a garbage `StructDef` with empty
+   `fields`. Fix: use separate iterators, promote to a pointer only
+   after a verified hit.
+2. **Sibling-file type-imports skipped** — `env_module_load_decls.cpp`
+   had an optimization that only loaded `use` imports for `mod.tml`
+   files or intra-module references. External type imports (the last
+   path segment starts uppercase) from sibling files never triggered
+   the load. Fix: add `last_seg_is_type_like` to the `should_load`
+   predicate.
+3. **`std::events` missing from `lib/std/src/mod.tml`** — without the
+   `pub mod events` declaration, `preload_all_meta_caches` never
+   discovered the module, so `GlobalModuleCache::put` never ran, and
+   downstream compilation units could not resolve `EventEmitter`.
+   Fix: declare `pub mod events`.
+
+Secondary fix: `emit_all` in `lib/coverage/src/mod.tml` now calls
+`Path::create_dir_all(out_dir)` before writing, so coverage_cli no
+longer exits non-zero on a non-existent output directory.
+
+### Archived tasks
+- `phase0v_codegen-bringup-bugs` (all 9 bring-up bugs fixed; workarounds
+  un-applied in `compiler-tml/src/cc/`; regression tests shipped).
+- `phase23b_c-frontend` (C17 frontend complete: lexer, parser, types,
+  MIR lowerer; component suites green).
+
+### Key commits
+- `66bc0232` fix(codegen): EventEmitter 3 fields
+- `546a2cfc` fix(coverage): auto-create output directory
+- `72d7d87d` test(cli): cmd_coverage regression (phase0w 9.3)
+- `6a05eca5` archive phase0v
+- `6d26046e` archive phase23b
+
+### Next Steps
+- phase0w still in-progress but every actionable item is closed; what
+  remains is manual / external-tool (genhtml, llvm-cov, browser
+  verify) or the Phase 10 C++ HTML generator removal (destructive).
+- phase24_cc-cli-integration Phase 1 already done via phase0v; next
+  tractable work is Phase 2 (cc_bridge FFI) + Phase 3 (cmd_cc.cpp).
 
 <!-- PLANS:HISTORY:END -->
