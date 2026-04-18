@@ -1,0 +1,79 @@
+//! Filter tests — phase 5.4.
+
+use test::*
+use coverage::filter::{glob_match, passes, filter}
+use coverage::types::*
+use std::collections::List
+
+@test("glob_match — literal")
+func test_literal() {
+    assert_true(glob_match("foo.tml", "foo.tml"), "literal match")
+    assert_false(glob_match("foo.tml", "bar.tml"), "literal mismatch")
+}
+
+@test("glob_match — `*` stops at `/`")
+func test_single_star() {
+    assert_true(glob_match("lib/*/mod.tml", "lib/core/mod.tml"), "single-segment *")
+    assert_false(glob_match("lib/*/mod.tml", "lib/core/str/mod.tml"), "single * must not cross /")
+}
+
+@test("glob_match — `**` crosses `/`")
+func test_double_star() {
+    assert_true(glob_match("lib/**/mod.tml", "lib/core/str/mod.tml"), "** crosses /")
+    assert_true(glob_match("**/tests/**", "lib/core/tests/basic.test.tml"), "mid-** pattern")
+}
+
+@test("glob_match — `?` single char")
+func test_question() {
+    assert_true(glob_match("f?o", "foo"), "? matches any one")
+    assert_false(glob_match("f?o", "fo"), "? requires a char")
+}
+
+@test("passes — empty include means accept unless excluded")
+func test_passes_empty_include() {
+    assert_true(passes("anything", List[Str]::new(), List[Str]::new()), "empty include = accept all")
+}
+
+@test("passes — exclude beats include")
+func test_exclude_wins() {
+    let include: List[Str] = List[Str]::new()
+    include.push("lib/**")
+    let exclude: List[Str] = List[Str]::new()
+    exclude.push("**/tests/**")
+    assert_false(passes("lib/core/tests/a.tml", include, exclude), "exclude wins")
+    assert_true(passes("lib/core/str.tml", include, exclude), "include-only match")
+}
+
+@test("filter — keeps matching files, drops others")
+func test_filter_drops() {
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(mk_file("lib/core/str.tml"))
+    files.push(mk_file("lib/core/tests/str.test.tml"))
+    files.push(mk_file("compiler/src/main.cpp"))
+
+    let r = CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "test",
+        version: "",
+        generated_at: 0,
+    }
+
+    let include: List[Str] = List[Str]::new()
+    include.push("lib/**")
+    let exclude: List[Str] = List[Str]::new()
+    exclude.push("**/tests/**")
+
+    let kept = filter(r, include, exclude)
+    assert_eq(kept.files.len(), 1, "only lib/core/str.tml kept")
+    assert_eq(kept.files.get(0).path, "lib/core/str.tml", "path")
+}
+
+func mk_file(path: Str) -> FileCoverage {
+    FileCoverage {
+        path: path,
+        lines: List[LineHit]::new(),
+        functions: List[FuncHit]::new(),
+        branches: List[BranchHit]::new(),
+    }
+}

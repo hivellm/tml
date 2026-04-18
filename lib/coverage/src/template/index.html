@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coverage report</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Coverage</div>
+    <div class="totals" id="totals"></div>
+    <div class="search">
+      <input id="search" type="search" placeholder="Filter files…  (press /)" autocomplete="off" />
+    </div>
+  </header>
+
+  <main class="layout">
+    <nav class="tree" id="tree" aria-label="File tree"></nav>
+    <section class="viewer" id="viewer">
+      <div class="empty">Select a file to view its coverage.</div>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">ready</span>
+    <span class="hint">shortcuts: / search · j/k navigate · g top</span>
+  </footer>
+
+  <script src="prism.min.js"></script>
+  <script src="tml.prism.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

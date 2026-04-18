@@ -1,0 +1,157 @@
+//! `coverage_cli` — standalone TML binary invoked by `tml coverage`.
+//!
+//! Parses argv, calls `coverage::run` with a `CliArgs`, and returns
+//! the exit code.
+
+use coverage::types::*
+use coverage::{run}
+use std::collections::List
+use std::os
+
+func main() -> I32 {
+    let argv: List[Str] = os::args()
+
+    if argv.len() < 2 {
+        os::println(help_text())
+        return 2
+    }
+
+    let first = argv.get(1)
+    if first == "--help" or first == "-h" {
+        os::println(help_text())
+        return 0
+    }
+
+    let parsed = parse_argv(argv)
+    when parsed {
+        Err(msg) => {
+            os::eprintln(msg)
+            os::eprintln(help_text())
+            return 2
+        },
+        Ok(args) => {
+            return run(args)
+        }
+    }
+}
+
+/// Build a `CliArgs` from argv. Returns `Err(message)` on unknown
+/// flags or missing required values.
+func parse_argv(argv: List[Str]) -> Outcome[CliArgs, Str] {
+    let inputs: List[Str] = List[Str]::new()
+    let include: List[Str] = List[Str]::new()
+    let exclude: List[Str] = List[Str]::new()
+    var format: OutputFormat = OutputFormat::Html
+    var format_set: Bool = false
+    var output_dir: Str = "coverage-report"
+    var baseline: Maybe[Str] = Nothing
+    var fail_under: Maybe[F64] = Nothing
+    var compact_json: Bool = true
+    var help: Bool = false
+
+    var i: I64 = 1
+    loop (i < argv.len()) {
+        let a = argv.get(i)
+        if a == "--help" or a == "-h" {
+            help = true
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--input=") {
+            inputs.push(core::str::basic::substring_from(a, 8))
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--format=") {
+            let v = core::str::basic::substring_from(a, 9)
+            when parse_format(v) {
+                Ok(fmt) => {
+                    format = fmt
+                    format_set = true
+                },
+                Err(m) => return Err(m),
+            }
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--output=") {
+            output_dir = core::str::basic::substring_from(a, 9)
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--include=") {
+            include.push(core::str::basic::substring_from(a, 10))
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--exclude=") {
+            exclude.push(core::str::basic::substring_from(a, 10))
+            i = i + 1
+            continue
+        }
+        if a.starts_with("--baseline=") {
+            baseline = Just(core::str::basic::substring_from(a, 11))
+            i = i + 1
+            continue
+        }
+        if a == "--pretty-json" {
+            compact_json = false
+            i = i + 1
+            continue
+        }
+        // --fail-under=<pct> is recognized but value parsing is
+        // deferred; any non-empty value disables the gate for now.
+        if a.starts_with("--fail-under=") {
+            i = i + 1
+            continue
+        }
+        return Err("unknown argument")
+    }
+
+    if not help {
+        if inputs.len() == 0 {
+            return Err("missing required --input=<path>")
+        }
+        if not format_set {
+            return Err("missing required --format=lcov|json|html|cobertura|all")
+        }
+    }
+
+    Ok(CliArgs {
+        inputs: inputs,
+        format: format,
+        output_dir: output_dir,
+        include: include,
+        exclude: exclude,
+        baseline: baseline,
+        fail_under: fail_under,
+        compact_json: compact_json,
+        help: help,
+    })
+}
+
+func parse_format(v: Str) -> Outcome[OutputFormat, Str] {
+    if v == "lcov" { return Ok(OutputFormat::Lcov) }
+    if v == "json" { return Ok(OutputFormat::Json) }
+    if v == "html" { return Ok(OutputFormat::Html) }
+    if v == "cobertura" { return Ok(OutputFormat::Cobertura) }
+    if v == "all" { return Ok(OutputFormat::All) }
+    Err("unknown format (expected lcov|json|html|cobertura|all)")
+}
+
+func help_text() -> Str {
+    "coverage_cli - TML code coverage reporter\n\n" +
+    "Usage:\n" +
+    "  coverage_cli --input=<path> --format=<fmt> [--output=<dir>] [options]\n\n" +
+    "Required:\n" +
+    "  --input=<path>     input file or directory (repeatable)\n" +
+    "  --format=<fmt>     lcov | json | html | cobertura | all\n\n" +
+    "Optional:\n" +
+    "  --output=<dir>     output directory (default: coverage-report)\n" +
+    "  --include=<glob>   include glob (repeatable)\n" +
+    "  --exclude=<glob>   exclude glob (repeatable)\n" +
+    "  --baseline=<path>  baseline report for delta (optional)\n" +
+    "  --fail-under=<pct> reserved (value not validated yet)\n" +
+    "  --pretty-json      emit indented / full-key JSON (default: compact)\n" +
+    "  --help, -h         show this help\n"
+}

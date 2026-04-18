@@ -1,0 +1,145 @@
+//! Path-glob include/exclude filter (phase 5.2).
+//!
+//! A file is kept iff:
+//!
+//! - The include list is empty OR at least one include glob matches, AND
+//! - No exclude glob matches.
+//!
+//! # Glob syntax
+//!
+//! - `?`     — matches exactly one character (any, including `/`).
+//! - `*`     — matches any run of characters other than `/`.
+//! - `**`    — matches any run of characters including `/`.
+//! - any other character matches literally.
+//!
+//! This is the GitHub Actions / rsync subset — enough for the 95% case
+//! and small enough to implement inline without pulling in a full glob
+//! crate.
+
+use coverage::types::*
+use std::collections::List
+
+/// Filter `report.files` by include / exclude glob lists.
+pub func filter(report: CoverageReport, include: List[Str], exclude: List[Str]) -> CoverageReport {
+    let kept: List[FileCoverage] = List[FileCoverage]::new()
+    var i: I64 = 0
+    loop (i < report.files.len()) {
+        let f = report.files.get(i)
+        if passes(f.path, include, exclude) {
+            kept.push(f)
+        }
+        i = i + 1
+    }
+    CoverageReport {
+        files: kept,
+        source_roots: report.source_roots,
+        tool: report.tool,
+        version: report.version,
+        generated_at: report.generated_at,
+    }
+}
+
+/// Return true iff `path` is kept under the given include/exclude lists.
+pub func passes(path: Str, include: List[Str], exclude: List[Str]) -> Bool {
+    // Exclude is checked first.
+    var i: I64 = 0
+    loop (i < exclude.len()) {
+        if glob_match(exclude.get(i), path) {
+            return false
+        }
+        i = i + 1
+    }
+    if include.len() == 0 {
+        return true
+    }
+    i = 0
+    loop (i < include.len()) {
+        if glob_match(include.get(i), path) {
+            return true
+        }
+        i = i + 1
+    }
+    false
+}
+
+/// Match `pattern` against `text` using the subset documented above.
+/// Pure-byte matching; callers normalize path separators if they care.
+pub func glob_match(pattern: Str, text: Str) -> Bool {
+    glob_rec(pattern, 0, text, 0)
+}
+
+// ============================================================================
+// Internal recursion
+// ============================================================================
+
+func glob_rec(pat: Str, p: I64, text: Str, t: I64) -> Bool {
+    let plen = pat.len()
+    let tlen = text.len()
+    var pi: I64 = p
+    var ti: I64 = t
+
+    loop (pi < plen) {
+        let pc = byte_at(pat, pi)
+        // `**` — match any run, including `/`
+        if pc == 42 and pi + 1 < plen and byte_at(pat, pi + 1) == 42 {
+            let next_pi = pi + 2
+            if next_pi >= plen {
+                return true
+            }
+            // Try every suffix of text.
+            var k: I64 = ti
+            loop (k <= tlen) {
+                if glob_rec(pat, next_pi, text, k) {
+                    return true
+                }
+                k = k + 1
+            }
+            return false
+        }
+        // `*` — match any run except `/`
+        if pc == 42 {
+            let next_pi = pi + 1
+            if next_pi >= plen {
+                // Trailing `*` — must not contain `/`
+                var k: I64 = ti
+                loop (k < tlen) {
+                    if byte_at(text, k) == 47 { return false }
+                    k = k + 1
+                }
+                return true
+            }
+            // Try progressively longer matches for this *
+            var k2: I64 = ti
+            loop (k2 <= tlen) {
+                if glob_rec(pat, next_pi, text, k2) {
+                    return true
+                }
+                if k2 < tlen and byte_at(text, k2) == 47 {
+                    return false
+                }
+                k2 = k2 + 1
+            }
+            return false
+        }
+        // `?` — single char
+        if pc == 63 {
+            if ti >= tlen { return false }
+            pi = pi + 1
+            ti = ti + 1
+            continue
+        }
+        // Literal
+        if ti >= tlen { return false }
+        if byte_at(text, ti) != pc { return false }
+        pi = pi + 1
+        ti = ti + 1
+    }
+
+    ti == tlen
+}
+
+/// Byte at index `i` in `s`. Assumes ASCII for glob metacharacters,
+/// which is correct for all glob syntax we use.
+func byte_at(s: Str, i: I64) -> I32 {
+    core::str::basic::char_at(s, i)
+}

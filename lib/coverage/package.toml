@@ -1,0 +1,29 @@
+[package]
+name = "coverage"
+version = "0.1.0"
+edition = "2025"
+authors = ["TML Team"]
+description = "Code coverage reporting library — ingest LCOV/llvm-cov JSON, merge, filter, summarize, emit LCOV/JSON/HTML/Cobertura"
+license = "Apache-2.0"
+repository = "https://github.com/hivellm/tml"
+homepage = "https://tml-lang.org"
+readme = "README.md"
+keywords = ["coverage", "lcov", "testing", "reporting", "html"]
+categories = ["testing", "development-tools"]
+
+[lib]
+name = "coverage"
+path = "src/mod.tml"
+
+[features]
+default = ["std"]
+std = []
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true

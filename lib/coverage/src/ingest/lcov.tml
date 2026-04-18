@@ -1,0 +1,298 @@
+//! LCOV `.info` ingest.
+//!
+//! Parses the LCOV line grammar produced by `lcov`, `geninfo`,
+//! `llvm-cov export -format=lcov` and every other tool that speaks it.
+//! See `man geninfo(1)` for the record definitions.
+//!
+//! # Grammar (subset implemented)
+//!
+//! ```text
+//! TN:<test>                         test name (per record)
+//! SF:<source>                       begin source file section
+//! FN:<line>,<fn>                    function declared at line
+//! FNDA:<hits>,<fn>                  function hit count
+//! FNF:<n>                           functions found   (ignored — recomputed on emit)
+//! FNH:<n>                           functions hit     (ignored — recomputed on emit)
+//! BRDA:<line>,<block>,<branch>,<hit>   branch data (hit is count or '-')
+//! BRF:<n>                           branches found    (ignored)
+//! BRH:<n>                           branches hit      (ignored)
+//! DA:<line>,<hits>[,<checksum>]     line data; optional MD5 checksum
+//! LF:<n>                            lines found       (ignored)
+//! LH:<n>                            lines hit         (ignored)
+//! end_of_record                     end of source file section
+//! ```
+//!
+//! Totals (`FNF/FNH/BRF/BRH/LF/LH`) are recomputed from the records on
+//! every write to guarantee consistency; the emit step ignores them on
+//! input to avoid treating stale totals as authoritative.
+//!
+//! # Design note
+//!
+//! The parser is split into two passes to avoid a currently-broken
+//! codegen path for mutable `Maybe[FileCoverage]` state:
+//!
+//! 1. [`split_sections`] splits the input into slices of lines bounded
+//!    by `SF:` / `end_of_record` — returning `List[List[Str]]`.
+//! 2. [`parse_section`] consumes one slice and produces a
+//!    `FileCoverage`. No `Maybe` mutation needed.
+
+use coverage::types::*
+use std::file::File
+
+/// Read an LCOV `.info` file and produce a `CoverageReport`.
+pub func read_lcov(path: Str) -> Outcome[CoverageReport, IngestError] {
+    let content = File::read_all(path)
+    if content.len() == 0 {
+        return Err(IngestError::ReadError(`empty or missing file: {path}`))
+    }
+
+    let all_lines = content.split("\n")
+    let sections = split_sections(all_lines)
+
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    var i: I64 = 0
+    loop (i < sections.len()) {
+        let section = sections.get(i)
+        let fc = parse_section(section)
+        if fc.path.len() > 0 {
+            files.push(fc)
+        }
+        i = i + 1
+    }
+
+    Ok(CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "lcov",
+        version: "",
+        generated_at: 0,
+    })
+}
+
+// ============================================================================
+// Pass 1 — split into sections
+// ============================================================================
+
+/// Split the raw lines into sections, each starting at an `SF:` line
+/// and ending at the matching `end_of_record` (or EOF). Lines outside
+/// any section are discarded.
+func split_sections(all_lines: List[Str]) -> List[List[Str]] {
+    let sections: List[List[Str]] = List[List[Str]]::new()
+    var current: List[Str] = List[Str]::new()
+    var in_section: Bool = false
+
+    var i: I64 = 0
+    loop (i < all_lines.len()) {
+        let raw = all_lines.get(i)
+        let line = raw.trim_end()
+        i = i + 1
+
+        if line.len() == 0 {
+            continue
+        }
+
+        if line.starts_with("SF:") {
+            if in_section and current.len() > 0 {
+                // Unterminated previous section — flush.
+                sections.push(current)
+            }
+            current = List[Str]::new()
+            current.push(line)
+            in_section = true
+            continue
+        }
+
+        if line == "end_of_record" {
+            if in_section {
+                sections.push(current)
+                current = List[Str]::new()
+                in_section = false
+            }
+            continue
+        }
+
+        if in_section {
+            current.push(line)
+        }
+    }
+
+    if in_section and current.len() > 0 {
+        sections.push(current)
+    }
+
+    sections
+}
+
+// ============================================================================
+// Pass 2 — parse a single section
+// ============================================================================
+
+/// Parse one LCOV section (a list of lines starting with `SF:…`) into
+/// a `FileCoverage`. An empty-path result signals "drop".
+func parse_section(section: List[Str]) -> FileCoverage {
+    let lines: List[LineHit] = List[LineHit]::new()
+    let functions: List[FuncHit] = List[FuncHit]::new()
+    let branches: List[BranchHit] = List[BranchHit]::new()
+    var path: Str = ""
+
+    var i: I64 = 0
+    loop (i < section.len()) {
+        let line = section.get(i)
+        i = i + 1
+
+        if line.starts_with("SF:") {
+            path = substring_from(line, 3)
+            continue
+        }
+
+        if line.starts_with("DA:") {
+            let rest = substring_from(line, 3)
+            let parts = rest.split(",")
+            if parts.len() >= 2 {
+                let l_v = parts.get(0).parse_i64()
+                let c_v = parts.get(1).parse_i64()
+                when l_v {
+                    Just(l) => {
+                        when c_v {
+                            Just(c) => {
+                                lines.push(LineHit {
+                                    line: l,
+                                    count: c,
+                                    branch_count: 0,
+                                    branch_taken: 0,
+                                })
+                            },
+                            Nothing => {}
+                        }
+                    },
+                    Nothing => {}
+                }
+            }
+            continue
+        }
+
+        if line.starts_with("FN:") {
+            let rest = substring_from(line, 3)
+            let parts = rest.split(",")
+            if parts.len() >= 2 {
+                let l_v = parts.get(0).parse_i64()
+                when l_v {
+                    Just(l) => {
+                        let name = join_from(parts, 1, ",")
+                        functions.push(FuncHit {
+                            name: name,
+                            start_line: l,
+                            hit_count: 0,
+                        })
+                    },
+                    Nothing => {}
+                }
+            }
+            continue
+        }
+
+        if line.starts_with("FNDA:") {
+            let rest = substring_from(line, 5)
+            let parts = rest.split(",")
+            if parts.len() >= 2 {
+                let h_v = parts.get(0).parse_i64()
+                when h_v {
+                    Just(h) => {
+                        let name = join_from(parts, 1, ",")
+                        apply_fnda_mut(functions, name, h)
+                    },
+                    Nothing => {}
+                }
+            }
+            continue
+        }
+
+        if line.starts_with("BRDA:") {
+            let rest = substring_from(line, 5)
+            let parts = rest.split(",")
+            if parts.len() >= 4 {
+                let l_v = parts.get(0).parse_i64()
+                let b_v = parts.get(1).parse_i64()
+                let br_v = parts.get(2).parse_i64()
+                let hit_raw = parts.get(3)
+                when l_v {
+                    Just(l) => {
+                        when b_v {
+                            Just(b) => {
+                                when br_v {
+                                    Just(br) => {
+                                        let hit: I64 = if hit_raw == "-" {
+                                            0
+                                        } else {
+                                            when hit_raw.parse_i64() {
+                                                Just(v) => v,
+                                                Nothing => 0,
+                                            }
+                                        }
+                                        branches.push(BranchHit {
+                                            line: l,
+                                            block_id: b,
+                                            branch_id: br,
+                                            hit_count: hit,
+                                        })
+                                    },
+                                    Nothing => {}
+                                }
+                            },
+                            Nothing => {}
+                        }
+                    },
+                    Nothing => {}
+                }
+            }
+            continue
+        }
+        // Ignored records: TN, FNF, FNH, BRF, BRH, LF, LH, VER, comments
+    }
+
+    FileCoverage {
+        path: path,
+        lines: lines,
+        functions: functions,
+        branches: branches,
+    }
+}
+
+/// Mutate `functions` in place: for every entry whose name matches
+/// `fn_name`, overwrite `hit_count = hits`.
+func apply_fnda_mut(functions: List[FuncHit], fn_name: Str, hits: I64) {
+    var i: I64 = 0
+    loop (i < functions.len()) {
+        let fh = functions.get(i)
+        if fh.name == fn_name {
+            functions.set(i, FuncHit {
+                name: fh.name,
+                start_line: fh.start_line,
+                hit_count: hits,
+            })
+        }
+        i = i + 1
+    }
+}
+
+/// Substring from byte index `start` to end.
+func substring_from(s: Str, start: I64) -> Str {
+    core::str::basic::substring_from(s, start)
+}
+
+/// Rejoin `parts[start..]` with `sep`.
+func join_from(parts: List[Str], start: I64, sep: Str) -> Str {
+    var out: Str = ""
+    var i: I64 = start
+    var first: Bool = true
+    loop (i < parts.len()) {
+        if first {
+            out = parts.get(i)
+            first = false
+        } else {
+            out = out + sep + parts.get(i)
+        }
+        i = i + 1
+    }
+    out
+}

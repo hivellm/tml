@@ -1,0 +1,117 @@
+//! LCOV ingest tests — phase 2.2.
+//!
+//! Fixtures under `tests/fixtures/lcov/` cover:
+//! - minimal.info:         one file, three DA records (one unhit)
+//! - multi_file.info:      two files separated by `end_of_record`
+//! - with_functions.info:  FN + FNDA records, one function unhit
+//! - with_branches.info:   BRDA records, including `-` (untaken)
+//! - empty.info:           zero-byte file (error path)
+//! - comma_in_fn_name.info: FN name contains `,` (regression guard)
+
+use test::*
+use coverage::types::*
+use coverage::ingest::lcov::read_lcov
+
+@test("minimal LCOV — one file, three DA records")
+func test_minimal() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/minimal.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed`)
+            return
+        }
+    }
+    assert_eq(r.files.len(), 1, "one file expected")
+    let f = r.files.get(0)
+    assert_eq(f.path, "src/add.tml", "path preserved verbatim")
+    assert_eq(f.lines.len(), 3, "three DA records")
+    assert_eq(f.lines.get(0).line, 1, "line 1")
+    assert_eq(f.lines.get(0).count, 1, "line 1 hit once")
+    assert_eq(f.lines.get(2).line, 3, "line 3")
+    assert_eq(f.lines.get(2).count, 0, "line 3 unhit")
+    assert_eq(f.functions.len(), 0, "no FN records")
+    assert_eq(f.branches.len(), 0, "no BRDA records")
+}
+
+@test("multi-file LCOV — two files")
+func test_multi_file() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/multi_file.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed`)
+            return
+        }
+    }
+    assert_eq(r.files.len(), 2, "two files expected")
+    assert_eq(r.files.get(0).path, "src/add.tml", "first path")
+    assert_eq(r.files.get(1).path, "src/sub.tml", "second path")
+    assert_eq(r.files.get(1).lines.len(), 3, "sub.tml has 3 lines")
+}
+
+@test("function records — FN + FNDA correlate by name")
+func test_with_functions() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/with_functions.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed`)
+            return
+        }
+    }
+    let f = r.files.get(0)
+    assert_eq(f.functions.len(), 2, "two FN records")
+
+    var add_hits: I64 = -1
+    var sub_hits: I64 = -1
+    var i: I64 = 0
+    loop (i < f.functions.len()) {
+        let fh = f.functions.get(i)
+        if fh.name == "add" { add_hits = fh.hit_count }
+        if fh.name == "sub" { sub_hits = fh.hit_count }
+        i = i + 1
+    }
+    assert_eq(add_hits, 42, "add hit 42 times (FNDA correlated)")
+    assert_eq(sub_hits, 0,  "sub unhit (FNDA=0)")
+}
+
+@test("branch records — numeric and '-' (untaken)")
+func test_with_branches() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/with_branches.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed`)
+            return
+        }
+    }
+    let f = r.files.get(0)
+    assert_eq(f.branches.len(), 4, "four BRDA records")
+    // Untaken branch ('-') normalized to hit_count=0
+    assert_eq(f.branches.get(2).hit_count, 0, "BRDA '-' -> 0")
+    assert_eq(f.branches.get(3).hit_count, 10, "numeric branch preserved")
+}
+
+@test("empty file returns ReadError")
+func test_empty_file() {
+    let r = read_lcov("lib/coverage/tests/fixtures/lcov/empty.info")
+    assert_true(r.is_err(), "empty file must return Err")
+}
+
+@test("missing file returns ReadError")
+func test_missing_file() {
+    let r = read_lcov("lib/coverage/tests/fixtures/lcov/does_not_exist.info")
+    assert_true(r.is_err(), "missing file must return Err")
+}
+
+@test("FN name containing comma — rejoined correctly")
+func test_comma_in_fn_name() {
+    let r = when read_lcov("lib/coverage/tests/fixtures/lcov/comma_in_fn_name.info") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, `read_lcov failed`)
+            return
+        }
+    }
+    let f = r.files.get(0)
+    assert_eq(f.functions.len(), 1, "one FN")
+    assert_eq(f.functions.get(0).name, "fn_impl<T,U>", "FN name with comma preserved")
+    assert_eq(f.functions.get(0).hit_count, 7, "FNDA correlation by full name")
+}

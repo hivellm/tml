@@ -1,0 +1,17 @@
+# TML Coverage Library
+#
+# Pure-TML reporting layer for code coverage data.
+# Ingests LCOV, llvm-cov JSON and the legacy TML collector format;
+# emits LCOV, Cobertura XML, compact JSON and a static HTML SPA.
+# Depends on core + std.
+
+[package]
+name = "coverage"
+version = "0.1.0"
+edition = "2025"
+description = "Coverage ingest/merge/summary/emit library — LCOV, Cobertura, JSON, HTML SPA"
+license = "Apache-2.0"
+
+[dependencies]
+core = { path = "../core" }
+std  = { path = "../std" }

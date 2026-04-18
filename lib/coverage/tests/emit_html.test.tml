@@ -1,0 +1,96 @@
+//! HTML SPA emit tests — phase 7.6.
+//!
+//! Verifies `write_html` produces exactly the expected output set
+//! (5 template files + 1 coverage.json) and that `coverage.json`
+//! parses as valid JSON with the expected structure.
+
+use test::*
+use coverage::types::*
+use coverage::emit::html::{write_html_with_template, template_file_names}
+use std::collections::List
+use std::file::{File, Path}
+use std::json
+
+@test("write_html — output dir contains every template + coverage.json")
+func test_file_presence() {
+    let out = ".sandbox/coverage_html_test"
+    ensure_clean(out)
+
+    let r = make_report()
+    let res = write_html_with_template(r, out, "lib/coverage/src/template")
+    assert_true(res.is_ok(), "write_html_with_template succeeded")
+
+    let names = template_file_names()
+    var i: I64 = 0
+    loop (i < names.len()) {
+        let p = `{out}/{names.get(i)}`.as_str()
+        assert_true(Path::exists(p), "template file copied")
+        i = i + 1
+    }
+    assert_true(Path::exists(`{out}/coverage.json`.as_str()), "coverage.json written")
+}
+
+@test("write_html — coverage.json is valid JSON with `files` array")
+func test_coverage_json_valid() {
+    let out = ".sandbox/coverage_html_test2"
+    ensure_clean(out)
+
+    let r = make_report()
+    let _ = write_html_with_template(r, out, "lib/coverage/src/template")
+
+    let text = File::read_all(`{out}/coverage.json`.as_str())
+    assert_true(text.len() > 0, "coverage.json non-empty")
+    let h = json::parse_fast(text)
+    assert_true(h != -1, "coverage.json parses")
+    let files = json::object_get(h, "files")
+    assert_true(files != -1 and json::is_array(files) != 0, "`files` array present")
+    assert_eq(json::array_len(files), 1, "1 file")
+    json::free(h)
+}
+
+@test("write_html — templates are byte-for-byte verbatim")
+func test_verbatim() {
+    let out = ".sandbox/coverage_html_test3"
+    ensure_clean(out)
+
+    let r = make_report()
+    let _ = write_html_with_template(r, out, "lib/coverage/src/template")
+
+    let src = File::read_all("lib/coverage/src/template/app.css")
+    let dst = File::read_all(`{out}/app.css`.as_str())
+    assert_eq(src, dst, "app.css copied verbatim")
+
+    let src_js = File::read_all("lib/coverage/src/template/app.js")
+    let dst_js = File::read_all(`{out}/app.js`.as_str())
+    assert_eq(src_js, dst_js, "app.js copied verbatim")
+}
+
+// Helpers ----------------------------------------------------------------
+
+func ensure_clean(dir: Str) {
+    // Best-effort cleanup — existence is enough of a signal.
+    // Not all environments support recursive removal; tests run under
+    // `.sandbox/` so leftover data between runs is tolerated.
+    if not Path::exists(dir) {
+        let _ = Path::create_dir_all(dir)
+    }
+}
+
+func make_report() -> CoverageReport {
+    let lines: List[LineHit] = List[LineHit]::new()
+    lines.push(LineHit { line: 1, count: 5, branch_count: 0, branch_taken: 0 })
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage {
+        path: "src/a.tml",
+        lines: lines,
+        functions: List[FuncHit]::new(),
+        branches: List[BranchHit]::new(),
+    })
+    CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "test",
+        version: "0",
+        generated_at: 0,
+    }
+}

@@ -1,0 +1,123 @@
+//! Coverage Library — Core Type Definitions
+//!
+//! Shared types for every stage of the pipeline (ingest, transform, emit).
+//! Designed to be lossy toward neither LCOV nor `llvm-cov` JSON so a
+//! round-trip through the library preserves per-line, per-branch and
+//! per-function data.
+//!
+//! # Summary of the model
+//!
+//! - [`CoverageReport`] — the top-level object produced by every `read_*` and
+//!   consumed by every `write_*` function.
+//! - [`FileCoverage`] — per-source-file data (path, lines, functions, branches).
+//! - [`LineHit`], [`FuncHit`], [`BranchHit`] — the per-element counters.
+//! - [`Summary`] — aggregated percentages and totals, produced by `summarize`.
+//! - [`IngestError`], [`EmitError`] — structured failure types returned by
+//!   `Outcome`-returning operations.
+//! - [`CliArgs`] — parsed argv, the entry argument of `run`.
+//!
+//! # Conventions
+//!
+//! - All counts use `I64` to tolerate long runs (a hot line in a soak
+//!   test can easily exceed 2^31 hits).
+//! - Percentages are `F64` in the `[0.0, 100.0]` range and rounded to one
+//!   decimal when rendered, never when stored.
+//! - Source paths are stored exactly as the producing tool reports them.
+//!   Normalization to a common root is the caller's responsibility.
+
+/// Per-line hit count plus optional branch detail
+pub type LineHit {
+    pub line: I64,
+    pub count: I64,
+    /// Total branches originating on this line (0 if no branch).
+    pub branch_count: I64,
+    /// Branches taken at least once.
+    pub branch_taken: I64,
+}
+
+/// Per-function hit count
+pub type FuncHit {
+    pub name: Str,
+    pub start_line: I64,
+    pub hit_count: I64,
+}
+
+/// Branch record, addressable by (line, block, branch) identifier
+pub type BranchHit {
+    pub line: I64,
+    pub block_id: I64,
+    pub branch_id: I64,
+    pub hit_count: I64,
+}
+
+/// Per-source-file coverage
+pub type FileCoverage {
+    pub path: Str,
+    pub lines: List[LineHit],
+    pub functions: List[FuncHit],
+    pub branches: List[BranchHit],
+}
+
+/// Top-level coverage report
+pub type CoverageReport {
+    pub files: List[FileCoverage],
+    /// Optional source roots (e.g. "lib/core", "compiler/src") used by the
+    /// HTML reporter to group by module.
+    pub source_roots: List[Str],
+    /// Producing tool (e.g. "llvm-cov 22.1.0", "tml-legacy-json", "lcov 1.16").
+    pub tool: Str,
+    /// Tool version (free-form).
+    pub version: Str,
+    /// Unix epoch seconds when the report was produced.
+    pub generated_at: I64,
+}
+
+/// Aggregated coverage summary
+pub type Summary {
+    pub pct_lines: F64,
+    pub pct_branches: F64,
+    pub pct_functions: F64,
+    pub covered_lines: I64,
+    pub total_lines: I64,
+    pub covered_branches: I64,
+    pub total_branches: I64,
+    pub covered_functions: I64,
+    pub total_functions: I64,
+}
+
+/// Ingest failure — returned by every `read_*` on error
+pub type IngestError {
+    NotFound(Str),
+    ReadError(Str),
+    ParseError(Str),
+    UnknownFormat(Str),
+}
+
+/// Emit failure — returned by every `write_*` on error
+pub type EmitError {
+    WriteError(Str),
+    MissingTemplate(Str),
+    InvalidReport(Str),
+}
+
+/// Output format selector for `run()`
+pub type OutputFormat {
+    Lcov,
+    Json,
+    Html,
+    Cobertura,
+    All,
+}
+
+/// Parsed CLI arguments (used by `run`)
+pub type CliArgs {
+    pub inputs: List[Str],
+    pub format: OutputFormat,
+    pub output_dir: Str,
+    pub include: List[Str],
+    pub exclude: List[Str],
+    pub baseline: Maybe[Str],
+    pub fail_under: Maybe[F64],
+    pub compact_json: Bool,
+    pub help: Bool,
+}

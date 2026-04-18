@@ -1,0 +1,4 @@
+lib::core::str::basic::substring_from
+lib::core::str::basic::substring_to
+lib::core::str::split::split
+lib::core::str::search::starts_with

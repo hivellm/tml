@@ -1,0 +1,87 @@
+//! HTML SPA emit (phase 7.5).
+//!
+//! Copies every file from `lib/coverage/src/template/` into the output
+//! directory byte-for-byte, then writes a single `coverage.json` data
+//! file consumed by the SPA at runtime. **No string concatenation of
+//! HTML, CSS or JS happens here** — templates are shipped verbatim.
+
+use coverage::types::*
+use coverage::emit::json::render_json
+use std::file::{File, Path}
+
+/// Write a `CoverageReport` as a static HTML SPA at `out_dir/`.
+///
+/// Default template location is `lib/coverage/src/template/` relative
+/// to the working directory. Use `write_html_with_template` to override
+/// when invoking from a different CWD (e.g. an installed `coverage_cli`).
+pub func write_html(report: CoverageReport, out_dir: Str) -> Outcome[(), EmitError] {
+    write_html_with_template(report, out_dir, "lib/coverage/src/template")
+}
+
+/// Variant that accepts an explicit template directory.
+pub func write_html_with_template(
+    report: CoverageReport,
+    out_dir: Str,
+    template_dir: Str,
+) -> Outcome[(), EmitError] {
+    // 1. Ensure output directory exists.
+    if not Path::exists(out_dir) {
+        if not Path::create_dir_all(out_dir) {
+            return Err(EmitError::WriteError(`failed to create output dir: {out_dir}`.as_str()))
+        }
+    }
+
+    // 2. Copy the template files verbatim.
+    let names = template_file_names()
+    var i: I64 = 0
+    loop (i < names.len()) {
+        let name = names.get(i)
+        let src = `{template_dir}/{name}`.as_str()
+        let dst = `{out_dir}/{name}`.as_str()
+        let result = copy_file(src, dst)
+        when result {
+            Err(e) => return Err(e),
+            Ok(()) => {}
+        }
+        i = i + 1
+    }
+
+    // 3. Write coverage.json (compact) next to the template.
+    let json_path = `{out_dir}/coverage.json`.as_str()
+    let json_text = render_json(report, true)
+    if not File::write_all(json_path, json_text) {
+        return Err(EmitError::WriteError(`failed to write {json_path}`.as_str()))
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Internals
+// ============================================================================
+
+/// The canonical list of template files shipped with the library.
+/// Kept as a single authoritative source so tests can assert the
+/// output directory contains exactly these + `coverage.json`.
+pub func template_file_names() -> List[Str] {
+    let out: List[Str] = List[Str]::new()
+    out.push("index.html")
+    out.push("app.css")
+    out.push("app.js")
+    out.push("prism.min.js")
+    out.push("tml.prism.js")
+    out
+}
+
+/// Copy `src` → `dst`, byte-for-byte. Returns `MissingTemplate` on
+/// read failure and `WriteError` on write failure.
+func copy_file(src: Str, dst: Str) -> Outcome[(), EmitError] {
+    if not Path::exists(src) {
+        return Err(EmitError::MissingTemplate(`template not found: {src}`.as_str()))
+    }
+    let bytes = File::read_all(src)
+    if not File::write_all(dst, bytes) {
+        return Err(EmitError::WriteError(`failed to write {dst}`.as_str()))
+    }
+    Ok(())
+}

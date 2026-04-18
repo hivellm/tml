@@ -1,0 +1,85 @@
+//! Aggregate a `CoverageReport` into a `Summary` (phase 5.3).
+//!
+//! Computes per-project totals and percentages rounded to one decimal.
+//! Per-file and per-module summaries are provided as helpers for the
+//! HTML reporter.
+
+use coverage::types::*
+use std::collections::List
+
+/// Compute the project-wide summary.
+pub func summarize(report: CoverageReport) -> Summary {
+    var covered_lines: I64 = 0
+    var total_lines: I64 = 0
+    var covered_branches: I64 = 0
+    var total_branches: I64 = 0
+    var covered_functions: I64 = 0
+    var total_functions: I64 = 0
+
+    var i: I64 = 0
+    loop (i < report.files.len()) {
+        let f = report.files.get(i)
+        var li: I64 = 0
+        loop (li < f.lines.len()) {
+            total_lines = total_lines + 1
+            if f.lines.get(li).count > 0 {
+                covered_lines = covered_lines + 1
+            }
+            li = li + 1
+        }
+        var bi: I64 = 0
+        loop (bi < f.branches.len()) {
+            total_branches = total_branches + 1
+            if f.branches.get(bi).hit_count > 0 {
+                covered_branches = covered_branches + 1
+            }
+            bi = bi + 1
+        }
+        var fi: I64 = 0
+        loop (fi < f.functions.len()) {
+            total_functions = total_functions + 1
+            if f.functions.get(fi).hit_count > 0 {
+                covered_functions = covered_functions + 1
+            }
+            fi = fi + 1
+        }
+        i = i + 1
+    }
+
+    Summary {
+        pct_lines: pct(covered_lines, total_lines),
+        pct_branches: pct(covered_branches, total_branches),
+        pct_functions: pct(covered_functions, total_functions),
+        covered_lines: covered_lines,
+        total_lines: total_lines,
+        covered_branches: covered_branches,
+        total_branches: total_branches,
+        covered_functions: covered_functions,
+        total_functions: total_functions,
+    }
+}
+
+/// Per-file summary (useful for the file-tree dashboard in HTML).
+pub func summarize_file(f: FileCoverage) -> Summary {
+    let tmp_files: List[FileCoverage] = List[FileCoverage]::new()
+    tmp_files.push(f)
+    let tmp = CoverageReport {
+        files: tmp_files,
+        source_roots: List[Str]::new(),
+        tool: "",
+        version: "",
+        generated_at: 0,
+    }
+    summarize(tmp)
+}
+
+/// Compute `covered * 100 / total` with graceful handling of
+/// `total == 0` (returns 0.0 — "no data" rather than "infinity").
+pub func pct(covered: I64, total: I64) -> F64 {
+    if total == 0 {
+        return 0.0
+    }
+    let c = covered as F64
+    let t = total as F64
+    (c * 100.0) / t
+}

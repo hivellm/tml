@@ -1,0 +1,18 @@
+{
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1",
+  "data": [{
+    "files": [{
+      "filename": "src/add.cpp",
+      "segments": [
+        [1, 1, 42, true, true, false],
+        [2, 1, 42, true, true, false],
+        [3, 1, 0, true, true, false]
+      ],
+      "branches": []
+    }],
+    "functions": [
+      { "name": "_Z3addii", "count": 42, "filenames": ["src/add.cpp"] }
+    ]
+  }]
+}

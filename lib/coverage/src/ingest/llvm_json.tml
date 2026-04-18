@@ -1,0 +1,258 @@
+//! `llvm-cov export -format=text` JSON ingest.
+//!
+//! Consumes the schema documented at
+//! <https://llvm.org/docs/CoverageMappingFormat.html#export-coverage-data>.
+//!
+//! # Schema (subset used)
+//!
+//! ```json
+//! {
+//!   "type": "llvm.coverage.json.export",
+//!   "version": "2.0.1",
+//!   "data": [{
+//!     "files": [{
+//!       "filename": "src/foo.cpp",
+//!       "segments": [
+//!         [<line>, <col>, <count>, <has_count>, <is_region_entry>, <is_gap_region>],
+//!         ...
+//!       ],
+//!       "branches": [[<line>, <col>, <line>, <col>, <count>, ...], ...],
+//!       "functions": [{ "name": "_Z3addii", "count": 42, ... }]
+//!     }],
+//!     "functions": [
+//!       { "name": "_Z3addii", "count": 42, "filenames": ["src/foo.cpp"] },
+//!       ...
+//!     ]
+//!   }]
+//! }
+//! ```
+//!
+//! # Segment → per-line hit count
+//!
+//! LLVM emits segments (points where the region count changes) rather
+//! than explicit per-line counts. The reduction rule used here:
+//!
+//! - Group segments by `line`.
+//! - The line's hit count is the **max** `count` over all segments on
+//!   that line with `has_count = true`.
+//! - Segments with `has_count = false` (gap regions, skipped regions)
+//!   are ignored.
+
+use coverage::types::*
+use std::file::File
+use std::json
+
+/// Read an `llvm-cov export` JSON file at `path` and produce a
+/// `CoverageReport`.
+pub func read_llvm_json(path: Str) -> Outcome[CoverageReport, IngestError] {
+    let text = File::read_all(path)
+    if text.len() == 0 {
+        return Err(IngestError::ReadError(`empty or missing file: {path}`.as_str()))
+    }
+
+    let root = json::parse_fast(text)
+    if root == -1 {
+        return Err(IngestError::ParseError(`llvm-cov JSON: parse failure at {path}`.as_str()))
+    }
+
+    let data_arr = json::object_get(root, "data")
+    if data_arr == -1 or json::is_array(data_arr) == 0 {
+        json::free(root)
+        return Err(IngestError::ParseError("llvm-cov JSON: missing `data` array"))
+    }
+    if json::array_len(data_arr) == 0 {
+        json::free(root)
+        return Err(IngestError::ParseError("llvm-cov JSON: `data` array is empty"))
+    }
+    let data0 = json::array_get(data_arr, 0)
+
+    let files_arr = json::object_get(data0, "files")
+    let files_out: List[FileCoverage] = List[FileCoverage]::new()
+    if files_arr != -1 and json::is_array(files_arr) != 0 {
+        let n = json::array_len(files_arr)
+        var i: I64 = 0
+        loop (i < n) {
+            let fh = json::array_get(files_arr, i)
+            let fc = parse_file(fh)
+            files_out.push(fc)
+            i = i + 1
+        }
+    }
+
+    // Top-level `data[0].functions[]` — correlate by filename.
+    let fns_arr = json::object_get(data0, "functions")
+    if fns_arr != -1 and json::is_array(fns_arr) != 0 {
+        apply_top_functions(files_out, fns_arr)
+    }
+
+    json::free(root)
+
+    Ok(CoverageReport {
+        files: files_out,
+        source_roots: List[Str]::new(),
+        tool: "llvm-cov",
+        version: "",
+        generated_at: 0,
+    })
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Parse one `data[0].files[i]` object into a `FileCoverage`.
+func parse_file(obj: I64) -> FileCoverage {
+    var path: Str = ""
+    let name_h = json::object_get(obj, "filename")
+    if name_h != -1 and json::is_string(name_h) != 0 {
+        path = json::get_string(name_h)
+    }
+
+    let lines: List[LineHit] = derive_lines_from_segments(obj)
+    let branches: List[BranchHit] = derive_branches(obj)
+    // Per-function records may also appear under files[].functions[]; the
+    // top-level `data[0].functions[]` is authoritative and applied later.
+    let functions: List[FuncHit] = List[FuncHit]::new()
+
+    FileCoverage {
+        path: path,
+        lines: lines,
+        functions: functions,
+        branches: branches,
+    }
+}
+
+/// Reduce `files[i].segments` to per-line hit counts.
+/// Segment tuple: `[line, col, count, has_count, is_region_entry, is_gap_region]`.
+func derive_lines_from_segments(file_obj: I64) -> List[LineHit] {
+    let segs = json::object_get(file_obj, "segments")
+    let out: List[LineHit] = List[LineHit]::new()
+    if segs == -1 or json::is_array(segs) == 0 {
+        return out
+    }
+
+    // Map-by-line via two parallel vectors (no HashMap[I64,I64] to avoid
+    // any generic codegen rough edges; O(n) linear scan is fine for the
+    // line counts of a single file).
+    let keys: List[I64] = List[I64]::new()
+    let vals: List[I64] = List[I64]::new()
+
+    let n = json::array_len(segs)
+    var i: I64 = 0
+    loop (i < n) {
+        let seg = json::array_get(segs, i)
+        if json::is_array(seg) != 0 and json::array_len(seg) >= 4 {
+            let line = json::as_i64(json::array_get(seg, 0))
+            let count = json::as_i64(json::array_get(seg, 2))
+            let has_count = json::as_i64(json::array_get(seg, 3))
+            if has_count != 0 {
+                update_max(keys, vals, line, count)
+            }
+        }
+        i = i + 1
+    }
+
+    var k: I64 = 0
+    loop (k < keys.len()) {
+        out.push(LineHit {
+            line: keys.get(k),
+            count: vals.get(k),
+            branch_count: 0,
+            branch_taken: 0,
+        })
+        k = k + 1
+    }
+    out
+}
+
+/// Reduce `files[i].branches` to branch hit records. Tuple shape:
+/// `[start_line, start_col, end_line, end_col, count, file_id, expanded_file_id, kind]`
+/// (we use only `start_line` and `count`).
+func derive_branches(file_obj: I64) -> List[BranchHit] {
+    let out: List[BranchHit] = List[BranchHit]::new()
+    let arr = json::object_get(file_obj, "branches")
+    if arr == -1 or json::is_array(arr) == 0 {
+        return out
+    }
+    let n = json::array_len(arr)
+    var i: I64 = 0
+    var branch_id: I64 = 0
+    loop (i < n) {
+        let br = json::array_get(arr, i)
+        if json::is_array(br) != 0 and json::array_len(br) >= 5 {
+            let line = json::as_i64(json::array_get(br, 0))
+            let count = json::as_i64(json::array_get(br, 4))
+            out.push(BranchHit {
+                line: line,
+                block_id: 0,
+                branch_id: branch_id,
+                hit_count: count,
+            })
+            branch_id = branch_id + 1
+        }
+        i = i + 1
+    }
+    out
+}
+
+/// Apply top-level `data[0].functions[]` records to `files_out` by
+/// matching the first element of each function's `filenames[]` array.
+func apply_top_functions(files_out: List[FileCoverage], fns_arr: I64) {
+    let n = json::array_len(fns_arr)
+    var i: I64 = 0
+    loop (i < n) {
+        let fh = json::array_get(fns_arr, i)
+        var name: Str = ""
+        var count: I64 = 0
+        var target_file: Str = ""
+
+        let name_h = json::object_get(fh, "name")
+        if name_h != -1 and json::is_string(name_h) != 0 {
+            name = json::get_string(name_h)
+        }
+        let count_h = json::object_get(fh, "count")
+        if count_h != -1 and json::is_number(count_h) != 0 {
+            count = json::as_i64(count_h)
+        }
+        let filenames = json::object_get(fh, "filenames")
+        if filenames != -1 and json::is_array(filenames) != 0 and json::array_len(filenames) > 0 {
+            let f0 = json::array_get(filenames, 0)
+            if json::is_string(f0) != 0 {
+                target_file = json::get_string(f0)
+            }
+        }
+
+        // Append to the matching FileCoverage's functions list.
+        var fi: I64 = 0
+        loop (fi < files_out.len()) {
+            let fc = files_out.get(fi)
+            if fc.path == target_file {
+                fc.functions.push(FuncHit {
+                    name: name,
+                    start_line: 0,
+                    hit_count: count,
+                })
+            }
+            fi = fi + 1
+        }
+
+        i = i + 1
+    }
+}
+
+/// `keys` / `vals` act as a parallel map. If `key` already has an
+/// entry, replace its value with `max(existing, value)`; else append.
+func update_max(keys: List[I64], vals: List[I64], key: I64, value: I64) {
+    var i: I64 = 0
+    loop (i < keys.len()) {
+        if keys.get(i) == key {
+            if value > vals.get(i) {
+                vals.set(i, value)
+            }
+            return
+        }
+        i = i + 1
+    }
+    keys.push(key)
+    vals.push(value)
+}

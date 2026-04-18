@@ -1,0 +1,107 @@
+//! JSON emit tests — phase 6.3.
+
+use test::*
+use coverage::types::*
+use coverage::emit::json::render_json
+use std::collections::List
+use std::json
+
+@test("compact JSON — structure is parseable + key fields present")
+func test_compact_structure() {
+    let r = make_report()
+    let text = render_json(r, true)
+    let h = json::parse_fast(text)
+    assert_true(h != -1, "render output must be valid JSON")
+    assert_true(json::is_object(h) != 0, "root is an object")
+
+    let tool = json::object_get(h, "tool")
+    assert_true(tool != -1 and json::is_string(tool) != 0, "tool present")
+    assert_eq(json::get_string(tool), "testtool", "tool value")
+
+    let files = json::object_get(h, "files")
+    assert_true(files != -1 and json::is_array(files) != 0, "files array present")
+    assert_eq(json::array_len(files), 1, "one file")
+
+    let f0 = json::array_get(files, 0)
+    let p = json::object_get(f0, "p")
+    assert_eq(json::get_string(p), "src/a.tml", "compact: short key `p` preserved")
+
+    json::free(h)
+}
+
+@test("pretty JSON — uses full key names")
+func test_pretty_keys() {
+    let r = make_report()
+    let text = render_json(r, false)
+    let h = json::parse_fast(text)
+    assert_true(h != -1, "valid JSON")
+
+    let files = json::object_get(h, "files")
+    let f0 = json::array_get(files, 0)
+    let path = json::object_get(f0, "path")
+    assert_true(path != -1 and json::is_string(path) != 0, "pretty: `path` key present")
+    assert_eq(json::get_string(path), "src/a.tml", "path value")
+
+    // In pretty mode, even zero-hit lines appear in `lines[]`
+    let lines = json::object_get(f0, "lines")
+    assert_eq(json::array_len(lines), 3, "all 3 lines including the zero-hit one")
+
+    json::free(h)
+}
+
+@test("compact JSON — zero-hit lines go to `z` array")
+func test_compact_zero_lines() {
+    let r = make_report()
+    let text = render_json(r, true)
+    let h = json::parse_fast(text)
+
+    let files = json::object_get(h, "files")
+    let f0 = json::array_get(files, 0)
+
+    let l = json::object_get(f0, "l")
+    assert_eq(json::array_len(l), 2, "compact: only the 2 hit lines in `l`")
+
+    let z = json::object_get(f0, "z")
+    assert_true(z != -1 and json::is_array(z) != 0, "`z` present")
+    assert_eq(json::array_len(z), 1, "1 zero-hit line")
+    assert_eq(json::as_i64(json::array_get(z, 0)), 3, "line 3 is the zero one")
+
+    json::free(h)
+}
+
+@test("summary is embedded in the output")
+func test_summary() {
+    let r = make_report()
+    let text = render_json(r, true)
+    let h = json::parse_fast(text)
+    let summary = json::object_get(h, "summary")
+    assert_true(summary != -1, "summary present")
+    assert_eq(json::as_i64(json::object_get(summary, "total_lines")), 3, "total_lines=3")
+    assert_eq(json::as_i64(json::object_get(summary, "covered_lines")), 2, "covered_lines=2")
+    json::free(h)
+}
+
+// Helper ----------------------------------------------------------------
+
+func make_report() -> CoverageReport {
+    let lines: List[LineHit] = List[LineHit]::new()
+    lines.push(LineHit { line: 1, count: 5, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 2, count: 5, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 3, count: 0, branch_count: 0, branch_taken: 0 })
+
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage {
+        path: "src/a.tml",
+        lines: lines,
+        functions: List[FuncHit]::new(),
+        branches: List[BranchHit]::new(),
+    })
+
+    CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "testtool",
+        version: "1.0",
+        generated_at: 0,
+    }
+}

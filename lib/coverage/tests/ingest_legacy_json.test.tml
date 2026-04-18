@@ -1,0 +1,47 @@
+//! Legacy TML coverage format ingest tests — phase 4.3.
+//!
+//! The legacy format is plain text (one function name per line),
+//! NOT JSON — see `lib/coverage/docs/legacy-schema.md`.
+
+use test::*
+use coverage::types::*
+use coverage::ingest::legacy_json::read_legacy_json
+
+@test("legacy text — 4 functions synthesized into <unknown>")
+func test_basic_four_funcs() {
+    let r = when read_legacy_json("lib/coverage/tests/fixtures/legacy_json/cov_core_str.txt") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, "read_legacy_json failed")
+            return
+        }
+    }
+    assert_eq(r.tool, "tml-legacy", "tool tag")
+    assert_eq(r.files.len(), 1, "single synthetic file")
+    let f = r.files.get(0)
+    assert_eq(f.path, "<unknown>", "synthetic path")
+    assert_eq(f.functions.len(), 4, "4 function names")
+    assert_eq(f.functions.get(0).name, "lib::core::str::basic::substring_from", "name preserved")
+    assert_eq(f.functions.get(0).hit_count, 1, "hit_count defaults to 1")
+    assert_eq(f.lines.len(), 0, "no line data in legacy format")
+    assert_eq(f.branches.len(), 0, "no branch data in legacy format")
+}
+
+@test("legacy text with blank lines — blanks are skipped")
+func test_blank_lines_skipped() {
+    let r = when read_legacy_json("lib/coverage/tests/fixtures/legacy_json/cov_with_blank_lines.txt") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, "read_legacy_json failed")
+            return
+        }
+    }
+    let f = r.files.get(0)
+    assert_eq(f.functions.len(), 3, "foo/bar/baz — blanks ignored")
+}
+
+@test("missing legacy file returns ReadError")
+func test_missing() {
+    let r = read_legacy_json("lib/coverage/tests/fixtures/legacy_json/does_not_exist.txt")
+    assert_true(r.is_err(), "missing file must fail")
+}

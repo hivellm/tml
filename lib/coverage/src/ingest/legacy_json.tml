@@ -1,0 +1,68 @@
+//! Legacy TML `tml test --coverage` format ingest.
+//!
+//! Despite the historical `read_legacy_json` name, the legacy collector
+//! (`lib/test/runtime/coverage.c` + the test coordinator) emits **plain
+//! text**, one covered function name per line — **not** JSON. See
+//! [`docs/legacy-schema.md`](../../docs/legacy-schema.md) for the full
+//! reverse-engineered format.
+//!
+//! # Ingest strategy
+//!
+//! The legacy format carries only function names (no hit counts, no file
+//! paths, no line data). This reader:
+//!
+//! 1. Reads the file, splits by `\n`, trims `\r`.
+//! 2. Emits a single synthetic `FileCoverage` with `path = "<unknown>"`
+//!    whose `functions` list contains every name found.
+//! 3. Sets every `FuncHit.hit_count = 1` (the legacy format's only
+//!    signal is "function executed at least once").
+//!
+//! The result is intentionally lossy — downstream LCOV / HTML output
+//! can tell "which functions ran" but cannot answer "how many times" or
+//! "which lines". Callers that need richer data must regenerate
+//! coverage under the new LLVM-based collection path (outside the
+//! scope of this library).
+
+use coverage::types::*
+use std::file::File
+
+/// Read a legacy TML coverage file (plain text, one function name per
+/// line) and produce a `CoverageReport`.
+pub func read_legacy_json(path: Str) -> Outcome[CoverageReport, IngestError] {
+    let content = File::read_all(path)
+    if content.len() == 0 {
+        return Err(IngestError::ReadError(`empty or missing file: {path}`.as_str()))
+    }
+
+    let raw_lines = content.split("\n")
+    let fns: List[FuncHit] = List[FuncHit]::new()
+
+    var i: I64 = 0
+    loop (i < raw_lines.len()) {
+        let line = raw_lines.get(i).trim_end()
+        if line.len() > 0 {
+            fns.push(FuncHit {
+                name: line,
+                start_line: 0,
+                hit_count: 1,
+            })
+        }
+        i = i + 1
+    }
+
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage {
+        path: "<unknown>",
+        lines: List[LineHit]::new(),
+        functions: fns,
+        branches: List[BranchHit]::new(),
+    })
+
+    Ok(CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "tml-legacy",
+        version: "",
+        generated_at: 0,
+    })
+}
