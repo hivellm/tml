@@ -1342,8 +1342,12 @@ target_include_directories(tml_mcp_lib PUBLIC include src)
 # option(TML_USE_LLVM_BACKEND ...) is declared at the top of this file
 # ============================================================================
 if(TML_USE_LLVM_BACKEND)
-    # Find LLVM package
-    find_package(LLVM CONFIG QUIET)
+    # Find LLVM package.
+    # HINTS points at the local build/llvm/ produced by scripts/build-llvm.bat,
+    # so a fresh clone that ran the bootstrap works with zero environment
+    # variables. External installs (LLVM_DIR env) still take priority via
+    # CMake's standard config-package search.
+    find_package(LLVM CONFIG QUIET HINTS "${CMAKE_SOURCE_DIR}/../build/llvm/lib/cmake/llvm")
 
     if(NOT LLVM_FOUND)
         # Search paths for LLVM headers (C API headers in source tree)
@@ -1367,12 +1371,12 @@ if(TML_USE_LLVM_BACKEND)
 
         # Search paths for LLVM static libraries
         set(LLVM_LIB_PATHS
-            "${CMAKE_SOURCE_DIR}/../build/llvm/Release/lib"         # Local build output
+            "${CMAKE_SOURCE_DIR}/../build/llvm/lib"                 # Local (Ninja single-config)
+            "${CMAKE_SOURCE_DIR}/../build/llvm/Release/lib"         # Local (multi-config)
             "${CMAKE_SOURCE_DIR}/../src/llvm-install/lib"
             "$ENV{LLVM_DIR}/lib"
             "$ENV{LLVM_ROOT}/lib"
             "C:/Program Files/LLVM/lib"
-            "F:/LLVM/lib"
             "/usr/lib/llvm-18/lib"
             "/usr/lib/llvm-17/lib"
             "/usr/local/opt/llvm/lib"
@@ -1468,14 +1472,34 @@ if(TML_USE_LLVM_BACKEND)
                 endif()
             endif()
 
+            # Detect which LLVM targets were built so we don't ask for
+            # libs that were excluded (e.g. AArch64 when build-llvm.bat
+            # set LLVM_TARGETS_TO_BUILD=X86).
+            set(TML_LLVM_HAS_AARCH64 FALSE)
+            foreach(LIB_DIR ${LLVM_LIBRARY_DIRS})
+                if(EXISTS "${LIB_DIR}/LLVMAArch64CodeGen.lib"
+                    OR EXISTS "${LIB_DIR}/libLLVMAArch64CodeGen.a")
+                    set(TML_LLVM_HAS_AARCH64 TRUE)
+                    break()
+                endif()
+            endforeach()
+
             if(HAS_STATIC_LIBS)
                 # Link individual static LLVM libraries (no clang DLL needed)
                 # Complete dependency list with all transitive deps
                 target_link_libraries(tml_backend PUBLIC
                     # X86 target
                     LLVMX86CodeGen LLVMX86AsmParser LLVMX86Desc LLVMX86Disassembler LLVMX86Info LLVMX86TargetMCA
-                    # AArch64 target (for cross-compilation support)
-                    LLVMAArch64CodeGen LLVMAArch64AsmParser LLVMAArch64Desc LLVMAArch64Disassembler LLVMAArch64Info LLVMAArch64Utils
+                )
+                if(TML_LLVM_HAS_AARCH64)
+                    # AArch64 target (cross-compilation support, optional)
+                    target_link_libraries(tml_backend PUBLIC
+                        LLVMAArch64CodeGen LLVMAArch64AsmParser LLVMAArch64Desc
+                        LLVMAArch64Disassembler LLVMAArch64Info LLVMAArch64Utils
+                    )
+                    target_compile_definitions(tml_backend PUBLIC TML_LLVM_HAS_AARCH64=1)
+                endif()
+                target_link_libraries(tml_backend PUBLIC
                     # Optimization passes
                     LLVMPasses LLVMCoroutines LLVMipo LLVMVectorize LLVMSandboxIR
                     LLVMAggressiveInstCombine LLVMInstCombine LLVMScalarOpts
