@@ -66,24 +66,35 @@ so the natural forms are now the regression guard.
 
 ## Phase 3: CLI Subcommand (4 items)
 
-- [ ] 3.1 Create `compiler/src/cli/commands/cmd_cc.cpp` with the `cc`
-  subcommand entry point and flag table: `-o`, `-c`, `-O0`/`-O1`/`-O2`,
-  `-I <path>`, `-D <name>[=<val>]`, `-target <triple>`, `-g`, `--emit=<what>`.
-  Register it in the CLI dispatch table in `compiler/src/cli/main.cpp`
-  alongside `tml compile` / `tml build` / `tml test`.
-- [ ] 3.2 Wire the pipeline: read file bytes → call `cc_bridge_preproc`
-  with include paths and defines → pass the token stream to
-  `cc_bridge_parse` → pass the AST to `cc_bridge_lower` → hand the
-  `MirModule` to the existing MIR → LLVM backend (`compiler/src/backend/llvm_backend.cpp`)
-  → write `.obj` via the existing LLD linker integration.
-- [ ] 3.3 Implement `--emit` forms: `tokens` prints the token stream,
-  `ast` prints the `CTranslationUnit`, `mir` prints the lowered MIR,
-  `llvm-ir` prints the emitted LLVM IR before linking, `obj` is the
-  default and writes the output file. Each form exits early without
-  invoking downstream stages.
-- [ ] 3.4 Wire `-target <triple>` to select the `CAbiTarget` passed to
-  `c_lower` (Windows x64 LLP64 vs System V AMD64 LP64) and to pass the
-  matching target triple to the LLVM backend. Default to host triple.
+- [x] 3.1 Created `compiler/src/cli/commands/cmd_cc.{hpp,cpp}` with
+  the `run_cc(argc, argv, verbose)` entry point and the full flag
+  surface: `-o <path>`, `-c` (accepted for clang parity),
+  `-O0..-O3`, `-I <path>` (repeatable), `-D NAME[=VAL]`
+  (repeatable), `-target <triple>`, `-g`, `--emit=obj|llvm-ir|mir|ast|tokens`,
+  `-h/--help`. Two-token forms (`-I path`), attached forms
+  (`-Ipath`), and `-X=value` forms all accepted. Registered in
+  `compiler/src/cli/dispatcher.cpp` as the `cc` command; `tml cc
+  --help` and invalid-flag / no-input paths all emit usage.
+- [~] 3.2 Pipeline wired through `cc_bridge_preproc` → `cc_bridge_parse`
+  → `cc_bridge_lower` with proper ownership-transfer handling and
+  diagnostic rendering. The backend hand-off to
+  `compiler/src/backend/llvm_backend.cpp` is a TODO in cmd_cc.cpp
+  that will become active as soon as `cc_bridge_mir_borrow` returns
+  a real `mir::Module*` (gated on Phase 2.2 wire-up). Today any
+  invocation exits with the stub diagnostic from `cc_bridge`.
+- [~] 3.3 `--emit` stage-stopping logic in place. `tokens` / `ast` /
+  `mir` exit after the matching stage but currently print a
+  "renderer not yet implemented" stub because `cc_bridge` doesn't
+  expose enumerators over its opaque handles yet. The stage switch
+  itself is a one-line change when the enumerators land. `obj` /
+  `llvm-ir` need the backend hand-off from 3.2.
+- [x] 3.4 `-target <triple>` is parsed and mapped to `CcAbiTarget`
+  via a `abi_for_triple` helper: `x86_64-pc-windows-*` →
+  `WINDOWS_X64_LLP64`; `x86_64-*-linux-*` / other `x86_64-unknown-*`
+  → `SYSV_AMD64_LP64`; `aarch64-*` / `arm64-*` → `AARCH64`;
+  `i686-*` / `i386-*` → `I686`; empty / unrecognised → `HOST`. The
+  value is forwarded into `cc_bridge_lower` for the lowerer's
+  size/alignment/calling-convention decisions.
 
 ## Phase 4: Self-Compilation Gate (2 items)
 

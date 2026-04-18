@@ -1769,6 +1769,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_coverage.cpp
     # C frontend FFI bridge (phase24)
     src/cc/cc_bridge.cpp
+    src/cli/commands/cmd_cc.cpp
     src/testing/testing_process.cpp
     src/testing/testing_protocol.cpp
     src/testing/testing_dispatcher_gen.cpp
