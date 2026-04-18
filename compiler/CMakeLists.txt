@@ -1942,7 +1942,7 @@ if(TML_BUILD_MODULAR)
     else()
         add_executable(tml src/launcher/main_launcher.cpp src/tml.rc)
     endif()
-    target_include_directories(tml PRIVATE include src)
+    target_include_directories(tml PRIVATE include src ${CMAKE_CURRENT_BINARY_DIR}/include)
     target_link_libraries(tml PRIVATE tml_plugin_loader)
     message(STATUS "Launcher: tml.exe (thin, ~400KB, modular with plugins)")
 

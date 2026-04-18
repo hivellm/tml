@@ -33,7 +33,12 @@
 
 use coverage::types::*
 use coverage::ingest::lcov::read_lcov
-use coverage::ingest::llvm_json::read_llvm_json
+// llvm_json ingest is temporarily not re-exported from run(): a codegen
+// K001 (invalid `getelementptr inbounds i64, ptr, i64 0, i64 0` emitted
+// around JSON handle access) prevents building the CLI when the llvm_json
+// module is pulled in. Direct consumers can still import
+// `coverage::ingest::llvm_json::read_llvm_json` — the function itself
+// type-checks; only the code path from the CLI binary is affected.
 use coverage::ingest::legacy_json::read_legacy_json
 use coverage::merge::merge
 use coverage::filter::filter_paths
@@ -114,7 +119,10 @@ func ingest_one(path: Str) -> Outcome[CoverageReport, IngestError] {
         return read_lcov(path)
     }
     if path.ends_with(".json") {
-        return read_llvm_json(path)
+        // Falls through to UnknownFormat until the codegen K001 on
+        // JSON handle access is fixed. Callers that must ingest
+        // llvm-cov JSON today should import the module directly.
+        return Err(IngestError::UnknownFormat("llvm-cov JSON ingest is temporarily disabled in the CLI dispatcher"))
     }
     if path.ends_with(".txt") {
         return read_legacy_json(path)

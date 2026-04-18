@@ -15,6 +15,7 @@ TML_MODULE("launcher")
 #include "common/crc32c.hpp"
 #include "plugin/abi.h"
 #include "plugin/loader.hpp"
+#include "version_generated.hpp"  // tml::VERSION (CMake-generated from /VERSION)
 
 #include <cstring>
 #include <filesystem>
@@ -303,10 +304,9 @@ static int try_daemon_forward_launcher(int argc, char* argv[]) {
 
 } // anonymous namespace
 
-// Version is generated at build time
-#ifndef TML_VERSION
-#define TML_VERSION "0.1.6"
-#endif
+// Version comes from compiler/include/version_generated.hpp
+// which CMake materializes from the /VERSION file on every build.
+#define TML_VERSION tml::VERSION
 
 // Function pointer type for the compiler's main entry point
 typedef int (*CompilerMainFn)(int argc, char* argv[]);
