@@ -20,7 +20,11 @@ use coverage::types::*
 use std::collections::List
 
 /// Filter `report.files` by include / exclude glob lists.
-pub func filter(report: CoverageReport, include: List[Str], exclude: List[Str]) -> CoverageReport {
+///
+/// Named `filter_paths` (not `filter`) to avoid a compiler bug where
+/// `filter` would get confused with `core::iter::Filter` during
+/// generic monomorphization.
+pub func filter_paths(report: CoverageReport, include: List[Str], exclude: List[Str]) -> CoverageReport {
     let kept: List[FileCoverage] = List[FileCoverage]::new()
     var i: I64 = 0
     loop (i < report.files.len()) {
