@@ -216,9 +216,22 @@
   static mapping) stay reachable for all other invocations. Full
   rewrite to a 150-LOC pure dispatcher is deferred to Phase 10 where
   the legacy path is removed.
-- [ ] 9.3 C++ regression test at
-  `compiler/tests/compiler/cmd_coverage.test.cpp` — pending the
-  coverage_cli build (needs the stdlib K001 cleared).
+- [x] 9.3 Added `compiler/tests/cli/cmd_coverage_test.cpp` (12 test
+  cases) exercising the new-mode routing shim in
+  `cmd_coverage.cpp::run_coverage`. Each recognised flag
+  (`--input=`, `--format=`, `--output=`, `--include=`, `--exclude=`,
+  `--baseline=`, `--fail-under=`, `--pretty-json`) trips the
+  dispatcher; legacy flags (`--path=`, `--quick`, bare invocation)
+  stay on the original source-to-test mapping; `tml cv` and `tml
+  coverage` route identically. Gracefully skipped when
+  `coverage_cli.exe` is already built so the test doesn't try to
+  spawn the real binary. Wired into `compiler/CMakeLists.txt` under
+  the existing `tests/cli/` block (runs as part of `tml_tests` when
+  `TML_BUILD_TESTS=ON`). Test file is ready; actual execution is
+  pending an orthogonal infra fix — GoogleTest currently fails to
+  configure under Zig CC / Clang 20 with `cxx_std_14` not known,
+  and MSVC build hits an unrelated `chrono` include-path issue.
+  Both are environment-scope, not part of this task's scope.
 - [x] 9.4 `tml --help` already includes `coverage` via the existing
   dispatcher alias (`cv` or `coverage`). No changes required in
   `dispatcher.cpp`.

@@ -2068,6 +2068,7 @@ if(TML_BUILD_TESTS)
         tests/cli/parallel_build_test.cpp
         tests/cli/builder_test.cpp
         tests/cli/tty_output_test.cpp
+        tests/cli/cmd_coverage_test.cpp
         # Integration
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
