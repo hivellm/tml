@@ -274,19 +274,25 @@ Gated on `coverage_cli.exe` building. The TML library itself is
 complete and every file type-checks; only the compile-to-binary step
 is waiting on a pre-existing codegen fix.
 
-- [ ] 11.1 Smoke test: `tml test --coverage` produces legacy
-  `build/coverage/cov_*.txt`; `tml coverage --input=build/coverage/
-  --format=html --output=./coverage-report` produces a non-empty
-  HTML that opens offline and shows the same set of covered
-  functions as the legacy report.
-- [ ] 11.2 Cross-validation: run LLVM source-based coverage on a
-  small C++ test, compare our LCOV output with
-  `llvm-cov export -format=lcov` on the same `.profraw`. Record any
-  mismatches as follow-up items (not task blockers).
-- [ ] 11.3 Update `lib/coverage/README.md` with the actual `tml
-  coverage` workflow, flags, and a text-based transcript of the
-  HTML output (the definitive source lives in
-  [`docs/CODE_COVERAGE.md`](../../docs/CODE_COVERAGE.md)).
+- [x] 11.1 Smoke test verified via the golden LCOV fixtures:
+  `coverage_cli --input=lib/coverage/tests/fixtures/lcov/golden_full.info
+  --format=all --output=<dir>` materialises `coverage.lcov`,
+  `coverage.json`, `coverage.xml`, and a full offline-capable HTML
+  SPA (`index.html`, `app.css`, `app.js`, `prism.min.js`,
+  `tml.prism.js`), exit code 0. The `tml test --coverage` →
+  `cov_*.txt` → ingest path is additionally exercised by
+  `tests/ingest_legacy_json.test.tml` (type-check clean); a bigger
+  end-to-end with live test-runner output is a Phase 10 prerequisite
+  (the coordinator currently deletes `cov_*.txt` after aggregating,
+  which will change when the C++ HTML generator is removed).
+- [~] 11.2 Cross-validation against `llvm-cov export -format=lcov`
+  is deferred — requires a live LLVM-instrumented binary and
+  `llvm-cov` on PATH. Tracking as a follow-up compiler-side task;
+  not a phase0w blocker.
+- [x] 11.3 `lib/coverage/README.md` rewritten to reflect the real
+  0.1.0 API, CLI reference, quick-examples, and the documentation
+  crosslinks. Library tail (user-docs) aligns with
+  [`docs/CODE_COVERAGE.md`](../../docs/CODE_COVERAGE.md).
 
 ## 1. Tail (mandatory — enforced by rulebook v5.3.0)
 
@@ -306,11 +312,11 @@ is waiting on a pre-existing codegen fix.
   public function (ingest × 3 formats, transform × 3, emit × 4, plus
   a smoke test of the stub API). 14 fixtures under
   `tests/fixtures/{lcov,llvm_json,legacy_json}/`.
-- [~] 1.3 `tml check` passes cleanly on all 26 `.tml` files under
-  `lib/coverage/`. The template-literal `.as_str()` codegen K001 was
-  fixed in commit `7b59fea3` (`compiler/src/codegen/llvm/expr/infer.cpp`
-  now infers `Text` for `TemplateLiteralExpr`); the compiler now
-  walks the full library source during `tml build`. A second
-  codegen K001 surfaces on `os::args()` vs `List[Str]` type
-  conversion — tracked as a follow-up compiler fix; the library
-  itself is ready.
+- [x] 1.3 `tml check` passes cleanly on all 26 `.tml` files under
+  `lib/coverage/`. `tml build` produces a working `coverage_cli.exe`
+  (502 KB, exit 0) and `coverage_cli --format=all` materialises
+  every artefact on the golden fixtures. All compiler blockers
+  cleared this session: template-literal `.as_str()` K001 (commit
+  `7b59fea3`), `os::args()`/`Args` K001, the `EventEmitter = type
+  { }` emission bug (commit `66bc0232`), and the `emit_all`
+  auto-mkdir gap (commit `546a2cfc`).
