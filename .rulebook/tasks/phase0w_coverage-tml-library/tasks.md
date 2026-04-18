@@ -81,10 +81,11 @@
 - [x] 3.2 Added `tests/fixtures/llvm_json/{minimal,with_branches,malformed}.json`
   + `tests/ingest_llvm_json.test.tml` (4 cases: minimal, branches,
   malformed error path, missing-file error path). All type-check.
-- [ ] 3.3 Cross-validation against `llvm-cov export -format=lcov`
-  requires a live LLVM-instrumented test binary plus `llvm-cov` on
-  PATH; deferred pending Phase 11 (parity check) or a future
-  codegen-side task that lights up LLVM source-based coverage.
+- [x] 3.3 Cross-validated against `llvm-cov export -format=lcov`
+  under 11.2 — see `lib/coverage/docs/llvm-cov-parity.md` and the
+  `test_llvm_cov_reference` regression in `ingest_lcov.test.tml`.
+  Aggregate counts match exactly between llvm-cov and the TML
+  ingest/emit pair; the `sort | diff` of the two LCOV files exits 0.
 
 ## Phase 4: Legacy TML coverage ingest (transition path, 3 items)
 
