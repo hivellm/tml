@@ -33,11 +33,17 @@ so the natural forms are now the regression guard.
 
 ## Phase 2: FFI Bridge (3 items)
 
-- [ ] 2.1 Create `compiler/include/cc/cc_bridge.hpp` with a plain-C ABI
-  surface: `CcTokenStream`, `CcTranslationUnit`, `CcMirModule` opaque
-  handle types; `cc_bridge_preproc`, `cc_bridge_parse`, `cc_bridge_lower`,
-  and three `cc_bridge_free_*` functions. Document the ownership contract
-  in each function's doc comment (caller frees everything it receives).
+- [x] 2.1 Created `compiler/include/cc/cc_bridge.hpp` with the plain-C
+  ABI surface: opaque handle types `CcTokenStream`,
+  `CcTranslationUnit`, `CcMirModule`, `CcDiagnostics`; pipeline entry
+  points `cc_bridge_preproc` / `cc_bridge_parse` / `cc_bridge_lower`;
+  matching `cc_bridge_free_*` destructors; `CcAbiTarget` enum
+  (HOST / Windows x64 LLP64 / SysV AMD64 LP64 / i686 / aarch64);
+  diagnostic accumulator with `CcDiagnostic` records; and a
+  `cc_bridge_mir_borrow` accessor that returns a `const mir::Module*`
+  so the existing LLVM backend can consume it without copying.
+  Ownership contract documented: single-owner handles, transfer on
+  successful consumption, caller retains ownership on failure.
 - [ ] 2.2 Create `compiler/src/cc/cc_bridge.cpp` implementing the handle
   types and dispatching each bridge call to the matching TML entry point
   registered via `tml_register_extern`. `cc_bridge_preproc` drives the
