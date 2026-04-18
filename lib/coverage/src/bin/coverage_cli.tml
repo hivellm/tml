@@ -9,30 +9,41 @@ use std::collections::List
 use std::os
 
 func main() -> I32 {
-    let argv: List[Str] = os::args()
+    let argv: List[Str] = collect_argv()
 
     if argv.len() < 2 {
-        os::println(help_text())
+        println(help_text())
         return 2
     }
 
     let first = argv.get(1)
     if first == "--help" or first == "-h" {
-        os::println(help_text())
+        println(help_text())
         return 0
     }
 
     let parsed = parse_argv(argv)
     when parsed {
         Err(msg) => {
-            os::eprintln(msg)
-            os::eprintln(help_text())
+            println(msg)
+            println(help_text())
             return 2
         },
         Ok(args) => {
             return run(args)
         }
     }
+}
+
+/// Collect argv into `List[Str]` via the `os::Args` iterator API.
+/// (`os::args()` returns an iterator struct, not a List.)
+func collect_argv() -> List[Str] {
+    let out: List[Str] = List[Str]::new()
+    var it = os::args()
+    loop (it.has_next()) {
+        out.push(it.next())
+    }
+    out
 }
 
 /// Build a `CliArgs` from argv. Returns `Err(message)` on unknown
@@ -100,7 +111,7 @@ func parse_argv(argv: List[Str]) -> Outcome[CliArgs, Str] {
             continue
         }
         // --fail-under=<pct> is recognized but value parsing is
-        // deferred; any non-empty value disables the gate for now.
+        // deferred; any non-empty value is silently accepted for now.
         if a.starts_with("--fail-under=") {
             i = i + 1
             continue

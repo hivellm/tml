@@ -88,6 +88,11 @@ auto LLDLinker::find_lld() -> bool {
     // Project-relative LLVM install (for dev builds)
     search_paths.push_back(fs::current_path() / "src" / "llvm-install" / "bin");
 
+    // Project-relative LLVM build output (produced by scripts/build-llvm.bat)
+    // — lld-link.exe lives under build/llvm/bin/ for the locally-vendored
+    // LLVM build. No LLVM_DIR env var needed.
+    search_paths.push_back(fs::current_path() / "build" / "llvm" / "bin");
+
     // PATH entries
     if (const char* path_env = std::getenv("PATH")) {
         std::string path_str(path_env);

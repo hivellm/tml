@@ -66,7 +66,7 @@ pub func run(args: CliArgs) -> I32 {
         when r {
             Ok(rep) => reports.push(rep),
             Err(e) => {
-                os::eprintln("coverage: ingest failed")
+                println("coverage: ingest failed")
                 return 1
             }
         }
@@ -83,7 +83,7 @@ pub func run(args: CliArgs) -> I32 {
     let emit_result = emit_all(final_report, args.output_dir, args.format, args.compact_json)
     when emit_result {
         Err(e) => {
-            os::eprintln("coverage: emit failed")
+            println("coverage: emit failed")
             return 1
         },
         Ok(()) => {}
@@ -94,7 +94,7 @@ pub func run(args: CliArgs) -> I32 {
         Just(threshold) => {
             let s = summarize(final_report)
             if s.pct_lines < threshold {
-                os::eprintln("coverage: below --fail-under threshold")
+                println("coverage: below --fail-under threshold")
                 return 2
             }
         },
