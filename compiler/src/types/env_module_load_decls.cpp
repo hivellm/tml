@@ -7,6 +7,7 @@ TML_MODULE("compiler")
 #include "types/module.hpp"
 #include "types/parsed_module_file.hpp"
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 
@@ -781,16 +782,30 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
                 // Note: We use silent=true because the path might be an item import
                 // (e.g., "use core::default::Default" where Default is a symbol, not a module)
                 //
-                // OPTIMIZATION: For sibling files in a directory module (not mod.tml itself),
-                // skip eager loading of external dependencies. These are only needed when the
-                // sibling file's code is actually compiled, not when building the parent module's
-                // type signature. This prevents transitive dependency bloat — e.g., importing
+                // For sibling files in a directory module (not mod.tml itself), skip eager loading
+                // of external *function* dependencies to avoid transitive bloat — e.g. importing
                 // from std::http should not pull in std::zlib just because encoding.tml uses it.
-                // Intra-module references (use_path starts with module_path) are still loaded
-                // since they define types/functions within the same module.
+                // Intra-module references (use_path starts with module_path) are always loaded.
+                //
+                // TYPE imports (last segment starts with an uppercase letter) MUST still be loaded
+                // eagerly even from siblings, because public types in the sibling may reference
+                // those types as field types — and codegen needs the complete field list of any
+                // transitively reachable struct. Without this, a field `events: EventEmitter`
+                // inside `std::stream::readable_stream::ReadableStream` would never trigger the
+                // load of `std::events`, and the EventEmitter struct would be emitted as
+                // `%struct.EventEmitter = type { }` (zero fields) via a fallback path.
                 bool is_intra_module =
                     use_path.find(module_path + "::") == 0 || use_path == module_path;
-                bool should_load = is_from_mod_file || is_intra_module;
+                bool last_seg_is_type_like = false;
+                if (!use_decl.path.segments.empty()) {
+                    const auto& last = use_decl.path.segments.back();
+                    if (!last.empty()) {
+                        unsigned char c0 = static_cast<unsigned char>(last[0]);
+                        last_seg_is_type_like = std::isupper(c0) != 0;
+                    }
+                }
+                bool should_load = is_from_mod_file || is_intra_module || last_seg_is_type_like;
+
 
                 if (should_load) {
                     bool prev_abort_on_error = abort_on_module_error_;

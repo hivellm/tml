@@ -185,12 +185,18 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         resolving_types.insert(name);
         const auto& all_modules = env_.module_registry()->get_all_modules();
         for (const auto& [mod_name, mod] : all_modules) {
-            auto it = mod.structs.find(name);
-            if (it == mod.structs.end())
-                it = mod.internal_structs.find(name);
-            if (it != mod.structs.end() ||
-                (it = mod.internal_structs.find(name)) != mod.internal_structs.end()) {
-                const auto& sdef = it->second;
+            const types::StructDef* sdef_ptr = nullptr;
+            auto pub_it = mod.structs.find(name);
+            if (pub_it != mod.structs.end()) {
+                sdef_ptr = &pub_it->second;
+            } else {
+                auto priv_it = mod.internal_structs.find(name);
+                if (priv_it != mod.internal_structs.end()) {
+                    sdef_ptr = &priv_it->second;
+                }
+            }
+            if (sdef_ptr) {
+                const auto& sdef = *sdef_ptr;
                 if (sdef.type_params.empty()) {
                     // Non-generic: emit now. Register FIRST to prevent infinite
                     // recursion if fields reference each other (A→B→A).
