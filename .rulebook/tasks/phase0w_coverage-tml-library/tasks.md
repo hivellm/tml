@@ -235,18 +235,19 @@
 - [x] 9.4 `tml --help` already includes `coverage` via the existing
   dispatcher alias (`cv` or `coverage`). No changes required in
   `dispatcher.cpp`.
-- [~] 9.5 End-to-end verification: `tml build
+- [x] 9.5 End-to-end verification complete. `tml build
   lib/coverage/src/bin/coverage_cli.tml --stage=parser:cpp -o
-  build/debug/bin/coverage_cli.exe` now produces a 502KB executable
-  that runs and prints its `--help` text. Prior blockers cleared:
-  the `TemplateLiteralExpr` fix in `infer.cpp`, the `os::args()`
-  codegen K001, and the `EventEmitter = type { }` emission bug
-  (commit 66bc0232 — UB in the llvm_types.cpp struct-resolution
-  loop + missing `pub mod events` in `lib/std/src/mod.tml` +
-  sibling-file type-import eager-load rule). End-to-end
-  `--input=<lcov> --format=json` currently exits non-zero with
-  "emit failed" and leak warnings — tracked as a separate runtime
-  issue in the coverage library, not a compiler blocker.
+  build/debug/bin/coverage_cli.exe` produces a 502KB executable.
+  Running `coverage_cli --input=<fixture.info> --format=all
+  --output=<dir>` on the golden LCOV fixtures materialises all four
+  artefacts (`coverage.lcov`, `coverage.json`, `coverage.xml`, HTML
+  SPA with app.css/app.js/prism/tml.prism.js) and exits 0. Blockers
+  cleared across this session: the `TemplateLiteralExpr` fix in
+  `infer.cpp`, the `os::args()` codegen K001, the `EventEmitter =
+  type { }` emission bug (commit 66bc0232 — UB in the llvm_types.cpp
+  struct-resolution loop + missing `pub mod events` in
+  `lib/std/src/mod.tml` + sibling-file type-import eager-load rule),
+  and the `emit_all` auto-mkdir gap (commit 546a2cfc).
 
 ## Phase 10: Remove the C++ HTML generator (3 items — pending runtime parity)
 
