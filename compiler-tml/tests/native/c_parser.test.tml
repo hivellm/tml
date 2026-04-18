@@ -34,6 +34,13 @@ use std::collections::list::List
     }
 }
 
+// NOTE: `cp_parse_translation_unit` on `int x;` infinite-loops /
+// segfaults. Documented here for the next session — the tokens
+// produced by `pp_tokenize_source` reach c_lexer cleanly
+// (verified by `tml cc foo.c --emit=tokens`) but the parser hangs
+// in the TU driver loop. Regression-test TBD once the parser fix
+// lands.
+
 @test func test_parser_declarator_for_ident() {
     let pp = List[PpToken]::new(3 as I64)
     pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
