@@ -33,11 +33,10 @@
 
 use coverage::types::*
 use coverage::ingest::lcov::read_lcov
-// llvm_json is available as a direct import but not routed through
-// `run()`: pulling the module in transitively imports `std::stream`
-// which hits a pre-existing codegen K001 on struct emission order
-// (`struct.EventEmitter` forward-referenced by `struct.ReadableStream`).
-// Direct consumers can still use `coverage::ingest::llvm_json::read_llvm_json`.
+// Re-enabled after the EventEmitter struct-emission K001 was fixed in
+// commit 66bc0232 (phase0w). `std::stream` now emits cleanly, so the
+// transitive import that pulls `read_llvm_json` in is once again safe.
+use coverage::ingest::llvm_json::read_llvm_json
 use coverage::ingest::legacy_json::read_legacy_json
 use coverage::merge::merge
 use coverage::filter::filter_paths
@@ -119,7 +118,7 @@ func ingest_one(path: Str) -> Outcome[CoverageReport, IngestError] {
         return read_lcov(path)
     }
     if path.ends_with(".json") {
-        return Err(IngestError::UnknownFormat("llvm-cov JSON ingest is disabled in the CLI dispatcher (pre-existing codegen struct-order K001 when std::stream is transitively imported)"))
+        return read_llvm_json(path)
     }
     if path.ends_with(".txt") {
         return read_legacy_json(path)

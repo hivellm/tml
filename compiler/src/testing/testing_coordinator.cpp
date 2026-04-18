@@ -1517,9 +1517,14 @@ TestRunResult run_tests(const TestConfig& config) {
                     "test",
                     "\033[1;31m========================================================\033[0m");
             } else {
-                write_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
-                                    cov_stats);
-                TML_LOG_INFO("test", "\033[1;32m[Coverage report updated successfully]\033[0m");
+                // Write the JSON summary + history log (HTML is now produced
+                // by `tml coverage --format=html`, which consumes the same
+                // data via the legacy-json ingest path).
+                write_coverage_json_summary(all_covered_functions,
+                                            CompilerOptions::coverage_output, cov_stats);
+                TML_LOG_INFO("test", "\033[1;32m[Coverage summary written; run `tml coverage "
+                                     "--input=build/coverage/ --format=html --output=<dir>` "
+                                     "for the dashboard]\033[0m");
                 save_coverage_cache(all_covered_functions);
             }
         }

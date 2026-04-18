@@ -37,10 +37,20 @@ struct CoverageStats {
 void print_coverage_report(const std::set<std::string>& covered_functions, bool use_color,
                            const CoverageStats& stats = {});
 
-/// Write coverage report as HTML + JSON files.
-/// JSON is written alongside the HTML with .json extension.
-void write_coverage_html(const std::set<std::string>& covered_functions,
-                         const std::string& output_path, const CoverageStats& stats = {});
+/// Write the coverage summary JSON and append to coverage_history.jsonl.
+///
+/// The HTML output that the deleted `write_coverage_html` used to
+/// produce is now emitted by `tml coverage --format=html` (see the
+/// `lib/coverage/` pure-TML reporter). This function writes only the
+/// JSON summary (which regression detection depends on) and the
+/// history log.
+///
+/// The JSON path is derived from `output_path` by replacing its
+/// extension with `.json`, so callers still holding the historical
+/// `coverage.html` path string get the same behaviour.
+void write_coverage_json_summary(const std::set<std::string>& covered_functions,
+                                 const std::string& output_path,
+                                 const CoverageStats& stats = {});
 
 /// Previous coverage data read from existing JSON report.
 struct PreviousCoverage {

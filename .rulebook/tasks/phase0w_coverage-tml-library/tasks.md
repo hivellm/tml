@@ -259,15 +259,26 @@ Once the pre-existing codegen K001 around `.as_str()` / template
 literals is cleared and `coverage_cli.exe` runs end-to-end, these
 items land atomically:
 
-- [ ] 10.1 Delete `compiler/src/testing/testing_coverage_html.cpp`
-  and its header. Remove from `compiler/CMakeLists.txt` + plugin
-  target. Clean build.
-- [ ] 10.2 Remove the HTML-generation branch from
-  `compiler/src/testing/testing_coverage.cpp`. Target shrink ≈ 900
-  LOC out (leaves the collector-adjacent helpers the codegen still
-  calls).
-- [ ] 10.3 Update `compiler/include/testing/testing_coverage.hpp`
-  to drop HTML-related declarations.
+- [x] 10.1 Deleted `compiler/src/testing/testing_coverage_html.cpp`
+  (1,397 LOC). Removed from `compiler/CMakeLists.txt` (tml_cli
+  source list). Build stays green on zig cc + clang 20.
+- [x] 10.2 The JSON summary + `coverage_history.jsonl` append that
+  `write_coverage_html` used to emit now lives in a new
+  `write_coverage_json_summary` function in `testing_coverage.cpp`.
+  HTML generation itself is dropped — `tml coverage --format=html`
+  now owns that path via the pure-TML reporter. `testing_coordinator`
+  was updated to call the new function and emit a log hint pointing
+  users at `tml coverage`.
+- [x] 10.3 `compiler/include/testing/testing_coverage.hpp` now
+  declares `write_coverage_json_summary` in place of
+  `write_coverage_html`; all other declarations
+  (`print_coverage_report`, `get_previous_coverage_from_json`,
+  coverage cache API) kept intact.
+
+Bonus: re-enabled `read_llvm_json` in the coverage_cli dispatcher
+(`lib/coverage/src/mod.tml`) now that the EventEmitter K001 blocker
+is cleared, so `coverage_cli --input=foo.json --format=...` works
+end-to-end instead of returning `UnknownFormat`.
 
 ## Phase 11: Parity check and cutover (3 items — pending runtime)
 
