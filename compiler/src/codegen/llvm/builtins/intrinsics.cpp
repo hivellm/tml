@@ -228,6 +228,20 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         }
     }
 
+    // Same collision guard for `array_*` intrinsics: `json::array_get`,
+    // `json::array_len`, `std::collections::array_set` etc. are NOT calls
+    // to the element-access intrinsics at all — they're FFI/free functions
+    // in other modules that happen to share the suffix. Treat as intrinsic
+    // only when unqualified or explicitly in an `intrinsics::` path.
+    static const std::unordered_set<std::string> array_intrinsic_names = {
+        "array_take", "array_get", "array_get_ref", "array_set", "array_uninit"};
+    if (array_intrinsic_names.count(base_name) > 0 && fn_name.find("::") != std::string::npos) {
+        bool is_intrinsic_path = fn_name.find("intrinsics::") != std::string::npos;
+        if (!is_intrinsic_path) {
+            return std::nullopt;
+        }
+    }
+
     // Use base_name for all subsequent intrinsic checks
     const std::string& intrinsic_name = base_name;
 
