@@ -258,6 +258,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return types::make_i32();
         }
     }
+    // Template literals (`...{expr}...`) produce a Text value. The type
+    // checker already records this; the codegen-side inference was
+    // missing it, causing `.as_str()` and other Text methods to fail
+    // with "Unknown method" when called directly on a template literal.
+    if (expr.is<parser::TemplateLiteralExpr>()) {
+        return std::make_shared<types::Type>(
+            types::Type{types::NamedType{"Text", "", {}}});
+    }
     if (expr.is<parser::IdentExpr>()) {
         const auto& ident = expr.as<parser::IdentExpr>();
 
