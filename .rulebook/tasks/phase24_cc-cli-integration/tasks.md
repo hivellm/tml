@@ -9,32 +9,27 @@
 
 ---
 
-## Phase 1: TML Codegen Bug Fixes (3 items)
+## Phase 1: TML Codegen Bug Fixes (3 items — COMPLETE in phase0v)
 
-These three bugs in `compiler/src/codegen/` prevent the phase23b TML-compiled
-parser from running on non-trivial inputs. Each has an isolated reproducer
-in `compiler-tml/tests/native/c_parser.test.tml` that the fix must make
-pass.
+These three bugs were fixed under `phase0v_codegen-bringup-bugs` (archived
+2026-04-18). The workarounds in `compiler-tml/src/cc/` have been un-applied
+so the natural forms are now the regression guard.
 
-- [ ] 1.1 Fix codegen bug #7: enum-variant pattern-binding on non-heap fields
-  of a variant whose first payload is a `Heap[T]`. Reproducer: uncomment
-  the `Func(Heap[CDeclarator], List[CParam], I64)` → `Func(_, ps, _)` form
-  in `parser.tml::declarator_func_params` (currently uses the `CFuncDeclPart`
-  struct workaround) and run the c_parser test suite — it should still
-  pass with the direct pattern.
-- [ ] 1.2 Fix codegen bug #8: deeply-nested constructor expressions. The
-  duplicate codegen path recurses through each nested enum / struct
-  payload without a Heap boundary, causing hang or crash on forms like
-  `decls.push(Heap[CDecl]::new(CDecl::Var(Heap[CVarDecl]::new(vd))))`.
-  Reproducer: collapse the stepwise let-bindings in `parser.tml::cp_parse_top_decl`
-  back to a single-line nested constructor call — c_parser test suite must
-  still pass.
-- [ ] 1.3 Fix codegen bug #9: large-enum by-value struct payload duplicate
-  crash. The enum layout inlines every variant's payload bytes even when
-  the variant is not active, which multiplied by the per-payload duplicate
-  recursion causes stack blowup. Reproducer: remove the `Heap[T]` wrappers
-  on the `CDecl` variants in `ast.tml` (`Var(CVarDecl)` instead of
-  `Var(Heap[CVarDecl])`) and run the c_parser test suite.
+- [x] 1.1 Bug #7 fix committed as `880dfbba` — enum-variant pattern-binding
+  on non-heap fields of a variant whose first payload is a `Heap[T]`. Root
+  cause was the multi-field binding branch in `when.cpp::gen_when` requiring
+  `payload[0]->is<IdentPattern>()`. Regression test at
+  `compiler/tests/compiler/enum_pattern_bind_multiple_fields.test.tml`.
+- [x] 1.2 Bug #8 fix absorbed into `880dfbba` — deeply-nested constructor
+  expressions. This was a secondary manifestation of bug #7 (the pattern
+  binding failure generated malformed IR that crashed downstream duplicate
+  calls). Once #7 was fixed, the one-line nested-constructor form worked
+  without any source-level workaround. Regression test at
+  `compiler/tests/compiler/nested_constructor_push.test.tml`.
+- [x] 1.3 Bug #9 fix absorbed into `880dfbba` — large-enum by-value struct
+  payload duplicate crash. Same cascading story. Workarounds un-applied in
+  `compiler-tml/src/cc/` under commit `cc9fb6fc`. Regression test at
+  `compiler/tests/compiler/large_enum_by_value_duplicate.test.tml`.
 
 ## Phase 2: FFI Bridge (3 items)
 
