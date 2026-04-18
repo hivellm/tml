@@ -46,6 +46,7 @@ use coverage::emit::lcov::write_lcov
 use coverage::emit::json::write_json
 use coverage::emit::html::write_html
 use coverage::emit::cobertura::write_cobertura
+use std::file::Path
 use std::collections::List
 use std::os
 
@@ -127,7 +128,15 @@ func ingest_one(path: Str) -> Outcome[CoverageReport, IngestError] {
 }
 
 /// Write every requested output artifact under `out_dir`.
+///
+/// Creates `out_dir` (and any missing parent directories) before writing
+/// so callers don't have to pre-mkdir. Matches the ergonomics of `cargo
+/// tarpaulin`, `go test -coverprofile`, and similar tools that
+/// materialise their report directory on demand.
 func emit_all(report: CoverageReport, out_dir: Str, format: OutputFormat, compact: Bool) -> Outcome[(), EmitError] {
+    if not Path::create_dir_all(out_dir) {
+        return Err(EmitError::WriteError(`failed to create output directory {out_dir}`.as_str()))
+    }
     when format {
         OutputFormat::Lcov => return write_lcov(report, out_dir + "/coverage.lcov"),
         OutputFormat::Json => return write_json(report, out_dir + "/coverage.json", compact),
