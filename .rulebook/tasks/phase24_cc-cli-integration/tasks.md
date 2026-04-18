@@ -44,16 +44,25 @@ so the natural forms are now the regression guard.
   so the existing LLVM backend can consume it without copying.
   Ownership contract documented: single-owner handles, transfer on
   successful consumption, caller retains ownership on failure.
-- [ ] 2.2 Create `compiler/src/cc/cc_bridge.cpp` implementing the handle
-  types and dispatching each bridge call to the matching TML entry point
-  registered via `tml_register_extern`. `cc_bridge_preproc` drives the
-  phase23a preprocessor (already C++) and wraps its output in an opaque
-  `CcTokenStream`. `cc_bridge_parse` and `cc_bridge_lower` call into
-  TML-compiled entry points and wrap the TML heap pointers.
+- [~] 2.2 Created `compiler/src/cc/cc_bridge.cpp` with the full
+  `CcDiagnostics` lifecycle (`_new`, `_count`, `_get`,
+  `_free_diagnostics`) plus stubs for the three pipeline entry points
+  (`cc_bridge_preproc`, `cc_bridge_parse`, `cc_bridge_lower`) that
+  currently append a fatal diagnostic and return NULL. The TML-side
+  cc modules (`compiler-tml/src/cc/preproc/`, `lexer.tml`, `parser.tml`,
+  `lower.tml`) need to be reachable from this layer before the stubs
+  become real dispatch. Two candidate wire-up paths (subprocess via a
+  new `cc_driver.exe` mirroring `coverage_cli.exe`, vs static link of
+  TML-compiled cc modules into `tml.exe`) documented in the file's
+  header comment; choice deferred until Phase 3 clarifies what the CLI
+  needs. The C ABI and header contract are stable and the file is
+  linked into `tml_cli` so downstream (`cmd_cc.cpp`) can begin drafting
+  against the real ABI shape.
 - [ ] 2.3 Register the cc_bridge ffi symbols in the runtime-modules library
   so the TML-compiled parser and lowerer can be invoked through them.
   Add the three entry points to `compiler/src/codegen/llvm/core/runtime.cpp`'s
-  preamble catalogue so the linker resolves them.
+  preamble catalogue so the linker resolves them. Gated on 2.2
+  completing — there's nothing to register until the wire-up exists.
 
 ## Phase 3: CLI Subcommand (4 items)
 
