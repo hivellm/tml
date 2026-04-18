@@ -222,16 +222,18 @@
 - [x] 9.4 `tml --help` already includes `coverage` via the existing
   dispatcher alias (`cv` or `coverage`). No changes required in
   `dispatcher.cpp`.
-- [~] 9.5 End-to-end verification partially validated: `tml coverage
-  --input=foo --format=lcov` correctly routes to the new-mode
-  dispatcher and reports the missing binary with the exact build
-  command to produce it. `tml build` now compiles the CLI through
-  type-check + IR emission after the `TemplateLiteralExpr` fix in
-  `infer.cpp`; a second codegen K001 (`%struct.Args` vs
-  `%struct.List__Str` on `let argv: List[Str] = os::args()`) is the
-  remaining gap before the binary materializes. Same pattern works in
-  `compiler-tml/src/main.tml`, so the fix is a codegen tweak not a
-  rewrite; tracked separately from this task.
+- [~] 9.5 End-to-end verification: `tml build
+  lib/coverage/src/bin/coverage_cli.tml --stage=parser:cpp -o
+  build/debug/bin/coverage_cli.exe` now produces a 502KB executable
+  that runs and prints its `--help` text. Prior blockers cleared:
+  the `TemplateLiteralExpr` fix in `infer.cpp`, the `os::args()`
+  codegen K001, and the `EventEmitter = type { }` emission bug
+  (commit 66bc0232 — UB in the llvm_types.cpp struct-resolution
+  loop + missing `pub mod events` in `lib/std/src/mod.tml` +
+  sibling-file type-import eager-load rule). End-to-end
+  `--input=<lcov> --format=json` currently exits non-zero with
+  "emit failed" and leak warnings — tracked as a separate runtime
+  issue in the coverage library, not a compiler blocker.
 
 ## Phase 10: Remove the C++ HTML generator (3 items — pending runtime parity)
 
