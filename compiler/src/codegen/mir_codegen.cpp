@@ -373,7 +373,7 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     // Tells LLVM the values are in [0, 2^63) so the alias analyzer can
     // prove `ptr + len` never wraps back to `ptr - 8` (the header) —
     // unlocks store-to-load forwarding across loop iterations.
-    emitln("!str_len_range = !{i64 0, i64 9223372036854775807}");
+    emitln("!1 = !{i64 0, i64 9223372036854775807}");
 
     // phase1k — alias-scope metadata was removed after the
     // incremental-cache crash it caused when the AST codegen path
@@ -1143,9 +1143,9 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %a_is_ours, label %a_has_hdr, label %a_literal");
     emitln("a_has_hdr:");
     emitln("  %a_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !str_len_range");
+    emitln("  %a_len_hdr = load i64, ptr %a_len_p, !range !1");
     emitln("  %a_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
-    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !str_len_range");
+    emitln("  %a_cap_hdr = load i64, ptr %a_cap_p, !range !1");
     emitln("  br label %a_done");
     emitln("a_literal:");
     emitln("  %a_len_slow = call i64 @strlen(ptr %a_safe)");
@@ -1160,7 +1160,7 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %b_is_ours, label %b_has_hdr, label %b_literal");
     emitln("b_has_hdr:");
     emitln("  %b_len_p = getelementptr i8, ptr %b_safe, i64 -8");
-    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !str_len_range");
+    emitln("  %b_len_hdr = load i64, ptr %b_len_p, !range !1");
     emitln("  br label %b_done");
     emitln("b_literal:");
     emitln("  %b_len_slow = call i64 @strlen(ptr %b_safe)");
@@ -1229,15 +1229,15 @@ void MirCodegen::emit_preamble() {
     emitln("  %b_null = icmp eq ptr %b, null");
     emitln("  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b");
     // --- fast path: read len_a from shadow alloca ---
-    emitln("  %shadow_len = load i64, ptr %len_slot, align 8, !range !str_len_range");
+    emitln("  %shadow_len = load i64, ptr %len_slot, align 8, !range !1");
     // --- check if `a` has our magic header (to get cap and validate shadow) ---
     emitln("  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24");
-    emitln("  %a_magic = load i64, ptr %a_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %a_magic = load i64, ptr %a_magic_p");
     emitln("  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637");
     emitln("  br i1 %a_is_ours, label %at_has_hdr, label %at_literal");
     emitln("at_has_hdr:");
     emitln("  %at_cap_p = getelementptr i8, ptr %a_safe, i64 -16");
-    emitln("  %at_cap_hdr = load i64, ptr %at_cap_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %at_cap_hdr = load i64, ptr %at_cap_p, !range !1");
     emitln("  br label %at_done_a");
     emitln("at_literal:");
     // Shadow-based read-ahead fails for a literal: `var s: Str = \"seed\"`
@@ -1249,12 +1249,12 @@ void MirCodegen::emit_preamble() {
     emitln("  %at_cap = phi i64 [ %at_cap_hdr, %at_has_hdr ], [ 0, %at_literal ]");
     // --- read len_b (same inline magic check as str_append) ---
     emitln("  %bt_magic_p = getelementptr i8, ptr %b_safe, i64 -24");
-    emitln("  %bt_magic = load i64, ptr %bt_magic_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %bt_magic = load i64, ptr %bt_magic_p");
     emitln("  %bt_is_ours = icmp eq i64 %bt_magic, 3552126293525794637");
     emitln("  br i1 %bt_is_ours, label %bt_has_hdr, label %bt_literal");
     emitln("bt_has_hdr:");
     emitln("  %bt_len_p = getelementptr i8, ptr %b_safe, i64 -8");
-    emitln("  %bt_len_hdr = load i64, ptr %bt_len_p, !range !str_len_range, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  %bt_len_hdr = load i64, ptr %bt_len_p, !range !1");
     emitln("  br label %bt_done");
     emitln("bt_literal:");
     emitln("  %bt_len_slow = call i64 @strlen(ptr %b_safe)");
@@ -1269,11 +1269,11 @@ void MirCodegen::emit_preamble() {
     emitln("  br i1 %at_inplace_ok, label %at_app_inplace, label %at_app_check");
     emitln("at_app_inplace:");
     emitln("  %at_dst_ip = getelementptr i8, ptr %a_safe, i64 %at_len_a");
-    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_ip, ptr %b_safe, i64 %at_len_b, i1 false), !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_ip, ptr %b_safe, i64 %at_len_b, i1 false)");
     emitln("  %at_end_ip = getelementptr i8, ptr %a_safe, i64 %at_total");
-    emitln("  store i8 0, ptr %at_end_ip, !alias.scope !str_data_scope, !noalias !str_hdr_scope");
+    emitln("  store i8 0, ptr %at_end_ip");
     emitln("  %at_hdr_len_p = getelementptr i8, ptr %a_safe, i64 -8");
-    emitln("  store i64 %at_total, ptr %at_hdr_len_p, !alias.scope !str_hdr_scope, !noalias !str_data_scope");
+    emitln("  store i64 %at_total, ptr %at_hdr_len_p");
     // Update shadow — this is the KEY store that LLVM's mem2reg will
     // promote to a phi update across loop iterations.
     emitln("  store i64 %at_total, ptr %len_slot, align 8");

@@ -39,11 +39,10 @@ set(CMAKE_RANLIB "${_scripts_dir}/zig-ar.bat" CACHE FILEPATH "" FORCE)
 set(CMAKE_C_CREATE_STATIC_LIBRARY "<CMAKE_AR> qc <TARGET> <OBJECTS>" CACHE STRING "" FORCE)
 set(CMAKE_CXX_CREATE_STATIC_LIBRARY "<CMAKE_AR> qc <TARGET> <OBJECTS>" CACHE STRING "" FORCE)
 
-# Force dynamic CRT (/MD) to match LLVM static libs built with /MD
-# Zig CC default is static CRT; -D_DLL -D_MT selects dynamic CRT headers
-# --dependent-lib=msvcrt tells the linker to link msvcrt.lib (dynamic CRT)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "" FORCE)
-set(CMAKE_C_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt -fno-sanitize=undefined" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_INIT "-D_DLL -D_MT -Xclang --dependent-lib=msvcrt -fno-sanitize=undefined" CACHE STRING "" FORCE)
+# Force static CRT (/MT) to match F:/LLVM static libs built with /MT
+# Zig CC default is static CRT; --dependent-lib=libcmt links the static CRT
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_INIT "-Xclang --dependent-lib=libcmt -fno-sanitize=undefined" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_INIT "-Xclang --dependent-lib=libcmt -fno-sanitize=undefined" CACHE STRING "" FORCE)
 
 set(TML_USE_ZIG_CC ON CACHE BOOL "Using Zig CC toolchain" FORCE)
