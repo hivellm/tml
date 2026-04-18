@@ -85,7 +85,23 @@ vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-l
 
 ### Build
 
-The build system automatically selects the best available compiler:
+**First-time bootstrap** — build the vendored LLVM submodule once.
+Subsequent compiler builds reuse the output and take seconds.
+
+```bash
+git submodule update --init --recursive src/llvm-project
+
+# Windows (one-time, 30-90 minutes)
+scripts\build-llvm.bat         # Release build of build/llvm/
+
+# Linux/Mac
+./scripts/build-llvm.sh        # Equivalent
+```
+
+Once `build/llvm/` exists, CMake's `find_package(LLVM CONFIG)` picks
+it up automatically — no `LLVM_DIR` environment variable needed.
+
+The compiler build system then auto-selects the best host compiler:
 
 | Priority | Compiler | Flag | Requirements |
 |----------|----------|------|-------------|
