@@ -78,6 +78,18 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 } else if (target_type == "i64") {
                     expected_literal_type_ = "i64";
                     expected_literal_is_unsigned_ = false;
+                } else if (target_type.starts_with("%struct.") ||
+                           target_type.starts_with("%union.")) {
+                    // Struct/enum LHS — propagate as expected_enum_type_ so that
+                    // bare enum constructors (`Just(expr)`, `Ok(v)`, `Nothing`)
+                    // on the RHS pick up the full monomorphised type instead of
+                    // falling back to the default Maybe__I32 / Outcome__I32 shape.
+                    //
+                    // Without this, `init_opt: Maybe[Heap[CBlockItem]]` followed by
+                    // `init_opt = Just(Heap[CBlockItem]::new(item))` would emit
+                    // the Just() payload as Maybe__I32 and cause a K001 on the
+                    // final store (i32 payload slot vs i64 Heap pointer).
+                    expected_enum_type_ = target_type;
                 }
             }
         }

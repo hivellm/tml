@@ -318,6 +318,73 @@ struct CStrArray {
     }
 };
 
+/// Locate a pre-built `cc_driver.exe` in the standard output dirs.
+/// Returns an empty path if none is present.
+fs::path find_cc_driver() {
+    fs::path build = fs::current_path() / "build";
+    std::vector<fs::path> candidates = {
+        build / "debug" / "bin" / "cc_driver.exe",
+        build / "release" / "bin" / "cc_driver.exe",
+        build / "debug" / "cc_driver.exe",
+        build / "release" / "cc_driver.exe",
+    };
+    for (const auto& c : candidates) {
+        if (fs::exists(c)) {
+            return c;
+        }
+    }
+    return {};
+}
+
+/// Translate a `CcOptions` into a `cc_driver` argv. The TML-side
+/// driver accepts a narrower flag surface than the full `clang -c`
+/// shape — flags it doesn't understand get dropped here with a note.
+/// Append `arg` to `cmd` with a leading space, quoting only when the
+/// argument contains whitespace. On Windows, `std::system` wraps the
+/// command line with cmd.exe `/c`, which eats the outermost pair of
+/// quotes. Quoting every arg unconditionally would therefore produce
+/// a malformed command where cmd.exe treats the joined `<exe>" "<arg>`
+/// as one token — that's what breaks `tml cc foo.c` for inputs
+/// without spaces.
+void cmdline_append(std::string& cmd, const std::string& arg) {
+    cmd += " ";
+    if (arg.find(' ') != std::string::npos) {
+        cmd += "\"" + arg + "\"";
+    } else {
+        cmd += arg;
+    }
+}
+
+std::string build_cc_driver_cmdline(const fs::path& exe, const CcOptions& opts) {
+    std::string cmd = "\"" + exe.string() + "\"";
+    cmdline_append(cmd, opts.input);
+    switch (opts.emit) {
+    case EmitStage::Obj:
+        cmdline_append(cmd, "--emit=pipeline");
+        break;
+    case EmitStage::LlvmIr:
+        cmdline_append(cmd, "--emit=mir"); // cc_driver stops at MIR; LLVM is Phase 4
+        break;
+    case EmitStage::Mir:
+        cmdline_append(cmd, "--emit=mir");
+        break;
+    case EmitStage::Ast:
+        cmdline_append(cmd, "--emit=ast");
+        break;
+    case EmitStage::Tokens:
+        cmdline_append(cmd, "--emit=tokens");
+        break;
+    }
+    if (!opts.target_triple.empty()) {
+        cmdline_append(cmd, "--target=" + opts.target_triple);
+    }
+    if (!opts.output.empty()) {
+        cmdline_append(cmd, "-o");
+        cmdline_append(cmd, opts.output);
+    }
+    return cmd;
+}
+
 } // namespace
 
 // ============================================================================
@@ -340,6 +407,26 @@ int run_cc(int argc, char* argv[], bool verbose) {
         std::fprintf(stderr, "tml cc: no input file\n\n%s", std::string(kUsage).c_str());
         return 2;
     }
+
+    // Subprocess dispatch — preferred path, mirrors the coverage_cli
+    // pattern. If `cc_driver.exe` is present (built via
+    // `tml build compiler-tml/src/cc/bin/cc_driver.tml -o build/debug/bin/cc_driver.exe`),
+    // forward argv straight to it and return its exit code. Keeps the
+    // TML cc pipeline reachable today without any FFI plumbing.
+    fs::path driver = find_cc_driver();
+    if (!driver.empty()) {
+        std::string cmd = build_cc_driver_cmdline(driver, opts);
+        return std::system(cmd.c_str());
+    }
+
+    // Fallback path — the `cc_bridge` FFI. Currently this returns a
+    // stub diagnostic from each pipeline stage; it becomes the real
+    // dispatch once Phase 2.2 wires the TML cc modules in-process.
+    std::fprintf(stderr,
+                 "tml cc: cc_driver.exe not found under build/{debug,release}/bin/ — "
+                 "build it with `tml build compiler-tml/src/cc/bin/cc_driver.tml "
+                 "-o build/debug/bin/cc_driver.exe`. Falling back to the in-process "
+                 "cc_bridge (stubs only).\n");
 
     std::string source;
     if (!read_file(opts.input, source)) {

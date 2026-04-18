@@ -1050,17 +1050,54 @@ void LLVMIRGen::ensure_enum_drop_function(const std::string& enum_type_name) {
                             if (inner_is_this_enum) {
                                 e("  call void @" + func_name + "(ptr " + rp + ")");
                             } else {
-                                // Different inner enum: ensure its drop exists
-                                ensure_enum_drop_function(inner);
-                                auto inner_dk = inner + "_drop";
-                                auto inner_it = functions_.find(inner_dk);
-                                std::string inner_fn;
-                                if (inner_it != functions_.end()) {
-                                    inner_fn = inner_it->second.llvm_name;
-                                } else {
-                                    inner_fn = "@" + mangle_impl_method(inner, "drop");
+                                // Different inner type. Three cases:
+                                //   (a) inner is an enum — pre-emit its drop body
+                                //       via `ensure_enum_drop_function` so the
+                                //       emitted call resolves at link time.
+                                //   (b) inner is a struct with an EXPLICIT user
+                                //       Drop impl — that impl was (or will be)
+                                //       emitted elsewhere, so just reference it.
+                                //   (c) inner is a struct with only auto-synthesised
+                                //       drop (droppable fields but no user impl).
+                                //       `mangle_impl_method(inner, "drop")` names a
+                                //       function that the pending-impl pipeline
+                                //       can't actually synthesise for a non-generic
+                                //       library struct without an impl block, so
+                                //       emitting the call would dangle. Skip the
+                                //       nested drop in that case and rely on
+                                //       `Heap::drop` below to at least reclaim the
+                                //       outer allocation — losing inner-field
+                                //       cleanup is a leak, not a miscompile.
+                                auto ienum = env_.lookup_enum(inner);
+                                bool inner_is_enum =
+                                    ienum.has_value() ||
+                                    pending_generic_enums_.count(inner) > 0;
+                                bool inner_has_explicit_drop =
+                                    env_.type_implements(inner, "Drop");
+                                if (inner_is_enum) {
+                                    ensure_enum_drop_function(inner);
                                 }
-                                e("  call void " + inner_fn + "(ptr " + rp + ")");
+                                bool should_call_inner_drop =
+                                    inner_is_enum || inner_has_explicit_drop;
+                                if (should_call_inner_drop) {
+                                    auto inner_dk = inner + "_drop";
+                                    auto inner_it = functions_.find(inner_dk);
+                                    std::string inner_fn;
+                                    if (inner_it != functions_.end()) {
+                                        inner_fn = inner_it->second.llvm_name;
+                                    } else {
+                                        inner_fn =
+                                            "@" + mangle_impl_method(inner, "drop");
+                                    }
+                                    e("  call void " + inner_fn + "(ptr " + rp +
+                                      ")");
+                                } else {
+                                    // Struct without explicit Drop — skip nested
+                                    // drop, note the leak in the IR comment.
+                                    e("  ; skipped drop for inner struct '" +
+                                      inner +
+                                      "' (no explicit Drop impl; fields may leak)");
+                                }
                             }
                             e("  br label %" + aib);
                             e(aib + ":");

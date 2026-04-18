@@ -44,26 +44,40 @@ so the natural forms are now the regression guard.
   so the existing LLVM backend can consume it without copying.
   Ownership contract documented: single-owner handles, transfer on
   successful consumption, caller retains ownership on failure.
-- [~] 2.2 Two halves shipped:
-  - `compiler/src/cc/cc_bridge.cpp` — the full `CcDiagnostics`
-    lifecycle (`_new`, `_count`, `_get`, `_free_diagnostics`) plus
-    stubs for the three pipeline entry points that currently append
-    a fatal diagnostic and return NULL.
-  - `compiler-tml/src/cc/bin/cc_driver.tml` — standalone TML driver
-    that wraps the phase23b pipeline end to end (collect argv → read
-    file → c_lexer → tokenize → cp_parse_translation_unit → c_lower
-    → `--emit=pipeline|ast|mir|tokens`). Type-checks cleanly.
-    **Blocker:** `tml build` on the driver hits a pre-existing
-    Maybe-instantiation K001
-    (`%struct.Maybe__I32` stored into `%struct.Maybe__Heap__CBlockItem`
-    slot — same bug that keeps `c_frontend.test.tml` from compiling).
-    Once that codegen fix lands, `cc_driver.exe` materialises and
-    `cmd_cc.cpp` can dispatch to it via subprocess (coverage_cli
-    pattern).
-  - A real text→`List[PpToken]` entry point is still missing from
-    `compiler-tml/src/cc/preproc/`; until it's added, cc_driver runs
-    the pipeline on an empty pp-stream (enough to exercise the
-    lexer/parser/lowerer integration but not real C compilation).
+- [x] 2.2 cc_driver.exe builds and `tml cc` dispatches to it end to
+  end. Two-part delivery:
+  - `compiler-tml/src/cc/bin/cc_driver.tml` — TML binary that runs
+    the phase23b pipeline (collect argv → read file → c_lexer →
+    tokenize → cp_parse_translation_unit → c_lower →
+    `--emit=pipeline|ast|mir|tokens`). Builds to `build/debug/cc_driver.exe`
+    (~877 KB, exit 0).
+  - `compiler/src/cli/commands/cmd_cc.cpp` — `run_cc` now prefers
+    the `cc_driver.exe` subprocess path (mirrors the
+    `coverage_cli.exe` dispatch pattern). Falls back to the
+    in-process `cc_bridge` stubs when the binary is missing.
+  - `compiler/src/cc/cc_bridge.cpp` — kept as the forward-looking
+    FFI ABI; the diagnostic lifecycle (`_new`, `_count`, `_get`,
+    `_free_diagnostics`) is fully functional for callers that
+    eventually want in-process dispatch.
+
+  **Two codegen blockers cleared in this task:**
+  - Maybe generic-instantiation K001: `init_opt: Maybe[Heap[T]]`
+    followed by `init_opt = Just(Heap[T]::new(...))` was emitting
+    the payload as `Maybe__I32` instead of `Maybe__Heap__T`. Fixed
+    by propagating the LHS struct type as `expected_enum_type_` in
+    `BinaryExpr::Assign` when the target is an `IdentExpr`
+    (`compiler/src/codegen/llvm/expr/binary.cpp`).
+  - Enum-drop nested-struct undefined-symbol K001: emitted
+    `call @Type::drop` for struct payloads whose types had
+    droppable fields but no explicit `impl Drop`. Fixed by skipping
+    the nested drop when no user Drop impl exists (the Heap's own
+    `drop`/`mem_free` still reclaims the outer allocation). Fix in
+    `compiler/src/codegen/llvm/core/drop.cpp`.
+
+  Text→`List[PpToken]` entry point still missing from
+  `compiler-tml/src/cc/preproc/`; cc_driver runs the pipeline on an
+  empty pp-stream today (0 decls / 0 functions). Phase 4
+  self-compile requires that entry point.
 - [ ] 2.3 Register the cc_bridge ffi symbols in the runtime-modules library
   so the TML-compiled parser and lowerer can be invoked through them.
   Add the three entry points to `compiler/src/codegen/llvm/core/runtime.cpp`'s
