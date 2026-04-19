@@ -45,6 +45,64 @@ should be confirmed with the user first.
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-04-18 (session 2) — phase24 Phase 2.3 + parser bug bisection
+
+### Accomplished
+- **phase24 item 2.3 COMPLETE** (commit c44afd2f): registered 11
+  `cc_bridge_*` FFI symbols in `runtime.cpp::init_runtime_catalog`.
+  Handles all map to `ptr`; `CcDiagnostic` struct return declared as
+  `{ ptr, i32, i32, i32, ptr }`; `CcAbiTarget` passed as `i32`. Build
+  clean, no regressions, all 11 symbol strings present in the
+  compiler DLL.
+
+### cp_parse_translation_unit segfault — partial root-cause found
+
+Bisected the `int x;` crash inside `cp_parse_translation_unit` via
+`File::append_all` instrumentation (println buffered and discarded
+on SIGSEGV — use direct file append for crash debugging).
+
+Crash trail:
+1. `pp_tokenize_source`, `c_lexer`, `tokenize`, `c_parser` all pass.
+2. `cp_parse_top_decl` enters, `cp_parse_specifiers` returns Ok at p=1.
+3. `aggregate_kind` returns 0 (non-aggregate).
+4. `cp_parse_declarator` returns Ok with dp.pos=2.
+5. **`declarator_name(dp.decl)` returns `'larator\n'` instead of `'x'`.**
+   This is the first garbage — reading from an offset inside the string
+   "top_decl-post-declarator\n" (one of my own instrumentation strings).
+
+Root cause hypothesis: `tok.text` captured from `cp_peek(parser.tokens,
+p)` is a `Str` whose pointer aliases the source heap slot inside
+`parser.tokens`. When `tok` drops at end of scope, the Str is freed /
+the memory gets reused, and the `CDeclarator::Ident(tok.text)` payload
+dangles. Adding `tok.text.duplicate()` before storing into the enum
+made the name come back correctly in instrumented runs, but the full
+pipeline still crashes downstream (other sites use the same pattern).
+
+Confirmed mechanisms NOT at fault:
+- Not bug #7/#8/#9 (phase0v regression tests still pass).
+- Not a missing catalogue entry.
+- Not specific to the MIR path — same crash via `--stage=parser:cpp`.
+
+### Next steps for the parser crash
+1. Audit `cp_parse_*` for every `tok.text` / `tok.file` / Str-from-peek
+   site and insert `.duplicate()` or change `cp_peek` to return a
+   deep-cloned `CToken`. Probably 20+ call sites in `parser.tml`.
+2. Better long-term fix: make `List[T].get(i)` deep-duplicate when T
+   contains `Str`, or flip `cp_peek` to return an owned `CToken` by
+   construction. That's a language/runtime-level fix with wider blast
+   radius — should be scoped to its own task.
+
+### Files modified this session (committed)
+- `compiler/src/codegen/llvm/core/runtime.cpp` (+42 lines, cc_bridge
+  catalogue entries)
+- `.rulebook/tasks/phase24_cc-cli-integration/tasks.md` (item 2.3
+  marked [x])
+
+### Next session starter
+Next item: phase24 Phase 3.2 or create a follow-up task for the
+`tok.text` dangling-Str audit in `parser.tml`. The latter is the real
+unblocker for 4.1/4.2 (self-compile essential.c / mem.c).
+
 ### 2026-04-14
 ## phase0h_cmov-select-if-else — COMPLETE
 
