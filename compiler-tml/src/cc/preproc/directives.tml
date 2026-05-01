@@ -1,0 +1,256 @@
+//! Top-level preprocessor directive sweep.
+//!
+//! Walks a `List[PpToken]`, recognises directives at start-of-line
+//! (`#include`, `#define`, `#undef`, `#if`, `#ifdef`, `#ifndef`, `#elif`,
+//! `#else`, `#endif`, `#error`, `#pragma`, `#line`), updates the
+//! `Preprocessor` state, and produces a filtered token stream that the
+//! C lexer can consume.
+//!
+//! Phase 24a item 1.2.
+
+use compiler::cc::preproc::token::*
+use compiler::cc::preproc::macros::*
+use compiler::cc::preproc::conditionals::*
+use std::collections::list::List
+
+/// Walk `tokens` and apply directive logic. Returns a new token list
+/// that contains only the non-directive tokens that survive the
+/// active-conditional gate. Whitespace and Newline tokens are stripped
+/// because the C lexer ignores them anyway.
+pub func pp_sweep(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken] {
+    let n: I64 = tokens.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+
+    var i: I64 = 0 as I64
+    var at_line_start: I64 = 1 as I64
+    loop (i < n) {
+        let tok: PpToken = tokens.get(i)
+        let kind_code: I64 = pp_kind_code(tok.kind)
+
+        if kind_code == 7 as I64 {
+            // Whitespace — does not break "start of line" for # detection
+            i = i + 1 as I64
+            continue
+        }
+        if kind_code == 6 as I64 {
+            // Newline
+            at_line_start = 1 as I64
+            i = i + 1 as I64
+            continue
+        }
+
+        let is_directive_marker: I64 = if kind_code == 5 as I64 and tok.text == "#" and at_line_start == 1 as I64 { 1 as I64 } else { 0 as I64 }
+        if is_directive_marker == 1 as I64 {
+            // Skip whitespace after the `#` until the directive name.
+            var j: I64 = i + 1 as I64
+            var found_name: I64 = 0 as I64
+            loop (j < n and found_name == 0 as I64) {
+                let kc: I64 = pp_kind_code(tokens.get(j).kind)
+                if kc == 7 as I64 {
+                    j = j + 1 as I64
+                } else {
+                    found_name = 1 as I64
+                }
+            }
+            if j >= n { break }
+            let name_tok: PpToken = tokens.get(j)
+            var name: Str = ""
+            if pp_kind_code(name_tok.kind) == 0 as I64 {
+                name = name_tok.text.duplicate()
+            }
+            // Collect tokens after the directive name up to the next Newline.
+            var k: I64 = j + 1 as I64
+            let body: List[PpToken] = List[PpToken]::new(8 as I64)
+            var hit_newline: I64 = 0 as I64
+            loop (k < n and hit_newline == 0 as I64) {
+                let t: PpToken = tokens.get(k)
+                let tc: I64 = pp_kind_code(t.kind)
+                if tc == 6 as I64 {
+                    hit_newline = 1 as I64
+                } else {
+                    body.push(t)
+                    k = k + 1 as I64
+                }
+            }
+            // Advance i past the trailing Newline (or to n).
+            i = if k < n { k + 1 as I64 } else { k }
+            at_line_start = 1 as I64
+            pp_handle_directive(pp, name, body)
+            continue
+        }
+
+        // Non-directive token. Append when the current conditional is active.
+        if cond_is_active(pp) == 1 as I64 {
+            expand_object_macro_into(pp, tok, kind_code, out)
+        }
+        at_line_start = 0 as I64
+        i = i + 1 as I64
+    }
+    return out
+}
+
+/// Inline object-like macro expansion. Function-like macros and the
+/// full blue-paint algorithm live in `macros.tml::expand_macros`; that
+/// path is not wired here yet because its monomorphization triggers
+/// pre-existing codegen bug K001. For object-like macros (the only
+/// kind needed to make `essential.c` parse) the substitution is
+/// trivial: replace the identifier token with the body tokens.
+func expand_object_macro_into(pp: Preprocessor, tok: PpToken, kind_code: I64, out: List[PpToken]) {
+    if kind_code != 0 as I64 {
+        out.push(tok)
+        return
+    }
+    if pp.defines.has(tok.text) == false { out.push(tok); return }
+    let def: MacroDef = pp.defines.get(tok.text)
+    let Just(body) = object_like_body(def) else {
+        out.push(tok)
+        return
+    }
+    let bn: I64 = body.len() as I64
+    for bi in 0 to bn {
+        out.push(body.get(bi))
+    }
+}
+
+/// Extract the body of an object-like macro, or `Nothing` when the
+/// macro is function-like. Isolated so the for-in loop in the caller
+/// does not have to live inside a `when` arm (codegen bug K001 fires
+/// when both shapes appear in the same scope).
+func object_like_body(def: MacroDef) -> Maybe[List[PpToken]] {
+    when def {
+        ObjectLike(body) => return Just(body),
+        FunctionLike(_) => return Nothing
+    }
+}
+
+/// Numeric code for a PpTokenKind so the sweep can branch on plain I64.
+/// Mirrors the enum order in `compiler::cc::preproc::token::PpTokenKind`.
+func pp_kind_code(k: PpTokenKind) -> I64 {
+    when k {
+        Ident => return 0 as I64,
+        IntLit => return 1 as I64,
+        FloatLit => return 2 as I64,
+        CharLit => return 3 as I64,
+        StringLit => return 4 as I64,
+        Punct => return 5 as I64,
+        Newline => return 6 as I64,
+        Whitespace => return 7 as I64,
+        Eof => return 8 as I64
+    }
+}
+
+/// Dispatch a single directive. `body` is the tokens after the
+/// directive name, in order, with whitespace tokens still embedded.
+func pp_handle_directive(pp: Preprocessor, name: Str, body: List[PpToken]) {
+    let active: I64 = cond_is_active(pp)
+
+    // Conditionals are evaluated even when an outer block is inactive
+    // because they change the depth of the conditional stack. Other
+    // directives are silently dropped when inactive.
+    if name == "ifdef" {
+        let arg: Str = first_ident_text(body)
+        let v: I64 = if active == 1 as I64 { pp_is_defined(pp, arg) } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "ifndef" {
+        let arg: Str = first_ident_text(body)
+        let raw: I64 = if active == 1 as I64 { pp_is_defined(pp, arg) } else { 1 as I64 }
+        let v: I64 = if raw == 0 as I64 { 1 as I64 } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "if" {
+        let v: I64 = if active == 1 as I64 { eval_const_expr(pp, strip_ws(body)) } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "elif" {
+        let v: I64 = eval_const_expr(pp, strip_ws(body))
+        cond_elif(pp, v)
+        return
+    }
+    if name == "else" {
+        cond_else(pp)
+        return
+    }
+    if name == "endif" {
+        cond_endif(pp)
+        return
+    }
+
+    // From here on, only act when the surrounding conditional is active.
+    if active == 0 as I64 { return }
+
+    if name == "define" {
+        // Object-like only for now: `#define NAME body...`
+        let arg: Str = first_ident_text(body)
+        if arg == "" { return }
+        let body_after_name: List[PpToken] = drop_first_ident(body)
+        let body_clean: List[PpToken] = strip_ws(body_after_name)
+        pp_define_object(pp, arg, body_clean)
+        return
+    }
+    if name == "undef" {
+        let arg: Str = first_ident_text(body)
+        if arg != "" { pp_undef(pp, arg) }
+        return
+    }
+    if name == "include" {
+        // `#include` is a no-op for now (full file resolution + recursion
+        // is phase24a item 2). Drop the directive silently.
+        return
+    }
+    // `#error`, `#pragma`, `#line` and any unknown directive: drop.
+}
+
+/// Return the text of the first Ident token in `body`, or empty Str.
+func first_ident_text(body: List[PpToken]) -> Str {
+    let n: I64 = body.len() as I64
+    var found: Str = ""
+    var done: I64 = 0 as I64
+    var i: I64 = 0 as I64
+    loop (i < n and done == 0 as I64) {
+        let t: PpToken = body.get(i)
+        if pp_kind_code(t.kind) == 0 as I64 {
+            found = t.text.duplicate()
+            done = 1 as I64
+        }
+        i = i + 1 as I64
+    }
+    return found
+}
+
+/// Drop the first non-whitespace identifier from `body`, returning the
+/// rest. Whitespace before the identifier is dropped; whitespace after
+/// is preserved (the caller decides whether to strip it).
+func drop_first_ident(body: List[PpToken]) -> List[PpToken] {
+    let n: I64 = body.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    var seen_ident: I64 = 0 as I64
+    for i in 0 to n {
+        let t: PpToken = body.get(i)
+        if seen_ident == 0 as I64 {
+            if pp_kind_code(t.kind) == 0 as I64 {
+                seen_ident = 1 as I64
+            }
+        } else {
+            out.push(t)
+        }
+    }
+    return out
+}
+
+/// Return a copy of `body` with Whitespace and Newline tokens removed.
+func strip_ws(body: List[PpToken]) -> List[PpToken] {
+    let n: I64 = body.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    for i in 0 to n {
+        let t: PpToken = body.get(i)
+        let kc: I64 = pp_kind_code(t.kind)
+        if kc != 6 as I64 and kc != 7 as I64 {
+            out.push(t)
+        }
+    }
+    return out
+}

@@ -1,0 +1,81 @@
+//! Regression tests for the C preprocessor directive sweep
+//! (`compiler::cc::preproc::directives::pp_sweep`). Phase 24a item 4.1.
+
+use test::{assert, assert_eq}
+use std::collections::list::List
+use compiler::cc::preproc::token::{
+    PpToken, PpTokenKind, pp_token, Preprocessor, pp_new
+}
+use compiler::cc::preproc::tokenize::pp_tokenize_source
+use compiler::cc::preproc::directives::pp_sweep
+
+/// Tokenise a source string as if it lived in `t.c` and return the
+/// pp-token stream after the directive sweep.
+func sweep_source(source: Str) -> List[PpToken] {
+    let raw: List[PpToken] = pp_tokenize_source(source, "t.c")
+    let pp: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    return pp_sweep(pp, raw)
+}
+
+/// Concatenate the `text` field of every token in `tokens` (separated
+/// by spaces) so tests can compare the result with a literal Str.
+func tokens_concat(tokens: List[PpToken]) -> Str {
+    var s: Str = ""
+    let n: I64 = tokens.len() as I64
+    for i in 0 to n {
+        if i > 0 { s = s + " " }
+        s = s + tokens.get(i).text
+    }
+    return s
+}
+
+@test func test_sweep_drops_define_directive() {
+    // The `#define X 42` line should be consumed; only the `int x;`
+    // tokens survive.
+    let out = sweep_source("#define X 42\nint x;")
+    assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_sweep_expands_object_like_macro() {
+    // After `#define X 42`, the identifier `X` in code is replaced by
+    // the token sequence the macro body holds.
+    let out = sweep_source("#define X 42\nint y = X;")
+    assert_eq(tokens_concat(out), "int y = 42 ;")
+}
+
+@test func test_sweep_skips_include() {
+    // `#include` is a silent no-op for now (full resolution is
+    // phase24a item 2). The directive must not leak `#` into the
+    // output stream.
+    let out = sweep_source("#include <stdio.h>\nint x;")
+    assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_sweep_ifdef_active_branch() {
+    // `WIN` is defined → the inner `int win_only;` survives.
+    let src: Str = "#define WIN 1\n#ifdef WIN\nint win_only;\n#else\nint posix_only;\n#endif"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int win_only ;")
+}
+
+@test func test_sweep_ifndef_inactive_branch() {
+    // `NEVER` is not defined → the `#ifndef NEVER` branch is taken,
+    // and the `#else` branch is masked.
+    let src: Str = "#ifndef NEVER\nint yes;\n#else\nint no;\n#endif"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int yes ;")
+}
+
+@test func test_sweep_undef_drops_macro() {
+    // After `#undef X`, the identifier `X` is no longer expanded.
+    let src: Str = "#define X 42\n#undef X\nint x = X;"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int x = X ;")
+}
+
+@test func test_sweep_pragma_and_line_are_noop() {
+    // `#pragma`, `#line`, and unknown directives are dropped silently.
+    let src: Str = "#pragma once\n#line 42 \"foo.c\"\nint x;"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int x ;")
+}

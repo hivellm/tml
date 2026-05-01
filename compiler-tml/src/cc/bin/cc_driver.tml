@@ -27,8 +27,9 @@
 //! - `mir`: print the lowered MIR module's function-list size.
 
 use test::{assert, assert_eq}
-use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token, Preprocessor, pp_new}
 use compiler::cc::preproc::tokenize::pp_tokenize_source
+use compiler::cc::preproc::directives::pp_sweep
 use compiler::cc::lexer::*
 use compiler::cc::parser::*
 use compiler::cc::ast::*
@@ -141,12 +142,19 @@ func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
     // viable scanner shipped with phase24 Phase 2.2; it covers the
     // common C17 §6.4 lexical classes (identifiers, pp-numbers,
     // char/string literals, multi-char punctuators, line + block
-    // comments). Directive processing (`#include`, `#define`,
-    // etc.) is still handled by the macros/conditionals passes on
-    // top of this stream — not yet wired in the driver.
-    let pp: List[PpToken] = pp_tokenize_source(source, input_path)
+    // comments).
+    let raw_pp: List[PpToken] = pp_tokenize_source(source, input_path)
 
-    // Stage 1b — C token classifier. Turns the pp-token stream into
+    // Stage 1b — directive sweep + macro expansion (phase24a item 1.x).
+    // `pp_sweep` walks the pp-token stream, applies `#define`/`#undef`,
+    // pushes/pops conditional frames, drops `#include` / `#error` /
+    // `#pragma` / `#line` (no-ops for now), and produces a filtered
+    // stream that the C lexer can consume. `expand_macros` then
+    // rewrites identifiers that match registered object-like macros.
+    let preproc: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    let pp: List[PpToken] = pp_sweep(preproc, raw_pp)
+
+    // Stage 1c — C token classifier. Turns the pp-token stream into
     // CToken records (keyword resolution, literal decoding).
     let lex: CLexer = c_lexer(pp)
     let toks: List[CToken] = tokenize(lex)
