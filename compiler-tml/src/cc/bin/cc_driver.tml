@@ -29,7 +29,7 @@
 use test::{assert, assert_eq}
 use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token, Preprocessor, pp_new}
 use compiler::cc::preproc::tokenize::pp_tokenize_source
-use compiler::cc::preproc::directives::pp_sweep
+use compiler::cc::preproc::directives::{pp_sweep, pp_sweep_in_file}
 use compiler::cc::preproc::predefined::{register_predefined_macros, register_linux_macros}
 use compiler::cc::lexer::*
 use compiler::cc::parser::*
@@ -51,7 +51,9 @@ type DriverArgs {
     input: Str,
     output: Str,
     target: Str,
-    emit: DriverEmit
+    emit: DriverEmit,
+    user_paths: List[Str],
+    system_paths: List[Str]
 }
 
 /// Collect argv into `List[Str]` via the `os::Args` iterator.
@@ -70,6 +72,8 @@ func parse_argv(argv: List[Str]) -> Outcome[DriverArgs, Str] {
     var output: Str = ""
     var target: Str = ""
     var emit: DriverEmit = DriverEmit::Pipeline
+    let user_paths: List[Str] = List[Str]::new(4 as I64)
+    let system_paths: List[Str] = List[Str]::new(4 as I64)
 
     var i: I64 = 1 as I64
     loop (i < argv.len()) {
@@ -90,6 +94,16 @@ func parse_argv(argv: List[Str]) -> Outcome[DriverArgs, Str] {
                 return Err("cc_driver: -o requires a value")
             }
             output = argv.get(i)
+        } else if a == "-I" {
+            i = i + 1
+            if i >= argv.len() { return Err("cc_driver: -I requires a path") }
+            user_paths.push(argv.get(i))
+        } else if a.starts_with("-I") {
+            user_paths.push(a.slice(2 as I64, a.len()))
+        } else if a == "-isystem" {
+            i = i + 1
+            if i >= argv.len() { return Err("cc_driver: -isystem requires a path") }
+            system_paths.push(argv.get(i))
         } else if a.starts_with("-") {
             return Err(`cc_driver: unknown option '{a}'`.as_str())
         } else {
@@ -105,7 +119,10 @@ func parse_argv(argv: List[Str]) -> Outcome[DriverArgs, Str] {
     if input == "" {
         return Err("cc_driver: no input file")
     }
-    Ok(DriverArgs { input: input, output: output, target: target, emit: emit })
+    Ok(DriverArgs {
+        input: input, output: output, target: target, emit: emit,
+        user_paths: user_paths, system_paths: system_paths
+    })
 }
 
 /// Pick the `CAbiTarget` matching a `clang -target`-style triple.
@@ -135,7 +152,12 @@ func abi_for_target(target: Str) -> CAbiTarget {
 /// on a synthetic empty translation unit. Once the missing
 /// `preprocess_source(text) -> List[PpToken]` lands, this function
 /// feeds it the file contents.
-func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
+func run_pipeline(
+    input_path: Str,
+    target: CAbiTarget,
+    user_paths: List[Str],
+    system_paths: List[Str]
+) -> Outcome[CLower, Str] {
     // Stage 0 — read the file.
     let source: Str = File::read_all(input_path)
 
@@ -146,19 +168,20 @@ func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
     // comments).
     let raw_pp: List[PpToken] = pp_tokenize_source(source, input_path)
 
-    // Stage 1b — directive sweep + macro expansion (phase24a item 1.x).
-    // `pp_sweep` walks the pp-token stream, applies `#define`/`#undef`,
-    // pushes/pops conditional frames, drops `#include` / `#error` /
-    // `#pragma` / `#line` (no-ops for now), and produces a filtered
-    // stream that the C lexer can consume. `expand_macros` then
-    // rewrites identifiers that match registered object-like macros.
-    let preproc: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    // Stage 1b — directive sweep + macro expansion (phase24a items 1.x + 2.x).
+    // `pp_sweep_in_file` walks the pp-token stream, applies `#define`/`#undef`,
+    // pushes/pops conditional frames, recursively expands `#include`
+    // directives via `pp_resolve_include` against the user (`-I`) and
+    // system (`-isystem`) include paths, drops `#error` / `#pragma` /
+    // `#line` no-ops, and produces a filtered stream that the C lexer
+    // can consume. Object-like macros are inlined during the sweep.
+    let preproc: Preprocessor = pp_new(system_paths, user_paths)
     register_predefined_macros(preproc)
     when target {
         SysvAmd64 => register_linux_macros(preproc),
         _ => {}
     }
-    let pp: List[PpToken] = pp_sweep(preproc, raw_pp)
+    let pp: List[PpToken] = pp_sweep_in_file(preproc, raw_pp, input_path)
 
     // Stage 1c — C token classifier. Turns the pp-token stream into
     // CToken records (keyword resolution, literal decoding).
@@ -201,7 +224,7 @@ func emit_tokens_stub(args: DriverArgs) -> I32 {
 
 func emit_ast_summary(args: DriverArgs) -> I32 {
     let abi = abi_for_target(args.target)
-    when run_pipeline(args.input, abi) {
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
         Ok(_lw) => {
             println(`cc_driver: parsed {args.input}`.as_str())
             0
@@ -215,7 +238,7 @@ func emit_ast_summary(args: DriverArgs) -> I32 {
 
 func emit_mir_summary(args: DriverArgs) -> I32 {
     let abi = abi_for_target(args.target)
-    when run_pipeline(args.input, abi) {
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
         Ok(lw) => {
             let n = lw.module.functions.len()
             println(`cc_driver: lowered {args.input} (module={lw.module.name}, functions={n})`.as_str())
@@ -230,7 +253,7 @@ func emit_mir_summary(args: DriverArgs) -> I32 {
 
 func emit_pipeline_status(args: DriverArgs) -> I32 {
     let abi = abi_for_target(args.target)
-    when run_pipeline(args.input, abi) {
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
         Ok(_lw) => {
             println(`cc_driver: pipeline OK for {args.input}`.as_str())
             0

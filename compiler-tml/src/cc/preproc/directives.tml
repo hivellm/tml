@@ -11,13 +11,27 @@
 use compiler::cc::preproc::token::*
 use compiler::cc::preproc::macros::*
 use compiler::cc::preproc::conditionals::*
+use compiler::cc::preproc::include::*
+use compiler::cc::preproc::tokenize::pp_tokenize_source
 use std::collections::list::List
+use std::file::File
 
 /// Walk `tokens` and apply directive logic. Returns a new token list
 /// that contains only the non-directive tokens that survive the
 /// active-conditional gate. Whitespace and Newline tokens are stripped
 /// because the C lexer ignores them anyway.
+///
+/// The convenience entry point — equivalent to `pp_sweep_in_file(pp,
+/// tokens, "")`. Use `pp_sweep_in_file` when you have a known source
+/// path so `#include "..."` lookups can resolve relative to it.
 pub func pp_sweep(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken] {
+    return pp_sweep_in_file(pp, tokens, "")
+}
+
+/// Same as `pp_sweep` but takes the absolute path of the file the
+/// tokens were produced from so `#include "..."` references can be
+/// resolved relative to it.
+pub func pp_sweep_in_file(pp: Preprocessor, tokens: List[PpToken], current_file: Str) -> List[PpToken] {
     let n: I64 = tokens.len() as I64
     let out: List[PpToken] = List[PpToken]::new(n)
 
@@ -75,7 +89,7 @@ pub func pp_sweep(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken] {
             // Advance i past the trailing Newline (or to n).
             i = if k < n { k + 1 as I64 } else { k }
             at_line_start = 1 as I64
-            pp_handle_directive(pp, name, body)
+            pp_handle_directive(pp, name, body, current_file, out)
             continue
         }
 
@@ -141,7 +155,17 @@ func pp_kind_code(k: PpTokenKind) -> I64 {
 
 /// Dispatch a single directive. `body` is the tokens after the
 /// directive name, in order, with whitespace tokens still embedded.
-func pp_handle_directive(pp: Preprocessor, name: Str, body: List[PpToken]) {
+/// `current_file` is the path of the file the directive came from
+/// (used for relative `#include "..."` resolution). `out` is the
+/// running output stream — `#include` appends its expanded content
+/// here.
+func pp_handle_directive(
+    pp: Preprocessor,
+    name: Str,
+    body: List[PpToken],
+    current_file: Str,
+    out: List[PpToken]
+) {
     let active: I64 = cond_is_active(pp)
 
     // Conditionals are evaluated even when an outer block is inactive
@@ -197,8 +221,41 @@ func pp_handle_directive(pp: Preprocessor, name: Str, body: List[PpToken]) {
         return
     }
     if name == "include" {
-        // `#include` is a no-op for now (full file resolution + recursion
-        // is phase24a item 2). Drop the directive silently.
+        let parsed_opt: Maybe[ParsedInclude] = pp_parse_include_body(body)
+        let Just(parsed) = parsed_opt else {
+            pp.errors.push("malformed #include directive")
+            return
+        }
+        let resolved_opt: Maybe[Str] = pp_resolve_include(
+            parsed.name, parsed.is_system, current_file,
+            pp.user_paths, pp.system_paths)
+        let Just(path) = resolved_opt else {
+            // Header not found. For a self-hosted compiler bring-up we
+            // tolerate missing system headers (the real `<stdio.h>` is
+            // only fully needed at link time); record an error so the
+            // caller can surface it but otherwise treat the include as
+            // a no-op.
+            pp.errors.push("could not resolve #include " + parsed.name)
+            return
+        }
+        if pp_is_circular(pp, path) == 1 as I64 {
+            pp.errors.push("circular #include of " + path)
+            return
+        }
+        if pp_is_guarded(pp, path) == 1 as I64 {
+            // Already included once with `#pragma once` or guarded —
+            // skip silently per C17 §6.10.2.
+            return
+        }
+        pp_push_include(pp, path)
+        let included_source: Str = File::read_all(path)
+        let included_pp: List[PpToken] = pp_tokenize_source(included_source, path)
+        let included_swept: List[PpToken] = pp_sweep_in_file(pp, included_pp, path)
+        let m: I64 = included_swept.len() as I64
+        for k in 0 to m {
+            out.push(included_swept.get(k))
+        }
+        pp_pop_include(pp)
         return
     }
     // `#error`, `#pragma`, `#line` and any unknown directive: drop.

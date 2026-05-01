@@ -9,6 +9,7 @@ use compiler::cc::preproc::token::{
 use compiler::cc::preproc::tokenize::pp_tokenize_source
 use compiler::cc::preproc::directives::pp_sweep
 use compiler::cc::preproc::predefined::register_predefined_macros
+use compiler::cc::preproc::include::*
 
 /// Tokenise a source string as if it lived in `t.c` and return the
 /// pp-token stream after the directive sweep.
@@ -79,6 +80,64 @@ func tokens_concat(tokens: List[PpToken]) -> Str {
     let src: Str = "#pragma once\n#line 42 \"foo.c\"\nint x;"
     let out = sweep_source(src)
     assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_parse_include_angle_form() {
+    let raw = pp_tokenize_source("#include <stdio.h>\n", "t.c")
+    // Drop the leading `# include <whitespace>` so we hand
+    // `pp_parse_include_body` the body the directive sweep would.
+    var body: List[PpToken] = List[PpToken]::new(8 as I64)
+    let n: I64 = raw.len() as I64
+    var seen_keyword: I64 = 0 as I64
+    for i in 0 to n {
+        let t = raw.get(i)
+        if seen_keyword == 0 as I64 {
+            when t.kind {
+                Ident => { if t.text == "include" { seen_keyword = 1 as I64 } },
+                _ => {}
+            }
+        } else {
+            when t.kind {
+                Newline => {},
+                _ => body.push(t)
+            }
+        }
+    }
+    let parsed_opt = pp_parse_include_body(body)
+    let Just(parsed) = parsed_opt else {
+        assert(false)
+        return
+    }
+    assert_eq(parsed.name, "stdio.h")
+    assert_eq(parsed.is_system as I32, 1)
+}
+
+@test func test_parse_include_quoted_form() {
+    let raw = pp_tokenize_source("#include \"foo.h\"\n", "t.c")
+    var body: List[PpToken] = List[PpToken]::new(4 as I64)
+    let n: I64 = raw.len() as I64
+    var seen_keyword: I64 = 0 as I64
+    for i in 0 to n {
+        let t = raw.get(i)
+        if seen_keyword == 0 as I64 {
+            when t.kind {
+                Ident => { if t.text == "include" { seen_keyword = 1 as I64 } },
+                _ => {}
+            }
+        } else {
+            when t.kind {
+                Newline => {},
+                _ => body.push(t)
+            }
+        }
+    }
+    let parsed_opt = pp_parse_include_body(body)
+    let Just(parsed) = parsed_opt else {
+        assert(false)
+        return
+    }
+    assert_eq(parsed.name, "foo.h")
+    assert_eq(parsed.is_system as I32, 0)
 }
 
 @test func test_sweep_predefined_win32() {

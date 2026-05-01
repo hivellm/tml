@@ -5,10 +5,10 @@
 - [x] 1.4 `register_predefined_macros(preproc)` runs before the sweep in `cc_driver.tml::run_pipeline`. Registers `__STDC__`, `__STDC_VERSION__`, `__TML__`, `_WIN32`/`_WIN64`, `__x86_64__`, sizeof macros, byte order. When the target ABI is `SysvAmd64`, `register_linux_macros` runs in addition (sets `__linux__`, `__unix__`, `__ELF__`, `__SIZEOF_LONG__=8`). `__FILE__` / `__LINE__` are special-form macros that the existing predefined.tml leaves to the scanner; phase24a item 5 will wire those when self-compile of essential.c needs them.
 
 ## 2. #include resolution
-- [ ] 2.1 Implement `pp_resolve_include(name: Str, is_system: I64, current_file: Str, search_paths: List[Str]) -> Maybe[Str]` returning the resolved absolute path
-- [ ] 2.2 Implement `pp_include_file(pp, path)` that reads the file, recurses through `pp_tokenize_source`, runs the directive sweep on the new tokens, and splices the result in place of the `#include` directive
-- [ ] 2.3 Detect and reject circular `#include` chains (track an active-file set on the Preprocessor)
-- [ ] 2.4 Add `-I <path>` and `-isystem <path>` flags to `cc_driver.tml` and forward them as the search path
+- [x] 2.1 New `compiler-tml/src/cc/preproc/include.tml` ships `pp_parse_include_body` (reconstructs `<foo/bar.h>` from punctuator tokens, strips quotes from `"foo.h"`) and `pp_resolve_include(name, is_system, current_file, user_paths, system_paths) -> Maybe[Str]`. Search order matches C17 §6.10.2: relative-to-current-file (for the quoted form only), then `-I` user paths, then `-isystem` system paths.
+- [x] 2.2 `pp_handle_directive` now reads the resolved path via `File::read_all`, tokenises via `pp_tokenize_source`, and recurses through `pp_sweep_in_file`, appending the result to the parent stream. `pp_sweep` keeps the old single-arg signature as a thin wrapper.
+- [x] 2.3 Circular includes detected via the existing `pp_is_circular`/`pp_push_include`/`pp_pop_include` helpers on `Preprocessor.include_stack`. `pp_is_guarded` short-circuits files already pulled in via `#pragma once` or include guards.
+- [x] 2.4 `cc_driver.tml::parse_argv` now accepts `-I <path>`, `-Ipath`, and `-isystem <path>`; `cmd_cc.cpp::build_cc_driver_cmdline` forwards `-I` from the C++ wrapper. `-D` and `-isystem` plumbing on the C++ wrapper still pending Phase 3 (only `-I` is needed for the bundled stdlib stubs).
 
 ## 3. Minimal C stdlib stubs
 - [ ] 3.1 Create `compiler/runtime/include/c-stdlib/` with stubs for `<stdint.h>`, `<stddef.h>`, `<stdarg.h>`, `<stdbool.h>`, `<stdio.h>`, `<stdlib.h>`, `<string.h>`, `<math.h>`, `<setjmp.h>`, `<signal.h>`, `<malloc.h>`, `<fcntl.h>`, `<io.h>`, `<unistd.h>`

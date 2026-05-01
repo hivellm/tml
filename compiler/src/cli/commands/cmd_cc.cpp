@@ -382,6 +382,15 @@ std::string build_cc_driver_cmdline(const fs::path& exe, const CcOptions& opts) 
         cmdline_append(cmd, "-o");
         cmdline_append(cmd, opts.output);
     }
+    // Forward `-I <path>` flags so cc_driver's preprocessor can resolve
+    // user `#include "..."` references against the same search list as
+    // a clang invocation would. `-D` and `-isystem` are still TODO on
+    // the driver side; once cc_driver grows handlers, append them here
+    // as well.
+    for (const auto& path : opts.include_paths) {
+        cmdline_append(cmd, "-I");
+        cmdline_append(cmd, path);
+    }
     return cmd;
 }
 

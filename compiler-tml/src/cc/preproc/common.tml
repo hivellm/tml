@@ -11,3 +11,4 @@ pub use compiler::cc::preproc::conditionals::*
 pub use compiler::cc::preproc::predefined::*
 pub use compiler::cc::preproc::tokenize::pp_tokenize_source
 pub use compiler::cc::preproc::directives::pp_sweep
+pub use compiler::cc::preproc::include::*
