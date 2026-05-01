@@ -32,21 +32,22 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase0x_heap-decl-codegen-crash COMPLETE (2026-05-01). Sentinel-
-bisected the actual emitter to `gen_method_static_dispatch`
-(method_static_dispatch.cpp:1006-1020). The struct→ptr fixup there
-relied on a FuncInfo lookup that missed for queued generic
-instantiations; added a fallback that fires the impl.cpp:392-395 rule
-unconditionally when `i == 0` AND arg is `%struct.`/`%enum.` AND the
-FuncInfo lookup misses. `tml cc int_x.c --emit=ast` exits 0; new
-regression tests for `cp_parse_top_decl` and
-`cp_parse_translation_unit` on `int x;` pass; bug #7/#8/#9 tests
-unchanged. Compiler suite 298/317 — 19 failures all pre-existing.
-Version bumped 0.3.38 → 0.3.39.
+phase0x_heap-decl-codegen-crash ARCHIVED (2026-05-01). After the fix,
+attempted phase24 Phase 4.1 (`tml cc essential.c`) — fails because
+the parser is given raw `#include`/`#define`/`#ifdef` tokens.
+`cc_driver.tml::run_pipeline` calls `pp_tokenize_source` and hands
+the stream straight to the C lexer, with no macro expansion or
+conditional inclusion. The macro and conditional logic already exists
+in `compiler-tml/src/cc/preproc/` but is not wired up; `#include`
+file lookup is the only piece needing net-new code.
 
-Next: phase24_cc-cli-integration Phase 3 (cmd_cc.cpp CLI subcommand)
-+ Phase 4 (self-compile essential.c / mem.c via `tml cc`). Phase 1 +
-Phase 2 of phase24 already done.
+Filed `phase24a_cc-preprocessor-wire` as the actual blocker for
+phase24 Phase 4. Five-phase plan: driver wiring, #include resolution,
+bundled C stdlib stubs, regression tests, end-to-end self-compile.
+Plain non-preprocessed C parses cleanly today (verified `int x;`,
+struct + main, function defs, typedefs).
+
+Next active task: phase24a_cc-preprocessor-wire item 1.1.
 Secondary option: phase0w Phase 10 (delete C++ HTML generator —
 destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
