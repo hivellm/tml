@@ -77,6 +77,69 @@ use std::collections::list::List
     }
 }
 
+// phase24b regression: `typedef int int32_t; int32_t x;` —
+// after the first typedef, subsequent declarations using the new
+// type name silently crash `cp_parse_translation_unit`. Diagnosed
+// in phase24b: the parser registers the typedef in
+// `parser.typedefs` correctly, but the second declaration's
+// specifier-parsing path misses the lookup. Active investigation;
+// reproducer landed first.
+@test func test_typedef_then_use_minimal() {
+    let pp = List[PpToken]::new(8 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 2 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 10 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => {
+            // Two top-level decls: the typedef and the var decl.
+            assert_eq(unit.decls.len() as I32, 2)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// Direct phase24b reproducer for the function-form crash:
+// `typedef int int32_t; int32_t add(int32_t a, int32_t b) { return a + b; }`
+@test func test_typedef_then_use_in_function() {
+    let pp = List[PpToken]::new(20 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "add", "t.c", 2 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 2 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "a", "t.c", 2 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ",", "t.c", 2 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "b", "t.c", 2 as I64, 32 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 2 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 2 as I64, 35 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "return", "t.c", 2 as I64, 37 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "a", "t.c", 2 as I64, 44 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "+", "t.c", 2 as I64, 46 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "b", "t.c", 2 as I64, 48 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 49 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 2 as I64, 51 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 2),
+        Err(_) => assert(false)
+    }
+}
+
 @test func test_parser_declarator_for_ident() {
     let pp = List[PpToken]::new(3 as I64)
     pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
