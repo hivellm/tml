@@ -32,17 +32,27 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-Active blocker: phase0x_heap-decl-codegen-crash. Filed 2026-05-01 after
-isolating the `cp_parse_translation_unit` segfault on `int x;` to
-`Heap[CDecl]::new(CDecl::Var(vd))` — crashes with ACCESS_VIOLATION
-even with literal Strs in CVarDecl, so it's a codegen bug independent
-of the dangling-Str issue (which was the prerequisite fix shipped this
-session). Phase 1.1: land the minimal CDecl-shaped repro under
-`compiler/tests/compiler/heap_decl_var_repro.test.tml`.
+Active blocker: phase0x_heap-decl-codegen-crash. Phases 1 + 2 done
+this session. Repro at `compiler/tests/compiler/heap_decl_var_repro.test.tml`
+crashes with ACCESS_VIOLATION at 0x0. Root cause: ABI mismatch.
+`impl.cpp:392-395` lowers the first non-self struct/enum param of a
+non-instance method to `(ptr %value)` and emits `load %struct, ptr
+%value` in the body; the call site in our case passes the struct by
+value, so the callee reinterprets the first 8 bytes (i32 disc + pad =
+0) as a pointer and dereferences null.
+
+Patch attempted in `call_user.cpp:897-922` to handle the generic-
+instantiation key (`Heap__MinDecl_new` instead of `Heap_new`) was
+correct in principle but did not fire — sentinel emit_line at
+`gen_call_user_function` entry confirmed this path is not the
+emitter for `Heap[T]::new` calls. The actual emitter lives elsewhere
+(audit `= call` sites in `compiler/src/codegen/llvm/expr/`,
+particularly generic-class / generic-impl paths). Next session: find
+that emitter and apply the struct→ptr fixup there.
 
 Next after phase0x: phase24_cc-cli-integration Phase 3 (cmd_cc.cpp
 CLI subcommand) + Phase 4 (self-compile essential.c / mem.c via
-`tml cc`). Phase 1 + Phase 2 of phase24 are already done.
+`tml cc`). Phase 1 + Phase 2 of phase24 already done.
 Secondary option: phase0w Phase 10 (delete C++ HTML generator —
 destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
