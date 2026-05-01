@@ -30,6 +30,7 @@ use test::{assert, assert_eq}
 use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token, Preprocessor, pp_new}
 use compiler::cc::preproc::tokenize::pp_tokenize_source
 use compiler::cc::preproc::directives::pp_sweep
+use compiler::cc::preproc::predefined::{register_predefined_macros, register_linux_macros}
 use compiler::cc::lexer::*
 use compiler::cc::parser::*
 use compiler::cc::ast::*
@@ -152,6 +153,11 @@ func run_pipeline(input_path: Str, target: CAbiTarget) -> Outcome[CLower, Str] {
     // stream that the C lexer can consume. `expand_macros` then
     // rewrites identifiers that match registered object-like macros.
     let preproc: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    register_predefined_macros(preproc)
+    when target {
+        SysvAmd64 => register_linux_macros(preproc),
+        _ => {}
+    }
     let pp: List[PpToken] = pp_sweep(preproc, raw_pp)
 
     // Stage 1c — C token classifier. Turns the pp-token stream into

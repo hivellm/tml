@@ -8,6 +8,7 @@ use compiler::cc::preproc::token::{
 }
 use compiler::cc::preproc::tokenize::pp_tokenize_source
 use compiler::cc::preproc::directives::pp_sweep
+use compiler::cc::preproc::predefined::register_predefined_macros
 
 /// Tokenise a source string as if it lived in `t.c` and return the
 /// pp-token stream after the directive sweep.
@@ -78,4 +79,14 @@ func tokens_concat(tokens: List[PpToken]) -> Str {
     let src: Str = "#pragma once\n#line 42 \"foo.c\"\nint x;"
     let out = sweep_source(src)
     assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_sweep_predefined_win32() {
+    // `register_predefined_macros` registers `_WIN32`, so `#ifdef _WIN32`
+    // is taken and `int win = 1;` survives.
+    let raw = pp_tokenize_source("#ifdef _WIN32\nint win;\n#else\nint posix;\n#endif", "t.c")
+    let pp = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    register_predefined_macros(pp)
+    let out = pp_sweep(pp, raw)
+    assert_eq(tokens_concat(out), "int win ;")
 }
