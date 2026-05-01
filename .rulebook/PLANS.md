@@ -32,22 +32,22 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase0x_heap-decl-codegen-crash ARCHIVED (2026-05-01). After the fix,
-attempted phase24 Phase 4.1 (`tml cc essential.c`) — fails because
-the parser is given raw `#include`/`#define`/`#ifdef` tokens.
-`cc_driver.tml::run_pipeline` calls `pp_tokenize_source` and hands
-the stream straight to the C lexer, with no macro expansion or
-conditional inclusion. The macro and conditional logic already exists
-in `compiler-tml/src/cc/preproc/` but is not wired up; `#include`
-file lookup is the only piece needing net-new code.
+phase0x_heap-decl-codegen-crash ARCHIVED. phase24a_cc-preprocessor-wire
+Phases 1-3 + tests are committed and working:
+  - Phase 1: directive sweep, object-like macro expansion, predefined
+    macros (commits 0742e475, d46382cb).
+  - Phase 2: #include resolution + recursive sweep + -I/-isystem
+    flags forwarded through cmd_cc.cpp (commit 053eafec).
+  - Phase 3: ten bundled minimal C stdlib headers under
+    compiler/runtime/include/c-stdlib/ (commit 62e53325).
+  - 10 passing regression tests in compiler-tml/tests/native/c_preproc.test.tml.
 
-Filed `phase24a_cc-preprocessor-wire` as the actual blocker for
-phase24 Phase 4. Five-phase plan: driver wiring, #include resolution,
-bundled C stdlib stubs, regression tests, end-to-end self-compile.
-Plain non-preprocessed C parses cleanly today (verified `int x;`,
-struct + main, function defs, typedefs).
+Phase 5 (`tml cc essential.c` end-to-end) is blocked on a separate
+parser bug, NOT on the preprocessor: `typedef int int32_t; int32_t
+f(void);` crashes the C parser silently even with no #include
+involved. Filing as phase24b_cc-typedef-name-resolution.
 
-Next active task: phase24a_cc-preprocessor-wire item 1.1.
+Next active task: phase24b_cc-typedef-name-resolution.
 Secondary option: phase0w Phase 10 (delete C++ HTML generator —
 destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
