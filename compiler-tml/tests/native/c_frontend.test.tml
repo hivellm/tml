@@ -54,3 +54,28 @@ use std::collections::list::List
     let lw: CLower = c_lower(CAbiTarget::WindowsX64, "smoke")
     assert_eq(lw.module.name, "smoke")
 }
+
+// ---------------------------------------------------------------------------
+// phase24b regression: CTypeEnv passed by value to base_to_ctype frees the
+// caller's HashMap buckets via drop glue. The second call on the same env
+// reads dangling memory and crashes. Fix is to take env: ref CTypeEnv.
+// ---------------------------------------------------------------------------
+
+@test func test_phase24b_base_to_ctype_typedef_repeat() {
+    let lw: CLower = c_lower(CAbiTarget::WindowsX64, "phase24b")
+    // Register a typedef int32_t -> int.
+    let int_ty: CType = CType::Int
+    let int_ty_h: Heap[CType] = Heap[CType]::new(int_ty)
+    lw.env.typedefs.set("int32_t", int_ty_h)
+    // First lookup — unaffected.
+    let r1: CType = base_to_ctype(ref lw.env, CBaseType::Typedef("int32_t"))
+    assert_eq(ctype_kind(r1), CT_KIND_INT)
+    // Second lookup — pre-fix, drop glue from r1 had freed env.typedefs
+    // buckets, this dereference crashed.
+    let r2: CType = base_to_ctype(ref lw.env, CBaseType::Typedef("int32_t"))
+    assert_eq(ctype_kind(r2), CT_KIND_INT)
+    // Third — confirm the env is still healthy after multiple by-value
+    // entries, mirroring lower_func_decl's parameter loop pattern.
+    let r3: CType = base_to_ctype(ref lw.env, CBaseType::Typedef("int32_t"))
+    assert_eq(ctype_kind(r3), CT_KIND_INT)
+}

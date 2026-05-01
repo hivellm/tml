@@ -330,8 +330,8 @@ pub func lower_struct_def(lw: CLower, sd: CStructDef) {
     let n: I64 = sd.fields.len() as I64
     loop (i < n) {
         let pf: CStructField = sd.fields.get(i)
-        let base_ty: CType = base_to_ctype(lw.env, pf.specifiers.base_type)
-        let ft_c: CType = apply_declarator(lw.env, base_ty, pf.declarator)
+        let base_ty: CType = base_to_ctype(ref lw.env, pf.specifiers.base_type)
+        let ft_c: CType = apply_declarator(ref lw.env, base_ty, pf.declarator)
         let ft_heap: Heap[CType] = Heap[CType]::new(ft_c)
         let af: CAggregateField = CAggregateField {
             name: pf.name, ty: ft_heap, offset: 0 as I64, bit_width: pf.bit_width
@@ -339,7 +339,7 @@ pub func lower_struct_def(lw: CLower, sd: CStructDef) {
         fields.push(af)
         i = i + 1
     }
-    let agg: CAggregate = layout_struct(lw.env, sd.tag, fields)
+    let agg: CAggregate = layout_struct(ref lw.env, sd.tag, fields)
     let agg_heap: Heap[CAggregate] = Heap[CAggregate]::new(agg)
     lw.env.structs.set(sd.tag, agg_heap)
 
@@ -363,8 +363,8 @@ pub func lower_union_def(lw: CLower, ud: CUnionDef) {
     let n: I64 = ud.fields.len() as I64
     loop (i < n) {
         let pf: CStructField = ud.fields.get(i)
-        let base_ty: CType = base_to_ctype(lw.env, pf.specifiers.base_type)
-        let ft_c: CType = apply_declarator(lw.env, base_ty, pf.declarator)
+        let base_ty: CType = base_to_ctype(ref lw.env, pf.specifiers.base_type)
+        let ft_c: CType = apply_declarator(ref lw.env, base_ty, pf.declarator)
         let af: CAggregateField = CAggregateField {
             name: pf.name, ty: Heap[CType]::new(ft_c),
             offset: 0 as I64, bit_width: pf.bit_width
@@ -372,7 +372,7 @@ pub func lower_union_def(lw: CLower, ud: CUnionDef) {
         fields.push(af)
         i = i + 1
     }
-    let agg: CAggregate = layout_union(lw.env, ud.tag, fields)
+    let agg: CAggregate = layout_union(ref lw.env, ud.tag, fields)
     lw.env.unions.set(ud.tag, Heap[CAggregate]::new(agg))
 }
 
@@ -416,8 +416,8 @@ pub func lower_enum_def(lw: CLower, ed: CEnumDef) {
 // ============================================================================
 
 pub func lower_typedef(lw: CLower, td: CTypedefDef) {
-    let base_ty: CType = base_to_ctype(lw.env, td.specifiers.base_type)
-    let resolved: CType = apply_declarator(lw.env, base_ty, td.declarator)
+    let base_ty: CType = base_to_ctype(ref lw.env, td.specifiers.base_type)
+    let resolved: CType = apply_declarator(ref lw.env, base_ty, td.declarator)
     lw.env.typedefs.set(td.name, Heap[CType]::new(resolved))
 }
 
@@ -441,8 +441,8 @@ pub func lower_typedef(lw: CLower, td: CTypedefDef) {
 
 pub func lower_global_var(lw: CLower, vd: CVarDecl) {
     let resolved: CType = apply_declarator(
-        lw.env,
-        base_to_ctype(lw.env, vd.specifiers.base_type),
+        ref lw.env,
+        base_to_ctype(ref lw.env, vd.specifiers.base_type),
         vd.declarator
     )
     let is_extern: I64 = storage_is_extern(vd.specifiers.storage)
@@ -501,8 +501,8 @@ pub func lower_func_decl(lw: CLower, fd: CFuncDecl) {
     let n: I64 = fd.params.len() as I64
     loop (i < n) {
         let p: CParam = fd.params.get(i)
-        let p_base: CType = base_to_ctype(lw.env, p.specifiers.base_type)
-        let p_ty_c: CType = apply_declarator(lw.env, p_base, p.declarator)
+        let p_base: CType = base_to_ctype(ref lw.env, p.specifiers.base_type)
+        let p_ty_c: CType = apply_declarator(ref lw.env, p_base, p.declarator)
         let p_ty_final: CType = apply_param_decays(p_ty_c)
         let p_mir: MirType = lower_type(lw, p_ty_final)
         let pid: I64 = fresh_value(lw)
@@ -533,12 +533,12 @@ pub func lower_func_decl(lw: CLower, fd: CFuncDecl) {
 // outermost Func layer's inner wraps the return; we re-apply the
 // declarator spine without the outer Func to recover it.
 func return_type_of_func_decl(lw: CLower, fd: CFuncDecl) -> CType {
-    let base_ty: CType = base_to_ctype(lw.env, fd.specifiers.base_type)
+    let base_ty: CType = base_to_ctype(ref lw.env, fd.specifiers.base_type)
     when fd.declarator {
         Func(part) => {
-            return apply_declarator(lw.env, base_ty, part.inner.get())
+            return apply_declarator(ref lw.env, base_ty, part.inner.get())
         },
-        _ => return apply_declarator(lw.env, base_ty, fd.declarator)
+        _ => return apply_declarator(ref lw.env, base_ty, fd.declarator)
     }
 }
 
@@ -712,8 +712,8 @@ pub func lower_local_decl(lw: CLower, mfunc: MirFunc, d: CDecl) {
     when d {
         Var(vd) => {
             let resolved: CType = apply_declarator(
-                lw.env,
-                base_to_ctype(lw.env, vd.specifiers.base_type),
+                ref lw.env,
+                base_to_ctype(ref lw.env, vd.specifiers.base_type),
                 vd.declarator
             )
             // Allocate an alloca slot and remember it.

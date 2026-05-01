@@ -13,12 +13,18 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-Last completed (2026-04-18): phase0v_codegen-bringup-bugs ARCHIVED,
-phase23b_c-frontend ARCHIVED. Only phase0w_coverage-tml-library remains
-in-progress; everything it has left is either external-tool-gated
-(genhtml, llvm-cov, browser verify) or the Phase 10 C++ HTML generator
-removal (destructive, awaits user green light).
-Branch: feat/self-hosting-compiler. Version: 0.3.38.
+Last completed (2026-05-01): phase24b_cc-typedef-name-resolution
+items 1–5 done. Fix selected option (a) from proposal — type-system
+entry points in `compiler-tml/src/cc/types.tml` and callers in
+`compiler-tml/src/cc/lower.tml` take `env: ref CTypeEnv` instead of
+by-value `CTypeEnv`. Eliminates the value-pass + drop-glue path that
+freed the caller's HashMap buckets on `base_to_ctype` callee exit.
+Regression `test_phase24b_base_to_ctype_typedef_repeat` lands in
+`c_frontend.test.tml`. Compiler suite: 299/318 (baseline preserved).
+End-to-end `tml cc test_no_inc.c` verification needs `cc_driver.exe`,
+which currently fails to link `lib/std/runtime/file.c` despite
+`std::file::File` being imported — filed as `phase24c_cc-driver-runtime-link`.
+Branch: feat/self-hosting-compiler. Version: 0.3.40.
 coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
 golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
 SPA and exits 0.
@@ -32,21 +38,20 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase0x ARCHIVED. phase24a Phases 1-3 done (commits 0742e475,
-d46382cb, 053eafec, 62e53325). phase24b 1.x + 2.x done (commit
-7f6edc89): the typedef-as-type crash is NOT a parser bug — the
-parser passes synthetic-token tests for the same shape. Real
-crash site is `base_to_ctype` in `compiler-tml/src/cc/types.tml`,
-where passing `env: CTypeEnv` (struct of four HashMap fields)
-by value triggers drop glue on exit that frees the caller's
-HashMap buckets. Subsequent `base_to_ctype` calls on the same
-env crash on the Heap dereference inside the `Typedef` arm.
+phase24b ready to archive. Fix landed (option a from proposal):
+type-system entry points in `compiler-tml/src/cc/types.tml` +
+callers in `compiler-tml/src/cc/lower.tml` now take
+`env: ref CTypeEnv`. 11 signatures + 13 call sites updated.
+Regression test passes; compiler suite baseline intact.
 
-A synthetic repro at `.sandbox/ctype_return_repro.tml` with the
-same shape does NOT crash — the exact difference between
-synthetic and real flow needs another bisect.
+Active follow-up: `phase24c_cc-driver-runtime-link` to restore
+`tml build cc_driver.tml` linking `lib/std/runtime/file.c`. Once
+that lands, phase24b items 4.1 / 4.2 (end-to-end `tml cc`
+verification) become runnable in CI.
 
-Fix candidates (proposal.md): (a) `env: ref CTypeEnv` everywhere;
+Old fix-candidate analysis preserved here for context (superseded
+by option (a) ship): proposal.md candidates were
+(a) `env: ref CTypeEnv` everywhere — SHIPPED;
 (b) codegen elides field-level drops on a value-passed local
 when the field is a single pointer; (c) explicit borrow semantics
 for struct value parameters.
