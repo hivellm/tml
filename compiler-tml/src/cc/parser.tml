@@ -49,9 +49,12 @@ pub type CParseError {
 }
 
 pub func c_parse_err(message: Str, tok: CToken) -> CParseError {
+    // tok is a value parameter that drops at function exit; if we
+    // captured tok.file by raw alias the CParseError's file pointer
+    // would dangle. Duplicate the Str so the error owns its storage.
     return CParseError {
         message: message,
-        file: tok.file,
+        file: tok.file.duplicate(),
         line: tok.line,
         col: tok.col
     }
@@ -96,17 +99,33 @@ pub func c_parser(tokens: List[CToken]) -> CParser {
 // Token navigation helpers
 // ============================================================================
 
+// `List.get(i)` returns a bitwise copy via `ptr_read[T]`, which for
+// CToken means the returned value's `Str` fields share heap pointers
+// with the list slot. If the returned CToken's scope ends and its
+// drop runs, the heap strings can be freed out from under the list.
+// We deep-duplicate the Str fields here so every caller gets a
+// CToken that owns its storage.
+func cp_dup_token(src: CToken) -> CToken {
+    return CToken {
+        kind: src.kind,
+        file: src.file.duplicate(),
+        line: src.line,
+        col: src.col,
+        text: src.text.duplicate()
+    }
+}
+
 pub func cp_peek(tokens: List[CToken], pos: I64) -> CToken {
     let n: I64 = tokens.len() as I64
-    if pos >= n { return tokens.get(n - 1) }
-    return tokens.get(pos)
+    let idx: I64 = if pos >= n { n - 1 } else { pos }
+    return cp_dup_token(tokens.get(idx))
 }
 
 pub func cp_peek_at(tokens: List[CToken], pos: I64, offset: I64) -> CToken {
     let n: I64 = tokens.len() as I64
-    let idx: I64 = pos + offset
-    if idx >= n { return tokens.get(n - 1) }
-    return tokens.get(idx)
+    let raw_idx: I64 = pos + offset
+    let idx: I64 = if raw_idx >= n { n - 1 } else { raw_idx }
+    return cp_dup_token(tokens.get(idx))
 }
 
 pub func cp_is_eof(tokens: List[CToken], pos: I64) -> Bool {
@@ -150,7 +169,7 @@ pub func cp_expect_punct(tokens: List[CToken], pos: I64, p: CPunct, msg: Str) ->
 pub func cp_expect_ident(tokens: List[CToken], pos: I64, msg: Str) -> Outcome[CParsedName, CParseError] {
     let tok: CToken = cp_peek(tokens, pos)
     when tok.kind {
-        Ident => return Ok(CParsedName { name: tok.text, pos: pos + 1 }),
+        Ident => return Ok(CParsedName { name: tok.text.duplicate(), pos: pos + 1 }),
         _ => return Err(c_parse_err(msg, tok))
     }
 }
@@ -268,7 +287,9 @@ pub func cp_parse_specifiers(parser: CParser, pos: I64) -> Outcome[CParsedSpecs,
     var p: I64 = pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
-        let tok: CToken = parser.tokens.get(p)
+        // cp_peek deep-duplicates Str fields so dropping `tok` at end of
+        // iteration does not free strings still owned by parser.tokens.
+        let tok: CToken = cp_peek(parser.tokens, p)
         when tok.kind {
             Keyword(k) => {
                 let kind: I64 = specifier_kind(k)
@@ -358,7 +379,9 @@ pub func cp_parse_specifiers(parser: CParser, pos: I64) -> Outcome[CParsedSpecs,
             Ident => {
                 if has_base == 1 as I64 { break }
                 if parser.typedefs.has(tok.text) {
-                    base_override = Just(CBaseType::Typedef(tok.text))
+                    // Duplicate so the variant owns its own Str storage
+                    // independent of the local `tok` lifetime.
+                    base_override = Just(CBaseType::Typedef(tok.text.duplicate()))
                     has_base = 1 as I64
                     p = p + 1
                 } else {
@@ -430,7 +453,8 @@ func cp_parse_aggregate_specifier(parser: CParser, start: I64, storage: CStorage
     let tag_tok: CToken = cp_peek(parser.tokens, p)
     when tag_tok.kind {
         Ident => {
-            tag = tag_tok.text
+            // Duplicate so `tag` outlives tag_tok's drop.
+            tag = tag_tok.text.duplicate()
             p = p + 1
         },
         _ => {}
@@ -459,7 +483,7 @@ func cp_parse_quals_list(parser: CParser, pos: I64) -> CParsedQuals {
     var p: I64 = pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
-        let tok: CToken = parser.tokens.get(p)
+        let tok: CToken = cp_peek(parser.tokens, p)
         when tok.kind {
             Keyword(k) => {
                 when k {
@@ -517,7 +541,7 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
             var p: I64 = pos + 1
             let n: I64 = parser.tokens.len() as I64
             loop (p < n) {
-                let nxt: CToken = parser.tokens.get(p)
+                let nxt: CToken = cp_peek(parser.tokens, p)
                 when nxt.kind {
                     StringLit(next_lit) => {
                         var i: I64 = 0 as I64
@@ -535,7 +559,7 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
             return Ok(CParsedExpr { expr: e, pos: p })
         },
         Ident => {
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Ident(tok.text))
+            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Ident(tok.text.duplicate()))
             return Ok(CParsedExpr { expr: e, pos: pos + 1 })
         },
         Punct(op) => {
@@ -658,7 +682,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
     var p: I64 = first.pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
-        let tok: CToken = parser.tokens.get(p)
+        let tok: CToken = cp_peek(parser.tokens, p)
         when tok.kind {
             Punct(op) => {
                 let code: I64 = op as I64
@@ -941,7 +965,7 @@ func cp_parse_binary(parser: CParser, pos: I64, min_prec: I64) -> Outcome[CParse
     var p: I64 = first.pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
-        let tok: CToken = parser.tokens.get(p)
+        let tok: CToken = cp_peek(parser.tokens, p)
         var info: I64 = -1 as I64
         when tok.kind {
             Punct(op) => info = infix_info(op),
@@ -1084,7 +1108,8 @@ func cp_parse_direct(parser: CParser, pos: I64, allow_abstract: I64) -> Outcome[
     let tok: CToken = cp_peek(parser.tokens, p)
     when tok.kind {
         Ident => {
-            leaf = CDeclarator::Ident(tok.text)
+            // Duplicate so the variant payload outlives `tok`'s drop.
+            leaf = CDeclarator::Ident(tok.text.duplicate())
             p = p + 1
         },
         Punct(op) => {
@@ -1309,8 +1334,11 @@ func cp_parse_param_list(parser: CParser, pos: I64) -> Outcome[CParsedParams, CP
 // ============================================================================
 
 pub func declarator_name(d: CDeclarator) -> Str {
+    // Always return an owned Str — the variant payload behind `d` may
+    // drop before the returned name is consumed (callers store it into
+    // long-lived structures like CFuncDecl.name and HashMap keys).
     when d {
-        Ident(name) => return name,
+        Ident(name) => return name.duplicate(),
         Abstract => return "",
         Pointer(inner, _) => return declarator_name_heap(inner),
         Array(inner, _) => return declarator_name_heap(inner),
@@ -1484,7 +1512,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             p = bp.pos
             let def: CStructDef = CStructDef {
                 tag: tag, fields: bp.fields, is_forward: 0 as I64,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::StructDef(def)))
         } else if agg_kind == 2 as I64 {
@@ -1496,7 +1524,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             p = bp.pos
             let def: CUnionDef = CUnionDef {
                 tag: tag, fields: bp.fields, is_forward: 0 as I64,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::UnionDef(def)))
         } else {
@@ -1509,7 +1537,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             p = bp.pos
             let def: CEnumDef = CEnumDef {
                 tag: tag, variants: bp.variants, is_forward: 0 as I64,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::EnumDef(def)))
         }
@@ -1524,21 +1552,21 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 let def: CStructDef = CStructDef {
                     tag: tag, fields: List[CStructField]::new(0 as I64),
                     is_forward: 1 as I64,
-                    file: start_tok.file, line: start_tok.line, col: start_tok.col
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
                 }
                 decls.push(Heap[CDecl]::new(CDecl::StructDef(def)))
             } else if agg_kind == 2 as I64 {
                 let def: CUnionDef = CUnionDef {
                     tag: tag, fields: List[CStructField]::new(0 as I64),
                     is_forward: 1 as I64,
-                    file: start_tok.file, line: start_tok.line, col: start_tok.col
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
                 }
                 decls.push(Heap[CDecl]::new(CDecl::UnionDef(def)))
             } else {
                 let def: CEnumDef = CEnumDef {
                     tag: tag, variants: List[CEnumVariantDef]::new(0 as I64),
                     is_forward: 1 as I64,
-                    file: start_tok.file, line: start_tok.line, col: start_tok.col
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
                 }
                 decls.push(Heap[CDecl]::new(CDecl::EnumDef(def)))
             }
@@ -1576,7 +1604,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 params: params, is_variadic: is_variadic,
                 kr_decls: List[CVarDecl]::new(0 as I64),
                 body: Just(bp.stmt),
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::Func(fd)))
             return Ok(CParsedDecls { decls: decls, pos: p })
@@ -1587,7 +1615,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             parser.typedefs.set(name, 1 as I64)
             let td: CTypedefDef = CTypedefDef {
                 name: name, specifiers: specs, declarator: dp.decl,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::TypedefDef(td)))
         } else if declarator_is_func(dp.decl) and not cp_check_punct(parser.tokens, p, CPunct::Assign) {
@@ -1599,7 +1627,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 params: params, is_variadic: is_variadic,
                 kr_decls: List[CVarDecl]::new(0 as I64),
                 body: Nothing,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Heap[CDecl]::new(CDecl::Func(fd)))
         } else {
@@ -1617,7 +1645,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             let vd: CVarDecl = CVarDecl {
                 name: name, specifiers: specs, declarator: dp.decl,
                 init: init_opt,
-                file: start_tok.file, line: start_tok.line, col: start_tok.col
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             // Natural form after bug #7 fix — no Heap wrapping needed, no
             // stepwise let bindings. Keep as regression guard for bugs #7/#8/#9.
@@ -1967,7 +1995,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
                 _ => {}
             }
             if is_label == 1 as I64 {
-                let name: Str = tok.text
+                let name: Str = tok.text.duplicate()
                 let body_res: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, pos + 2)
                 let Ok(bp) = body_res else {
                     let Err(e) = body_res else { return Err(c_parse_err("internal: label body", tok)) }
@@ -2315,7 +2343,7 @@ func cp_parse_static_assert_stmt(parser: CParser, pos: I64) -> Outcome[CParsedSt
     let msg_tok: CToken = cp_peek(parser.tokens, p)
     var msg: Str = ""
     when msg_tok.kind {
-        StringLit(_) => { msg = msg_tok.text; p = p + 1 },
+        StringLit(_) => { msg = msg_tok.text.duplicate(); p = p + 1 },
         _ => return Err(c_parse_err("expected string literal as _Static_assert message", msg_tok))
     }
     let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close _Static_assert")

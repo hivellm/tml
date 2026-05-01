@@ -32,19 +32,88 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-Next task: phase24_cc-cli-integration Phase 2 (FFI bridge, ~500 LOC
-C++) + Phase 3 (cmd_cc.cpp CLI subcommand) + Phase 4 (self-compile
-essential.c / mem.c via `tml cc`). Phase 1 of phase24 was already done
-under phase0v (all 9 codegen bring-up bugs fixed).
-Secondary option: phase0w Phase 10 (delete the C++ HTML generator —
-~900 LOC shrink). Coverage_cli now covers the same feature set so the
-C++ fallback is safe to remove, but it's a destructive change and
-should be confirmed with the user first.
+Active blocker: phase0x_heap-decl-codegen-crash. Filed 2026-05-01 after
+isolating the `cp_parse_translation_unit` segfault on `int x;` to
+`Heap[CDecl]::new(CDecl::Var(vd))` — crashes with ACCESS_VIOLATION
+even with literal Strs in CVarDecl, so it's a codegen bug independent
+of the dangling-Str issue (which was the prerequisite fix shipped this
+session). Phase 1.1: land the minimal CDecl-shaped repro under
+`compiler/tests/compiler/heap_decl_var_repro.test.tml`.
+
+Next after phase0x: phase24_cc-cli-integration Phase 3 (cmd_cc.cpp
+CLI subcommand) + Phase 4 (self-compile essential.c / mem.c via
+`tml cc`). Phase 1 + Phase 2 of phase24 are already done.
+Secondary option: phase0w Phase 10 (delete C++ HTML generator —
+destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
 
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-05-01 — cc parser dangling-Str fix + Heap[CDecl] crash isolation
+
+### Accomplished
+
+Audited every `tok.text` / `tok.file` site in
+`compiler-tml/src/cc/parser.tml`. `cp_dup_token` already deep-
+duplicated Str fields on `cp_peek`, but five raw `parser.tokens.get(p)`
+calls inside loops bypassed it: dropping the local `tok` at end of
+iteration freed Str pointers still owned by `parser.tokens`. Fixed:
+all five raw `.get(p)` → `cp_peek(parser.tokens, p)` (lines 287, 478,
+536, 677, 960).
+
+Added `.duplicate()` at every Str escape site where `tok.text` or
+`tok.file` flows into a value outliving the local `tok`:
+`c_parse_err.file`, `cp_expect_ident.name`,
+`CBaseType::Typedef(tok.text)`, `tag = tag_tok.text`,
+`CExpr::Ident(tok.text)`, `CDeclarator::Ident(tok.text)`,
+10× `start_tok.file` across CStructDef/CUnionDef/CEnumDef/CFuncDecl/
+CTypedefDef/CVarDecl, label `name = tok.text`, and
+`_Static_assert msg = msg_tok.text`. Also made `declarator_name`
+return an owned Str so HashMap/struct captures of the returned name
+don't dangle.
+
+Type-check clean; `c_lexer`, `c_parser`, `c_frontend` test suites all
+pass after the fix (no regressions).
+
+### Crash isolation: discovered Heap[CDecl] codegen bug
+
+After dangling-Str fixes, the `cp_parse_translation_unit` segfault on
+`int x;` moved to `decls.push(Heap[CDecl]::new(CDecl::Var(vd)))`.
+Bisected via `File::append_all` instrumentation (println is buffered
+and lost on SIGSEGV — direct file appends survive). Reduced to:
+
+```tml
+let vd: CVarDecl = CVarDecl {
+    name: "x", specifiers: specs, declarator: CDeclarator::Ident("x"),
+    init: Nothing,
+    file: "t.c", line: 1, col: 1
+}
+decls.push(Heap[CDecl]::new(CDecl::Var(vd)))
+```
+
+Crashes with ACCESS_VIOLATION at `Heap[CDecl]::new(...)` even with
+literal Strs — so it's **not** in my fix; it's a pre-existing codegen
+bug in `Heap[T]::new` for `T = CDecl`-shaped values (large enum +
+nested struct fields with Str payloads). The phase0v bug #7/#8/#9
+regression tests pass because their synthetic types differ from the
+`CVarDecl` / `CDeclSpecifiers` / `CDeclarator` shape.
+
+Filed as `phase0x_heap-decl-codegen-crash` with bisect plan and
+Rust-as-Reference IR methodology. This is the actual blocker for
+phase24 Phase 4.
+
+### Files modified this session (uncommitted)
+- `compiler-tml/src/cc/parser.tml` — dangling-Str fix (~25 sites).
+- `.rulebook/tasks/phase0x_heap-decl-codegen-crash/` — new follow-up.
+
+### Next session starter
+
+Active task: `phase0x_heap-decl-codegen-crash`. Start at item 1.1 —
+land the minimal `heap_decl_var_repro.test.tml` fixture and confirm it
+crashes on a clean checkout. Item 2.1 (`emit-ir` on the fixture) is
+where the actual codegen bug becomes visible.
+
 ### 2026-04-18 (session 2) — phase24 Phase 2.3 + parser bug bisection
 
 ### Accomplished
