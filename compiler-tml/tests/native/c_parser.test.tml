@@ -34,9 +34,48 @@ use std::collections::list::List
     }
 }
 
-// NOTE: regression tests for `cp_parse_top_decl` / `cp_parse_translation_unit`
-// on `int x;` are pending — the dangling-Str fix lands first; runtime
-// behaviour is verified separately via `tml cc t.c --emit=ast`.
+// Regression: `cp_parse_translation_unit` on `int x;` previously
+// segfaulted because of two compounding bugs:
+//   1. dangling-Str leaks in the parser (CToken Str fields aliased
+//      list slots — fixed in commit 7e70a7bc7), and
+//   2. an ABI mismatch in the static-method dispatch path: generic
+//      impl methods like `Heap[T]::new` registered FuncInfo only
+//      after queued instantiation ran, so the call-site struct→ptr
+//      fixup at method_static_dispatch.cpp could not find param
+//      types and skipped the conversion. The callee then dereferenced
+//      a struct value as a pointer and crashed at 0x0.
+@test func test_parse_top_decl_int_x() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 3)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+@test func test_parse_translation_unit_int_x() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
 
 @test func test_parser_declarator_for_ident() {
     let pp = List[PpToken]::new(3 as I64)

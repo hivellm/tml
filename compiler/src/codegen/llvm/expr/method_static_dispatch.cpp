@@ -1000,17 +1000,27 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     // Check if the function definition expects ptr but we have a
                     // struct/enum by value (ABI mismatch from impl.cpp receiver
                     // convention). Use the registered FuncInfo param types as source
-                    // of truth.
+                    // of truth, falling back to the impl.cpp:392-395 rule for the
+                    // first non-self param when the FuncInfo is not yet registered
+                    // (generic instantiations are queued during arg processing and
+                    // registered only when `gen_impl_method_instantiation` runs).
+                    bool is_aggregate_arg =
+                        arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0;
+                    bool needs_struct_to_ptr = false;
                     if (method_it != functions_.end() && i < method_it->second.param_types.size()) {
-                        const auto& expected = method_it->second.param_types[i];
-                        if (expected == "ptr" &&
-                            (arg_type.find("%struct.") == 0 || arg_type.find("%enum.") == 0)) {
-                            std::string temp = fresh_reg();
-                            emit_line("  " + temp + " = alloca " + arg_type);
-                            emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
-                            val = temp;
-                            arg_type = "ptr";
-                        }
+                        needs_struct_to_ptr =
+                            method_it->second.param_types[i] == "ptr" && is_aggregate_arg;
+                    } else if (method_it == functions_.end() && i == 0 && is_aggregate_arg) {
+                        // Mirror impl.cpp:392-395: first non-self struct/enum param
+                        // is lowered to `ptr` in the LLVM definition.
+                        needs_struct_to_ptr = true;
+                    }
+                    if (needs_struct_to_ptr) {
+                        std::string temp = fresh_reg();
+                        emit_line("  " + temp + " = alloca " + arg_type);
+                        emit_line("  store " + arg_type + " " + val + ", ptr " + temp);
+                        val = temp;
+                        arg_type = "ptr";
                     }
                     typed_args.push_back({arg_type, val});
                 }

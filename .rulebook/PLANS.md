@@ -32,27 +32,21 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-Active blocker: phase0x_heap-decl-codegen-crash. Phases 1 + 2 done
-this session. Repro at `compiler/tests/compiler/heap_decl_var_repro.test.tml`
-crashes with ACCESS_VIOLATION at 0x0. Root cause: ABI mismatch.
-`impl.cpp:392-395` lowers the first non-self struct/enum param of a
-non-instance method to `(ptr %value)` and emits `load %struct, ptr
-%value` in the body; the call site in our case passes the struct by
-value, so the callee reinterprets the first 8 bytes (i32 disc + pad =
-0) as a pointer and dereferences null.
+phase0x_heap-decl-codegen-crash COMPLETE (2026-05-01). Sentinel-
+bisected the actual emitter to `gen_method_static_dispatch`
+(method_static_dispatch.cpp:1006-1020). The struct→ptr fixup there
+relied on a FuncInfo lookup that missed for queued generic
+instantiations; added a fallback that fires the impl.cpp:392-395 rule
+unconditionally when `i == 0` AND arg is `%struct.`/`%enum.` AND the
+FuncInfo lookup misses. `tml cc int_x.c --emit=ast` exits 0; new
+regression tests for `cp_parse_top_decl` and
+`cp_parse_translation_unit` on `int x;` pass; bug #7/#8/#9 tests
+unchanged. Compiler suite 298/317 — 19 failures all pre-existing.
+Version bumped 0.3.38 → 0.3.39.
 
-Patch attempted in `call_user.cpp:897-922` to handle the generic-
-instantiation key (`Heap__MinDecl_new` instead of `Heap_new`) was
-correct in principle but did not fire — sentinel emit_line at
-`gen_call_user_function` entry confirmed this path is not the
-emitter for `Heap[T]::new` calls. The actual emitter lives elsewhere
-(audit `= call` sites in `compiler/src/codegen/llvm/expr/`,
-particularly generic-class / generic-impl paths). Next session: find
-that emitter and apply the struct→ptr fixup there.
-
-Next after phase0x: phase24_cc-cli-integration Phase 3 (cmd_cc.cpp
-CLI subcommand) + Phase 4 (self-compile essential.c / mem.c via
-`tml cc`). Phase 1 + Phase 2 of phase24 already done.
+Next: phase24_cc-cli-integration Phase 3 (cmd_cc.cpp CLI subcommand)
++ Phase 4 (self-compile essential.c / mem.c via `tml cc`). Phase 1 +
+Phase 2 of phase24 already done.
 Secondary option: phase0w Phase 10 (delete C++ HTML generator —
 destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
@@ -60,6 +54,85 @@ destructive, awaits user OK).
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-05-01 (session 2) — phase0x_heap-decl-codegen-crash COMPLETE
+
+### Accomplished
+
+Fixed the codegen ABI mismatch that crashed `cp_parse_translation_unit`
+on `int x;` after the dangling-Str fix in commit 7e70a7bc7 exposed it.
+
+**Bisect path** (sentinels at every `= call` emit site):
+1. `gen_call_user_function` (call_user.cpp) — not invoked.
+2. `gen_call_generic_struct_method` (call_generic_struct.cpp) — not invoked.
+3. `gen_call` top of dispatch (call.cpp) — not invoked!
+4. `gen_method_call` (method.cpp) — fires for `method=new`.
+5. `gen_method_static_dispatch` (method_static_dispatch.cpp) — fires
+   for `method=new, receiver_seg0=Heap`. The actual emitter.
+
+So the call to `Heap[T]::new(value)` is parsed as a `MethodCallExpr`
+with PathExpr receiver, NOT a CallExpr — explains why the previous
+audit of CallExpr handlers turned up nothing.
+
+**Diagnostic via emit_line in the fixup site** showed
+`functions_.find("Heap__MinDecl_new")` returned `end()` at
+arg-processing time. Generic instantiations are queued at
+method_static_dispatch.cpp:953-956 and the FuncInfo registers later
+when `gen_impl_method_instantiation` runs as part of a subsequent
+pass. The existing fixup at line 1010-1020 had nothing to read.
+
+**Fix** (method_static_dispatch.cpp:1006-1029): added a fallback
+that mirrors the impl.cpp:392-395 rule unconditionally when:
+- the FuncInfo lookup misses, AND
+- `i == 0` (first user-visible param), AND
+- the resolved arg type starts with `%struct.` or `%enum.`
+
+Scoped to the `func_sig` branch only; the other branches (1081+,
+1162+) handle their own cases through `pending_generic_impls_`.
+
+### Verification
+
+- `compiler/tests/compiler/heap_decl_var_repro.test.tml` PASS.
+- Bug #7/#8/#9 regression tests (`nested_constructor_push`,
+  `large_enum_by_value_duplicate`) still pass.
+- `compiler-tml/tests/native/c_parser.test.tml`:
+  `test_parse_top_decl_int_x` and `test_parse_translation_unit_int_x`
+  added and pass.
+- `tml cc .sandbox/int_x.c --emit=ast` exits 0 with output
+  `cc_driver: parsed .sandbox/int_x.c`.
+- Compiler suite (`tml test --suite=compiler --no-fail-fast`): 298/317
+  pass. The 19 failures are all pre-existing K001 self-host tests
+  (lexer_basic, parser_basic, hir_types, infer_differential,
+  c_preprocessor, parse_*, test_*) plus one X002 timeout
+  (builtins_imports). Verified by re-running on `git stash` (without
+  the fix) — same failure set, no regressions introduced.
+
+### Bisect data point worth keeping
+
+Static method calls via `Type::method(args)` syntax in TML are
+parsed as `MethodCallExpr`, not `CallExpr`. The dispatch path lives
+in `method.cpp::gen_method_call → gen_method_static_dispatch`, NOT
+`call.cpp::gen_call`. Future ABI-mismatch debugging on static-method
+calls should start at method_static_dispatch.cpp.
+
+### Files changed
+
+- `compiler/src/codegen/llvm/expr/method_static_dispatch.cpp`
+  (+15 / −9, the actual fix).
+- `compiler-tml/tests/native/c_parser.test.tml` (+34 / −3, regression
+  tests).
+- `compiler/tests/compiler/heap_decl_var_repro.test.tml` (already
+  landed in 0e814621; no new changes).
+- `VERSION`: 0.3.38 → 0.3.39.
+- `CHANGELOG.md`: 0.3.39 row.
+- `docs/patches/v0.3.39.md`: full release notes.
+- `.rulebook/tasks/phase0x_heap-decl-codegen-crash/tasks.md`: all
+  items checked.
+
+### Next session starter
+
+phase24 Phase 3 (cmd_cc.cpp CLI subcommand) and Phase 4
+(self-compile essential.c / mem.c via `tml cc`) are now unblocked.
+
 ### 2026-05-01 — cc parser dangling-Str fix + Heap[CDecl] crash isolation
 
 ### Accomplished
