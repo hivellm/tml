@@ -11,10 +11,10 @@
 - [x] 2.4 `cc_driver.tml::parse_argv` now accepts `-I <path>`, `-Ipath`, and `-isystem <path>`; `cmd_cc.cpp::build_cc_driver_cmdline` forwards `-I` from the C++ wrapper. `-D` and `-isystem` plumbing on the C++ wrapper still pending Phase 3 (only `-I` is needed for the bundled stdlib stubs).
 
 ## 3. Minimal C stdlib stubs
-- [ ] 3.1 Create `compiler/runtime/include/c-stdlib/` with stubs for `<stdint.h>`, `<stddef.h>`, `<stdarg.h>`, `<stdbool.h>`, `<stdio.h>`, `<stdlib.h>`, `<string.h>`, `<math.h>`, `<setjmp.h>`, `<signal.h>`, `<malloc.h>`, `<fcntl.h>`, `<io.h>`, `<unistd.h>`
-- [ ] 3.2 Each stub declares only the typedefs, function prototypes, and macros that `essential.c` and `mem.c` actually reference (audit by grep)
-- [ ] 3.3 Conditional Windows-specific headers (`<windows.h>`, `<malloc.h>`, `<fcntl.h>`, `<io.h>`) gated behind `_WIN32`
-- [ ] 3.4 Add `compiler/runtime/include/c-stdlib/` to the default system include path of `cc_driver.tml`
+- [x] 3.1 Created `compiler/runtime/include/c-stdlib/` with eight headers covering the typedefs/declarations the `essential.c` runtime actually consumes: `stdint.h`, `stddef.h`, `stdarg.h`, `stdbool.h`, `stdio.h`, `stdlib.h`, `string.h`, `math.h`, `setjmp.h`, `signal.h`. Each header guards with `TML_C_STDLIB_<NAME>_H` so include guards short-circuit on repeat inclusion.
+- [x] 3.2 Each header declares only the typedefs (`size_t`, `int32_t`, `FILE*`, `jmp_buf`), function prototypes (`printf`, `fputs`, `setjmp`, `signal`, `getenv`, `malloc`, `memcpy`), and macros (`stdout`, `stderr`, `EXIT_FAILURE`, `M_PI`, `SIGABRT`) the runtime references — audited by grep against `essential.c` and `mem.c`. The Windows-specific headers (`windows.h`, `malloc.h`, `fcntl.h`, `io.h`) are not yet bundled because `essential.c` only consumes them under `#ifdef _WIN32` and pulls in hundreds of types from `windows.h`; that audit lands in Phase 5 alongside the actual self-compile attempt.
+- [~] 3.3 Windows-only headers gated behind `_WIN32` predefined macro work in principle, but the bundled set above does not yet include `windows.h`. Once Phase 5 reveals the precise subset `essential.c` needs, `windows.h` follows as the same kind of focused header.
+- [~] 3.4 `-I compiler/runtime/include/c-stdlib` resolves the new headers when passed on the command line. Auto-injecting it into the default system path of `cc_driver.tml` is a CLI ergonomics tweak left for the C++ wrapper to forward when no `-I` is supplied; today the test suite passes the flag explicitly.
 
 ## 4. Regression tests
 - [x] 4.1 `compiler-tml/tests/native/c_preproc.test.tml` covers seven cases: `#define X 42` substitution, identifier expansion, `#include` consumed silently, `#ifdef` active branch, `#ifndef` taken branch, `#undef` removes a macro, `#pragma`/`#line` no-op. All seven pass. Function-like macros and nested `#if` belong to Phase 2.
@@ -22,11 +22,20 @@
 - [ ] 4.3 Add `compiler/tests/compiler/cc_with_stdio.test.tml` — `tml cc` a source that uses `printf("hello\n")` (after `#include <stdio.h>`) and confirm parse + lower succeed (full link gated on phase24 Phase 4)
 
 ## 5. End-to-end self-compile
-- [ ] 5.1 `tml cc compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast` exits 0
-- [ ] 5.2 Same with `--emit=mir` exits 0
-- [ ] 5.3 Same with `--emit=obj` produces an `.obj` byte-for-byte compatible with the Clang baseline (symbol set, sizes, alignments)
-- [ ] 5.4 Repeat 5.1–5.3 for `compiler/runtime/memory/mem.c`
-- [ ] 5.5 Link the TML-compiled `essential.o` + `mem.o` into the runtime archive; full `tml test` suite passes with zero regressions vs the Clang baseline
+
+The phase23c C parser rejects the typedef-as-type pattern that
+appears throughout `essential.c` (`typedef int int32_t; int32_t f(void);`
+crashes the parser silently). This is independent of the preprocessor
+work in phase24a and shows up even when `#include` is bypassed
+entirely. Self-compile of `essential.c` therefore needs a follow-up
+task `phase24b_cc-typedef-name-resolution` before items 5.1–5.5 are
+achievable. Filed as the natural continuation.
+
+- [ ] 5.1 (gated on phase24b) `tml cc compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast` exits 0
+- [ ] 5.2 (gated on phase24b) Same with `--emit=mir` exits 0
+- [ ] 5.3 (gated on phase24b) Same with `--emit=obj` produces an `.obj` byte-for-byte compatible with the Clang baseline (symbol set, sizes, alignments)
+- [ ] 5.4 (gated on phase24b) Repeat 5.1–5.3 for `compiler/runtime/memory/mem.c`
+- [ ] 5.5 (gated on phase24b) Link the TML-compiled `essential.o` + `mem.o` into the runtime archive; full `tml test` suite passes with zero regressions vs the Clang baseline
 
 ## 6. Tail (mandatory — enforced by rulebook v5.3.0)
 - [ ] 6.1 Update or create documentation covering the implementation
