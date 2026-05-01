@@ -32,24 +32,28 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase0x_heap-decl-codegen-crash ARCHIVED. phase24a_cc-preprocessor-wire
-Phases 1-3 + tests are committed and working:
-  - Phase 1: directive sweep, object-like macro expansion, predefined
-    macros (commits 0742e475, d46382cb).
-  - Phase 2: #include resolution + recursive sweep + -I/-isystem
-    flags forwarded through cmd_cc.cpp (commit 053eafec).
-  - Phase 3: ten bundled minimal C stdlib headers under
-    compiler/runtime/include/c-stdlib/ (commit 62e53325).
-  - 10 passing regression tests in compiler-tml/tests/native/c_preproc.test.tml.
+phase0x ARCHIVED. phase24a Phases 1-3 done (commits 0742e475,
+d46382cb, 053eafec, 62e53325). phase24b 1.x + 2.x done (commit
+7f6edc89): the typedef-as-type crash is NOT a parser bug — the
+parser passes synthetic-token tests for the same shape. Real
+crash site is `base_to_ctype` in `compiler-tml/src/cc/types.tml`,
+where passing `env: CTypeEnv` (struct of four HashMap fields)
+by value triggers drop glue on exit that frees the caller's
+HashMap buckets. Subsequent `base_to_ctype` calls on the same
+env crash on the Heap dereference inside the `Typedef` arm.
 
-Phase 5 (`tml cc essential.c` end-to-end) is blocked on a separate
-parser bug, NOT on the preprocessor: `typedef int int32_t; int32_t
-f(void);` crashes the C parser silently even with no #include
-involved. Filing as phase24b_cc-typedef-name-resolution.
+A synthetic repro at `.sandbox/ctype_return_repro.tml` with the
+same shape does NOT crash — the exact difference between
+synthetic and real flow needs another bisect.
 
-Next active task: phase24b_cc-typedef-name-resolution.
-Secondary option: phase0w Phase 10 (delete C++ HTML generator —
-destructive, awaits user OK).
+Fix candidates (proposal.md): (a) `env: ref CTypeEnv` everywhere;
+(b) codegen elides field-level drops on a value-passed local
+when the field is a single pointer; (c) explicit borrow semantics
+for struct value parameters.
+
+Next active task: phase24b_cc-typedef-name-resolution Phase 3
+(codegen / type-system fix). Secondary option: phase0w Phase 10
+(delete C++ HTML generator — destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
 
 ## Session History

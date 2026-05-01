@@ -32,13 +32,30 @@ shows otherwise:
     So the parser is correct; the lowerer's CType return path is
     the trigger.
 
-This is the same family of ABI mismatch as `phase0x_heap-decl-codegen-crash`:
-returning a value-type with `Heap`-wrapped enum/struct fields by
-value triggers a calling-convention mismatch on Win64. phase0x
-fixed the call-site struct→ptr fixup for `Heap[T]::new(...)`
-(a function ARG path); the same fix needs to land on the function
-RETURN path so that returning a `CType` (or any aggregate with
-`Heap[X]` fields) from a function does not corrupt memory.
+This is the same family of ownership/lifetime issue as `phase0x_heap-decl-codegen-crash`,
+but the trigger is different. The function `base_to_ctype(env: CTypeEnv, ...)`
+takes `CTypeEnv` by value. `CTypeEnv` is a struct of four `HashMap`
+fields. The bitwise-copy semantics of TML pass-by-value mean the
+callee's local `env` aliases the caller's HashMap allocations. When
+the callee exits, drop glue runs on the local `env`, which calls
+`HashMap.drop` and `mem_free`s the buckets array — the caller's
+own copy of the same HashMap pointer is now dangling. Subsequent
+`base_to_ctype` calls (e.g. for the second declaration's parameter)
+read the freed buckets and crash on the `t.get()` Heap dereference.
+
+A 30-line synthetic repro that mimics the shape (`FakeEnv` with
+two HashMap fields, repeated `resolve_base` calls) does NOT crash,
+so the trigger involves more than just the field count and Heap
+nesting. The exact difference between the synthetic repro and the
+real `lower_func_decl → base_to_ctype` flow needs another bisect
+session.
+
+The fix candidates: (a) change `base_to_ctype` and the other type-
+system entry points to take `env: ref CTypeEnv`, eliminating the
+copy + drop; (b) make the codegen recognise structs whose fields
+are pointer-typed (HashMap = `{ ptr }`) and elide the field-level
+drops on a value-passed local; (c) introduce explicit `borrow`
+semantics for value-types containing pointer-owning fields.
 
 ## What Changes
 
