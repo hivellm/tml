@@ -207,12 +207,16 @@ func run_pipeline(
 }
 
 /// Emit the pp-token stream produced by `pp_tokenize_source` — a
-/// human-readable listing for debugging the lexical phase without
-/// triggering the phase23b parser (which still has known bugs on
-/// non-trivial declaration inputs, tracked as a follow-up).
+/// human-readable listing for debugging the lexical phase. Runs
+/// `pp_sweep` after tokenisation so the listing reflects what the C
+/// lexer actually receives (directives consumed, macros expanded,
+/// `#include` content spliced).
 func emit_tokens_stub(args: DriverArgs) -> I32 {
     let source: Str = File::read_all(args.input)
-    let pp: List[PpToken] = pp_tokenize_source(source, args.input)
+    let raw: List[PpToken] = pp_tokenize_source(source, args.input)
+    let preproc: Preprocessor = pp_new(args.system_paths, args.user_paths)
+    register_predefined_macros(preproc)
+    let pp: List[PpToken] = pp_sweep_in_file(preproc, raw, args.input)
     let n: I64 = pp.len()
     println(`cc_driver: pp-tokenized {args.input} ({n} tokens)`.as_str())
     for i in 0 to n {

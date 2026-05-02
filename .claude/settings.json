@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-deferred.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/enforce-no-deferred.sh"
           }
         ]
       },
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-shortcuts.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/enforce-no-shortcuts.sh"
           }
         ]
       },
@@ -59,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-mcp-for-tasks.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/enforce-mcp-for-tasks.sh"
           }
         ]
       },
@@ -79,7 +79,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/on-compact-reinject.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/on-compact-reinject.sh"
           }
         ]
       },
@@ -87,7 +87,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/resume-from-handoff.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/resume-from-handoff.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/terse-activate.sh"
           }
         ]
       }
@@ -97,7 +105,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/check-context-and-handoff.sh"
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/check-context-and-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash E:/HiveLLM/Tml/.claude/hooks/terse-mode-tracker.sh"
           }
         ]
       }
