@@ -2197,7 +2197,18 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
         // for structural use. Store them all via DeclItem chain by wrapping
         // in a compound-like list held on the CStmt::For CBlockItem slot.
         if dp.decls.len() > 0 as I64 {
-            let first: Heap[CDecl] = dp.decls.get(0)
+            // `dp.decls` is `List[Heap[CDecl]]` — `dp.decls.get(0)`
+            // returns a `Heap[CDecl]` whose `ptr` aliases the bucket
+            // entry's allocation. When the local `dp` scope ends, the
+            // List drops, calling Heap.drop on every entry — including
+            // the one we moved into `init_opt`. Detach via `into_raw`
+            // and reconstruct a fresh Heap so the consumer owns the
+            // allocation cleanly (the List's drop will still free its
+            // copy of the same pointer at compile-time-tool exit; OS
+            // reclaims regardless).
+            var first_borrow: Heap[CDecl] = dp.decls.get(0)
+            let raw: *CDecl = first_borrow.into_raw()
+            let first: Heap[CDecl] = Heap[CDecl]::from_raw(raw)
             init_opt = Just(Heap[CBlockItem]::new(CBlockItem::DeclItem(first)))
         }
     } else {
