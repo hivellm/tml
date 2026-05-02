@@ -60,12 +60,14 @@ pub enum CAbiTarget {
 // Resolved CType
 // ============================================================================
 
+@auto(duplicate)
 pub type CFuncType {
     ret: Heap[CType],
     params: List[Heap[CType]],
     is_variadic: I64
 }
 
+@auto(duplicate)
 pub type CArrayType {
     elem: Heap[CType],
     // `size = -1` for unsized / incomplete arrays (function parameters,
@@ -73,6 +75,7 @@ pub type CArrayType {
     size: I64
 }
 
+@auto(duplicate)
 pub type CAggregateField {
     name: Str,
     ty: Heap[CType],
@@ -83,6 +86,7 @@ pub type CAggregateField {
     bit_width: I64
 }
 
+@auto(duplicate)
 pub type CAggregate {
     tag: Str,
     fields: List[CAggregateField],
@@ -94,11 +98,13 @@ pub type CAggregate {
     kind: I64
 }
 
+@auto(duplicate)
 pub type CEnumValue {
     name: Str,
     value: I64
 }
 
+@auto(duplicate)
 pub type CEnumType {
     tag: Str,
     values: List[CEnumValue],
@@ -141,6 +147,40 @@ pub enum CType {
     /// An unresolved typedef name — the env ran without a registered
     /// definition. Kept as a placeholder so diagnostics can name it.
     UnresolvedTypedef(Str)
+}
+
+// Manual Duplicate impl for CType. `@auto(duplicate)` does not yet
+// support enums; the recursive `Heap[CType]` variants make this
+// implementation hand-rolled.
+impl Duplicate for CType {
+    pub func duplicate(this) -> CType {
+        when this {
+            Void => return CType::Void,
+            Bool => return CType::Bool,
+            Char => return CType::Char,
+            SChar => return CType::SChar,
+            UChar => return CType::UChar,
+            Short => return CType::Short,
+            UShort => return CType::UShort,
+            Int => return CType::Int,
+            UInt => return CType::UInt,
+            Long => return CType::Long,
+            ULong => return CType::ULong,
+            LongLong => return CType::LongLong,
+            ULongLong => return CType::ULongLong,
+            Float => return CType::Float,
+            Double => return CType::Double,
+            LongDouble => return CType::LongDouble,
+            Ptr(h) => return CType::Ptr(h.duplicate()),
+            Array(h) => return CType::Array(h.duplicate()),
+            Struct(h) => return CType::Struct(h.duplicate()),
+            Union(h) => return CType::Union(h.duplicate()),
+            Enum(h) => return CType::Enum(h.duplicate()),
+            Func(h) => return CType::Func(h.duplicate()),
+            Qualified(h, q) => return CType::Qualified(h.duplicate(), q),
+            UnresolvedTypedef(name) => return CType::UnresolvedTypedef(name.duplicate())
+        }
+    }
 }
 
 // ============================================================================
@@ -718,20 +758,13 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         Complex => return CType::Double,   // approximate: `_Complex` treated as double-rank
         StructRef(tag) => {
             if env.structs.has(tag) {
-                // Same Heap-borrow-drop hazard as the Typedef arm: the
-                // returned `Heap[CAggregate]` shares its allocation with
-                // the map bucket. Steal the raw pointer (nulling the
-                // bucket-borrowed local's drop) and reconstruct a fresh
-                // Heap that the returned CType variant owns. The env's
-                // bucket Heap also still holds the same pointer; both
-                // will try to mem_free at scope end. Compile-time `tml
-                // cc` tools exit before env drops fire, so the duplicate
-                // free is unobservable in practice. The real fix lives
-                // at the language level (Rc-style Heap or non-owning
-                // HashMap.get) — phase24d follow-up.
+                // Deep-clone the bucket Heap so the returned CType
+                // owns an independent allocation. Avoids the
+                // Heap-borrow-drop double-free against env's bucket.
                 var borrowed: Heap[CAggregate] = env.structs.get(tag)
-                let raw: *CAggregate = borrowed.into_raw()
-                return CType::Struct(Heap[CAggregate]::from_raw(raw))
+                let dup: Heap[CAggregate] = borrowed.duplicate()
+                let _raw: *CAggregate = borrowed.into_raw()
+                return CType::Struct(dup)
             }
             // Forward reference — produce an empty struct entry so later
             // definitions can patch.
@@ -746,8 +779,9 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         UnionRef(tag) => {
             if env.unions.has(tag) {
                 var borrowed: Heap[CAggregate] = env.unions.get(tag)
-                let raw: *CAggregate = borrowed.into_raw()
-                return CType::Union(Heap[CAggregate]::from_raw(raw))
+                let dup: Heap[CAggregate] = borrowed.duplicate()
+                let _raw: *CAggregate = borrowed.into_raw()
+                return CType::Union(dup)
             }
             let empty: CAggregate = CAggregate {
                 tag: tag,
@@ -760,8 +794,9 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         EnumRef(tag) => {
             if env.enums.has(tag) {
                 var borrowed: Heap[CEnumType] = env.enums.get(tag)
-                let raw: *CEnumType = borrowed.into_raw()
-                return CType::Enum(Heap[CEnumType]::from_raw(raw))
+                let dup: Heap[CEnumType] = borrowed.duplicate()
+                let _raw: *CEnumType = borrowed.into_raw()
+                return CType::Enum(dup)
             }
             let empty: CEnumType = CEnumType {
                 tag: tag,
@@ -773,16 +808,20 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         },
         Typedef(name) => {
             if env.typedefs.has(name) {
-                // `HashMap.get` returns a `Heap[CType]` BY VALUE that
-                // shares the underlying allocation pointer with the
-                // map's bucket entry. The default `Drop for Heap[T]`
-                // calls `mem_free(this.ptr)`, which would free the
-                // allocation that the map still references — leaving a
-                // dangling pointer in `env.typedefs.get(name)` for the
-                // next call. `into_raw()` nulls the pointer so the
-                // local's drop is a no-op, preserving the map entry.
+                // Deep-clone the typedef target. `HashMap.get` returns
+                // a `Heap[CType]` BY VALUE that shares the underlying
+                // allocation pointer with the map bucket; using it
+                // directly would let the local's drop free the bucket's
+                // allocation. `t.get().duplicate()` reads the CType
+                // value out and produces an owned independent copy,
+                // recursively duplicating any nested Heap-bearing
+                // variants. The local `t` then drops normally — its
+                // mem_free is harmless because the bucket has its own
+                // independent reference… except the bucket's Heap
+                // still aliases the same allocation that `t.ptr` does,
+                // so we ALSO need to neutralize the local's drop.
                 var t: Heap[CType] = env.typedefs.get(name)
-                let r: CType = t.get()
+                let r: CType = t.get().duplicate()
                 let _raw: *CType = t.into_raw()
                 return r
             }
