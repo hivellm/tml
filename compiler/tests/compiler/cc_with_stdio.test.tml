@@ -1,0 +1,46 @@
+//! phase24a item 4.3 — cc_driver smoke test for a `printf`-using source.
+//!
+//! End-to-end gate: shell out to `build/debug/cc_driver.exe` with a C
+//! source that uses `printf` (after `#include <stdio.h>`), pass the
+//! bundled C-stdlib include path via `-I`, and assert that parse +
+//! lower succeed (`cc_driver: parsed` on stdout, exit 0). Linking and
+//! execution are gated on phase24 Phase 4. Skipped if cc_driver.exe
+//! is not present.
+
+use test::{assert, assert_eq}
+use std::os::subprocess::{Command, Stdio}
+use std::file::{File, Path}
+use core::str
+
+const CC_DRIVER_PATH: Str = "build/debug/cc_driver.exe"
+const STDLIB_INC_PATH: Str = "compiler/runtime/include/c-stdlib"
+const TEST_SRC_PATH: Str = ".sandbox/cc_with_stdio_test.c"
+
+@test func test_cc_driver_stdio_printf_smoke() {
+    if not Path::exists(CC_DRIVER_PATH) {
+        return
+    }
+    if not Path::exists(STDLIB_INC_PATH) {
+        return
+    }
+
+    let src: Str = "#include <stdio.h>\nint main() { printf(\"hello\\n\"); return 0; }\n"
+    let _ = File::write_all(TEST_SRC_PATH, src)
+
+    let result = Command::new(CC_DRIVER_PATH)
+        .arg(TEST_SRC_PATH)
+        .arg("-I")
+        .arg(STDLIB_INC_PATH)
+        .arg("--emit=ast")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+
+    when result {
+        Ok(out) => {
+            assert_eq(out.exit_code, 0 as I32)
+            assert(str::contains(out.stdout, "cc_driver: parsed"))
+        },
+        Err(_) => assert(false)
+    }
+}

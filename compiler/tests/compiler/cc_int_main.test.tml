@@ -1,0 +1,44 @@
+//! phase24a item 4.2 — cc_driver smoke test for `int main() { return 0; }`.
+//!
+//! End-to-end gate: shell out to the pre-built `build/debug/cc_driver.exe`
+//! with a minimal C source and assert exit 0 + `cc_driver: parsed` on
+//! stdout. Skipped if `cc_driver.exe` is not present (gated on the
+//! self-hosted compiler build pipeline).
+
+use test::{assert, assert_eq}
+use std::os::subprocess::{Command, Stdio}
+use std::file::{File, Path}
+use core::str
+
+// Path to the pre-built cc_driver binary. Built via:
+//   tml build compiler-tml/src/cc/bin/cc_driver.tml \
+//     -o build/debug/cc_driver.exe --stage=parser:cpp
+const CC_DRIVER_PATH: Str = "build/debug/cc_driver.exe"
+const TEST_SRC_PATH: Str = ".sandbox/cc_int_main_test.c"
+
+@test func test_cc_driver_int_main_smoke() {
+    if not Path::exists(CC_DRIVER_PATH) {
+        // cc_driver not built — gate test on the self-hosted toolchain.
+        // The test passes as a no-op rather than failing in CI without
+        // cc_driver. Build cc_driver explicitly with the command above
+        // when running the phase24 self-hosting suite.
+        return
+    }
+
+    let _ = File::write_all(TEST_SRC_PATH, "int main() { return 0; }\n")
+
+    let result = Command::new(CC_DRIVER_PATH)
+        .arg(TEST_SRC_PATH)
+        .arg("--emit=ast")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+
+    when result {
+        Ok(out) => {
+            assert_eq(out.exit_code, 0 as I32)
+            assert(str::contains(out.stdout, "cc_driver: parsed"))
+        },
+        Err(_) => assert(false)
+    }
+}
