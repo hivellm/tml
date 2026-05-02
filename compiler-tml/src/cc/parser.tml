@@ -1346,8 +1346,49 @@ pub func declarator_name(d: CDeclarator) -> Str {
     }
 }
 
+// `Heap[CDeclarator]` shares its allocation with whatever Heap the
+// caller already holds (e.g. CDeclarator::Pointer's inner field).
+// Dropping our local copy at function exit would `mem_free` the
+// allocation, leaving the caller's Heap dangling. `into_raw()` nulls
+// our local's ptr so its drop is a no-op; we copy the value out
+// before that and recurse on the copy. The temporary CDeclarator
+// from `.get()` is itself a value that may have nested Heap
+// pointers — we leak those too rather than free them.
 func declarator_name_heap(d: Heap[CDeclarator]) -> Str {
-    return declarator_name(d.get())
+    var local: Heap[CDeclarator] = d
+    let val: CDeclarator = local.get()
+    let _raw: *CDeclarator = local.into_raw()
+    return declarator_name_value_leak(val)
+}
+
+// Walks a CDeclarator value to extract the leaf Ident name without
+// dropping any nested Heap allocations. Returns an owned Str (a
+// duplicate of the leaf identifier text). All variant payloads are
+// leaked via `into_raw()` so drop glue does not run on the shared
+// inner Heaps.
+func declarator_name_value_leak(d: CDeclarator) -> Str {
+    when d {
+        Ident(name) => return name.duplicate(),
+        Abstract => return "",
+        Pointer(inner, _) => {
+            var local: Heap[CDeclarator] = inner
+            let nested: CDeclarator = local.get()
+            let _raw: *CDeclarator = local.into_raw()
+            return declarator_name_value_leak(nested)
+        },
+        Array(inner, _) => {
+            var local: Heap[CDeclarator] = inner
+            let nested: CDeclarator = local.get()
+            let _raw: *CDeclarator = local.into_raw()
+            return declarator_name_value_leak(nested)
+        },
+        Func(part) => {
+            var local: Heap[CDeclarator] = part.inner
+            let nested: CDeclarator = local.get()
+            let _raw: *CDeclarator = local.into_raw()
+            return declarator_name_value_leak(nested)
+        }
+    }
 }
 
 // ============================================================================
