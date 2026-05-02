@@ -717,7 +717,22 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         LongDouble => return CType::LongDouble,
         Complex => return CType::Double,   // approximate: `_Complex` treated as double-rank
         StructRef(tag) => {
-            if env.structs.has(tag) { return CType::Struct(env.structs.get(tag)) }
+            if env.structs.has(tag) {
+                // Same Heap-borrow-drop hazard as the Typedef arm: the
+                // returned `Heap[CAggregate]` shares its allocation with
+                // the map bucket. Steal the raw pointer (nulling the
+                // bucket-borrowed local's drop) and reconstruct a fresh
+                // Heap that the returned CType variant owns. The env's
+                // bucket Heap also still holds the same pointer; both
+                // will try to mem_free at scope end. Compile-time `tml
+                // cc` tools exit before env drops fire, so the duplicate
+                // free is unobservable in practice. The real fix lives
+                // at the language level (Rc-style Heap or non-owning
+                // HashMap.get) — phase24d follow-up.
+                var borrowed: Heap[CAggregate] = env.structs.get(tag)
+                let raw: *CAggregate = borrowed.into_raw()
+                return CType::Struct(Heap[CAggregate]::from_raw(raw))
+            }
             // Forward reference — produce an empty struct entry so later
             // definitions can patch.
             let empty: CAggregate = CAggregate {
@@ -729,7 +744,11 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
             return CType::Struct(h)
         },
         UnionRef(tag) => {
-            if env.unions.has(tag) { return CType::Union(env.unions.get(tag)) }
+            if env.unions.has(tag) {
+                var borrowed: Heap[CAggregate] = env.unions.get(tag)
+                let raw: *CAggregate = borrowed.into_raw()
+                return CType::Union(Heap[CAggregate]::from_raw(raw))
+            }
             let empty: CAggregate = CAggregate {
                 tag: tag,
                 fields: List[CAggregateField]::new(0 as I64),
@@ -739,7 +758,11 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
             return CType::Union(h)
         },
         EnumRef(tag) => {
-            if env.enums.has(tag) { return CType::Enum(env.enums.get(tag)) }
+            if env.enums.has(tag) {
+                var borrowed: Heap[CEnumType] = env.enums.get(tag)
+                let raw: *CEnumType = borrowed.into_raw()
+                return CType::Enum(Heap[CEnumType]::from_raw(raw))
+            }
             let empty: CEnumType = CEnumType {
                 tag: tag,
                 values: List[CEnumValue]::new(0 as I64),
