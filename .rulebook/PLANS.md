@@ -21,22 +21,27 @@ by-value `CTypeEnv`. Eliminates the value-pass + drop-glue path that
 freed the caller's HashMap buckets on `base_to_ctype` callee exit.
 Regression `test_phase24b_base_to_ctype_typedef_repeat` lands in
 `c_frontend.test.tml`. Compiler suite: 299/318 (baseline preserved).
-phase24c shipped: `./build/debug/cc_driver.exe .sandbox/test_no_inc.c
---emit=ast` exits 0 with `cc_driver: parsed`. Root cause was
-Heap-borrow-drop double-free, not the value-pass theory:
-`HashMap[Str, Heap[CType]].get(name)` returns `Heap[CType]` BY
-VALUE; the local copy's `ptr` aliases the map bucket's
-allocation; `Drop for Heap[T]` calls `mem_free(this.ptr)`, freeing
-the bucket's allocation on local scope exit. Fix: `var t =
-env.typedefs.get(name); let r = t.get(); let _ = t.into_raw();
-return r` — `into_raw()` nulls the local's ptr so its drop skips
-mem_free, preserving the bucket. VERSION 0.3.40 → 0.3.41.
+phase24c/24d/24e all shipped:
+- 24c (v0.3.41): Typedef arm Heap-borrow-drop fix via `into_raw`.
+- 24d (v0.3.42): same pattern in StructRef/UnionRef/EnumRef arms.
+- 24e (v0.3.43): replaced `into_raw`+`from_raw` aliasing hack with
+  proper deep-clone via `impl Duplicate for CType` + `@auto(duplicate)`
+  on CFuncType / CArrayType / CAggregateField / CAggregate /
+  CEnumValue / CEnumType. The env's bucket and consumer's CType are
+  fully decoupled — no double-free hazard regardless of drop order.
 
-Same Heap-borrow-drop pattern still affects `base_to_ctype`'s
-StructRef/UnionRef/EnumRef arms (return moves Heap into CType
-variant; eventual drop frees bucket allocation) — filed as
-`phase24d_heap-borrow-drop-structref`. `essential.c` self-compile
-(phase24b 4.2) gated on phase24d.
+cc_driver now parses every typedef/struct/union/enum-as-param
+shape we tested (`typed_simple`, `typed_two`, `typed_ptr`,
+`struct_ref`, `union_ref`, `enum_ref`, `test_no_inc`). All exit 0
+with `cc_driver: parsed`. 5/5 regression tests pass.
+
+Last blocker for `essential.c` self-compile: bare function-pointer
+typedef declaration crash, e.g. `typedef void (*sig_t)(int);`.
+Bisect via File::append_all shows the parser intermittently
+extracts the wrong typedef name (`(`, `int`, never `sig_t`) —
+dangling-Str pattern in `cp_parse_declarator`'s function-pointer
+path. Filed as `phase24f_cc-funcptr-typedef-parser`. Predates
+phase24e and is a parser-level fix, not a Heap-ownership issue.
 Branch: feat/self-hosting-compiler. Version: 0.3.40.
 coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
 golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
