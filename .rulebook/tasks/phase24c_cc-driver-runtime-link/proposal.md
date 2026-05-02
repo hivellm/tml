@@ -1,73 +1,111 @@
-# Proposal: phase24c_cc-driver-runtime-link
+# Proposal: phase24c_cc-driver-return-path-codegen
 
 ## Why
 
-`tml build compiler-tml/src/cc/bin/cc_driver.tml -o build/debug/bin/cc_driver.exe`
-fails at link time with:
+After phase24b shipped option (a) — `env: ref CTypeEnv` everywhere —
+the value-pass + drop-glue crash is gone (verified by
+`test_phase24b_base_to_ctype_typedef_repeat`, which calls
+`base_to_ctype` 3× in a row without crashing). The compiled
+`cc_driver.exe` now builds cleanly and parses simple C inputs:
+
+- `int x;` — exit 0, `cc_driver: parsed`
+- `typedef int int32_t;` — exit 0, `cc_driver: parsed`
+- `typedef int int32_t; int32_t x;` — exit 0, `cc_driver: parsed`
+
+But the original phase24b reproducer still crashes:
+
+- `typedef int int32_t; int32_t add(int32_t a, int32_t b) { return a + b; }`
+  → exit 127, no output
+
+`File::append_all` traces inside `lower_func_decl` and `base_to_ctype`
+show the precise crash site is no longer the `t.get()` Heap deref,
+nor the second-call HashMap bucket access. Trace from the failing run:
 
 ```
-lld-link: error: undefined symbol: file_read_all
-lld-link: error: undefined symbol: file_seek_from
-lld-link: error: undefined symbol: file_read_line
-lld-link: error: undefined symbol: path_exists
-lld-link: error: undefined symbol: path_parent
-lld-link: error: undefined symbol: path_join
+lfd:enter
+btc:enter (return-type lookup via return_type_of_func_decl)
+btc:typedef name='int32_t'
+btc:typedef:has
+btc:typedef:got_heap
+btc:typedef:got_value kind=6
+btc:typedef:about_to_return
+lfd:ret_c          ← OK, return-type base_to_ctype returns cleanly
+lfd:ret_mir
+lfd:params_loop n=2
+lfd:param[0]:enter
+lfd:param[0]:got
+btc:enter (param 0 base_type)
+btc:typedef name='int32_t'
+btc:typedef:has
+btc:typedef:got_heap
+btc:typedef:got_value kind=6
+btc:typedef:about_to_return    ← reaches return statement
+                                    ← but caller never resumes
+[CRASH]
 ```
 
-`cc_driver.tml` imports `use std::file::File`. The C implementations of
-those symbols exist in `lib/std/runtime/file.c`:
+So:
 
-- `file_read_all` — line 107
-- `file_read_line` — line 132
-- `file_seek_from` — line 299
-- `path_exists` — line 712
-- `path_join` — line 830
-- `path_parent` — line 860
+- The first `base_to_ctype` call (return-type, called from
+  `return_type_of_func_decl`) returns OK.
+- The second `base_to_ctype` call (param 0, called directly from
+  `lower_func_decl`'s parameter loop) reaches the `return r`
+  statement but the caller's `let p_base: CType = ...` slot never
+  gets the value — process aborts during the SSA return + caller
+  resume sequence.
 
-`compiler/src/cli/builder/builder_helpers_runtime.cpp::get_runtime_objects`
-gates the file.c link on `registry->has_module("std::file")` (line 421)
-or any submodule path starting with `std::file::` (line 424). For
-`cc_driver.tml` neither check fires for the `tml build` flow even though
-the same import resolves correctly through `tml run` (a smoke
-`.sandbox/file_smoke.tml` calling `File::read_all` runs successfully —
-file.c gets linked as expected when invoked through `tml run --stage=parser:cpp`).
+Both calls return the same `CType::Int` (kind=6, primitive variant —
+no Heap payload). Both have identical signatures. The difference is
+the caller context: `return_type_of_func_decl` is a separate TML
+function whose body returns CType directly, while
+`lower_func_decl`'s parameter loop captures the return value into a
+local `let p_base: CType`.
 
-The phase24b session traced the divergence to the build path: the
-incremental cache GREEN path (`incr/incr.bin` reuse) reuses a
-codegen-only result that did not seed the registry with `std::file`
-when the `tml build` was first run on cc_driver.tml. Even after wiping
-`incr/incr.bin` the link error reproduces, so the gap is in the
-registry / runtime-collection step, not the cache.
+This is the proposal's original "symmetric return-path" hypothesis
+from phase24b — return of a value-type enum across a function
+boundary, in the specific shape `Func(B)::base_to_ctype → Func(A)::let
+p_base = ...`. Phase 0x fixed the call-site arg path for
+`Heap[T]::new(...)` static methods; the return path of a value-type
+enum from a free function in a parameter-loop context is unfixed.
 
-This blocks phase24b items 4.1 and 4.2 (end-to-end `tml cc` verification)
-and any further work on the self-compiled cc_driver.exe path.
+End-to-end `tml cc t.c` on any C source with a typedef'd type used as
+a function parameter is blocked by this crash; phase24b items 4.1
+and 4.2 cannot be exercised in CI until it lands.
 
 ## What Changes
 
-1. Add a build-side diagnostic that logs which `std::*` modules
-   `get_runtime_objects` sees in the registry for the binary being
-   built. Run that diagnostic on the failing `tml build cc_driver.tml`
-   to identify whether `std::file` is missing from the registry, or
-   present under a different path/key.
-2. Repair the registration so `tml build` populates the same module
-   set that `tml run` does — likely a missing call to
-   `preload_all_meta_caches` or an import-walker step in the build
-   pipeline.
-3. Verify by building `cc_driver.exe` end to end and running
-   `tml cc .sandbox/test_no_inc.c --emit=ast` (= phase24b item 4.1).
-4. Run `tml cc compiler/runtime/core/essential.c` (= phase24b item 4.2)
-   and document the next limitation surfaced by the larger source.
+1. **Reproduce in C++ unit-test land.** Author a TML test fixture
+   that mirrors the failing shape: outer function with a `loop` that
+   captures the return of an inner function returning
+   `enum E { A(Heap[T]), B(Heap[U]), Primitive }` into a `let x: E`
+   binding. Iteration N=2 should crash if the codegen bug is real.
+2. **Compare against rustc.** Write the equivalent in Rust
+   (`fn outer() { for _ in 0..2 { let x: E = inner(); … } }`),
+   compile to LLVM IR, diff against TML's IR for
+   `lower_func_decl`'s parameter loop. The Rust-as-Reference IR
+   methodology (CLAUDE.md) should pinpoint the lowering difference.
+3. **Apply the codegen fix** in
+   `compiler/src/codegen/llvm/decl/func.cpp` (return-type lowering)
+   and/or `compiler/src/codegen/llvm/expr/return_stmt.cpp` (return
+   instruction emission), structurally similar to the phase0x patch
+   in `expr/method_static_dispatch.cpp` but on the return-path side.
+4. **Verify** `./build/debug/cc_driver.exe .sandbox/test_no_inc.c
+   --emit=ast` exits 0 with `cc_driver: parsed`. Re-run phase24b
+   item 4.2 (`essential.c --emit=ast`) and document the next
+   limitation (separate task entry).
 
 ## Impact
 
-- Affected specs: none (build-pipeline correctness, no language change).
+- Affected specs: none (codegen fix, no language change).
 - Affected code:
-  - `compiler/src/cli/builder/builder_helpers_runtime.cpp` —
-    `uses_file_module` (and likely the other `uses_*_module` helpers)
-    or the registry initialization path that feeds it.
-  - `compiler/src/cli/builder/build.cpp` — possibly the registry
-    seeding before `get_runtime_objects` runs.
+  - `compiler/src/codegen/llvm/decl/func.cpp` — likely the return
+    type / sret call lowering path.
+  - `compiler/src/codegen/llvm/expr/return_stmt.cpp` — return value
+    materialization.
+  - `compiler/tests/compiler/heap_ctype_return_repro.test.tml` —
+    minimal regression in C++ test infrastructure.
 - Breaking change: NO.
-- User benefit: re-enables building `cc_driver.exe` from
-  `cc_driver.tml`, which unblocks `tml cc <file.c>` end-to-end and
-  the larger phase24 self-compile pipeline (essential.c, mem.c, …).
+- User benefit: unblocks `tml cc` on any non-trivial C source.
+  Without this fix, every typedef'd type used as a function
+  parameter crashes `tml cc`, making phase24 Phase 4 (essential.c
+  self-compile) unreachable.

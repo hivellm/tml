@@ -21,9 +21,17 @@ by-value `CTypeEnv`. Eliminates the value-pass + drop-glue path that
 freed the caller's HashMap buckets on `base_to_ctype` callee exit.
 Regression `test_phase24b_base_to_ctype_typedef_repeat` lands in
 `c_frontend.test.tml`. Compiler suite: 299/318 (baseline preserved).
-End-to-end `tml cc test_no_inc.c` verification needs `cc_driver.exe`,
-which currently fails to link `lib/std/runtime/file.c` despite
-`std::file::File` being imported — filed as `phase24c_cc-driver-runtime-link`.
+cc_driver.exe builds + parses simple C inputs (`int x;`,
+`typedef int int32_t;`, `typedef int int32_t; int32_t x;` — all exit 0).
+Original phase24b reproducer (`int32_t add(int32_t a, int32_t b) { ... }`)
+still crashes at exit 127: trace shows the second `base_to_ctype`
+call reaches `return r` (kind=6, CType::Int) but the caller's
+`let p_base: CType = ...` slot never resumes. Different bug class
+from phase24b's value-pass — filed as
+`phase24c_cc-driver-runtime-link` (renamed scope: codegen on
+return-of-value-type-enum from a function called inside a
+parameter loop). Phase 0x fixed the symmetric arg-path; this
+return-path remains.
 Branch: feat/self-hosting-compiler. Version: 0.3.40.
 coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
 golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
