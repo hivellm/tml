@@ -35,13 +35,20 @@ shape we tested (`typed_simple`, `typed_two`, `typed_ptr`,
 `struct_ref`, `union_ref`, `enum_ref`, `test_no_inc`). All exit 0
 with `cc_driver: parsed`. 5/5 regression tests pass.
 
-Last blocker for `essential.c` self-compile: bare function-pointer
-typedef declaration crash, e.g. `typedef void (*sig_t)(int);`.
-Bisect via File::append_all shows the parser intermittently
-extracts the wrong typedef name (`(`, `int`, never `sig_t`) —
-dangling-Str pattern in `cp_parse_declarator`'s function-pointer
-path. Filed as `phase24f_cc-funcptr-typedef-parser`. Predates
-phase24e and is a parser-level fix, not a Heap-ownership issue.
+phase24f shipped (v0.3.44, partial): `declarator_name_heap` had
+the same Heap-borrow-drop pattern at the parser level. Replaced
+the recursive `declarator_name → declarator_name_heap →
+declarator_name` loop with `declarator_name_value_leak` using
+`into_raw()` at every Heap layer. `sig_alone.c` improved from
+0% → 60% deterministic; full determinism requires structural
+Heap[T] refcounting.
+
+Filed `phase24g_heap-rc-or-borrow-language-fix` as the structural
+fix: upgrade `Heap[T]` from unique-owning to refcounted-shared in
+`lib/core/src/alloc/heap.tml`. Closes the entire Heap-borrow-drop
+bug class in one shot; surgical phase24c/24d/24e/24f patches can
+then be reverted in favor of the simpler refcount semantics.
+`essential.c` self-compile remains gated on phase24g.
 Branch: feat/self-hosting-compiler. Version: 0.3.40.
 coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
 golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
