@@ -1,5 +1,25 @@
 # Proposal: phase24c_cc-driver-return-path-codegen
 
+## Confirmed (session 2026-05-01)
+
+- Phase24b's `ref CTypeEnv` fix IS lowered to `ptr` param in LLVM IR
+  (mangled name `_R8CTypeEnv9CBaseType`, signature
+  `define %struct.CType @base_to_ctype(ptr %env, %struct.CBaseType %b)`).
+  Fix is real, not a no-op. Verified by inspecting fresh codegen output
+  in `build/debug/cache/incr/ir/codegen_unit_*.ll`.
+- cc_driver.exe rebuilt with the fix in place still crashes on
+  `int32_t add(int32_t a, int32_t b)` (typedef-then-use as function
+  parameter). Trace pinpoints the crash to the call/return sequence
+  for the second `base_to_ctype` invocation in `lower_func_decl`'s
+  parameter loop.
+- Two synthetic repros — `test_phase24b_base_to_ctype_typedef_repeat`
+  (3 sequential calls) and `heap_ctype_return_repro.test.tml` (loop
+  with struct list + mixed-variant enum return) — both PASS. The
+  exact trigger is more specific than the base shape; needs a deeper
+  bisect against the full `CType` enum (23 variants, including
+  `Heap`-wrapped + Str + nullary primitives + `Qualified(Heap[CType],
+  CQualifiers)` recursive variant).
+
 ## Why
 
 After phase24b shipped option (a) — `env: ref CTypeEnv` everywhere —

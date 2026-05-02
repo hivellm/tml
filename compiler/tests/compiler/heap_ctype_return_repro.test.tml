@@ -1,0 +1,123 @@
+//! Regression test for `phase24c_cc-driver-runtime-link` (renamed
+//! scope: codegen return-path for value-type enum from a function
+//! called inside a parameter loop).
+//!
+//! Phase24b shipped option (a) — `env: ref CTypeEnv` everywhere —
+//! which fixed the value-pass + drop-glue path. After that fix,
+//! `tml cc` still crashes on:
+//!
+//!   typedef int int32_t;
+//!   int32_t add(int32_t a, int32_t b) { return a + b; }
+//!
+//! Trace shows the second call to `base_to_ctype` (for param 0)
+//! reaches `return r` (with `r: CType::Int`, primitive variant,
+//! kind=6) but the caller's `let p_base: CType = ...` slot never
+//! resumes — exit 127, no output. The first call (for return-type
+//! via `return_type_of_func_decl`) succeeds. Difference is the
+//! caller context: `return_type_of_func_decl` is a separate TML
+//! function; the param-loop call is inside `lower_func_decl`.
+//!
+//! This file mirrors the failing shape: outer function with a
+//! `loop` capturing the return of an inner function returning an
+//! enum with `Heap`-wrapped variants into a `let x: E` binding,
+//! where the iteration's call returns the primitive variant of
+//! the enum.
+
+use test::{assert, assert_eq}
+use core::alloc::heap::Heap
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+
+pub type Inner { value: I64 }
+
+// Enum with Heap-wrapped variants + nullary primitive variants +
+// Str-bearing variant. Mirrors CType: nullary primitives (Void..),
+// Heap variants (Ptr/Array/Struct/Func), Str variant
+// (UnresolvedTypedef(Str)).
+pub enum E {
+    Nullary,
+    Other,
+    Boxed(Heap[Inner]),
+    Stringy(Str)
+}
+
+// Inner enum carrying Str — mirrors CBaseType::Typedef(Str).
+pub enum Btk {
+    Plain,
+    Tagged(Str)
+}
+
+// Specifiers struct holding nested enum — mirrors CDeclSpecifiers.
+pub type Specs {
+    storage: I64,
+    base_type: Btk,
+    flags: I64
+}
+
+// Outer struct held in List — mirrors CParam.
+pub type Param {
+    name: Str,
+    specifiers: Specs,
+    extra: I64
+}
+
+pub type Env {
+    table: HashMap[Str, Heap[Inner]]
+}
+
+func make_env() -> Env {
+    let h: HashMap[Str, Heap[Inner]] = HashMap[Str, Heap[Inner]]::new(8 as I64)
+    h.set("k", Heap[Inner]::new(Inner { value: 42 as I64 }))
+    return Env { table: h }
+}
+
+// Inner function: returns value-type enum E with mixed variants.
+// Mirrors `base_to_ctype` shape — different control-flow paths
+// returning different variants.
+func inner_lookup(env: ref Env, b: Btk) -> E {
+    when b {
+        Tagged(name) => {
+            if env.table.has(name) {
+                return E::Nullary
+            }
+            return E::Stringy(name)
+        },
+        Plain => return E::Other
+    }
+}
+
+@test func test_phase24c_value_enum_return_in_param_loop() {
+    let env: Env = make_env()
+    // Build a List of structs whose nested field carries the
+    // Str-bearing enum variant. Mirrors `fd.params: List[CParam]`.
+    let params: List[Param] = List[Param]::new(2 as I64)
+    params.push(Param {
+        name: "a",
+        specifiers: Specs { storage: 0 as I64, base_type: Btk::Tagged("k"), flags: 0 as I64 },
+        extra: 0 as I64
+    })
+    params.push(Param {
+        name: "b",
+        specifiers: Specs { storage: 0 as I64, base_type: Btk::Tagged("k"), flags: 0 as I64 },
+        extra: 0 as I64
+    })
+
+    // First call: return-type style — separate caller scope.
+    let _ret_e: E = inner_lookup(ref env, Btk::Tagged("k"))
+
+    // Loop mirroring `lower_func_decl`'s param loop: pull struct by
+    // value, access nested field, pass to value-enum-returning func.
+    var i: I64 = 0 as I64
+    let n: I64 = params.len() as I64
+    var count: I64 = 0 as I64
+    loop (i < n) {
+        let p: Param = params.get(i)
+        let p_e: E = inner_lookup(ref env, p.specifiers.base_type)
+        when p_e {
+            Nullary => count = count + 1 as I64,
+            _ => {}
+        }
+        i = i + 1 as I64
+    }
+    assert_eq(count as I32, 2 as I32)
+}
