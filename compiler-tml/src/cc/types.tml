@@ -750,8 +750,18 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         },
         Typedef(name) => {
             if env.typedefs.has(name) {
-                let t: Heap[CType] = env.typedefs.get(name)
-                return t.get()
+                // `HashMap.get` returns a `Heap[CType]` BY VALUE that
+                // shares the underlying allocation pointer with the
+                // map's bucket entry. The default `Drop for Heap[T]`
+                // calls `mem_free(this.ptr)`, which would free the
+                // allocation that the map still references — leaving a
+                // dangling pointer in `env.typedefs.get(name)` for the
+                // next call. `into_raw()` nulls the pointer so the
+                // local's drop is a no-op, preserving the map entry.
+                var t: Heap[CType] = env.typedefs.get(name)
+                let r: CType = t.get()
+                let _raw: *CType = t.into_raw()
+                return r
             }
             return CType::UnresolvedTypedef(name)
         }

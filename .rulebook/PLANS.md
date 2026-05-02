@@ -21,17 +21,22 @@ by-value `CTypeEnv`. Eliminates the value-pass + drop-glue path that
 freed the caller's HashMap buckets on `base_to_ctype` callee exit.
 Regression `test_phase24b_base_to_ctype_typedef_repeat` lands in
 `c_frontend.test.tml`. Compiler suite: 299/318 (baseline preserved).
-cc_driver.exe builds + parses simple C inputs (`int x;`,
-`typedef int int32_t;`, `typedef int int32_t; int32_t x;` — all exit 0).
-Original phase24b reproducer (`int32_t add(int32_t a, int32_t b) { ... }`)
-still crashes at exit 127: trace shows the second `base_to_ctype`
-call reaches `return r` (kind=6, CType::Int) but the caller's
-`let p_base: CType = ...` slot never resumes. Different bug class
-from phase24b's value-pass — filed as
-`phase24c_cc-driver-runtime-link` (renamed scope: codegen on
-return-of-value-type-enum from a function called inside a
-parameter loop). Phase 0x fixed the symmetric arg-path; this
-return-path remains.
+phase24c shipped: `./build/debug/cc_driver.exe .sandbox/test_no_inc.c
+--emit=ast` exits 0 with `cc_driver: parsed`. Root cause was
+Heap-borrow-drop double-free, not the value-pass theory:
+`HashMap[Str, Heap[CType]].get(name)` returns `Heap[CType]` BY
+VALUE; the local copy's `ptr` aliases the map bucket's
+allocation; `Drop for Heap[T]` calls `mem_free(this.ptr)`, freeing
+the bucket's allocation on local scope exit. Fix: `var t =
+env.typedefs.get(name); let r = t.get(); let _ = t.into_raw();
+return r` — `into_raw()` nulls the local's ptr so its drop skips
+mem_free, preserving the bucket. VERSION 0.3.40 → 0.3.41.
+
+Same Heap-borrow-drop pattern still affects `base_to_ctype`'s
+StructRef/UnionRef/EnumRef arms (return moves Heap into CType
+variant; eventual drop frees bucket allocation) — filed as
+`phase24d_heap-borrow-drop-structref`. `essential.c` self-compile
+(phase24b 4.2) gated on phase24d.
 Branch: feat/self-hosting-compiler. Version: 0.3.40.
 coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
 golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
