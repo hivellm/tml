@@ -1,18 +1,21 @@
 ## 1. Design
-- [ ] 1.1 Write design doc comparing options (a) refcount header, (b) Borrow[T] type, (c) language-level lifetimes. Pick one (recommend option a).
-- [ ] 1.2 Decide refcount semantics: non-atomic for single-threaded use, or atomic from day one.
-- [ ] 1.3 Define new Heap[T] allocation layout: `[refcount: U64][T payload]`. Document alignment rules for arbitrary T.
+- [x] 1.1 Discovered `lib/core/src/alloc/shared.tml` already provides `Shared[T]` — a non-atomic `Rc[T]`-style refcounted pointer with `new`, `duplicate` (refcount-increment), `Drop` (decrement + free at zero), `is_unique`, `get_mut`, `try_unwrap`, `downgrade`/`SharedWeak`. No language change needed. Selecting option (a) via the existing `Shared[T]`.
+- [x] 1.2 Refcount is non-atomic — `Shared[T]` already targets single-threaded sharing (cc_driver fits). `Sync[T]` (atomic variant) exists for multi-threaded use; not needed here.
+- [x] 1.3 Allocation layout for `Shared[T]` is already defined: `SharedInner[T] { value: T, strong_count: I32, weak_count: I32 }` allocated as one block; `Shared { ptr: *SharedInner[T] }` in the user-facing struct.
 
-## 2. Implementation
-- [ ] 2.1 Update `lib/core/src/alloc/heap.tml`: header allocation, Drop refcount-decrement gate, explicit `clone()` method (or auto-Duplicate fallthrough that increments).
-- [ ] 2.2 Update `lib/core/src/alloc/heap.tml::Heap::new(value)` to allocate header + payload, initialize `refcount = 1`, return `Heap { ptr: payload_addr }`.
-- [ ] 2.3 Update `Heap::from_raw` / `Heap::into_raw` semantics to handle the header (e.g. `from_raw` claims an existing allocation with refcount=1; `into_raw` strips ownership without dropping).
-- [ ] 2.4 Audit other Heap[T] consumers across `lib/` and `compiler-tml/` for breakage.
+## 2. Migration (CTypeEnv + CType)
+- [ ] 2.1 Migrate `CTypeEnv` bucket types in `compiler-tml/src/cc/types.tml`: `typedefs: HashMap[Str, Heap[CType]]` → `HashMap[Str, Shared[CType]]`. Same for `structs`, `unions`, `enums` (`Shared[CAggregate]`, `Shared[CEnumType]`).
+- [ ] 2.2 At every `env.X.get(k)`, call `.duplicate()` on the returned `Shared` to refcount-increment.
+- [ ] 2.3 Migrate `CType` Heap-bearing variants to `Shared`: `Ptr(Shared[CType])`, `Array(Shared[CArrayType])`, `Struct(Shared[CAggregate])`, `Union(Shared[CAggregate])`, `Enum(Shared[CEnumType])`, `Func(Shared[CFuncType])`, `Qualified(Shared[CType], CQualifiers)`.
+- [ ] 2.4 Update `impl Duplicate for CType` to call `.duplicate()` on `Shared` payloads (cheap refcount-increment chain instead of deep clone).
+- [ ] 2.5 Migrate `CFuncType.ret`, `CFuncType.params`, `CArrayType.elem`, `CAggregateField.ty`, `CDeclarator::Pointer`/`Array`/`Func` from `Heap` to `Shared` where they hold inner CType / CDeclarator references.
+- [ ] 2.6 Audit construction sites (`Heap::new(...)` in lower.tml, parser.tml, types.tml) — replace with `Shared::new(...)` for the migrated types.
 
 ## 3. Cleanup phase24c/24d/24e/24f workarounds
-- [ ] 3.1 Remove `into_raw()` + `Heap::from_raw()` patches in `compiler-tml/src/cc/types.tml` Typedef/StructRef/UnionRef/EnumRef arms. Replace with direct return of `env.X.get(tag)` (refcount handles sharing).
-- [ ] 3.2 Remove `impl Duplicate for CType` and `@auto(duplicate)` decorations on CFuncType / CArrayType / CAggregateField / CAggregate / CEnumValue / CEnumType — refcount removes the need for deep-clone.
-- [ ] 3.3 Remove `declarator_name_value_leak` in `compiler-tml/src/cc/parser.tml`; restore the simpler recursive `declarator_name → declarator_name_heap → declarator_name` loop.
+- [ ] 3.1 Remove `into_raw()` + `Heap::from_raw()` patches in `compiler-tml/src/cc/types.tml` Typedef/StructRef/UnionRef/EnumRef arms. Replace with `env.X.get(tag).duplicate()`.
+- [ ] 3.2 Remove `impl Duplicate for CType` deep-clone path; replace with refcount-increment (item 2.4).
+- [ ] 3.3 Remove `declarator_name_value_leak` in `compiler-tml/src/cc/parser.tml`; restore the simpler recursive `declarator_name → declarator_name_heap → declarator_name` loop with `Shared`-aware `Heap[CDeclarator]` → `Shared[CDeclarator]` migration.
+- [ ] 3.4 Remove the for-init `into_raw + from_raw` patch (commit `6c48664a`) once the migration covers `List[Shared[CDecl]]`.
 
 ## 4. Verify
 - [ ] 4.1 `./build/debug/cc_driver.exe .sandbox/sig_alone.c --emit=ast` exits 0 deterministically across 10 consecutive runs.

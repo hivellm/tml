@@ -1,5 +1,47 @@
 # Proposal: phase24g_heap-rc-or-borrow-language-fix
 
+## Update (2026-05-02)
+
+`lib/core/src/alloc/shared.tml` already provides exactly the
+`Rc[T]`-style refcounted pointer this proposal called option (a):
+`Shared[T]` with `new`, `duplicate` (atomic-free refcount-increment),
+`Drop` (refcount-decrement + free at zero), `is_unique`,
+`get_mut`, `try_unwrap`, `downgrade`/`SharedWeak`. No language
+extension needed.
+
+The migration path is clear:
+
+1. **Migrate CTypeEnv bucket types** in
+   `compiler-tml/src/cc/types.tml`: `HashMap[Str, Heap[CType]]` →
+   `HashMap[Str, Shared[CType]]` (and same for structs, unions,
+   enums). At every `env.X.get(k)`, call `.duplicate()` on the
+   returned `Shared` to refcount-increment. The bucket and
+   consumer both hold the same allocation; refcount tracks them.
+
+2. **Migrate CType internal `Heap[CType]` variants** to
+   `Shared[CType]` for the recursive Heap-bearing variants:
+   `Ptr(Shared[CType])`, `Array(Shared[CArrayType])`,
+   `Struct(Shared[CAggregate])`, `Union(Shared[CAggregate])`,
+   `Enum(Shared[CEnumType])`, `Func(Shared[CFuncType])`,
+   `Qualified(Shared[CType], CQualifiers)`. The
+   `impl Duplicate for CType` (currently deep-clone) becomes a
+   chain of cheap refcount-increments.
+
+3. **Remove phase24c–24f surgical workarounds**:
+   `into_raw()` / `Heap::from_raw()` / `borrowed.duplicate()` /
+   `declarator_name_value_leak` all become unnecessary once the
+   types use `Shared` semantics.
+
+4. **Audit the rest of compiler-tml** for the same
+   bucket-borrow-drop pattern and migrate any other
+   `HashMap[K, Heap[V]]` containers to `Shared[V]`.
+
+The migration is wide (touches CType, CFuncType, CArrayType,
+CAggregate, CEnumType, all of CTypeEnv's HashMap value types,
+plus every site that constructs / pattern-matches a CType
+variant) but mechanical. No new codegen or type-system work
+needed.
+
 ## Why
 
 Phases 24c, 24d, 24e, and 24f have surgically patched specific
