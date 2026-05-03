@@ -98,6 +98,7 @@ use compiler::cc::types::{
     tentative_declare, tentative_define,
     CFuncType, CArrayType, CAggregate, CAggregateField, CEnumType, CEnumValue,
     resolve_type_name, base_to_ctype, apply_declarator, apply_param_decays,
+    wrap_qualifiers,
     sizeof_type, alignof_type, ctype_kind, promote_integer, usual_arith_conv,
     decay_array, decay_function, decay_lvalue, apply_expr_decays,
     ptr_add_scale, ptrdiff_type, size_type,
@@ -530,16 +531,37 @@ pub func lower_func_decl(lw: CLower, fd: CFuncDecl) {
     lw.module.functions.push(mfunc)
 }
 
-// Extract the C return type from a CFuncDecl. The declarator's
-// outermost Func layer's inner wraps the return; we re-apply the
-// declarator spine without the outer Func to recover it.
+// Extract the C return type from a CFuncDecl. For a plain function
+// definition `T f(...)`, the declarator is `Func(part)` and the return
+// type is `apply_declarator(base, part.inner)`.
+//
+// For `T *f(...)`, the parser produces `Pointer(Func(part))` (the leading
+// `*` of the declarator is wrapped outside the function). Per C semantics
+// this means "f is a function returning pointer-to-T", so the return type
+// is `Ptr(apply_declarator(base, part.inner))`. More generally, the chain
+// `Pointer(Pointer(...Func(part)))` contributes a stack of Pointer
+// wrappers around the final return type. We peel through Pointer layers,
+// extract the Func's inner-applied type, then re-wrap with the same
+// pointer layers.
 func return_type_of_func_decl(lw: CLower, fd: CFuncDecl) -> CType {
     let base_ty: CType = base_to_ctype(ref lw.env, fd.specifiers.base_type)
-    when fd.declarator {
-        Func(part) => {
-            return apply_declarator(ref lw.env, base_ty, part.inner.get())
+    return ret_type_through_pointers(ref lw.env, base_ty, fd.declarator)
+}
+
+// Recursive helper — walks through outer Pointer layers, finds the Func,
+// computes its return type via `apply_declarator(base, part.inner)`, then
+// wraps the result in the same number of Pointer layers (preserving each
+// layer's qualifiers).
+func ret_type_through_pointers(env: ref CTypeEnv, base_ty: CType, decl: CDeclarator) -> CType {
+    when decl {
+        Func(part) => return apply_declarator(ref env, base_ty, part.inner.get()),
+        Pointer(inner, quals) => {
+            let inner_ret: CType = ret_type_through_pointers(ref env, base_ty, inner.get())
+            let boxed: Shared[CType] = Shared[CType]::new(inner_ret)
+            let pt: CType = CType::Ptr(boxed)
+            return wrap_qualifiers(pt, quals)
         },
-        _ => return apply_declarator(ref lw.env, base_ty, fd.declarator)
+        _ => return apply_declarator(ref env, base_ty, decl)
     }
 }
 

@@ -884,7 +884,7 @@ pub func apply_param_decays(t: CType) -> CType {
     return decay_function(t1)
 }
 
-func wrap_qualifiers(t: CType, q: CQualifiers) -> CType {
+pub func wrap_qualifiers(t: CType, q: CQualifiers) -> CType {
     if q.is_const == 0 as I64 and q.is_volatile == 0 as I64 and
        q.is_restrict == 0 as I64 and q.is_atomic == 0 as I64 {
         return t

@@ -1811,9 +1811,20 @@ func aggregate_tag(b: CBaseType) -> Str {
     }
 }
 
+// True iff the declarator describes a function (possibly returning a
+// pointer/pointers). C declarator semantics: `*f(void)` is "f is a function
+// returning pointer", parsed as `Pointer(Func(Ident("f")))`. The outermost
+// AST layer is `Pointer`, but `f` itself is still a function. We must
+// recurse through `Pointer` layers (the return-type modifiers) to find
+// the underlying `Func`.
+//
+// Note: `Array(Func(...))` would mean "array of functions" which is
+// invalid in C; `Func(Pointer(...))` means `f` is a pointer-to-function,
+// NOT a function — those cases correctly return false.
 func declarator_is_func(d: CDeclarator) -> Bool {
     when d {
         Func(_) => return true,
+        Pointer(inner, _) => return declarator_is_func(inner.get()),
         _ => return false
     }
 }
@@ -1821,6 +1832,7 @@ func declarator_is_func(d: CDeclarator) -> Bool {
 func declarator_func_params(d: CDeclarator) -> List[CParam] {
     when d {
         Func(part) => return part.params,
+        Pointer(inner, _) => return declarator_func_params(inner.get()),
         _ => return List[CParam]::new(0 as I64)
     }
 }
@@ -1828,6 +1840,7 @@ func declarator_func_params(d: CDeclarator) -> List[CParam] {
 func declarator_func_variadic(d: CDeclarator) -> I64 {
     when d {
         Func(part) => return part.is_variadic,
+        Pointer(inner, _) => return declarator_func_variadic(inner.get()),
         _ => return 0 as I64
     }
 }

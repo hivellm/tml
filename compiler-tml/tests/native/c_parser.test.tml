@@ -298,3 +298,83 @@ use std::collections::list::List
         Err(_) => assert(false)
     }
 }
+
+// phase0z regression: `void *f(void) { return 0; }` — function definition
+// returning pointer-to-T. The leading `*` of the declarator is wrapped
+// outside the `Func` AST node by `cp_parse_declarator_inner`, producing
+// `Pointer(Func(Ident("f"), [void]))`. Previously, `declarator_is_func`
+// only matched the outermost `Func` variant, so the function-definition
+// path at `cp_parse_top_decl:1711` did not fire — the parser fell into
+// the variable-declaration path, expected `;` after the declarator, and
+// hit `{` instead, raising "expected ';' after declaration". Fixed by
+// recursing through `Pointer` layers in `declarator_is_func`,
+// `declarator_func_params`, and `declarator_func_variadic`.
+@test func test_func_def_returning_pointer() {
+    // Tokens for `void *f(void) { return 0; }`
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "f", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "return", "t.c", 1 as I64, 17 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "0", "t.c", 1 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 1 as I64, 27 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => {
+            // One Func decl with a body (definition, not prototype).
+            assert_eq(unit.decls.len() as I32, 1)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: prototype `void *g(void);` must still parse as a
+// Func decl (with body=Nothing), confirming the recursion through
+// `Pointer` in `declarator_is_func` correctly identifies prototypes too,
+// not just definitions.
+@test func test_func_prototype_returning_pointer() {
+    let pp = List[PpToken]::new(7 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "g", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 14 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: a plain pointer variable like `void *p;` must NOT
+// be classified as a function definition/prototype. The recursion in
+// `declarator_is_func` must bottom out at `Ident` (returning false), not
+// erroneously match.
+@test func test_pointer_variable_not_func() {
+    let pp = List[PpToken]::new(4 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "p", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 8 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
