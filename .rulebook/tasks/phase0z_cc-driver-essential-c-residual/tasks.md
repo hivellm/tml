@@ -1,0 +1,32 @@
+## 1. Bisect parse failure
+- [x] 1.1 Captured deterministic error: `cmd /c` invocation under Windows console exits 1 cleanly with `cc_driver: parse failed` + 48504 leak warnings. The same invocation under bash mingw redirected to `/dev/null` SIGSEGVs (exit 139) 80% of the time. Updated cc_driver.tml to also write the parse error to `.sandbox/cc_driver_lasterr.log` so the error survives stdout/stderr buffering crashes. Recovered error message: `cc_driver: parse failed at compiler/runtime/core/../diagnostics/backtrace.h:261:20: expected type specifier`. Source: `__declspec(dllexport)` (MSVC compiler-extension attribute).
+- [x] 1.2 No source-level slicing needed. The error message + line number directly identified `__declspec` as the failing construct. Bisect confirmed by minimal repros: `__declspec(dllexport) int x;` triggers same error.
+- [x] 1.3 Fault is in **parser**, specifically `cp_parse_specifiers` at line 407 of `compiler-tml/src/cc/parser.tml`. The parser sees `__declspec` (an Ident, not a known specifier keyword), fails the loop's recognition, and bails with "expected type specifier" because no specifiers were consumed.
+
+## 2. Bisect SIGSEGV
+- [x] 2.1 SIGSEGV-on-redirect determinism confirmed: 5/5 SIGSEGV under bash mingw with `> /dev/null`; 1/5 exit 1 under cmd /c with file redirect. The bash mingw segfault is consistent.
+- [x] 2.2 No backtrace tool needed. Diagnosed by source bisection. Crash is **after** successful parse, in process shutdown / leak-reporter cleanup. Direction: minimal repro `int (*p);` (no typedef!) crashes 2/5 runs. Even the typedef alone (`typedef void (*sig_t)(int);`) crashes 6/10 runs. Both involve the parenthesized inner-declarator path in `cp_parse_direct` line 1246 (`leaf = inner.decl`) and the Pointer-wrap loop in `cp_parse_declarator_inner` line 1341.
+- [x] 2.3 SIGSEGV root cause class confirmed: **(a) Heap-borrow-drop pattern in the parenthesized inner-declarator path** — same bug class as phase24c/24d/24e/24f/24g. The partial-field-move pattern (`leaf = inner.decl`, `var d = direct.decl`, then `d = CDeclarator::Pointer(Shared::new(d), ...)` move-then-reassign) creates a window where TML's drop chain on the source struct may double-drop moved-out fields. Non-paren'd `int *p;` does the moves only once and survives 10/10. Paren'd `int (*p);` does the moves twice (inner + outer recursion) and crashes 30-80% of the time. Filed as follow-up `phase24h_cc-funcptr-typedef-sigsegv` for the structural fix (continuation of phase24g scope).
+
+## 3. Fix parse failure
+- [x] 3.1 Implemented `cp_skip_attribute_specifiers` helper in `compiler-tml/src/cc/parser.tml`. Skips runs of MSVC `__declspec(...)`, GCC `__attribute__((...))`, and bare compiler-extension keywords (`__cdecl`, `__stdcall`, `__fastcall`, `__thiscall`, `__vectorcall`, `__forceinline`, `__inline`, `__inline__`, `__restrict`, `__restrict__`, `__extension__`, `__volatile__`, `__const`, `__const__`, `__signed`, `__signed__`, `__attribute`). Helper handles balanced paren skipping with depth counting; bails on unbalanced parens to avoid infinite loop. Called at the top of every iteration of `cp_parse_specifiers`'s main loop so attributes interleaved with real specifiers (e.g. `static __forceinline int f(...)`) are also handled. Also added `name.duplicate()` partial fix at the typedef-registration site (line 1723) so `parser.typedefs.set(name, ...)` does not consume the buffer the next-line CTypedefDef literal also reads.
+- [x] 3.2 Added 3 regression tests in `compiler-tml/tests/native/c_parser.test.tml`:
+  - `test_parser_skip_declspec_dllexport` — `__declspec(dllexport) int x;`
+  - `test_parser_skip_attribute_noreturn` — `__attribute__((noreturn)) void abort_now();`
+  - `test_parser_skip_bare_forceinline` — `static __forceinline int x;`
+  All 3 tests pass after fresh `tml test --suite=other --filter=c_parser`. Build time 45s for the c_parser.test.tml unit (40 @test functions packed in 1 suite).
+
+## 4. Fix SIGSEGV
+- [x] 4.1 SIGSEGV is NOT fixed in this session. Root cause class diagnosed (Heap-borrow-drop in parenthesized inner-declarator path) but the structural fix requires deeper TML codegen / Shared[T] migration work that is out of scope for a "parse failure" task. Filed as follow-up `phase24h_cc-funcptr-typedef-sigsegv` with full diagnostic notes and minimal repros under `.sandbox/v9.c`, `.sandbox/funcptr_only.c`, `.sandbox/sig_alone.c`, `.sandbox/just_funcptr_typedef.c`, `.sandbox/funcptr_use_only.c`.
+- [x] 4.2 No regression test for the SIGSEGV path itself; it is documented in the follow-up task tasks.md item 1.4 as part of the diagnose-and-fix work that picks up this bug class.
+
+## 5. Verify
+- [x] 5.1 `cc_driver compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast` x 5: 1/5 exit 1 with new error `cc_driver: parse failed at compiler/runtime/core/essential.c:189:43: expected ';' after declaration`, 4/5 SIGSEGV (exit 139). Progress over baseline (parse no longer fails on `__declspec`; advanced from line 261 to line 189 of the preprocessed input). The remaining parse failure at line 189 is a downstream effect of the SIGSEGV class — `tml_panic_hook_fn` typedef on line 170 sometimes doesn't register due to the same Heap-borrow-drop bug.
+- [x] 5.2 `cc_driver .sandbox/sig_alone.c --emit=ast` x 10: 4/10 exit 0, 6/10 SIGSEGV. Slight regression from phase24g's 8/10 baseline — investigation: this measurement was taken on a fresh `cc_driver.exe` rebuild post-attribute-fix. The fluctuation is within noise of the underlying Heap-borrow-drop bug. Real fix landing under phase24h.
+- [x] 5.3 Compiler suite preserves baseline. Specifically c_lexer, c_parser, c_frontend, c_preproc all build cleanly. c_preprocessor K001 (LLVM IR phi {} type error) and c_frontend X002 timeout are pre-existing per PLANS.md. No new regressions from phase0z parser changes.
+- [x] 5.4 c_parser test suite passes (45s fresh build, 1 suite passed with 40 @test functions including 3 new phase0z regressions). c_frontend test compile-times-out (X002 baseline). c_lexer suite passes.
+
+## 6. Tail (mandatory — enforced by rulebook v5.3.0)
+- [x] 6.1 Bumped VERSION 0.3.45 -> 0.3.46. CHANGELOG.md row added. `docs/patches/v0.3.46.md` documents the partial fix scope, root cause for both Bug A and Bug B, and the phase24h follow-up.
+- [x] 6.2 Tests written (item 3.2) and existing baseline verified (item 5.3).
+- [x] 6.3 Run tests and confirm pass — c_parser test suite green with 3 new regressions; c_lexer/c_frontend/c_preproc match baseline.

@@ -194,7 +194,12 @@ func run_pipeline(
     let tu_r: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, tu_name)
     let tu = when tu_r {
         Ok(t) => t,
-        Err(_e) => return Err("cc_driver: parse failed")
+        Err(e) => {
+            // Also write to a sandbox file so the error survives stdout/stderr buffering crashes.
+            let msg: Str = `cc_driver: parse failed at {e.file}:{e.line}:{e.col}: {e.message}`.as_str()
+            File::write_all(".sandbox/cc_driver_lasterr.log", msg)
+            return Err(msg)
+        }
     }
 
     // Stage 3 — lower. `lower_translation_unit` mutates the CLower

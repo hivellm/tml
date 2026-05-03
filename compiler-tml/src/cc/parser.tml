@@ -272,6 +272,97 @@ func fold_tyspec(c: TySpecCount) -> Maybe[CBaseType] {
 }
 
 // ============================================================================
+// Compiler-extension attribute skipping (phase0z)
+// ============================================================================
+
+// Returns true when `name` matches an MSVC / GCC compiler extension that
+// can appear in declaration position and should be skipped by the parser.
+// Names are duplicated in `cp_skip_attribute_specifiers` so the caller's
+// CToken can drop safely; this predicate operates on a borrowed Str.
+func cp_is_attribute_name(name: Str) -> Bool {
+    if name == "__attribute__" { return true }
+    if name == "__attribute" { return true }
+    if name == "__declspec" { return true }
+    if name == "__cdecl" { return true }
+    if name == "__stdcall" { return true }
+    if name == "__fastcall" { return true }
+    if name == "__thiscall" { return true }
+    if name == "__vectorcall" { return true }
+    if name == "__forceinline" { return true }
+    if name == "__inline" { return true }
+    if name == "__inline__" { return true }
+    if name == "__restrict" { return true }
+    if name == "__restrict__" { return true }
+    if name == "__extension__" { return true }
+    if name == "__volatile__" { return true }
+    if name == "__const" { return true }
+    if name == "__const__" { return true }
+    if name == "__signed" { return true }
+    if name == "__signed__" { return true }
+    return false
+}
+
+// Skip a balanced parenthesised group starting at `pos` (which must point
+// at an `LParen`). Returns the position of the token *after* the matching
+// `RParen`. If parens are unbalanced, returns the original `pos` so the
+// caller can detect and stop.
+func cp_skip_paren_group(tokens: List[CToken], pos: I64) -> I64 {
+    let n: I64 = tokens.len() as I64
+    if pos >= n { return pos }
+    if not cp_check_punct(tokens, pos, CPunct::LParen) { return pos }
+    var p: I64 = pos + 1
+    var depth: I64 = 1 as I64
+    loop (p < n and depth > 0 as I64) {
+        if cp_check_punct(tokens, p, CPunct::LParen) {
+            depth = depth + 1 as I64
+        } else if cp_check_punct(tokens, p, CPunct::RParen) {
+            depth = depth - 1 as I64
+            if depth == 0 as I64 {
+                return p + 1
+            }
+        }
+        p = p + 1
+    }
+    // Unbalanced — bail by returning original pos so caller stops.
+    return pos
+}
+
+// Skip any contiguous run of MSVC `__declspec(...)` / GCC `__attribute__((...))`
+// and other compiler-extension keywords (`__cdecl`, `__forceinline`, etc.)
+// at `pos`. Returns the new position. Safe to call when there are no
+// attributes to skip — returns `pos` unchanged.
+pub func cp_skip_attribute_specifiers(parser: CParser, pos: I64) -> I64 {
+    let n: I64 = parser.tokens.len() as I64
+    var p: I64 = pos
+    loop (p < n) {
+        let tok: CToken = cp_peek(parser.tokens, p)
+        var matched: I64 = 0 as I64
+        when tok.kind {
+            Ident => {
+                if cp_is_attribute_name(tok.text) {
+                    matched = 1 as I64
+                    let after_name: I64 = p + 1
+                    if cp_check_punct(parser.tokens, after_name, CPunct::LParen) {
+                        let after_group: I64 = cp_skip_paren_group(parser.tokens, after_name)
+                        if after_group == after_name {
+                            // Unbalanced parens — give up to avoid infinite loop.
+                            return p
+                        }
+                        p = after_group
+                    } else {
+                        // Bare keyword like `__forceinline` / `__cdecl` — just consume the ident.
+                        p = after_name
+                    }
+                }
+            },
+            _ => {}
+        }
+        if matched == 0 as I64 { return p }
+    }
+    return p
+}
+
+// ============================================================================
 // Declaration specifier parsing (item 2.1)
 // ============================================================================
 
@@ -288,6 +379,15 @@ pub func cp_parse_specifiers(parser: CParser, pos: I64) -> Outcome[CParsedSpecs,
     var p: I64 = pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
+        // Skip MSVC `__declspec(...)` / GCC `__attribute__((...))` and other
+        // compiler-extension attributes that may appear interleaved with
+        // real specifiers (e.g. `static __forceinline int f(...)`).
+        let after_attrs: I64 = cp_skip_attribute_specifiers(parser, p)
+        if after_attrs != p {
+            p = after_attrs
+            // Re-enter the loop to peek the next token after the attribute(s).
+        }
+        if p >= n { break }
         // cp_peek deep-duplicates Str fields so dropping `tok` at end of
         // iteration does not free strings still owned by parser.tokens.
         let tok: CToken = cp_peek(parser.tokens, p)
@@ -1619,8 +1719,13 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
         }
 
         // Register typedef name if this declaration has typedef storage.
+        // `name` is reused on the next line in the CTypedefDef literal; we
+        // pass a duplicated copy to `parser.typedefs.set` so the caller's
+        // `name` stays valid for the second use. Without the duplicate, the
+        // `set` callee's parameter drop frees the Str buffer that `name`
+        // also references, leaving `td.name` dangling.
         if (specs.storage as I64) == (CStorageClass::Typedef as I64) and name.len() > 0 as I64 {
-            parser.typedefs.set(name, 1 as I64)
+            parser.typedefs.set(name.duplicate(), 1 as I64)
             let td: CTypedefDef = CTypedefDef {
                 name: name, specifiers: specs, declarator: dp.decl,
                 file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col

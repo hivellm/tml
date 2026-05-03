@@ -154,3 +154,88 @@ use std::collections::list::List
         Err(_) => assert(false)
     }
 }
+
+// phase0z regression: `__declspec(dllexport) int x;` — MSVC compiler
+// extension attribute. Real-world headers (compiler/runtime/diagnostics/
+// backtrace.h:261) define `TML_EXPORT` as `__declspec(dllexport)` and
+// apply it to function/variable declarations. Without an attribute-
+// skipping pass, the parser bails at `__declspec` with "expected type
+// specifier" because `__declspec` is an Ident, not a known specifier
+// keyword. The fix adds `cp_skip_attribute_specifiers` which strips
+// MSVC `__declspec(...)` and GCC `__attribute__((...))` runs at the
+// top of the specifier loop.
+@test func test_parser_skip_declspec_dllexport() {
+    let pp = List[PpToken]::new(8 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "__declspec", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 11 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "dllexport", "t.c", 1 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 28 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            // 4 attribute tokens skipped + `int x ;` = pos 7
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 7)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: `__attribute__((noreturn)) void abort_now();` —
+// GCC extension attribute with double-paren. Same root cause as the
+// `__declspec` test: attribute skipping must handle nested parens
+// (single-paren-wrapped attribute list inside the outer attribute call).
+@test func test_parser_skip_attribute_noreturn() {
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "__attribute__", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "noreturn", "t.c", 1 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "abort_now", "t.c", 1 as I64, 32 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 41 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 42 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 43 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            // 6 attribute tokens skipped + `void abort_now ( ) ;` = pos 11
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 11)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: bare compiler-extension keywords like `__forceinline`
+// (no parentheses) must be skipped between the storage class and type.
+@test func test_parser_skip_bare_forceinline() {
+    let pp = List[PpToken]::new(5 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "static", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "__forceinline", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 26 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 27 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 5)
+        },
+        Err(_) => assert(false)
+    }
+}
