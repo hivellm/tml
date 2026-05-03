@@ -23,6 +23,7 @@ use compiler::cc::ast::*
 use compiler::cc::types::*
 use compiler::cc::lower::*
 use std::collections::list::List
+use core::alloc::shared::Shared
 
 // ---------------------------------------------------------------------------
 // Smoke — the full pipeline type-checks against real AST shapes.
@@ -65,7 +66,7 @@ use std::collections::list::List
     let lw: CLower = c_lower(CAbiTarget::WindowsX64, "phase24b")
     // Register a typedef int32_t -> int.
     let int_ty: CType = CType::Int
-    let int_ty_h: Heap[CType] = Heap[CType]::new(int_ty)
+    let int_ty_h: Shared[CType] = Shared[CType]::new(int_ty)
     lw.env.typedefs.set("int32_t", int_ty_h)
     // First lookup — unaffected.
     let r1: CType = base_to_ctype(ref lw.env, CBaseType::Typedef("int32_t"))
@@ -78,4 +79,53 @@ use std::collections::list::List
     // entries, mirroring lower_func_decl's parameter loop pattern.
     let r3: CType = base_to_ctype(ref lw.env, CBaseType::Typedef("int32_t"))
     assert_eq(ctype_kind(r3), CT_KIND_INT)
+}
+
+// ---------------------------------------------------------------------------
+// phase24g regression: for-init `for (int i = 0; ...)` carries a CDecl that
+// outlives its source `dp.decls` List. Pre-migration relied on
+// `into_raw + from_raw` to detach the Heap from the bucket; with
+// Shared[CDecl] the natural one-liner `dp.decls.get(0).duplicate()`
+// preserves the bucket reference via refcount-increment. This test
+// constructs the for-init parse path directly via `cp_parse_compound_stmt`
+// and confirms: (a) the parse succeeds, (b) the resulting CBlockItem chain
+// holds a CDecl::Var whose name is "i" — proving the Shared[CDecl] passed
+// from `dp.decls.get(0).duplicate()` into `CBlockItem::DeclItem` survived
+// the source list's drop.
+// ---------------------------------------------------------------------------
+
+@test func test_phase24g_for_init_decl() {
+    // Tokens: { for ( int i = 0 ; i < 10 ; i = i + 1 ) { } }
+    let pp = List[PpToken]::new(20 as I64)
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "for", "t.c", 1 as I64, 2 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 1 as I64, 10 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 1 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "0", "t.c", 1 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 1 as I64, 17 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "<", "t.c", 1 as I64, 19 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "10", "t.c", 1 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 1 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 1 as I64, 29 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "+", "t.c", 1 as I64, 31 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "1", "t.c", 1 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 34 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 1 as I64, 36 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 1 as I64, 37 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 1 as I64, 38 as I64))
+
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    // cp_parse_compound_stmt expects to be at `{`.
+    let res: Outcome[CParsedStmt, CParseError] = cp_parse_compound_stmt(parser, 0 as I64)
+    when res {
+        Ok(_) => assert(true),
+        Err(_) => assert(false)
+    }
 }

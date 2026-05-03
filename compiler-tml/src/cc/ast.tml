@@ -26,6 +26,7 @@
 
 use std::collections::list::List
 use core::alloc::heap::Heap
+use core::alloc::shared::Shared
 
 // ============================================================================
 // Declaration specifiers (C17 §6.7)
@@ -116,9 +117,9 @@ pub type CDeclSpecifiers {
 
 /// Function-declarator layer. Split out of the enum so pattern-binding a
 /// single struct arg avoids the codegen bug that hits when a Func variant
-/// is declared as `Func(Heap[CDeclarator], List[CParam], I64)`.
+/// is declared as `Func(Shared[CDeclarator], List[CParam], I64)`.
 pub type CFuncDeclPart {
-    inner: Heap[CDeclarator],
+    inner: Shared[CDeclarator],
     params: List[CParam],
     is_variadic: I64
 }
@@ -127,6 +128,11 @@ pub type CFuncDeclPart {
 /// a pointer/array/function layer until the leaf (`Ident` or `Abstract`).
 /// Parenthesized declarators like `(*fp)(int)` are represented as nested
 /// declarators: outermost is Func, wrapping a Pointer, wrapping Ident.
+///
+/// `Shared[CDeclarator]` (refcounted) is used for the recursive payload
+/// so that `HashMap.get` / `List.get` slot aliasing is safe — the Heap
+/// equivalent caused use-after-free bugs across phases 24c–24f because
+/// dropping the local handle freed the slot's allocation.
 pub enum CDeclarator {
     /// Named identifier — the declarator "bottoms out" here.
     Ident(Str),
@@ -134,10 +140,10 @@ pub enum CDeclarator {
     /// positions (`int(*)(int,int)` as a type name) and in `sizeof(T)`.
     Abstract,
     /// `*` pointer with qualifiers applied to the pointer itself.
-    Pointer(Heap[CDeclarator], CQualifiers),
+    Pointer(Shared[CDeclarator], CQualifiers),
     /// `[N]` array. `size = Nothing` means unsized / incomplete (`int arr[];`
     /// or a VLA, both of which we only allow on function parameters).
-    Array(Heap[CDeclarator], Maybe[Heap[CExpr]]),
+    Array(Shared[CDeclarator], Maybe[Heap[CExpr]]),
     /// Function declarator. See `CFuncDeclPart` for field layout.
     Func(CFuncDeclPart)
 }
@@ -283,8 +289,12 @@ pub enum CStmt {
 
 /// Item inside a compound statement: C99 permits declarations and statements
 /// to interleave, so a block is a list of either.
+///
+/// `DeclItem` carries a `Shared[CDecl]` (refcounted) so list slots and
+/// HashMap buckets containing CDecl values stay aliasing-safe — same
+/// rationale as the type-system Heap-borrow-drop fix from phase24g.
 pub enum CBlockItem {
-    DeclItem(Heap[CDecl]),
+    DeclItem(Shared[CDecl]),
     StmtItem(Heap[CStmt])
 }
 
@@ -394,7 +404,7 @@ pub type CTypedefDef {
 // ============================================================================
 
 pub type CTranslationUnit {
-    decls: List[Heap[CDecl]],
+    decls: List[Shared[CDecl]],
     // File name of the primary source (for diagnostics and the eventual
     // MIR `#file` directive).
     file: Str
@@ -402,7 +412,7 @@ pub type CTranslationUnit {
 
 pub func c_tu(file: Str) -> CTranslationUnit {
     return CTranslationUnit {
-        decls: List[Heap[CDecl]]::new(0 as I64),
+        decls: List[Shared[CDecl]]::new(0 as I64),
         file: file
     }
 }

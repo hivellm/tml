@@ -41,6 +41,7 @@
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
+use core::alloc::shared::Shared
 use compiler::cc::ast::{
     CBaseType, CQualifiers, CDeclSpecifiers, CDeclarator, CFuncDeclPart,
     CTypeName, CStructDef, CUnionDef, CEnumDef, CTypedefDef, CStructField,
@@ -62,14 +63,14 @@ pub enum CAbiTarget {
 
 @auto(duplicate)
 pub type CFuncType {
-    ret: Heap[CType],
-    params: List[Heap[CType]],
+    ret: Shared[CType],
+    params: List[Shared[CType]],
     is_variadic: I64
 }
 
 @auto(duplicate)
 pub type CArrayType {
-    elem: Heap[CType],
+    elem: Shared[CType],
     // `size = -1` for unsized / incomplete arrays (function parameters,
     // extern declarations). Otherwise the explicit element count.
     size: I64
@@ -78,7 +79,7 @@ pub type CArrayType {
 @auto(duplicate)
 pub type CAggregateField {
     name: Str,
-    ty: Heap[CType],
+    ty: Shared[CType],
     // Byte offset from the start of the aggregate. Computed by
     // `layout_struct` / `layout_union`.
     offset: I64,
@@ -115,8 +116,11 @@ pub type CEnumType {
 }
 
 /// The resolved C type. Each constructor either holds the type directly
-/// (primitive) or a `Heap` indirection to break recursion and avoid the
-/// large-variant codegen issues seen throughout phase 23b.
+/// (primitive) or a `Shared` (refcounted) indirection to break recursion
+/// and decouple consumer ownership from env-bucket ownership. Refcount
+/// increment via `.duplicate()` is cheap and aliasing-safe — drops at
+/// either end simply decrement the count, freeing the allocation only
+/// when the last reference goes away.
 pub enum CType {
     Void,
     Bool,
@@ -134,24 +138,26 @@ pub enum CType {
     Float,
     Double,
     LongDouble,
-    Ptr(Heap[CType]),
-    Array(Heap[CArrayType]),
-    Struct(Heap[CAggregate]),
-    Union(Heap[CAggregate]),
-    Enum(Heap[CEnumType]),
-    Func(Heap[CFuncType]),
+    Ptr(Shared[CType]),
+    Array(Shared[CArrayType]),
+    Struct(Shared[CAggregate]),
+    Union(Shared[CAggregate]),
+    Enum(Shared[CEnumType]),
+    Func(Shared[CFuncType]),
     /// Qualified wrapper — the qualifiers apply to the payload type for
     /// compatibility and lvalue-conversion rules. Structurally identical
     /// to the underlying type for sizeof / alignof.
-    Qualified(Heap[CType], CQualifiers),
+    Qualified(Shared[CType], CQualifiers),
     /// An unresolved typedef name — the env ran without a registered
     /// definition. Kept as a placeholder so diagnostics can name it.
     UnresolvedTypedef(Str)
 }
 
 // Manual Duplicate impl for CType. `@auto(duplicate)` does not yet
-// support enums; the recursive `Heap[CType]` variants make this
-// implementation hand-rolled.
+// support enums; the recursive `Shared[CType]` variants make this
+// implementation hand-rolled. Each variant arm does a refcount
+// increment via `Shared.duplicate()` — no deep clone required because
+// `Shared` already provides aliasing-safe shared ownership.
 impl Duplicate for CType {
     pub func duplicate(this) -> CType {
         when this {
@@ -194,23 +200,25 @@ impl Duplicate for CType {
 pub type CTypeEnv {
     target: CAbiTarget,
     // Typedef resolution map: `typedef T name;` → name → CType(T).
-    // Heap-wrapped so the map's value type is pointer-sized and doesn't
-    // blow up codegen.
-    typedefs: HashMap[Str, Heap[CType]],
+    // `Shared`-wrapped so the map's value type is pointer-sized and the
+    // bucket entry stays aliveness-safe under aliasing — `HashMap.get`
+    // returns a refcount-incremented handle rather than a unique-owning
+    // pointer that would dangle once the local drops.
+    typedefs: HashMap[Str, Shared[CType]],
     // Tag types — separate namespaces for struct/union vs enum because
     // C treats them independently (`struct X` and `union X` can coexist).
-    structs: HashMap[Str, Heap[CAggregate]],
-    unions: HashMap[Str, Heap[CAggregate]],
-    enums: HashMap[Str, Heap[CEnumType]]
+    structs: HashMap[Str, Shared[CAggregate]],
+    unions: HashMap[Str, Shared[CAggregate]],
+    enums: HashMap[Str, Shared[CEnumType]]
 }
 
 pub func c_type_env(target: CAbiTarget) -> CTypeEnv {
     return CTypeEnv {
         target: target,
-        typedefs: HashMap[Str, Heap[CType]]::new(32 as I64),
-        structs: HashMap[Str, Heap[CAggregate]]::new(16 as I64),
-        unions: HashMap[Str, Heap[CAggregate]]::new(8 as I64),
-        enums: HashMap[Str, Heap[CEnumType]]::new(8 as I64)
+        typedefs: HashMap[Str, Shared[CType]]::new(32 as I64),
+        structs: HashMap[Str, Shared[CAggregate]]::new(16 as I64),
+        unions: HashMap[Str, Shared[CAggregate]]::new(8 as I64),
+        enums: HashMap[Str, Shared[CEnumType]]::new(8 as I64)
     }
 }
 
@@ -330,7 +338,7 @@ pub func unqualified(t: CType) -> CType {
     }
 }
 
-func unqualified_heap(t: Heap[CType]) -> CType {
+func unqualified_heap(t: Shared[CType]) -> CType {
     return unqualified(t.get())
 }
 
@@ -399,7 +407,7 @@ pub func sizeof_type(env: ref CTypeEnv, t: CType) -> I64 {
     }
 }
 
-func sizeof_heap(env: ref CTypeEnv, t: Heap[CType]) -> I64 {
+func sizeof_heap(env: ref CTypeEnv, t: Shared[CType]) -> I64 {
     return sizeof_type(ref env, t.get())
 }
 
@@ -416,7 +424,7 @@ pub func alignof_type(env: ref CTypeEnv, t: CType) -> I64 {
     }
 }
 
-func alignof_heap(env: ref CTypeEnv, t: Heap[CType]) -> I64 {
+func alignof_heap(env: ref CTypeEnv, t: Shared[CType]) -> I64 {
     return alignof_type(ref env, t.get())
 }
 
@@ -611,7 +619,7 @@ pub func decay_lvalue(t: CType) -> CType {
 pub func decay_array(t: CType) -> CType {
     when t {
         Array(at) => {
-            let elem: Heap[CType] = at.get().elem
+            let elem: Shared[CType] = at.get().elem
             return CType::Ptr(elem)
         },
         Qualified(inner, _) => return decay_array(inner.get()),
@@ -622,7 +630,7 @@ pub func decay_array(t: CType) -> CType {
 pub func decay_function(t: CType) -> CType {
     when t {
         Func(_) => {
-            let boxed: Heap[CType] = Heap[CType]::new(t)
+            let boxed: Shared[CType] = Shared[CType]::new(t)
             return CType::Ptr(boxed)
         },
         _ => return t
@@ -758,13 +766,11 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         Complex => return CType::Double,   // approximate: `_Complex` treated as double-rank
         StructRef(tag) => {
             if env.structs.has(tag) {
-                // Deep-clone the bucket Heap so the returned CType
-                // owns an independent allocation. Avoids the
-                // Heap-borrow-drop double-free against env's bucket.
-                var borrowed: Heap[CAggregate] = env.structs.get(tag)
-                let dup: Heap[CAggregate] = borrowed.duplicate()
-                let _raw: *CAggregate = borrowed.into_raw()
-                return CType::Struct(dup)
+                // `HashMap.get` returns a `Shared[CAggregate]` by value.
+                // `.duplicate()` increments the refcount so the returned
+                // CType owns its own reference; the bucket retains its
+                // own. Both drops decrement the count safely.
+                return CType::Struct(env.structs.get(tag).duplicate())
             }
             // Forward reference — produce an empty struct entry so later
             // definitions can patch.
@@ -773,57 +779,41 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
                 fields: List[CAggregateField]::new(0 as I64),
                 size: 0 as I64, align: 1 as I64, kind: 0 as I64
             }
-            let h: Heap[CAggregate] = Heap[CAggregate]::new(empty)
+            let h: Shared[CAggregate] = Shared[CAggregate]::new(empty)
             return CType::Struct(h)
         },
         UnionRef(tag) => {
             if env.unions.has(tag) {
-                var borrowed: Heap[CAggregate] = env.unions.get(tag)
-                let dup: Heap[CAggregate] = borrowed.duplicate()
-                let _raw: *CAggregate = borrowed.into_raw()
-                return CType::Union(dup)
+                return CType::Union(env.unions.get(tag).duplicate())
             }
             let empty: CAggregate = CAggregate {
                 tag: tag,
                 fields: List[CAggregateField]::new(0 as I64),
                 size: 0 as I64, align: 1 as I64, kind: 1 as I64
             }
-            let h: Heap[CAggregate] = Heap[CAggregate]::new(empty)
+            let h: Shared[CAggregate] = Shared[CAggregate]::new(empty)
             return CType::Union(h)
         },
         EnumRef(tag) => {
             if env.enums.has(tag) {
-                var borrowed: Heap[CEnumType] = env.enums.get(tag)
-                let dup: Heap[CEnumType] = borrowed.duplicate()
-                let _raw: *CEnumType = borrowed.into_raw()
-                return CType::Enum(dup)
+                return CType::Enum(env.enums.get(tag).duplicate())
             }
             let empty: CEnumType = CEnumType {
                 tag: tag,
                 values: List[CEnumValue]::new(0 as I64),
                 underlying_kind: CT_KIND_INT
             }
-            let h: Heap[CEnumType] = Heap[CEnumType]::new(empty)
+            let h: Shared[CEnumType] = Shared[CEnumType]::new(empty)
             return CType::Enum(h)
         },
         Typedef(name) => {
             if env.typedefs.has(name) {
-                // Deep-clone the typedef target. `HashMap.get` returns
-                // a `Heap[CType]` BY VALUE that shares the underlying
-                // allocation pointer with the map bucket; using it
-                // directly would let the local's drop free the bucket's
-                // allocation. `t.get().duplicate()` reads the CType
-                // value out and produces an owned independent copy,
-                // recursively duplicating any nested Heap-bearing
-                // variants. The local `t` then drops normally — its
-                // mem_free is harmless because the bucket has its own
-                // independent reference… except the bucket's Heap
-                // still aliases the same allocation that `t.ptr` does,
-                // so we ALSO need to neutralize the local's drop.
-                var t: Heap[CType] = env.typedefs.get(name)
-                let r: CType = t.get().duplicate()
-                let _raw: *CType = t.into_raw()
-                return r
+                // `HashMap.get` returns a `Shared[CType]` by value;
+                // `.duplicate()` increments the refcount so the returned
+                // CType (extracted via `.get()`) and the bucket each own
+                // an independent strong reference to the same allocation.
+                // The local handle drops harmlessly via refcount-decrement.
+                return env.typedefs.get(name).duplicate().get()
             }
             return CType::UnresolvedTypedef(name)
         }
@@ -839,31 +829,31 @@ pub func apply_declarator(env: ref CTypeEnv, base_ty: CType, decl: CDeclarator) 
         Pointer(inner, quals) => {
             // Apply inner first, then wrap in pointer.
             let inner_ty: CType = apply_declarator(ref env, base_ty, inner.get())
-            let boxed: Heap[CType] = Heap[CType]::new(inner_ty)
+            let boxed: Shared[CType] = Shared[CType]::new(inner_ty)
             let pt: CType = CType::Ptr(boxed)
             // The qualifiers apply to the *pointer*, not the pointee.
             return wrap_qualifiers(pt, quals)
         },
         Array(inner, size_expr_opt) => {
             let inner_ty: CType = apply_declarator(ref env, base_ty, inner.get())
-            let elem_heap: Heap[CType] = Heap[CType]::new(inner_ty)
+            let elem_shared: Shared[CType] = Shared[CType]::new(inner_ty)
             // Constant-expression evaluation for array sizes is deferred
             // to the type checker's `const_eval` pass; at this point we
             // record -1 for unknown / unsized arrays.
             var sz: I64 = -1 as I64
             let Just(_) = size_expr_opt else {
-                let at: CArrayType = CArrayType { elem: elem_heap, size: sz }
-                return CType::Array(Heap[CArrayType]::new(at))
+                let at: CArrayType = CArrayType { elem: elem_shared, size: sz }
+                return CType::Array(Shared[CArrayType]::new(at))
             }
-            let at: CArrayType = CArrayType { elem: elem_heap, size: sz }
-            return CType::Array(Heap[CArrayType]::new(at))
+            let at: CArrayType = CArrayType { elem: elem_shared, size: sz }
+            return CType::Array(Shared[CArrayType]::new(at))
         },
         Func(part) => {
             let inner_ty: CType = apply_declarator(ref env, base_ty, part.inner.get())
             // inner_ty is the return type.
-            let ret: Heap[CType] = Heap[CType]::new(inner_ty)
+            let ret: Shared[CType] = Shared[CType]::new(inner_ty)
             // Resolve each parameter into a CType.
-            var params_out: List[Heap[CType]] = List[Heap[CType]]::new(part.params.len())
+            var params_out: List[Shared[CType]] = List[Shared[CType]]::new(part.params.len())
             var i: I64 = 0 as I64
             let n: I64 = part.params.len() as I64
             loop (i < n) {
@@ -872,8 +862,8 @@ pub func apply_declarator(env: ref CTypeEnv, base_ty: CType, decl: CDeclarator) 
                 let p_ty: CType = apply_declarator(ref env, p_base, p.declarator)
                 // Parameter type undergoes implicit decay (array / function).
                 let p_final: CType = apply_param_decays(p_ty)
-                let p_heap: Heap[CType] = Heap[CType]::new(p_final)
-                params_out.push(p_heap)
+                let p_shared: Shared[CType] = Shared[CType]::new(p_final)
+                params_out.push(p_shared)
                 i = i + 1
             }
             let ft: CFuncType = CFuncType {
@@ -881,8 +871,8 @@ pub func apply_declarator(env: ref CTypeEnv, base_ty: CType, decl: CDeclarator) 
                 params: params_out,
                 is_variadic: part.is_variadic
             }
-            let ft_heap: Heap[CFuncType] = Heap[CFuncType]::new(ft)
-            return CType::Func(ft_heap)
+            let ft_shared: Shared[CFuncType] = Shared[CFuncType]::new(ft)
+            return CType::Func(ft_shared)
         }
     }
 }
@@ -899,7 +889,7 @@ func wrap_qualifiers(t: CType, q: CQualifiers) -> CType {
        q.is_restrict == 0 as I64 and q.is_atomic == 0 as I64 {
         return t
     }
-    return CType::Qualified(Heap[CType]::new(t), q)
+    return CType::Qualified(Shared[CType]::new(t), q)
 }
 
 /// Resolve a parsed `CTypeName` (specifier + abstract declarator bundle)

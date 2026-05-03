@@ -86,6 +86,7 @@
 use std::collections::list::List
 use std::collections::hashmap::HashMap
 use core::alloc::heap::Heap
+use core::alloc::shared::Shared
 use compiler::cc::ast::{
     CTranslationUnit, CDecl, CStorageClass, CBaseType, CDeclSpecifiers, CDeclarator,
     CFuncDeclPart, CParam, CVarDecl, CFuncDecl, CStructDef, CUnionDef, CEnumDef,
@@ -332,23 +333,23 @@ pub func lower_struct_def(lw: CLower, sd: CStructDef) {
         let pf: CStructField = sd.fields.get(i)
         let base_ty: CType = base_to_ctype(ref lw.env, pf.specifiers.base_type)
         let ft_c: CType = apply_declarator(ref lw.env, base_ty, pf.declarator)
-        let ft_heap: Heap[CType] = Heap[CType]::new(ft_c)
+        let ft_shared: Shared[CType] = Shared[CType]::new(ft_c)
         let af: CAggregateField = CAggregateField {
-            name: pf.name, ty: ft_heap, offset: 0 as I64, bit_width: pf.bit_width
+            name: pf.name, ty: ft_shared, offset: 0 as I64, bit_width: pf.bit_width
         }
         fields.push(af)
         i = i + 1
     }
     let agg: CAggregate = layout_struct(ref lw.env, sd.tag, fields)
-    let agg_heap: Heap[CAggregate] = Heap[CAggregate]::new(agg)
-    lw.env.structs.set(sd.tag, agg_heap)
+    let agg_shared: Shared[CAggregate] = Shared[CAggregate]::new(agg)
+    lw.env.structs.set(sd.tag, agg_shared)
 
     // Emit MirStructDef for codegen.
-    var mir_fields: List[MirType] = List[MirType]::new(agg_heap.get().fields.len())
+    var mir_fields: List[MirType] = List[MirType]::new(agg_shared.get().fields.len())
     var j: I64 = 0 as I64
-    let m: I64 = agg_heap.get().fields.len() as I64
+    let m: I64 = agg_shared.get().fields.len() as I64
     loop (j < m) {
-        let af2: CAggregateField = agg_heap.get().fields.get(j)
+        let af2: CAggregateField = agg_shared.get().fields.get(j)
         mir_fields.push(lower_type(lw, af2.ty.get()))
         j = j + 1
     }
@@ -366,14 +367,14 @@ pub func lower_union_def(lw: CLower, ud: CUnionDef) {
         let base_ty: CType = base_to_ctype(ref lw.env, pf.specifiers.base_type)
         let ft_c: CType = apply_declarator(ref lw.env, base_ty, pf.declarator)
         let af: CAggregateField = CAggregateField {
-            name: pf.name, ty: Heap[CType]::new(ft_c),
+            name: pf.name, ty: Shared[CType]::new(ft_c),
             offset: 0 as I64, bit_width: pf.bit_width
         }
         fields.push(af)
         i = i + 1
     }
     let agg: CAggregate = layout_union(ref lw.env, ud.tag, fields)
-    lw.env.unions.set(ud.tag, Heap[CAggregate]::new(agg))
+    lw.env.unions.set(ud.tag, Shared[CAggregate]::new(agg))
 }
 
 pub func lower_enum_def(lw: CLower, ed: CEnumDef) {
@@ -408,7 +409,7 @@ pub func lower_enum_def(lw: CLower, ed: CEnumDef) {
         values: vs,
         underlying_kind: CT_KIND_INT
     }
-    lw.env.enums.set(ed.tag, Heap[CEnumType]::new(et))
+    lw.env.enums.set(ed.tag, Shared[CEnumType]::new(et))
 }
 
 // ============================================================================
@@ -418,7 +419,7 @@ pub func lower_enum_def(lw: CLower, ed: CEnumDef) {
 pub func lower_typedef(lw: CLower, td: CTypedefDef) {
     let base_ty: CType = base_to_ctype(ref lw.env, td.specifiers.base_type)
     let resolved: CType = apply_declarator(ref lw.env, base_ty, td.declarator)
-    lw.env.typedefs.set(td.name, Heap[CType]::new(resolved))
+    lw.env.typedefs.set(td.name, Shared[CType]::new(resolved))
 }
 
 // ============================================================================
