@@ -239,3 +239,62 @@ use std::collections::list::List
         Err(_) => assert(false)
     }
 }
+
+// phase24h regression: `int (*p);` (parenthesized pointer-only declarator)
+// previously SIGSEGV'd non-deterministically (~50% of runs) because the
+// partial-field move `leaf = inner.decl` in `cp_parse_direct` bitwise-
+// copied the `Pointer(Shared[CDeclarator], ...)` variant payload, then the
+// drop on the source `CParsedDeclarator` decremented the contained
+// `Shared` a second time. Fixed by giving `CDeclarator` an explicit
+// `Duplicate` impl and inserting `.duplicate()` at the partial-move sites
+// (`cp_parse_direct` line 1246 and `cp_parse_declarator_inner` line 1338).
+@test func test_paren_pointer_declarator_no_crash() {
+    let pp = List[PpToken]::new(6 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "p", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 9 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// phase24h regression: `typedef void (*sig_t)(int);` — the function-pointer
+// typedef path goes through the same partial-field-move sites twice (once
+// for the inner `(*sig_t)` declarator, once for the outer `(int)` function
+// suffix), so the crash window was wider than for `int (*p);`. Successful
+// parse must register `sig_t` as a typedef name and emit one TypedefDef
+// declaration.
+@test func test_funcptr_typedef_no_crash() {
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "sig_t", "t.c", 1 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 26 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "extra_eof_pad", "t.c", 2 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            // sig_t must be registered in the typedef table now.
+            assert(parser.typedefs.has("sig_t"))
+        },
+        Err(_) => assert(false)
+    }
+}

@@ -1243,7 +1243,15 @@ func cp_parse_direct(parser: CParser, pos: I64, allow_abstract: I64) -> Outcome[
                         let Err(e) = rp else { return Err(c_parse_err("internal: paren-inner close", tok)) }
                         return Err(e)
                     }
-                    leaf = inner.decl
+                    // Explicit `.duplicate()` so the source `inner` retains
+                    // ownership of its `decl` field (a refcounted
+                    // `Shared[CDeclarator]` payload) for its end-of-scope
+                    // drop. Without this, the partial-field move would
+                    // bitwise-copy the variant and double-decrement the
+                    // contained `Shared` when both `inner.decl` (via the
+                    // source struct's drop) and `leaf` (via its own drop)
+                    // ran. See phase24h.
+                    leaf = inner.decl.duplicate()
                     p = np
                 } else {
                     if allow_abstract == 0 as I64 {
@@ -1335,7 +1343,10 @@ func cp_parse_declarator_inner(parser: CParser, pos: I64, allow_abstract: I64) -
     }
     // Wrap direct with pointer layers in reverse order (innermost `*`
     // closest to the identifier).
-    var d: CDeclarator = direct.decl
+    // Explicit `.duplicate()` on the partial-field-move (`direct.decl`)
+    // so the source `direct` retains a live `decl` for its drop. See
+    // phase24h.
+    var d: CDeclarator = direct.decl.duplicate()
     var i: I64 = ptr_quals.len() - 1 as I64
     loop (i >= 0) {
         d = CDeclarator::Pointer(Shared[CDeclarator]::new(d), ptr_quals.get(i))

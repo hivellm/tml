@@ -118,6 +118,7 @@ pub type CDeclSpecifiers {
 /// Function-declarator layer. Split out of the enum so pattern-binding a
 /// single struct arg avoids the codegen bug that hits when a Func variant
 /// is declared as `Func(Shared[CDeclarator], List[CParam], I64)`.
+@auto(duplicate)
 pub type CFuncDeclPart {
     inner: Shared[CDeclarator],
     params: List[CParam],
@@ -146,6 +147,24 @@ pub enum CDeclarator {
     Array(Shared[CDeclarator], Maybe[Heap[CExpr]]),
     /// Function declarator. See `CFuncDeclPart` for field layout.
     Func(CFuncDeclPart)
+}
+
+// Manual `Duplicate` impl for `CDeclarator`. `@auto(duplicate)` does not yet
+// support enums; recursive `Shared[CDeclarator]` variants need refcount-aware
+// duplication. Without this impl, partial-field-moves of a `CDeclarator`
+// (e.g. `let leaf = parsed.decl`) would bitwise-copy the variant payload and
+// then double-drop the contained `Shared` when the source struct's drop ran.
+// See phase24h.
+impl Duplicate for CDeclarator {
+    pub func duplicate(this) -> CDeclarator {
+        when this {
+            Ident(name) => return CDeclarator::Ident(name.duplicate()),
+            Abstract => return CDeclarator::Abstract,
+            Pointer(inner, q) => return CDeclarator::Pointer(inner.duplicate(), q),
+            Array(inner, size) => return CDeclarator::Array(inner.duplicate(), size.duplicate()),
+            Func(part) => return CDeclarator::Func(part.duplicate())
+        }
+    }
 }
 
 pub type CParam {
