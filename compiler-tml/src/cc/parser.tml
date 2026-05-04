@@ -69,10 +69,10 @@ pub type CParsedSpecs { specs: CDeclSpecifiers, pos: I64 }
 pub type CParsedQuals { quals: CQualifiers, pos: I64 }
 pub type CParsedDeclarator { decl: CDeclarator, pos: I64 }
 pub type CParsedParams { params: List[CParam], is_variadic: I64, pos: I64 }
-pub type CParsedInit { init: Heap[CInit], pos: I64 }
-pub type CParsedExpr { expr: Heap[CExpr], pos: I64 }
+pub type CParsedInit { init: Shared[CInit], pos: I64 }
+pub type CParsedExpr { expr: Shared[CExpr], pos: I64 }
 pub type CParsedTypeName { ty: CTypeName, pos: I64 }
-pub type CParsedStmt { stmt: Heap[CStmt], pos: I64 }
+pub type CParsedStmt { stmt: Shared[CStmt], pos: I64 }
 pub type CParsedFields { fields: List[CStructField], pos: I64 }
 pub type CParsedVariants { variants: List[CEnumVariantDef], pos: I64 }
 pub type CParsedName { name: Str, pos: I64 }
@@ -625,16 +625,16 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
     when tok.kind {
         IntLit(lit) => {
             let is_ul: I64 = if lit.is_hex_or_octal == 1 as I64 { 1 as I64 } else { 0 as I64 }
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::IntLit(lit.value, is_ul))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::IntLit(lit.value, is_ul))
             return Ok(CParsedExpr { expr: e, pos: pos + 1 })
         },
         FloatLit(lit) => {
             let is_f: I64 = lit.is_hex
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::FloatLit(lit.value, is_f))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::FloatLit(lit.value, is_f))
             return Ok(CParsedExpr { expr: e, pos: pos + 1 })
         },
         CharLit(lit) => {
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::CharLit(lit.value))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::CharLit(lit.value))
             return Ok(CParsedExpr { expr: e, pos: pos + 1 })
         },
         StringLit(lit) => {
@@ -656,11 +656,11 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                     _ => break
                 }
             }
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::StringLit(bytes))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::StringLit(bytes))
             return Ok(CParsedExpr { expr: e, pos: p })
         },
         Ident => {
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Ident(tok.text.duplicate()))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Ident(tok.text.duplicate()))
             return Ok(CParsedExpr { expr: e, pos: pos + 1 })
         },
         Punct(op) => {
@@ -675,7 +675,7 @@ func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                     let Err(e) = rp_res else { return Err(c_parse_err("internal: paren rp", tok)) }
                     return Err(e)
                 }
-                let pe: Heap[CExpr] = Heap[CExpr]::new(CExpr::Paren(ie.expr))
+                let pe: Shared[CExpr] = Shared[CExpr]::new(CExpr::Paren(ie.expr.duplicate()))
                 return Ok(CParsedExpr { expr: pe, pos: np })
             }
             return Err(c_parse_err("expected expression", tok))
@@ -757,7 +757,7 @@ func cp_parse_generic(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
             return Err(e)
         }
         p = val.pos
-        assocs.push(CGenericAssoc { is_default: is_default, ty: ty, value: val.expr })
+        assocs.push(CGenericAssoc { is_default: is_default, ty: ty.duplicate(), value: val.expr.duplicate() })
         if cp_check_punct(parser.tokens, p, CPunct::Comma) {
             p = p + 1
             continue
@@ -769,7 +769,7 @@ func cp_parse_generic(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
         let Err(e) = rp else { return Err(c_parse_err("internal: generic rp", cp_peek(parser.tokens, p))) }
         return Err(e)
     }
-    let gen: Heap[CExpr] = Heap[CExpr]::new(CExpr::Generic(ctrl.expr, assocs))
+    let gen: Shared[CExpr] = Shared[CExpr]::new(CExpr::Generic(ctrl.expr.duplicate(), assocs))
     return Ok(CParsedExpr { expr: gen, pos: after_rp })
 }
 
@@ -779,7 +779,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
         let Err(e) = prim else { return Err(c_parse_err("internal: postfix primary", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    var expr: Heap[CExpr] = first.expr
+    var expr: Shared[CExpr] = first.expr.duplicate()
     var p: I64 = first.pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
@@ -798,10 +798,10 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                         let Err(e) = after else { return Err(c_parse_err("internal: postfix rbracket", tok)) }
                         return Err(e)
                     }
-                    expr = Heap[CExpr]::new(CExpr::Index(expr, ie.expr))
+                    expr = Shared[CExpr]::new(CExpr::Index(expr.duplicate(), ie.expr.duplicate()))
                     p = np
                 } else if code == (CPunct::LParen as I64) {
-                    var args: List[Heap[CExpr]] = List[Heap[CExpr]]::new(0 as I64)
+                    var args: List[Shared[CExpr]] = List[Shared[CExpr]]::new(0 as I64)
                     var ap: I64 = p + 1
                     if cp_check_punct(parser.tokens, ap, CPunct::RParen) {
                         ap = ap + 1
@@ -813,7 +813,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                                 let Err(e) = arg else { return Err(c_parse_err("internal: call arg", tok)) }
                                 return Err(e)
                             }
-                            args.push(ae.expr)
+                            args.push(ae.expr.duplicate())
                             ap = ae.pos
                             if cp_check_punct(parser.tokens, ap, CPunct::Comma) {
                                 ap = ap + 1
@@ -828,7 +828,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                             cont = 0 as I64
                         }
                     }
-                    expr = Heap[CExpr]::new(CExpr::Call(expr, args))
+                    expr = Shared[CExpr]::new(CExpr::Call(expr.duplicate(), args))
                     p = ap
                 } else if code == (CPunct::Dot as I64) {
                     let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p + 1, "expected field name after '.'")
@@ -836,7 +836,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                         let Err(e) = nm else { return Err(c_parse_err("internal: dot", tok)) }
                         return Err(e)
                     }
-                    expr = Heap[CExpr]::new(CExpr::Member(expr, nmp.name))
+                    expr = Shared[CExpr]::new(CExpr::Member(expr.duplicate(), nmp.name.duplicate()))
                     p = nmp.pos
                 } else if code == (CPunct::Arrow as I64) {
                     let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p + 1, "expected field name after '->'")
@@ -844,13 +844,13 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
                         let Err(e) = nm else { return Err(c_parse_err("internal: arrow", tok)) }
                         return Err(e)
                     }
-                    expr = Heap[CExpr]::new(CExpr::Arrow(expr, nmp.name))
+                    expr = Shared[CExpr]::new(CExpr::Arrow(expr.duplicate(), nmp.name.duplicate()))
                     p = nmp.pos
                 } else if code == (CPunct::PlusPlus as I64) {
-                    expr = Heap[CExpr]::new(CExpr::PostInc(expr))
+                    expr = Shared[CExpr]::new(CExpr::PostInc(expr.duplicate()))
                     p = p + 1
                 } else if code == (CPunct::MinusMinus as I64) {
-                    expr = Heap[CExpr]::new(CExpr::PostDec(expr))
+                    expr = Shared[CExpr]::new(CExpr::PostDec(expr.duplicate()))
                     p = p + 1
                 } else {
                     break
@@ -859,7 +859,7 @@ func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseE
             _ => break
         }
     }
-    return Ok(CParsedExpr { expr: expr, pos: p })
+    return Ok(CParsedExpr { expr: expr.duplicate(), pos: p })
 }
 
 pub func cp_at_type_start(parser: CParser, pos: I64) -> Bool {
@@ -893,7 +893,7 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                     let Err(e) = inner else { return Err(c_parse_err("internal: pre-inc", tok)) }
                     return Err(e)
                 }
-                let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Unary(CUnaryOp::PreInc, ie.expr))
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(CUnaryOp::PreInc, ie.expr.duplicate()))
                 return Ok(CParsedExpr { expr: e, pos: ie.pos })
             }
             if code == (CPunct::MinusMinus as I64) {
@@ -902,7 +902,7 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                     let Err(e) = inner else { return Err(c_parse_err("internal: pre-dec", tok)) }
                     return Err(e)
                 }
-                let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Unary(CUnaryOp::PreDec, ie.expr))
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(CUnaryOp::PreDec, ie.expr.duplicate()))
                 return Ok(CParsedExpr { expr: e, pos: ie.pos })
             }
             var op_enum: CUnaryOp = CUnaryOp::Plus
@@ -919,7 +919,7 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                     let Err(e) = inner else { return Err(c_parse_err("internal: unary op", tok)) }
                     return Err(e)
                 }
-                let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Unary(op_enum, ie.expr))
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(op_enum, ie.expr.duplicate()))
                 return Ok(CParsedExpr { expr: e, pos: ie.pos })
             }
             return cp_parse_postfix(parser, pos)
@@ -938,8 +938,8 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                         let Err(e) = rp else { return Err(c_parse_err("internal: sizeof rp", tok)) }
                         return Err(e)
                     }
-                    let tnh: Heap[CTypeName] = Heap[CTypeName]::new(te.ty)
-                    let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::SizeofType(tnh))
+                    let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+                    let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::SizeofType(tnh.duplicate()))
                     return Ok(CParsedExpr { expr: e, pos: np })
                 }
                 let inner: Outcome[CParsedExpr, CParseError] = cp_parse_unary(parser, after_kw)
@@ -947,7 +947,7 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                     let Err(e) = inner else { return Err(c_parse_err("internal: sizeof expr", tok)) }
                     return Err(e)
                 }
-                let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::SizeofExpr(ie.expr))
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::SizeofExpr(ie.expr.duplicate()))
                 return Ok(CParsedExpr { expr: e, pos: ie.pos })
             }
             if (k as I64) == (CKeyword::KwAlignof as I64) {
@@ -966,8 +966,8 @@ func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErr
                     let Err(e) = rp else { return Err(c_parse_err("internal: alignof rp", tok)) }
                     return Err(e)
                 }
-                let tnh: Heap[CTypeName] = Heap[CTypeName]::new(te.ty)
-                let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::AlignofType(tnh))
+                let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::AlignofType(tnh.duplicate()))
                 return Ok(CParsedExpr { expr: e, pos: np })
             }
             return cp_parse_postfix(parser, pos)
@@ -994,8 +994,8 @@ func cp_parse_cast(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErro
                 let Err(e) = init_res else { return Err(c_parse_err("internal: compound", cp_peek(parser.tokens, pos))) }
                 return Err(e)
             }
-            let tnh: Heap[CTypeName] = Heap[CTypeName]::new(te.ty)
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Compound(tnh, iu.init))
+            let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Compound(tnh.duplicate(), iu.init.duplicate()))
             return Ok(CParsedExpr { expr: e, pos: iu.pos })
         }
         let inner: Outcome[CParsedExpr, CParseError] = cp_parse_cast(parser, np)
@@ -1003,8 +1003,8 @@ func cp_parse_cast(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErro
             let Err(e) = inner else { return Err(c_parse_err("internal: cast inner", cp_peek(parser.tokens, pos))) }
             return Err(e)
         }
-        let tnh: Heap[CTypeName] = Heap[CTypeName]::new(te.ty)
-        let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Cast(tnh, ie.expr))
+        let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+        let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Cast(tnh.duplicate(), ie.expr.duplicate()))
         return Ok(CParsedExpr { expr: e, pos: ie.pos })
     }
     return cp_parse_unary(parser, pos)
@@ -1062,7 +1062,7 @@ func cp_parse_binary(parser: CParser, pos: I64, min_prec: I64) -> Outcome[CParse
         let Err(e) = left_res else { return Err(c_parse_err("internal: binary lhs", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    var left: Heap[CExpr] = first.expr
+    var left: Shared[CExpr] = first.expr.duplicate()
     var p: I64 = first.pos
     let n: I64 = parser.tokens.len() as I64
     loop (p < n) {
@@ -1082,10 +1082,10 @@ func cp_parse_binary(parser: CParser, pos: I64, min_prec: I64) -> Outcome[CParse
             return Err(e)
         }
         let bop: CBinaryOp = binop_from_code(op_code)
-        left = Heap[CExpr]::new(CExpr::Binary(bop, left, rhs.expr))
+        left = Shared[CExpr]::new(CExpr::Binary(bop, left.duplicate(), rhs.expr.duplicate()))
         p = rhs.pos
     }
-    return Ok(CParsedExpr { expr: left, pos: p })
+    return Ok(CParsedExpr { expr: left.duplicate(), pos: p })
 }
 
 func cp_parse_cond(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
@@ -1112,7 +1112,7 @@ func cp_parse_cond(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseErro
         let Err(e) = else_res else { return Err(c_parse_err("internal: cond else", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Cond(cond.expr, then_e.expr, else_e.expr))
+    let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Cond(cond.expr.duplicate(), then_e.expr.duplicate(), else_e.expr.duplicate()))
     return Ok(CParsedExpr { expr: e, pos: else_e.pos })
 }
 
@@ -1150,7 +1150,7 @@ pub func cp_parse_assign_expr(parser: CParser, pos: I64) -> Outcome[CParsedExpr,
                 let Err(e) = rhs_res else { return Err(c_parse_err("internal: assign rhs", tok)) }
                 return Err(e)
             }
-            let e: Heap[CExpr] = Heap[CExpr]::new(CExpr::Assign(aop, lhs.expr, rhs.expr))
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Assign(aop, lhs.expr.duplicate(), rhs.expr.duplicate()))
             return Ok(CParsedExpr { expr: e, pos: rhs.pos })
         },
         _ => return Ok(lhs)
@@ -1163,7 +1163,7 @@ pub func cp_parse_expr(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParse
         let Err(e) = first_res else { return Err(c_parse_err("internal: comma lhs", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    var left: Heap[CExpr] = first.expr
+    var left: Shared[CExpr] = first.expr.duplicate()
     var p: I64 = first.pos
     loop (cp_check_punct(parser.tokens, p, CPunct::Comma)) {
         let rhs_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
@@ -1171,10 +1171,10 @@ pub func cp_parse_expr(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParse
             let Err(e) = rhs_res else { return Err(c_parse_err("internal: comma rhs", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        left = Heap[CExpr]::new(CExpr::Comma(left, rhs.expr))
+        left = Shared[CExpr]::new(CExpr::Comma(left.duplicate(), rhs.expr.duplicate()))
         p = rhs.pos
     }
-    return Ok(CParsedExpr { expr: left, pos: p })
+    return Ok(CParsedExpr { expr: left.duplicate(), pos: p })
 }
 
 // ============================================================================
@@ -1286,14 +1286,14 @@ func cp_parse_direct(parser: CParser, pos: I64, allow_abstract: I64) -> Outcome[
             // keep the array-size parse simple.
             let sq: CParsedQuals = cp_parse_quals_list(parser, cp)
             cp = sq.pos
-            var size_opt: Maybe[Heap[CExpr]] = Nothing
+            var size_opt: Maybe[Shared[CExpr]] = Nothing
             if not cp_check_punct(parser.tokens, cp, CPunct::RBracket) {
                 let se: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, cp)
                 let Ok(sep) = se else {
                     let Err(e) = se else { return Err(c_parse_err("internal: array size", cp_peek(parser.tokens, cp))) }
                     return Err(e)
                 }
-                size_opt = Just(sep.expr)
+                size_opt = Just(sep.expr.duplicate())
                 cp = sep.pos
             }
             let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, cp, CPunct::RBracket, "expected ']' in array declarator")
@@ -1495,7 +1495,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
         var p: I64 = pos + 1
         if cp_check_punct(parser.tokens, p, CPunct::RBrace) {
             p = p + 1
-            let empty: Heap[CInit] = Heap[CInit]::new(CInit::Brace(elems))
+            let empty: Shared[CInit] = Shared[CInit]::new(CInit::Brace(elems))
             return Ok(CParsedInit { init: empty, pos: p })
         }
         var cont: I64 = 1 as I64
@@ -1509,7 +1509,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
                         let Err(e) = nm else { return Err(c_parse_err("internal: dsgn dot", cp_peek(parser.tokens, p))) }
                         return Err(e)
                     }
-                    designators.push(CDesignator::Field(nmp.name))
+                    designators.push(CDesignator::Field(nmp.name.duplicate()))
                     p = nmp.pos
                 } else if cp_check_punct(parser.tokens, p, CPunct::LBracket) {
                     let ie: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
@@ -1522,7 +1522,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
                         let Err(e) = rb else { return Err(c_parse_err("internal: dsgn rb", cp_peek(parser.tokens, p))) }
                         return Err(e)
                     }
-                    designators.push(CDesignator::Index(iep.expr))
+                    designators.push(CDesignator::Index(iep.expr.duplicate()))
                     p = np
                 } else {
                     dcont = 0 as I64
@@ -1541,7 +1541,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
                 let Err(e) = elem_init else { return Err(c_parse_err("internal: elem init", cp_peek(parser.tokens, p))) }
                 return Err(e)
             }
-            elems.push(CInitElement { designators: designators, init: eip.init })
+            elems.push(CInitElement { designators: designators, init: eip.init.duplicate() })
             p = eip.pos
             if cp_check_punct(parser.tokens, p, CPunct::Comma) {
                 p = p + 1
@@ -1560,7 +1560,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
             p = np
             cont = 0 as I64
         }
-        let brace: Heap[CInit] = Heap[CInit]::new(CInit::Brace(elems))
+        let brace: Shared[CInit] = Shared[CInit]::new(CInit::Brace(elems))
         return Ok(CParsedInit { init: brace, pos: p })
     }
     let sc_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, pos)
@@ -1568,7 +1568,7 @@ pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit,
         let Err(e) = sc_res else { return Err(c_parse_err("internal: scalar init", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    let scalar: Heap[CInit] = Heap[CInit]::new(CInit::Scalar(sc.expr))
+    let scalar: Shared[CInit] = Shared[CInit]::new(CInit::Scalar(sc.expr.duplicate()))
     return Ok(CParsedInit { init: scalar, pos: sc.pos })
 }
 
@@ -1722,7 +1722,7 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
                 name: name, specifiers: specs, declarator: dp.decl,
                 params: params, is_variadic: is_variadic,
                 kr_decls: List[CVarDecl]::new(0 as I64),
-                body: Just(bp.stmt),
+                body: Just(bp.stmt.duplicate()),
                 file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
             }
             decls.push(Shared[CDecl]::new(CDecl::Func(fd)))
@@ -1756,14 +1756,14 @@ pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, C
             decls.push(Shared[CDecl]::new(CDecl::Func(fd)))
         } else {
             // Variable declaration, possibly with initializer.
-            var init_opt: Maybe[Heap[CInit]] = Nothing
+            var init_opt: Maybe[Shared[CInit]] = Nothing
             if cp_check_punct(parser.tokens, p, CPunct::Assign) {
                 let ir: Outcome[CParsedInit, CParseError] = cp_parse_initializer(parser, p + 1)
                 let Ok(ip) = ir else {
                     let Err(e) = ir else { return Err(c_parse_err("internal: init", cp_peek(parser.tokens, p))) }
                     return Err(e)
                 }
-                init_opt = Just(ip.init)
+                init_opt = Just(ip.init.duplicate())
                 p = ip.pos
             }
             let vd: CVarDecl = CVarDecl {
@@ -1941,7 +1941,7 @@ func cp_parse_struct_body(parser: CParser, pos: I64) -> Outcome[CParsedFields, C
 // Currently only handles bare IntLit; more folding (unary neg, arithmetic)
 // is the type checker's job (phase 5). Negative bit-widths surface as
 // diagnostics there.
-func const_expr_to_i64(e: Heap[CExpr]) -> I64 {
+func const_expr_to_i64(e: Shared[CExpr]) -> I64 {
     when e.get() {
         IntLit(v, _) => return v as I64,
         _ => return -1 as I64
@@ -1970,17 +1970,17 @@ func cp_parse_enum_body(parser: CParser, pos: I64) -> Outcome[CParsedVariants, C
             return Err(e)
         }
         p = nmp.pos
-        var value_opt: Maybe[Heap[CExpr]] = Nothing
+        var value_opt: Maybe[Shared[CExpr]] = Nothing
         if cp_check_punct(parser.tokens, p, CPunct::Assign) {
             let ve: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
             let Ok(vep) = ve else {
                 let Err(e) = ve else { return Err(c_parse_err("internal: enum value", cp_peek(parser.tokens, p))) }
                 return Err(e)
             }
-            value_opt = Just(vep.expr)
+            value_opt = Just(vep.expr.duplicate())
             p = vep.pos
         }
-        variants.push(CEnumVariantDef { name: nmp.name, value: value_opt })
+        variants.push(CEnumVariantDef { name: nmp.name.duplicate(), value: value_opt })
         if cp_check_punct(parser.tokens, p, CPunct::Comma) {
             p = p + 1
             continue
@@ -2050,10 +2050,10 @@ pub func cp_parse_compound_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStm
             let Err(e) = sres else { return Err(c_parse_err("internal: block stmt", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        items.push(CBlockItem::StmtItem(sp.stmt))
+        items.push(CBlockItem::StmtItem(sp.stmt.duplicate()))
         p = sp.pos
     }
-    let body: Heap[CStmt] = Heap[CStmt]::new(CStmt::Compound(items))
+    let body: Shared[CStmt] = Shared[CStmt]::new(CStmt::Compound(items))
     return Ok(CParsedStmt { stmt: body, pos: p })
 }
 
@@ -2081,7 +2081,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
             let code: I64 = op as I64
             if code == (CPunct::Semi as I64) {
                 // Empty statement.
-                let es: Heap[CStmt] = Heap[CStmt]::new(CStmt::Empty)
+                let es: Shared[CStmt] = Shared[CStmt]::new(CStmt::Empty)
                 return Ok(CParsedStmt { stmt: es, pos: pos + 1 })
             }
             if code == (CPunct::LBrace as I64) {
@@ -2099,7 +2099,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
             if kc == (CKeyword::Case as I64) { return cp_parse_case(parser, pos) }
             if kc == (CKeyword::Default as I64) { return cp_parse_default(parser, pos) }
             if kc == (CKeyword::Break as I64) {
-                let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Break)
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Break)
                 let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::Semi, "expected ';' after break")
                 let Ok(np) = semi else {
                     let Err(e) = semi else { return Err(c_parse_err("internal: break semi", tok)) }
@@ -2108,7 +2108,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
                 return Ok(CParsedStmt { stmt: s, pos: np })
             }
             if kc == (CKeyword::Continue as I64) {
-                let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Continue)
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Continue)
                 let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::Semi, "expected ';' after continue")
                 let Ok(np) = semi else {
                     let Err(e) = semi else { return Err(c_parse_err("internal: continue semi", tok)) }
@@ -2140,7 +2140,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
                     let Err(e) = body_res else { return Err(c_parse_err("internal: label body", tok)) }
                     return Err(e)
                 }
-                let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Label(name, bp.stmt))
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Label(name, bp.stmt.duplicate()))
                 return Ok(CParsedStmt { stmt: s, pos: bp.pos })
             }
             return cp_parse_expr_stmt(parser, pos)
@@ -2151,7 +2151,7 @@ pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
 
 func cp_parse_expr_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
     if cp_check_punct(parser.tokens, pos, CPunct::Semi) {
-        let es: Heap[CStmt] = Heap[CStmt]::new(CStmt::Empty)
+        let es: Shared[CStmt] = Shared[CStmt]::new(CStmt::Empty)
         return Ok(CParsedStmt { stmt: es, pos: pos + 1 })
     }
     let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, pos)
@@ -2164,7 +2164,7 @@ func cp_parse_expr_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CPars
         let Err(e) = semi else { return Err(c_parse_err("internal: expr-stmt semi", cp_peek(parser.tokens, pos))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Expr(ep.expr))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Expr(ep.expr.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: np })
 }
 
@@ -2192,17 +2192,17 @@ func cp_parse_if(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError]
         return Err(e)
     }
     p = then_sp.pos
-    var else_opt: Maybe[Heap[CStmt]] = Nothing
+    var else_opt: Maybe[Shared[CStmt]] = Nothing
     if cp_check_kw(parser.tokens, p, CKeyword::Else) {
         let else_res: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, p + 1)
         let Ok(else_sp) = else_res else {
             let Err(e) = else_res else { return Err(c_parse_err("internal: if else", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        else_opt = Just(else_sp.stmt)
+        else_opt = Just(else_sp.stmt.duplicate())
         p = else_sp.pos
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::If(cp_c.expr, then_sp.stmt, else_opt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::If(cp_c.expr.duplicate(), then_sp.stmt.duplicate(), else_opt))
     return Ok(CParsedStmt { stmt: s, pos: p })
 }
 
@@ -2229,7 +2229,7 @@ func cp_parse_while(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseErr
         let Err(e) = body else { return Err(c_parse_err("internal: while body", cp_peek(parser.tokens, after_rp))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::While(cp_c.expr, bp.stmt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::While(cp_c.expr.duplicate(), bp.stmt.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: bp.pos })
 }
 
@@ -2266,7 +2266,7 @@ func cp_parse_do_while(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParse
         let Err(e) = semi else { return Err(c_parse_err("internal: do while semi", cp_peek(parser.tokens, after_rp))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::DoWhile(bp.stmt, cp_c.expr))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::DoWhile(bp.stmt.duplicate(), cp_c.expr.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: np })
 }
 
@@ -2280,7 +2280,7 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
     p = ap
     // Init clause: either a declaration (C99) or an expression-statement
     // (or empty). The for-init lexical scope belongs to the for loop.
-    var init_opt: Maybe[Heap[CBlockItem]] = Nothing
+    var init_opt: Maybe[Shared[CBlockItem]] = Nothing
     if cp_check_punct(parser.tokens, p, CPunct::Semi) {
         p = p + 1
     } else if cp_at_decl_specifier(parser, p) {
@@ -2301,7 +2301,7 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
             // independent strong references — no into_raw/from_raw
             // workaround needed.
             let first: Shared[CDecl] = dp.decls.get(0).duplicate()
-            init_opt = Just(Heap[CBlockItem]::new(CBlockItem::DeclItem(first)))
+            init_opt = Just(Shared[CBlockItem]::new(CBlockItem::DeclItem(first)))
         }
     } else {
         let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
@@ -2315,19 +2315,19 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
             return Err(e)
         }
         p = np
-        let stmt_val: CStmt = CStmt::Expr(ep.expr)
-        let stmt_heap: Heap[CStmt] = Heap[CStmt]::new(stmt_val)
-        init_opt = Just(Heap[CBlockItem]::new(CBlockItem::StmtItem(stmt_heap)))
+        let stmt_val: CStmt = CStmt::Expr(ep.expr.duplicate())
+        let stmt_heap: Shared[CStmt] = Shared[CStmt]::new(stmt_val)
+        init_opt = Just(Shared[CBlockItem]::new(CBlockItem::StmtItem(stmt_heap)))
     }
     // Condition (optional).
-    var cond_opt: Maybe[Heap[CExpr]] = Nothing
+    var cond_opt: Maybe[Shared[CExpr]] = Nothing
     if not cp_check_punct(parser.tokens, p, CPunct::Semi) {
         let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
         let Ok(ep) = er else {
             let Err(e) = er else { return Err(c_parse_err("internal: for cond", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        cond_opt = Just(ep.expr)
+        cond_opt = Just(ep.expr.duplicate())
         p = ep.pos
     }
     let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after for-cond")
@@ -2337,14 +2337,14 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
     }
     p = after_cond_semi
     // Update (optional).
-    var update_opt: Maybe[Heap[CExpr]] = Nothing
+    var update_opt: Maybe[Shared[CExpr]] = Nothing
     if not cp_check_punct(parser.tokens, p, CPunct::RParen) {
         let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
         let Ok(ep) = er else {
             let Err(e) = er else { return Err(c_parse_err("internal: for update", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        update_opt = Just(ep.expr)
+        update_opt = Just(ep.expr.duplicate())
         p = ep.pos
     }
     let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close for header")
@@ -2357,7 +2357,7 @@ func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError
         let Err(e) = body else { return Err(c_parse_err("internal: for body", cp_peek(parser.tokens, after_rp))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::For(init_opt, cond_opt, update_opt, bp.stmt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::For(init_opt, cond_opt, update_opt, bp.stmt.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: bp.pos })
 }
 
@@ -2384,7 +2384,7 @@ func cp_parse_switch(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseEr
         let Err(e) = body else { return Err(c_parse_err("internal: switch body", cp_peek(parser.tokens, after_rp))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Switch(cp_c.expr, bp.stmt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Switch(cp_c.expr.duplicate(), bp.stmt.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: bp.pos })
 }
 
@@ -2406,7 +2406,7 @@ func cp_parse_case(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseErro
         let Err(e) = body else { return Err(c_parse_err("internal: case body", cp_peek(parser.tokens, after_colon))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Case(vp.expr, bp.stmt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Case(vp.expr.duplicate(), bp.stmt.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: bp.pos })
 }
 
@@ -2421,20 +2421,20 @@ func cp_parse_default(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseE
         let Err(e) = body else { return Err(c_parse_err("internal: default body", cp_peek(parser.tokens, after_colon))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Default(bp.stmt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Default(bp.stmt.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: bp.pos })
 }
 
 func cp_parse_return(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
     var p: I64 = pos + 1
-    var val_opt: Maybe[Heap[CExpr]] = Nothing
+    var val_opt: Maybe[Shared[CExpr]] = Nothing
     if not cp_check_punct(parser.tokens, p, CPunct::Semi) {
         let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
         let Ok(ep) = er else {
             let Err(e) = er else { return Err(c_parse_err("internal: return val", cp_peek(parser.tokens, p))) }
             return Err(e)
         }
-        val_opt = Just(ep.expr)
+        val_opt = Just(ep.expr.duplicate())
         p = ep.pos
     }
     let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after return")
@@ -2442,7 +2442,7 @@ func cp_parse_return(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseEr
         let Err(e) = semi else { return Err(c_parse_err("internal: return semi", cp_peek(parser.tokens, p))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Return(val_opt))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Return(val_opt))
     return Ok(CParsedStmt { stmt: s, pos: np })
 }
 
@@ -2457,7 +2457,7 @@ func cp_parse_goto(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseErro
         let Err(e) = semi else { return Err(c_parse_err("internal: goto semi", cp_peek(parser.tokens, nmp.pos))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::Goto(nmp.name))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Goto(nmp.name.duplicate()))
     return Ok(CParsedStmt { stmt: s, pos: np })
 }
 
@@ -2500,6 +2500,6 @@ func cp_parse_static_assert_stmt(parser: CParser, pos: I64) -> Outcome[CParsedSt
         let Err(e) = semi else { return Err(c_parse_err("internal: sa semi", cp_peek(parser.tokens, after_rp))) }
         return Err(e)
     }
-    let s: Heap[CStmt] = Heap[CStmt]::new(CStmt::StaticAssert(cp_c.expr, msg))
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::StaticAssert(cp_c.expr.duplicate(), msg))
     return Ok(CParsedStmt { stmt: s, pos: np })
 }

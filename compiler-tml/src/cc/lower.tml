@@ -688,7 +688,7 @@ pub func lower_stmt_into(lw: CLower, mfunc: MirFunc, s: CStmt) {
     }
 }
 
-func for_rest(lw: CLower, mfunc: MirFunc, cond_opt: Maybe[Heap[CExpr]], upd_opt: Maybe[Heap[CExpr]], body: CStmt) {
+func for_rest(lw: CLower, mfunc: MirFunc, cond_opt: Maybe[Shared[CExpr]], upd_opt: Maybe[Shared[CExpr]], body: CStmt) {
     let header: I64 = fresh_block(lw)
     let exit: I64 = fresh_block(lw)
     let cont: I64 = fresh_block(lw)

@@ -94,6 +94,107 @@ use core::alloc::shared::Shared
 // the source list's drop.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// phase24j regression: deeply nested function body with mixed if/for/while
+// and many CBlockItem entries exercises the `Shared[CStmt]` /
+// `Shared[CBlockItem]` migration. Pre-phase24j the cleanup path
+// non-deterministically segfaulted on `Maybe[Heap[CBlockItem]]` drop with
+// many nested statements. This test parses a 30+ line function body and
+// confirms the parse succeeds; the cleanup-time double-decrement is gone.
+// ---------------------------------------------------------------------------
+
+@test func test_phase24j_deep_nested_function_parses() {
+    // C source: int f() { int s = 0; for (int i = 0; i < 10; i++) {
+    //   if (i > 5) { s = s + i; } else { s = s - i; }
+    //   while (s > 100) { s = s / 2; }
+    // } return s; }
+    let pp = List[PpToken]::new(80 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "f", "t.c", 1 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 2 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 2 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 2 as I64, 11 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "0", "t.c", 2 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "for", "t.c", 3 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 3 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 3 as I64, 10 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 3 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 3 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "0", "t.c", 3 as I64, 18 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 3 as I64, 19 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 3 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "<", "t.c", 3 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "10", "t.c", 3 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 3 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 3 as I64, 29 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 3 as I64, 31 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 3 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "+", "t.c", 3 as I64, 35 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "1", "t.c", 3 as I64, 37 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 3 as I64, 38 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 3 as I64, 40 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "if", "t.c", 4 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 4 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 4 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ">", "t.c", 4 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "5", "t.c", 4 as I64, 17 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 4 as I64, 18 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 4 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 4 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 4 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 4 as I64, 26 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "+", "t.c", 4 as I64, 28 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 4 as I64, 30 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 4 as I64, 31 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 4 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "else", "t.c", 4 as I64, 35 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 4 as I64, 40 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 4 as I64, 42 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 4 as I64, 44 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 4 as I64, 46 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "-", "t.c", 4 as I64, 48 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "i", "t.c", 4 as I64, 50 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 4 as I64, 51 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 4 as I64, 53 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "while", "t.c", 5 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 5 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 5 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ">", "t.c", 5 as I64, 18 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "100", "t.c", 5 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 5 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 5 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 5 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "=", "t.c", 5 as I64, 29 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 5 as I64, 31 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "/", "t.c", 5 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "2", "t.c", 5 as I64, 35 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 5 as I64, 36 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 5 as I64, 38 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 6 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "return", "t.c", 7 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "s", "t.c", 7 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 7 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 8 as I64, 1 as I64))
+
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu_r: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "deep.c")
+    when tu_r {
+        Ok(tu) => {
+            // Successful parse + clean shutdown is the regression check.
+            // Pre-phase24j this would have non-deterministically SIGSEGV'd
+            // on cleanup as the Maybe[Heap[CBlockItem]] chain was dropped.
+            assert_eq(tu.file, "deep.c")
+        },
+        Err(_) => assert(false)
+    }
+}
+
 @test func test_phase24g_for_init_decl() {
     // Tokens: { for ( int i = 0 ; i < 10 ; i = i + 1 ) { } }
     let pp = List[PpToken]::new(20 as I64)

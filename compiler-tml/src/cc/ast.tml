@@ -25,7 +25,6 @@
 //! this file only defines the shape of nodes, not the lexing decision.
 
 use std::collections::list::List
-use core::alloc::heap::Heap
 use core::alloc::shared::Shared
 
 // ============================================================================
@@ -144,7 +143,7 @@ pub enum CDeclarator {
     Pointer(Shared[CDeclarator], CQualifiers),
     /// `[N]` array. `size = Nothing` means unsized / incomplete (`int arr[];`
     /// or a VLA, both of which we only allow on function parameters).
-    Array(Shared[CDeclarator], Maybe[Heap[CExpr]]),
+    Array(Shared[CDeclarator], Maybe[Shared[CExpr]]),
     /// Function declarator. See `CFuncDeclPart` for field layout.
     Func(CFuncDeclPart)
 }
@@ -193,25 +192,28 @@ pub enum CExpr {
     StringLit(List[U8]),           // bytes (encoding handled at type-check)
     // Identifiers
     Ident(Str),
-    // Compound
-    Paren(Heap[CExpr]),
-    Binary(CBinaryOp, Heap[CExpr], Heap[CExpr]),
-    Unary(CUnaryOp, Heap[CExpr]),
-    PostInc(Heap[CExpr]),
-    PostDec(Heap[CExpr]),
-    Assign(CAssignOp, Heap[CExpr], Heap[CExpr]),
-    Cond(Heap[CExpr], Heap[CExpr], Heap[CExpr]),
-    Comma(Heap[CExpr], Heap[CExpr]),
-    Call(Heap[CExpr], List[Heap[CExpr]]),
-    Member(Heap[CExpr], Str),      // expr.field
-    Arrow(Heap[CExpr], Str),       // expr->field
-    Index(Heap[CExpr], Heap[CExpr]),
-    Cast(Heap[CTypeName], Heap[CExpr]),
-    SizeofExpr(Heap[CExpr]),
-    SizeofType(Heap[CTypeName]),
-    AlignofType(Heap[CTypeName]),
-    Compound(Heap[CTypeName], Heap[CInit]),   // (T){...}  C99
-    Generic(Heap[CExpr], List[CGenericAssoc]) // _Generic(ctrl, T1: e1, default: e2)
+    // Compound — `Shared[T]` (refcounted) for the same Heap-borrow-drop
+    // reason as `CDeclarator` / `CDecl` (phase24g/h): when a parser
+    // partial-move drops the source struct, the contained allocation
+    // must remain valid. See phase24j.
+    Paren(Shared[CExpr]),
+    Binary(CBinaryOp, Shared[CExpr], Shared[CExpr]),
+    Unary(CUnaryOp, Shared[CExpr]),
+    PostInc(Shared[CExpr]),
+    PostDec(Shared[CExpr]),
+    Assign(CAssignOp, Shared[CExpr], Shared[CExpr]),
+    Cond(Shared[CExpr], Shared[CExpr], Shared[CExpr]),
+    Comma(Shared[CExpr], Shared[CExpr]),
+    Call(Shared[CExpr], List[Shared[CExpr]]),
+    Member(Shared[CExpr], Str),      // expr.field
+    Arrow(Shared[CExpr], Str),       // expr->field
+    Index(Shared[CExpr], Shared[CExpr]),
+    Cast(Shared[CTypeName], Shared[CExpr]),
+    SizeofExpr(Shared[CExpr]),
+    SizeofType(Shared[CTypeName]),
+    AlignofType(Shared[CTypeName]),
+    Compound(Shared[CTypeName], Shared[CInit]),   // (T){...}  C99
+    Generic(Shared[CExpr], List[CGenericAssoc]) // _Generic(ctrl, T1: e1, default: e2)
 }
 
 pub enum CBinaryOp {
@@ -253,7 +255,7 @@ pub type CGenericAssoc {
     // `is_default = 1` → the `default:` arm; ty is unused in that case.
     is_default: I64,
     ty: CTypeName,
-    value: Heap[CExpr]
+    value: Shared[CExpr]
 }
 
 // ============================================================================
@@ -264,7 +266,7 @@ pub type CGenericAssoc {
 /// Designated initializers are encoded as elements with non-empty designator
 /// chains.
 pub enum CInit {
-    Scalar(Heap[CExpr]),
+    Scalar(Shared[CExpr]),
     Brace(List[CInitElement])
 }
 
@@ -272,12 +274,12 @@ pub type CInitElement {
     /// Designator chain. Empty = positional. `.field` or `[expr]`, possibly
     /// nested: `.inner[3].x`.
     designators: List[CDesignator],
-    init: Heap[CInit]
+    init: Shared[CInit]
 }
 
 pub enum CDesignator {
     Field(Str),                // .name
-    Index(Heap[CExpr])         // [expr]  (constant expression at type-check)
+    Index(Shared[CExpr])       // [expr]  (constant expression at type-check)
 }
 
 // ============================================================================
@@ -289,21 +291,21 @@ pub enum CDesignator {
 
 pub enum CStmt {
     Empty,                                  // ;
-    Expr(Heap[CExpr]),                      // expr;
+    Expr(Shared[CExpr]),                    // expr;
     Compound(List[CBlockItem]),             // { decls; stmts; }
-    If(Heap[CExpr], Heap[CStmt], Maybe[Heap[CStmt]]),
-    For(Maybe[Heap[CBlockItem]], Maybe[Heap[CExpr]], Maybe[Heap[CExpr]], Heap[CStmt]),
-    While(Heap[CExpr], Heap[CStmt]),
-    DoWhile(Heap[CStmt], Heap[CExpr]),
-    Switch(Heap[CExpr], Heap[CStmt]),
-    Case(Heap[CExpr], Heap[CStmt]),
-    Default(Heap[CStmt]),
+    If(Shared[CExpr], Shared[CStmt], Maybe[Shared[CStmt]]),
+    For(Maybe[Shared[CBlockItem]], Maybe[Shared[CExpr]], Maybe[Shared[CExpr]], Shared[CStmt]),
+    While(Shared[CExpr], Shared[CStmt]),
+    DoWhile(Shared[CStmt], Shared[CExpr]),
+    Switch(Shared[CExpr], Shared[CStmt]),
+    Case(Shared[CExpr], Shared[CStmt]),
+    Default(Shared[CStmt]),
     Break,
     Continue,
-    Return(Maybe[Heap[CExpr]]),
+    Return(Maybe[Shared[CExpr]]),
     Goto(Str),
-    Label(Str, Heap[CStmt]),
-    StaticAssert(Heap[CExpr], Str)          // _Static_assert(expr, "msg")
+    Label(Str, Shared[CStmt]),
+    StaticAssert(Shared[CExpr], Str)        // _Static_assert(expr, "msg")
 }
 
 /// Item inside a compound statement: C99 permits declarations and statements
@@ -312,9 +314,11 @@ pub enum CStmt {
 /// `DeclItem` carries a `Shared[CDecl]` (refcounted) so list slots and
 /// HashMap buckets containing CDecl values stay aliasing-safe — same
 /// rationale as the type-system Heap-borrow-drop fix from phase24g.
+/// `StmtItem` likewise uses `Shared[CStmt]` (phase24j) so partial-move
+/// of items out of a `List[CBlockItem]` doesn't double-drop.
 pub enum CBlockItem {
     DeclItem(Shared[CDecl]),
-    StmtItem(Heap[CStmt])
+    StmtItem(Shared[CStmt])
 }
 
 // ============================================================================
@@ -334,14 +338,14 @@ pub enum CDecl {
     /// A typedef declaration `typedef T name;`.
     TypedefDef(CTypedefDef),
     /// `_Static_assert` at file scope (C11).
-    StaticAssert(Heap[CExpr], Str)
+    StaticAssert(Shared[CExpr], Str)
 }
 
 pub type CVarDecl {
     name: Str,
     specifiers: CDeclSpecifiers,
     declarator: CDeclarator,
-    init: Maybe[Heap[CInit]],
+    init: Maybe[Shared[CInit]],
     file: Str,
     line: I64,
     col: I64
@@ -359,7 +363,7 @@ pub type CFuncDecl {
     // K&R-style declarations: `int f(a, b) int a; char b; { ... }` — the
     // declaration lines between `)` and `{` carry the parameter types.
     kr_decls: List[CVarDecl],
-    body: Maybe[Heap[CStmt]],
+    body: Maybe[Shared[CStmt]],
     file: Str,
     line: I64,
     col: I64
@@ -397,7 +401,7 @@ pub type CEnumVariantDef {
     name: Str,
     // Explicit value `= N` as a constant expression, or Nothing for the
     // auto-increment default (previous + 1, or 0 for the first).
-    value: Maybe[Heap[CExpr]]
+    value: Maybe[Shared[CExpr]]
 }
 
 pub type CEnumDef {
@@ -433,5 +437,222 @@ pub func c_tu(file: Str) -> CTranslationUnit {
     return CTranslationUnit {
         decls: List[Shared[CDecl]]::new(0 as I64),
         file: file
+    }
+}
+
+// ============================================================================
+// Manual Duplicate impls (phase24j)
+// ============================================================================
+//
+// `@auto(duplicate)` does not yet support enums; the recursive
+// `Shared[CExpr]` / `Shared[CStmt]` / `Shared[CInit]` / `Shared[CBlockItem]`
+// variants need refcount-aware duplication so partial-field-moves of
+// these enums (e.g. `let leaf = parsed.expr`) don't bitwise-copy a
+// variant payload and double-drop the contained `Shared` when the
+// source struct's drop ran. Same pattern as `CDeclarator` in phase24h
+// and `CType` in phase24g/types.tml.
+
+impl Duplicate for CGenericAssoc {
+    pub func duplicate(this) -> CGenericAssoc {
+        return CGenericAssoc {
+            is_default: this.is_default,
+            ty: this.ty.duplicate(),
+            value: this.value.duplicate()
+        }
+    }
+}
+
+// Free helper used by `dup_designators`. Methods on small enums hit a
+// codegen ABI mismatch where `this` is passed as `ptr` but the method
+// is defined to take a value — the impl below works around that by
+// only being called from contexts where `this` is already a value.
+func dup_designator_value(d: CDesignator) -> CDesignator {
+    when d {
+        Field(name) => return CDesignator::Field(name.duplicate()),
+        Index(e) => return CDesignator::Index(e.duplicate())
+    }
+}
+
+impl Duplicate for CDesignator {
+    pub func duplicate(this) -> CDesignator {
+        when this {
+            Field(name) => return CDesignator::Field(name.duplicate()),
+            Index(e) => return CDesignator::Index(e.duplicate())
+        }
+    }
+}
+
+// Manual element-walk for `List[CDesignator]` / `List[CInitElement]`:
+// the auto-derived `List.duplicate` codegen has an ABI mismatch on
+// small enum element types (CDesignator is `{i32, i64}` packed —
+// `.get(i).duplicate()` lowering passes the value by-ptr while the
+// manual impl receives by-value, producing
+// `'%struct.CDesignator' but expected 'ptr'` at LLVM verification).
+// Hand-rolled loops sidestep the auto-derive path.
+
+func dup_designators(src: List[CDesignator]) -> List[CDesignator] {
+    let result: List[CDesignator] = List[CDesignator]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_designator_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+func dup_init_elem_value(e: CInitElement) -> CInitElement {
+    return CInitElement {
+        designators: dup_designators(e.designators),
+        init: e.init.duplicate()
+    }
+}
+
+func dup_init_elems(src: List[CInitElement]) -> List[CInitElement] {
+    let result: List[CInitElement] = List[CInitElement]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_init_elem_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+// Auto-derived `List[Shared[CExpr]].duplicate()` mis-types the
+// per-element call as returning `Shared[Shared[CExpr]]` instead of
+// `Shared[CExpr]`. Hand-rolled walker bypasses the generic Duplicate
+// instantiation and calls Shared.duplicate directly with correct types.
+func dup_shared_expr_list(src: List[Shared[CExpr]]) -> List[Shared[CExpr]] {
+    let result: List[Shared[CExpr]] = List[Shared[CExpr]]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        let elem: Shared[CExpr] = src.get(i)
+        result.push(elem.duplicate())
+        i = i + 1
+    }
+    return result
+}
+
+// Same for List[CGenericAssoc] which holds CGenericAssoc structs that
+// internally hold Shared[CExpr]. Auto-derive triggers the same bug.
+func dup_generic_assocs(src: List[CGenericAssoc]) -> List[CGenericAssoc] {
+    let result: List[CGenericAssoc] = List[CGenericAssoc]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        let elem: CGenericAssoc = src.get(i)
+        result.push(elem.duplicate())
+        i = i + 1
+    }
+    return result
+}
+
+impl Duplicate for CInitElement {
+    pub func duplicate(this) -> CInitElement {
+        return CInitElement {
+            designators: dup_designators(this.designators),
+            init: this.init.duplicate()
+        }
+    }
+}
+
+impl Duplicate for CInit {
+    pub func duplicate(this) -> CInit {
+        when this {
+            Scalar(e) => return CInit::Scalar(e.duplicate()),
+            Brace(elems) => return CInit::Brace(dup_init_elems(elems))
+        }
+    }
+}
+
+impl Duplicate for CTypeName {
+    pub func duplicate(this) -> CTypeName {
+        return CTypeName {
+            specifiers: this.specifiers.duplicate(),
+            declarator: this.declarator.duplicate()
+        }
+    }
+}
+
+impl Duplicate for CExpr {
+    pub func duplicate(this) -> CExpr {
+        when this {
+            IntLit(v, f) => return CExpr::IntLit(v, f),
+            FloatLit(v, f) => return CExpr::FloatLit(v, f),
+            CharLit(c) => return CExpr::CharLit(c),
+            StringLit(bytes) => return CExpr::StringLit(bytes.duplicate()),
+            Ident(name) => return CExpr::Ident(name.duplicate()),
+            Paren(e) => return CExpr::Paren(e.duplicate()),
+            Binary(op, l, r) => return CExpr::Binary(op, l.duplicate(), r.duplicate()),
+            Unary(op, e) => return CExpr::Unary(op, e.duplicate()),
+            PostInc(e) => return CExpr::PostInc(e.duplicate()),
+            PostDec(e) => return CExpr::PostDec(e.duplicate()),
+            Assign(op, l, r) => return CExpr::Assign(op, l.duplicate(), r.duplicate()),
+            Cond(c, t, f) => return CExpr::Cond(c.duplicate(), t.duplicate(), f.duplicate()),
+            Comma(l, r) => return CExpr::Comma(l.duplicate(), r.duplicate()),
+            Call(callee, args) => return CExpr::Call(callee.duplicate(), dup_shared_expr_list(args)),
+            Member(recv, name) => return CExpr::Member(recv.duplicate(), name.duplicate()),
+            Arrow(recv, name) => return CExpr::Arrow(recv.duplicate(), name.duplicate()),
+            Index(arr, idx) => return CExpr::Index(arr.duplicate(), idx.duplicate()),
+            Cast(ty, e) => return CExpr::Cast(ty.duplicate(), e.duplicate()),
+            SizeofExpr(e) => return CExpr::SizeofExpr(e.duplicate()),
+            SizeofType(ty) => return CExpr::SizeofType(ty.duplicate()),
+            AlignofType(ty) => return CExpr::AlignofType(ty.duplicate()),
+            Compound(ty, init) => return CExpr::Compound(ty.duplicate(), init.duplicate()),
+            Generic(ctrl, assocs) => return CExpr::Generic(ctrl.duplicate(), dup_generic_assocs(assocs))
+        }
+    }
+}
+
+// Free helper bypasses the small-enum method dispatch ABI mismatch.
+func dup_block_item_value(b: CBlockItem) -> CBlockItem {
+    when b {
+        DeclItem(d) => return CBlockItem::DeclItem(d.duplicate()),
+        StmtItem(s) => return CBlockItem::StmtItem(s.duplicate())
+    }
+}
+
+func dup_block_items(src: List[CBlockItem]) -> List[CBlockItem] {
+    let result: List[CBlockItem] = List[CBlockItem]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_block_item_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+impl Duplicate for CBlockItem {
+    pub func duplicate(this) -> CBlockItem {
+        when this {
+            DeclItem(d) => return CBlockItem::DeclItem(d.duplicate()),
+            StmtItem(s) => return CBlockItem::StmtItem(s.duplicate())
+        }
+    }
+}
+
+impl Duplicate for CStmt {
+    pub func duplicate(this) -> CStmt {
+        when this {
+            Empty => return CStmt::Empty,
+            Expr(e) => return CStmt::Expr(e.duplicate()),
+            Compound(items) => return CStmt::Compound(dup_block_items(items)),
+            If(c, t, eo) => return CStmt::If(c.duplicate(), t.duplicate(), eo.duplicate()),
+            For(io, co, uo, b) => return CStmt::For(io.duplicate(), co.duplicate(), uo.duplicate(), b.duplicate()),
+            While(c, b) => return CStmt::While(c.duplicate(), b.duplicate()),
+            DoWhile(b, c) => return CStmt::DoWhile(b.duplicate(), c.duplicate()),
+            Switch(c, b) => return CStmt::Switch(c.duplicate(), b.duplicate()),
+            Case(v, b) => return CStmt::Case(v.duplicate(), b.duplicate()),
+            Default(b) => return CStmt::Default(b.duplicate()),
+            Break => return CStmt::Break,
+            Continue => return CStmt::Continue,
+            Return(vo) => return CStmt::Return(vo.duplicate()),
+            Goto(name) => return CStmt::Goto(name.duplicate()),
+            Label(name, body) => return CStmt::Label(name.duplicate(), body.duplicate()),
+            StaticAssert(e, msg) => return CStmt::StaticAssert(e.duplicate(), msg.duplicate())
+        }
     }
 }
