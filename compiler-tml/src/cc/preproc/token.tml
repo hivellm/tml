@@ -144,6 +144,15 @@ pub func pp_define_object(pp: Preprocessor, name: Str, body: List[PpToken]) {
     pp.defines.set(name, MacroDef::ObjectLike(body))
 }
 
+/// Define a function-like macro.
+pub func pp_define_function(pp: Preprocessor, name: Str, params: List[Str], is_variadic: I64, body: List[PpToken]) {
+    pp.defines.set(name, MacroDef::FunctionLike(FuncMacroDef {
+        params: params,
+        is_variadic: is_variadic,
+        body: body
+    }))
+}
+
 /// Define a simple text macro (convenience).
 pub func pp_define_str(pp: Preprocessor, name: Str, value: Str) {
     let body = List[PpToken]::new(1 as I64)

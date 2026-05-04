@@ -149,3 +149,102 @@ func tokens_concat(tokens: List[PpToken]) -> Str {
     let out = pp_sweep(pp, raw)
     assert_eq(tokens_concat(out), "int win ;")
 }
+
+// ============================================================================
+// Function-like macros (phase24i)
+// ============================================================================
+//
+// Pre-phase24i the directive sweep treated `#define M(x) f(x)` as an
+// object-like macro whose body was the entire `(x) f(x)` token sequence,
+// then left the call-site `M(1)` alone — the resulting stream
+// `(x) f(x) (1)` failed to parse as C. Phase24i adds proper function-
+// like macro support: parameter parsing, argument collection (with
+// paren-depth tracking), substitution, `__VA_ARGS__`, the GCC
+// `, ##__VA_ARGS__` comma-elision extension, and plain `##` token
+// pasting.
+
+/// Concatenate the `text` of every NON-whitespace, NON-newline token.
+/// Function-like macro substitution preserves intra-argument whitespace
+/// so the C lexer ignores it; the test compares only the meaningful
+/// tokens.
+func tokens_concat_no_ws(tokens: List[PpToken]) -> Str {
+    var s: Str = ""
+    let n: I64 = tokens.len() as I64
+    var first: I64 = 1 as I64
+    for i in 0 to n {
+        let t: PpToken = tokens.get(i)
+        when t.kind {
+            Whitespace => {},
+            Newline => {},
+            _ => {
+                if first == 0 as I64 { s = s + " " }
+                s = s + t.text
+                first = 0 as I64
+            }
+        }
+    }
+    return s
+}
+
+@test func test_funclike_basic_va_args() {
+    // `#define M(...) f(__VA_ARGS__)` followed by `M(1, 2)` — basic
+    // variadic macro (no GCC comma-elision involved).
+    let src: Str = "#define M(...) f(__VA_ARGS__)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_named_plus_va_args() {
+    // Named param + variadic: `#define M(x, ...) f(x, __VA_ARGS__)`.
+    let src: Str = "#define M(x, ...) f(x, __VA_ARGS__)\nM(1, 2, 3);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 , 3 ) ;")
+}
+
+@test func test_funclike_paste_va_empty_drops_comma() {
+    // GCC `, ##__VA_ARGS__` extension: when the variadic arg list is
+    // empty, the preceding comma is dropped.
+    let src: Str = "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(1);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 ) ;")
+}
+
+@test func test_funclike_paste_va_nonempty_keeps_comma() {
+    // GCC `, ##__VA_ARGS__` extension: when the variadic arg list is
+    // non-empty, the comma stays and the `##` is dropped.
+    let src: Str = "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_rt_fatal_shape() {
+    // The exact `RT_FATAL` shape from `compiler/runtime/diagnostics/log.h`
+    // — three named params plus variadic, with `, ##__VA_ARGS__` and a
+    // non-empty invocation.
+    let src: Str = "#define RT_FATAL(m, f, ...) g(1, m, f, ##__VA_ARGS__)\nRT_FATAL(\"a\", \"%s\", \"b\");"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "g ( 1 , \"a\" , \"%s\" , \"b\" ) ;")
+}
+
+@test func test_funclike_simple_one_param() {
+    // Sanity — single parameter, body uses parentheses around the
+    // parameter (the original phase24i bisect target).
+    let src: Str = "#define M(x) f(x)\nM(1);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 ) ;")
+}
+
+@test func test_funclike_two_params() {
+    // Two named params, no variadics.
+    let src: Str = "#define M(x, y) f(x, y)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_nested_parens_in_arg() {
+    // Argument contains nested parens — collect_macro_args must not
+    // split on the inner comma.
+    let src: Str = "#define M(x) f(x)\nM(g(1, 2));"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( g ( 1 , 2 ) ) ;")
+}

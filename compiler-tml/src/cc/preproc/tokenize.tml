@@ -275,6 +275,7 @@ func scan_punct(sc: Scanner, tokens: List[PpToken], file: Str) {
     if c0 == ('-' as I32) and c1 == ('-' as I32) { take2 = true }
     if c0 == ('-' as I32) and c1 == ('>' as I32) { take2 = true }
     if c0 == (':' as I32) and c1 == (':' as I32) { take2 = true }
+    if c0 == ('#' as I32) and c1 == ('#' as I32) { take2 = true }
     if c0 == ('.' as I32) and c1 == ('.' as I32) and
        scanner_peek_at(sc, 2 as I64) == ('.' as I32) {
         // 3-char ellipsis.
