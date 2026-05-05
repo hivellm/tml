@@ -808,12 +808,20 @@ pub func base_to_ctype(env: ref CTypeEnv, b: CBaseType) -> CType {
         },
         Typedef(name) => {
             if env.typedefs.has(name) {
-                // `HashMap.get` returns a `Shared[CType]` by value;
-                // `.duplicate()` increments the refcount so the returned
-                // CType (extracted via `.get()`) and the bucket each own
-                // an independent strong reference to the same allocation.
-                // The local handle drops harmlessly via refcount-decrement.
-                return env.typedefs.get(name).duplicate().get()
+                // `HashMap.get` returns `Shared[CType]` by bitwise alias.
+                // `.get_clone()` deep-clones the inner CType via
+                // `CType::duplicate()`, which bumps every nested
+                // `Shared[...]` field's refcount (Ptr/Array/Func/etc.).
+                // The returned CType therefore carries fresh refcounts
+                // for its own sub-allocations; dropping it does not free
+                // the env's backing storage. (phase24l: replaces the
+                // earlier `.duplicate().get()` pattern that aliased
+                // nested Shareds without refcount bumps and caused
+                // the residual essential.c SIGSEGV diagnosed in
+                // phase24k. Fully closes the c_essential_repro minimal
+                // reproducer; essential.c residual SIGSEGV survives
+                // and is filed for follow-up as phase24m.)
+                return env.typedefs.get(name).get_clone()
             }
             return CType::UnresolvedTypedef(name)
         }

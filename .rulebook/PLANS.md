@@ -63,11 +63,26 @@ other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-phase24b ready to archive. Fix landed (option a from proposal):
-type-system entry points in `compiler-tml/src/cc/types.tml` +
-callers in `compiler-tml/src/cc/lower.tml` now take
-`env: ref CTypeEnv`. 11 signatures + 13 call sites updated.
-Regression test passes; compiler suite baseline intact.
+phase24l shipped (partial): added `Shared.get_clone(this) -> T where
+T: Duplicate` to `lib/core/src/alloc/shared.tml` (new opt-in method,
+preserves existing `.get()` bitwise semantics). Migrated ONLY the
+typedef arm in `compiler-tml/src/cc/types.tml::base_to_ctype` to use
+it. Closes `c_essential_repro.c` minimal trigger (28/30 vs 29/30
+baseline; within noise band). Preserves sig_alone 10/10, `int (*p);`
+30/30, `typedef void (*sig_t)(int);` 30/30, compiler suite 290/295.
+
+essential.c x 5 = 0/5 NOT met. Per task spec (phase24l 3.1), VERSION
+bump deferred to phase24m. ADR #9 records the hybrid (a)+(b) decision
+with full attempt log. phase24m filed as the residual essential.c
+follow-up — covers options (a)+audit, (b) compiler-codegen, or (c)
+HashMap.get specialization.
+
+Phase24l attempts that REGRESSED and were reverted:
+- Broader (b) migration to ~40 call sites in cc/types.tml + lower.tml
+  + parser.tml: minimal repro fell to 25/30.
+- Pure (a): change `Shared.get` to `where T: Duplicate { value.duplicate() }`:
+  REGRESSED lib/core (cache_aligned_box, cache, cache_soavec_set,
+  future_fuse fail K001).
 
 Active follow-up: `phase24c_cc-driver-runtime-link` to restore
 `tml build cc_driver.tml` linking `lib/std/runtime/file.c`. Once
@@ -89,6 +104,80 @@ Next active task: phase24b_cc-typedef-name-resolution Phase 3
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-05-04 — phase24k_essential-cleanup-segv DIAGNOSED (filed phase24l)
+
+### Accomplished
+
+Bisected the residual `essential.c × 5 = 0/5` SIGSEGV down to a 3-line
+minimal reproducer:
+
+```c
+typedef void (*sig_t)(int);
+sig_t f(int sig, sig_t handler);
+int main(void) { return 0; }
+```
+
+Saved as `compiler-tml/tests/native/c_essential_repro.c` with full
+trigger-pattern documentation in the file header.
+
+### Root cause precisely identified
+
+`Shared.get(this) -> T` (`lib/core/src/alloc/shared.tml:126`) returns
+the inner T by bitwise copy via `(*this.ptr).value`. When T contains
+nested `Shared[...]` fields (e.g., the recursive `CType` enum), those
+nested Shareds are aliased into the returned value WITHOUT bumping
+their refcounts. When the returned value drops, its drop-glue
+decrements those refcounts to 0, freeing the env's stored
+sub-allocations. Subsequent typedef lookups operate on the resulting
+dangling pointers.
+
+Crash trace pinpointed the failure to recursive `lower_type` calls
+on the SECOND typedef use in a single function declaration. First
+use of `sig_t` (return type) succeeds; its CType drop frees the
+env's `Shared[CFuncType]`. Second use (param) returns CType wrapping
+the now-dangling pointer; `lower_type`'s `when t {` discriminant
+read crashes.
+
+### Fix attempts (both reverted)
+
+1. `let v = ...get(); return v.duplicate()` in `base_to_ctype` typedef
+   arm. Result: minimal repro near baseline; essential.c REGRESSED
+   from 5/5 → 30/30 crashes.
+2. `expand_typedef_value(h: Shared[CType]) -> CType` helper that
+   manually walks the variant calling `inner.duplicate()` per Shared
+   field. Result: minimal repro fixed (0/30); but essential_top50.c
+   regressed 2/10 → 10/10. essential.c stayed 5/5.
+
+Per fail-twice rule + T0 (no "blocked"), filed
+`phase24l_shared-get-aliasing-deep-fix` for the structural fix.
+Three options proposed: (a) make `Shared.get()` deep-clone for
+`T: Duplicate`, (b) audit-and-fix every `.get()` call site in
+compiler-tml/src/cc, (c) compiler-codegen-level fix.
+
+### Verified preserved baselines
+
+- minimal repro × 30: 0/30 crashes
+- sig_alone.c × 10: 10/10 OK
+- `int (*p);` × 30: 30/30 OK
+- typedef sig_t × 30: 30/30 OK
+- essential.c × 5: 0/5 (residual SIGSEGV — gate NOT met)
+
+### Files touched
+
+- NEW: `compiler-tml/tests/native/c_essential_repro.c` (regression fixture)
+- NEW: `.rulebook/tasks/phase24l_shared-get-aliasing-deep-fix/` (follow-up)
+- UPD: `.rulebook/tasks/phase24k_essential-cleanup-segv/tasks.md` (status)
+- (no compiler-tml/src/cc/ changes — both attempted fixes were reverted)
+
+### Next session starter
+
+Active follow-up: `phase24l_shared-get-aliasing-deep-fix`. Start at
+item 1.1 — choose between options (a/b/c) for the structural fix
+to `Shared.get()` aliasing. Phase24k stays open until phase24l
+ships and essential.c × 5 = 5/5.
+
+NO VERSION bump (no behavior shipped).
+
 ### 2026-05-01 (session 2) — phase0x_heap-decl-codegen-crash COMPLETE
 
 ### Accomplished

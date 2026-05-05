@@ -230,3 +230,80 @@ use core::alloc::shared::Shared
         Err(_) => assert(false)
     }
 }
+
+// ---------------------------------------------------------------------------
+// phase24l: regression for typedef-arm Heap-borrow-drop fix via
+// `Shared.get_clone`. Mirrors the minimal trigger from
+// `c_essential_repro.c`: a function-pointer typedef referenced TWICE
+// (return type + parameter type) deterministically used to read freed
+// `Shared[CFuncType]` storage on the second `base_to_ctype` call. The
+// fix adds `Shared.get_clone(this) -> T where T: Duplicate` and
+// rewires `base_to_ctype::Typedef` to use it; the deep-clone bumps
+// every nested Shared field's refcount so the consumer's drop is
+// harmless to the env's bucket.
+// ---------------------------------------------------------------------------
+
+@test func test_phase24l_typedef_double_use_via_get_clone() {
+    // Set up a CTypeEnv with a function-pointer typedef registered.
+    var env: CTypeEnv = c_type_env(CAbiTarget::WindowsX64)
+    let fty: CFuncType = CFuncType {
+        ret: Shared[CType]::new(CType::Void),
+        params: List[Shared[CType]]::new(0 as I64),
+        is_variadic: 0 as I64
+    }
+    let func_ct: CType = CType::Func(Shared[CFuncType]::new(fty))
+    env.typedefs.set("sig_t", Shared[CType]::new(func_ct))
+
+    // First lookup — used as a return type.
+    let r1: CType = base_to_ctype(ref env, CBaseType::Typedef("sig_t"))
+    when r1 {
+        Func(_) => assert(true),
+        _ => assert(false)
+    }
+
+    // Second lookup — pre-fix this dereferenced freed CFuncType
+    // storage and SIGSEGV'd. With `.get_clone()` the env's bucket is
+    // intact (refcount-bumped) and the second lookup observes the
+    // same shape.
+    let r2: CType = base_to_ctype(ref env, CBaseType::Typedef("sig_t"))
+    when r2 {
+        Func(_) => assert(true),
+        _ => assert(false)
+    }
+
+    // Third lookup — confirms the env survives multiple consumer drops.
+    let r3: CType = base_to_ctype(ref env, CBaseType::Typedef("sig_t"))
+    when r3 {
+        Func(_) => assert(true),
+        _ => assert(false)
+    }
+}
+
+// phase24l: directly exercise `Shared.get_clone` on a CType-shaped
+// payload to lock in the refcount-bump contract that the typedef-arm
+// fix relies on.
+@test func test_phase24l_shared_get_clone_bumps_nested_refcount() {
+    let inner_func: CFuncType = CFuncType {
+        ret: Shared[CType]::new(CType::Int),
+        params: List[Shared[CType]]::new(0 as I64),
+        is_variadic: 0 as I64
+    }
+    let inner_h: Shared[CFuncType] = Shared[CFuncType]::new(inner_func)
+    let outer: Shared[CType] = Shared[CType]::new(CType::Func(inner_h))
+
+    // Pre-clone refcount of the outer Shared[CType] is 1.
+    assert_eq(outer.strong_count(), 1 as I32)
+
+    // `.get_clone()` constructs a CType R via `value.duplicate()`.
+    // The CType::duplicate impl bumps each nested Shared field's
+    // refcount, so R's nested Func(h) has its OWN strong reference.
+    let r: CType = outer.get_clone()
+    when r {
+        Func(h) => {
+            // The cloned Func(h) Shared shares the same allocation
+            // as the env's, but its refcount has been bumped to 2.
+            assert(h.strong_count() >= 2 as I32)
+        },
+        _ => assert(false)
+    }
+}
