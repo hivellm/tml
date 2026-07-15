@@ -13,6 +13,31 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
+## ⚡ STRATEGIC PIVOT (2026-07-15) — Stabilization ERA 0 (READ FIRST)
+
+User decision after the state-of-language analysis
+(`docs/analysis/tml-table-analysis/` — motivated by the abandoned UzDB app):
+
+1. **`feat/self-hosting-compiler` merges to main AS-IS** — self-hosting is
+   **paused by strategic decision, not finished** (stated in README). A new
+   branch off main hosts the stabilization work.
+2. **Task board reorganized** (`TASKS-INDEX.md`): new ERA 0 tasks
+   phase25a/25b (determinism harness + LLVM verifier CI) →
+   phase26a/26b/26c (ADR-009 memory-model decision → implementation →
+   band-aid revert) → phase27a/27b (K001 / X002-X003 root-cause) →
+   phase28a/28b (UzDB-core acceptance soak + async-file hardening).
+3. **Frozen**: phase23c, 31–34 (self-hosting/native) and 35–39 (DB/AI/HTTP/
+   toolchain features). phase38a (package registry) unfreezes first after ERA 0.
+4. **Superseded**: phase0z, phase24i–n band-aid line — per-site fixes proven
+   non-convergent (phase24l Attempt log); the class closes at the root in
+   phase26. Keep their repros for the phase25a corpus.
+5. Next concrete step: **phase25a + phase25b (parallel)**, then phase26a
+   (ADR-009 — requires user sign-off on B1 drop-flags vs B2 ARC).
+
+Historical context below describes the pre-pivot phase24 grind.
+
+---
+
 Last completed (2026-05-01): phase24b_cc-typedef-name-resolution
 items 1–5 done. Fix selected option (a) from proposal — type-system
 entry points in `compiler-tml/src/cc/types.tml` and callers in

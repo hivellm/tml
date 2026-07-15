@@ -7,7 +7,9 @@
 
 One binary. Zero external tools. 12,000+ tests. 99% library coverage. Rust-parity performance. Everything you need from code to production.
 
-> **Status:** The C++ compiler is **100% functional (beta)** — all language features, standard library, and tooling are fully implemented and test-covered. The self-hosted TML compiler (written in TML itself) is **actively in development** on the `feat/self-hosting-compiler` branch as part of the self-hosting roadmap.
+> **Status:** The C++ compiler is **100% functional (beta)** — all language features, standard library, and tooling are fully implemented and test-covered.
+>
+> **Self-hosting paused by strategic decision (2026-07):** the self-hosted TML compiler (written in TML itself) was **not finished** — work on it was deliberately paused, not abandoned. Building it surfaced foundational issues in the language's memory model (RAII drop insertion over raw-pointer smart pointers causing a double-free/use-after-free bug class) and codegen stability (invalid-IR and non-deterministic failures) that must be fixed **before** self-hosting can succeed. The project's current focus is the **Stabilization roadmap (ERA 0)**: memory-model soundness, codegen reliability, and a real-application acceptance gate. Full analysis and corrective plan: [`docs/analysis/tml-table-analysis/`](docs/analysis/tml-table-analysis/README.md).
 
 ```tml
 use std::json::Json

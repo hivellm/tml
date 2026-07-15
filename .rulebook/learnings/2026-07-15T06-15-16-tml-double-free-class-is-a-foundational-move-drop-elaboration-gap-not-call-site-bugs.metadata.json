@@ -1,0 +1,14 @@
+{
+  "id": "2026-07-15T06-15-16-tml-double-free-class-is-a-foundational-move-drop-elaboration-gap-not-call-site-bugs",
+  "title": "TML double-free class is a foundational move/drop-elaboration gap, not call-site bugs",
+  "content": "The phase24 double-free/use-after-free class (Shared.get / Heap.get / HashMap.get bitwise-copy aliasing nested owned handles without refcount bumps) is a foundational language/codegen defect: drop insertion is lexical-scope-based (compiler/src/codegen/llvm/core/drop.cpp) and cannot see aliasing through raw *T in lowlevel blocks; the borrow checker (NLL+Polonius) is blind to it. Proven non-convergent by phase24l Attempt log: migrating ~40 sites to .get_clone() regressed the minimal repro 30/30→25/30 (refcount imbalance), and making .get() deep-clone at the language level regressed lib/core with K001 in 4 unrelated generic-monomorphization users. The only real exits are (A) MIR move/init-state + drop-flag elaboration, or (B) ARC-style compiler-inserted retain/release. Full analysis: docs/analysis/tml-table-analysis/ (esp. 02-memory-model-unsoundness.md, 06-execution-plan.md).",
+  "source": "manual",
+  "tags": [
+    "analysis:tml-table-analysis",
+    "memory-model",
+    "phase24",
+    "double-free",
+    "codegen"
+  ],
+  "createdAt": "2026-07-15T06:15:16.271Z"
+}
