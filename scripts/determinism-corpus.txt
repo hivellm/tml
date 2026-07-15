@@ -1,0 +1,49 @@
+# TML determinism corpus (phase25a) — tracked crash repros.
+#
+# Consumed by scripts/determinism.sh --corpus. One shell command per line,
+# executed from the REPO ROOT with `bash -c`; blank lines and '#' comments
+# are ignored. An optional "name: " prefix sets the display label.
+#
+#   scripts/determinism.sh --corpus scripts/determinism-corpus.txt
+#   TML_ALLOC_POISON=1 TML_ALLOC_QUARANTINE=256 \
+#       scripts/determinism.sh --corpus scripts/determinism-corpus.txt
+#
+# Baseline numbers: docs/analysis/tml-table-analysis/07-determinism-baseline.md
+# Gate: scripts/determinism-gate.sh (compiles the test exes, then runs this).
+#
+# ============================================================================
+# PRIMARY — pure-TML repros (compiler/tests/determinism/*.test.tml)
+# ============================================================================
+# Each is a standard @test-framework suite compiled once by `tml test`
+# (see determinism-gate.sh) and executed here as a standalone exe via the
+# ADR-004 subprocess protocol (--run-all; nonzero exit = failure/crash).
+# These target the C++ compiler's codegen + lib/core stdlib ONLY — no
+# dependency on the frozen compiler-tml/ tree.
+
+tml_f002_hashmap: ./build/debug/cache/tests/compiler_determinism_f002_hashmap.exe --run-all
+tml_f002_list: ./build/debug/cache/tests/compiler_determinism_f002_list.exe --run-all
+tml_partial_move_enum: ./build/debug/cache/tests/compiler_determinism_partial_move_enum.exe --run-all
+tml_f013_refcount_cycles: ./build/debug/cache/tests/compiler_determinism_f013_refcount_cycles.exe --run-all
+tml_churn_uzdb_shape: ./build/debug/cache/tests/compiler_determinism_churn_uzdb_shape.exe --run-all
+
+# ============================================================================
+# LEGACY (secondary) — cc_driver repros from the phase24 era
+# ============================================================================
+# Kept ONLY because their pass-rates are comparable with the phase24 history
+# (CHANGELOG 0.3.39-0.3.52). They exercise the same C++ codegen bug class
+# through the frozen compiler-tml C frontend. NOT the primary gate; nothing
+# new is built on compiler-tml. Fixtures live in
+# compiler/tests/determinism/legacy-cc/ (except the two committed originals).
+
+essential.c: ./build/debug/bin/tml.exe cc compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast
+c_essential_repro: ./build/debug/bin/tml.exe cc compiler-tml/tests/native/c_essential_repro.c --emit=ast
+sig_alone: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/sig_alone.c --emit=ast
+int_p: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/int_p.c --emit=ast
+funcptr_typedef: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/funcptr_typedef.c --emit=ast
+macro_r0: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0.c --emit=ast
+macro_r0a: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0a.c --emit=ast
+macro_r1: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r1.c --emit=ast
+macro_r2: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r2.c --emit=ast
+macro_r3: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r3.c --emit=ast
+macro_r4: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r4.c --emit=ast
+macro_r5: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r5.c --emit=ast

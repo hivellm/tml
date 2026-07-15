@@ -1,0 +1,34 @@
+// Determinism corpus (phase25a) — phase24h shape: partial move of a
+// Shared-carrying recursive enum payload, then scope exit.
+//
+// Pure-TML equivalent of the CDeclarator::Pointer(Shared[CDeclarator]) crash
+// fixed in v0.3.48 with a manual `impl Duplicate` band-aid in compiler-tml —
+// this repro deliberately has NO such band-aid.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+
+enum Node {
+    Leaf(I64),
+    Chain(Shared[Node]),
+}
+
+func peel(n: Node) -> I64 {
+    when n {
+        Node::Leaf(v) => v,
+        Node::Chain(inner) => peel(inner.get()),
+    }
+}
+
+@test
+func test_partial_move_recursive_enum() -> I32 {
+    var total: I64 = 0
+    for i in 0 to 200 {
+        let chain = Node::Chain(Shared::new(Node::Chain(Shared::new(Node::Leaf(i)))))
+        total = total + peel(chain)
+    }
+
+    // sum(i, i in 0..199)
+    assert_eq(total, 19900 as I64, "partial move of Shared enum payload must not double-free")
+    return 0
+}

@@ -286,10 +286,149 @@ TML_EXPORT int64_t mem_usable_size(void* ptr) {
 #endif
 }
 
+// ============================================================================
+// Adversarial Allocator Mode (phase25a determinism harness)
+// ============================================================================
+//
+// Two opt-in debug behaviors for `mem_free`, controlled by environment
+// variables read once on the first free:
+//
+//   TML_ALLOC_POISON=1       Fill freed blocks with 0xDD before releasing,
+//                            so use-after-free reads garbage
+//                            deterministically instead of stale-but-valid
+//                            data.
+//   TML_ALLOC_QUARANTINE=N   Freed blocks are held in a FIFO quarantine of
+//                            N entries (poison, when enabled, stays applied
+//                            while quarantined) and are only actually freed
+//                            on eviction — converts heap-layout-dependent
+//                            reuse crashes into deterministic ones. A block
+//                            freed a second time while still quarantined is
+//                            a proven double-free: reported and abort()ed.
+//
+// When both variables are unset the only cost is one branch on a cached
+// flag (`g_adv_state == 0` after the first call). `mem_realloc` and
+// `tml_str_realloc` are NOT instrumented — only the `mem_free` path, which
+// is where the Heap/Shared drop-glue double-free class lands.
+
+#define TML_ADV_POISON 1
+#define TML_ADV_QUARANTINE 2
+#define TML_ADV_POISON_BYTE 0xDD
+
+static volatile int g_adv_state = -1; /* -1 uninit, 0 off, else bitmask */
+static void** g_adv_quarantine = NULL; /* FIFO ring of quarantined blocks */
+static size_t g_adv_quarantine_cap = 0;
+static size_t g_adv_quarantine_head = 0; /* next insert/evict slot */
+static size_t g_adv_quarantine_len = 0;
+
+#ifdef _WIN32
+static SRWLOCK g_adv_lock = SRWLOCK_INIT;
+#define TML_ADV_LOCK() AcquireSRWLockExclusive(&g_adv_lock)
+#define TML_ADV_UNLOCK() ReleaseSRWLockExclusive(&g_adv_lock)
+#else
+#include <pthread.h>
+static pthread_mutex_t g_adv_lock = PTHREAD_MUTEX_INITIALIZER;
+#define TML_ADV_LOCK() pthread_mutex_lock(&g_adv_lock)
+#define TML_ADV_UNLOCK() pthread_mutex_unlock(&g_adv_lock)
+#endif
+
+// Usable size of a live heap block, for poisoning. Returns 0 when the
+// allocator cannot report it (the block is then left unpoisoned).
+static size_t adv_block_size(void* ptr) {
+#ifdef _WIN32
+    size_t sz = tml_safe_msize(ptr);
+    return sz == (size_t)-1 ? 0 : sz;
+#elif defined(__APPLE__)
+    return malloc_size(ptr);
+#elif defined(__GLIBC__) || defined(__linux__)
+    return malloc_usable_size(ptr);
+#else
+    (void)ptr;
+    return 0;
+#endif
+}
+
+// Reads the env vars once. Caller holds g_adv_lock.
+static void adv_init_locked(void) {
+    int state = 0;
+    const char* poison = getenv("TML_ALLOC_POISON");
+    if (poison != NULL && poison[0] == '1' && poison[1] == '\0') {
+        state |= TML_ADV_POISON;
+    }
+    const char* quarantine = getenv("TML_ALLOC_QUARANTINE");
+    if (quarantine != NULL && quarantine[0] != '\0') {
+        long n = strtol(quarantine, NULL, 10);
+        if (n > 0) {
+            g_adv_quarantine = (void**)calloc((size_t)n, sizeof(void*));
+            if (g_adv_quarantine != NULL) {
+                g_adv_quarantine_cap = (size_t)n;
+                state |= TML_ADV_QUARANTINE;
+            }
+        }
+    }
+    g_adv_state = state;
+}
+
+// Slow-path free: first-call init + poison + quarantine.
+static void adv_free(void* ptr) {
+    void* evicted = NULL;
+    int state;
+
+    TML_ADV_LOCK();
+    if (g_adv_state < 0) {
+        adv_init_locked();
+    }
+    state = g_adv_state;
+    if (state == 0 || ptr == NULL) {
+        TML_ADV_UNLOCK();
+        free(ptr); /* free(NULL) is a no-op */
+        return;
+    }
+
+    if (state & TML_ADV_POISON) {
+        size_t sz = adv_block_size(ptr);
+        if (sz > 0) {
+            memset(ptr, TML_ADV_POISON_BYTE, sz);
+        }
+    }
+
+    if (state & TML_ADV_QUARANTINE) {
+        // The same pointer entering the quarantine twice means two owners
+        // freed one allocation — the exact phase24 drop-glue class. Make
+        // it deterministic instead of a heap-layout lottery.
+        for (size_t i = 0; i < g_adv_quarantine_len; i++) {
+            if (g_adv_quarantine[i] == ptr) {
+                fprintf(stderr,
+                        "tml runtime: double free of %p detected by "
+                        "TML_ALLOC_QUARANTINE\n",
+                        ptr);
+                fflush(stderr);
+                abort();
+            }
+        }
+        if (g_adv_quarantine_len == g_adv_quarantine_cap) {
+            evicted = g_adv_quarantine[g_adv_quarantine_head];
+        } else {
+            g_adv_quarantine_len++;
+        }
+        g_adv_quarantine[g_adv_quarantine_head] = ptr;
+        g_adv_quarantine_head = (g_adv_quarantine_head + 1) % g_adv_quarantine_cap;
+        TML_ADV_UNLOCK();
+        free(evicted); /* NULL until the ring fills up */
+        return;
+    }
+
+    TML_ADV_UNLOCK();
+    free(ptr);
+}
+
 /**
  * @brief Frees allocated memory.
  *
  * Maps to TML's `mem_free(ptr: *Unit) -> Unit` builtin.
+ *
+ * When `TML_ALLOC_POISON` / `TML_ALLOC_QUARANTINE` are set, routes through
+ * the adversarial slow path (see above). Otherwise a single cached-flag
+ * branch ahead of the plain `free`.
  *
  * @param ptr Pointer to memory to free. NULL is safe.
  */
@@ -297,6 +436,10 @@ TML_EXPORT void mem_free(void* ptr) {
 #ifdef TML_DEBUG_MEMORY
     tml_mem_track_free(ptr);
 #endif
+    if (g_adv_state != 0) { /* -1 on first call (needs init) or active mode */
+        adv_free(ptr);
+        return;
+    }
     free(ptr);
 }
 

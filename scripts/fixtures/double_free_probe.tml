@@ -1,0 +1,12 @@
+// Harness fixture (phase25a): deliberate double-free that MUST be caught
+// deterministically by TML_ALLOC_QUARANTINE. Exercised by
+// scripts/determinism-selftest.sh. Lives under scripts/ (not compiler/tests/)
+// so `tml test` discovery never runs a deliberately-crashing program.
+use std::collections::buffer::{buf_mem_alloc, buf_mem_free}
+
+func main() {
+    let p = buf_mem_alloc(64)
+    buf_mem_free(p)
+    buf_mem_free(p)
+    println("double free NOT caught")
+}

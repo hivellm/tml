@@ -1,0 +1,37 @@
+// Determinism corpus (phase25a) — F-002 shape, HashMap path.
+// See docs/analysis/tml-table-analysis/02-memory-model-unsoundness.md.
+//
+// `Row` deliberately has NO Duplicate decoration: an undecorated user struct
+// wrapping a Shared handle hits ptr_read_clone's bitwise fallback (the
+// detection hole in the ADR-009 groundwork), so `map.get` aliases `payload`
+// without a refcount bump; the local's drop decrements a count the map still
+// relies on. Run N times by scripts/determinism.sh — pass-rate is the metric.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+use std::collections::hashmap::HashMap
+
+type Row {
+    id: I64,
+    payload: Shared[I64],
+}
+
+@test
+func test_f002_undecorated_struct_in_hashmap() -> I32 {
+    var map: HashMap[I64, Row] = HashMap::new(16)
+    for i in 0 to 64 {
+        map.set(i, Row { id: i, payload: Shared::new(i * 2) })
+    }
+
+    var total: I64 = 0
+    for round in 0 to 32 {
+        for i in 0 to 64 {
+            let row = map.get(i)
+            total = total + row.payload.get()
+        }
+    }
+
+    // 32 rounds * sum(2i, i in 0..63) = 32 * 4032
+    assert_eq(total, 129024 as I64, "hashmap reads must not corrupt Shared payloads")
+    return 0
+}

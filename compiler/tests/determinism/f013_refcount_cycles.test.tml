@@ -1,0 +1,46 @@
+// Determinism corpus (phase25a) — F-013 shape: Shared::increment_count /
+// decrement_count bitwise-copy the whole SharedInner[T] (shared.tml:320/333)
+// just to touch the counter. If that inner copy is drop-elaborated, every
+// duplicate+drop cycle leaks a decrement on `payload`, freeing it while
+// `outer` is still alive.
+//
+// Detector: an independent handle to the nested payload. Its strong_count
+// must stay exactly 2 (this handle + the Row field) across all cycles; a
+// leaked decrement drags it below 2 / frees the allocation.
+//
+// KNOWN CODEGEN DIVERGENCES found while authoring (pass `tml check`, fail
+// compile — phase27a specimens):
+//   1. `outer.get_ref().payload.get()` → "Cannot resolve field access object"
+//   2. `let b = outer.get_ref()` + `b.payload.get()` → K001 "%tN defined with
+//      type 'i32' but expected 'ptr'"
+//   3. F-002 tests + this test in ONE module → K001 "use of undefined value
+//      @...Shared__I64.duplicate" (mono queueing is composition-sensitive).
+//   4. @derive(Duplicate) type + explicit duplicate loop in the SAME file →
+//      same undefined Shared__I64.duplicate K001 (derive glue references the
+//      nested duplicate without queueing its instantiation).
+// Workaround: no derive/get_ref/get_clone here — direct calls only.
+
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+
+type Row {
+    id: I64,
+    payload: Shared[I64],
+}
+
+@test
+func test_f013_duplicate_drop_cycles() -> I32 {
+    let payload = Shared::new(42 as I64)
+    let outer = Shared::new(Row { id: 7, payload: payload.duplicate() })
+    assert_eq(payload.strong_count(), 2 as I64, "independent handle + Row field")
+
+    for i in 0 to 2000 {
+        let alias = outer.duplicate()
+        assert(alias.strong_count() >= 1, "alias must be alive inside the cycle")
+    }
+
+    assert_eq(outer.strong_count(), 1 as I64, "all duplicates dropped — count must return to 1")
+    assert_eq(payload.strong_count(), 2 as I64, "no refcount leak on the nested payload (F-013)")
+    assert_eq(payload.get(), 42 as I64, "nested payload must survive duplicate/drop cycles")
+    return 0
+}

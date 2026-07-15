@@ -1,0 +1,35 @@
+// Determinism corpus (phase25a) — UzDB-shaped container churn: repeated
+// insert / read / delete cycles against one map with Shared-carrying rows.
+// This is the workload class that killed the original UzDB application
+// (docs/analysis/tml-table-analysis/01-context-uzdb-failure.md).
+
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+use std::collections::hashmap::HashMap
+
+type Row {
+    id: I64,
+    payload: Shared[I64],
+}
+
+@test
+func test_container_churn_uzdb_shape() -> I32 {
+    var map: HashMap[I64, Row] = HashMap::new(16)
+    var checksum: I64 = 0
+
+    for round in 0 to 64 {
+        for i in 0 to 32 {
+            map.set(i, Row { id: i, payload: Shared::new(round * 100 + i) })
+        }
+        for i in 0 to 32 {
+            let row = map.get(i)
+            checksum = checksum + row.payload.get() - (round * 100 + i)
+        }
+        for i in 0 to 32 {
+            assert(map.remove(i), "every inserted key must be removable")
+        }
+    }
+
+    assert_eq(checksum, 0 as I64, "read-back values must match what was inserted")
+    return 0
+}

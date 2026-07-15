@@ -1,0 +1,35 @@
+// Determinism corpus (phase25a) — F-002 shape, List path.
+// Same detection-hole canary as f002_hashmap.test.tml via `List.get`.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+
+type Pair {
+    tag: I64,
+    left: Shared[I64],
+    right: Shared[I64],
+}
+
+@test
+func test_f002_undecorated_struct_in_list() -> I32 {
+    var items: List[Pair] = List::new(0)
+    for i in 0 to 64 {
+        items.push(Pair {
+            tag: i,
+            left: Shared::new(i),
+            right: Shared::new(i + 1000),
+        })
+    }
+
+    var total: I64 = 0
+    for round in 0 to 32 {
+        for i in 0 to 64 {
+            let pair = items.get(i)
+            total = total + pair.left.get() + pair.right.get()
+        }
+    }
+
+    // 32 * (sum(i) + sum(i + 1000)) for i in 0..63 = 32 * (2016 + 66016)
+    assert_eq(total, 2177024 as I64, "list reads must not corrupt Shared payloads")
+    return 0
+}

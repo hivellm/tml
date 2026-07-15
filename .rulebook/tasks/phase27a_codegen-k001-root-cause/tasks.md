@@ -5,6 +5,20 @@
 > the release history shows one-off K001 fixes (0.3.38/0.3.46) keep being followed
 > by new instances of the same shape. Requires phase25b (verifier) landed so
 > fixes are protected.
+>
+> **Fresh specimens (found 2026-07-15 while authoring the phase25a corpus —
+> all pass `tml check` and fail compilation; details in
+> `compiler/tests/determinism/f013_refcount_cycles.test.tml` header):**
+> 1. `outer.get_ref().payload.get()` on `Shared[Row]` → "Cannot resolve field
+>    access object" (chained field access through ref-returning method).
+> 2. Same expression two-stepped (`let b = outer.get_ref()` then
+>    `b.payload.get()`) → K001 `%tN defined with type 'i32' but expected 'ptr'`.
+> 3. Module-composition-sensitive mono queueing: a test file that compiles
+>    alone gets K001 `use of undefined value @...Shared__I64.duplicate` when
+>    other tests coexist in the module.
+> 4. `@derive(Duplicate)` glue referencing nested `Shared[I64]::duplicate`
+>    without queueing its instantiation → same undefined-value K001 even in a
+>    single-file module (when an explicit `.duplicate()` loop coexists).
 
 ## 1. Implementation
 - [ ] 1.1 Root-cause `std/collections` K001 (btreeset / btreemap / arraylist) — these are the flagship container suites; trace the exact verifier error to the emitting code path (MIR vs legacy)

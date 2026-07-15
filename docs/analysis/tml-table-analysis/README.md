@@ -49,6 +49,7 @@ today.
 | [04-self-hosting-and-strategy.md](04-self-hosting-and-strategy.md) | compiler-tml stuck; ambition-vs-foundation mismatch | F-009, F-014 |
 | [05-tooling-stdlib-gaps.md](05-tooling-stdlib-gaps.md) | Package manager, remaining app-capability gaps | F-010, F-012 |
 | [06-execution-plan.md](06-execution-plan.md) | Phased corrective roadmap (A–E) with exit gates | — |
+| [07-determinism-baseline.md](07-determinism-baseline.md) | Measured crash-rate baseline ×100, normal + adversarial allocator (phase25a) | — |
 
 ## Key evidence files (absolute paths)
 
