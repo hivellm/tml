@@ -50,6 +50,7 @@ today.
 | [05-tooling-stdlib-gaps.md](05-tooling-stdlib-gaps.md) | Package manager, remaining app-capability gaps | F-010, F-012 |
 | [06-execution-plan.md](06-execution-plan.md) | Phased corrective roadmap (A–E) with exit gates | — |
 | [07-determinism-baseline.md](07-determinism-baseline.md) | Measured crash-rate baseline ×100, normal + adversarial allocator (phase25a) | — |
+| [08-memory-copy-audit.md](08-memory-copy-audit.md) | Stdlib+codegen audit of the copy-instead-of-move class: no move semantics, 13 UAF sites, pass-by-value, perf | F-015..F-022 |
 
 ## Key evidence files (absolute paths)
 
@@ -84,3 +85,11 @@ today.
 | F-012 | Remaining app-capability gaps are modest (async I/O maturity, registry) | Medium-High | Medium |
 | F-013 | `Shared::increment_count`/`decrement_count` bitwise-copy the whole inner value | Medium | Medium-High |
 | F-014 | Roadmap ambition (DB drivers, CUDA, LoRA) dramatically exceeds foundation readiness | High | Strategic |
+| F-015 | No real move semantics at codegen (mark_moved dead, consumed_vars_ syntactic, borrow facts discarded) | High | Critical |
+| F-016 | 13 confirmed double-free/UAF sites (unfixed F-013/F-002 siblings across alloc/collections/iterators) | High | Critical |
+| F-017 | 2 move-outs double-free unconditionally (`Arc::try_unwrap`, `AnyValue::into_inner`) — fixable now | High | Critical |
+| F-018 | `Sync[T]::get` copies with NO safe alternative (no get_ref/get_clone) | High | High |
+| F-019 | Read/iterate asymmetry: `get` deep-clones (sound), iterators alias (unsound) | High | Medium-High |
+| F-020 | Pass-by-value MUST-BORROW (phase24b class alive): BigInt, str::join, HTTP/2 — one-token `ref` fixes | High | High |
+| F-021 | Collections have no borrow accessor; `get` returns owned deep clone (language gap — the zero-cost blocker) | High | Critical |
+| F-022 | `List`/`HashMap` `destroy` skip per-element Drop → leak every handle (mirror of copy hazard) | High | High |

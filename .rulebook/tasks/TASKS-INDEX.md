@@ -27,12 +27,17 @@ green. Rationale + evidence: [`docs/analysis/tml-table-analysis/`](../../docs/an
 
 | ID | Task | Status | Depends on |
 |----|------|--------|------------|
-| 26a | [ADR-009: Memory-Model Decision (B1 drop-flags vs B2 ARC)](phase26a_memmodel-adr-decision/) | **In progress** — F-013 confirmed at IR level; path-divergence spike pending | **user sign-off required** |
-| 26b | [Memory-Model Implementation](phase26b_memmodel-implementation/) | Pending | 26a |
+| 26a | ADR-009: Memory-Model Decision | **✅ Done — B3 ACCEPTED** (unify paths → drop-flags once). Archived | — |
+| 26b | [Memory-Model Implementation (B3)](phase26b_memmodel-implementation/) | **In progress** — Step 1 done (v0.3.55 F-013 fix); Step 2 next (MIR gap closure + pipeline flip) | 26a ✅ |
 | 26c | [Revert phase24 Band-Aids + Close Bug Class](phase26c_memmodel-bandaid-revert/) | Pending | 26b |
+| 26d | [Stdlib Copy-Hazard Sweep (library-level, parallel)](phase26d_stdlib-copy-hazards-sweep/) | Pending — F-017/018/020, model-independent safe wins | none (parallel w/ 26b) |
+| 26e | [Collection Borrow Accessors (the zero-cost enabler)](phase26e_collection-borrow-accessors/) | Pending — F-021, new lang+codegen surface | 26b |
 
 **Gate:** `essential.c --emit=ast` ×100 = 100/100 under adversarial allocator, ALL
-phase24 workarounds reverted.
+phase24 workarounds reverted, the 13 F-016 UAF sites + F-022 leaks sound by
+construction. See `docs/analysis/tml-table-analysis/08-memory-copy-audit.md`
+(F-015..F-022): TML has **no real move semantics** today — the copy-instead-of-move
+class is systemic, not the isolated F-013.
 
 ### Phase 27 — Codegen stability (Plan Phase C)
 
@@ -123,8 +128,9 @@ Full dirs with attempt logs in `.rulebook/tasks/archive/2026-07-15-*`.
 ## Roadmap summary
 
 ```
-ERA 0 (ACTIVE):  [25a ✅ 25b ✅] → 26a(user decision) → 26b → 26c → 27a,27b → 28a → 28b
+ERA 0 (ACTIVE):  [25a ✅ 25b ✅ 26a ✅] → 26b(in progress) + 26d(parallel) → 26c → 26e
+                 → 27a,27b → 28a → 28b
 FUTURE:          29 (registry) → 30–33 (native/self-hosting) → 34 (C++ frontend)
                  → 35–37 (DB/AI/HTTP features) → 38–39 (toolchain/backends)
-ARCHIVED:        phase24 band-aid line (7 tasks, evidence preserved)
+ARCHIVED:        phase24 band-aid line (7 tasks) + 25a/25b/26a (done, evidence preserved)
 ```

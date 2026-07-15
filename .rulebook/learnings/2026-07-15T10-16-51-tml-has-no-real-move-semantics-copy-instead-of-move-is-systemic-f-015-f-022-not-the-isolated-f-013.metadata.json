@@ -1,0 +1,14 @@
+{
+  "id": "2026-07-15T10-16-51-tml-has-no-real-move-semantics-copy-instead-of-move-is-systemic-f-015-f-022-not-the-isolated-f-013",
+  "title": "TML has no real move semantics — copy-instead-of-move is systemic (F-015..F-022), not the isolated F-013",
+  "content": "A 4-agent audit (docs/analysis/tml-table-analysis/08-memory-copy-audit.md) confirmed the copy-instead-of-move bug is language-wide. ROOT (F-015): no real move semantics at codegen — MIR's mark_moved/is_moved is dead code (never called), the AST path's consumed_vars_ is name-based syntactic tracking that can't see value-returning reads (map.get/shared.get have no named source), and the borrow checker's ownership/init-state facts are discarded before MIR. The drop.cpp:460-471 comment (\"TML doesn't have move semantics, so these types are copied not moved\") is true of the whole compiler; the two codegen paths paper over it with opposite hacks (AST skips container drops = LEAK; MIR deep-clones at read = 2N heap ops). Consequences: 13 confirmed double-free/UAF sites (F-016: Sync/Heap get, ListIter/HashSetIter/HashMapIter by-value yields, List::retain, Arc::make_mut); 2 unconditional double-frees fixable now (F-017: Arc::try_unwrap + AnyValue::into_inner never forget/null the source); Sync::get has no safe alternative (F-018); ~40 pass-by-value MUST-BORROW sites, phase24b class alive (F-020: BigInt operators, str::join, HTTP/2 Buffer accumulators); collections have NO working borrow accessor so every handle-bearing get deep-clones (F-021, the zero-cost blocker — list_get_mut intrinsic has no codegen); destroy skips per-element Drop = leak (F-022). VERIFIED sound (do not touch): Shared::get_ref/get_clone (IR-checked, no dropping temp), primitives, this-receivers. Tasks: phase26d (library safe wins, parallel), phase26b step 4 (model fix closes F-016/022), phase26e (borrow accessors = actual zero-cost).",
+  "source": "manual",
+  "tags": [
+    "analysis:tml-table-analysis",
+    "memory-model",
+    "move-semantics",
+    "performance",
+    "era0"
+  ],
+  "createdAt": "2026-07-15T10:16:51.460Z"
+}

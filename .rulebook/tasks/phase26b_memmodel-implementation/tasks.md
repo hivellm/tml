@@ -29,7 +29,8 @@
 - [ ] 4.2 Wire `BuildContext::mark_moved` (currently dead) at every move site in the THIR→MIR builder; moved-from locals are never dropped
 - [ ] 4.3 Port the borrow checker's init-state merge dataflow (checker.hpp:799-816) to MIR drop elaboration; conditional drops via flags only where control-flow-dependent
 - [ ] 4.4 Extend the discipline below `lowlevel` for stdlib internals (container read-out = borrow or explicit clone; `.get()` semantics well-defined; supersedes `ptr_read_clone` conservative detection)
-- [ ] 4.5 Gates: `sig_alone.c` 100/100, `c_essential_repro.c` 100/100 (was 86), `essential.c --emit=ast` 100/100 (was 0), corpus canaries 100/100, full suites at/above baseline — all under adversarial allocator
+- [ ] 4.5 **Acceptance surface (from 08-memory-copy-audit)**: the 13 F-016 double-free/UAF sites (Sync/Heap get, ListIter/HashSetIter/HashMapIter by-value yields, List::retain, Arc::make_mut) and F-022 (List/HashMap destroy skipping per-element Drop) must ALL become sound by construction — the read-out becomes a move or properly-paired clone, iterators stop aliasing, destroy runs per-element drop. This replaces the `drop.cpp:460-471` leak special-case and the `ptr_read_clone` band-aid
+- [ ] 4.6 Gates: `sig_alone.c` 100/100, `c_essential_repro.c` 100/100 (was 86), `essential.c --emit=ast` 100/100 (was 0), corpus canaries 100/100 (incl. `tml_refcount_bleed_userpath` + new F-016 canaries), full suites at/above baseline — all under adversarial allocator
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 2.1 Update or create documentation covering the implementation
