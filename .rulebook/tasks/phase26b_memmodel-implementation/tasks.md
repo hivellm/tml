@@ -16,13 +16,17 @@
 - [x] 1.2 Canary `scripts/fixtures/refcount_bleed_probe.tml` via `tml run`, corpus `tml_refcount_bleed_userpath`: 0/N before → 100/100 both modes after; core/alloc 41/41, determinism 5/5
 
 ### Step 2 — Consume borrow-checker move/init facts in the AST codegen
-> The borrow checker already computes the right lattice (`OwnershipState{Owned,Moved,
-> Borrowed,MutBorrowed,Dropped}` + init-state merge dataflow, `checker.hpp:330-336,
-> 799-816`) and DISCARDS it before codegen (`query_core.cpp:575-593`, F-004). Surface
-> those facts to `LLVMIRGen` so drop insertion is ownership-driven, not name-based.
-- [ ] 2.1 Thread borrowcheck's per-place ownership/init-state result through the query system into the AST codegen inputs (a new query dependency `provide_codegen_unit` → borrowcheck facts, replacing the discard at `query_core.cpp:575-593`)
-- [ ] 2.2 Replace the name-based `consumed_vars_` (`drop.cpp:97-99`, ~30 syntactic sites) with a per-place initialization map keyed on the borrow-checker facts; a place that is moved-from OR uninitialized on a path is not dropped there
-- [ ] 2.3 Extend coverage below `lowlevel { *this.ptr }` for the stdlib's own raw-pointer internals — the aliasing the checker is currently blind to (F-004); the read-out sites in shared/heap/collections must be classified as move | borrow | balanced-clone
+> Scoped concretely in `specs/step2-scoping/wiring-plan.md`. The checker already computes
+> `OwnershipState`/`moved_projections`/`is_initialized` (`checker.hpp:330-336,567-614`)
+> and DISCARDS it (`provide_borrowcheck_module` returns only success+errors,
+> `query_core.cpp:465-502`). **JOIN KEY = the binding's definition `SourceSpan`** (exists
+> both sides: `PlaceState.definition` `checker.hpp:588`; `let.span` at codegen, currently
+> dropped). Facts already exist → export + join is CHEAP. Land granularity (i) first
+> (monotonic "ever moved" set — never worse than today); conditional correctness is Step 4.
+- [ ] 2.1 Export: add `PlaceOwnershipFact{def_span, name, moved_out, initialized, moved_projections, conditional}` + `ownership` to `BorrowcheckResult` (`query_key.hpp:196-199`); `BorrowChecker::ownership_facts()` snapshots `env_.all_places()` (`checker.hpp:703`) keyed by def-span; populate in `provide_borrowcheck_module` (`query_core.cpp:488-500`) before the stack-local checker dies. No behavior change, no new query edge (codegen_unit→borrowcheck dep already exists, `:722`)
+- [ ] 2.2 Plumb into `LLVMIRGen` (`set_ownership_facts` + `ownership_by_span_`); wire the codegen_unit site (`query_core.cpp:1030`) AND the direct-CLI construction sites so `tml build`/`run` get facts (`build.cpp:567`, `parallel_build.cpp:676`, `run_profiled.cpp:194`, `llvm_codegen_backend.cpp:132`)
+- [ ] 2.3 Carry the key: add `SourceSpan def_span` to `DropInfo` (`llvm_ir_gen.hpp:528`); extend `register_for_drop` (`drop.cpp:128`) + ~15 callers to pass `let.span`
+- [ ] 2.4 The swap (granularity i): in `emit_scope_drops`/`emit_all_drops` (`drop.cpp:1170,1174,1191,1195`) look up `ownership_by_span_[def_span]` — suppress on `moved_out`, drive partial drops from `moved_projections` (not the `"var.field"` prefix scan). Keep `consumed_vars_` as temporary fallback, then retire the ~30 `mark_var_consumed` sites + remove `consumed_vars_`/`has_consumed_fields` (`drop.cpp:97-116`)
 
 ### Step 3 — Sound container / smart-pointer read-out on the AST path
 - [ ] 3.1 Every value-returning read out of an owning container/smart pointer (`get`/`get_opt`/iterator `next`/`value`) is either a balanced clone (`ptr_read_clone`, bump paired with the returned value's drop) or a tracked move — NEVER a bitwise alias. Close the aggregate-without-Duplicate bitwise fallthrough (`intrinsics.cpp:819-822`)
