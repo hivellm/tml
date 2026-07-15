@@ -89,15 +89,24 @@ questions (F-013 MIR elaboration; AST-path fallback frequency).
   `decrement_count` → **writes the decrement to the REAL allocation's
   strong_count via this.ptr and `mem_free`s it at 0**. So on the emit-ir path,
   every `outer.duplicate()` leaks one real decrement of each nested handle.
-- **OPEN QUESTION for the spikes (item 1.4):** the f013 corpus test
-  (2000 duplicate/drop cycles + `payload.strong_count()==2` assert) passes
-  100/100 at runtime — the refcount bleed does NOT manifest in the test
-  binary. Most plausible explanation: `--emit-ir` forces the LEGACY AST path
-  (build.cpp:413 `emit_ir_only`), while the test binary's codegen elaborates
-  the inner-copy drop differently (or not at all). Determining WHICH path the
-  test binary takes and WHERE the two diverge is decision-critical: it tells
-  us which drop-elaboration subsystem is live in practice and which one B1
-  must fix first.
+- **RESOLVED (2026-07-15 spike, runtime probes):** the bleed is REAL on the
+  path real programs use. `tml run` probe (Shared[Payload{nested: Shared[I64]}],
+  print strong_count between duplicates): **2 → 1 → -1**, and `payload.get()`
+  reads 42 from FREED memory — silent use-after-free, no crash (decrement_count
+  frees exactly at 0, negative counts never re-free). Same result with the
+  @derive(Duplicate) corpus shape → the discriminant is the BUILD PATH, not
+  the decoration.
+- **PATH DIVERGENCE ROOT CAUSE:** the test framework compiles suites through
+  the QUERY pipeline with a pre-compiled shared stdlib object
+  (`testing_compile.cpp:69-74` "skip per-suite stdlib IR generation",
+  `:356/:616` qopts) — the MIR path, which does NOT elaborate the inner-copy
+  drop. `tml run`/`tml build` of ANY program importing stdlib hits the
+  AST-legacy fallback (`build.cpp:413`) — which DOES elaborate it and bleeds.
+  **Consequence: the entire test suite validates a codegen path that real
+  user programs never take.** "12,000+ tests green" and "UzDB corrupts in
+  production" are both true simultaneously. This is decision-critical for
+  ADR-009: any fix must either land on BOTH paths or retire the AST fallback
+  so user builds take the tested path.
 - Same read-whole-inner shape: `Shared::take` (shared.tml:287-290),
   `Heap::into_inner` (heap.tml:152-157), plus the F-002 getters
   (`shared.tml:149`, `heap.tml:117`). Safe forms exist: `get_clone` (:177-182),
