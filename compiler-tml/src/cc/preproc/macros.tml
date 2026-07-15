@@ -25,12 +25,15 @@ pub func expand_macros(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken]
                 let name: Str = tok.text
                 // Check blue-paint: if this macro name is in the token's blue set, skip
                 if is_blue_painted(tok, name) > 0 {
-                    result.push(tok)
+                    result.push(dup_pp_token(tok))
                     continue
                 }
                 // Check if name is a defined macro
                 if pp.defines.has(name) {
-                    let def: MacroDef = pp.defines.get(name)
+                    // Deep-clone to detach from HashMap's bitwise alias.
+                    // (phase24m: same Heap-borrow-drop class fix as
+                    // expand_macro_at in directives.tml.)
+                    let def: MacroDef = dup_macro_def(pp.defines.get(name))
                     when def {
                         ObjectLike(body) => {
                             // Paint all body tokens with this macro name
@@ -46,14 +49,14 @@ pub func expand_macros(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken]
                         FunctionLike(fdef) => {
                             // Function-like macros need argument collection
                             // For now, push as-is (full arg collection in next iteration)
-                            result.push(tok)
+                            result.push(dup_pp_token(tok))
                         }
                     }
                 } else {
-                    result.push(tok)
+                    result.push(dup_pp_token(tok))
                 }
             },
-            _ => result.push(tok)
+            _ => result.push(dup_pp_token(tok))
         }
     }
 
@@ -77,18 +80,24 @@ func is_blue_painted(tok: PpToken, name: Str) -> I64 {
 func add_blue_paint(tok: PpToken, name: Str) -> PpToken {
     let new_blue = List[Str]::new(tok.blue_set.len() as I64 + 1)
     let n: I64 = tok.blue_set.len() as I64
-    for i in 0 to n { new_blue.push(tok.blue_set.get(i)) }
-    new_blue.push(name)
-    return PpToken { kind: tok.kind, text: tok.text, file: tok.file, line: tok.line, col: tok.col, blue_set: new_blue }
+    for i in 0 to n { new_blue.push(tok.blue_set.get(i).duplicate()) }
+    new_blue.push(name.duplicate())
+    return PpToken { kind: tok.kind, text: tok.text.duplicate(), file: tok.file.duplicate(), line: tok.line, col: tok.col, blue_set: new_blue }
 }
 
 /// Union two tokens' blue sets into a new token (keeps the first token's other fields).
 func union_blue_sets(target: PpToken, source: PpToken) -> PpToken {
     let n: I64 = source.blue_set.len() as I64
-    if n == 0 { return target }
+    if n == 0 {
+        return PpToken {
+            kind: target.kind, text: target.text.duplicate(),
+            file: target.file.duplicate(), line: target.line, col: target.col,
+            blue_set: List[Str]::new(0 as I64)
+        }
+    }
     let new_blue = List[Str]::new(target.blue_set.len() as I64 + n)
     let tn: I64 = target.blue_set.len() as I64
-    for i in 0 to tn { new_blue.push(target.blue_set.get(i)) }
+    for i in 0 to tn { new_blue.push(target.blue_set.get(i).duplicate()) }
     for i in 0 to n {
         let name: Str = source.blue_set.get(i)
         // Avoid duplicates
@@ -96,9 +105,9 @@ func union_blue_sets(target: PpToken, source: PpToken) -> PpToken {
         for j in 0 to tn {
             if new_blue.get(j) == name { found = 1 }
         }
-        if found == 0 { new_blue.push(name) }
+        if found == 0 { new_blue.push(name.duplicate()) }
     }
-    return PpToken { kind: target.kind, text: target.text, file: target.file, line: target.line, col: target.col, blue_set: new_blue }
+    return PpToken { kind: target.kind, text: target.text.duplicate(), file: target.file.duplicate(), line: target.line, col: target.col, blue_set: new_blue }
 }
 
 // ============================================================================
@@ -126,8 +135,9 @@ pub func paste_tokens(left: PpToken, right: PpToken) -> PpToken {
     if first_char >= 48 and first_char <= 57 {
         kind = PpTokenKind::IntLit
     }
-    // Union blue sets
-    let result: PpToken = pp_token(kind, pasted_text, left.file, left.line, left.col)
+    // Union blue sets. `left.file` is bitwise-aliased with the caller's
+    // token; `pp_token` and `union_blue_sets` deep-clone it. (phase24m.)
+    let result: PpToken = pp_token(kind, pasted_text, left.file.duplicate(), left.line, left.col)
     let r2: PpToken = union_blue_sets(result, left)
     return union_blue_sets(r2, right)
 }
@@ -172,6 +182,51 @@ pub func dup_pp_token(t: PpToken) -> PpToken {
         line: t.line,
         col: t.col,
         blue_set: List[Str]::new(0 as I64)
+    }
+}
+
+/// Deep-clones a `List[PpToken]`. The returned list owns fresh Str
+/// fields and a fresh backing buffer; it is safe to drop independently
+/// of the source.
+///
+/// `List[T]` does not have a `Duplicate` impl, so `.duplicate()` on a
+/// `List[PpToken]` falls back to a bitwise copy in codegen — the exact
+/// pattern that causes Heap-borrow-drop crashes when the bitwise alias
+/// is dropped while the source still owns the buffer. This helper does
+/// element-wise deep clone via `dup_pp_token`.
+pub func dup_pp_token_list(src: List[PpToken]) -> List[PpToken] {
+    let n: I64 = src.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    for i in 0 to n {
+        out.push(dup_pp_token(src.get(i)))
+    }
+    return out
+}
+
+/// Deep-clones a `MacroDef`. Walks the active variant and constructs a
+/// fresh value with deep-cloned `List[PpToken]` / `List[Str]` payloads.
+/// Use after `pp.defines.get(name)` to detach the consumer's `MacroDef`
+/// from the HashMap's bitwise-aliased storage — this is the safe lookup
+/// pattern for value types containing `List` fields whose drop-glue
+/// would otherwise free the HashMap's backing buffer when the local
+/// goes out of scope. (phase24m: residual essential.c SIGSEGV diagnosed
+/// at `pp_sweep_in_file → expand_macro_at`.)
+pub func dup_macro_def(def: MacroDef) -> MacroDef {
+    when def {
+        ObjectLike(body) => return MacroDef::ObjectLike(dup_pp_token_list(body)),
+        FunctionLike(fdef) => {
+            let pn: I64 = fdef.params.len() as I64
+            let new_params: List[Str] = List[Str]::new(pn)
+            for i in 0 to pn {
+                new_params.push(fdef.params.get(i).duplicate())
+            }
+            let new_body: List[PpToken] = dup_pp_token_list(fdef.body)
+            return MacroDef::FunctionLike(FuncMacroDef {
+                params: new_params,
+                is_variadic: fdef.is_variadic,
+                body: new_body
+            })
+        }
     }
 }
 
@@ -451,7 +506,10 @@ pub func substitute_func_macro(fdef: FuncMacroDef, args: CollectedArgs) -> List[
             trim_trailing_ws(out)
             // Step 2: pop the left-hand operand.
             if out.len() == 0 { i = i + 1 as I64; continue }
-            let left: PpToken = out.get(out.len() as I64 - 1 as I64)
+            // Deep-clone before pop: `out.get` returns a bitwise alias
+            // of the slot; `out.pop()` then frees that slot's contents.
+            // (phase24m.)
+            let left: PpToken = dup_pp_token(out.get(out.len() as I64 - 1 as I64))
             out.pop()
             // Step 3: find the next non-ws token in body.
             var j: I64 = i + 1 as I64

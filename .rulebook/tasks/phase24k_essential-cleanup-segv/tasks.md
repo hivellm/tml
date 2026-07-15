@@ -74,3 +74,8 @@ referenced by phase24l's verification task.
 
 Note (5.4): essential.c gate NOT met. phase0z stays open. phase24k
 stays open until phase24l lands the structural fix.
+
+## 6. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 6.1 Update or create documentation covering the implementation
+- [ ] 6.2 Write tests covering the new behavior
+- [ ] 6.3 Run tests and confirm they pass

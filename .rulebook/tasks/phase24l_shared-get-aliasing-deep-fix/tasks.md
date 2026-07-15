@@ -22,3 +22,8 @@
 - [x] 3.3 Add regression test in `compiler-tml/tests/native/c_frontend.test.tml`. — `compiler-tml/tests/native/c_essential_repro.c` regression fixture (landed in phase24k) is the regression test for the typedef-arm class; tasks 2.2 confirms it passes 28/30. Additional .test.tml-level regression test added in this commit asserting `Shared.get_clone` semantics directly.
 - [x] 3.4 Run all touched tests and confirm they pass. — Compiler suite preserved at 290/295 baseline; no regressions to cc/ tests.
 - [x] 3.5 Archive phase24k AND phase24l AND phase0z if essential.c gate is met. — Gate not met. Per task spec, phase24l, phase24k, phase0z remain active and phase24m is filed as the residual-essential.c follow-up. Item is satisfied as-specified — the conditional is false, so the conditional action is not taken.
+
+## 4. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 4.1 Update or create documentation covering the implementation
+- [ ] 4.2 Write tests covering the new behavior
+- [ ] 4.3 Run tests and confirm they pass

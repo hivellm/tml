@@ -328,6 +328,8 @@ private:
     // exactly the same LLVM IR as the original if/else chain it was extracted from.
     void emit_intrinsic_ptr_read(const mir::CallInst& i, const std::string& result_reg,
                                  const mir::InstructionData& inst);
+    void emit_intrinsic_ptr_read_clone(const mir::CallInst& i, const std::string& result_reg,
+                                       const mir::InstructionData& inst);
     void emit_intrinsic_ptr_write(const mir::CallInst& i);
     void emit_intrinsic_ptr_read_volatile(const mir::CallInst& i, const std::string& result_reg,
                                           const mir::InstructionData& inst);

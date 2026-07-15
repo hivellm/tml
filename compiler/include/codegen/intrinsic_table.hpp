@@ -32,6 +32,7 @@ namespace tml::codegen {
 enum class IntrinsicKind : uint8_t {
     // Pointer operations
     PtrRead,
+    PtrReadClone,
     PtrWrite,
     PtrOffset,
     PtrReadVolatile,

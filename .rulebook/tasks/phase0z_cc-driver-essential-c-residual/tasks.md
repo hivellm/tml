@@ -31,3 +31,8 @@
 - [x] 6.1 Bumped VERSION 0.3.45 -> 0.3.46. CHANGELOG.md row added. `docs/patches/v0.3.46.md` documents the partial fix scope, root cause for both Bug A and Bug B, and the phase24h follow-up.
 - [x] 6.2 Tests written (item 3.2) and existing baseline verified (item 5.3).
 - [x] 6.3 Run tests and confirm pass — c_parser test suite green with 3 new regressions; c_lexer/c_frontend/c_preproc match baseline.
+
+## 7. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 7.1 Update or create documentation covering the implementation
+- [ ] 7.2 Write tests covering the new behavior
+- [ ] 7.3 Run tests and confirm they pass

@@ -240,6 +240,9 @@ void MirCodegen::emit_call_inst(const mir::CallInst& i, const std::string& resul
         case IntrinsicKind::PtrRead:
             emit_intrinsic_ptr_read(i, result_reg, inst);
             return;
+        case IntrinsicKind::PtrReadClone:
+            emit_intrinsic_ptr_read_clone(i, result_reg, inst);
+            return;
         case IntrinsicKind::PtrReadVolatile:
             emit_intrinsic_ptr_read_volatile(i, result_reg, inst);
             return;
@@ -946,6 +949,152 @@ void MirCodegen::emit_intrinsic_ptr_read(const mir::CallInst& i, const std::stri
     emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
     if (inst.result != mir::INVALID_VALUE) {
         cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// ptr_read_clone[T] — bitwise load + auto-duplicate when T is non-trivial.
+//
+// Phase24n: structural codegen-level fix for the `Shared.get / HashMap.get /
+// List.get` aliasing bug class. When T contains nested refcounted handles
+// (Shared / Heap / Str / List / nested-aggregate), a bitwise load creates an
+// alias whose drop double-frees the source slot's storage. ptr_read_clone
+// emits an explicit `T::duplicate(temp)` call after the bitwise load so the
+// returned value carries fresh refcounts. The bitwise temp itself is NOT
+// registered for drop — it is a transient alloca that goes out of scope when
+// the surrounding LLVM block ends.
+//
+// For primitive T (i1/i8/i16/i32/i64/i128/f32/f64/ptr) the duplicate call is
+// elided — the bitwise load IS the duplicate result.
+//
+// For aggregate T whose Duplicate impl symbol cannot be resolved at codegen
+// time, this falls back to a bitwise load (matching ptr_read semantics).
+// ----------------------------------------------------------------------------
+namespace {
+
+/// Itanium-style hierarchical mangler shared with LLVMIRGen::mangle_tml_symbol.
+/// Encodes module::Type::method as N<len><seg>...<len><method>E.
+std::string mangle_itanium_path(const std::string& module_name, const std::string& type_name,
+                                const std::string& method_name) {
+    // Build the segment list: each :: in module_name becomes a length-prefixed
+    // segment, then type_name becomes another segment, then method_name.
+    std::string result = "N";
+    size_t pos = 0;
+    while (pos <= module_name.size()) {
+        size_t sep = module_name.find("::", pos);
+        if (sep == std::string::npos)
+            sep = module_name.size();
+        std::string seg = module_name.substr(pos, sep - pos);
+        if (!seg.empty()) {
+            result += std::to_string(seg.size()) + seg;
+        }
+        pos = sep + 2;
+    }
+    result += std::to_string(type_name.size()) + type_name;
+    result += std::to_string(method_name.size()) + method_name;
+    result += "E";
+    return result;
+}
+
+/// Heuristic: derive the canonical module path for a TML type from its
+/// mangled simple name (the suffix after `%struct.` or `%enum.`).
+///
+/// For library types we return the canonical path that LLVMIRGen's
+/// `find_module_for_type` would emit. For local user types the AST codegen
+/// uses "core" as the fallback — we mirror that to keep the symbols stable.
+///
+/// Returns the empty string for unknown types so the caller can fall back to
+/// a bitwise read instead of emitting an unresolved external call.
+std::string canonical_module_for_type(const std::string& type_name) {
+    // Strip generic instantiation suffix: "Shared__I32" -> base "Shared".
+    std::string base = type_name;
+    auto dunder = base.find("__");
+    if (dunder != std::string::npos) {
+        base = base.substr(0, dunder);
+    }
+
+    // Library types — canonical paths.
+    static const std::unordered_map<std::string, std::string> library_modules = {
+        {"Shared", "core::alloc::shared"},
+        {"Heap", "core::alloc::heap"},
+        {"Box", "core::alloc::box"},
+        {"Rc", "core::alloc::rc"},
+        {"Arc", "core::alloc::arc"},
+        {"Cell", "core::cell"},
+        {"RefCell", "core::cell"},
+        {"List", "std::collections::list"},
+        {"HashMap", "std::collections::hashmap"},
+        {"HashSet", "std::collections::hashset"},
+        {"Buffer", "std::collections::buffer"},
+        {"Maybe", "core"},
+        {"Outcome", "core"},
+        // Primitives
+        {"Str", "core"},
+    };
+    auto it = library_modules.find(base);
+    if (it != library_modules.end()) {
+        return it->second;
+    }
+    // Local types fall back to "core" (matching LLVMIRGen::find_module_for_type).
+    return "core";
+}
+
+bool is_primitive_llvm_type(const std::string& t) {
+    return t == "i1" || t == "i8" || t == "i16" || t == "i32" || t == "i64" || t == "i128" ||
+           t == "f32" || t == "f64" || t == "float" || t == "double" || t == "ptr" || t == "void";
+}
+
+} // namespace
+
+void MirCodegen::emit_intrinsic_ptr_read_clone(const mir::CallInst& i,
+                                               const std::string& result_reg,
+                                               const mir::InstructionData& inst) {
+    std::string ptr_arg = get_value_reg(i.args[0]);
+    std::string elem_type = resolve_read_element_type(i);
+    std::string ptr_reg = ensure_ptr_reg(i.args[0], ptr_arg, "prc");
+
+    // 1. Bitwise load (same as ptr_read).
+    emitln("    " + result_reg + " = load " + elem_type + ", ptr " + ptr_reg);
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(result_reg, elem_type, nullptr);
+    }
+
+    // 2. Primitive — duplicate is identity. Done.
+    if (is_primitive_llvm_type(elem_type)) {
+        return;
+    }
+
+    // 3. Aggregate — derive type's mangled name from "%struct.X" / "%enum.X".
+    std::string type_name;
+    if (elem_type.size() > 8 && elem_type.substr(0, 8) == "%struct.") {
+        type_name = elem_type.substr(8);
+    } else if (elem_type.size() > 6 && elem_type.substr(0, 6) == "%enum.") {
+        type_name = elem_type.substr(6);
+    } else {
+        // Unknown aggregate form (tuple, array, ref). Bitwise read is safe.
+        return;
+    }
+
+    std::string module_path = canonical_module_for_type(type_name);
+    if (module_path.empty()) {
+        return; // No reliable mangling available — fall back to bitwise.
+    }
+
+    std::string dup_func = "@tml_" + mangle_itanium_path(module_path, type_name, "duplicate");
+
+    // 4. Spill to alloca so we can pass by-ptr to T::duplicate(this).
+    std::string spill = "%spill_prc" + std::to_string(spill_counter_++);
+    emitln("    " + spill + " = alloca " + elem_type);
+    emitln("    store " + elem_type + " " + result_reg + ", ptr " + spill);
+
+    // 5. Call duplicate. The result overwrites result_reg in cg_values_ so
+    //    consumers see the duplicated value, not the bitwise alias.
+    std::string dup_reg = new_temp();
+    emitln("    " + dup_reg + " = call " + elem_type + " " + dup_func + "(ptr " + spill + ")");
+
+    // 6. Re-bind the MIR result value to the duplicated register.
+    if (inst.result != mir::INVALID_VALUE) {
+        cg_values_[inst.result] = CGValue::immediate(dup_reg, elem_type, nullptr);
     }
 }
 

@@ -168,7 +168,10 @@ impl[T] List[T] {
         // Unchecked multiply avoids overflow branch that blocks vectorization
         let byte_offset: I64 = lowlevel { unchecked_mul(index, stride) }
         let elem_ptr: *T = lowlevel { ptr_offset(data, byte_offset) } as *T
-        lowlevel { ptr_read[T](elem_ptr) }
+        // ptr_read_clone auto-emits T::duplicate when T contains nested
+        // refcounted handles (Shared / Heap / Str / etc.) — preventing the
+        // bitwise-alias double-free bug. For primitive T it is identity.
+        lowlevel { ptr_read_clone[T](elem_ptr) }
     }
 
     /// Sets the element at the given index.

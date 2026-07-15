@@ -181,6 +181,37 @@ impl[T] Shared[T] {
         return (*this.ptr).value.duplicate()
     }
 
+    /// Returns a reference to the inner value WITHOUT loading it by value.
+    ///
+    /// Unlike `get` (bitwise copy that aliases nested handles) and
+    /// `get_clone` (deep clone that materialises a bitwise temp before
+    /// calling `T::duplicate`), `get_ref` returns a borrow into the
+    /// allocation. No bitwise temp is materialised, no drop-glue runs.
+    ///
+    /// This is the safe pattern when the consumer wants to inspect the
+    /// inner value (e.g. pattern-match on an enum) without taking
+    /// ownership. Refcount semantics are unaffected — the original
+    /// `Shared` retains its strong reference.
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let s = Shared::new(Tree::Leaf)
+    /// let r: ref Tree = s.get_ref()
+    /// when *r {
+    ///     Leaf => println("leaf"),
+    ///     Node(_) => println("node")
+    /// }
+    /// // s still owns its reference; r borrows into it.
+    /// ```
+    pub func get_ref(this) -> ref T {
+        if this.ptr == null {
+            panic("Shared::get_ref: null pointer")
+        }
+        let addr: I64 = this.ptr as I64
+        return lowlevel { ptr_as_ref[T](addr) }
+    }
+
     /// Returns the current reference count.
     ///
     /// ## Examples

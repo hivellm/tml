@@ -43,3 +43,8 @@ Improvement: large/complex C programs (200 globals, deeply nested
 control flow, function-pointer typedefs, all phase24h regressions)
 all 30/30 deterministic. essential.c specifically still triggers a
 content-shape-dependent cleanup-time fault.
+
+## 7. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 7.1 Update or create documentation covering the implementation
+- [ ] 7.2 Write tests covering the new behavior
+- [ ] 7.3 Run tests and confirm they pass

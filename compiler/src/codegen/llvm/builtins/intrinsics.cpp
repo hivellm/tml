@@ -118,7 +118,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "llvm_shl", "llvm_shr", "llvm_eq", "llvm_ne", "llvm_lt", "llvm_le", "llvm_gt", "llvm_ge",
         "transmute", "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
         "unchecked_mul", "unchecked_add", "unchecked_sub",
-        "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "store_byte", "volatile_read",
+        "ptr_offset", "ptr_read", "ptr_read_clone", "ptr_write", "ptr_copy", "store_byte",
+        "volatile_read",
         "volatile_write", "ptr_read_volatile", "ptr_write_volatile", "ptr_read_unaligned",
         "ptr_write_unaligned", "memcpy", "memmove", "memset", "atomic_load", "atomic_store",
         "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or",
@@ -655,6 +656,324 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             emit_line("  " + result + " = load " + elem_type + ", ptr " + ptr);
             last_expr_type_ = elem_type;
             return result;
+        }
+        return "0";
+    }
+
+    // ptr_read_clone[T](ptr: Ptr[T]) -> T
+    //
+    // Like ptr_read, but if T has a non-trivial Duplicate impl (i.e. T is an
+    // aggregate / struct / enum, not a primitive), emit a call to T::duplicate
+    // on the bitwise-loaded slot. The bitwise temp itself is NOT registered
+    // for drop — its inner refcounted handles continue to be owned by the
+    // caller-side slot, while the duplicated result has its own bumped
+    // refcounts. This is the codegen-level fix for the Shared/HashMap/List
+    // get aliasing class (phase24n).
+    //
+    // For primitive T (i1/i8/i16/i32/i64/i128/f32/f64/ptr) the result is
+    // identical to ptr_read — no duplicate call is emitted.
+    if (intrinsic_name == "ptr_read_clone") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string ptr_type = last_expr_type_;
+
+            if (ptr_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + ptr + " to ptr");
+                ptr = conv;
+            }
+
+            std::string elem_type = resolve_ptr_elem_type(call, 0);
+
+            // 1. Bitwise load (current ptr_read behavior)
+            std::string raw = fresh_reg();
+            emit_line("  " + raw + " = load " + elem_type + ", ptr " + ptr);
+            last_expr_type_ = elem_type;
+
+            // 2. If T is a primitive LLVM type, duplicate is identity — return
+            //    the bitwise load directly.
+            //    Primitives covered: i1/i8/i16/i32/i64/i128/f32/f64/ptr.
+            auto is_primitive_llvm = [](const std::string& t) -> bool {
+                return t == "i1" || t == "i8" || t == "i16" || t == "i32" || t == "i64" ||
+                       t == "i128" || t == "f32" || t == "f64" || t == "ptr" || t == "void";
+            };
+            if (is_primitive_llvm(elem_type)) {
+                return raw;
+            }
+
+            // 3. T is an aggregate (struct/enum). Look up its Duplicate impl
+            //    via mangle_impl_method. Strip the LLVM "%struct." or "%enum."
+            //    prefix to recover the type's mangled name.
+            std::string type_name = elem_type;
+            if (type_name.size() > 8 && type_name.substr(0, 8) == "%struct.") {
+                type_name = type_name.substr(8);
+            } else if (type_name.size() > 6 && type_name.substr(0, 6) == "%enum.") {
+                type_name = type_name.substr(6);
+            } else {
+                // Unrecognized aggregate form — fall back to bitwise read.
+                // (Tuples, arrays, etc. — these don't have nested refcounted
+                // handles in practice; bitwise is fine.)
+                return raw;
+            }
+
+            // 4a. Detect whether T actually has a Duplicate impl available.
+            //     Three sources:
+            //       (i)   @derive(Duplicate) / @auto(duplicate) on the struct
+            //             or enum decl (`struct_decls_` / `pending_generic_structs_`
+            //             / pending_generic_enums_).
+            //       (ii)  Manual `impl[T] Duplicate for X[T]` in
+            //             `pending_generic_impls_` (Shared, Heap, Box, Rc, ...).
+            //       (iii) Library type whose Duplicate is auto-derived at
+            //             instantiation time via `gen_derive_duplicate_instantiation`
+            //             (covered by case (i) on the base struct decl).
+            //
+            //     If none of these are present, T does NOT support
+            //     duplicate() — fall back to bitwise read. This is correct
+            //     for pure POD aggregates (e.g. CQualifiers) which do not
+            //     contain refcounted handles and thus do not need a clone.
+            auto has_duplicate_decoration = [](const auto& decorators) -> bool {
+                for (const auto& deco : decorators) {
+                    if (deco.name != "derive" && deco.name != "auto") {
+                        continue;
+                    }
+                    for (const auto& arg : deco.args) {
+                        if (arg->template is<parser::IdentExpr>()) {
+                            const auto& name = arg->template as<parser::IdentExpr>().name;
+                            if (name == "Duplicate" || name == "Copy" ||
+                                name == "duplicate") {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            };
+
+            // Strip the generic instantiation suffix to get the base type
+            // name for impl/decorator lookup.
+            std::string base_type_for_lookup = type_name;
+            std::string type_arg_for_lookup;
+            auto dunder_split = type_name.find("__");
+            if (dunder_split != std::string::npos) {
+                base_type_for_lookup = type_name.substr(0, dunder_split);
+                type_arg_for_lookup = type_name.substr(dunder_split + 2);
+            }
+
+            bool has_duplicate_impl = false;
+
+            // Check struct decls (local + library generic).
+            auto sd_it = struct_decls_.find(base_type_for_lookup);
+            if (sd_it != struct_decls_.end() && sd_it->second) {
+                if (has_duplicate_decoration(sd_it->second->decorators)) {
+                    has_duplicate_impl = true;
+                }
+            }
+            if (!has_duplicate_impl) {
+                auto pgs_it = pending_generic_structs_.find(base_type_for_lookup);
+                if (pgs_it != pending_generic_structs_.end() && pgs_it->second) {
+                    if (has_duplicate_decoration(pgs_it->second->decorators)) {
+                        has_duplicate_impl = true;
+                    }
+                }
+            }
+
+            // Check enum decls (local + library generic).
+            if (!has_duplicate_impl) {
+                auto pge_it = pending_generic_enums_.find(base_type_for_lookup);
+                if (pge_it != pending_generic_enums_.end() && pge_it->second) {
+                    if (has_duplicate_decoration(pge_it->second->decorators)) {
+                        has_duplicate_impl = true;
+                    }
+                }
+            }
+
+            // Check manual `impl Duplicate for X[T]` in
+            // pending_generic_impls_ / pending_generic_impls_all_.
+            if (!has_duplicate_impl) {
+                auto chk_impl = [&](const parser::ImplDecl& impl) -> bool {
+                    for (const auto& m : impl.methods) {
+                        if (m.name == "duplicate") {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                auto pi_it = pending_generic_impls_.find(base_type_for_lookup);
+                if (pi_it != pending_generic_impls_.end() && pi_it->second &&
+                    chk_impl(*pi_it->second)) {
+                    has_duplicate_impl = true;
+                }
+                if (!has_duplicate_impl) {
+                    auto pia_it = pending_generic_impls_all_.find(base_type_for_lookup);
+                    if (pia_it != pending_generic_impls_all_.end()) {
+                        for (const parser::ImplDecl* alt : pia_it->second) {
+                            if (alt && chk_impl(*alt)) {
+                                has_duplicate_impl = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!has_duplicate_impl) {
+                // T is a pure POD aggregate — bitwise read is correct.
+                return raw;
+            }
+
+            std::string dup_func = "@" + mangle_impl_method(type_name, "duplicate");
+
+            // 4a-bis. For non-generic local/library structs and enums with
+            //     @derive(Duplicate) / @auto(duplicate), drive the derive
+            //     emitter directly — but ONLY if the function isn't already
+            //     generated. The emitter is idempotent
+            //     (`generated_functions_` guards prevent double emission)
+            //     and generates the duplicate function into
+            //     `type_defs_buffer_`. This is necessary because
+            //     `gen_struct_decl` / `gen_enum_decl` skip the derive
+            //     emitters when the type was pre-registered by
+            //     `runtime_modules.cpp` (a common path for library types).
+            if (generated_functions_.count(dup_func) == 0 &&
+                sd_it != struct_decls_.end() && sd_it->second &&
+                has_duplicate_decoration(sd_it->second->decorators)) {
+                gen_derive_duplicate_struct(*sd_it->second);
+            }
+
+            // 4. Queue generation of T::duplicate so the symbol resolves at
+            //    link time. Two cases to handle:
+            //
+            //    (a) Generic library type with manual `impl[T] Duplicate for
+            //        Foo[T]` (e.g. Shared, Heap, Box) — find the impl in
+            //        `pending_generic_impls_` keyed by base type name and
+            //        push a PendingImplMethod for the `duplicate` method
+            //        with type_subs for the generic param.
+            //
+            //    (b) Local @derive(Duplicate) / @auto(duplicate) struct or
+            //        enum — `gen_derive_duplicate_struct` /
+            //        `gen_derive_duplicate_instantiation` is wired through
+            //        the regular dispatch path; raw IR call sites still need
+            //        the function emitted, so we defer to the recovery
+            //        verify-and-recover loop in `runtime_modules_library.cpp`
+            //        for those (no extra work here).
+            //
+            // The generated function is what consumes the ptr argument we
+            // pass below.
+            {
+                // Strip method-level type suffix from name to extract base
+                // type. Pattern: "Shared__Inner" -> base "Shared", arg "Inner".
+                std::string base_type = type_name;
+                std::string type_arg_str;
+                auto dunder = type_name.find("__");
+                if (dunder != std::string::npos) {
+                    base_type = type_name.substr(0, dunder);
+                    type_arg_str = type_name.substr(dunder + 2);
+                }
+
+                // Look for a generic impl block keyed by base type.
+                auto impl_it = pending_generic_impls_.find(base_type);
+                if (impl_it != pending_generic_impls_.end()) {
+                    const auto& impl_block = *impl_it->second;
+                    // Find the duplicate method in the impl block.
+                    const parser::FuncDecl* dup_method = nullptr;
+                    for (const auto& m : impl_block.methods) {
+                        if (m.name == "duplicate") {
+                            dup_method = &m;
+                            break;
+                        }
+                    }
+                    // Also check pending_generic_impls_all_ for additional
+                    // impl blocks of the same base type (e.g. impl Drop AND
+                    // impl Duplicate are stored separately).
+                    if (!dup_method) {
+                        auto all_it = pending_generic_impls_all_.find(base_type);
+                        if (all_it != pending_generic_impls_all_.end()) {
+                            for (const parser::ImplDecl* alt_impl : all_it->second) {
+                                for (const auto& m : alt_impl->methods) {
+                                    if (m.name == "duplicate") {
+                                        dup_method = &m;
+                                        break;
+                                    }
+                                }
+                                if (dup_method) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (dup_method) {
+                        std::string mangled_method =
+                            mangle_impl_method(type_name, "duplicate");
+                        if (generated_impl_methods_.count(mangled_method) == 0) {
+                            // Build type_subs from the type arg suffix.
+                            // Recover a TypePtr from the mangled type-arg
+                            // string: handles primitives directly and falls
+                            // back to a NamedType for aggregates. Sufficient
+                            // for the duplicate dispatch — the actual codegen
+                            // re-resolves any nested generics.
+                            std::unordered_map<std::string, types::TypePtr> type_subs;
+                            if (impl_block.generics.size() == 1 && !type_arg_str.empty()) {
+                                types::TypePtr type_arg;
+                                if (type_arg_str == "I8")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::I8);
+                                else if (type_arg_str == "I16")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::I16);
+                                else if (type_arg_str == "I32")
+                                    type_arg = types::make_i32();
+                                else if (type_arg_str == "I64")
+                                    type_arg = types::make_i64();
+                                else if (type_arg_str == "U8")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::U8);
+                                else if (type_arg_str == "U16")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::U16);
+                                else if (type_arg_str == "U32")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::U32);
+                                else if (type_arg_str == "U64")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::U64);
+                                else if (type_arg_str == "F32")
+                                    type_arg = types::make_primitive(types::PrimitiveKind::F32);
+                                else if (type_arg_str == "F64")
+                                    type_arg = types::make_f64();
+                                else if (type_arg_str == "Bool")
+                                    type_arg = types::make_bool();
+                                else if (type_arg_str == "Str")
+                                    type_arg = types::make_str();
+                                else {
+                                    // Aggregate — synthesize a NamedType.
+                                    auto t = std::make_shared<types::Type>();
+                                    types::NamedType named;
+                                    named.name = type_arg_str;
+                                    t->kind = std::move(named);
+                                    type_arg = t;
+                                }
+                                if (type_arg) {
+                                    type_subs[impl_block.generics[0].name] = type_arg;
+                                }
+                            }
+                            pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                type_name, "duplicate", type_subs, base_type, "",
+                                /*is_library_type=*/true});
+                            generated_impl_methods_.insert(mangled_method);
+                        }
+                    }
+                }
+            }
+
+            // 5. Spill bitwise load to a temp alloca so we can pass it as ptr
+            //    to T::duplicate(ptr).  This temp is deliberately NOT
+            //    registered for drop — it's a transient bitwise alias whose
+            //    inner refcounted handles still belong to the source slot.
+            std::string spill = fresh_reg();
+            emit_line("  " + spill + " = alloca " + elem_type);
+            emit_line("  store " + elem_type + " " + raw + ", ptr " + spill);
+
+            // 6. Call T::duplicate(spill) — refcount-bumps every nested handle.
+            std::string dup_result = fresh_reg();
+            emit_line("  " + dup_result + " = call " + elem_type + " " + dup_func + "(ptr " +
+                      spill + ")");
+
+            // 7. Return the duplicated result. last_expr_type_ already set.
+            return dup_result;
         }
         return "0";
     }

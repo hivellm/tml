@@ -252,7 +252,7 @@ impl[K, V] HashMap[K, V] {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) {
                     let val_ptr: *V = (entries_addr + h * esz + 8) as *V
-                    return lowlevel { ptr_read[V](val_ptr) }
+                    return lowlevel { ptr_read_clone[V](val_ptr) }
                 }
             }
             h = (h + 1) & mask
@@ -288,7 +288,7 @@ impl[K, V] HashMap[K, V] {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) {
                     let val_ptr: *V = (entries_addr + h * esz + 8) as *V
-                    let v: V = lowlevel { ptr_read[V](val_ptr) }
+                    let v: V = lowlevel { ptr_read_clone[V](val_ptr) }
                     return Just(v)
                 }
             }
