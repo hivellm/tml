@@ -11,6 +11,7 @@ TML_MODULE("codegen_x86")
 #include "version_generated.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <mutex>
@@ -185,6 +186,54 @@ static void run_on_large_stack(std::function<void()> fn, std::size_t /*stack_byt
 }
 #endif
 
+// ============================================================================
+// IR verification policy (phase25b)
+// ============================================================================
+//
+// The LLVM parser only checks syntax/type well-formedness; the verifier
+// enforces the structural rules (dominance, terminators, PHI shape, attribute
+// combinations) that, when violated, make the optimizer and codegen produce
+// undefined behavior. Invalid IR is ALWAYS a TML codegen bug, so verification
+// failure is a hard error. TML_NO_VERIFY_IR=1 demotes it to a warning — an
+// escape hatch for bisecting only, never for shipping.
+
+/// True when TML_NO_VERIFY_IR=1 demotes verifier failures to warnings.
+static bool verify_ir_demoted() {
+    static const bool demoted = [] {
+        const char* v = std::getenv("TML_NO_VERIFY_IR");
+        return v != nullptr && v[0] == '1' && v[1] == '\0';
+    }();
+    return demoted;
+}
+
+/// Runs the LLVM verifier on `module`. Returns true when compilation may
+/// proceed. On failure under the hard-error policy, fills
+/// `result.error_message` (K002) and returns false; the caller must dispose
+/// its LLVM resources and return `result`.
+static bool verify_module_or_fail(LLVMModuleRef module, const char* phase,
+                                  LLVMCompileResult& result) {
+    char* error = nullptr;
+    if (LLVMVerifyModule(module, LLVMReturnStatusAction, &error) != 0) {
+        std::string msg = consume_error_message(error);
+        if (verify_ir_demoted()) {
+            result.warnings.push_back(std::string("[K002] Module verification failed (") + phase +
+                                      ", demoted to warning by TML_NO_VERIFY_IR=1): " + msg);
+            return true;
+        }
+        result.error_message =
+            std::string("[K002] Module verification failed (") + phase + "): " + msg +
+            "\n\nThe generated LLVM IR parsed successfully but violates LLVM's structural\n"
+            "rules — compiling it would be undefined behavior. This is always a TML\n"
+            "compiler codegen bug. Inspect with `--emit-ir` and report it. To bisect,\n"
+            "TML_NO_VERIFY_IR=1 temporarily demotes this error to a warning.";
+        return false;
+    }
+    if (error) {
+        LLVMDisposeMessage(error);
+    }
+    return true;
+}
+
 } // namespace
 
 auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::path& output_path,
@@ -223,6 +272,13 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
             "  • Incorrect struct/enum field layouts or sizes\n" +
             "  • Wrong calling conventions or parameter counts\n" +
             "  • Invalid aggregate type operations\n";
+        return result;
+    }
+
+    // Verify BEFORE optimization: invalid IR fed to LLVMRunPasses is undefined
+    // behavior (and a suspected source of X003-class crashes).
+    if (!verify_module_or_fail(module, "pre-optimization", result)) {
+        LLVMDisposeModule(module);
         return result;
     }
 
@@ -328,13 +384,14 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
         LLVMDisposePassBuilderOptions(pass_opts);
     }
 
-    // Verify the module
-    error = nullptr;
-    if (LLVMVerifyModule(module, LLVMReturnStatusAction, &error) != 0) {
-        result.warnings.push_back("[K002] Module verification warning: " +
-                                  consume_error_message(error));
-    } else if (error) {
-        LLVMDisposeMessage(error);
+    // Verify AFTER optimization: passes running on valid input must yield
+    // valid output; a failure here is an optimizer-interaction bug. Hard
+    // error (phase25b) — was a demoted K002 warning before.
+    if (options.optimization_level > 0 &&
+        !verify_module_or_fail(module, "post-optimization", result)) {
+        LLVMDisposeTargetMachine(target_machine);
+        LLVMDisposeModule(module);
+        return result;
     }
 
     // Emit object file with retry on Windows file locking errors.
@@ -448,6 +505,13 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
         return result;
     }
 
+    // Verify BEFORE optimization (phase25b). This path (in-process linking)
+    // previously never ran the verifier at all.
+    if (!verify_module_or_fail(module, "pre-optimization", result)) {
+        LLVMDisposeModule(module);
+        return result;
+    }
+
     // Determine target triple
     std::string target_triple = options.target_triple;
     if (target_triple.empty()) {
@@ -525,6 +589,13 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
         const char* passes = get_opt_level_string(options.optimization_level);
         LLVMRunPasses(module, passes, target_machine, pass_opts);
         LLVMDisposePassBuilderOptions(pass_opts);
+
+        // Verify AFTER optimization (phase25b) — see compile_ir_to_object.
+        if (!verify_module_or_fail(module, "post-optimization", result)) {
+            LLVMDisposeTargetMachine(target_machine);
+            LLVMDisposeModule(module);
+            return result;
+        }
     }
 
     // Emit to memory buffer instead of file

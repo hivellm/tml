@@ -1,0 +1,47 @@
+# Known standing test failures (ERA 0 stabilization baseline — 2026-07-15, v0.3.54)
+#
+# Purpose: the line between "pre-existing debt" and "new regression". A suite
+# listed here failing is KNOWN (tracked by the ERA 0 tasks referenced below);
+# any failure NOT on this list is a regression and blocks the push/merge.
+# Shrink this list as phases 26-27 land; never grow it silently — adding a
+# line requires a task reference.
+#
+# Sources: .rulebook/PLANS.md standing-failures list (pre-pivot),
+# docs/analysis/tml-table-analysis/07-determinism-baseline.md (measured),
+# .rulebook/tasks/phase27a (fresh specimens).
+#
+# Format: <suite-or-target> | <error-class> | <owning-task>
+
+# --- K001 / K002 invalid-IR class (owner: phase27a) ---
+std/collections/btreeset        | K001 | phase27a_codegen-k001-root-cause
+std/collections/btreemap        | K001 | phase27a_codegen-k001-root-cause
+std/collections/arraylist       | K001 | phase27a_codegen-k001-root-cause
+compiler/hir_types              | K001 | phase27a_codegen-k001-root-cause
+compiler/infer_differential     | K001 | phase27a_codegen-k001-root-cause
+compiler/c_preprocessor         | K001 | phase27a_codegen-k001-root-cause
+compiler/c_frontend             | K001 | phase27a_codegen-k001-root-cause (Maybe[Heap[CBlockItem]])
+
+# --- X002 timeout / X003 crash class (owner: phase27b) ---
+compiler/builtins_imports       | X002 | phase27b_codegen-x002-x003-hangs
+compiler/slice_split_pred       | X002 | phase27b_codegen-x002-x003-hangs
+compiler/let_patterns           | X002 | phase27b_codegen-x002-x003-hangs
+other/closure_codegen           | X003/X002 | phase27b_codegen-x002-x003-hangs
+core/any                        | T056 | phase27b_codegen-x002-x003-hangs (rider item 1.5)
+
+# --- Determinism corpus floors below 100% (owner: phase26) ---
+essential.c                     | SIGSEGV 0/100 | phase26b_memmodel-implementation
+c_essential_repro               | SIGSEGV 86/100 | phase26b_memmodel-implementation
+
+# --- Verifier hard-error fallout (owner: phase27a) ---
+# Measured 2026-07-15 post-promotion: 209 compiler suites + determinism +
+# core/alloc + std/json recompiled with --no-cache under the hard-error
+# verifier — ZERO K002 occurrences. No suites to list. (Evidence: phase25b
+# fallout run; any future K002 is a regression, full stop.)
+
+# --- Flaky test infrastructure (not codegen) ---
+# Coordinator can schedule the SAME suite twice in one batch; the duplicate
+# deletes the .obj the first link needs -> spurious N001 "could not open
+# ...obj". Seen on compiler/when_block_body during the phase25b fallout run
+# (suite passes alone); matches the "parallel-build cache race" flakiness
+# noted in v0.3.45 patch notes.
+compiler/* (any single suite)    | N001-race | test-coordinator duplicate scheduling (no task yet — file if recurrence blocks a gate)

@@ -35,6 +35,29 @@ entry:
 }
 )";
     }
+
+    /// Parses fine but violates SSA dominance (%v does not dominate its use
+    /// in %c) — only the verifier rejects it. Exercises the phase25b
+    /// hard-error policy; before it, this IR sailed into codegen as UB.
+    static std::string verifier_invalid_ir() {
+        return R"(
+target triple = "x86_64-pc-windows-msvc"
+target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+
+define i32 @main() {
+entry:
+    br i1 true, label %a, label %b
+a:
+    %v = add i32 1, 2
+    br label %c
+b:
+    br label %c
+c:
+    %r = add i32 %v, 1
+    ret i32 %r
+}
+)";
+    }
 };
 
 // ============================================================================
@@ -99,6 +122,51 @@ TEST_F(LLVMBackendTest, CompileInvalidIr) {
     auto result = backend.compile_ir_to_object("this is not valid LLVM IR", output, opts);
     EXPECT_FALSE(result.success);
     EXPECT_FALSE(result.error_message.empty());
+}
+
+// ============================================================================
+// IR verifier hard-error policy (phase25b)
+// ============================================================================
+// Note: the TML_NO_VERIFY_IR escape hatch is intentionally NOT tested here —
+// the demotion flag is read once and cached in a static, so mutating the
+// environment mid-process would poison every subsequent test in this binary.
+
+TEST_F(LLVMBackendTest, VerifierRejectsInvalidIrToObject) {
+    LLVMBackend backend;
+    ASSERT_TRUE(backend.initialize());
+
+    auto output = temp_dir_ / "verifier_bad.obj";
+    LLVMCompileOptions opts;
+
+    auto result = backend.compile_ir_to_object(verifier_invalid_ir(), output, opts);
+    EXPECT_FALSE(result.success);
+    EXPECT_NE(result.error_message.find("[K002]"), std::string::npos) << result.error_message;
+    EXPECT_NE(result.error_message.find("pre-optimization"), std::string::npos)
+        << result.error_message;
+    EXPECT_FALSE(fs::exists(output));
+}
+
+TEST_F(LLVMBackendTest, VerifierRejectsInvalidIrToBuffer) {
+    LLVMBackend backend;
+    ASSERT_TRUE(backend.initialize());
+
+    LLVMCompileOptions opts;
+
+    auto result = backend.compile_ir_to_buffer(verifier_invalid_ir(), opts);
+    EXPECT_FALSE(result.success);
+    EXPECT_NE(result.error_message.find("[K002]"), std::string::npos) << result.error_message;
+    EXPECT_TRUE(result.object_data.empty());
+}
+
+TEST_F(LLVMBackendTest, VerifierAcceptsValidIrToBuffer) {
+    LLVMBackend backend;
+    ASSERT_TRUE(backend.initialize());
+
+    LLVMCompileOptions opts;
+
+    auto result = backend.compile_ir_to_buffer(minimal_ir(), opts);
+    EXPECT_TRUE(result.success) << result.error_message;
+    EXPECT_FALSE(result.object_data.empty());
 }
 
 TEST_F(LLVMBackendTest, CompileWithOptimization) {

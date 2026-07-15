@@ -39,24 +39,35 @@ including the generated IR from `--emit-ir`.
 )EX"},
 
         {"K002", R"EX(
-Module verification warning [K002]
+Module verification failed [K002]
 
-The LLVM module verifier found a potential issue in the generated IR. This is
-a warning, not a fatal error, but it may indicate incorrect or unsafe code
-generation.
+The LLVM module verifier rejected the generated IR. The IR parsed successfully
+(so it is not a K001), but it violates LLVM's structural rules — compiling or
+executing it would be undefined behavior. This is always an internal TML
+compiler bug.
 
-The verifier checks for structural correctness of the IR — things like:
+The verifier checks structural correctness of the IR — things like:
 - All basic blocks must end with a terminator instruction
-- All values must be defined before use
+- All values must be defined before use (dominance)
 - Type consistency across instructions
+- Well-formed PHI nodes and attribute combinations
 
-This warning is emitted when the compiler detects a verifiable issue but
-can still proceed. However, the resulting binary may have undefined behavior.
+Since v0.3.54 this is a HARD ERROR on every emission path (object file,
+in-process buffer, and JIT), both before and after the optimization pipeline.
+The error message names the phase ("pre-optimization" / "post-optimization" /
+"jit").
 
-How to fix:
+How to diagnose:
 
-Report this as a compiler bug with the output of:
-    tml build myfile.tml --emit-ir
+    tml build myfile.tml --emit-ir    # Inspect the generated IR
+    tml explain K002                  # This explanation
+
+Escape hatch (bisection ONLY — the produced binary may have undefined
+behavior):
+
+    TML_NO_VERIFY_IR=1 tml build myfile.tml
+
+Report this as a compiler bug with the `--emit-ir` output.
 )EX"},
 
         {"K003", R"EX(

@@ -14,9 +14,12 @@ TML_MODULE("codegen_x86")
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#include <cstdlib>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
@@ -157,6 +160,29 @@ auto JitEngine::addModule(const std::string& ir_text) -> JitResult {
         result.success = false;
         result.error = "[J002] IR parse error: " + std::string(diag.getMessage());
         return result;
+    }
+
+    // Verify before handing the module to the JIT (phase25b): executing
+    // verifier-invalid IR is undefined behavior. Hard error unless the
+    // TML_NO_VERIFY_IR=1 bisection escape hatch is set (same policy as the
+    // object-emission paths in llvm_backend.cpp).
+    {
+        std::string verifier_msg;
+        llvm::raw_string_ostream verifier_os(verifier_msg);
+        if (llvm::verifyModule(*mod, &verifier_os)) {
+            const char* demote = std::getenv("TML_NO_VERIFY_IR");
+            if (demote == nullptr || demote[0] != '1' || demote[1] != '\0') {
+                result.success = false;
+                result.error = "[K002] Module verification failed (jit): " + verifier_os.str() +
+                               "\nThe generated LLVM IR parsed but violates LLVM's structural "
+                               "rules — a TML codegen bug. TML_NO_VERIFY_IR=1 demotes this to "
+                               "a warning for bisection.";
+                return result;
+            }
+            fprintf(stderr,
+                    "[K002] Module verification failed (jit, demoted by TML_NO_VERIFY_IR=1): %s\n",
+                    verifier_os.str().c_str());
+        }
     }
 
     // Override the module's data layout to match the JIT's host target.
