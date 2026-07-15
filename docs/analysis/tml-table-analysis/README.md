@@ -93,3 +93,4 @@ today.
 | F-020 | Pass-by-value MUST-BORROW (phase24b class alive): BigInt, str::join, HTTP/2 — one-token `ref` fixes | High | High |
 | F-021 | Collections have no borrow accessor; `get` returns owned deep clone (language gap — the zero-cost blocker) | High | Critical |
 | F-022 | `List`/`HashMap` `destroy` skip per-element Drop → leak every handle (mirror of copy hazard) | High | High |
+| F-023 | `Shared`/`Sync` `try_unwrap` free ignoring weak refs → UAF (distinct class, fixable now) | High | High |

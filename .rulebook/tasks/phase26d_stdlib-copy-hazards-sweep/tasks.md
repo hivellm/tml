@@ -15,6 +15,9 @@
 ### F-018 — Sync has no safe read accessor
 - [ ] 1.3 Port `get_ref(this) -> ref T` and `get_clone(this) -> T where T: Duplicate` from `Shared` (`lib/core/src/alloc/shared.tml:177,207`) to `Sync[T]` (`lib/core/src/alloc/sync.tml`); document `get`'s copy hazard the same way `Shared::get` is documented. IR-verify `get_ref` returns a true borrow and `get_clone` has no dropping temp
 
+### F-023 — try_unwrap frees ignoring weak refs
+- [ ] 1.3b `Shared::try_unwrap` (`shared.tml:285-295`) and `Sync::try_unwrap` (`sync.tml:260`): `is_unique()` checks only `strong_count==1` and the free ignores `weak_count`, dangling any outstanding `SharedWeak`/`SyncWeak`. Fix: on strong→0 move the value out + decrement strong, and `mem_free` only when `weak_count` also reaches 0 (mirror `decrement_count`). Regression: downgrade → try_unwrap → weak.upgrade()/drop must not touch freed memory
+
 ### F-020 — pass-by-value MUST-BORROW → `ref` migration (one-token, idiom-matching)
 - [ ] 1.4 BigInt operator cluster (`lib/std/src/bigint.tml`): `other: BigInt` → `other: ref BigInt` at add:265, sub:290, mul:300, div:351, rem:357, divmod:363, gcd:566, mod_pow:614 (exp+modulus), mod_inverse:638, bitand:824, bitor:841, bitxor:862. Bodies already borrow internally — verify no `.duplicate()` needed
 - [ ] 1.5 `str::join`/`concat_all` (`lib/core/src/str/convert.tml:130,200`): `parts: List[Str]` → `ref List[Str]`

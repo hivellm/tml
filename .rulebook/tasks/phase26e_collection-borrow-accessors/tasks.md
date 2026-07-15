@@ -15,7 +15,8 @@
 - [ ] 1.4 Mut accessors: implement the currently-dead `list_get_mut` intrinsic (referenced by `IndexMut::index_mut` in `behaviors.tml` but ABSENT from `compiler/`), then `HashMap::get_mut`, etc.
 - [ ] 1.5 Borrowing iterators: `iter_ref`/`values_ref` yielding `ref T`; make the existing by-value iterators either move-out (consuming) or delegate to the ref form so the F-019 asymmetry is resolved coherently
 - [ ] 1.6 Migrate hot stdlib call sites (List sort/dedup/contains, BTreeMap shift, HashMap duplicate/to_string) from `get`(clone) to `get_ref` — IR-verify zero alloc on `List[Str]` sort and `HashMap[Str,Str]` iteration
-- [ ] 1.7 Benchmark vs Rust: `HashMap::get`/`List::get`/iteration on handle-bearing elements must emit zero heap traffic (match Rust's `&T` return); record in a perf doc
+- [ ] 1.7 `Text` borrow view: `Text::as_str_ref -> ref str`-style borrow so an SSO `Text` can be read as a string without a fresh alloc+copy (F-08 minor: `Text.as_str` currently allocates; `Text.concat` double-copies inline results, std/text.tml)
+- [ ] 1.8 Benchmark vs Rust: `HashMap::get`/`List::get`/iteration on handle-bearing elements must emit zero heap traffic (match Rust's `&T` return); record in a perf doc
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 2.1 Update or create documentation covering the implementation

@@ -184,6 +184,24 @@ drop model sound; a borrowing accessor needs (1) interior-pointer codegen into t
 erased buffer, and (2) borrow-checker lifetimes binding the reference to the
 container. ADR-009 flagged this as the "largest blast radius, deferred" alternative.
 
+## F-023 — `try_unwrap` frees the allocation ignoring outstanding weak refs → UAF (distinct class, fixable now)
+
+**Confidence: High. Impact: High. INDEPENDENT of the model fix.**
+
+`Shared::try_unwrap` (`shared.tml:285-295`) and `Sync::try_unwrap` (`sync.tml:260`)
+gate on `is_unique()`, which is `strong_count() == 1` and **does not check
+`weak_count`** (`shared.tml:244-246`). When unique-by-strong but weak refs exist
+(from `downgrade`, `shared.tml:399`), `try_unwrap` `mem_free`s the whole
+`SharedInner` — the `SharedWeak`/`SyncWeak` still point at it, so their `upgrade`
+(`:444`) and `drop` (`:497`) read/write freed memory → use-after-free / heap
+corruption. Rust's `Rc::try_unwrap` drops only the value and keeps the box alive
+until weak reaches 0.
+
+This is a **different class from F-013** (free-ignoring-weak, not copy-not-move) and
+is library-fixable: on `strong == 1`, move the value out + decrement strong, and free
+the allocation only when `weak_count` also hits 0 (mirror the `decrement_count`
+logic). Same for `Sync`.
+
 ## F-022 — `List`/`HashMap` `destroy` don't run per-element Drop → leak (mirror of the copy hazard)
 
 **Confidence: High. Impact: High.**
@@ -220,7 +238,18 @@ The findings split cleanly by dependency on the ADR-009 model fix:
 - F-017 broken move-outs (`Arc::try_unwrap`, `AnyValue::into_inner`) — add null/forget.
 - F-018 `Sync` — port `get_ref`/`get_clone`.
 - F-020 pass-by-value → one-token `ref` migration (BigInt, str::join, HTTP/2, etc.).
+- F-023 `Shared`/`Sync` `try_unwrap` — free only when weak_count also 0.
 → **New task `phase26d_stdlib-copy-hazards-sweep`** (created; runs in parallel with 26b).
+
+Minor / lower-priority items surfaced by the audit, folded in rather than tasked
+separately:
+- **RefCell `replace`/`replace_with`/`swap`** (`core/cell/ref_cell.tml:105-166`) do
+  `let old: T = this.value; this.value = new` — instances of F-015 (copy-not-move
+  aliasing), closed generically by the model fix; added to phase26b step 4.5 as
+  verification sites, not a separate task.
+- **`Text.concat` double-copies for inline results** and **`Text.as_str` can't
+  borrow** (`std/text.tml`) — perf only; folded into phase26e's borrow-accessor
+  family (a `Text` that can hand out a `&str` view).
 
 **Requires the model fix (ADR-009 B3, phase26b step 4 = drop-flag elaboration):**
 - F-015 (root), F-016 read-out copies, F-019 iterator asymmetry, F-022 destroy leaks —
