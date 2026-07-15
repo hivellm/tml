@@ -1,0 +1,140 @@
+//! Protocol Buffers type definitions: field tag, field types, and error types.
+
+use std::protobuf::wire::{WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_FIXED32}
+
+/// A decoded protobuf field tag containing the field number and wire type.
+pub type ProtoTag {
+    field_num: I64,
+    wire_type: I64
+}
+
+/// Protobuf field types corresponding to .proto type declarations.
+pub enum FieldType {
+    /// 64-bit IEEE 754 floating point (wire type 1: FIXED64)
+    Double,
+    /// 32-bit IEEE 754 floating point (wire type 5: FIXED32)
+    Float,
+    /// Signed 32-bit integer, variable-length encoding (wire type 0: VARINT)
+    Int32,
+    /// Signed 64-bit integer, variable-length encoding (wire type 0: VARINT)
+    Int64,
+    /// Unsigned 32-bit integer, variable-length encoding (wire type 0: VARINT)
+    Uint32,
+    /// Unsigned 64-bit integer, variable-length encoding (wire type 0: VARINT)
+    Uint64,
+    /// Signed 32-bit integer, zigzag-encoded varint (wire type 0: VARINT)
+    Sint32,
+    /// Signed 64-bit integer, zigzag-encoded varint (wire type 0: VARINT)
+    Sint64,
+    /// Unsigned 32-bit integer, always 4 bytes (wire type 5: FIXED32)
+    Fixed32,
+    /// Unsigned 64-bit integer, always 8 bytes (wire type 1: FIXED64)
+    Fixed64,
+    /// Signed 32-bit integer, always 4 bytes (wire type 5: FIXED32)
+    Sfixed32,
+    /// Signed 64-bit integer, always 8 bytes (wire type 1: FIXED64)
+    Sfixed64,
+    /// Boolean, encoded as varint 0 or 1 (wire type 0: VARINT)
+    Bool,
+    /// UTF-8 string, length-delimited (wire type 2: LEN)
+    String,
+    /// Arbitrary byte sequence, length-delimited (wire type 2: LEN)
+    Bytes,
+    /// Enum value, encoded as varint (wire type 0: VARINT)
+    Enum,
+    /// Embedded message, length-delimited (wire type 2: LEN)
+    Message
+}
+
+/// Returns the wire type for a given field type.
+pub func field_type_wire_type(ft: FieldType) -> I64 {
+    when ft {
+        FieldType::Double => WIRE_FIXED64,
+        FieldType::Float => WIRE_FIXED32,
+        FieldType::Int32 => WIRE_VARINT,
+        FieldType::Int64 => WIRE_VARINT,
+        FieldType::Uint32 => WIRE_VARINT,
+        FieldType::Uint64 => WIRE_VARINT,
+        FieldType::Sint32 => WIRE_VARINT,
+        FieldType::Sint64 => WIRE_VARINT,
+        FieldType::Fixed32 => WIRE_FIXED32,
+        FieldType::Fixed64 => WIRE_FIXED64,
+        FieldType::Sfixed32 => WIRE_FIXED32,
+        FieldType::Sfixed64 => WIRE_FIXED64,
+        FieldType::Bool => WIRE_VARINT,
+        FieldType::String => WIRE_LEN,
+        FieldType::Bytes => WIRE_LEN,
+        FieldType::Enum => WIRE_VARINT,
+        FieldType::Message => WIRE_LEN,
+    }
+}
+
+/// Returns the default I64 value for a field type.
+/// Numeric types default to 0, bool defaults to 0 (false).
+pub func field_type_default_i64(ft: FieldType) -> I64 {
+    // All protobuf numeric/bool defaults are 0
+    return 0
+}
+
+// ============================================================================
+// Structured error type
+// ============================================================================
+
+/// Structured errors produced by protobuf decoding.
+///
+/// Every `ProtoReader` method currently returns `Outcome[T, Str]` so that
+/// existing call sites continue to work unchanged. `ProtoError` provides a
+/// discriminated error type for new code and for tooling that wants to pattern
+/// match rather than inspect error strings.
+pub enum ProtoError {
+    /// Reader hit end-of-input before decoding completed.
+    Eof,
+    /// Wire type doesn't match what was expected for the field.
+    InvalidWireType(I64),
+    /// Varint was longer than 10 bytes (impossible per spec).
+    InvalidVarint,
+    /// Fixed-width read went past the reader limit.
+    BufferOverflow,
+    /// Length-prefixed field had a negative length.
+    NegativeLength,
+    /// Bytes did not decode as valid UTF-8 (for string fields).
+    InvalidUtf8,
+    /// Field tag referred to a field number we don't know how to handle.
+    UnexpectedField(I64),
+    /// Fallback for other errors; carries a free-form message.
+    Custom(Str)
+}
+
+impl ProtoError {
+    /// Renders the error as a human-readable string (for logging / Err-to-Str
+    /// interop with the existing `Outcome[T, Str]`-returning reader API).
+    pub func to_string(this) -> Str {
+        when this {
+            ProtoError::Eof              => "unexpected end of input",
+            ProtoError::InvalidWireType(_wt) => "invalid wire type",
+            ProtoError::InvalidVarint    => "varint too long",
+            ProtoError::BufferOverflow   => "not enough bytes",
+            ProtoError::NegativeLength   => "negative length",
+            ProtoError::InvalidUtf8      => "invalid UTF-8",
+            ProtoError::UnexpectedField(_fn) => "unexpected field",
+            ProtoError::Custom(msg)      => msg,
+        }
+    }
+}
+
+/// Converts a legacy `Outcome[T, Str]` into `Outcome[T, ProtoError]`.
+/// Heuristically pattern-matches common error strings produced by
+/// `ProtoReader` so that pre-existing callers can switch to structured
+/// errors without changing the underlying reader implementation.
+pub func proto_error_from_str(msg: Str) -> ProtoError {
+    if msg == "unexpected end of input" {
+        return ProtoError::Eof
+    }
+    if msg == "varint too long" {
+        return ProtoError::InvalidVarint
+    }
+    if msg == "unknown wire type" {
+        return ProtoError::InvalidWireType(-1)
+    }
+    return ProtoError::Custom(msg)
+}

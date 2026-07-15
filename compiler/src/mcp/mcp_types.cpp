@@ -14,8 +14,9 @@ namespace tml::mcp {
 
 auto ServerInfo::to_json() const -> json::JsonValue {
     json::JsonObject obj;
-    obj["name"] = json::JsonValue(name);
-    obj["version"] = json::JsonValue(version);
+    obj.reserve(2);
+    obj.emplace_back("name", json::JsonValue(name));
+    obj.emplace_back("version", json::JsonValue(version));
     return json::JsonValue(std::move(obj));
 }
 
@@ -47,8 +48,9 @@ auto ClientInfo::from_json(const json::JsonValue& json) -> std::optional<ClientI
 
 auto ToolParameter::to_json() const -> json::JsonValue {
     json::JsonObject obj;
-    obj["type"] = json::JsonValue(type);
-    obj["description"] = json::JsonValue(description);
+    obj.reserve(2);
+    obj.emplace_back("type", json::JsonValue(type));
+    obj.emplace_back("description", json::JsonValue(description));
     return json::JsonValue(std::move(obj));
 }
 
@@ -58,29 +60,32 @@ auto ToolParameter::to_json() const -> json::JsonValue {
 
 auto Tool::to_json() const -> json::JsonValue {
     json::JsonObject obj;
-    obj["name"] = json::JsonValue(name);
-    obj["description"] = json::JsonValue(description);
+    obj.reserve(3);
+    obj.emplace_back("name", json::JsonValue(name));
+    obj.emplace_back("description", json::JsonValue(description));
 
     // Build inputSchema
     json::JsonObject schema;
-    schema["type"] = json::JsonValue("object");
+    schema.reserve(3);
+    schema.emplace_back("type", json::JsonValue("object"));
 
     json::JsonObject properties;
+    properties.reserve(parameters.size());
     json::JsonArray required_params;
 
     for (const auto& param : parameters) {
-        properties[param.name] = param.to_json();
+        properties.emplace_back(param.name, param.to_json());
         if (param.required) {
             required_params.push_back(json::JsonValue(param.name));
         }
     }
 
-    schema["properties"] = json::JsonValue(std::move(properties));
+    schema.emplace_back("properties", json::JsonValue(std::move(properties)));
     if (!required_params.empty()) {
-        schema["required"] = json::JsonValue(std::move(required_params));
+        schema.emplace_back("required", json::JsonValue(std::move(required_params)));
     }
 
-    obj["inputSchema"] = json::JsonValue(std::move(schema));
+    obj.emplace_back("inputSchema", json::JsonValue(std::move(schema)));
     return json::JsonValue(std::move(obj));
 }
 
@@ -90,10 +95,11 @@ auto Tool::to_json() const -> json::JsonValue {
 
 auto Resource::to_json() const -> json::JsonValue {
     json::JsonObject obj;
-    obj["uri"] = json::JsonValue(uri);
-    obj["name"] = json::JsonValue(name);
-    obj["description"] = json::JsonValue(description);
-    obj["mimeType"] = json::JsonValue(mime_type);
+    obj.reserve(4);
+    obj.emplace_back("uri", json::JsonValue(uri));
+    obj.emplace_back("name", json::JsonValue(name));
+    obj.emplace_back("description", json::JsonValue(description));
+    obj.emplace_back("mimeType", json::JsonValue(mime_type));
     return json::JsonValue(std::move(obj));
 }
 
@@ -105,15 +111,15 @@ auto ServerCapabilities::to_json() const -> json::JsonValue {
     json::JsonObject obj;
     if (tools) {
         json::JsonObject tools_cap;
-        obj["tools"] = json::JsonValue(std::move(tools_cap));
+        obj.emplace_back("tools", json::JsonValue(std::move(tools_cap)));
     }
     if (resources) {
         json::JsonObject resources_cap;
-        obj["resources"] = json::JsonValue(std::move(resources_cap));
+        obj.emplace_back("resources", json::JsonValue(std::move(resources_cap)));
     }
     if (prompts) {
         json::JsonObject prompts_cap;
-        obj["prompts"] = json::JsonValue(std::move(prompts_cap));
+        obj.emplace_back("prompts", json::JsonValue(std::move(prompts_cap)));
     }
     return json::JsonValue(std::move(obj));
 }
@@ -124,8 +130,9 @@ auto ServerCapabilities::to_json() const -> json::JsonValue {
 
 auto ToolContent::to_json() const -> json::JsonValue {
     json::JsonObject obj;
-    obj["type"] = json::JsonValue(type);
-    obj["text"] = json::JsonValue(text);
+    obj.reserve(2);
+    obj.emplace_back("type", json::JsonValue(type));
+    obj.emplace_back("text", json::JsonValue(text));
     return json::JsonValue(std::move(obj));
 }
 
@@ -135,15 +142,16 @@ auto ToolContent::to_json() const -> json::JsonValue {
 
 auto ToolResult::to_json() const -> json::JsonValue {
     json::JsonObject obj;
+    obj.reserve(2);
 
     json::JsonArray content_arr;
     for (const auto& c : content) {
         content_arr.push_back(c.to_json());
     }
-    obj["content"] = json::JsonValue(std::move(content_arr));
+    obj.emplace_back("content", json::JsonValue(std::move(content_arr)));
 
     if (is_error) {
-        obj["isError"] = json::JsonValue(true);
+        obj.emplace_back("isError", json::JsonValue(true));
     }
 
     return json::JsonValue(std::move(obj));

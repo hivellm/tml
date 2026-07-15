@@ -25,12 +25,15 @@ pub func expand_macros(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken]
                 let name: Str = tok.text
                 // Check blue-paint: if this macro name is in the token's blue set, skip
                 if is_blue_painted(tok, name) > 0 {
-                    result.push(tok)
+                    result.push(dup_pp_token(tok))
                     continue
                 }
                 // Check if name is a defined macro
                 if pp.defines.has(name) {
-                    let def: MacroDef = pp.defines.get(name)
+                    // Deep-clone to detach from HashMap's bitwise alias.
+                    // (phase24m: same Heap-borrow-drop class fix as
+                    // expand_macro_at in directives.tml.)
+                    let def: MacroDef = dup_macro_def(pp.defines.get(name))
                     when def {
                         ObjectLike(body) => {
                             // Paint all body tokens with this macro name
@@ -46,14 +49,14 @@ pub func expand_macros(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken]
                         FunctionLike(fdef) => {
                             // Function-like macros need argument collection
                             // For now, push as-is (full arg collection in next iteration)
-                            result.push(tok)
+                            result.push(dup_pp_token(tok))
                         }
                     }
                 } else {
-                    result.push(tok)
+                    result.push(dup_pp_token(tok))
                 }
             },
-            _ => result.push(tok)
+            _ => result.push(dup_pp_token(tok))
         }
     }
 
@@ -77,18 +80,24 @@ func is_blue_painted(tok: PpToken, name: Str) -> I64 {
 func add_blue_paint(tok: PpToken, name: Str) -> PpToken {
     let new_blue = List[Str]::new(tok.blue_set.len() as I64 + 1)
     let n: I64 = tok.blue_set.len() as I64
-    for i in 0 to n { new_blue.push(tok.blue_set.get(i)) }
-    new_blue.push(name)
-    return PpToken { kind: tok.kind, text: tok.text, file: tok.file, line: tok.line, col: tok.col, blue_set: new_blue }
+    for i in 0 to n { new_blue.push(tok.blue_set.get(i).duplicate()) }
+    new_blue.push(name.duplicate())
+    return PpToken { kind: tok.kind, text: tok.text.duplicate(), file: tok.file.duplicate(), line: tok.line, col: tok.col, blue_set: new_blue }
 }
 
 /// Union two tokens' blue sets into a new token (keeps the first token's other fields).
 func union_blue_sets(target: PpToken, source: PpToken) -> PpToken {
     let n: I64 = source.blue_set.len() as I64
-    if n == 0 { return target }
+    if n == 0 {
+        return PpToken {
+            kind: target.kind, text: target.text.duplicate(),
+            file: target.file.duplicate(), line: target.line, col: target.col,
+            blue_set: List[Str]::new(0 as I64)
+        }
+    }
     let new_blue = List[Str]::new(target.blue_set.len() as I64 + n)
     let tn: I64 = target.blue_set.len() as I64
-    for i in 0 to tn { new_blue.push(target.blue_set.get(i)) }
+    for i in 0 to tn { new_blue.push(target.blue_set.get(i).duplicate()) }
     for i in 0 to n {
         let name: Str = source.blue_set.get(i)
         // Avoid duplicates
@@ -96,9 +105,9 @@ func union_blue_sets(target: PpToken, source: PpToken) -> PpToken {
         for j in 0 to tn {
             if new_blue.get(j) == name { found = 1 }
         }
-        if found == 0 { new_blue.push(name) }
+        if found == 0 { new_blue.push(name.duplicate()) }
     }
-    return PpToken { kind: target.kind, text: target.text, file: target.file, line: target.line, col: target.col, blue_set: new_blue }
+    return PpToken { kind: target.kind, text: target.text.duplicate(), file: target.file.duplicate(), line: target.line, col: target.col, blue_set: new_blue }
 }
 
 // ============================================================================
@@ -126,8 +135,491 @@ pub func paste_tokens(left: PpToken, right: PpToken) -> PpToken {
     if first_char >= 48 and first_char <= 57 {
         kind = PpTokenKind::IntLit
     }
-    // Union blue sets
-    let result: PpToken = pp_token(kind, pasted_text, left.file, left.line, left.col)
+    // Union blue sets. `left.file` is bitwise-aliased with the caller's
+    // token; `pp_token` and `union_blue_sets` deep-clone it. (phase24m.)
+    let result: PpToken = pp_token(kind, pasted_text, left.file.duplicate(), left.line, left.col)
     let r2: PpToken = union_blue_sets(result, left)
     return union_blue_sets(r2, right)
+}
+
+// ============================================================================
+// Function-like macro definition parsing (phase24i)
+// ============================================================================
+
+/// Result of parsing a function-like macro definition body.
+pub type ParsedFuncMacro {
+    params: List[Str],
+    is_variadic: I64,
+    body: List[PpToken]
+}
+
+/// Numeric code for a PpTokenKind. Mirrors `directives::pp_kind_code`
+/// because that function is private to its module.
+func ppk(k: PpTokenKind) -> I64 {
+    when k {
+        Ident => return 0 as I64,
+        IntLit => return 1 as I64,
+        FloatLit => return 2 as I64,
+        CharLit => return 3 as I64,
+        StringLit => return 4 as I64,
+        Punct => return 5 as I64,
+        Newline => return 6 as I64,
+        Whitespace => return 7 as I64,
+        Eof => return 8 as I64
+    }
+}
+
+/// Deep-clone a PpToken's heap-owned Str fields. Without this, the
+/// stored copy aliases the original `text` / `file` pointers; once the
+/// source-side List drops, those pointers dangle and macro expansion
+/// produces non-deterministic garbage. Mirrors the `cp_dup_token`
+/// pattern in the C parser.
+pub func dup_pp_token(t: PpToken) -> PpToken {
+    return PpToken {
+        kind: t.kind,
+        text: t.text.duplicate(),
+        file: t.file.duplicate(),
+        line: t.line,
+        col: t.col,
+        blue_set: List[Str]::new(0 as I64)
+    }
+}
+
+/// Deep-clones a `List[PpToken]`. The returned list owns fresh Str
+/// fields and a fresh backing buffer; it is safe to drop independently
+/// of the source.
+///
+/// `List[T]` does not have a `Duplicate` impl, so `.duplicate()` on a
+/// `List[PpToken]` falls back to a bitwise copy in codegen — the exact
+/// pattern that causes Heap-borrow-drop crashes when the bitwise alias
+/// is dropped while the source still owns the buffer. This helper does
+/// element-wise deep clone via `dup_pp_token`.
+pub func dup_pp_token_list(src: List[PpToken]) -> List[PpToken] {
+    let n: I64 = src.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    for i in 0 to n {
+        out.push(dup_pp_token(src.get(i)))
+    }
+    return out
+}
+
+/// Deep-clones a `MacroDef`. Walks the active variant and constructs a
+/// fresh value with deep-cloned `List[PpToken]` / `List[Str]` payloads.
+/// Use after `pp.defines.get(name)` to detach the consumer's `MacroDef`
+/// from the HashMap's bitwise-aliased storage — this is the safe lookup
+/// pattern for value types containing `List` fields whose drop-glue
+/// would otherwise free the HashMap's backing buffer when the local
+/// goes out of scope. (phase24m: residual essential.c SIGSEGV diagnosed
+/// at `pp_sweep_in_file → expand_macro_at`.)
+pub func dup_macro_def(def: MacroDef) -> MacroDef {
+    when def {
+        ObjectLike(body) => return MacroDef::ObjectLike(dup_pp_token_list(body)),
+        FunctionLike(fdef) => {
+            let pn: I64 = fdef.params.len() as I64
+            let new_params: List[Str] = List[Str]::new(pn)
+            for i in 0 to pn {
+                new_params.push(fdef.params.get(i).duplicate())
+            }
+            let new_body: List[PpToken] = dup_pp_token_list(fdef.body)
+            return MacroDef::FunctionLike(FuncMacroDef {
+                params: new_params,
+                is_variadic: fdef.is_variadic,
+                body: new_body
+            })
+        }
+    }
+}
+
+/// True (1) if the body of a `#define NAME ...` is function-like (i.e.
+/// the very first token is `(` with NO whitespace between the macro
+/// name and the `(`). Returns 0 otherwise.
+pub func is_function_like_define(body_after_name: List[PpToken]) -> I64 {
+    let n: I64 = body_after_name.len() as I64
+    if n == 0 as I64 { return 0 as I64 }
+    let first: PpToken = body_after_name.get(0)
+    if ppk(first.kind) == 5 as I64 and first.text == "(" {
+        return 1 as I64
+    }
+    return 0 as I64
+}
+
+/// Parse the body of a function-like macro definition. The input
+/// `body_after_name` starts with `(`, then the parameter list, then
+/// `)`, then the replacement body (possibly with leading whitespace).
+pub func parse_func_macro_def(body_after_name: List[PpToken]) -> Maybe[ParsedFuncMacro] {
+    let n: I64 = body_after_name.len() as I64
+    if n == 0 as I64 { return Nothing }
+    let first: PpToken = body_after_name.get(0)
+    if ppk(first.kind) != 5 as I64 or first.text != "(" { return Nothing }
+
+    let params: List[Str] = List[Str]::new(4 as I64)
+    var is_variadic: I64 = 0 as I64
+    var i: I64 = 1 as I64
+    var saw_close: I64 = 0 as I64
+    var expect_param: I64 = 1 as I64
+
+    loop (i < n and saw_close == 0 as I64) {
+        let t: PpToken = body_after_name.get(i)
+        let kc: I64 = ppk(t.kind)
+        if kc == 7 as I64 {
+            // Skip whitespace inside the parameter list.
+            i = i + 1 as I64
+            continue
+        }
+        if kc == 5 as I64 and t.text == ")" {
+            saw_close = 1 as I64
+            i = i + 1 as I64
+            break
+        }
+        if kc == 5 as I64 and t.text == "..." {
+            is_variadic = 1 as I64
+            // Per C17: __VA_ARGS__ stands in for ...
+            params.push("__VA_ARGS__".duplicate())
+            i = i + 1 as I64
+            expect_param = 0 as I64
+            continue
+        }
+        if kc == 5 as I64 and t.text == "," {
+            expect_param = 1 as I64
+            i = i + 1 as I64
+            continue
+        }
+        if expect_param == 1 as I64 and kc == 0 as I64 {
+            params.push(t.text.duplicate())
+            expect_param = 0 as I64
+            i = i + 1 as I64
+            continue
+        }
+        // Unexpected token in parameter list — abort.
+        return Nothing
+    }
+    if saw_close == 0 as I64 { return Nothing }
+
+    // Remainder is the replacement body. Strip leading whitespace
+    // tokens (between `)` and the body content), and strip trailing
+    // whitespace too. Internal whitespace is preserved (it can matter
+    // for stringification but typically does not affect parsing).
+    let body: List[PpToken] = List[PpToken]::new(n - i)
+    var k: I64 = i
+    var seen_non_ws: I64 = 0 as I64
+    loop (k < n) {
+        let bt: PpToken = body_after_name.get(k)
+        let bkc: I64 = ppk(bt.kind)
+        if seen_non_ws == 0 as I64 and (bkc == 6 as I64 or bkc == 7 as I64) {
+            k = k + 1 as I64
+            continue
+        }
+        seen_non_ws = 1 as I64
+        body.push(dup_pp_token(bt))
+        k = k + 1 as I64
+    }
+    // Trim trailing whitespace/newline tokens.
+    var trim_end: I64 = body.len() as I64
+    loop (trim_end > 0 as I64) {
+        let lt: PpToken = body.get(trim_end - 1 as I64)
+        let lkc: I64 = ppk(lt.kind)
+        if lkc == 6 as I64 or lkc == 7 as I64 {
+            trim_end = trim_end - 1 as I64
+        } else {
+            break
+        }
+    }
+    let trimmed: List[PpToken] = List[PpToken]::new(trim_end)
+    for ti in 0 to trim_end {
+        trimmed.push(dup_pp_token(body.get(ti)))
+    }
+
+    return Just(ParsedFuncMacro {
+        params: params,
+        is_variadic: is_variadic,
+        body: trimmed
+    })
+}
+
+// ============================================================================
+// Function-like macro invocation: argument collection + substitution
+// ============================================================================
+
+/// Flat representation of macro invocation arguments. `flat` holds all
+/// argument tokens packed end-to-end. `offsets[i]` is the start index
+/// into `flat` for argument i. `offsets[arg_count]` (one past the end)
+/// always equals `flat.len()` so `arg i` covers `flat[offsets[i] ..
+/// offsets[i+1]]`. Avoiding `List[List[PpToken]]` sidesteps the
+/// Heap-borrow-drop pattern documented in the archived phase24g
+/// proposal — nested `List`s share inner buffers via the still-unique
+/// `Heap[T]` and randomly drop them, producing non-deterministic
+/// expansion garbage.
+pub type CollectedArgs {
+    flat: List[PpToken],
+    offsets: List[I64],
+    end: I64                  // index of the closing `)` in the source token stream
+}
+
+pub func ca_arg_count(c: CollectedArgs) -> I64 {
+    let n: I64 = c.offsets.len() as I64
+    if n == 0 as I64 { return 0 as I64 }
+    return n - 1 as I64
+}
+
+pub func ca_arg_len(c: CollectedArgs, idx: I64) -> I64 {
+    let n_args: I64 = ca_arg_count(c)
+    if idx < 0 as I64 or idx >= n_args { return 0 as I64 }
+    return c.offsets.get(idx + 1 as I64) - c.offsets.get(idx)
+}
+
+pub func ca_arg_token(c: CollectedArgs, idx: I64, k: I64) -> PpToken {
+    let base: I64 = c.offsets.get(idx)
+    return c.flat.get(base + k)
+}
+
+pub func ca_arg_is_empty(c: CollectedArgs, idx: I64) -> I64 {
+    let n_args: I64 = ca_arg_count(c)
+    if idx < 0 as I64 or idx >= n_args { return 1 as I64 }
+    let len: I64 = ca_arg_len(c, idx)
+    if len == 0 as I64 { return 1 as I64 }
+    let base: I64 = c.offsets.get(idx)
+    for k in 0 to len {
+        let kc: I64 = ppk(c.flat.get(base + k).kind)
+        if kc != 6 as I64 and kc != 7 as I64 { return 0 as I64 }
+    }
+    return 1 as I64
+}
+
+/// Collect comma-separated argument token lists starting at `lparen_pos`
+/// (which must point at `(`). Tracks paren depth so commas inside
+/// nested `(...)` don't split arguments. Stores all argument tokens in
+/// a single flat List to avoid the nested-List Heap-borrow-drop hazard.
+pub func collect_macro_args(tokens: List[PpToken], lparen_pos: I64, n: I64) -> Maybe[CollectedArgs] {
+    let flat: List[PpToken] = List[PpToken]::new(8 as I64)
+    let offsets: List[I64] = List[I64]::new(4 as I64)
+    offsets.push(0 as I64)             // arg 0 starts at flat[0]
+    var depth: I64 = 1 as I64
+    var i: I64 = lparen_pos + 1 as I64
+    var saw_any_token: I64 = 0 as I64
+    var saw_comma: I64 = 0 as I64
+    loop (i < n) {
+        let t: PpToken = tokens.get(i)
+        let kc: I64 = ppk(t.kind)
+        if kc == 5 as I64 and t.text == "(" {
+            depth = depth + 1 as I64
+            flat.push(dup_pp_token(t))
+            saw_any_token = 1 as I64
+            i = i + 1 as I64
+            continue
+        }
+        if kc == 5 as I64 and t.text == ")" {
+            depth = depth - 1 as I64
+            if depth == 0 as I64 {
+                // End of argument list. Close the final arg unless this
+                // is a zero-arg call (`M()` — no tokens, no commas).
+                if saw_any_token == 1 as I64 or saw_comma == 1 as I64 {
+                    offsets.push(flat.len() as I64)
+                }
+                return Just(CollectedArgs { flat: flat, offsets: offsets, end: i })
+            }
+            flat.push(dup_pp_token(t))
+            saw_any_token = 1 as I64
+            i = i + 1 as I64
+            continue
+        }
+        if kc == 5 as I64 and t.text == "," and depth == 1 as I64 {
+            // End current arg; start the next one at the current flat index.
+            offsets.push(flat.len() as I64)
+            saw_comma = 1 as I64
+            saw_any_token = 0 as I64
+            i = i + 1 as I64
+            continue
+        }
+        // Skip leading whitespace/newlines on each argument; preserve
+        // interior whitespace (callers usually don't care, but it keeps
+        // stringification reasonable).
+        if (kc == 6 as I64 or kc == 7 as I64) and saw_any_token == 0 as I64 {
+            i = i + 1 as I64
+            continue
+        }
+        flat.push(dup_pp_token(t))
+        if kc != 6 as I64 and kc != 7 as I64 {
+            saw_any_token = 1 as I64
+        }
+        i = i + 1 as I64
+    }
+    return Nothing
+}
+
+/// Substitute arguments into a function-like macro body. Implements:
+///
+/// - Plain parameter substitution: `x` in body → arg list.
+/// - `__VA_ARGS__`: replaced by the variadic args joined with `,` tokens.
+/// - `, ##__VA_ARGS__` (GCC extension): when `__VA_ARGS__` is empty, the
+///   comma and the `##` are dropped. When non-empty, the `##` is dropped
+///   and the comma is preserved (no actual token paste happens here —
+///   the arg expansion already pastes onto the comma).
+/// - Plain `## tok`: paste the previous token onto `tok` per C17 §6.10.3.3.
+pub func substitute_func_macro(fdef: FuncMacroDef, args: CollectedArgs) -> List[PpToken] {
+    let body: List[PpToken] = fdef.body
+    let bn: I64 = body.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(bn * 2 as I64)
+    let n_params: I64 = fdef.params.len() as I64
+
+    // Variadic param index = last param when is_variadic. Determine
+    // whether __VA_ARGS__ is empty (no extra args were supplied).
+    var va_index: I64 = -1 as I64
+    if fdef.is_variadic == 1 as I64 {
+        va_index = n_params - 1 as I64
+    }
+
+    var i: I64 = 0 as I64
+    loop (i < bn) {
+        let t: PpToken = body.get(i)
+        let kc: I64 = ppk(t.kind)
+
+        // Detect `, ## __VA_ARGS__` (GCC comma-elision).
+        if kc == 5 as I64 and t.text == "," and fdef.is_variadic == 1 as I64 {
+            let pa_opt: Maybe[I64] = peek_paste_va(body, i, fdef.params)
+            let Just(va_after) = pa_opt else {
+                out.push(dup_pp_token(t))
+                i = i + 1 as I64
+                continue
+            }
+            // Found `, ## __VA_ARGS__` at position i..va_after.
+            let va_empty: I64 = ca_arg_is_empty(args, va_index)
+            if va_empty == 1 as I64 {
+                // Drop the comma and the ## — emit nothing for the VA.
+                i = va_after + 1 as I64
+                continue
+            }
+            // Non-empty: emit the comma, drop the ##, then emit the VA.
+            out.push(dup_pp_token(t))
+            let an: I64 = ca_arg_len(args, va_index)
+            for ai in 0 to an {
+                out.push(dup_pp_token(ca_arg_token(args, va_index, ai)))
+            }
+            i = va_after + 1 as I64
+            continue
+        }
+
+        // Plain `##` token paste (not preceded by comma special case).
+        if kc == 5 as I64 and t.text == "##" {
+            // Paste the previous emitted token with the next non-ws
+            // token (after substituting if it's a parameter).
+            // Step 1: drop trailing whitespace from `out`.
+            trim_trailing_ws(out)
+            // Step 2: pop the left-hand operand.
+            if out.len() == 0 { i = i + 1 as I64; continue }
+            // Deep-clone before pop: `out.get` returns a bitwise alias
+            // of the slot; `out.pop()` then frees that slot's contents.
+            // (phase24m.)
+            let left: PpToken = dup_pp_token(out.get(out.len() as I64 - 1 as I64))
+            out.pop()
+            // Step 3: find the next non-ws token in body.
+            var j: I64 = i + 1 as I64
+            loop (j < bn) {
+                let nt_kc: I64 = ppk(body.get(j).kind)
+                if nt_kc == 6 as I64 or nt_kc == 7 as I64 {
+                    j = j + 1 as I64
+                } else {
+                    break
+                }
+            }
+            if j >= bn {
+                // Dangling ## — restore left and skip.
+                out.push(left)
+                i = i + 1 as I64
+                continue
+            }
+            let right_tok: PpToken = body.get(j)
+            // If right is a parameter, expand its argument; paste left
+            // onto the FIRST token of that arg, then emit the rest.
+            let pidx: I64 = param_index(fdef.params, right_tok)
+            if pidx >= 0 as I64 {
+                let ak: I64 = ca_arg_len(args, pidx)
+                if ak == 0 as I64 {
+                    out.push(left)
+                    i = j + 1 as I64
+                    continue
+                }
+                let pasted: PpToken = paste_tokens(left, ca_arg_token(args, pidx, 0))
+                out.push(pasted)
+                for ki in 1 to ak {
+                    out.push(dup_pp_token(ca_arg_token(args, pidx, ki)))
+                }
+                i = j + 1 as I64
+                continue
+            }
+            // Non-parameter right operand — paste literally.
+            let pasted2: PpToken = paste_tokens(left, right_tok)
+            out.push(pasted2)
+            i = j + 1 as I64
+            continue
+        }
+
+        // Plain parameter substitution.
+        if kc == 0 as I64 {
+            let pidx: I64 = param_index(fdef.params, t)
+            if pidx >= 0 as I64 {
+                let ak: I64 = ca_arg_len(args, pidx)
+                for ki in 0 to ak {
+                    out.push(dup_pp_token(ca_arg_token(args, pidx, ki)))
+                }
+                i = i + 1 as I64
+                continue
+            }
+        }
+
+        // Default: copy the body token verbatim.
+        out.push(dup_pp_token(t))
+        i = i + 1 as I64
+    }
+
+    return out
+}
+
+/// Look ahead from position `i` (which must point at a `,` token in the
+/// macro body) for a `## __VA_ARGS__` sequence. Returns the index of
+/// the `__VA_ARGS__` ident on success, Nothing otherwise. Allows
+/// whitespace between the comma, the `##`, and the `__VA_ARGS__`.
+func peek_paste_va(body: List[PpToken], i: I64, _params: List[Str]) -> Maybe[I64] {
+    let n: I64 = body.len() as I64
+    var j: I64 = i + 1 as I64
+    // Skip whitespace.
+    loop (j < n) {
+        let kc: I64 = ppk(body.get(j).kind)
+        if kc == 6 as I64 or kc == 7 as I64 { j = j + 1 as I64 } else { break }
+    }
+    if j >= n { return Nothing }
+    let hh: PpToken = body.get(j)
+    if ppk(hh.kind) != 5 as I64 or hh.text != "##" { return Nothing }
+    j = j + 1 as I64
+    loop (j < n) {
+        let kc: I64 = ppk(body.get(j).kind)
+        if kc == 6 as I64 or kc == 7 as I64 { j = j + 1 as I64 } else { break }
+    }
+    if j >= n { return Nothing }
+    let va: PpToken = body.get(j)
+    if ppk(va.kind) != 0 as I64 or va.text != "__VA_ARGS__" { return Nothing }
+    return Just(j)
+}
+
+/// Find the parameter index for an identifier token, or -1 if not a
+/// parameter.
+func param_index(params: List[Str], tok: PpToken) -> I64 {
+    if ppk(tok.kind) != 0 as I64 { return -1 as I64 }
+    let n: I64 = params.len() as I64
+    for i in 0 to n {
+        if params.get(i) == tok.text { return i }
+    }
+    return -1 as I64
+}
+
+/// Drop trailing whitespace/newline tokens from `out` (in place).
+func trim_trailing_ws(out: List[PpToken]) {
+    loop (out.len() > 0) {
+        let t: PpToken = out.get(out.len() as I64 - 1 as I64)
+        let kc: I64 = ppk(t.kind)
+        if kc == 6 as I64 or kc == 7 as I64 {
+            out.pop()
+        } else {
+            break
+        }
+    }
 }

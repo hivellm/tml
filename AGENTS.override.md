@@ -115,6 +115,7 @@ If `docs_search` does not return the symbol you expect, the symbol probably does
 ## T4. Implementation Discipline
 
 - **No baby-stepping. Execute the full task end-to-end.** When given a task, complete every phase and every item before stopping. Do NOT pause between phases to ask "continue?", "want me to proceed?", "should I do phase N+1?". The only valid stops are: (a) genuine design ambiguity that requires a user decision, (b) destructive-op authorization, (c) the fail-twice rule, (d) the task is 100% complete (all items `[x]`, mandatory tail done).
+- **Auto-advance to the next task.** When a task is 100% complete — all checklist items `[x]`, tests pass, docs updated, task archived — immediately read `rulebook_task_list` and begin the next pending task WITHOUT asking the user for permission. The user does not need to say "go to next task". The only exception is if the next task requires a destructive operation or has genuine design ambiguity (see (a)/(b) above).
 - **Incremental quality, not incremental delivery**: still compile/check after each file and fix errors before moving on — but keep moving on. Incremental means small verified steps inside one continuous run, NOT stopping to confirm with the user between steps.
 - **Rust-as-Reference IR**: when fixing codegen bugs, write equivalent `.rs` + `.tml`, compile both to LLVM IR, compare function-by-function. TML should not exceed ~2× Rust instruction count.
 - **Analyze before executing**: check existing examples/conventions before restructuring.

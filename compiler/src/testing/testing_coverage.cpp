@@ -1150,4 +1150,182 @@ void save_coverage_cache(const std::set<std::string>& covered_functions) {
                                                    << cache_path.string());
 }
 
+// ============================================================================
+// JSON summary + history (successor of the deleted write_coverage_html)
+// ============================================================================
+//
+// Before phase0w, `testing_coverage_html.cpp` wrote both an HTML dashboard
+// and a companion JSON summary. The HTML path is now produced by
+// `coverage_cli` (`tml coverage --input=... --format=html`); this function
+// preserves the JSON + `coverage_history.jsonl` append that the rest of
+// the coordinator relies on for regression detection. The schema matches
+// what `get_previous_coverage_from_json` expects.
+
+void write_coverage_json_summary(const std::set<std::string>& covered_functions,
+                                 const std::string& output_path,
+                                 const CoverageStats& stats) {
+    fs::path cwd = fs::current_path();
+    std::vector<fs::path> lib_dirs = {cwd / "lib" / "core", cwd / "lib" / "std",
+                                      cwd / "lib" / "test"};
+
+    auto modules = scan_library(lib_dirs);
+    if (modules.empty())
+        return;
+
+    int total_funcs = 0, total_covered = 0;
+    compute_coverage(modules, covered_functions, total_funcs, total_covered);
+
+    double overall_pct = total_funcs > 0 ? (100.0 * total_covered / total_funcs) : 0.0;
+
+    int tml_tests = 0;
+    for (const auto& suite : stats.suites) {
+        tml_tests += suite.test_count;
+    }
+
+    int full_coverage = 0, partial_coverage = 0, zero_coverage = 0;
+    for (const auto& mod : modules) {
+        if (mod.functions.empty())
+            continue;
+        if (mod.covered_count == 0) {
+            zero_coverage++;
+        } else if (mod.covered_count == static_cast<int>(mod.functions.size())) {
+            full_coverage++;
+        } else {
+            partial_coverage++;
+        }
+    }
+
+    // Write the summary JSON alongside the advertised output_path (same
+    // naming convention the HTML generator used, so
+    // `get_previous_coverage_from_json(html_path)` continues to work when
+    // callers feed it the old .html path). The .json extension is derived
+    // from output_path regardless of whether the caller supplies an html
+    // or json path.
+    fs::path json_path = fs::path(output_path).replace_extension(".json");
+    std::error_code ec;
+    fs::create_directories(json_path.parent_path(), ec);
+
+    std::ofstream json_file(json_path);
+    if (!json_file.is_open()) {
+        TML_LOG_ERROR("test", "Cannot write coverage JSON to " << json_path.string());
+        return;
+    }
+    json_file << "{\n";
+    json_file << "  \"summary\": {\n";
+    json_file << "    \"library_functions\": " << total_funcs << ",\n";
+    json_file << "    \"library_covered\": " << total_covered << ",\n";
+    json_file << "    \"coverage_percent\": " << std::fixed << std::setprecision(2) << overall_pct
+              << ",\n";
+    json_file << "    \"modules_full\": " << full_coverage << ",\n";
+    json_file << "    \"modules_partial\": " << partial_coverage << ",\n";
+    json_file << "    \"modules_zero\": " << zero_coverage << ",\n";
+    json_file << "    \"tests_passed\": " << tml_tests << ",\n";
+    json_file << "    \"test_files\": " << stats.total_files << ",\n";
+    json_file << "    \"duration_ms\": " << stats.total_duration_ms << "\n";
+    json_file << "  },\n";
+
+    // Modules sorted by uncovered count descending — same order the old
+    // HTML page displayed, preserved so CI diffs stay readable.
+    struct ModuleEntry {
+        std::string name;
+        int total;
+        int covered;
+        double percent;
+        std::vector<std::string> uncovered;
+    };
+    std::vector<ModuleEntry> sorted;
+    for (const auto& mod : modules) {
+        if (mod.functions.empty())
+            continue;
+        ModuleEntry e;
+        e.name      = mod.name;
+        e.total     = static_cast<int>(mod.functions.size());
+        e.covered   = mod.covered_count;
+        e.percent   = e.total > 0 ? (100.0 * e.covered / e.total) : 0.0;
+        e.uncovered = mod.uncovered_functions;
+        sorted.push_back(std::move(e));
+    }
+    std::sort(sorted.begin(), sorted.end(), [](const ModuleEntry& a, const ModuleEntry& b) {
+        int au = a.total - a.covered, bu = b.total - b.covered;
+        return au != bu ? au > bu : a.name < b.name;
+    });
+
+    json_file << "  \"modules\": [\n";
+    for (size_t i = 0; i < sorted.size(); ++i) {
+        const auto& m = sorted[i];
+        json_file << "    {\n";
+        json_file << "      \"name\": \"" << json_escape(m.name) << "\",\n";
+        json_file << "      \"total\": " << m.total << ",\n";
+        json_file << "      \"covered\": " << m.covered << ",\n";
+        json_file << "      \"uncovered\": " << (m.total - m.covered) << ",\n";
+        json_file << "      \"percent\": " << std::fixed << std::setprecision(1) << m.percent
+                  << ",\n";
+        json_file << "      \"uncovered_functions\": [";
+        if (!m.uncovered.empty()) {
+            json_file << "\n";
+            for (size_t j = 0; j < m.uncovered.size(); ++j) {
+                json_file << "        \"" << json_escape(m.uncovered[j]) << "\"";
+                if (j + 1 < m.uncovered.size())
+                    json_file << ",";
+                json_file << "\n";
+            }
+            json_file << "      ";
+        }
+        json_file << "]\n";
+        json_file << "    }";
+        if (i + 1 < sorted.size())
+            json_file << ",";
+        json_file << "\n";
+    }
+    json_file << "  ]\n}\n";
+    json_file.close();
+
+    // Append to coverage history (JSONL — one line per run, used by CI
+    // trend charts).
+    fs::path history_path = json_path.parent_path() / "coverage_history.jsonl";
+    std::ofstream hf(history_path, std::ios::app);
+    if (!hf.is_open()) {
+        return;
+    }
+    auto now = std::chrono::system_clock::now();
+    auto tt  = std::chrono::system_clock::to_time_t(now);
+    auto ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    struct tm tb;
+#ifdef _WIN32
+    localtime_s(&tb, &tt);
+#else
+    localtime_r(&tt, &tb);
+#endif
+    std::ostringstream ts;
+    ts << std::put_time(&tb, "%Y-%m-%dT%H:%M:%S") << "." << std::setfill('0') << std::setw(3)
+       << ms.count();
+
+    hf << "{\"timestamp\":\"" << ts.str() << "\",\"coverage_percent\":" << std::fixed
+       << std::setprecision(2) << overall_pct << ",\"library_functions\":" << total_funcs
+       << ",\"library_covered\":" << total_covered
+       << ",\"runtime_covered_functions\":" << static_cast<int>(covered_functions.size())
+       << ",\"modules_full\":" << full_coverage << ",\"modules_partial\":" << partial_coverage
+       << ",\"modules_zero\":" << zero_coverage << ",\"tests_passed\":" << tml_tests
+       << ",\"tests_failed\":" << stats.failed_count
+       << ",\"compilation_errors\":" << stats.compilation_error_count
+       << ",\"test_files\":" << stats.total_files
+       << ",\"no_cache\":" << (stats.no_cache ? "true" : "false")
+       << ",\"duration_ms\":" << stats.total_duration_ms << ",\"modules\":[";
+    bool first_mod = true;
+    for (const auto& mod : modules) {
+        if (mod.functions.empty())
+            continue;
+        if (!first_mod)
+            hf << ",";
+        first_mod = false;
+        hf << "{\"n\":\"" << json_escape(mod.name)
+           << "\",\"t\":" << static_cast<int>(mod.functions.size())
+           << ",\"c\":" << mod.covered_count << "}";
+    }
+    hf << "]}\n";
+    hf.close();
+    TML_LOG_INFO("test", "Coverage history appended to " << history_path.string());
+}
+
 } // namespace tml::testing

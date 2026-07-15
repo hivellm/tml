@@ -1,0 +1,85 @@
+//! # Protocol Buffers Binary Wire Format
+//!
+//! Pure TML implementation of the Protocol Buffers binary encoding and
+//! decoding. Supports all core wire types (varint/LEB128, fixed32, fixed64,
+//! length-delimited), zigzag signed encoding, packed repeated fields,
+//! message descriptors, and a `ProtoMessage` behavior for typed serialization.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}
+//!
+//! // Encode: message Person { string name = 1; int32 id = 2; }
+//! var w: ProtoWriter = ProtoWriter::new()
+//! w.write_field_string(1, "Alice")
+//! w.write_field_varint(2, 12345)
+//! let data: Buffer = w.to_buffer()
+//!
+//! // Decode
+//! var r: ProtoReader = ProtoReader::from_buffer(ref data)
+//! let t1 = r.read_tag()   // field 1, wire LEN
+//! let name = r.read_string()
+//! let t2 = r.read_tag()   // field 2, wire VARINT
+//! let id = r.read_varint()
+//! ```
+
+// Submodule declarations (required for meta preload discovery)
+pub mod wire
+pub mod varint
+pub mod types
+pub mod writer
+pub mod reader
+pub mod message
+pub mod descriptor
+pub mod packed
+pub mod proto_parser
+pub mod codegen
+pub mod well_known
+
+// Wire type constants and tag helpers
+pub use std::protobuf::wire::{
+    WIRE_VARINT, WIRE_FIXED64, WIRE_LEN, WIRE_SGROUP, WIRE_EGROUP, WIRE_FIXED32,
+    wire_type_name, make_tag, tag_field_number, tag_wire_type
+}
+
+// Varint and zigzag encoding
+pub use std::protobuf::varint::{
+    zigzag_encode, zigzag_decode, varint_size, encode_varint, decode_varint
+}
+
+// Types
+pub use std::protobuf::types::{ProtoTag, FieldType, ProtoError, proto_error_from_str, field_type_wire_type, field_type_default_i64}
+
+// Encoder
+pub use std::protobuf::writer::ProtoWriter
+
+// Decoder
+pub use std::protobuf::reader::{ProtoReader, MapEntrySS, MapEntrySI, MapEntryIS, MapEntryII}
+
+// Message behavior
+pub use std::protobuf::message::{ProtoMessage, encode_length_delimited, decode_length_delimited}
+
+// Descriptors
+pub use std::protobuf::descriptor::{
+    FieldDescriptor, MessageDescriptor, OneofDescriptor,
+    scalar_field, repeated_field, optional_field, map_field, oneof_field
+}
+
+// Packed repeated fields
+pub use std::protobuf::packed::{
+    write_packed_varints, write_packed_sint64,
+    write_packed_fixed32, write_packed_fixed64,
+    write_packed_float, write_packed_double,
+    read_packed_varints, read_packed_fixed32, read_packed_fixed64,
+    read_packed_float, read_packed_double
+}
+
+// Proto file parser (.proto → descriptors)
+pub use std::protobuf::proto_parser::{parse_proto, parse_proto_file, ProtoFile, EnumDescriptor, EnumValue}
+
+// TML code generator (descriptors → TML source)
+pub use std::protobuf::codegen::{generate_tml, generate_to_file}
+
+// Well-known types (google.protobuf.*)
+pub use std::protobuf::well_known::{Timestamp, Duration, Any}

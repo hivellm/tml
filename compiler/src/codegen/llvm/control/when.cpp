@@ -54,6 +54,31 @@ static std::vector<std::string> parse_tuple_types(const std::string& tuple_type)
     return element_types;
 }
 
+/// True if the payload pattern list is eligible for the multi-field binding
+/// path in `gen_when` — every element must be either an IdentPattern
+/// (named binding, wildcard-by-prefix-`_`, or real binding) or a
+/// WildcardPattern. Anything else (LiteralPattern, TuplePattern, nested
+/// EnumPattern) falls through to the single-field or unsupported paths.
+static bool multi_field_pattern_eligible(
+    const std::vector<std::unique_ptr<parser::Pattern>>& payload) {
+    bool saw_binding = false;
+    for (const auto& elem : payload) {
+        if (elem->is<parser::IdentPattern>()) {
+            saw_binding = true;
+            continue;
+        }
+        if (elem->is<parser::WildcardPattern>()) {
+            continue;
+        }
+        return false;
+    }
+    // Require at least one real binding in the payload — a pure all-`_`
+    // form like Two(_, _) is a match-only (no binding) and the branch's
+    // loop does nothing useful; the variant-tag comparison in
+    // gen_pattern_cmp already handles that case.
+    return saw_binding;
+}
+
 auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::string& scrutinee,
                                 const std::string& scrutinee_type, const std::string& tag,
                                 bool is_primitive) -> std::string {
@@ -844,9 +869,15 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         }
                     }
                 } else if (enum_pat.payload->size() > 1 &&
-                           enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
-                    // Multi-field variant pattern: Two(a, b) with payload size > 1
-                    // Each element is an IdentPattern binding to a field in the tuple payload
+                           multi_field_pattern_eligible(*enum_pat.payload)) {
+                    // Multi-field variant pattern: Two(a, b), Two(_, b), Two(a, _), etc.
+                    // Each element is either an IdentPattern (binds a field) or a
+                    // WildcardPattern (skips binding). The guard used to require
+                    // payload[0] to be IdentPattern, which made Two(_, b) fall
+                    // through to the no-binding path — leaving `b` unresolved
+                    // ("Unknown variable" at codegen time). Allow any mix of
+                    // Ident / Wildcard at any position; the per-element loop
+                    // below already skips non-binding forms.
 
                     // Look up the enum variant's payload types
                     std::vector<types::TypePtr> field_types;

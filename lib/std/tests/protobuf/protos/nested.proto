@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package examples;
+
+// Complex nested message with map, oneof, optional
+message GeoPoint {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string zip = 4;
+  string country = 5;
+  GeoPoint location = 6;
+}
+
+message Contact {
+  string name = 1;
+  int32 age = 2;
+  Address home_address = 3;
+  Address work_address = 4;
+  map<string, string> metadata = 5;
+  oneof identifier {
+    string email = 6;
+    string phone = 7;
+    int64 user_id = 8;
+  }
+  optional string nickname = 9;
+  repeated string tags = 10;
+}

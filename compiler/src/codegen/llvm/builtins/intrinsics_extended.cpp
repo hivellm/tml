@@ -243,8 +243,8 @@ auto LLVMIRGen::try_gen_intrinsic_extended(const std::string& intrinsic_name,
         if (call.args.size() >= 2) {
             // Resolve the target type from the generic type argument [T] on the call,
             // not from argument evaluation (which may produce wrong types for large literals)
-            std::string target_type = "i32"; // default
-            types::TypePtr type_arg = types::make_i32();
+            std::string target_type = "i64"; // TML default integer
+            types::TypePtr type_arg = types::make_i64();
 
             if (call.callee->is<parser::PathExpr>()) {
                 const auto& path_expr = call.callee->as<parser::PathExpr>();

@@ -1,0 +1,20 @@
+// Regression test for S001: 'match' is not valid TML — use 'when' instead.
+//
+// Users from Rust/Swift/C# write `match` — TML uses `when`. Before this fix,
+// `match` produced confusing cascading P001 errors. After the fix, a single
+// S001 points at the `match` token with note: "TML uses 'when' for pattern
+// matching (equivalent to Rust's 'match')".
+
+use test
+
+@test
+func test_when_works() -> I32 {
+    let x: I32 = 42
+    let result: I32 = when x {
+        1 => 10,
+        42 => 420,
+        _ => 0,
+    }
+    assert_eq(result, 420, "when should match 42")
+    return 0
+}

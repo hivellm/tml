@@ -5,6 +5,312 @@ All notable changes to the TML standard library will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.36] — 2026-04-16
+
+### Changed — `Str` phase1i (amortized O(1) `str_append`)
+
+`Str + Str` (and `Str +=` loops) now lowers to a new runtime function
+`str_append(left, right)` that appends in place when the left buffer
+has allocator slack. Growth is exponential, matching Rust's `String`.
+
+Three-branch IR:
+
+1. **In-place** — `mem_usable_size(left)` reports ≥ `len(left) + len(right) + 1`
+   available; `memcpy` past the NUL terminator and return the same
+   pointer.
+2. **Grow in place** — heap buffer too small; `mem_realloc` to
+   `max(capacity * 2, needed)` and append.
+3. **Fresh** — left operand is a `.rdata` literal (detected via a
+   Windows image-range check on module segments — `_msize` on a
+   literal is UB) or lives outside the C heap; allocate a new buffer
+   with `len(a) + len(b) + 1` bytes.
+
+`mem_usable_size` is a new `@extern("c")` runtime export that wraps the
+platform allocator query (`_msize` Windows / `malloc_usable_size` glibc
+/ `malloc_size` macOS). The Windows variant initializes once per
+process with `EnumProcessModules` and rejects any pointer inside a
+loaded PE image range to prevent UB on string literals.
+
+Benchmarks (`benchmarks/profile_tml/string_bench.tml`, release):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Str Naive Append 10K (100-byte pieces) | 3,044 ns/op | 462 ns/op | **-85%** |
+
+Ratio vs Rust `String::push_str` closed from 1,098x → 154x. The
+remaining gap is per-call `strlen` + `tml_str_free` overhead, not
+algorithmic.
+
+Both AST codegen (`binary_ops.cpp` — `Str + Str` Add) and MIR codegen
+(`instructions.cpp` — `ptr + ptr` Add) emit `@str_append`. The augmented
+concat pattern (`let s2 = s + …` where `s` was an augmented assign)
+also switches to `str_append`. The left operand is consumed by
+`str_append` (no free emitted after the call since the return pointer
+may alias the input), while the right operand is freed as before when
+it's a heap producer.
+
+All 23/23 `std/json` tests, 32/32 `core/str` tests, and 5/6 `std/text`
+tests pass (the one failure is the pre-existing `text_search_transform`
+K001 codegen bug).
+
+## [0.3.35] — 2026-04-16
+
+### Changed — `std::text` phase1h (strlen constant-folding for literals)
+
+Adds LLVM libc-canonical attributes to the `strlen`, `strcmp`, and
+`memcmp` declarations in the runtime catalog so LLVM's SimplifyLibCalls
+pass recognizes them and constant-folds calls with compile-time
+string-literal arguments. The attribute set is
+`readonly nounwind willreturn`.
+
+Text `push_str("literal")` — the hot path inside `Text.push_str` now
+has its `text_str_len("literal")` call constant-folded at -O1+, cutting
+one FFI round-trip per call.
+
+Benchmarks (`benchmarks/profile_tml/text_bench.tml`, release build):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Small Appends push_str() | 4 ns/op | 2 ns/op | **-50%** |
+
+`push_str(non_literal_str)` is unchanged — the strlen call stays
+because the length isn't known at compile time. The same optimization
+applies transparently to every other site that calls
+`text_str_len("literal")` (concat, starts_with, ends_with, contains,
+split with literal delim).
+
+All 5 passing std/text test suites continue to pass; the pre-existing
+`text_search_transform` K001 codegen bug is unaffected.
+
+## [0.3.34] — 2026-04-16
+
+### Changed — `std::json` phase1e (arena parser overload)
+
+Threads `JsonArena` through `FastJsonParser` and adds a
+`parse_json_fast(input, JsonArena*)` overload so callers can now share a
+bump-allocated arena across parses.
+
+The FFI entry point (`tml_json_parse_fast`) intentionally keeps the
+non-arena path until `JsonValue`'s string storage is refactored. A
+direct experiment wiring `thread_local JsonArena arena; arena.reset();`
+into the FFI regressed every benchmark by 30-60% because the arena's
+`reset()` rebuilds the common-keys intern table on every parse and that
+cost is not offset by any allocation savings while `JsonValue` still
+stores `std::string` by value. The overload is in place so the follow-
+up `JsonValue`-refactor phase can switch in with a one-line change.
+
+Behaviour unchanged for all existing callers; all 23 std/json test
+suites pass.
+
+## [0.3.33] — 2026-04-16
+
+### Changed — `std::json` phase1d (borrowed handles for accessors)
+
+Eliminates the deep-clone that `tml_json_object_get`, `tml_json_array_get`,
+and `tml_json_object_value_at` performed on every field access:
+
+* Added a parallel `json_borrowed` vector alongside the existing
+  `json_values` / `json_values_free` arrays. A handle is "borrowed" when
+  its borrow slot is non-null — in that case `get_json_value` returns
+  the pointed-to JsonValue instead of the owned slot.
+* New `alloc_borrowed_handle(ptr)` creates a handle that references an
+  existing JsonValue in-place. Pointer stability holds because
+  `JsonArray` and `JsonObject` store their elements in heap-allocated
+  containers (`Box<...>`), so reallocating the outer `json_values`
+  vector does not invalidate pointers into an element.
+* `tml_json_free` clears the borrow pointer alongside the owned slot;
+  freeing a borrow handle therefore does not free the parent document.
+  The caller must ensure the parent handle outlives any borrow derived
+  from it — mirrors serde_json's `&Value` semantics.
+* Matching behaviour added to `tml_json_arena_reset`.
+
+Benchmark (`benchmarks/profile_tml/json_bench.tml`, release build):
+
+| Operation | Before | After | Δ |
+|-----------|--------|-------|---|
+| Field Access | 15,320 ns | 10,353 ns | **-32%** |
+| Array Iteration | 11,007 ns | 10,696 ns | -3% |
+| Nested Object Access | 11,174 ns | 10,541 ns | -5% |
+
+The remaining gap to serde_json's 7,100 ns Field Access is the handle-
+allocation cost and FFI dispatch overhead, not the clone.
+
+New test: `lib/std/tests/json/json_borrowed_handle.test.tml` — exercises
+repeated field access, nested access, and the 32-iteration borrow/free
+cycle to catch use-after-free in the borrow bookkeeping.
+
+## [0.3.32] — 2026-04-16
+
+### Changed — `std::json` phase1c (parse_string fast path)
+
+`parse_string()` in `compiler/src/json/json_fast_parser.cpp` now has a
+two-path structure:
+
+* **Fast path**: run `find_string_special_simd` first. If the next
+  special byte is the closing quote, construct the result
+  `std::string(start, len)` directly from the input view, bypassing
+  `string_buffer_` entirely.
+* **Slow path**: unchanged — strings containing escape sequences or
+  control bytes still use the `string_buffer_` append loop.
+
+This is the structural prerequisite for phase1d (F-003), which changes
+`JsonValue`'s string storage so the fast path can return a view without
+copying. The raw benchmark wall-clock is unchanged (the path still
+allocates a new `std::string` because `JsonValue` stores strings by
+value), but correctness holds across all 22 std/json test suites.
+
+## [0.3.31] — 2026-04-16
+
+### Added — `std::msgpack` phase1b (spec completion)
+
+Completes the asymmetric reader gaps and adds extension-type + timestamp
+support, bringing the module from ~61% to ~95% MessagePack spec coverage.
+
+* **Reader symmetry** — `read_f32`, `read_f64`, `read_bin` mirror the
+  existing writer methods. Uses `Buffer::read_f32_be`/`read_f64_be` for
+  IEEE 754 decoding and manual byte loops for bin 8/16/32.
+* **Generic decode utilities** — `peek_type()` inspects the next format
+  byte without advancing the cursor; `advance_past_value()` skips one
+  complete value (recursively descending into nested arrays/maps and
+  handling all fixext/ext sizes). `MsgPackType` enum gained a `Timestamp`
+  variant.
+* **Extension types** — `write_ext(type_id: I32, data: ref Buffer)`
+  auto-selects the most compact form (fixext 1/2/4/8/16 for those
+  specific sizes, ext 8/16/32 for everything else). `read_ext()` decodes
+  all 8 ext formats and returns `Maybe[ExtValue { type_id, data }]`.
+* **Timestamp (ext type -1)** — `write_timestamp(seconds, nanos)`
+  auto-selects timestamp 32 (when `nanos == 0` and seconds fits U32),
+  timestamp 64 (seconds in [0, 2^34) and nanos < 2^30, packed as
+  `(nanos << 34) | seconds`), or timestamp 96 (4-byte nanos + 8-byte
+  signed seconds). `read_timestamp()` decodes all three encodings.
+
+New public types exported from `std::msgpack`:
+  `ExtValue { type_id: I32, data: Buffer }` and
+  `Timestamp { seconds: I64, nanos: I64 }`.
+
+### Test coverage added
+
+- `lib/std/tests/msgpack/float_bin_ext.test.tml` — 11 tests covering
+  F32/F64 roundtrip, binary short payload, peek_type on Nil/Str/Array,
+  advance_past_value on nested arrays, fixext + ext 8 roundtrips, and
+  all three timestamp encodings (including negative-seconds → ts96).
+
+### Codegen note
+
+`Timestamp.nanos` is stored as `I64` rather than `U32` because the TML
+codegen currently hangs when a struct with mixed `I64+U32` fields is
+returned via `Maybe[...]` and pattern-matched with `when`. `let-else`
+destructuring works regardless — use that to unwrap `Maybe[Timestamp]`.
+This is the same K001 pattern captured in earlier phase work and is
+tracked as a follow-up codegen fix.
+
+## [0.3.29] — 2026-04-16
+
+### Added — `std::protobuf` phase1a (production-readiness)
+
+- **Float/Double bitcast verified** — `write_float`/`read_float`/`write_double`/`read_double`
+  already delegated to `Buffer::write_f32_le`/`read_f32_le`/`write_f64_le`/`read_f64_le`
+  (IEEE 754 via type-punned memory). Added `protobuf_float.test.tml` covering
+  roundtrip + canonical wire bytes (`3.14f = 0xC3 0xF5 0x48 0x40` LE).
+- **Packed repeated end-to-end** — `write_packed_varints`/`read_packed_varints`,
+  `write_packed_fixed32`/`read_packed_fixed32` now have regression tests
+  (`protobuf_packed.test.tml`): encode `[1,2,3,150,300]`, decode, verify; empty
+  list emits zero bytes.
+- **Map fields** — added `write_field_map_entry_{ss,si,is,ii}` to `ProtoWriter`
+  and `decode_map_entry_{ss,si,is,ii}` to `ProtoReader`, returning
+  `MapEntrySS/SI/IS/II` structs (tuple returns cause codegen bugs with
+  mixed `Str+I64` payloads — see AGENTS.override.md T6). Codegen detects
+  `is_map` fields and generates `HashMap[K,V]` storage + per-entry encode/decode.
+- **Oneof support** — added `OneofDescriptor`, `MessageDescriptor.oneof_groups`,
+  and `FieldDescriptor.oneof_index`. `oneof_field()` constructor and
+  `parse_oneof` populate the group metadata. Tests cover descriptor shape,
+  parser behavior, and proto3 last-one-wins decode semantics.
+- **Proto3 default-value omission** — generated encoders now wrap scalar field
+  writes in `if this.field != default { writer.write_field_...(num, value) }`
+  so all-default messages serialize to 0 bytes.
+- **Interop validation** — `protobuf_interop.test.tml` checks encoded bytes
+  against canonical protobuf wire-format sequences (identical to what
+  `google.golang.org/protobuf`, C++, Python emit) for Person, packed repeated
+  int32, enum, and nested message.
+- **Well-known types** — new `lib/std/src/protobuf/well_known.tml` implements
+  `Timestamp { seconds: I64, nanos: I32 }`, `Duration { ... }`, and
+  `Any { type_url: Str, value: Str }` with encode/decode and proto3 default
+  omission. Constructors `Timestamp::from_unix`, `::from_parts`, `::now` and
+  matching `Duration::from_parts`.
+- **File I/O** — `parse_proto_file(path: Str) -> Outcome[ProtoFile, Str]` reads
+  a `.proto` from disk (with null-pointer guard against `file_read_all`
+  returning NULL), and `generate_to_file(proto, path)` writes the generated
+  TML source.
+- **Structured errors** — `ProtoError` enum (`Eof`, `InvalidWireType(I64)`,
+  `InvalidVarint`, `BufferOverflow`, `NegativeLength`, `InvalidUtf8`,
+  `UnexpectedField(I64)`, `Custom(Str)`) with `to_string()` and
+  `proto_error_from_str()` for incremental migration from the existing
+  `Outcome[T, Str]` reader API.
+
+### Test coverage added
+
+- `protobuf_float.test.tml` — 4 tests (roundtrip + wire bytes for F32/F64)
+- `protobuf_packed.test.tml` — 4 tests (varint/fixed32 packed, empty case)
+- `protobuf_map.test.tml` — 7 tests (ii/ss/si/is roundtrips, missing field defaults)
+- `protobuf_oneof.test.tml` — 4 tests (descriptor shape, parser, last-one-wins)
+- `protobuf_defaults.test.tml` — 4 tests (guards in generated code, omitted scalars)
+- `protobuf_interop.test.tml` — 6 tests (canonical wire bytes, nested, packed, enum)
+- `protobuf_well_known.test.tml` — 7 tests (Timestamp/Duration/Any roundtrip)
+- `protobuf_file_io.test.tml` — 2 tests (parse from disk, missing-file error)
+- `protobuf_errors.test.tml` — 10 tests (ProtoError variants + Str conversion)
+
+### Discovery
+
+- `ProtoWriter.to_bytes()` returns a `Str` which is NUL-terminated and truncates
+  at the first 0x00 byte. Binary wire bytes (fixed32/fixed64/float/double)
+  contain NULs. **Always** construct readers via `ProtoReader::from_buffer(ref buf)`
+  for roundtrip tests — `ProtoReader::new(w.to_bytes())` will silently drop data.
+
+## [0.3.28] — 2026-04-15
+
+### Added
+
+- **`std::protobuf` module** — Protocol Buffers wire format (pure TML, 11 files, ~2300 lines)
+  - `ProtoWriter` — full proto3 encoder: all scalar types (int32/64, uint32/64, sint32/64, fixed32/64, sfixed32/64, float, double, bool, string, bytes, enum), nested messages, field helpers
+  - `ProtoReader` — full proto3 decoder: all scalar types, sub-message reader, skip unknown fields, tag decoding
+  - `varint.tml` — LEB128 encoding/decoding, zigzag for sint32/sint64, varint_size
+  - `wire.tml` — wire type constants (VARINT, FIXED64, LEN, FIXED32), tag manipulation helpers
+  - `types.tml` — `ProtoTag`, `FieldType` enum (17 variants), field-type-to-wire-type mapping
+  - `packed.tml` — packed repeated fields: varints, fixed32/64, float, double
+  - `descriptor.tml` — `FieldDescriptor`, `MessageDescriptor` for runtime reflection
+  - `message.tml` — `ProtoMessage` behavior, length-delimited encode/decode
+  - `proto_parser.tml` — .proto file lexer + parser (proto3 syntax: message, enum, field, map, oneof, optional, repeated, comments)
+  - `codegen.tml` — TML code generator from parsed .proto descriptors (struct types + encode/decode methods)
+  - 7 test suites: basic, fields, sint, spec_examples, scalars, messages, proto_parser
+  - 4 .proto schema files: person.proto, scalars.proto, packed.proto, nested.proto
+
+### Changed
+
+- **`@inline` on iterator hot path** — `into_iter()`, `iter()`, `next()` on `ListIter[T]` and `List[T]` now marked `@inline` for LLVM inlining (enables SIMD vectorization)
+- **`@inline` on `Heap::new`, `Heap::get`, `Heap::drop`** — enables LLVM to see malloc/free pairs for potential heap-to-stack promotion
+- **Allocator attributes** — `mem_alloc`, `mem_free`, `malloc`, `free` now have `noalias`, `allocsize`, `allockind`, `alloc-family` attributes for LLVM alias analysis
+- **Pointer-stepping `for x in list`** — bypasses `next() -> Maybe[T]`, emits direct phi-based pointer-stepping loop matching Rust's `slice::Iter` pattern
+- **Constant stride in for-in** — compile-time stride for primitive types (i8=1, i16=2, i32/f32=4, i64/f64/ptr=8)
+- **Remove MIR personality** — MIR functions no longer emit `personality ptr @__CxxFrameHandler3` (not needed since MIR uses `call` not `invoke`)
+- **Fix `List.iter()` struct mismatch** — was returning 4-field struct, now correctly returns 3-field `{ ptr, end, stride }` matching `ListIter` definition
+- **Fix encoding benchmark leaks** — added `free_str()` to free returned strings in encode/decode loops (200K leaks → 0)
+
+## [0.3.23] — 2026-04-15
+
+### Added
+
+- **`std::msgpack` module** — MessagePack binary serialization (pure TML, no C runtime)
+  - `MsgPackWriter` — full spec encoder: nil, bool, int8-64, uint8-64, float32/64, fixstr/str8-32, bin8-32, fixarray/array16/32, fixmap/map16/32
+  - `MsgPackReader` — decoder: `read_nil`, `read_bool`, `read_u64`, `read_i64`, `read_str`, `read_array_header`, `read_map_header`
+  - `MsgPackType` enum for value type identification
+  - `MsgPackError` enum for error handling
+  - 20 tests (10 writer encoding, 10 reader round-trip)
+
+- **`File::sync()` and `File::datasync()`** — fsync/fdatasync for WAL durability
+  - `sync()` — flushes data + metadata to permanent storage (`_commit` on Windows, `fsync` on Unix)
+  - `datasync()` — flushes data only (`fdatasync` on Linux, `fsync` fallback on macOS/Windows)
+  - C runtime functions: `file_sync()`, `file_datasync()` in `lib/std/runtime/file.c`
+
 ## [0.2.6] — 2026-04-12
 
 ### Changed

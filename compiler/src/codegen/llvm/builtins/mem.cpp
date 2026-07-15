@@ -235,7 +235,7 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
                 offset64 = fresh_reg();
                 emit_line("  " + offset64 + " = sext i32 " + offset + " to i64");
             }
-            emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i64 " + offset64);
+            emit_line("  " + result + " = getelementptr i8, ptr " + ptr + ", i64 " + offset64);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -256,7 +256,7 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
     // mem::zeroed[T]() / mem_zeroed() - return a zero-initialized value of type T
     if (fn_name == "mem_zeroed" || fn_name == "mem::zeroed") {
         // Determine the target type from context
-        std::string zero_type = "i32"; // default
+        std::string zero_type = "i64"; // TML default integer
 
         // Use expected_literal_type_ or current_ret_type_ as type hint
         if (!expected_literal_type_.empty()) {

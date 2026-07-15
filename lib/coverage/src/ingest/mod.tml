@@ -1,0 +1,18 @@
+//! Coverage ingest submodule.
+//!
+//! Exposes parsers that turn external files into `CoverageReport`.
+//! Currently scaffolded with stubs; full implementations land in
+//! phases 2 (LCOV), 3 (llvm-cov JSON), 4 (legacy TML JSON).
+
+// Sibling re-exports are not currently supported; consumers import
+// directly (e.g. `use coverage::ingest::lcov::read_lcov`).
+
+use coverage::types::*
+
+/// Dispatch to the correct parser based on path extension.
+///
+/// Stub: delegates to `read_lcov`/`read_llvm_json`/`read_legacy_json`
+/// once those are implemented. For now, returns an `UnknownFormat` error.
+pub func read_dir(path: Str) -> Outcome[CoverageReport, IngestError] {
+    Err(IngestError::UnknownFormat(`read_dir not implemented yet (path={path})`))
+}

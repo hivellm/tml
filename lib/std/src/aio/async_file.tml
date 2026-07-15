@@ -1,0 +1,74 @@
+//! Asynchronous file I/O — thread-pool MVP.
+//!
+//! Wraps the blocking file FFI on a worker thread so callers can issue
+//! concurrent reads/writes without blocking their current thread. Each
+//! async call returns a [`thread::I64JoinHandle`] whose `join()` yields
+//! either a string handle (for reads) or a 0/1 success flag (for writes).
+//!
+//! This is a deliberate thread-offload model rather than a true OS
+//! completion design (IOCP / io_uring). It unblocks the UzDB "no async
+//! file I/O" feedback today without adding new runtime code; the richer
+//! event-loop-integrated design is tracked in
+//! [docs/specs/async-file-io-design.md](../../../../docs/specs/async-file-io-design.md).
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::aio::async_file
+//!
+//! let mut h = async_file::read_all_async("config.txt")
+//! // ... do other work ...
+//! let content: Str = async_file::await_str(h)
+//! ```
+
+use std::thread::{spawn_i64, I64JoinHandle}
+
+// Direct FFI bindings — importing `std::file::File` currently triggers a
+// K001 struct-forward-reference bug in this module's compile context, so
+// we bind the two C entrypoints directly here.
+@allocates
+@extern("file_read_all")
+func ffi_file_read_all(path: Str) -> Str
+
+@extern("file_write_all")
+func ffi_file_write_all(path: Str, content: Str) -> Bool
+
+/// Spawn a worker thread that runs `file_read_all(path)` and returns the
+/// string handle via `I64JoinHandle`. Await with [`await_str`].
+pub func read_all_async(path: Str) -> I64JoinHandle {
+    let worker = do() -> I64 {
+        let s: Str = ffi_file_read_all(path)
+        lowlevel { s as I64 }
+    }
+    return spawn_i64(worker)
+}
+
+/// Block on an async-read handle and return the Str content. Returns an
+/// empty string if the worker failed or the underlying read returned
+/// nothing.
+pub func await_str(mut h: I64JoinHandle) -> Str {
+    let result = h.join()
+    when result {
+        Ok(raw) => lowlevel { raw as Str },
+        Err(_) => "",
+    }
+}
+
+/// Spawn a worker thread that runs `file_write_all(path, content)` and
+/// returns 1 on success, 0 on failure. Await with [`await_bool`].
+pub func write_all_async(path: Str, content: Str) -> I64JoinHandle {
+    let worker = do() -> I64 {
+        let ok: Bool = ffi_file_write_all(path, content)
+        if ok { 1 as I64 } else { 0 as I64 }
+    }
+    return spawn_i64(worker)
+}
+
+/// Block on an async-write handle and return whether the write succeeded.
+pub func await_bool(mut h: I64JoinHandle) -> Bool {
+    let result = h.join()
+    when result {
+        Ok(flag) => flag != 0,
+        Err(_) => false,
+    }
+}

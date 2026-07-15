@@ -105,13 +105,52 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
             else if (gen_type == "i32")
                 arg_type = PrintArgType::Int;
             else if (gen_type == "%struct.Text") {
-                // Template literal result — Text { handle: *Unit }
-                // handle points to header: [data_ptr (offset 0), len (offset 8), ...]
-                // Extract handle, then load data_ptr from it
-                std::string handle = fresh_reg();
-                emit_line("  " + handle + " = extractvalue %struct.Text " + arg_val + ", 0");
+                // SSO Text { _w0: i64, _w1: i64, _w2: i64 }
+                // _w2 < 0 (inline): bytes 0-22 = data, byte 23 = 0x80|len
+                // _w2 >= 0 (heap): _w0 = data_ptr (as i64)
+                std::string w0 = fresh_reg();
+                std::string w2 = fresh_reg();
+                emit_line("  " + w0 + " = extractvalue %struct.Text " + arg_val + ", 0");
+                emit_line("  " + w2 + " = extractvalue %struct.Text " + arg_val + ", 2");
+
+                std::string is_inline = fresh_reg();
+                emit_line("  " + is_inline + " = icmp slt i64 " + w2 + ", 0");
+
+                std::string lbl_heap = fresh_label("text.heap");
+                std::string lbl_inline = fresh_label("text.inline");
+                std::string lbl_done = fresh_label("text.done");
+                emit_line("  br i1 " + is_inline + ", label %" + lbl_inline +
+                          ", label %" + lbl_heap);
+
+                // Heap path: _w0 is the data pointer (as i64)
+                emit_line(lbl_heap + ":");
+                std::string heap_ptr = fresh_reg();
+                emit_line("  " + heap_ptr + " = inttoptr i64 " + w0 + " to ptr");
+                emit_line("  br label %" + lbl_done);
+
+                // Inline path: store struct to stack, null-terminate, use as Str
+                emit_line(lbl_inline + ":");
+                std::string buf = fresh_reg();
+                emit_line("  " + buf + " = alloca %struct.Text");
+                emit_line("  store %struct.Text " + arg_val + ", ptr " + buf);
+                // length = (w2 >> 56) & 0x7F
+                std::string len_raw = fresh_reg();
+                emit_line("  " + len_raw + " = ashr i64 " + w2 + ", 56");
+                std::string len_val = fresh_reg();
+                emit_line("  " + len_val + " = and i64 " + len_raw + ", 127");
+                // Null-terminate at buf + len
+                std::string end_ptr = fresh_reg();
+                emit_line("  " + end_ptr + " = getelementptr i8, ptr " + buf +
+                          ", i64 " + len_val);
+                emit_line("  store i8 0, ptr " + end_ptr);
+                emit_line("  br label %" + lbl_done);
+
+                // Merge
+                emit_line(lbl_done + ":");
                 std::string data_ptr = fresh_reg();
-                emit_line("  " + data_ptr + " = load ptr, ptr " + handle);
+                emit_line("  " + data_ptr + " = phi ptr [ " + heap_ptr + ", %" +
+                          lbl_heap + " ], [ " + buf + ", %" + lbl_inline + " ]");
+
                 arg_val = data_ptr;
                 arg_type = PrintArgType::Str;
             }

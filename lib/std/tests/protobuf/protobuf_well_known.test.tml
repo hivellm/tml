@@ -1,0 +1,72 @@
+/// Tests for google.protobuf.* well-known types (phase1a items 7.1-7.6).
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, Timestamp, Duration, Any}
+use std::collections::Buffer
+
+@test func test_timestamp_from_unix() {
+    let ts = Timestamp::from_unix(1_700_000_000)
+    assert_eq(ts.seconds, 1_700_000_000)
+    assert_eq(ts.nanos, 0 as I32)
+}
+
+@test func test_timestamp_from_parts() {
+    let ts = Timestamp::from_parts(1000, 500_000_000 as I32)
+    assert_eq(ts.seconds, 1000)
+    assert_eq(ts.nanos, 500_000_000 as I32)
+}
+
+@test func test_timestamp_roundtrip() {
+    let ts = Timestamp::from_parts(1_700_000_000, 123_456_789 as I32)
+    var w = ProtoWriter::new()
+    ts.encode(mut ref w)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+    let decoded = when Timestamp::decode(mut ref r) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(decoded.seconds, 1_700_000_000)
+    assert_eq(decoded.nanos, 123_456_789 as I32)
+}
+
+@test func test_timestamp_default_values_emit_nothing() {
+    let ts = Timestamp::from_parts(0, 0 as I32)
+    var w = ProtoWriter::new()
+    ts.encode(mut ref w)
+    assert_eq(w.len(), 0)
+}
+
+@test func test_duration_roundtrip() {
+    let d = Duration::from_parts(42, 250_000_000 as I32)
+    var w = ProtoWriter::new()
+    d.encode(mut ref w)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+    let decoded = when Duration::decode(mut ref r) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(decoded.seconds, 42)
+    assert_eq(decoded.nanos, 250_000_000 as I32)
+}
+
+@test func test_duration_negative_seconds() {
+    let d = Duration::from_parts(-5, 0 as I32)
+    var w = ProtoWriter::new()
+    d.encode(mut ref w)
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+    let decoded = when Duration::decode(mut ref r) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert_eq(decoded.seconds, -5)
+}
+
+@test func test_any_roundtrip() {
+    let a = Any::new("type.googleapis.com/foo.Bar", "payload-bytes")
+    var w = ProtoWriter::new()
+    a.encode(mut ref w)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+    let decoded = when Any::decode(mut ref r) { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    let url: Str = decoded.type_url
+    let val: Str = decoded.value
+    assert_eq(url, "type.googleapis.com/foo.Bar")
+    assert_eq(val, "payload-bytes")
+}

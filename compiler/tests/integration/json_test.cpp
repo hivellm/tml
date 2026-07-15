@@ -124,10 +124,52 @@ TEST(JsonValueTest, ArrayConstruction) {
     EXPECT_EQ(v.as_array()[0].as_i64(), 1);
 }
 
+TEST(JsonValueTest, FlatObjectLargeParse) {
+    // Phase 1b: flat-vector JsonObject must scale to 20+ fields without
+    // O(n log n) tree overhead. Parse a 24-field object and verify every
+    // field is accessible.
+    std::string src = "{";
+    for (int i = 0; i < 24; ++i) {
+        if (i > 0) src += ",";
+        src += "\"k";
+        src += std::to_string(i);
+        src += "\":";
+        src += std::to_string(i * 10);
+    }
+    src += "}";
+
+    auto result = parse(src);
+    ASSERT_TRUE(json_is_ok(result));
+    auto val = std::move(std::get<JsonValue>(result));
+    EXPECT_TRUE(val.is_object());
+    EXPECT_EQ(val.size(), 24u);
+
+    for (int i = 0; i < 24; ++i) {
+        std::string key = "k" + std::to_string(i);
+        auto* v = val.get(key);
+        ASSERT_NE(v, nullptr) << "missing key " << key;
+        EXPECT_EQ(v->as_i64(), static_cast<int64_t>(i * 10));
+    }
+}
+
+TEST(JsonValueTest, FlatObjectInsertionOrderPreserved) {
+    // Flat-object preserves insertion order (unlike the old std::map which
+    // sorted alphabetically).
+    JsonObject obj;
+    obj.emplace_back("zeta", JsonValue(1));
+    obj.emplace_back("alpha", JsonValue(2));
+    obj.emplace_back("mu", JsonValue(3));
+    JsonValue v(std::move(obj));
+
+    auto out = v.to_string();
+    // First key written must be "zeta" (insertion order), not "alpha".
+    EXPECT_EQ(out.find("\"zeta\""), 1u);
+}
+
 TEST(JsonValueTest, ObjectConstruction) {
     JsonObject obj;
-    obj["name"] = JsonValue("Alice");
-    obj["age"] = JsonValue(30);
+    obj.emplace_back("name", JsonValue("Alice"));
+    obj.emplace_back("age", JsonValue(30));
 
     JsonValue v(std::move(obj));
     EXPECT_TRUE(v.is_object());
@@ -441,8 +483,8 @@ TEST(JsonSerializerTest, SerializeArray) {
 
 TEST(JsonSerializerTest, SerializeObject) {
     JsonObject obj;
-    obj["a"] = JsonValue(1);
-    obj["b"] = JsonValue(2);
+    obj.emplace_back("a", JsonValue(1));
+    obj.emplace_back("b", JsonValue(2));
     JsonValue v(std::move(obj));
     auto str = v.to_string();
     EXPECT_TRUE(str.find("\"a\":1") != std::string::npos);
@@ -465,7 +507,7 @@ TEST(JsonSerializerTest, PrettyPrintArray) {
 
 TEST(JsonSerializerTest, PrettyPrintObject) {
     JsonObject obj;
-    obj["key"] = JsonValue("value");
+    obj.emplace_back("key", JsonValue("value"));
     JsonValue v(std::move(obj));
     auto pretty = v.to_string_pretty(2);
     EXPECT_TRUE(pretty.find("{\n") != std::string::npos);
@@ -738,14 +780,15 @@ TEST(JsonValueTest, EqualityDifferentTypes) {
 
 TEST(JsonSerializerTest, WriteToStream) {
     JsonObject obj;
-    obj["name"] = JsonValue("Alice");
-    obj["age"] = JsonValue(int64_t(30));
+    obj.emplace_back("name", JsonValue("Alice"));
+    obj.emplace_back("age", JsonValue(int64_t(30)));
     JsonValue v(std::move(obj));
 
     std::ostringstream oss;
     v.write_to(oss);
 
-    EXPECT_EQ(oss.str(), R"({"age":30,"name":"Alice"})");
+    // Flat-object preserves insertion order (previously sorted alphabetically).
+    EXPECT_EQ(oss.str(), R"({"name":"Alice","age":30})");
 }
 
 TEST(JsonSerializerTest, WriteToStreamPretty) {
@@ -869,7 +912,7 @@ TEST(JsonSchemaTest, ValidateArrayOfIntegers) {
 TEST(JsonSchemaTest, ValidateObject) {
     auto schema = JsonSchema::object();
     JsonObject obj;
-    obj["key"] = JsonValue("value");
+    obj.emplace_back("key", JsonValue("value"));
     EXPECT_TRUE(schema.validate(JsonValue(std::move(obj))).valid);
     EXPECT_FALSE(schema.validate(JsonValue("not an object")).valid);
 }

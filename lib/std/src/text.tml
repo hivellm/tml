@@ -1,29 +1,29 @@
-//! Dynamic string type with heap allocation and rich manipulation API.
+//! Dynamic string type with Small String Optimization (SSO).
 //!
-//! This module provides `Text`, a growable, heap-allocated string type
-//! for dynamic string building and manipulation.
+//! This module provides `Text`, a growable string type that stores short strings
+//! (≤23 bytes) inline with zero heap allocations, and falls back to heap for
+//! longer strings.
 //!
 //! # Main Types
 //!
 //! | Type | Description |
 //! |------|-------------|
-//! | [`Text`] | Dynamic string with automatic growth |
-//!
-//! # When to Use Text
-//!
-//! Use `Text` when you need:
-//! - Dynamic string building and manipulation
-//! - Mutable strings that grow and shrink
-//! - Rich string operations (split, replace, trim, etc.)
-//!
-//! For static, immutable strings use `Str` instead.
+//! | [`Text`] | Dynamic string with SSO (≤23 chars inline, heap above that) |
 //!
 //! # Memory Layout
 //!
-//! Text is implemented as a heap-allocated header (24 bytes):
-//!   offset 0:  data pointer (*U8) — points to null-terminated byte buffer
-//!   offset 8:  len (I64) — current byte length
-//!   offset 16: capacity (I64) — allocated capacity of data buffer
+//! Text is a 24-byte tagged-union struct:
+//!
+//! **Inline mode** (`_w2 < 0`, i.e., MSB of byte 23 is set):
+//!   - bytes 0-22: string data stored directly in the struct
+//!   - byte 23: `0x80 | length` (length is 0-23)
+//!   - Zero heap allocations
+//!
+//! **Heap mode** (`_w2 >= 0`):
+//!   - `_w0` = data buffer pointer (as I64)
+//!   - `_w1` = current length (I64)
+//!   - `_w2` = capacity (I64)
+//!   - One heap allocation (data buffer only)
 //!
 //! # Example
 //!
@@ -41,67 +41,37 @@
 // Text Type Definition
 // ============================================================================
 
-/// Dynamic string with heap allocation and automatic growth.
+/// Dynamic string with Small String Optimization (SSO).
 ///
-/// Text provides JavaScript-like string manipulation methods.
-/// Internally uses a 24-byte header (data_ptr + len + capacity)
-/// with a separate heap-allocated byte buffer.
+/// Strings ≤23 bytes are stored inline (zero malloc). Longer strings use
+/// a single heap-allocated data buffer.
 pub type Text {
-    handle: *Unit
+    _w0: I64
+    _w1: I64
+    _w2: I64
 }
 
 // ============================================================================
 // Internal Helpers
 // ============================================================================
 
-// Header field offsets
-func text_data_ptr_offset() -> I64 { 0 }
-func text_len_offset() -> I64 { 8 }
-func text_cap_offset() -> I64 { 16 }
-func text_header_size() -> I64 { 24 }
+// -- Str helpers --------------------------------------------------------------
 
-// Read header field: data pointer
-func text_get_data(h: *Unit) -> *U8 {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_data_ptr_offset()) as *I64
-    let raw: I64 = lowlevel { ptr_read[I64](p) }
-    raw as *U8
+// FFI to libc strlen (SIMD-optimized, much faster than byte loop)
+@extern("strlen")
+func text_c_strlen(s: Str) -> I64
+
+// Get length of a Str (null-terminated)
+func text_str_len(s: Str) -> I64 {
+    let addr: I64 = s as I64
+    if addr == 0 { return 0 }
+    return text_c_strlen(s)
 }
 
-// Read header field: length
-func text_get_len(h: *Unit) -> I64 {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_len_offset()) as *I64
-    lowlevel { ptr_read[I64](p) }
-}
-
-// Read header field: capacity
-func text_get_cap(h: *Unit) -> I64 {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_cap_offset()) as *I64
-    lowlevel { ptr_read[I64](p) }
-}
-
-// Write header field: data pointer
-func text_set_data(h: *Unit, data: *U8) {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_data_ptr_offset()) as *I64
-    let val: I64 = data as I64
-    lowlevel { ptr_write[I64](p, val) }
-}
-
-// Write header field: length
-func text_set_len(h: *Unit, new_len: I64) {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_len_offset()) as *I64
-    lowlevel { ptr_write[I64](p, new_len) }
-}
-
-// Write header field: capacity
-func text_set_cap(h: *Unit, new_cap: I64) {
-    let addr: I64 = h as I64
-    let p: *I64 = (addr + text_cap_offset()) as *I64
-    lowlevel { ptr_write[I64](p, new_cap) }
+// Check if byte is whitespace
+func text_is_ws(b: U8) -> Bool {
+    let v: I32 = b as I32
+    v == 32 or v == 9 or v == 10 or v == 13 or v == 12 or v == 11
 }
 
 // Calculate new capacity using growth strategy
@@ -118,45 +88,6 @@ func text_grow_cap(current: I64, required: I64) -> I64 {
         new_cap = required
     }
     new_cap
-}
-
-// Ensure the data buffer has enough capacity
-func text_ensure_cap(h: *Unit, required: I64) {
-    let cap: I64 = text_get_cap(h)
-    if required <= cap {
-        return
-    }
-    let new_cap: I64 = text_grow_cap(cap, required)
-    let old_data: *U8 = text_get_data(h)
-    let old_addr: I64 = old_data as I64
-    if old_addr == 0 {
-        // First allocation
-        let new_data: *U8 = lowlevel { mem_alloc(new_cap + 1) } as *U8
-        text_set_data(h, new_data)
-        text_set_cap(h, new_cap)
-    } else {
-        // Realloc
-        let new_data: *U8 = lowlevel { mem_realloc(old_data as *Unit, new_cap + 1) } as *U8
-        text_set_data(h, new_data)
-        text_set_cap(h, new_cap)
-    }
-}
-
-// Allocate a new header + buffer with given capacity
-func text_alloc_with_cap(cap: I64) -> *Unit {
-    let h: *Unit = lowlevel { mem_alloc(text_header_size()) }
-    var actual_cap: I64 = cap
-    if actual_cap < 8 {
-        actual_cap = 8
-    }
-    let data: *U8 = lowlevel { mem_alloc(actual_cap + 1) } as *U8
-    // null-terminate
-    let p: *U8 = (data as I64) as *U8
-    lowlevel { ptr_write[U8](p, 0 as U8) }
-    text_set_data(h, data)
-    text_set_len(h, 0)
-    text_set_cap(h, actual_cap)
-    h
 }
 
 // Copy bytes from Str into data buffer at offset
@@ -186,19 +117,6 @@ func text_set_byte(data: *U8, index: I64, value: U8) {
     lowlevel { ptr_write[U8](p, value) }
 }
 
-// FFI to libc strlen (SIMD-optimized, much faster than byte loop)
-@extern("strlen")
-func text_c_strlen(s: Str) -> I64
-
-// Get length of a Str (null-terminated)
-func text_str_len(s: Str) -> I64 {
-    let addr: I64 = s as I64
-    if addr == 0 {
-        return 0
-    }
-    return text_c_strlen(s)
-}
-
 // Count decimal digits of an I64 (for pre-calculating buffer size)
 func text_i64_digit_count(n: I64) -> I64 {
     if n == 0 { return 1 }
@@ -226,7 +144,6 @@ func text_i64_write_at(data: *U8, offset: I64, n: I64) -> I64 {
         val = 0 - val
     }
 
-    // Count digits
     var temp: I64 = val
     var digit_count: I64 = 0
     loop (temp > 0) {
@@ -238,12 +155,10 @@ func text_i64_write_at(data: *U8, offset: I64, n: I64) -> I64 {
     if is_neg { sign_len = 1 }
     let total: I64 = digit_count + sign_len
 
-    // Write sign
     if is_neg {
         text_set_byte(data, offset, 45 as U8) // '-'
     }
 
-    // Write digits backwards
     var write_pos: I64 = offset + total - 1
     var v: I64 = val
     loop (v > 0) {
@@ -256,84 +171,238 @@ func text_i64_write_at(data: *U8, offset: I64, n: I64) -> I64 {
     total
 }
 
-// Push a Str into text
-func text_push_str_raw(h: *Unit, s: Str) {
-    let slen: I64 = text_str_len(s)
-    if slen <= 0 {
-        return
+// -- SSO helpers --------------------------------------------------------------
+
+// Inline tag byte for a given length (0x80 | len), stored in high byte of _w2
+func text_inline_tag(len: I64) -> I64 {
+    ((128 | len) as I64) << 56
+}
+
+// Tag for an empty inline string
+func text_empty_tag() -> I64 {
+    (128 as I64) << 56
+}
+
+// Read length from a Text: inline if w2 < 0, heap uses w1
+func text_sso_len(w2: I64, w1: I64) -> I64 {
+    if w2 < 0 { (w2 >> 56) & 127 } else { w1 }
+}
+
+// Get the data pointer for reads.
+// For inline: self_addr is the struct address (bytes 0..22 are the data).
+// For heap: w0 is the data pointer (as I64).
+func text_data_ptr(self_addr: I64, w0: I64, w2: I64) -> *U8 {
+    if w2 < 0 { self_addr as *U8 } else { w0 as *U8 }
+}
+
+// Pack up to 8 bytes from Str starting at offset into an I64 (little-endian).
+// count must be 1..8.
+func text_pack_word(s: Str, offset: I64, count: I64) -> I64 {
+    var word: I64 = 0
+    let s_addr: I64 = s as I64
+    for i in 0 to count {
+        let bp: *U8 = (s_addr + offset + i) as *U8
+        let b: I64 = (lowlevel { ptr_read[U8](bp) }) as I64
+        word = word | (b << (i * 8))
     }
-    let cur_len: I64 = text_get_len(h)
-    text_ensure_cap(h, cur_len + slen)
-    let data: *U8 = text_get_data(h)
-    text_copy_str_at(data, cur_len, s, slen)
-    let new_len: I64 = cur_len + slen
-    text_set_len(h, new_len)
-    text_set_byte(data, new_len, 0 as U8)
+    word
 }
 
-// Check if byte is whitespace
-func text_is_ws(b: U8) -> Bool {
-    let v: I32 = b as I32
-    v == 32 or v == 9 or v == 10 or v == 13 or v == 12 or v == 11
+// Pack up to 8 bytes from a *U8 buffer starting at offset into an I64 (little-endian).
+// count must be 1..8.
+func text_pack_word_from_ptr(data: *U8, offset: I64, count: I64) -> I64 {
+    var word: I64 = 0
+    for i in 0 to count {
+        let bp: *U8 = (data as I64 + offset + i) as *U8
+        let b: I64 = (lowlevel { ptr_read[U8](bp) }) as I64
+        word = word | (b << (i * 8))
+    }
+    word
 }
 
-// ============================================================================
-// Integer to string helper (avoids dependency on core::str for module ordering)
-// ============================================================================
+// Build a Text from a raw data pointer + length.
+// If len <= 23, packs bytes inline. If len > 23, allocates a heap buffer.
+// The caller is responsible for freeing the source buffer if needed.
+func text_from_raw(data: *U8, len: I64) -> Text {
+    if len <= 0 {
+        return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
+    }
+    if len > 23 {
+        let buf: *U8 = lowlevel { mem_alloc(len + 1) } as *U8
+        lowlevel { copy_nonoverlapping(data, buf, len) }
+        lowlevel { ptr_write[U8]((buf as I64 + len) as *U8, 0 as U8) }
+        return Text { _w0: buf as I64, _w1: len, _w2: len }
+    }
+    // Inline: pack bytes into words
+    var w0: I64 = 0
+    var w1: I64 = 0
+    var w2_data: I64 = 0
+    if len >= 8 {
+        w0 = text_pack_word_from_ptr(data, 0, 8)
+    } else {
+        w0 = text_pack_word_from_ptr(data, 0, len)
+    }
+    if len >= 16 {
+        w1 = text_pack_word_from_ptr(data, 8, 8)
+    } else if len > 8 {
+        w1 = text_pack_word_from_ptr(data, 8, len - 8)
+    }
+    if len > 16 {
+        w2_data = text_pack_word_from_ptr(data, 16, len - 16)
+    }
+    Text { _w0: w0, _w1: w1, _w2: w2_data | text_inline_tag(len) }
+}
 
-func text_i64_to_str_push(h: *Unit, n: I64) {
-    if n == 0 {
-        let cur_len: I64 = text_get_len(h)
-        text_ensure_cap(h, cur_len + 1)
-        let data: *U8 = text_get_data(h)
-        text_set_byte(data, cur_len, 48 as U8) // '0'
-        text_set_len(h, cur_len + 1)
+// Ensure a heap Text has enough capacity. Promotes inline to heap if needed.
+// Returns (new_w0, new_w1, new_w2) by mutating through the struct pointer.
+// self_ptr must be a mutable pointer to the Text struct.
+func text_ensure_cap_ptr(self_ptr: *Unit, required: I64) {
+    let self_addr: I64 = self_ptr as I64
+    let w2_ptr: *I64 = (self_addr + 16) as *I64
+    let w2: I64 = lowlevel { ptr_read[I64](w2_ptr) }
+
+    if w2 < 0 {
+        // Inline mode: promote to heap if required > 23
+        let w1_ptr: *I64 = (self_addr + 8) as *I64
+        let cur_len: I64 = (w2 >> 56) & 127
+        if required <= 23 {
+            return  // still fits inline
+        }
+        // Promote: allocate heap buffer, copy inline bytes
+        let new_cap: I64 = text_grow_cap(0, required)
+        let new_buf: *U8 = lowlevel { mem_alloc(new_cap + 1) } as *U8
+        // Copy inline bytes from struct
+        let src: *U8 = self_addr as *U8
+        if cur_len > 0 {
+            lowlevel { copy_nonoverlapping(src, new_buf, cur_len) }
+        }
+        lowlevel { ptr_write[U8]((new_buf as I64 + cur_len) as *U8, 0 as U8) }
+        // Write new w0, w1, w2 into struct
+        let w0_ptr: *I64 = self_addr as *I64
+        lowlevel { ptr_write[I64](w0_ptr, new_buf as I64) }
+        lowlevel { ptr_write[I64](w1_ptr, cur_len) }
+        lowlevel { ptr_write[I64](w2_ptr, new_cap) }
+    } else {
+        // Heap mode
+        let w0_ptr: *I64 = self_addr as *I64
+        let w1_ptr: *I64 = (self_addr + 8) as *I64
+        let cap: I64 = w2
+        if required <= cap {
+            return
+        }
+        let new_cap: I64 = text_grow_cap(cap, required)
+        let old_data: *U8 = (lowlevel { ptr_read[I64](w0_ptr) }) as *U8
+        let new_data: *U8 = lowlevel { mem_realloc(old_data as *Unit, new_cap + 1) } as *U8
+        lowlevel { ptr_write[I64](w0_ptr, new_data as I64) }
+        lowlevel { ptr_write[I64](w2_ptr, new_cap) }
+    }
+}
+
+// Push a raw byte into the Text at this_ptr.
+func text_push_byte_ptr(self_ptr: *Unit, byte: U8) {
+    let self_addr: I64 = self_ptr as I64
+    let w2_ptr: *I64 = (self_addr + 16) as *I64
+    let w2: I64 = lowlevel { ptr_read[I64](w2_ptr) }
+
+    if w2 < 0 {
+        // Inline mode
+        let cur_len: I64 = (w2 >> 56) & 127
+        if cur_len < 23 {
+            // Write byte inline at position cur_len
+            let bp: *U8 = (self_addr + cur_len) as *U8
+            lowlevel { ptr_write[U8](bp, byte) }
+            // Update tag: clear old tag, set new tag with len+1
+            let new_tag: I64 = text_inline_tag(cur_len + 1)
+            // Re-read w2 from memory (the byte write above may have modified _w2 bytes 16-22)
+            let data_mask: I64 = 72057594037927935  // 0x00FFFFFFFFFFFFFF
+            let w2_current: I64 = lowlevel { ptr_read[I64](w2_ptr) }
+            let w2_data: I64 = w2_current & data_mask
+            lowlevel { ptr_write[I64](w2_ptr, w2_data | new_tag) }
+            return
+        }
+        // Need to promote to heap
+        text_ensure_cap_ptr(self_ptr, cur_len + 1)
+    } else {
+        // Heap mode
+        let w1_ptr: *I64 = (self_addr + 8) as *I64
+        let cur_len: I64 = lowlevel { ptr_read[I64](w1_ptr) }
+        let cap: I64 = w2
+        if cur_len >= cap {
+            text_ensure_cap_ptr(self_ptr, cur_len + 1)
+        }
+        // After possible realloc, re-read w0 and w1
+        let w0_ptr: *I64 = self_addr as *I64
+        let data_ptr_val: I64 = lowlevel { ptr_read[I64](w0_ptr) }
+        let data: *U8 = data_ptr_val as *U8
+        text_set_byte(data, cur_len, byte)
+        lowlevel { ptr_write[I64](w1_ptr, cur_len + 1) }
         text_set_byte(data, cur_len + 1, 0 as U8)
         return
     }
 
-    var val: I64 = n
-    var is_neg: Bool = false
-    if val < 0 {
-        is_neg = true
-        val = 0 - val
+    // After promotion, now in heap mode — push the byte
+    let w0_ptr: *I64 = self_addr as *I64
+    let w1_ptr: *I64 = (self_addr + 8) as *I64
+    let cur_len2: I64 = lowlevel { ptr_read[I64](w1_ptr) }
+    let data_ptr_val: I64 = lowlevel { ptr_read[I64](w0_ptr) }
+    let data: *U8 = data_ptr_val as *U8
+    text_set_byte(data, cur_len2, byte)
+    lowlevel { ptr_write[I64](w1_ptr, cur_len2 + 1) }
+    text_set_byte(data, cur_len2 + 1, 0 as U8)
+}
+
+// Push slen bytes from Str s into the Text at self_ptr.
+func text_push_str_ptr(self_ptr: *Unit, s: Str, slen: I64) {
+    if slen <= 0 { return }
+    let self_addr: I64 = self_ptr as I64
+    let w2_ptr: *I64 = (self_addr + 16) as *I64
+    let w2: I64 = lowlevel { ptr_read[I64](w2_ptr) }
+
+    let cur_len: I64 = if w2 < 0 { (w2 >> 56) & 127 } else {
+        let w1_ptr: *I64 = (self_addr + 8) as *I64
+        lowlevel { ptr_read[I64](w1_ptr) }
+    }
+    let required: I64 = cur_len + slen
+
+    if w2 < 0 and required <= 23 {
+        // Pure inline: write bytes directly into struct
+        let src_addr: I64 = s as I64
+        for i in 0 to slen {
+            let bp: *U8 = (src_addr + i) as *U8
+            let b: U8 = lowlevel { ptr_read[U8](bp) }
+            let dst: *U8 = (self_addr + cur_len + i) as *U8
+            lowlevel { ptr_write[U8](dst, b) }
+        }
+        // Update tag in w2
+        let w2_ptr2: *I64 = (self_addr + 16) as *I64
+        let data_mask: I64 = 72057594037927935  // 0x00FFFFFFFFFFFFFF
+        let w2_data: I64 = (lowlevel { ptr_read[I64](w2_ptr2) }) & data_mask
+        lowlevel { ptr_write[I64](w2_ptr2, w2_data | text_inline_tag(required)) }
+        return
     }
 
-    // Count digits
-    var temp: I64 = val
-    var digit_count: I64 = 0
-    loop (temp > 0) {
-        digit_count = digit_count + 1
-        temp = temp / 10
-    }
+    // Need heap (either already heap or need promotion)
+    text_ensure_cap_ptr(self_ptr, required)
 
-    var sign_len: I64 = 0
-    if is_neg { sign_len = 1 }
-    let total: I64 = digit_count + sign_len
-    let cur_len: I64 = text_get_len(h)
-    text_ensure_cap(h, cur_len + total)
-    let data: *U8 = text_get_data(h)
-
-    // Write sign
-    var pos: I64 = cur_len
-    if is_neg {
-        text_set_byte(data, pos, 45 as U8) // '-'
-        pos = pos + 1
-    }
-
-    // Write digits in reverse order
-    var write_pos: I64 = cur_len + total - 1
-    var v: I64 = val
-    loop (v > 0) {
-        let digit: I64 = v % 10
-        text_set_byte(data, write_pos, (digit + 48) as U8)
-        write_pos = write_pos - 1
-        v = v / 10
-    }
-
-    let new_len: I64 = cur_len + total
-    text_set_len(h, new_len)
+    // Re-read after possible promotion
+    let w0_ptr: *I64 = self_addr as *I64
+    let w1_ptr: *I64 = (self_addr + 8) as *I64
+    let data_val: I64 = lowlevel { ptr_read[I64](w0_ptr) }
+    let data: *U8 = data_val as *U8
+    let cur_len2: I64 = lowlevel { ptr_read[I64](w1_ptr) }
+    text_copy_str_at(data, cur_len2, s, slen)
+    let new_len: I64 = cur_len2 + slen
+    lowlevel { ptr_write[I64](w1_ptr, new_len) }
     text_set_byte(data, new_len, 0 as U8)
+}
+
+// Push an I64 as decimal text into the Text at self_ptr.
+func text_push_i64_ptr(self_ptr: *Unit, n: I64) {
+    // Compute digits into a local 24-byte stack equivalent using heap
+    let tmp: *U8 = lowlevel { mem_alloc(25) } as *U8
+    let written: I64 = text_i64_write_at(tmp, 0, n)
+    text_push_str_ptr(self_ptr, tmp as Str, written)
+    lowlevel { mem_free(tmp as *Unit) }
 }
 
 // ============================================================================
@@ -347,41 +416,63 @@ impl Text {
 
     /// Create a new empty Text
     pub func new() -> Text {
-        let h: *Unit = text_alloc_with_cap(8)
-        Text { handle: h }
+        Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
     }
 
-    /// Create Text from a string literal
+    /// Create Text from a string literal (SSO: ≤23 chars inline, else heap)
     pub func from(s: Str) -> Text {
         let slen: I64 = text_str_len(s)
-        var cap: I64 = slen
-        if cap < 8 { cap = 8 }
-        let h: *Unit = text_alloc_with_cap(cap)
-        if slen > 0 {
-            let data: *U8 = text_get_data(h)
-            text_copy_str_at(data, 0, s, slen)
-            text_set_len(h, slen)
-            text_set_byte(data, slen, 0 as U8)
+        if slen <= 0 {
+            return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
         }
-        Text { handle: h }
+        if slen > 23 {
+            // Heap path
+            let data: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
+            lowlevel { copy_nonoverlapping(s as *U8, data, slen) }
+            lowlevel { ptr_write[U8]((data as I64 + slen) as *U8, 0 as U8) }
+            return Text { _w0: data as I64, _w1: slen, _w2: slen }
+        }
+        // Inline path: pack bytes into words
+        var w0: I64 = 0
+        var w1: I64 = 0
+        var w2_data: I64 = 0
+        if slen >= 8 {
+            w0 = text_pack_word(s, 0, 8)
+        } else if slen > 0 {
+            w0 = text_pack_word(s, 0, slen)
+        }
+        if slen >= 16 {
+            w1 = text_pack_word(s, 8, 8)
+        } else if slen > 8 {
+            w1 = text_pack_word(s, 8, slen - 8)
+        }
+        if slen > 16 {
+            w2_data = text_pack_word(s, 16, slen - 16)
+        }
+        Text { _w0: w0, _w1: w1, _w2: w2_data | text_inline_tag(slen) }
     }
 
-    /// Create Text with pre-allocated capacity
+    /// Create Text with pre-allocated capacity (heap if > 23, else inline empty)
     pub func with_capacity(cap: I64) -> Text {
-        let h: *Unit = text_alloc_with_cap(cap)
-        Text { handle: h }
+        if cap <= 23 {
+            return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
+        }
+        let data: *U8 = lowlevel { mem_alloc(cap + 1) } as *U8
+        lowlevel { ptr_write[U8](data, 0 as U8) }
+        Text { _w0: data as I64, _w1: 0, _w2: cap }
     }
 
     /// Create Text from a number
     pub func from_i64(value: I64) -> Text {
-        let h: *Unit = text_alloc_with_cap(24)
-        text_i64_to_str_push(h, value)
-        Text { handle: h }
+        let tmp: *U8 = lowlevel { mem_alloc(25) } as *U8
+        let written: I64 = text_i64_write_at(tmp, 0, value)
+        let result: Text = text_from_raw(tmp, written)
+        lowlevel { mem_free(tmp as *Unit) }
+        result
     }
 
     /// Create Text from a floating-point number
     pub func from_f64(value: F64) -> Text {
-        // Use the f64_to_string C runtime (hardware-dependent snprintf)
         let s: Str = lowlevel { f64_to_string(value) }
         Text::from(s)
     }
@@ -394,29 +485,22 @@ impl Text {
 
     /// Create Text from a boolean
     pub func from_bool(value: Bool) -> Text {
-        if value {
-            Text::from("true")
-        } else {
-            Text::from("false")
-        }
+        if value { Text::from("true") } else { Text::from("false") }
     }
 
     // ========================================================================
     // Conversion
     // ========================================================================
 
-    /// Get the string data as a Str (returns a fresh heap copy).
+    /// Get the string data as a Str (returns a heap-allocated null-terminated copy).
     @allocates
     pub func as_str(this) -> Str {
-        let data: *U8 = text_get_data(this.handle)
-        let addr: I64 = data as I64
-        if addr == 0 {
-            return ""
-        }
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 {
-            return ""
-        }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return "" }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
         lowlevel { copy_nonoverlapping(data, buf, slen) }
         lowlevel { ptr_write[U8]((buf as I64 + slen) as *U8, 0 as U8) }
@@ -425,33 +509,26 @@ impl Text {
 
     /// Clone this Text (deep copy)
     pub func clone(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        var cap: I64 = slen
-        if cap < 8 { cap = 8 }
-        let h: *Unit = text_alloc_with_cap(cap)
-        if slen > 0 {
-            let src: *U8 = text_get_data(this.handle)
-            let dst: *U8 = text_get_data(h)
-            text_copy_bytes(dst, 0, src, 0, slen)
-            text_set_len(h, slen)
-            text_set_byte(dst, slen, 0 as U8)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 {
+            return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
         }
-        Text { handle: h }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        text_from_raw(src, slen)
     }
 
-    /// Free the Text memory
+    /// Free the Text memory (frees heap buffer; resets to empty inline)
     pub func drop(mut this) {
-        let addr: I64 = this.handle as I64
-        if addr == 0 {
-            return
+        let w2: I64 = this._w2
+        if w2 >= 0 and this._w0 != 0 {
+            lowlevel { mem_free(this._w0 as *Unit) }
         }
-        let data: *U8 = text_get_data(this.handle)
-        let data_addr: I64 = data as I64
-        if data_addr != 0 {
-            lowlevel { mem_free(data as *Unit) }
-        }
-        lowlevel { mem_free(this.handle) }
-        this.handle = null
+        this._w0 = 0
+        this._w1 = 0
+        this._w2 = text_empty_tag()
     }
 
     // ========================================================================
@@ -460,26 +537,28 @@ impl Text {
 
     /// Get the length in bytes
     pub func len(this) -> I64 {
-        text_get_len(this.handle)
+        text_sso_len(this._w2, this._w1)
     }
 
-    /// Get the current capacity
+    /// Get the current capacity (23 for inline, heap cap for heap mode)
     pub func capacity(this) -> I64 {
-        text_get_cap(this.handle)
+        if this._w2 < 0 { return 23 as I64 }
+        this._w2
     }
 
     /// Check if the Text is empty
     pub func is_empty(this) -> Bool {
-        text_get_len(this.handle) == 0
+        text_sso_len(this._w2, this._w1) == 0
     }
 
     /// Get byte at index (returns -1 if out of bounds)
     pub func byte_at(this, index: I64) -> I32 {
-        let slen: I64 = text_get_len(this.handle)
-        if index < 0 or index >= slen {
-            return -1
-        }
-        let data: *U8 = text_get_data(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if index < 0 or index >= slen { return -1 }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let b: U8 = text_byte_at_raw(data, index)
         b as I32
     }
@@ -488,165 +567,130 @@ impl Text {
     // Modification (mutates this Text)
     // ========================================================================
 
-    /// Clear the content
+    /// Clear the content (resets to empty inline)
     pub func clear(this) {
-        text_set_len(this.handle, 0)
-        let data: *U8 = text_get_data(this.handle)
-        let addr: I64 = data as I64
-        if addr != 0 {
-            text_set_byte(data, 0, 0 as U8)
+        let w2: I64 = this._w2
+        if w2 < 0 {
+            // Inline: reset to empty inline
+            let self_ptr: *Unit = lowlevel { this as *Unit }
+            let self_addr: I64 = self_ptr as I64
+            lowlevel { ptr_write[I64](self_addr as *I64, 0) }
+            lowlevel { ptr_write[I64]((self_addr + 8) as *I64, 0) }
+            lowlevel { ptr_write[I64]((self_addr + 16) as *I64, text_empty_tag()) }
+        } else {
+            // Heap: keep buffer, just zero length and null-terminate
+            let self_ptr: *Unit = lowlevel { this as *Unit }
+            let self_addr: I64 = self_ptr as I64
+            lowlevel { ptr_write[I64]((self_addr + 8) as *I64, 0) }
+            if this._w0 != 0 {
+                let data: *U8 = this._w0 as *U8
+                lowlevel { ptr_write[U8](data, 0 as U8) }
+            }
         }
     }
 
     /// Push a single byte
     pub func push(this, byte: I32) {
-        let cur_len: I64 = text_get_len(this.handle)
-        text_ensure_cap(this.handle, cur_len + 1)
-        let data: *U8 = text_get_data(this.handle)
-        text_set_byte(data, cur_len, byte as U8)
-        text_set_len(this.handle, cur_len + 1)
-        text_set_byte(data, cur_len + 1, 0 as U8)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        text_push_byte_ptr(self_ptr, byte as U8)
     }
 
     /// UNSAFE: Get raw data pointer
     pub func data_ptr(this) -> *U8 {
-        text_get_data(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        text_data_ptr(self_addr, this._w0, this._w2)
     }
 
     /// UNSAFE: Set length directly without bounds checking
     pub func set_len(this, new_len: I64) {
-        text_set_len(this.handle, new_len)
-        let data: *U8 = text_get_data(this.handle)
-        let addr: I64 = data as I64
-        if addr != 0 {
-            text_set_byte(data, new_len, 0 as U8)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        if w2 < 0 {
+            // Inline: update tag
+            let data_mask: I64 = 72057594037927935  // 0x00FFFFFFFFFFFFFF
+            let w2_data: I64 = w2 & data_mask
+            lowlevel { ptr_write[I64]((self_addr + 16) as *I64, w2_data | text_inline_tag(new_len)) }
+        } else {
+            // Heap: update w1 and null-terminate
+            lowlevel { ptr_write[I64]((self_addr + 8) as *I64, new_len) }
+            if this._w0 != 0 {
+                let data: *U8 = this._w0 as *U8
+                text_set_byte(data, new_len, 0 as U8)
+            }
         }
     }
 
     /// Append a string
     pub func push_str(this, s: Str) {
-        text_push_str_raw(this.handle, s)
+        let slen: I64 = text_str_len(s)
+        if slen <= 0 { return }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        text_push_str_ptr(self_ptr, s, slen)
     }
 
     /// Append an integer directly
     pub func push_i64(this, value: I64) {
-        text_i64_to_str_push(this.handle, value)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        text_push_i64_ptr(self_ptr, value)
     }
 
     /// Append formatted: prefix + integer + suffix in one call
     pub func push_formatted(this, prefix: Str, value: I64, suffix: Str) {
-        text_push_str_raw(this.handle, prefix)
-        text_i64_to_str_push(this.handle, value)
-        text_push_str_raw(this.handle, suffix)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let plen: I64 = text_str_len(prefix)
+        let slen: I64 = text_str_len(suffix)
+        if plen > 0 { text_push_str_ptr(self_ptr, prefix, plen) }
+        text_push_i64_ptr(self_ptr, value)
+        if slen > 0 { text_push_str_ptr(self_ptr, suffix, slen) }
     }
 
     /// Reserve additional capacity
     pub func reserve(this, additional: I64) {
-        let cur_len: I64 = text_get_len(this.handle)
-        text_ensure_cap(this.handle, cur_len + additional)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let cur_len: I64 = text_sso_len(w2, this._w1)
+        text_ensure_cap_ptr(self_ptr, cur_len + additional)
     }
 
     /// Fill with N copies of the same byte character (batch operation)
     pub func fill_char(this, byte: I32, count: I64) {
-        if count <= 0 {
-            return
-        }
-        let cur_len: I64 = text_get_len(this.handle)
-        text_ensure_cap(this.handle, cur_len + count)
-        let data: *U8 = text_get_data(this.handle)
+        if count <= 0 { return }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
         for i in 0 to count {
-            text_set_byte(data, cur_len + i, byte as U8)
+            text_push_byte_ptr(self_ptr, byte as U8)
         }
-        let new_len: I64 = cur_len + count
-        text_set_len(this.handle, new_len)
-        text_set_byte(data, new_len, 0 as U8)
     }
 
     /// Append log-style message: s1 + n1 + s2 + n2 + s3 + n3 + s4
-    /// Optimized: single capacity check, single data pointer read, batched writes
     pub func push_log(this, s1: Str, n1: I64, s2: Str, n2: I64, s3: Str, n3: I64, s4: Str) {
-        // Pre-calculate all lengths
+        let self_ptr: *Unit = lowlevel { this as *Unit }
         let slen1: I64 = text_str_len(s1)
-        let nlen1: I64 = text_i64_digit_count(n1) + (if n1 < 0 { 1 } else { 0 })
         let slen2: I64 = text_str_len(s2)
-        let nlen2: I64 = text_i64_digit_count(n2) + (if n2 < 0 { 1 } else { 0 })
         let slen3: I64 = text_str_len(s3)
-        let nlen3: I64 = text_i64_digit_count(n3) + (if n3 < 0 { 1 } else { 0 })
         let slen4: I64 = text_str_len(s4)
-        let total: I64 = slen1 + nlen1 + slen2 + nlen2 + slen3 + nlen3 + slen4
-
-        // Single capacity check
-        let cur_len: I64 = text_get_len(this.handle)
-        text_ensure_cap(this.handle, cur_len + total)
-
-        // Single data pointer read
-        let data: *U8 = text_get_data(this.handle)
-        var pos: I64 = cur_len
-
-        // Batch writes
-        if slen1 > 0 {
-            text_copy_str_at(data, pos, s1, slen1)
-            pos = pos + slen1
-        }
-        pos = pos + text_i64_write_at(data, pos, n1)
-        if slen2 > 0 {
-            text_copy_str_at(data, pos, s2, slen2)
-            pos = pos + slen2
-        }
-        pos = pos + text_i64_write_at(data, pos, n2)
-        if slen3 > 0 {
-            text_copy_str_at(data, pos, s3, slen3)
-            pos = pos + slen3
-        }
-        pos = pos + text_i64_write_at(data, pos, n3)
-        if slen4 > 0 {
-            text_copy_str_at(data, pos, s4, slen4)
-            pos = pos + slen4
-        }
-
-        // Single length update + null terminator
-        text_set_len(this.handle, pos)
-        text_set_byte(data, pos, 0 as U8)
+        if slen1 > 0 { text_push_str_ptr(self_ptr, s1, slen1) }
+        text_push_i64_ptr(self_ptr, n1)
+        if slen2 > 0 { text_push_str_ptr(self_ptr, s2, slen2) }
+        text_push_i64_ptr(self_ptr, n2)
+        if slen3 > 0 { text_push_str_ptr(self_ptr, s3, slen3) }
+        text_push_i64_ptr(self_ptr, n3)
+        if slen4 > 0 { text_push_str_ptr(self_ptr, s4, slen4) }
     }
 
     /// Append path-style pattern: s1 + n1 + s2 + n2 + s3
-    /// Optimized: single capacity check, single data pointer read, batched writes
     pub func push_path(this, s1: Str, n1: I64, s2: Str, n2: I64, s3: Str) {
-        // Pre-calculate all lengths
+        let self_ptr: *Unit = lowlevel { this as *Unit }
         let slen1: I64 = text_str_len(s1)
-        let nlen1: I64 = text_i64_digit_count(n1) + (if n1 < 0 { 1 } else { 0 })
         let slen2: I64 = text_str_len(s2)
-        let nlen2: I64 = text_i64_digit_count(n2) + (if n2 < 0 { 1 } else { 0 })
         let slen3: I64 = text_str_len(s3)
-        let total: I64 = slen1 + nlen1 + slen2 + nlen2 + slen3
-
-        // Single capacity check
-        let cur_len: I64 = text_get_len(this.handle)
-        text_ensure_cap(this.handle, cur_len + total)
-
-        // Single data pointer read (reuse for all writes)
-        let data: *U8 = text_get_data(this.handle)
-        var pos: I64 = cur_len
-
-        // Batch writes using cached pointer
-        if slen1 > 0 {
-            text_copy_str_at(data, pos, s1, slen1)
-            pos = pos + slen1
-        }
-        pos = pos + text_i64_write_at(data, pos, n1)
-        if slen2 > 0 {
-            text_copy_str_at(data, pos, s2, slen2)
-            pos = pos + slen2
-        }
-        pos = pos + text_i64_write_at(data, pos, n2)
-        if slen3 > 0 {
-            text_copy_str_at(data, pos, s3, slen3)
-            pos = pos + slen3
-        }
-
-        // Single length update + null terminator
-        text_set_len(this.handle, pos)
-        text_set_byte(data, pos, 0 as U8)
+        if slen1 > 0 { text_push_str_ptr(self_ptr, s1, slen1) }
+        text_push_i64_ptr(self_ptr, n1)
+        if slen2 > 0 { text_push_str_ptr(self_ptr, s2, slen2) }
+        text_push_i64_ptr(self_ptr, n2)
+        if slen3 > 0 { text_push_str_ptr(self_ptr, s3, slen3) }
     }
 
     // ========================================================================
@@ -655,11 +699,14 @@ impl Text {
 
     /// Find the index of a substring (returns -1 if not found)
     pub func index_of(this, search: Str) -> I64 {
-        let haystack_len: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let haystack_len: I64 = text_sso_len(w2, this._w1)
         let needle_len: I64 = text_str_len(search)
         if needle_len == 0 { return 0 }
         if needle_len > haystack_len { return -1 }
-        let data: *U8 = text_get_data(this.handle)
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let needle_addr: I64 = search as I64
         var i: I64 = 0
         loop (i <= haystack_len - needle_len) {
@@ -671,7 +718,7 @@ impl Text {
                 let b: U8 = lowlevel { ptr_read[U8](bp) }
                 if a != b {
                     matched = false
-                    j = needle_len // break
+                    j = needle_len
                 } else {
                     j = j + 1
                 }
@@ -684,11 +731,14 @@ impl Text {
 
     /// Find the last index of a substring (returns -1 if not found)
     pub func last_index_of(this, search: Str) -> I64 {
-        let haystack_len: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let haystack_len: I64 = text_sso_len(w2, this._w1)
         let needle_len: I64 = text_str_len(search)
         if needle_len == 0 { return haystack_len }
         if needle_len > haystack_len { return -1 }
-        let data: *U8 = text_get_data(this.handle)
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let needle_addr: I64 = search as I64
         var i: I64 = haystack_len - needle_len
         loop (i >= 0) {
@@ -713,11 +763,14 @@ impl Text {
 
     /// Check if this Text starts with the given prefix
     pub func starts_with(this, prefix: Str) -> Bool {
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         let plen: I64 = text_str_len(prefix)
         if plen > slen { return false }
         if plen == 0 { return true }
-        let data: *U8 = text_get_data(this.handle)
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let prefix_addr: I64 = prefix as I64
         for i in 0 to plen {
             let a: U8 = text_byte_at_raw(data, i)
@@ -730,11 +783,14 @@ impl Text {
 
     /// Check if this Text ends with the given suffix
     pub func ends_with(this, suffix: Str) -> Bool {
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         let suflen: I64 = text_str_len(suffix)
         if suflen > slen { return false }
         if suflen == 0 { return true }
-        let data: *U8 = text_get_data(this.handle)
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let suffix_addr: I64 = suffix as I64
         let start: I64 = slen - suflen
         for i in 0 to suflen {
@@ -762,132 +818,121 @@ impl Text {
 
     /// Convert to uppercase
     pub func to_upper_case(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        let result: *Unit = text_alloc_with_cap(slen)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
         for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, i)
             let v: I32 = b as I32
             if v >= 97 and v <= 122 {
-                text_set_byte(dst, i, (v - 32) as U8)
+                text_set_byte(buf, i, (v - 32) as U8)
             } else {
-                text_set_byte(dst, i, b)
+                text_set_byte(buf, i, b)
             }
         }
-        text_set_len(result, slen)
-        text_set_byte(dst, slen, 0 as U8)
-        Text { handle: result }
+        let result: Text = text_from_raw(buf, slen)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Convert to lowercase
     pub func to_lower_case(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        let result: *Unit = text_alloc_with_cap(slen)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
         for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, i)
             let v: I32 = b as I32
             if v >= 65 and v <= 90 {
-                text_set_byte(dst, i, (v + 32) as U8)
+                text_set_byte(buf, i, (v + 32) as U8)
             } else {
-                text_set_byte(dst, i, b)
+                text_set_byte(buf, i, b)
             }
         }
-        text_set_len(result, slen)
-        text_set_byte(dst, slen, 0 as U8)
-        Text { handle: result }
+        let result: Text = text_from_raw(buf, slen)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Remove whitespace from both ends
     pub func trim(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 { return Text::new() }
-        let data: *U8 = text_get_data(this.handle)
-        // Find start
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         var start: I64 = 0
-        loop (start < slen) {
-            let b: U8 = text_byte_at_raw(data, start)
-            if not text_is_ws(b) { start = slen } // break
-            else { start = start + 1 }
+        loop (start < slen and text_is_ws(text_byte_at_raw(data, start))) {
+            start = start + 1
         }
-        // Fixup: if we broke out, start is slen, need to go back
-        if start == slen {
-            // Find actual start (re-scan)
-            start = 0
-            loop (start < slen and text_is_ws(text_byte_at_raw(data, start))) {
-                start = start + 1
-            }
-        }
-        if start >= slen { return Text::new() }
-        // Find end
+        if start >= slen { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
         var end: I64 = slen
         loop (end > start and text_is_ws(text_byte_at_raw(data, end - 1))) {
             end = end - 1
         }
         let new_len: I64 = end - start
-        let result: *Unit = text_alloc_with_cap(new_len)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, data, start, new_len)
-        text_set_len(result, new_len)
-        text_set_byte(dst, new_len, 0 as U8)
-        Text { handle: result }
+        let src: *U8 = (data as I64 + start) as *U8
+        text_from_raw(src, new_len)
     }
 
     /// Remove whitespace from the start
     pub func trim_start(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 { return Text::new() }
-        let data: *U8 = text_get_data(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         var start: I64 = 0
         loop (start < slen and text_is_ws(text_byte_at_raw(data, start))) {
             start = start + 1
         }
         let new_len: I64 = slen - start
-        if new_len == 0 { return Text::new() }
-        let result: *Unit = text_alloc_with_cap(new_len)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, data, start, new_len)
-        text_set_len(result, new_len)
-        text_set_byte(dst, new_len, 0 as U8)
-        Text { handle: result }
+        if new_len == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let src: *U8 = (data as I64 + start) as *U8
+        text_from_raw(src, new_len)
     }
 
     /// Remove whitespace from the end
     pub func trim_end(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 { return Text::new() }
-        let data: *U8 = text_get_data(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
         var end: I64 = slen
         loop (end > 0 and text_is_ws(text_byte_at_raw(data, end - 1))) {
             end = end - 1
         }
-        if end == 0 { return Text::new() }
-        let result: *Unit = text_alloc_with_cap(end)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, data, 0, end)
-        text_set_len(result, end)
-        text_set_byte(dst, end, 0 as U8)
-        Text { handle: result }
+        if end == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        text_from_raw(data, end)
     }
 
     /// Get a substring from start to end (exclusive)
     pub func substring(this, start: I64, end: I64) -> Text {
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         var s: I64 = start
         var e: I64 = end
         if s < 0 { s = 0 }
         if e > slen { e = slen }
-        if s >= e { return Text::new() }
+        if s >= e { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
         let new_len: I64 = e - s
-        let result: *Unit = text_alloc_with_cap(new_len)
-        let data: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, data, s, new_len)
-        text_set_len(result, new_len)
-        text_set_byte(dst, new_len, 0 as U8)
-        Text { handle: result }
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let src: *U8 = (data as I64 + s) as *U8
+        text_from_raw(src, new_len)
     }
 
     /// Alias for substring (JavaScript compatibility)
@@ -897,65 +942,73 @@ impl Text {
 
     /// Repeat this Text n times
     pub func repeat(this, count: I64) -> Text {
-        if count <= 0 { return Text::new() }
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 { return Text::new() }
+        if count <= 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
         let total: I64 = slen * count
-        let result: *Unit = text_alloc_with_cap(total)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let buf: *U8 = lowlevel { mem_alloc(total + 1) } as *U8
         for i in 0 to count {
-            text_copy_bytes(dst, i * slen, src, 0, slen)
+            text_copy_bytes(buf, i * slen, src, 0, slen)
         }
-        text_set_len(result, total)
-        text_set_byte(dst, total, 0 as U8)
-        Text { handle: result }
+        let result: Text = text_from_raw(buf, total)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Replace first occurrence of search with replacement
     pub func replace(this, search: Str, replacement: Str) -> Text {
         let pos: I64 = this.index_of(search)
-        if pos < 0 {
-            return this.clone()
-        }
-        let slen: I64 = text_get_len(this.handle)
+        if pos < 0 { return this.clone() }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         let search_len: I64 = text_str_len(search)
         let repl_len: I64 = text_str_len(replacement)
         let new_len: I64 = slen - search_len + repl_len
-        let result: *Unit = text_alloc_with_cap(new_len)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
+        let buf: *U8 = lowlevel { mem_alloc(new_len + 1) } as *U8
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
         // Copy before match
-        text_copy_bytes(dst, 0, src, 0, pos)
+        text_copy_bytes(buf, 0, src, 0, pos)
         // Copy replacement
         let repl_addr: I64 = replacement as I64
         for i in 0 to repl_len {
             let rp: *U8 = (repl_addr + i) as *U8
             let b: U8 = lowlevel { ptr_read[U8](rp) }
-            text_set_byte(dst, pos + i, b)
+            text_set_byte(buf, pos + i, b)
         }
         // Copy after match
         let after: I64 = pos + search_len
         let remaining: I64 = slen - after
-        text_copy_bytes(dst, pos + repl_len, src, after, remaining)
-        text_set_len(result, new_len)
-        text_set_byte(dst, new_len, 0 as U8)
-        Text { handle: result }
+        text_copy_bytes(buf, pos + repl_len, src, after, remaining)
+        let result: Text = text_from_raw(buf, new_len)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Replace all occurrences of search with replacement
     pub func replace_all(this, search: Str, replacement: Str) -> Text {
         let search_len: I64 = text_str_len(search)
         if search_len == 0 { return this.clone() }
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         let repl_len: I64 = text_str_len(replacement)
-        let result: *Unit = text_alloc_with_cap(slen)
-        let src: *U8 = text_get_data(this.handle)
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let needle_addr: I64 = search as I64
         let repl_addr: I64 = replacement as I64
+
+        // Build result as a heap-allocated Text (we don't know final size)
+        let result: Text = Text::with_capacity(slen)
+        let result_ptr: *Unit = lowlevel { result as *Unit }
+
         var i: I64 = 0
         loop (i < slen) {
-            // Check if search matches at position i
             var matched: Bool = true
             if i + search_len <= slen {
                 var j: I64 = 0
@@ -974,86 +1027,71 @@ impl Text {
                 matched = false
             }
             if matched {
-                // Push replacement
-                for k in 0 to repl_len {
-                    let rp: *U8 = (repl_addr + k) as *U8
-                    let b: U8 = lowlevel { ptr_read[U8](rp) }
-                    let cur_len: I64 = text_get_len(result)
-                    text_ensure_cap(result, cur_len + 1)
-                    let dst: *U8 = text_get_data(result)
-                    text_set_byte(dst, cur_len, b)
-                    text_set_len(result, cur_len + 1)
-                }
+                text_push_str_ptr(result_ptr, replacement as Str, repl_len)
                 i = i + search_len
             } else {
-                let cur_len: I64 = text_get_len(result)
-                text_ensure_cap(result, cur_len + 1)
-                let dst: *U8 = text_get_data(result)
                 let b: U8 = text_byte_at_raw(src, i)
-                text_set_byte(dst, cur_len, b)
-                text_set_len(result, cur_len + 1)
+                text_push_byte_ptr(result_ptr, b)
                 i = i + 1
             }
         }
-        // Null-terminate
-        let final_len: I64 = text_get_len(result)
-        let dst: *U8 = text_get_data(result)
-        text_set_byte(dst, final_len, 0 as U8)
-        Text { handle: result }
+        result
     }
 
     /// Reverse the string
     pub func reverse(this) -> Text {
-        let slen: I64 = text_get_len(this.handle)
-        if slen == 0 { return Text::new() }
-        let result: *Unit = text_alloc_with_cap(slen)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
+        if slen == 0 { return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() } }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let buf: *U8 = lowlevel { mem_alloc(slen + 1) } as *U8
         for i in 0 to slen {
             let b: U8 = text_byte_at_raw(src, slen - 1 - i)
-            text_set_byte(dst, i, b)
+            text_set_byte(buf, i, b)
         }
-        text_set_len(result, slen)
-        text_set_byte(dst, slen, 0 as U8)
-        Text { handle: result }
+        let result: Text = text_from_raw(buf, slen)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Pad the start to reach target length
     pub func pad_start(this, target_len: I64, pad_char: I32) -> Text {
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         if slen >= target_len { return this.clone() }
         let pad_count: I64 = target_len - slen
-        let result: *Unit = text_alloc_with_cap(target_len)
-        let dst: *U8 = text_get_data(result)
-        // Fill pad chars
+        let buf: *U8 = lowlevel { mem_alloc(target_len + 1) } as *U8
         for i in 0 to pad_count {
-            text_set_byte(dst, i, pad_char as U8)
+            text_set_byte(buf, i, pad_char as U8)
         }
-        // Copy original
-        let src: *U8 = text_get_data(this.handle)
-        text_copy_bytes(dst, pad_count, src, 0, slen)
-        text_set_len(result, target_len)
-        text_set_byte(dst, target_len, 0 as U8)
-        Text { handle: result }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        text_copy_bytes(buf, pad_count, src, 0, slen)
+        let result: Text = text_from_raw(buf, target_len)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Pad the end to reach target length
     pub func pad_end(this, target_len: I64, pad_char: I32) -> Text {
-        let slen: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen: I64 = text_sso_len(w2, this._w1)
         if slen >= target_len { return this.clone() }
         let pad_count: I64 = target_len - slen
-        let result: *Unit = text_alloc_with_cap(target_len)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
-        // Copy original
-        text_copy_bytes(dst, 0, src, 0, slen)
-        // Fill pad chars
+        let buf: *U8 = lowlevel { mem_alloc(target_len + 1) } as *U8
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        text_copy_bytes(buf, 0, src, 0, slen)
         for i in 0 to pad_count {
-            text_set_byte(dst, slen + i, pad_char as U8)
+            text_set_byte(buf, slen + i, pad_char as U8)
         }
-        text_set_len(result, target_len)
-        text_set_byte(dst, target_len, 0 as U8)
-        Text { handle: result }
+        let result: Text = text_from_raw(buf, target_len)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     // ========================================================================
@@ -1062,33 +1100,43 @@ impl Text {
 
     /// Concatenate with another Text
     pub func concat(this, other: ref Text) -> Text {
-        let slen1: I64 = text_get_len(this.handle)
-        let slen2: I64 = text_get_len(other.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen1: I64 = text_sso_len(w2, this._w1)
+
+        let other_ptr: *Unit = lowlevel { other as *Unit }
+        let other_addr: I64 = other_ptr as I64
+        let ow2: I64 = other._w2
+        let slen2: I64 = text_sso_len(ow2, other._w1)
+
         let total: I64 = slen1 + slen2
-        let result: *Unit = text_alloc_with_cap(total)
-        let src1: *U8 = text_get_data(this.handle)
-        let src2: *U8 = text_get_data(other.handle)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, src1, 0, slen1)
-        text_copy_bytes(dst, slen1, src2, 0, slen2)
-        text_set_len(result, total)
-        text_set_byte(dst, total, 0 as U8)
-        Text { handle: result }
+        let src1: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let src2: *U8 = text_data_ptr(other_addr, other._w0, ow2)
+
+        let buf: *U8 = lowlevel { mem_alloc(total + 1) } as *U8
+        text_copy_bytes(buf, 0, src1, 0, slen1)
+        text_copy_bytes(buf, slen1, src2, 0, slen2)
+        let result: Text = text_from_raw(buf, total)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     /// Concatenate with a string
     pub func concat_str(this, s: Str) -> Text {
-        let slen1: I64 = text_get_len(this.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let slen1: I64 = text_sso_len(w2, this._w1)
         let slen2: I64 = text_str_len(s)
         let total: I64 = slen1 + slen2
-        let result: *Unit = text_alloc_with_cap(total)
-        let src: *U8 = text_get_data(this.handle)
-        let dst: *U8 = text_get_data(result)
-        text_copy_bytes(dst, 0, src, 0, slen1)
-        text_copy_str_at(dst, slen1, s, slen2)
-        text_set_len(result, total)
-        text_set_byte(dst, total, 0 as U8)
-        Text { handle: result }
+        let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let buf: *U8 = lowlevel { mem_alloc(total + 1) } as *U8
+        text_copy_bytes(buf, 0, src, 0, slen1)
+        text_copy_str_at(buf, slen1, s, slen2)
+        let result: Text = text_from_raw(buf, total)
+        lowlevel { mem_free(buf as *Unit) }
+        result
     }
 
     // ========================================================================
@@ -1097,10 +1145,19 @@ impl Text {
 
     /// Compare with another Text (-1, 0, or 1)
     pub func compare(this, other: ref Text) -> I32 {
-        let len1: I64 = text_get_len(this.handle)
-        let len2: I64 = text_get_len(other.handle)
-        let data1: *U8 = text_get_data(this.handle)
-        let data2: *U8 = text_get_data(other.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let len1: I64 = text_sso_len(w2, this._w1)
+
+        let other_ptr: *Unit = lowlevel { other as *Unit }
+        let other_addr: I64 = other_ptr as I64
+        let ow2: I64 = other._w2
+        let len2: I64 = text_sso_len(ow2, other._w1)
+
+        let data1: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let data2: *U8 = text_data_ptr(other_addr, other._w0, ow2)
+
         var min_len: I64 = len1
         if len2 < len1 { min_len = len2 }
         for i in 0 to min_len {
@@ -1116,11 +1173,19 @@ impl Text {
 
     /// Check equality with another Text
     pub func equals(this, other: ref Text) -> Bool {
-        let len1: I64 = text_get_len(this.handle)
-        let len2: I64 = text_get_len(other.handle)
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let w2: I64 = this._w2
+        let len1: I64 = text_sso_len(w2, this._w1)
+
+        let other_ptr: *Unit = lowlevel { other as *Unit }
+        let other_addr: I64 = other_ptr as I64
+        let ow2: I64 = other._w2
+        let len2: I64 = text_sso_len(ow2, other._w1)
+
         if len1 != len2 { return false }
-        let data1: *U8 = text_get_data(this.handle)
-        let data2: *U8 = text_get_data(other.handle)
+        let data1: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let data2: *U8 = text_data_ptr(other_addr, other._w0, ow2)
         for i in 0 to len1 {
             let a: U8 = text_byte_at_raw(data1, i)
             let b: U8 = text_byte_at_raw(data2, i)
@@ -1133,15 +1198,30 @@ impl Text {
     // Output
     // ========================================================================
 
-    /// Print the Text to stdout (no newline)
+    /// Print the Text to stdout (no newline).
+    ///
+    /// Fast path: heap-mode strings are already null-terminated in their
+    /// backing buffer (`text_from_raw` / `concat` / `push_str` all allocate
+    /// `len + 1` and write a trailing 0), so we can pass `_w0` straight to
+    /// `print_str` without allocating and copying a fresh buffer. Only
+    /// inline-mode strings (≤ 23 chars) fall back to `as_str()`, which is
+    /// cheap because the copy is at most 24 bytes. phase1g optimization.
     pub func print(this) {
-        let s: Str = this.as_str()
-        lowlevel { print_str(s) }
+        if this._w2 >= 0 {
+            lowlevel { print_str(this._w0 as Str) }
+        } else {
+            let s: Str = this.as_str()
+            lowlevel { print_str(s) }
+        }
     }
 
-    /// Print the Text to stdout with a newline
+    /// Print the Text to stdout with a newline. Same fast path as `print`.
     pub func println(this) {
-        let s: Str = this.as_str()
-        lowlevel { println_str(s) }
+        if this._w2 >= 0 {
+            lowlevel { println_str(this._w0 as Str) }
+        } else {
+            let s: Str = this.as_str()
+            lowlevel { println_str(s) }
+        }
     }
 }

@@ -1,0 +1,82 @@
+//! Cobertura emit tests — phase 8.2.
+
+use test::*
+use coverage::types::*
+use coverage::emit::cobertura::render_cobertura
+use std::collections::List
+
+@test("cobertura — XML declaration + root element present")
+func test_xml_header() {
+    let r = make_report()
+    let out = render_cobertura(r)
+    assert_true(out.starts_with("<?xml version=\"1.0\" ?>"), "xml decl present")
+    assert_true(out.contains("<coverage "), "<coverage> root")
+    assert_true(out.contains("</coverage>"), "</coverage> closed")
+}
+
+@test("cobertura — summary attributes are coherent")
+func test_summary_attrs() {
+    let r = make_report()
+    let out = render_cobertura(r)
+    assert_true(out.contains("lines-covered=\"2\""), "lines-covered=2")
+    assert_true(out.contains("lines-valid=\"3\""), "lines-valid=3")
+    assert_true(out.contains("branches-covered=\"0\""), "no branches")
+    assert_true(out.contains("branches-valid=\"0\""), "branches-valid=0")
+}
+
+@test("cobertura — per-file class element with filename")
+func test_class_filename() {
+    let r = make_report()
+    let out = render_cobertura(r)
+    assert_true(out.contains("filename=\"src/a.tml\""), "filename attribute")
+    assert_true(out.contains("name=\"a\""), "class name derived from path")
+}
+
+@test("cobertura — XML special characters are escaped")
+func test_escape() {
+    let lines: List[LineHit] = List[LineHit]::new()
+    lines.push(LineHit { line: 1, count: 1, branch_count: 0, branch_taken: 0 })
+    let fns: List[FuncHit] = List[FuncHit]::new()
+    fns.push(FuncHit { name: "f<T&U>", start_line: 1, hit_count: 1 })
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage {
+        path: "src/a.tml",
+        lines: lines,
+        functions: fns,
+        branches: List[BranchHit]::new(),
+    })
+    let r = CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "",
+        version: "",
+        generated_at: 0,
+    }
+    let out = render_cobertura(r)
+    assert_true(out.contains("f&lt;T&amp;U&gt;"), "method name escaped")
+}
+
+// Helper ----------------------------------------------------------------
+
+func make_report() -> CoverageReport {
+    let lines: List[LineHit] = List[LineHit]::new()
+    lines.push(LineHit { line: 1, count: 5, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 2, count: 5, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 3, count: 0, branch_count: 0, branch_taken: 0 })
+
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage {
+        path: "src/a.tml",
+        lines: lines,
+        functions: List[FuncHit]::new(),
+        branches: List[BranchHit]::new(),
+    })
+
+    CoverageReport {
+        files: files,
+        source_roots: List[Str]::new(),
+        tool: "test",
+        version: "0",
+        generated_at: 42,
+    }
+}

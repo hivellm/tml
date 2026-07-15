@@ -1,0 +1,250 @@
+//! Regression tests for the C preprocessor directive sweep
+//! (`compiler::cc::preproc::directives::pp_sweep`). Phase 24a item 4.1.
+
+use test::{assert, assert_eq}
+use std::collections::list::List
+use compiler::cc::preproc::token::{
+    PpToken, PpTokenKind, pp_token, Preprocessor, pp_new
+}
+use compiler::cc::preproc::tokenize::pp_tokenize_source
+use compiler::cc::preproc::directives::pp_sweep
+use compiler::cc::preproc::predefined::register_predefined_macros
+use compiler::cc::preproc::include::*
+
+/// Tokenise a source string as if it lived in `t.c` and return the
+/// pp-token stream after the directive sweep.
+func sweep_source(source: Str) -> List[PpToken] {
+    let raw: List[PpToken] = pp_tokenize_source(source, "t.c")
+    let pp: Preprocessor = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    return pp_sweep(pp, raw)
+}
+
+/// Concatenate the `text` field of every token in `tokens` (separated
+/// by spaces) so tests can compare the result with a literal Str.
+func tokens_concat(tokens: List[PpToken]) -> Str {
+    var s: Str = ""
+    let n: I64 = tokens.len() as I64
+    for i in 0 to n {
+        if i > 0 { s = s + " " }
+        s = s + tokens.get(i).text
+    }
+    return s
+}
+
+@test func test_sweep_drops_define_directive() {
+    // The `#define X 42` line should be consumed; only the `int x;`
+    // tokens survive.
+    let out = sweep_source("#define X 42\nint x;")
+    assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_sweep_expands_object_like_macro() {
+    // After `#define X 42`, the identifier `X` in code is replaced by
+    // the token sequence the macro body holds.
+    let out = sweep_source("#define X 42\nint y = X;")
+    assert_eq(tokens_concat(out), "int y = 42 ;")
+}
+
+@test func test_sweep_skips_include() {
+    // `#include` is a silent no-op for now (full resolution is
+    // phase24a item 2). The directive must not leak `#` into the
+    // output stream.
+    let out = sweep_source("#include <stdio.h>\nint x;")
+    assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_sweep_ifdef_active_branch() {
+    // `WIN` is defined → the inner `int win_only;` survives.
+    let src: Str = "#define WIN 1\n#ifdef WIN\nint win_only;\n#else\nint posix_only;\n#endif"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int win_only ;")
+}
+
+@test func test_sweep_ifndef_inactive_branch() {
+    // `NEVER` is not defined → the `#ifndef NEVER` branch is taken,
+    // and the `#else` branch is masked.
+    let src: Str = "#ifndef NEVER\nint yes;\n#else\nint no;\n#endif"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int yes ;")
+}
+
+@test func test_sweep_undef_drops_macro() {
+    // After `#undef X`, the identifier `X` is no longer expanded.
+    let src: Str = "#define X 42\n#undef X\nint x = X;"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int x = X ;")
+}
+
+@test func test_sweep_pragma_and_line_are_noop() {
+    // `#pragma`, `#line`, and unknown directives are dropped silently.
+    let src: Str = "#pragma once\n#line 42 \"foo.c\"\nint x;"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat(out), "int x ;")
+}
+
+@test func test_parse_include_angle_form() {
+    let raw = pp_tokenize_source("#include <stdio.h>\n", "t.c")
+    // Drop the leading `# include <whitespace>` so we hand
+    // `pp_parse_include_body` the body the directive sweep would.
+    var body: List[PpToken] = List[PpToken]::new(8 as I64)
+    let n: I64 = raw.len() as I64
+    var seen_keyword: I64 = 0 as I64
+    for i in 0 to n {
+        let t = raw.get(i)
+        if seen_keyword == 0 as I64 {
+            when t.kind {
+                Ident => { if t.text == "include" { seen_keyword = 1 as I64 } },
+                _ => {}
+            }
+        } else {
+            when t.kind {
+                Newline => {},
+                _ => body.push(t)
+            }
+        }
+    }
+    let parsed_opt = pp_parse_include_body(body)
+    let Just(parsed) = parsed_opt else {
+        assert(false)
+        return
+    }
+    assert_eq(parsed.name, "stdio.h")
+    assert_eq(parsed.is_system as I32, 1)
+}
+
+@test func test_parse_include_quoted_form() {
+    let raw = pp_tokenize_source("#include \"foo.h\"\n", "t.c")
+    var body: List[PpToken] = List[PpToken]::new(4 as I64)
+    let n: I64 = raw.len() as I64
+    var seen_keyword: I64 = 0 as I64
+    for i in 0 to n {
+        let t = raw.get(i)
+        if seen_keyword == 0 as I64 {
+            when t.kind {
+                Ident => { if t.text == "include" { seen_keyword = 1 as I64 } },
+                _ => {}
+            }
+        } else {
+            when t.kind {
+                Newline => {},
+                _ => body.push(t)
+            }
+        }
+    }
+    let parsed_opt = pp_parse_include_body(body)
+    let Just(parsed) = parsed_opt else {
+        assert(false)
+        return
+    }
+    assert_eq(parsed.name, "foo.h")
+    assert_eq(parsed.is_system as I32, 0)
+}
+
+@test func test_sweep_predefined_win32() {
+    // `register_predefined_macros` registers `_WIN32`, so `#ifdef _WIN32`
+    // is taken and `int win = 1;` survives.
+    let raw = pp_tokenize_source("#ifdef _WIN32\nint win;\n#else\nint posix;\n#endif", "t.c")
+    let pp = pp_new(List[Str]::new(0 as I64), List[Str]::new(0 as I64))
+    register_predefined_macros(pp)
+    let out = pp_sweep(pp, raw)
+    assert_eq(tokens_concat(out), "int win ;")
+}
+
+// ============================================================================
+// Function-like macros (phase24i)
+// ============================================================================
+//
+// Pre-phase24i the directive sweep treated `#define M(x) f(x)` as an
+// object-like macro whose body was the entire `(x) f(x)` token sequence,
+// then left the call-site `M(1)` alone — the resulting stream
+// `(x) f(x) (1)` failed to parse as C. Phase24i adds proper function-
+// like macro support: parameter parsing, argument collection (with
+// paren-depth tracking), substitution, `__VA_ARGS__`, the GCC
+// `, ##__VA_ARGS__` comma-elision extension, and plain `##` token
+// pasting.
+
+/// Concatenate the `text` of every NON-whitespace, NON-newline token.
+/// Function-like macro substitution preserves intra-argument whitespace
+/// so the C lexer ignores it; the test compares only the meaningful
+/// tokens.
+func tokens_concat_no_ws(tokens: List[PpToken]) -> Str {
+    var s: Str = ""
+    let n: I64 = tokens.len() as I64
+    var first: I64 = 1 as I64
+    for i in 0 to n {
+        let t: PpToken = tokens.get(i)
+        when t.kind {
+            Whitespace => {},
+            Newline => {},
+            _ => {
+                if first == 0 as I64 { s = s + " " }
+                s = s + t.text
+                first = 0 as I64
+            }
+        }
+    }
+    return s
+}
+
+@test func test_funclike_basic_va_args() {
+    // `#define M(...) f(__VA_ARGS__)` followed by `M(1, 2)` — basic
+    // variadic macro (no GCC comma-elision involved).
+    let src: Str = "#define M(...) f(__VA_ARGS__)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_named_plus_va_args() {
+    // Named param + variadic: `#define M(x, ...) f(x, __VA_ARGS__)`.
+    let src: Str = "#define M(x, ...) f(x, __VA_ARGS__)\nM(1, 2, 3);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 , 3 ) ;")
+}
+
+@test func test_funclike_paste_va_empty_drops_comma() {
+    // GCC `, ##__VA_ARGS__` extension: when the variadic arg list is
+    // empty, the preceding comma is dropped.
+    let src: Str = "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(1);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 ) ;")
+}
+
+@test func test_funclike_paste_va_nonempty_keeps_comma() {
+    // GCC `, ##__VA_ARGS__` extension: when the variadic arg list is
+    // non-empty, the comma stays and the `##` is dropped.
+    let src: Str = "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_rt_fatal_shape() {
+    // The exact `RT_FATAL` shape from `compiler/runtime/diagnostics/log.h`
+    // — three named params plus variadic, with `, ##__VA_ARGS__` and a
+    // non-empty invocation.
+    let src: Str = "#define RT_FATAL(m, f, ...) g(1, m, f, ##__VA_ARGS__)\nRT_FATAL(\"a\", \"%s\", \"b\");"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "g ( 1 , \"a\" , \"%s\" , \"b\" ) ;")
+}
+
+@test func test_funclike_simple_one_param() {
+    // Sanity — single parameter, body uses parentheses around the
+    // parameter (the original phase24i bisect target).
+    let src: Str = "#define M(x) f(x)\nM(1);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 ) ;")
+}
+
+@test func test_funclike_two_params() {
+    // Two named params, no variadics.
+    let src: Str = "#define M(x, y) f(x, y)\nM(1, 2);"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( 1 , 2 ) ;")
+}
+
+@test func test_funclike_nested_parens_in_arg() {
+    // Argument contains nested parens — collect_macro_args must not
+    // split on the inner comma.
+    let src: Str = "#define M(x) f(x)\nM(g(1, 2));"
+    let out = sweep_source(src)
+    assert_eq(tokens_concat_no_ws(out), "f ( g ( 1 , 2 ) ) ;")
+}

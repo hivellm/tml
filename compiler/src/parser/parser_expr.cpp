@@ -603,6 +603,27 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_template_literal_expr();
     }
 
+    // Helpful diagnostic for Rust/Swift/C# users who write `match` instead of `when`
+    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "match") {
+        auto span = peek().span;
+        advance();  // consume 'match'
+        // Skip the scrutinee expression and braced body to avoid cascading errors
+        int depth = 0;
+        while (!is_at_end()) {
+            if (check(lexer::TokenKind::LBrace)) { advance(); ++depth; }
+            else if (check(lexer::TokenKind::RBrace)) {
+                advance();
+                if (--depth <= 0) break;
+            }
+            else { advance(); }
+        }
+        return ParseError{.message = "'match' is not valid TML \xe2\x80\x94 use 'when' instead",
+                          .span = span,
+                          .notes = {"TML uses 'when' for pattern matching (equivalent to Rust's 'match')"},
+                          .fixes = {},
+                          .code = "S001"};
+    }
+
     // Identifier or path
     if (check(lexer::TokenKind::Identifier)) {
         return parse_ident_or_path_expr();
@@ -615,9 +636,20 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return make_ident_expr("this", span);
     }
 
-    // 'base' expression (parent class access in methods)
-    if (check(lexer::TokenKind::KwBase)) {
-        return parse_base_expr();
+    // 'base' expression (parent class access in methods). `base` is a
+    // contextual keyword — tokenised as Identifier; we detect it here by
+    // lexeme and only in the parse_primary_expr entry position, so
+    // locals / fields / parameters named `base` don't clash (bug #1).
+    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "base") {
+        // Only treat as the super-reference keyword when followed by `.`
+        // — otherwise it's a normal identifier (variable / field access).
+        size_t saved = pos_;
+        advance();
+        bool is_base_expr = check(lexer::TokenKind::Dot);
+        pos_ = saved;
+        if (is_base_expr) {
+            return parse_base_expr();
+        }
     }
 
     // Parenthesized expression or tuple

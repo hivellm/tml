@@ -1,0 +1,198 @@
+//! Protocol Buffers message and field descriptors for reflection.
+//!
+//! Descriptors provide runtime metadata about protobuf messages and fields,
+//! enabling generic serialization/deserialization without compile-time codegen.
+
+use std::collections::List
+use std::protobuf::types::FieldType
+
+/// Describes a single field in a protobuf message.
+pub type FieldDescriptor {
+    /// The field name from the .proto definition.
+    name: Str,
+    /// The field number (tag number) from the .proto definition.
+    number: I64,
+    /// The protobuf type of this field.
+    field_type: FieldType,
+    /// Whether this field is `repeated`.
+    is_repeated: Bool,
+    /// Whether repeated values should use packed encoding.
+    is_packed: Bool,
+    /// Whether this field is `optional` (proto3 optional or proto2 optional).
+    is_optional: Bool,
+    /// Whether this field is a map field (encoded as repeated Entry messages).
+    is_map: Bool,
+    /// For map fields, the key type.
+    map_key_type: Maybe[FieldType],
+    /// For map fields, the value type.
+    map_value_type: Maybe[FieldType],
+    /// Index into `MessageDescriptor.oneof_groups` if this field belongs to a oneof.
+    /// -1 indicates the field is not part of any oneof group.
+    oneof_index: I64
+}
+
+/// Describes a `oneof` group within a message: a set of fields of which at most
+/// one may be set at a time. Proto3 decoders use last-one-wins semantics.
+pub type OneofDescriptor {
+    /// The oneof group name from the .proto definition.
+    name: Str,
+    /// Field numbers of the fields in this oneof group (in declaration order).
+    field_numbers: List[I64]
+}
+
+/// Creates a simple scalar field descriptor with common defaults.
+pub func scalar_field(name: Str, number: I64, field_type: FieldType) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: field_type,
+        is_repeated: false,
+        is_packed: false,
+        is_optional: false,
+        is_map: false,
+        map_key_type: Nothing,
+        map_value_type: Nothing,
+        oneof_index: -1
+    }
+}
+
+/// Creates a repeated field descriptor.
+pub func repeated_field(name: Str, number: I64, field_type: FieldType, packed: Bool) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: field_type,
+        is_repeated: true,
+        is_packed: packed,
+        is_optional: false,
+        is_map: false,
+        map_key_type: Nothing,
+        map_value_type: Nothing,
+        oneof_index: -1
+    }
+}
+
+/// Creates an optional field descriptor.
+pub func optional_field(name: Str, number: I64, field_type: FieldType) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: field_type,
+        is_repeated: false,
+        is_packed: false,
+        is_optional: true,
+        is_map: false,
+        map_key_type: Nothing,
+        map_value_type: Nothing,
+        oneof_index: -1
+    }
+}
+
+/// Creates a map field descriptor.
+pub func map_field(name: Str, number: I64, key_type: FieldType, value_type: FieldType) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: FieldType::Message,
+        is_repeated: true,
+        is_packed: false,
+        is_optional: false,
+        is_map: true,
+        map_key_type: Just(key_type),
+        map_value_type: Just(value_type),
+        oneof_index: -1
+    }
+}
+
+/// Creates a field descriptor belonging to a oneof group.
+pub func oneof_field(name: Str, number: I64, field_type: FieldType, oneof_index: I64) -> FieldDescriptor {
+    FieldDescriptor {
+        name: name,
+        number: number,
+        field_type: field_type,
+        is_repeated: false,
+        is_packed: false,
+        is_optional: true,
+        is_map: false,
+        map_key_type: Nothing,
+        map_value_type: Nothing,
+        oneof_index: oneof_index
+    }
+}
+
+/// Describes a protobuf message type with its fields.
+pub type MessageDescriptor {
+    /// The message name from the .proto definition.
+    name: Str,
+    /// The fields in this message.
+    fields: List[FieldDescriptor],
+    /// The `oneof` groups declared in this message. A field is in oneof group
+    /// `i` when its `oneof_index == i`.
+    oneof_groups: List[OneofDescriptor]
+}
+
+impl MessageDescriptor {
+    /// Creates a new empty message descriptor.
+    pub func new(name: Str) -> MessageDescriptor {
+        MessageDescriptor {
+            name: name,
+            fields: List[FieldDescriptor]::new(),
+            oneof_groups: List[OneofDescriptor]::new()
+        }
+    }
+
+    /// Registers a new oneof group and returns its index.
+    pub func add_oneof(mut this, oneof_name: Str) -> I64 {
+        let idx: I64 = this.oneof_groups.len()
+        this.oneof_groups.push(OneofDescriptor {
+            name: oneof_name,
+            field_numbers: List[I64]::new()
+        })
+        return idx
+    }
+
+    /// Records that a field number belongs to the given oneof group.
+    /// Call after `add_field` and `add_oneof`.
+    pub func add_oneof_member(mut this, oneof_index: I64, field_number: I64) {
+        if oneof_index < 0 or oneof_index >= this.oneof_groups.len() {
+            return
+        }
+        var g: OneofDescriptor = this.oneof_groups.get(oneof_index)
+        g.field_numbers.push(field_number)
+        this.oneof_groups.set(oneof_index, g)
+    }
+
+    /// Adds a field to this message descriptor.
+    pub func add_field(mut this, field: FieldDescriptor) {
+        this.fields.push(field)
+    }
+
+    /// Looks up a field by its field number.
+    /// Returns Nothing if no field has that number.
+    pub func field_by_number(this, num: I64) -> Maybe[FieldDescriptor] {
+        for i in 0 to this.fields.len() {
+            let f: FieldDescriptor = this.fields.get(i)
+            if f.number == num {
+                return Just(f)
+            }
+        }
+        return Nothing
+    }
+
+    /// Looks up a field by its name.
+    /// Returns Nothing if no field has that name.
+    pub func field_by_name(this, name: Str) -> Maybe[FieldDescriptor] {
+        for i in 0 to this.fields.len() {
+            let f: FieldDescriptor = this.fields.get(i)
+            if f.name == name {
+                return Just(f)
+            }
+        }
+        return Nothing
+    }
+
+    /// Returns the number of fields in this descriptor.
+    pub func field_count(this) -> I64 {
+        return this.fields.len()
+    }
+}

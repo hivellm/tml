@@ -1342,8 +1342,12 @@ target_include_directories(tml_mcp_lib PUBLIC include src)
 # option(TML_USE_LLVM_BACKEND ...) is declared at the top of this file
 # ============================================================================
 if(TML_USE_LLVM_BACKEND)
-    # Find LLVM package
-    find_package(LLVM CONFIG QUIET)
+    # Find LLVM package.
+    # HINTS points at the local build/llvm/ produced by scripts/build-llvm.bat,
+    # so a fresh clone that ran the bootstrap works with zero environment
+    # variables. External installs (LLVM_DIR env) still take priority via
+    # CMake's standard config-package search.
+    find_package(LLVM CONFIG QUIET HINTS "${CMAKE_SOURCE_DIR}/../build/llvm/lib/cmake/llvm")
 
     if(NOT LLVM_FOUND)
         # Search paths for LLVM headers (C API headers in source tree)
@@ -1367,12 +1371,12 @@ if(TML_USE_LLVM_BACKEND)
 
         # Search paths for LLVM static libraries
         set(LLVM_LIB_PATHS
-            "${CMAKE_SOURCE_DIR}/../build/llvm/Release/lib"         # Local build output
+            "${CMAKE_SOURCE_DIR}/../build/llvm/lib"                 # Local (Ninja single-config)
+            "${CMAKE_SOURCE_DIR}/../build/llvm/Release/lib"         # Local (multi-config)
             "${CMAKE_SOURCE_DIR}/../src/llvm-install/lib"
             "$ENV{LLVM_DIR}/lib"
             "$ENV{LLVM_ROOT}/lib"
             "C:/Program Files/LLVM/lib"
-            "F:/LLVM/lib"
             "/usr/lib/llvm-18/lib"
             "/usr/lib/llvm-17/lib"
             "/usr/local/opt/llvm/lib"
@@ -1468,14 +1472,34 @@ if(TML_USE_LLVM_BACKEND)
                 endif()
             endif()
 
+            # Detect which LLVM targets were built so we don't ask for
+            # libs that were excluded (e.g. AArch64 when build-llvm.bat
+            # set LLVM_TARGETS_TO_BUILD=X86).
+            set(TML_LLVM_HAS_AARCH64 FALSE)
+            foreach(LIB_DIR ${LLVM_LIBRARY_DIRS})
+                if(EXISTS "${LIB_DIR}/LLVMAArch64CodeGen.lib"
+                    OR EXISTS "${LIB_DIR}/libLLVMAArch64CodeGen.a")
+                    set(TML_LLVM_HAS_AARCH64 TRUE)
+                    break()
+                endif()
+            endforeach()
+
             if(HAS_STATIC_LIBS)
                 # Link individual static LLVM libraries (no clang DLL needed)
                 # Complete dependency list with all transitive deps
                 target_link_libraries(tml_backend PUBLIC
                     # X86 target
                     LLVMX86CodeGen LLVMX86AsmParser LLVMX86Desc LLVMX86Disassembler LLVMX86Info LLVMX86TargetMCA
-                    # AArch64 target (for cross-compilation support)
-                    LLVMAArch64CodeGen LLVMAArch64AsmParser LLVMAArch64Desc LLVMAArch64Disassembler LLVMAArch64Info LLVMAArch64Utils
+                )
+                if(TML_LLVM_HAS_AARCH64)
+                    # AArch64 target (cross-compilation support, optional)
+                    target_link_libraries(tml_backend PUBLIC
+                        LLVMAArch64CodeGen LLVMAArch64AsmParser LLVMAArch64Desc
+                        LLVMAArch64Disassembler LLVMAArch64Info LLVMAArch64Utils
+                    )
+                    target_compile_definitions(tml_backend PUBLIC TML_LLVM_HAS_AARCH64=1)
+                endif()
+                target_link_libraries(tml_backend PUBLIC
                     # Optimization passes
                     LLVMPasses LLVMCoroutines LLVMipo LLVMVectorize LLVMSandboxIR
                     LLVMAggressiveInstCombine LLVMInstCombine LLVMScalarOpts
@@ -1584,39 +1608,11 @@ add_library(tml_lld STATIC
 )
 target_include_directories(tml_lld PUBLIC include src)
 
-# Embed LLD libraries for in-process linking (no subprocess needed)
-if(TML_USE_LLVM_BACKEND AND LLVM_FOUND)
-    # LLD source headers (lld/Common/Driver.h)
-    set(LLD_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../src/llvm-project/lld/include")
-    # LLD generated headers (lld/Common/Version.inc)
-    set(LLD_GENERATED_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../build/llvm/tools/lld/include")
-
-    if(EXISTS "${LLD_INCLUDE_DIR}/lld/Common/Driver.h")
-        # Use SYSTEM to suppress warnings from LLVM/LLD headers (C4245, C4458 etc.)
-        target_include_directories(tml_lld SYSTEM PUBLIC
-            ${LLD_INCLUDE_DIR} ${LLD_GENERATED_INCLUDE_DIR} ${LLVM_ALL_INCLUDE_DIRS})
-        target_link_directories(tml_lld PUBLIC ${LLVM_LIBRARY_DIRS})
-
-        target_link_libraries(tml_lld PUBLIC
-            # LLD flavor libraries
-            lldCOFF lldCommon lldELF lldMachO lldMinGW lldWasm
-            # LLVM libraries required by LLD (transitive dependencies)
-            LLVMLTO LLVMDTLTO LLVMOption LLVMLibDriver LLVMPlugins
-            LLVMWindowsManifest LLVMWindowsDriver
-            # Core deps shared with tml_backend (needed for link resolution)
-            LLVMPasses LLVMipo LLVMBitWriter LLVMLinker LLVMTransformUtils
-            LLVMCodeGen LLVMTarget LLVMAnalysis LLVMObject LLVMCore
-            LLVMIRReader LLVMAsmParser LLVMBitReader LLVMProfileData
-            LLVMMC LLVMMCParser LLVMMCDisassembler LLVMBinaryFormat
-            LLVMDebugInfoDWARF LLVMDebugInfoCodeView LLVMDebugInfoMSF LLVMDebugInfoPDB
-            LLVMSupport LLVMDemangle LLVMTargetParser LLVMRemarks
-        )
-        target_compile_definitions(tml_lld PUBLIC TML_HAS_LLD_EMBEDDED=1)
-        message(STATUS "LLD Embedded: Enabled (in-process linking)")
-    else()
-        message(STATUS "LLD Embedded: Disabled (headers not found at ${LLD_INCLUDE_DIR})")
-    endif()
-endif()
+# LLD is no longer embedded — always use native OS linker as subprocess.
+# This saves ~30-40 MB from tml_codegen_x86.dll by removing lldCOFF, lldELF,
+# lldMachO, lldMinGW, lldWasm and their transitive LLVM dependencies.
+# Supported linkers: link.exe (Windows), ld (Linux/macOS), lld-link/ld.lld (fallback).
+message(STATUS "Linker: subprocess-only (native OS linker)")
 
 if(TML_USE_ZIG_LINKER)
     # Search for Zig installation
@@ -1719,6 +1715,7 @@ add_library(tml_cli STATIC
     src/cli/utils.cpp
     src/cli/diagnostic.cpp
     src/cli/dispatcher.cpp
+    src/cli/tty_output.cpp
     # Commands (cmd_*.cpp)
     src/cli/commands/cmd_build.cpp
     src/cli/commands/cmd_cache.cpp
@@ -1745,6 +1742,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
+    src/cli/commands/cmd_daemon.cpp
     src/cli/commands/cmd_mcp.cpp
     src/cli/commands/cmd_pkg.cpp
     src/cli/commands/cmd_inspect.cpp
@@ -1769,6 +1767,9 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_test.cpp
     # Coverage
     src/cli/commands/cmd_coverage.cpp
+    # C frontend FFI bridge (phase24)
+    src/cc/cc_bridge.cpp
+    src/cli/commands/cmd_cc.cpp
     src/testing/testing_process.cpp
     src/testing/testing_protocol.cpp
     src/testing/testing_dispatcher_gen.cpp
@@ -1779,7 +1780,6 @@ add_library(tml_cli STATIC
     src/testing/testing_compile.cpp
     src/testing/testing_compile_parallel.cpp
     src/testing/testing_coverage.cpp
-    src/testing/testing_coverage_html.cpp
     src/testing/testing_reporter.cpp
     # Linter modules
     src/cli/linter/config.cpp
@@ -1944,7 +1944,7 @@ if(TML_BUILD_MODULAR)
     else()
         add_executable(tml src/launcher/main_launcher.cpp src/tml.rc)
     endif()
-    target_include_directories(tml PRIVATE include src)
+    target_include_directories(tml PRIVATE include src ${CMAKE_CURRENT_BINARY_DIR}/include)
     target_link_libraries(tml PRIVATE tml_plugin_loader)
     message(STATUS "Launcher: tml.exe (thin, ~400KB, modular with plugins)")
 
@@ -2069,6 +2069,8 @@ if(TML_BUILD_TESTS)
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
         tests/cli/builder_test.cpp
+        tests/cli/tty_output_test.cpp
+        tests/cli/cmd_coverage_test.cpp
         # Integration
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
@@ -2094,17 +2096,24 @@ if(TML_BUILD_TESTS)
         GTest::gtest_main
     )
 
+    set_target_properties(tml_tests PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/tests"
+    )
+
     include(GoogleTest)
     gtest_discover_tests(tml_tests)
-endif()
 
-# Standalone serial reader round-trip tests (no GTest — uses own main)
-add_executable(serial_reader_test
-    tests/serial/serial_reader_test.cpp
-)
-target_link_libraries(serial_reader_test PRIVATE
-    tml_cli
-)
+    # Standalone serial reader round-trip tests (no GTest — uses own main)
+    add_executable(serial_reader_test
+        tests/serial/serial_reader_test.cpp
+    )
+    target_link_libraries(serial_reader_test PRIVATE
+        tml_cli
+    )
+    set_target_properties(serial_reader_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${TML_OUTPUT_DIR}/tests"
+    )
+endif()
 
 # =============================================================================
 # SIMD Benchmark Harness

@@ -1,5 +1,9 @@
 # Deep Analysis Reviewer Memory
 
+## Recurring bug patterns
+- [Heap-borrow-drop pattern](heap-borrow-drop-pattern.md) — non-deterministic crashes in cc/* from `Heap[T]` aliasing; flat List + offset table or `Shared[T]` are the structural fixes
+- [Shared.get aliasing](shared-get-aliasing.md) — `Shared[T].get()` returns T by bitwise copy; nested Shared fields aliased without refcount bumps. Use-after-free on drop. phase24k-discovered residual bug class after phase24g Shared migration. Naive .duplicate() workarounds REGRESS — needs structural fix in Shared::get or codegen.
+
 ## Key Debugging Insights
 
 ### Type Checker: Hardcoded Builtin Types Method List (2026-04-06) - PARTIALLY FIXED

@@ -277,11 +277,15 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
             return unwrap_err(rparen);
 
         // Optional base constructor call: : base(args)
+        // `base` is a contextual keyword — tokenised as Identifier; accept
+        // any Identifier with lexeme "base" here.
         std::optional<std::vector<ExprPtr>> base_args;
         if (match(lexer::TokenKind::Colon)) {
-            auto base_tok = expect(lexer::TokenKind::KwBase, "Expected 'base' after ':'");
-            if (is_err(base_tok))
-                return unwrap_err(base_tok);
+            if (!(check(lexer::TokenKind::Identifier) && peek().lexeme == "base")) {
+                return ParseError{
+                    "Expected 'base' after ':'", peek().span, {}, {}, "P009"};
+            }
+            advance();
 
             auto base_lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'base'");
             if (is_err(base_lparen))

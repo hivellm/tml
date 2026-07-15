@@ -1,0 +1,43 @@
+//! Regression test for codegen bug #8 (phase0v):
+//! Deeply-nested constructor expressions in a single statement previously
+//! hung or crashed at runtime when the outer enum was large AND the inner
+//! struct was large. The phase23b C frontend triggered this with
+//!   `decls.push(Heap[CDecl]::new(CDecl::Var(Heap[CVarDecl]::new(vd))))`
+//! where CDecl has 7 variants and CVarDecl has 7 fields. Workaround in
+//! phase23b was to split into stepwise let-bindings; this test exercises
+//! the single-line form that originally crashed.
+
+use test::{assert, assert_eq}
+use core::alloc::heap::Heap
+use std::collections::list::List
+
+pub type Inner {
+    f1: Str,
+    f2: I64,
+    f3: I64,
+    f4: I64,
+    f5: Str,
+    f6: I64,
+    f7: I64
+}
+
+pub enum Outer {
+    V1(Heap[Inner]),
+    V2(Heap[Inner]),
+    V3(Heap[Inner]),
+    V4(Heap[Inner]),
+    V5(Heap[Inner]),
+    V6(Heap[Inner]),
+    V7(Heap[I64], Str)
+}
+
+@test func test_bug8_nested_one_line() {
+    let list: List[Heap[Outer]] = List[Heap[Outer]]::new(4 as I64)
+    let inner: Inner = Inner {
+        f1: "a", f2: 1 as I64, f3: 2 as I64, f4: 3 as I64,
+        f5: "b", f6: 4 as I64, f7: 5 as I64
+    }
+    // The single-line form that crashed during phase23b bring-up.
+    list.push(Heap[Outer]::new(Outer::V1(Heap[Inner]::new(inner))))
+    assert_eq(list.len() as I32, 1)
+}

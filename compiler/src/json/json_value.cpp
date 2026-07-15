@@ -107,11 +107,17 @@ auto JsonValue::operator==(const JsonValue& other) const -> bool {
         if (obj1.size() != obj2.size()) {
             return false;
         }
+        // O(n^2) linear scan — acceptable for typical JSON object sizes.
         for (const auto& [key, val] : obj1) {
-            auto it = obj2.find(key);
-            if (it == obj2.end() || it->second != val) {
-                return false;
+            bool found = false;
+            for (const auto& [k2, v2] : obj2) {
+                if (k2 == key) {
+                    if (v2 != val) return false;
+                    found = true;
+                    break;
+                }
             }
+            if (!found) return false;
         }
         return true;
     }
@@ -136,7 +142,17 @@ void JsonValue::merge(JsonValue other) {
     auto& other_obj = other.as_object_mut();
 
     for (auto& [key, val] : other_obj) {
-        this_obj[key] = std::move(val);
+        bool replaced = false;
+        for (auto& kv : this_obj) {
+            if (kv.first == key) {
+                kv.second = std::move(val);
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            this_obj.emplace_back(std::move(key), std::move(val));
+        }
     }
 }
 

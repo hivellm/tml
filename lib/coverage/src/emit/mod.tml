@@ -1,0 +1,8 @@
+//! Coverage emit submodule.
+//!
+//! Exposes writers that turn a `CoverageReport` into on-disk artifacts.
+//! Currently scaffolded with stubs; full implementations land in
+//! phases 2 (LCOV), 6 (JSON), 7 (HTML SPA), 8 (Cobertura XML).
+
+// Sibling re-exports are not currently supported; consumers import
+// directly (e.g. `use coverage::emit::lcov::write_lcov`).

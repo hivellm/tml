@@ -649,6 +649,7 @@ auto JsonParser::parse_object() -> Result<JsonValue, JsonError> {
     advance(); // Skip '{'
 
     JsonObject obj;
+    obj.reserve(8);
 
     if (check(JsonTokenKind::RBrace)) {
         advance();
@@ -678,7 +679,7 @@ auto JsonParser::parse_object() -> Result<JsonValue, JsonError> {
             return value_result;
         }
 
-        obj[std::move(key)] = std::move(unwrap(value_result));
+        obj.emplace_back(std::move(key), std::move(unwrap(value_result)));
 
         // Check for comma or end
         if (check(JsonTokenKind::Comma)) {

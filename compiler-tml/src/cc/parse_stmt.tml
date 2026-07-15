@@ -1,0 +1,78 @@
+//! # C17 Statement Parser (phase 23b Phase 4)
+//!
+//! Public entry point for the C statement parser. The implementation lives
+//! alongside declaration and expression parsing in `parser.tml` because
+//! C's statement grammar is mutually recursive with declarations (C99
+//! mixed decls+stmts inside a block, C99 for-init declarations) and with
+//! expressions (condition, return value, case value, etc.). Splitting the
+//! implementation into a separate file would introduce a circular `use`
+//! import that TML doesn't support; this module provides a curated view
+//! of the statement-parsing surface.
+//!
+//! ## Entry points
+//! - `cp_parse_compound_stmt(parser, pos) -> Outcome[CParsedStmt, CParseError]` —
+//!   a `{ ... }` block. Each item inside is either a declaration (C99
+//!   mixed decls) or a statement.
+//! - `cp_parse_stmt(parser, pos) -> Outcome[CParsedStmt, CParseError]` —
+//!   a single statement (dispatches to the right sub-parser).
+//!
+//! ## Statement coverage
+//!
+//! | Form                                  | AST variant              | Status |
+//! |---------------------------------------|--------------------------|--------|
+//! | `;`                                   | `CStmt::Empty`           | ✓      |
+//! | `expr ;`                              | `CStmt::Expr`            | ✓      |
+//! | `{ items... }`                        | `CStmt::Compound`        | ✓      |
+//! | `if (e) s [else s]`                   | `CStmt::If`              | ✓      |
+//! | `for (init; cond; upd) body`          | `CStmt::For`             | ✓      |
+//! | `while (cond) body`                   | `CStmt::While`           | ✓      |
+//! | `do body while (cond);`               | `CStmt::DoWhile`         | ✓      |
+//! | `switch (e) body`                     | `CStmt::Switch`          | ✓      |
+//! | `case e : s`                          | `CStmt::Case`            | ✓      |
+//! | `default : s`                         | `CStmt::Default`         | ✓      |
+//! | `break ;` / `continue ;`              | `CStmt::Break`/`Continue`| ✓      |
+//! | `return [e] ;`                        | `CStmt::Return`          | ✓      |
+//! | `goto label ;`                        | `CStmt::Goto`            | ✓      |
+//! | `label : s`                           | `CStmt::Label`           | ✓      |
+//! | `_Static_assert(e, "msg") ;`          | `CStmt::StaticAssert`    | ✓      |
+//!
+//! ## Mixed declarations and statements (C99)
+//!
+//! `cp_parse_compound_stmt` detects declarations by `cp_at_decl_specifier`
+//! — when the current token starts a declaration-specifier list it routes
+//! to `cp_parse_top_decl` and wraps every resulting `Heap[CDecl]` in a
+//! `CBlockItem::DeclItem`. Otherwise it parses a statement via
+//! `cp_parse_stmt`. The `label_ahead` helper disambiguates `typedef-name :`
+//! (not a valid label — typedef names are expression identifiers) from
+//! `ident :` (a C label) by looking one token ahead.
+//!
+//! ## For-init declarations (C99)
+//!
+//! The `for` header's first slot accepts either an expression-statement
+//! or a declaration. When `cp_at_decl_specifier` returns true we route to
+//! `cp_parse_top_decl` and stash the first resulting decl in the
+//! `CStmt::For` init slot — MIR lowering (phase 23b Phase 6) expands
+//! multiple declarators into a compound block item.
+//!
+//! ## Attribute and alignment extensions
+//!
+//! - `__attribute__((...))` — GCC extension used in system headers. The
+//!   preprocessor doesn't strip it; we skip the entire `__attribute__((...))`
+//!   token sequence at declaration-specifier time (the parser's tokenizer
+//!   never sees it because the C preprocessor from phase23a already
+//!   consumed it — if we encounter it at statement position we treat it
+//!   as a no-op ahead of the next statement).
+//! - `_Alignas(N)` — already handled by `cp_parse_specifiers` (item 2.1)
+//!   via specifier kind 6; the type checker applies it to the aggregate
+//!   layout.
+
+use compiler::cc::parser::{
+    cp_parse_compound_stmt,
+    cp_parse_stmt,
+    CParsedStmt,
+    CParseError
+}
+
+pub type ReExports {
+    _placeholder: I64
+}

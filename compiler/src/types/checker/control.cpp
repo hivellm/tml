@@ -203,6 +203,58 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
                 } else {
                     element_type = next_sig->return_type;
                 }
+                // Substitute generic type params from the concrete iterator type.
+                // E.g. BTreeMapIter[I64, I64]::next() -> Maybe[MapEntry[K, V]]
+                //   => substitute K->I64, V->I64 => MapEntry[I64, I64]
+                if (!named.type_args.empty()) {
+                    auto struct_def = env_.lookup_struct(named.name);
+                    if (struct_def && struct_def->type_params.size() == named.type_args.size()) {
+                        std::unordered_map<std::string, TypePtr> subs;
+                        for (size_t i = 0; i < struct_def->type_params.size(); ++i) {
+                            subs[struct_def->type_params[i]] = named.type_args[i];
+                        }
+                        element_type = substitute_type(element_type, subs);
+                    }
+                }
+            } else {
+                element_type = make_unit();
+            }
+        } else if (env_.type_implements(named.name, "IntoIterator")) {
+            // Types implementing IntoIterator (e.g. BTreeMap) are usable in
+            // for-in via the desugaring `for x in expr` =>
+            // `for x in expr.into_iter()`. Element type comes from the
+            // iterator's `next()` return.
+            auto into_iter_sig = env_.lookup_func(named.name + "::into_iter");
+            if (into_iter_sig && into_iter_sig->return_type &&
+                into_iter_sig->return_type->is<NamedType>()) {
+                const auto& iter_named = into_iter_sig->return_type->as<NamedType>();
+                auto next_sig = env_.lookup_func(iter_named.name + "::next");
+                if (next_sig && next_sig->return_type &&
+                    next_sig->return_type->is<NamedType>()) {
+                    const auto& ret_named = next_sig->return_type->as<NamedType>();
+                    if ((ret_named.name == "Maybe" || ret_named.name == "Option") &&
+                        !ret_named.type_args.empty()) {
+                        element_type = ret_named.type_args[0];
+                    } else {
+                        element_type = next_sig->return_type;
+                    }
+                    // Substitute from the collection's type args. BTreeMap[K,V]'s
+                    // IntoIter is BTreeMapIter[K,V] with matching params, so we
+                    // can reuse the collection's substitution map.
+                    if (!named.type_args.empty()) {
+                        auto struct_def = env_.lookup_struct(named.name);
+                        if (struct_def &&
+                            struct_def->type_params.size() == named.type_args.size()) {
+                            std::unordered_map<std::string, TypePtr> subs;
+                            for (size_t i = 0; i < struct_def->type_params.size(); ++i) {
+                                subs[struct_def->type_params[i]] = named.type_args[i];
+                            }
+                            element_type = substitute_type(element_type, subs);
+                        }
+                    }
+                } else {
+                    element_type = make_unit();
+                }
             } else {
                 element_type = make_unit();
             }

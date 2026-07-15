@@ -1,0 +1,56 @@
+//! llvm-cov JSON ingest tests — phase 3.2.
+
+use test::*
+use coverage::types::*
+use coverage::ingest::llvm_json::read_llvm_json
+
+@test("minimal llvm-cov JSON — one file, 3 segments, 1 function")
+func test_minimal() {
+    let r = when read_llvm_json("lib/coverage/tests/fixtures/llvm_json/minimal.json") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, "read_llvm_json failed")
+            return
+        }
+    }
+    assert_eq(r.tool, "llvm-cov", "tool tag")
+    assert_eq(r.files.len(), 1, "one file")
+    let f = r.files.get(0)
+    assert_eq(f.path, "src/add.cpp", "filename preserved")
+    assert_eq(f.lines.len(), 3, "3 lines derived from segments")
+    assert_eq(f.lines.get(0).line, 1, "line 1")
+    assert_eq(f.lines.get(0).count, 42, "line 1 hit 42 times")
+    assert_eq(f.lines.get(2).count, 0, "line 3 unhit")
+    assert_eq(f.functions.len(), 1, "one function correlated by filenames[0]")
+    assert_eq(f.functions.get(0).name, "_Z3addii", "function name")
+    assert_eq(f.functions.get(0).hit_count, 42, "function count")
+}
+
+@test("llvm-cov JSON with branches")
+func test_with_branches() {
+    let r = when read_llvm_json("lib/coverage/tests/fixtures/llvm_json/with_branches.json") {
+        Ok(r) => r,
+        Err(e) => {
+            assert_true(false, "read_llvm_json failed")
+            return
+        }
+    }
+    let f = r.files.get(0)
+    assert_eq(f.lines.len(), 4, "4 lines")
+    assert_eq(f.branches.len(), 2, "2 branch records")
+    assert_eq(f.branches.get(0).line, 2, "branch 0 at line 2")
+    assert_eq(f.branches.get(0).hit_count, 7, "branch 0 hit 7 times")
+    assert_eq(f.branches.get(1).hit_count, 3, "branch 1 hit 3 times")
+}
+
+@test("malformed JSON returns ParseError")
+func test_malformed() {
+    let r = read_llvm_json("lib/coverage/tests/fixtures/llvm_json/malformed.json")
+    assert_true(r.is_err(), "malformed JSON must fail")
+}
+
+@test("missing file returns ReadError")
+func test_missing() {
+    let r = read_llvm_json("lib/coverage/tests/fixtures/llvm_json/does_not_exist.json")
+    assert_true(r.is_err(), "missing file must fail")
+}

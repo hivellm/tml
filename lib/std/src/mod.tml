@@ -72,6 +72,7 @@ pub mod regex
 pub mod alloc
 pub mod io
 pub mod stream     // Stream abstractions (Readable, Writable, pipe)
+pub mod events     // Event-driven primitives (EventEmitter, Observable, Promise)
 pub mod uuid       // UUID v4/v7 generation, parsing, formatting
 pub mod semver     // Semantic versioning parse, compare, ranges
 pub mod url        // URL parsing and building per RFC 3986
@@ -85,3 +86,5 @@ pub mod ia         // AI library — tensor operations, neural networks, ML prim
 pub mod ffi        // FFI types: CString (owned C string)
 pub mod debug      // Debug utilities for Reflect types (debug_print, debug_string)
 pub mod di         // Dependency Injection (pointer-based service registry, modules, config)
+pub mod msgpack    // MessagePack binary serialization
+pub mod protobuf   // Protocol Buffers wire format, .proto parser, TML codegen

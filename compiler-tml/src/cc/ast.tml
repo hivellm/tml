@@ -1,0 +1,658 @@
+//! # C17 AST (phase 23b Phase 2)
+//!
+//! The parsed representation of a C translation unit. Every node type the
+//! parser produces lives here so `parser.tml`, `parse_expr.tml`,
+//! `parse_stmt.tml` and the type-checker / lowerer all import from a single
+//! source of truth. The AST is intentionally close to the C17 grammar —
+//! promotions, implicit conversions and decay rules are *not* applied here;
+//! that's the type-checker's job (phase 5).
+//!
+//! ## Declarator model
+//!
+//! C declarations are split into declaration specifiers (`int const`,
+//! `static unsigned long`) and declarators (`*x`, `arr[10]`, `(*fp)(int)`).
+//! The declarator is a spine that wraps a base type; we model it as a
+//! recursive `CDeclarator` enum with pointer/array/function constructors
+//! that nest outwards from the eventual identifier. When a declarator is
+//! anonymous (function parameter, type-name in `sizeof((int*)0)`), the
+//! leaf becomes `Abstract` instead of `Ident`.
+//!
+//! ## Typedef-name ambiguity
+//!
+//! Recognising `foo *x;` as `foo` being a typedef (declaration) vs a
+//! multiplication (expression-statement) requires knowing the set of
+//! typedef names currently in scope. `CParser` tracks a typedef table;
+//! this file only defines the shape of nodes, not the lexing decision.
+
+use std::collections::list::List
+use core::alloc::shared::Shared
+
+// ============================================================================
+// Declaration specifiers (C17 §6.7)
+// ============================================================================
+
+/// Storage-class specifier. `None` means the declaration inherited the
+/// default linkage / storage for its scope (global → static, block → auto).
+pub enum CStorageClass {
+    None,
+    Auto,
+    Register,
+    Static,
+    Extern,
+    Typedef,
+    KwThreadLocal
+}
+
+/// Built-in arithmetic and aggregate base types. Signedness is already baked
+/// into the enum — the parser canonicalises `signed int`/`int`/`int signed`
+/// to the same variant. Aggregate specifiers (`struct X`, `union U`,
+/// `enum E`) keep the tag name so the type checker can look them up.
+pub enum CBaseType {
+    Void,
+    Bool,
+    Char,            // plain char, signedness implementation-defined
+    SChar,           // signed char
+    UChar,           // unsigned char
+    Short,           // signed short
+    UShort,          // unsigned short
+    Int,             // signed int (default for `long`, `short` unless otherwise)
+    UInt,            // unsigned int
+    Long,            // signed long
+    ULong,           // unsigned long
+    LongLong,        // signed long long
+    ULongLong,       // unsigned long long
+    Float,
+    Double,
+    LongDouble,
+    Complex,         // _Complex (double by default)
+    // Aggregate references by tag — the definition lives in a separate CDecl.
+    StructRef(Str),
+    UnionRef(Str),
+    EnumRef(Str),
+    // A named typedef — resolved by the type checker.
+    Typedef(Str)
+}
+
+/// Type qualifiers. A bitfield disguised as a struct because TML doesn't have
+/// bitfield types and a pack of four `I64` fields is what compiles cleanly
+/// through the current codegen.
+pub type CQualifiers {
+    is_const: I64,
+    is_volatile: I64,
+    is_restrict: I64,
+    is_atomic: I64
+}
+
+pub func c_quals_none() -> CQualifiers {
+    return CQualifiers { is_const: 0 as I64, is_volatile: 0 as I64, is_restrict: 0 as I64, is_atomic: 0 as I64 }
+}
+
+/// Function specifiers (C17 §6.7.4). `inline` is hint-only; `_Noreturn`
+/// affects control-flow analysis and attribute propagation.
+pub type CFuncSpec {
+    is_inline: I64,
+    is_noreturn: I64
+}
+
+pub func c_funcspec_none() -> CFuncSpec {
+    return CFuncSpec { is_inline: 0 as I64, is_noreturn: 0 as I64 }
+}
+
+/// All declaration specifiers collected from the leading run of a
+/// declaration (`static const unsigned long`). A parsed specifier list is
+/// one of these per declaration regardless of how many declarators follow.
+pub type CDeclSpecifiers {
+    storage: CStorageClass,
+    base_type: CBaseType,
+    quals: CQualifiers,
+    funcspec: CFuncSpec,
+    // `_Alignas(N)` alignment override, or 0 if not specified.
+    alignas_bytes: I64
+}
+
+// ============================================================================
+// Declarator spine
+// ============================================================================
+
+/// Function-declarator layer. Split out of the enum so pattern-binding a
+/// single struct arg avoids the codegen bug that hits when a Func variant
+/// is declared as `Func(Shared[CDeclarator], List[CParam], I64)`.
+@auto(duplicate)
+pub type CFuncDeclPart {
+    inner: Shared[CDeclarator],
+    params: List[CParam],
+    is_variadic: I64
+}
+
+/// The declarator syntax tree. Each level wraps the `inner` declarator with
+/// a pointer/array/function layer until the leaf (`Ident` or `Abstract`).
+/// Parenthesized declarators like `(*fp)(int)` are represented as nested
+/// declarators: outermost is Func, wrapping a Pointer, wrapping Ident.
+///
+/// `Shared[CDeclarator]` (refcounted) is used for the recursive payload
+/// so that `HashMap.get` / `List.get` slot aliasing is safe — the Heap
+/// equivalent caused use-after-free bugs across phases 24c–24f because
+/// dropping the local handle freed the slot's allocation.
+pub enum CDeclarator {
+    /// Named identifier — the declarator "bottoms out" here.
+    Ident(Str),
+    /// Abstract declarator — unnamed. Used in function-parameter type-only
+    /// positions (`int(*)(int,int)` as a type name) and in `sizeof(T)`.
+    Abstract,
+    /// `*` pointer with qualifiers applied to the pointer itself.
+    Pointer(Shared[CDeclarator], CQualifiers),
+    /// `[N]` array. `size = Nothing` means unsized / incomplete (`int arr[];`
+    /// or a VLA, both of which we only allow on function parameters).
+    Array(Shared[CDeclarator], Maybe[Shared[CExpr]]),
+    /// Function declarator. See `CFuncDeclPart` for field layout.
+    Func(CFuncDeclPart)
+}
+
+// Manual `Duplicate` impl for `CDeclarator`. `@auto(duplicate)` does not yet
+// support enums; recursive `Shared[CDeclarator]` variants need refcount-aware
+// duplication. Without this impl, partial-field-moves of a `CDeclarator`
+// (e.g. `let leaf = parsed.decl`) would bitwise-copy the variant payload and
+// then double-drop the contained `Shared` when the source struct's drop ran.
+// See phase24h.
+impl Duplicate for CDeclarator {
+    pub func duplicate(this) -> CDeclarator {
+        when this {
+            Ident(name) => return CDeclarator::Ident(name.duplicate()),
+            Abstract => return CDeclarator::Abstract,
+            Pointer(inner, q) => return CDeclarator::Pointer(inner.duplicate(), q),
+            Array(inner, size) => return CDeclarator::Array(inner.duplicate(), size.duplicate()),
+            Func(part) => return CDeclarator::Func(part.duplicate())
+        }
+    }
+}
+
+pub type CParam {
+    // Parameter name. Empty Str for unnamed parameters in prototypes
+    // (`void foo(int, int);`).
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator
+}
+
+// ============================================================================
+// Expressions (stubs filled in by parse_expr.tml)
+// ============================================================================
+//
+// We declare a complete CExpr enum here because the parser needs to produce
+// expression trees for initializers and declarator array sizes even while
+// parse_expr.tml is still a stub. Each variant corresponds to one productions
+// in C17 §6.5. The binary/unary operators are an enum each so downstream
+// passes do integer compares instead of string dispatch.
+
+pub enum CExpr {
+    // Literals
+    IntLit(U64, I64),              // value, is_unsigned_or_long_flag (from suffix)
+    FloatLit(F64, I64),            // value, is_float_suffix (1 = `f`, 0 = double/long-double)
+    CharLit(U32),                  // codepoint after decoding
+    StringLit(List[U8]),           // bytes (encoding handled at type-check)
+    // Identifiers
+    Ident(Str),
+    // Compound — `Shared[T]` (refcounted) for the same Heap-borrow-drop
+    // reason as `CDeclarator` / `CDecl` (phase24g/h): when a parser
+    // partial-move drops the source struct, the contained allocation
+    // must remain valid. See phase24j.
+    Paren(Shared[CExpr]),
+    Binary(CBinaryOp, Shared[CExpr], Shared[CExpr]),
+    Unary(CUnaryOp, Shared[CExpr]),
+    PostInc(Shared[CExpr]),
+    PostDec(Shared[CExpr]),
+    Assign(CAssignOp, Shared[CExpr], Shared[CExpr]),
+    Cond(Shared[CExpr], Shared[CExpr], Shared[CExpr]),
+    Comma(Shared[CExpr], Shared[CExpr]),
+    Call(Shared[CExpr], List[Shared[CExpr]]),
+    Member(Shared[CExpr], Str),      // expr.field
+    Arrow(Shared[CExpr], Str),       // expr->field
+    Index(Shared[CExpr], Shared[CExpr]),
+    Cast(Shared[CTypeName], Shared[CExpr]),
+    SizeofExpr(Shared[CExpr]),
+    SizeofType(Shared[CTypeName]),
+    AlignofType(Shared[CTypeName]),
+    Compound(Shared[CTypeName], Shared[CInit]),   // (T){...}  C99
+    Generic(Shared[CExpr], List[CGenericAssoc]) // _Generic(ctrl, T1: e1, default: e2)
+}
+
+pub enum CBinaryOp {
+    Add, Sub, Mul, Div, Mod,
+    Shl, Shr,
+    Lt, Gt, Le, Ge, Eq, Ne,
+    BitAnd, BitOr, BitXor,
+    LogAnd, LogOr
+}
+
+pub enum CUnaryOp {
+    Plus,                         // +x
+    Neg,                          // -x
+    BitNot,                       // ~x
+    LogNot,                       // !x
+    PreInc,                       // ++x
+    PreDec,                       // --x
+    AddrOf,                       // &x
+    Deref                         // *x
+}
+
+pub enum CAssignOp {
+    Assign,
+    AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
+    ShlAssign, ShrAssign,
+    BitAndAssign, BitOrAssign, BitXorAssign
+}
+
+/// A C type-name used in cast, sizeof(T), _Alignof(T), compound literals,
+/// and function prototypes. It's a decl-spec + abstract declarator bundle
+/// — the grammar calls this a "type-name".
+pub type CTypeName {
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator
+}
+
+/// `_Generic` association: `type: expr` or `default: expr`.
+pub type CGenericAssoc {
+    // `is_default = 1` → the `default:` arm; ty is unused in that case.
+    is_default: I64,
+    ty: CTypeName,
+    value: Shared[CExpr]
+}
+
+// ============================================================================
+// Initializers
+// ============================================================================
+
+/// C initializer: either a scalar expression or a brace-enclosed list.
+/// Designated initializers are encoded as elements with non-empty designator
+/// chains.
+pub enum CInit {
+    Scalar(Shared[CExpr]),
+    Brace(List[CInitElement])
+}
+
+pub type CInitElement {
+    /// Designator chain. Empty = positional. `.field` or `[expr]`, possibly
+    /// nested: `.inner[3].x`.
+    designators: List[CDesignator],
+    init: Shared[CInit]
+}
+
+pub enum CDesignator {
+    Field(Str),                // .name
+    Index(Shared[CExpr])       // [expr]  (constant expression at type-check)
+}
+
+// ============================================================================
+// Statements (stubs — parse_stmt.tml fills these in)
+// ============================================================================
+//
+// Declared here so function-declaration bodies can carry a statement block
+// even before parse_stmt.tml implements everything.
+
+pub enum CStmt {
+    Empty,                                  // ;
+    Expr(Shared[CExpr]),                    // expr;
+    Compound(List[CBlockItem]),             // { decls; stmts; }
+    If(Shared[CExpr], Shared[CStmt], Maybe[Shared[CStmt]]),
+    For(Maybe[Shared[CBlockItem]], Maybe[Shared[CExpr]], Maybe[Shared[CExpr]], Shared[CStmt]),
+    While(Shared[CExpr], Shared[CStmt]),
+    DoWhile(Shared[CStmt], Shared[CExpr]),
+    Switch(Shared[CExpr], Shared[CStmt]),
+    Case(Shared[CExpr], Shared[CStmt]),
+    Default(Shared[CStmt]),
+    Break,
+    Continue,
+    Return(Maybe[Shared[CExpr]]),
+    Goto(Str),
+    Label(Str, Shared[CStmt]),
+    StaticAssert(Shared[CExpr], Str)        // _Static_assert(expr, "msg")
+}
+
+/// Item inside a compound statement: C99 permits declarations and statements
+/// to interleave, so a block is a list of either.
+///
+/// `DeclItem` carries a `Shared[CDecl]` (refcounted) so list slots and
+/// HashMap buckets containing CDecl values stay aliasing-safe — same
+/// rationale as the type-system Heap-borrow-drop fix from phase24g.
+/// `StmtItem` likewise uses `Shared[CStmt]` (phase24j) so partial-move
+/// of items out of a `List[CBlockItem]` doesn't double-drop.
+pub enum CBlockItem {
+    DeclItem(Shared[CDecl]),
+    StmtItem(Shared[CStmt])
+}
+
+// ============================================================================
+// Top-level declarations
+// ============================================================================
+
+pub enum CDecl {
+    /// One variable from a declaration (`int a, *b;` → two VarDecls).
+    Var(CVarDecl),
+    /// Function definition (body = Just) or prototype (body = Nothing).
+    Func(CFuncDecl),
+    /// Struct or union definition `struct X { ... };`.
+    StructDef(CStructDef),
+    UnionDef(CUnionDef),
+    /// Enum definition `enum Color { ... };`.
+    EnumDef(CEnumDef),
+    /// A typedef declaration `typedef T name;`.
+    TypedefDef(CTypedefDef),
+    /// `_Static_assert` at file scope (C11).
+    StaticAssert(Shared[CExpr], Str)
+}
+
+pub type CVarDecl {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    init: Maybe[Shared[CInit]],
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CFuncDecl {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    /// Declarator spine *around* the name. The outermost layer is always
+    /// `Func(inner, params, variadic)` when this is a valid function decl;
+    /// `return_spec` + the non-func layers together give the return type.
+    declarator: CDeclarator,
+    params: List[CParam],
+    is_variadic: I64,
+    // K&R-style declarations: `int f(a, b) int a; char b; { ... }` — the
+    // declaration lines between `)` and `{` carry the parameter types.
+    kr_decls: List[CVarDecl],
+    body: Maybe[Shared[CStmt]],
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CStructField {
+    name: Str,                              // empty for anonymous struct/union members (C11)
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    // Non-negative bit-field width, or -1 if this is a regular field.
+    bit_width: I64
+}
+
+pub type CStructDef {
+    tag: Str,                               // empty for anonymous `struct {} x;`
+    fields: List[CStructField],
+    // Forward declaration (`struct Foo;`) carries an empty `fields` list AND
+    // `is_forward = 1` to distinguish from `struct Foo {};`.
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CUnionDef {
+    tag: Str,
+    fields: List[CStructField],
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CEnumVariantDef {
+    name: Str,
+    // Explicit value `= N` as a constant expression, or Nothing for the
+    // auto-increment default (previous + 1, or 0 for the first).
+    value: Maybe[Shared[CExpr]]
+}
+
+pub type CEnumDef {
+    tag: Str,
+    variants: List[CEnumVariantDef],
+    is_forward: I64,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub type CTypedefDef {
+    name: Str,
+    specifiers: CDeclSpecifiers,
+    declarator: CDeclarator,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+// ============================================================================
+// Translation unit
+// ============================================================================
+
+pub type CTranslationUnit {
+    decls: List[Shared[CDecl]],
+    // File name of the primary source (for diagnostics and the eventual
+    // MIR `#file` directive).
+    file: Str
+}
+
+pub func c_tu(file: Str) -> CTranslationUnit {
+    return CTranslationUnit {
+        decls: List[Shared[CDecl]]::new(0 as I64),
+        file: file
+    }
+}
+
+// ============================================================================
+// Manual Duplicate impls (phase24j)
+// ============================================================================
+//
+// `@auto(duplicate)` does not yet support enums; the recursive
+// `Shared[CExpr]` / `Shared[CStmt]` / `Shared[CInit]` / `Shared[CBlockItem]`
+// variants need refcount-aware duplication so partial-field-moves of
+// these enums (e.g. `let leaf = parsed.expr`) don't bitwise-copy a
+// variant payload and double-drop the contained `Shared` when the
+// source struct's drop ran. Same pattern as `CDeclarator` in phase24h
+// and `CType` in phase24g/types.tml.
+
+impl Duplicate for CGenericAssoc {
+    pub func duplicate(this) -> CGenericAssoc {
+        return CGenericAssoc {
+            is_default: this.is_default,
+            ty: this.ty.duplicate(),
+            value: this.value.duplicate()
+        }
+    }
+}
+
+// Free helper used by `dup_designators`. Methods on small enums hit a
+// codegen ABI mismatch where `this` is passed as `ptr` but the method
+// is defined to take a value — the impl below works around that by
+// only being called from contexts where `this` is already a value.
+func dup_designator_value(d: CDesignator) -> CDesignator {
+    when d {
+        Field(name) => return CDesignator::Field(name.duplicate()),
+        Index(e) => return CDesignator::Index(e.duplicate())
+    }
+}
+
+impl Duplicate for CDesignator {
+    pub func duplicate(this) -> CDesignator {
+        when this {
+            Field(name) => return CDesignator::Field(name.duplicate()),
+            Index(e) => return CDesignator::Index(e.duplicate())
+        }
+    }
+}
+
+// Manual element-walk for `List[CDesignator]` / `List[CInitElement]`:
+// the auto-derived `List.duplicate` codegen has an ABI mismatch on
+// small enum element types (CDesignator is `{i32, i64}` packed —
+// `.get(i).duplicate()` lowering passes the value by-ptr while the
+// manual impl receives by-value, producing
+// `'%struct.CDesignator' but expected 'ptr'` at LLVM verification).
+// Hand-rolled loops sidestep the auto-derive path.
+
+func dup_designators(src: List[CDesignator]) -> List[CDesignator] {
+    let result: List[CDesignator] = List[CDesignator]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_designator_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+func dup_init_elem_value(e: CInitElement) -> CInitElement {
+    return CInitElement {
+        designators: dup_designators(e.designators),
+        init: e.init.duplicate()
+    }
+}
+
+func dup_init_elems(src: List[CInitElement]) -> List[CInitElement] {
+    let result: List[CInitElement] = List[CInitElement]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_init_elem_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+// Auto-derived `List[Shared[CExpr]].duplicate()` mis-types the
+// per-element call as returning `Shared[Shared[CExpr]]` instead of
+// `Shared[CExpr]`. Hand-rolled walker bypasses the generic Duplicate
+// instantiation and calls Shared.duplicate directly with correct types.
+func dup_shared_expr_list(src: List[Shared[CExpr]]) -> List[Shared[CExpr]] {
+    let result: List[Shared[CExpr]] = List[Shared[CExpr]]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        let elem: Shared[CExpr] = src.get(i)
+        result.push(elem.duplicate())
+        i = i + 1
+    }
+    return result
+}
+
+// Same for List[CGenericAssoc] which holds CGenericAssoc structs that
+// internally hold Shared[CExpr]. Auto-derive triggers the same bug.
+func dup_generic_assocs(src: List[CGenericAssoc]) -> List[CGenericAssoc] {
+    let result: List[CGenericAssoc] = List[CGenericAssoc]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        let elem: CGenericAssoc = src.get(i)
+        result.push(elem.duplicate())
+        i = i + 1
+    }
+    return result
+}
+
+impl Duplicate for CInitElement {
+    pub func duplicate(this) -> CInitElement {
+        return CInitElement {
+            designators: dup_designators(this.designators),
+            init: this.init.duplicate()
+        }
+    }
+}
+
+impl Duplicate for CInit {
+    pub func duplicate(this) -> CInit {
+        when this {
+            Scalar(e) => return CInit::Scalar(e.duplicate()),
+            Brace(elems) => return CInit::Brace(dup_init_elems(elems))
+        }
+    }
+}
+
+impl Duplicate for CTypeName {
+    pub func duplicate(this) -> CTypeName {
+        return CTypeName {
+            specifiers: this.specifiers.duplicate(),
+            declarator: this.declarator.duplicate()
+        }
+    }
+}
+
+impl Duplicate for CExpr {
+    pub func duplicate(this) -> CExpr {
+        when this {
+            IntLit(v, f) => return CExpr::IntLit(v, f),
+            FloatLit(v, f) => return CExpr::FloatLit(v, f),
+            CharLit(c) => return CExpr::CharLit(c),
+            StringLit(bytes) => return CExpr::StringLit(bytes.duplicate()),
+            Ident(name) => return CExpr::Ident(name.duplicate()),
+            Paren(e) => return CExpr::Paren(e.duplicate()),
+            Binary(op, l, r) => return CExpr::Binary(op, l.duplicate(), r.duplicate()),
+            Unary(op, e) => return CExpr::Unary(op, e.duplicate()),
+            PostInc(e) => return CExpr::PostInc(e.duplicate()),
+            PostDec(e) => return CExpr::PostDec(e.duplicate()),
+            Assign(op, l, r) => return CExpr::Assign(op, l.duplicate(), r.duplicate()),
+            Cond(c, t, f) => return CExpr::Cond(c.duplicate(), t.duplicate(), f.duplicate()),
+            Comma(l, r) => return CExpr::Comma(l.duplicate(), r.duplicate()),
+            Call(callee, args) => return CExpr::Call(callee.duplicate(), dup_shared_expr_list(args)),
+            Member(recv, name) => return CExpr::Member(recv.duplicate(), name.duplicate()),
+            Arrow(recv, name) => return CExpr::Arrow(recv.duplicate(), name.duplicate()),
+            Index(arr, idx) => return CExpr::Index(arr.duplicate(), idx.duplicate()),
+            Cast(ty, e) => return CExpr::Cast(ty.duplicate(), e.duplicate()),
+            SizeofExpr(e) => return CExpr::SizeofExpr(e.duplicate()),
+            SizeofType(ty) => return CExpr::SizeofType(ty.duplicate()),
+            AlignofType(ty) => return CExpr::AlignofType(ty.duplicate()),
+            Compound(ty, init) => return CExpr::Compound(ty.duplicate(), init.duplicate()),
+            Generic(ctrl, assocs) => return CExpr::Generic(ctrl.duplicate(), dup_generic_assocs(assocs))
+        }
+    }
+}
+
+// Free helper bypasses the small-enum method dispatch ABI mismatch.
+func dup_block_item_value(b: CBlockItem) -> CBlockItem {
+    when b {
+        DeclItem(d) => return CBlockItem::DeclItem(d.duplicate()),
+        StmtItem(s) => return CBlockItem::StmtItem(s.duplicate())
+    }
+}
+
+func dup_block_items(src: List[CBlockItem]) -> List[CBlockItem] {
+    let result: List[CBlockItem] = List[CBlockItem]::new(src.capacity())
+    var i: I64 = 0 as I64
+    let n: I64 = src.len() as I64
+    loop (i < n) {
+        result.push(dup_block_item_value(src.get(i)))
+        i = i + 1
+    }
+    return result
+}
+
+impl Duplicate for CBlockItem {
+    pub func duplicate(this) -> CBlockItem {
+        when this {
+            DeclItem(d) => return CBlockItem::DeclItem(d.duplicate()),
+            StmtItem(s) => return CBlockItem::StmtItem(s.duplicate())
+        }
+    }
+}
+
+impl Duplicate for CStmt {
+    pub func duplicate(this) -> CStmt {
+        when this {
+            Empty => return CStmt::Empty,
+            Expr(e) => return CStmt::Expr(e.duplicate()),
+            Compound(items) => return CStmt::Compound(dup_block_items(items)),
+            If(c, t, eo) => return CStmt::If(c.duplicate(), t.duplicate(), eo.duplicate()),
+            For(io, co, uo, b) => return CStmt::For(io.duplicate(), co.duplicate(), uo.duplicate(), b.duplicate()),
+            While(c, b) => return CStmt::While(c.duplicate(), b.duplicate()),
+            DoWhile(b, c) => return CStmt::DoWhile(b.duplicate(), c.duplicate()),
+            Switch(c, b) => return CStmt::Switch(c.duplicate(), b.duplicate()),
+            Case(v, b) => return CStmt::Case(v.duplicate(), b.duplicate()),
+            Default(b) => return CStmt::Default(b.duplicate()),
+            Break => return CStmt::Break,
+            Continue => return CStmt::Continue,
+            Return(vo) => return CStmt::Return(vo.duplicate()),
+            Goto(name) => return CStmt::Goto(name.duplicate()),
+            Label(name, body) => return CStmt::Label(name.duplicate(), body.duplicate()),
+            StaticAssert(e, msg) => return CStmt::StaticAssert(e.duplicate(), msg.duplicate())
+        }
+    }
+}

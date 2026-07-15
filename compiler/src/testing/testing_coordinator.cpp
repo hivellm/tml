@@ -777,7 +777,7 @@ TestRunResult run_tests(const TestConfig& config) {
         CompileConfig compile_config;
         compile_config.verbose = config.verbose;
         compile_config.coverage = config.coverage;
-        compile_config.optimization_level = 0;
+        compile_config.optimization_level = config.optimization_level;
         compile_config.num_threads = config.compile_threads;
         compile_config.no_cache = config.no_cache;
         compile_config.stage_overrides = config.stage_overrides;
@@ -1289,6 +1289,7 @@ TestRunResult run_tests(const TestConfig& config) {
         compile_config.fail_fast = config.fail_fast;
         compile_config.num_threads = config.compile_threads; // 0 = auto (up to 8)
         compile_config.stage_overrides = config.stage_overrides;
+        compile_config.optimization_level = config.optimization_level;
 
         // (incremental cache saves happen after each batch below)
 
@@ -1516,9 +1517,14 @@ TestRunResult run_tests(const TestConfig& config) {
                     "test",
                     "\033[1;31m========================================================\033[0m");
             } else {
-                write_coverage_html(all_covered_functions, CompilerOptions::coverage_output,
-                                    cov_stats);
-                TML_LOG_INFO("test", "\033[1;32m[Coverage report updated successfully]\033[0m");
+                // Write the JSON summary + history log (HTML is now produced
+                // by `tml coverage --format=html`, which consumes the same
+                // data via the legacy-json ingest path).
+                write_coverage_json_summary(all_covered_functions,
+                                            CompilerOptions::coverage_output, cov_stats);
+                TML_LOG_INFO("test", "\033[1;32m[Coverage summary written; run `tml coverage "
+                                     "--input=build/coverage/ --format=html --output=<dir>` "
+                                     "for the dashboard]\033[0m");
                 save_coverage_cache(all_covered_functions);
             }
         }

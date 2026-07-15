@@ -1,0 +1,40 @@
+use test
+
+type Key {
+    id: U32,
+    pk: U64,
+}
+
+/// Integer literal `1` in a U32 field and `100` in a U64 field must infer
+/// from the field type rather than defaulting to I64. Regression guard for
+/// UzDB P3-10 (struct literal int inference).
+@test
+func test_int_inference_struct_fields() -> I32 {
+    let k = Key { id: 1, pk: 100 }
+    assert(k.id == 1, "id inferred as U32")
+    assert(k.pk == 100, "pk inferred as U64")
+    return 0
+}
+
+func doubled_u32(x: U32) -> U32 { return x + x }
+
+@test
+func test_int_inference_function_arg() -> I32 {
+    let r: U32 = doubled_u32(50)
+    assert(r == 100, "function arg infers U32 from param type")
+    return 0
+}
+
+@test
+func test_int_inference_arithmetic() -> I32 {
+    let z: U32 = 1 + 2
+    assert(z == 3, "arith operands infer from target type")
+    return 0
+}
+
+@test
+func test_int_inference_u8_direct() -> I32 {
+    let b: U8 = 200
+    assert(b == 200, "U8 literal inference")
+    return 0
+}

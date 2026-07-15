@@ -551,6 +551,14 @@ FastJsonParser::FastJsonParser(std::string_view input)
     string_buffer_.reserve(256); // Pre-allocate for typical strings
 }
 
+FastJsonParser::FastJsonParser(std::string_view input, JsonArena* arena)
+    : input_(input.data()),
+      pos_(input.data()),
+      end_(input.data() + input.size()),
+      arena_(arena) {
+    string_buffer_.reserve(256);
+}
+
 void FastJsonParser::skip_ws() {
     pos_ = skip_whitespace_simd(pos_, end_);
 }
@@ -632,6 +640,23 @@ auto FastJsonParser::parse_string() -> Result<std::string, JsonError> {
     ++pos_; // Skip opening quote
     ++column_;
 
+    // Fast path: scan for the closing quote without seeing any escape
+    // sequence. For the ~80% of JSON strings that contain no escapes we
+    // construct the std::string directly from the input view and skip
+    // the per-parse append into `string_buffer_` entirely (saves one
+    // allocation per string for small strings that fit in SSO, and keeps
+    // `string_buffer_`'s allocation intact for reuse on the slow path).
+    const char* fast_start = pos_;
+    const char* fast_special = find_string_special_simd(pos_, end_);
+    if (fast_special < end_ && *fast_special == '"') {
+        column_ += static_cast<size_t>(fast_special - pos_);
+        pos_ = fast_special + 1;  // step past closing quote
+        ++column_;
+        return std::string(fast_start, static_cast<size_t>(fast_special - fast_start));
+    }
+
+    // Slow path: at least one escape or control byte in the string.
+    // Reuse the pre-allocated `string_buffer_` (cleared, but capacity kept).
     string_buffer_.clear();
 
     while (pos_ < end_) {
@@ -867,7 +892,9 @@ auto FastJsonParser::parse_object() -> Result<JsonValue, JsonError> {
     ++column_;
 
     JsonObject obj;
-    // Note: std::map doesn't support reserve(), but unordered_map does
+    // Flat-vector object: reserve a typical size (8 fields) up front so most
+    // parses avoid any reallocation.
+    obj.reserve(8);
 
     skip_ws();
 
@@ -911,7 +938,7 @@ auto FastJsonParser::parse_object() -> Result<JsonValue, JsonError> {
             return value_result;
         }
 
-        obj.emplace(std::move(key), std::move(unwrap(value_result)));
+        obj.emplace_back(std::move(key), std::move(unwrap(value_result)));
 
         skip_ws();
 
@@ -1021,6 +1048,12 @@ auto FastJsonParser::parse_keyword() -> Result<JsonValue, JsonError> {
 
 auto parse_json_fast(std::string_view input) -> Result<JsonValue, JsonError> {
     FastJsonParser parser(input);
+    return parser.parse();
+}
+
+auto parse_json_fast(std::string_view input, JsonArena* arena)
+    -> Result<JsonValue, JsonError> {
+    FastJsonParser parser(input, arena);
     return parser.parse();
 }
 

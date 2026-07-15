@@ -1,0 +1,387 @@
+//! MessagePack encoder.
+//!
+//! Writes MessagePack binary format to an internal byte buffer.
+//! Implements the full MessagePack specification including compact encodings
+//! (fixint, fixstr, fixarray, fixmap).
+
+use std::collections::Buffer
+use std::msgpack::types::{ExtValue, Timestamp, MsgPackValue}
+
+/// A MessagePack encoder that writes to an internal buffer.
+pub type MsgPackWriter {
+    buf: Buffer
+}
+
+impl MsgPackWriter {
+    /// Creates a new writer with default buffer capacity.
+    pub func new() -> MsgPackWriter {
+        MsgPackWriter { buf: Buffer::new(256) }
+    }
+
+    /// Creates a new writer with specified initial capacity.
+    pub func with_capacity(cap: I64) -> MsgPackWriter {
+        MsgPackWriter { buf: Buffer::new(cap) }
+    }
+
+    /// Returns the encoded bytes as a Buffer.
+    pub func to_buffer(this) -> Buffer {
+        return this.buf
+    }
+
+    /// Returns the number of bytes written so far.
+    pub func len(this) -> I64 {
+        return this.buf.len()
+    }
+
+    // ==================================================================
+    // Nil / Bool
+    // ==================================================================
+
+    /// Writes a nil (null) value.
+    pub func write_nil(mut this) {
+        this.buf.write_byte(0xc0)
+    }
+
+    /// Writes a boolean value.
+    pub func write_bool(mut this, value: Bool) {
+        if value {
+            this.buf.write_byte(0xc3)
+        } else {
+            this.buf.write_byte(0xc2)
+        }
+    }
+
+    // ==================================================================
+    // Integers — uses smallest encoding that fits
+    // ==================================================================
+
+    /// Writes an unsigned 64-bit integer using the most compact encoding.
+    pub func write_u64(mut this, value: U64) {
+        if value < (128 as U64) {
+            // positive fixint: 0x00 - 0x7f
+            this.buf.write_byte(value as I32)
+        } else if value < (256 as U64) {
+            // uint 8
+            this.buf.write_byte(0xcc)
+            this.buf.write_byte(value as I32)
+        } else if value < (65536 as U64) {
+            // uint 16 (big-endian)
+            this.buf.write_byte(0xcd)
+            this.buf.write_byte((value / (256 as U64)) as I32)
+            this.buf.write_byte((value % (256 as U64)) as I32)
+        } else if value < (4294967296 as U64) {
+            // uint 32 (big-endian)
+            this.buf.write_byte(0xce)
+            this.buf.write_byte(((value / (16777216 as U64)) % (256 as U64)) as I32)
+            this.buf.write_byte(((value / (65536 as U64)) % (256 as U64)) as I32)
+            this.buf.write_byte(((value / (256 as U64)) % (256 as U64)) as I32)
+            this.buf.write_byte((value % (256 as U64)) as I32)
+        } else {
+            // uint 64 (big-endian) — extract bytes via division
+            this.buf.write_byte(0xcf)
+            let b7: U64 = value / (72057594037927936 as U64)
+            let b6: U64 = (value / (281474976710656 as U64)) % (256 as U64)
+            let b5: U64 = (value / (1099511627776 as U64)) % (256 as U64)
+            let b4: U64 = (value / (4294967296 as U64)) % (256 as U64)
+            let b3: U64 = (value / (16777216 as U64)) % (256 as U64)
+            let b2: U64 = (value / (65536 as U64)) % (256 as U64)
+            let b1: U64 = (value / (256 as U64)) % (256 as U64)
+            let b0: U64 = value % (256 as U64)
+            this.buf.write_byte(b7 as I32)
+            this.buf.write_byte(b6 as I32)
+            this.buf.write_byte(b5 as I32)
+            this.buf.write_byte(b4 as I32)
+            this.buf.write_byte(b3 as I32)
+            this.buf.write_byte(b2 as I32)
+            this.buf.write_byte(b1 as I32)
+            this.buf.write_byte(b0 as I32)
+        }
+    }
+
+    /// Writes a signed 64-bit integer using the most compact encoding.
+    pub func write_i64(mut this, value: I64) {
+        if value >= 0 {
+            this.write_u64(value as U64)
+        } else if value >= -32 {
+            // negative fixint: 0xe0 - 0xff
+            this.buf.write_byte((256 + value) as I32)
+        } else if value >= -128 {
+            // int 8
+            this.buf.write_byte(0xd0)
+            this.buf.write_byte((256 + value) as I32)
+        } else if value >= -32768 {
+            // int 16 (big-endian)
+            this.buf.write_byte(0xd1)
+            let v: I64 = if value < 0 { 65536 + value } else { value }
+            this.buf.write_byte((v / 256) as I32)
+            this.buf.write_byte((v % 256) as I32)
+        } else if value >= -2147483648 {
+            // int 32 (big-endian)
+            this.buf.write_byte(0xd2)
+            let v: I64 = if value < 0 { 4294967296 + value } else { value }
+            this.buf.write_byte(((v / 16777216) % 256) as I32)
+            this.buf.write_byte(((v / 65536) % 256) as I32)
+            this.buf.write_byte(((v / 256) % 256) as I32)
+            this.buf.write_byte((v % 256) as I32)
+        } else {
+            // int 64 (big-endian) — write raw bytes via Buffer
+            this.buf.write_byte(0xd3)
+            // Convert signed to unsigned for byte extraction
+            let uv: U64 = value as U64
+            let b7: U64 = uv / (72057594037927936 as U64)
+            let b6: U64 = (uv / (281474976710656 as U64)) % (256 as U64)
+            let b5: U64 = (uv / (1099511627776 as U64)) % (256 as U64)
+            let b4: U64 = (uv / (4294967296 as U64)) % (256 as U64)
+            let b3: U64 = (uv / (16777216 as U64)) % (256 as U64)
+            let b2: U64 = (uv / (65536 as U64)) % (256 as U64)
+            let b1: U64 = (uv / (256 as U64)) % (256 as U64)
+            let b0: U64 = uv % (256 as U64)
+            this.buf.write_byte(b7 as I32)
+            this.buf.write_byte(b6 as I32)
+            this.buf.write_byte(b5 as I32)
+            this.buf.write_byte(b4 as I32)
+            this.buf.write_byte(b3 as I32)
+            this.buf.write_byte(b2 as I32)
+            this.buf.write_byte(b1 as I32)
+            this.buf.write_byte(b0 as I32)
+        }
+    }
+
+    // ==================================================================
+    // Floats
+    // ==================================================================
+
+    /// Writes a 32-bit float.
+    pub func write_f32(mut this, value: F32) {
+        this.buf.write_byte(0xca)
+        // Write F32 as 4 big-endian bytes via Buffer's built-in method
+        let offset: I64 = this.buf.len()
+        // Ensure buffer has space, then write at current position
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_f32_be(value, offset)
+    }
+
+    /// Writes a 64-bit float.
+    pub func write_f64(mut this, value: F64) {
+        this.buf.write_byte(0xcb)
+        let offset: I64 = this.buf.len()
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_byte(0)
+        this.buf.write_f64_be(value, offset)
+    }
+
+    // ==================================================================
+    // Strings
+    // ==================================================================
+
+    /// Writes a UTF-8 string.
+    pub func write_str(mut this, value: Str) {
+        let n: I64 = value.len()
+        if n < 32 {
+            // fixstr: 0xa0 - 0xbf
+            this.buf.write_byte(0xa0 + n as I32)
+        } else if n < 256 {
+            // str 8
+            this.buf.write_byte(0xd9)
+            this.buf.write_byte(n as I32)
+        } else if n < 65536 {
+            // str 16
+            this.buf.write_byte(0xda)
+            this.buf.write_byte((n / 256) as I32)
+            this.buf.write_byte((n % 256) as I32)
+        } else {
+            // str 32
+            this.buf.write_byte(0xdb)
+            this.buf.write_byte(((n / 16777216) % 256) as I32)
+            this.buf.write_byte(((n / 65536) % 256) as I32)
+            this.buf.write_byte(((n / 256) % 256) as I32)
+            this.buf.write_byte((n % 256) as I32)
+        }
+        // Write string bytes
+        for i in 0 to n {
+            let ch: I32 = value.char_at(i) as I32
+            this.buf.write_byte(ch)
+        }
+    }
+
+    // ==================================================================
+    // Binary data
+    // ==================================================================
+
+    /// Writes binary data.
+    pub func write_bin(mut this, data: ref Buffer) {
+        let n: I64 = data.len()
+        if n < 256 {
+            this.buf.write_byte(0xc4)
+            this.buf.write_byte(n as I32)
+        } else if n < 65536 {
+            this.buf.write_byte(0xc5)
+            this.buf.write_byte((n / 256) as I32)
+            this.buf.write_byte((n % 256) as I32)
+        } else {
+            this.buf.write_byte(0xc6)
+            this.buf.write_byte(((n / 16777216) % 256) as I32)
+            this.buf.write_byte(((n / 65536) % 256) as I32)
+            this.buf.write_byte(((n / 256) % 256) as I32)
+            this.buf.write_byte((n % 256) as I32)
+        }
+        for i in 0 to n {
+            this.buf.write_byte(data.read_u8(i))
+        }
+    }
+
+    // ==================================================================
+    // Array / Map headers
+    // ==================================================================
+
+    /// Writes an array header. Caller must then write `count` elements.
+    pub func write_array_header(mut this, count: I64) {
+        if count < 16 {
+            // fixarray: 0x90 - 0x9f
+            this.buf.write_byte(0x90 + count as I32)
+        } else if count < 65536 {
+            // array 16
+            this.buf.write_byte(0xdc)
+            this.buf.write_byte((count / 256) as I32)
+            this.buf.write_byte((count % 256) as I32)
+        } else {
+            // array 32
+            this.buf.write_byte(0xdd)
+            this.buf.write_byte(((count / 16777216) % 256) as I32)
+            this.buf.write_byte(((count / 65536) % 256) as I32)
+            this.buf.write_byte(((count / 256) % 256) as I32)
+            this.buf.write_byte((count % 256) as I32)
+        }
+    }
+
+    // ==================================================================
+    // Extension types
+    // ==================================================================
+
+    /// Writes an extension value. Automatically selects the most compact
+    /// encoding — fixext 1/2/4/8/16 for those exact sizes, else ext 8/16/32.
+    /// `type_id` is an int8 in range [-128, 127]; negative values are
+    /// reserved for the MessagePack spec (e.g. -1 = Timestamp).
+    pub func write_ext(mut this, type_id: I32, data: ref Buffer) {
+        let n: I64 = data.len()
+        let tb: I32 = if type_id < 0 { type_id + 256 } else { type_id }
+        if n == 1 {
+            this.buf.write_byte(0xd4)
+        } else if n == 2 {
+            this.buf.write_byte(0xd5)
+        } else if n == 4 {
+            this.buf.write_byte(0xd6)
+        } else if n == 8 {
+            this.buf.write_byte(0xd7)
+        } else if n == 16 {
+            this.buf.write_byte(0xd8)
+        } else if n < 256 {
+            this.buf.write_byte(0xc7)
+            this.buf.write_byte(n as I32)
+        } else if n < 65536 {
+            this.buf.write_byte(0xc8)
+            this.buf.write_byte((n / 256) as I32)
+            this.buf.write_byte((n % 256) as I32)
+        } else {
+            this.buf.write_byte(0xc9)
+            this.buf.write_byte(((n / 16777216) % 256) as I32)
+            this.buf.write_byte(((n / 65536) % 256) as I32)
+            this.buf.write_byte(((n / 256) % 256) as I32)
+            this.buf.write_byte(n as I32 % 256)
+        }
+        this.buf.write_byte(tb)
+        for i in 0 to n {
+            this.buf.write_byte(data.read_u8(i))
+        }
+    }
+
+    // ==================================================================
+    // Timestamp (ext type -1)
+    // ==================================================================
+
+    /// Writes a timestamp (ext type -1). Automatically selects timestamp 32
+    /// (seconds fits U32, nanos=0), timestamp 64 (seconds fits 34 bits), or
+    /// timestamp 96 (full signed range + nanos).
+    ///
+    /// `nanos` is I64 (expected in [0, 999_999_999]) rather than U32 to match
+    /// the storage type in `Timestamp`.
+    pub func write_timestamp(mut this, seconds: I64, nanos: I64) {
+        let nanos_i: I64 = nanos
+        if nanos_i == 0 and seconds >= 0 and seconds < (4294967296 as I64) {
+            // timestamp 32: 4-byte big-endian seconds, ext type -1
+            var data: Buffer = Buffer::new(4)
+            data.write_byte(0)
+            data.write_byte(0)
+            data.write_byte(0)
+            data.write_byte(0)
+            data.write_u32_be(seconds, 0)
+            this.write_ext(-1, ref data)
+            return
+        }
+        // Timestamp 64 fits if seconds in [0, 2^34) and nanos in [0, 2^30).
+        // Wire form: (nanos << 34) | seconds, big-endian 8 bytes.
+        if seconds >= 0 and seconds < (17179869184 as I64) and nanos_i < 1073741824 {
+            let combined: I64 = (nanos_i * (17179869184 as I64)) | seconds
+            var data: Buffer = Buffer::new(8)
+            for i in 0 to 8 { data.write_byte(0) }
+            data.write_u64_be(combined, 0)
+            this.write_ext(-1, ref data)
+            return
+        }
+        // timestamp 96: 4-byte nanos + 8-byte signed seconds big-endian
+        var data: Buffer = Buffer::new(12)
+        for i in 0 to 12 { data.write_byte(0) }
+        data.write_u32_be(nanos_i, 0)
+        data.write_u64_be(seconds, 4)
+        this.write_ext(-1, ref data)
+    }
+
+    // ==================================================================
+    // Dynamic (scalar) value encoding
+    // ==================================================================
+
+    /// Writes a `MsgPackValue` using the format appropriate to its variant.
+    /// Scalars only — array/map payloads are handled via explicit
+    /// `write_array_header` / `write_map_header` calls by the caller.
+    pub func write_value(mut this, value: MsgPackValue) {
+        when value {
+            MsgPackValue::Nil => { this.write_nil() },
+            MsgPackValue::Bool(b) => { this.write_bool(b) },
+            MsgPackValue::Int(n) => { this.write_i64(n) },
+            MsgPackValue::Float64(f) => { this.write_f64(f) },
+            MsgPackValue::Str(s) => { this.write_str(s) },
+            MsgPackValue::Bin(buf) => { this.write_bin(ref buf) },
+            MsgPackValue::Ext(e) => { this.write_ext(e.type_id, ref e.data) },
+            MsgPackValue::Timestamp(ts) => { this.write_timestamp(ts.seconds, ts.nanos) },
+        }
+    }
+
+    /// Writes a map header. Caller must then write `count` key-value pairs.
+    pub func write_map_header(mut this, count: I64) {
+        if count < 16 {
+            // fixmap: 0x80 - 0x8f
+            this.buf.write_byte(0x80 + count as I32)
+        } else if count < 65536 {
+            // map 16
+            this.buf.write_byte(0xde)
+            this.buf.write_byte((count / 256) as I32)
+            this.buf.write_byte((count % 256) as I32)
+        } else {
+            // map 32
+            this.buf.write_byte(0xdf)
+            this.buf.write_byte(((count / 16777216) % 256) as I32)
+            this.buf.write_byte(((count / 65536) % 256) as I32)
+            this.buf.write_byte(((count / 256) % 256) as I32)
+            this.buf.write_byte((count % 256) as I32)
+        }
+    }
+}

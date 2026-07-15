@@ -241,15 +241,22 @@ void LLVMIRGen::clear_lifetime_scope() {
 }
 
 void LLVMIRGen::emit_lifetime_start(const std::string& alloca_reg, int64_t size) {
-    // Use -1 for unknown size (LLVM will figure it out)
-    std::string size_str = size > 0 ? std::to_string(size) : "-1";
-    emit_line("  call void @llvm.lifetime.start.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
+    // Skip lifetime markers inside loop bodies — they block LLVM auto-vectorization
+    // by adding "control flow" (intrinsic calls) that the vectorizer cannot
+    // substitute for a select. Outside loops, lifetime markers help stack reuse.
+    if (current_loop_start_.empty()) {
+        std::string size_str = size > 0 ? std::to_string(size) : "-1";
+        emit_line("  call void @llvm.lifetime.start.p0(i64 " + size_str + ", ptr " + alloca_reg +
+                  ")");
+    }
 }
 
 void LLVMIRGen::emit_lifetime_end(const std::string& alloca_reg, int64_t size) {
-    // Use -1 for unknown size (LLVM will figure it out)
-    std::string size_str = size > 0 ? std::to_string(size) : "-1";
-    emit_line("  call void @llvm.lifetime.end.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
+    if (current_loop_start_.empty()) {
+        std::string size_str = size > 0 ? std::to_string(size) : "-1";
+        emit_line("  call void @llvm.lifetime.end.p0(i64 " + size_str + ", ptr " + alloca_reg +
+                  ")");
+    }
 }
 
 void LLVMIRGen::register_alloca_in_scope(const std::string& alloca_reg, int64_t size) {

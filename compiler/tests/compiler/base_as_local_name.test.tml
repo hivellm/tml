@@ -1,0 +1,52 @@
+//! Regression test for codegen bug #1 (phase0v):
+//! `base` was a reserved keyword (`KwBase`) everywhere in TML, so a
+//! local variable / field / parameter named `base` failed to parse with
+//! "Expected variable name after 'var'". Phase23b's float-decoder bring-up
+//! worked around this by renaming the variable to `radix`. This test
+//! guards against regression by using `base` in every identifier
+//! position (local, param, field, nested, arithmetic).
+//!
+//! Fix: demote `base` from a reserved keyword to a contextual keyword —
+//! lexed as Identifier, recognised by the parser only in class-inheritance
+//! `: base(args)` and member-access `base.method()` positions.
+
+use test::{assert, assert_eq}
+
+@test func test_base_as_local_var() {
+    let base: I64 = 10 as I64
+    assert_eq(base as I32, 10)
+}
+
+@test func test_base_in_arithmetic() {
+    let base: I64 = 4 as I64
+    let result: I64 = base * 3 as I64 + 2 as I64
+    assert_eq(result as I32, 14)
+}
+
+pub type Point {
+    base: I64,
+    offset: I64
+}
+
+@test func test_base_as_struct_field() {
+    let p: Point = Point { base: 100 as I64, offset: 7 as I64 }
+    assert_eq(p.base as I32, 100)
+    assert_eq(p.offset as I32, 7)
+}
+
+func compute_with_base(base: I64, mul: I64) -> I64 {
+    return base * mul
+}
+
+@test func test_base_as_param_name() {
+    assert_eq(compute_with_base(5 as I64, 6 as I64) as I32, 30)
+}
+
+@test func test_base_radix_roundtrip() {
+    // The exact form from phase23b's decode_int before the workaround.
+    var base: I64 = 10 as I64
+    if true {
+        base = 16 as I64
+    }
+    assert_eq(base as I32, 16)
+}

@@ -1,0 +1,2505 @@
+//! # C17 Parser (phase 23b Phases 2–4)
+//!
+//! Parses a `List[CToken]` stream produced by `lexer.tml` into a
+//! `CTranslationUnit`. Consumes declarations, expressions, statements and
+//! initializers. Expression / statement parsers could be split into
+//! `parse_expr.tml` and `parse_stmt.tml` later, but they are deeply entangled
+//! with declarator parsing (e.g. `sizeof(T)` needs a declarator; array sizes
+//! need an expression) so they live together in this module.
+//!
+//! ## Entry points
+//! - `cp_parse_translation_unit(parser, file) -> CTranslationUnit`
+//! - `cp_parse_expr(parser, pos) -> Outcome[CParsedExpr, CParseError]`
+//! - `cp_parse_assign_expr(parser, pos) -> Outcome[CParsedExpr, CParseError]`
+//! - `cp_parse_initializer(parser, pos) -> Outcome[CParsedInit, CParseError]`
+//! - `cp_parse_type_name(parser, pos) -> Outcome[CParsedTypeName, CParseError]`
+//!
+//! ## State
+//! The parser owns a `typedefs: HashMap[Str, I64]` that tracks names
+//! registered via `typedef`. C's grammar is context-sensitive: `foo * x;` is
+//! either a multiplication statement or a pointer declaration depending on
+//! whether `foo` is a typedef. The parser updates the set when it finishes
+//! a `typedef` declaration.
+
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::heap::Heap
+use core::alloc::shared::Shared
+use compiler::cc::lexer::{
+    CToken, CTokenKind, CKeyword, CPunct, CIntLit, CFloatLit, CCharLit, CStringLit
+}
+use compiler::cc::ast::{
+    CTranslationUnit, c_tu, CDecl, CStorageClass, CBaseType, CQualifiers, c_quals_none,
+    CFuncSpec, c_funcspec_none, CDeclSpecifiers, CDeclarator, CFuncDeclPart, CParam,
+    CExpr, CBinaryOp, CUnaryOp, CAssignOp, CTypeName, CGenericAssoc,
+    CInit, CInitElement, CDesignator,
+    CStmt, CBlockItem,
+    CVarDecl, CFuncDecl, CStructField, CStructDef, CUnionDef,
+    CEnumVariantDef, CEnumDef, CTypedefDef
+}
+
+// ============================================================================
+// CParseError
+// ============================================================================
+
+pub type CParseError {
+    message: Str,
+    file: Str,
+    line: I64,
+    col: I64
+}
+
+pub func c_parse_err(message: Str, tok: CToken) -> CParseError {
+    // tok is a value parameter that drops at function exit; if we
+    // captured tok.file by raw alias the CParseError's file pointer
+    // would dangle. Duplicate the Str so the error owns its storage.
+    return CParseError {
+        message: message,
+        file: tok.file.duplicate(),
+        line: tok.line,
+        col: tok.col
+    }
+}
+
+// ============================================================================
+// Per-construct result types
+// ============================================================================
+
+pub type CParsedSpecs { specs: CDeclSpecifiers, pos: I64 }
+pub type CParsedQuals { quals: CQualifiers, pos: I64 }
+pub type CParsedDeclarator { decl: CDeclarator, pos: I64 }
+pub type CParsedParams { params: List[CParam], is_variadic: I64, pos: I64 }
+pub type CParsedInit { init: Shared[CInit], pos: I64 }
+pub type CParsedExpr { expr: Shared[CExpr], pos: I64 }
+pub type CParsedTypeName { ty: CTypeName, pos: I64 }
+pub type CParsedStmt { stmt: Shared[CStmt], pos: I64 }
+pub type CParsedFields { fields: List[CStructField], pos: I64 }
+pub type CParsedVariants { variants: List[CEnumVariantDef], pos: I64 }
+pub type CParsedName { name: Str, pos: I64 }
+pub type CParsedDecls { decls: List[Shared[CDecl]], pos: I64 }
+
+// ============================================================================
+// CParser state
+// ============================================================================
+
+pub type CParser {
+    tokens: List[CToken],
+    typedefs: HashMap[Str, I64],
+    errors: List[CParseError]
+}
+
+pub func c_parser(tokens: List[CToken]) -> CParser {
+    return CParser {
+        tokens: tokens,
+        typedefs: HashMap[Str, I64]::new(32 as I64),
+        errors: List[CParseError]::new(0 as I64)
+    }
+}
+
+// ============================================================================
+// Token navigation helpers
+// ============================================================================
+
+// `List.get(i)` returns a bitwise copy via `ptr_read[T]`, which for
+// CToken means the returned value's `Str` fields share heap pointers
+// with the list slot. If the returned CToken's scope ends and its
+// drop runs, the heap strings can be freed out from under the list.
+// We deep-duplicate the Str fields here so every caller gets a
+// CToken that owns its storage.
+func cp_dup_token(src: CToken) -> CToken {
+    return CToken {
+        kind: src.kind,
+        file: src.file.duplicate(),
+        line: src.line,
+        col: src.col,
+        text: src.text.duplicate()
+    }
+}
+
+pub func cp_peek(tokens: List[CToken], pos: I64) -> CToken {
+    let n: I64 = tokens.len() as I64
+    let idx: I64 = if pos >= n { n - 1 } else { pos }
+    return cp_dup_token(tokens.get(idx))
+}
+
+pub func cp_peek_at(tokens: List[CToken], pos: I64, offset: I64) -> CToken {
+    let n: I64 = tokens.len() as I64
+    let raw_idx: I64 = pos + offset
+    let idx: I64 = if raw_idx >= n { n - 1 } else { raw_idx }
+    return cp_dup_token(tokens.get(idx))
+}
+
+pub func cp_is_eof(tokens: List[CToken], pos: I64) -> Bool {
+    let tok: CToken = cp_peek(tokens, pos)
+    when tok.kind {
+        Eof => return true,
+        _ => return false
+    }
+}
+
+pub func cp_check_punct(tokens: List[CToken], pos: I64, p: CPunct) -> Bool {
+    let tok: CToken = cp_peek(tokens, pos)
+    when tok.kind {
+        Punct(q) => return (q as I64) == (p as I64),
+        _ => return false
+    }
+}
+
+pub func cp_check_kw(tokens: List[CToken], pos: I64, k: CKeyword) -> Bool {
+    let tok: CToken = cp_peek(tokens, pos)
+    when tok.kind {
+        Keyword(w) => return (w as I64) == (k as I64),
+        _ => return false
+    }
+}
+
+pub func cp_check_ident(tokens: List[CToken], pos: I64) -> Bool {
+    let tok: CToken = cp_peek(tokens, pos)
+    when tok.kind {
+        Ident => return true,
+        _ => return false
+    }
+}
+
+pub func cp_expect_punct(tokens: List[CToken], pos: I64, p: CPunct, msg: Str) -> Outcome[I64, CParseError] {
+    if cp_check_punct(tokens, pos, p) { return Ok(pos + 1) }
+    let tok: CToken = cp_peek(tokens, pos)
+    return Err(c_parse_err(msg, tok))
+}
+
+pub func cp_expect_ident(tokens: List[CToken], pos: I64, msg: Str) -> Outcome[CParsedName, CParseError] {
+    let tok: CToken = cp_peek(tokens, pos)
+    when tok.kind {
+        Ident => return Ok(CParsedName { name: tok.text.duplicate(), pos: pos + 1 }),
+        _ => return Err(c_parse_err(msg, tok))
+    }
+}
+
+// ============================================================================
+// Declaration-specifier classification
+// ============================================================================
+
+// 0 = not a specifier, 1 = storage, 2 = scalar type, 3 = qualifier,
+// 4 = function specifier, 5 = aggregate, 6 = _Alignas
+func specifier_kind(k: CKeyword) -> I64 {
+    when k {
+        Auto => return 1 as I64,
+        Register => return 1 as I64,
+        Static => return 1 as I64,
+        Extern => return 1 as I64,
+        Typedef => return 1 as I64,
+        KwThreadLocal => return 1 as I64,
+        Void => return 2 as I64,
+        Char => return 2 as I64,
+        Short => return 2 as I64,
+        Int => return 2 as I64,
+        Long => return 2 as I64,
+        Float => return 2 as I64,
+        Double => return 2 as I64,
+        Signed => return 2 as I64,
+        Unsigned => return 2 as I64,
+        KwBool => return 2 as I64,
+        KwComplex => return 2 as I64,
+        Const => return 3 as I64,
+        Volatile => return 3 as I64,
+        Restrict => return 3 as I64,
+        KwAtomic => return 3 as I64,
+        Inline => return 4 as I64,
+        KwNoreturn => return 4 as I64,
+        Struct => return 5 as I64,
+        Union => return 5 as I64,
+        Enum => return 5 as I64,
+        KwAlignas => return 6 as I64,
+        _ => return 0 as I64
+    }
+}
+
+pub func cp_at_decl_specifier(parser: CParser, pos: I64) -> Bool {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        Keyword(k) => return specifier_kind(k) != 0 as I64,
+        Ident => return parser.typedefs.has(tok.text),
+        _ => return false
+    }
+}
+
+type TySpecCount {
+    n_void: I64, n_char: I64, n_short: I64, n_int: I64,
+    n_long: I64, n_signed: I64, n_unsigned: I64,
+    n_float: I64, n_double: I64, n_bool: I64, n_complex: I64
+}
+
+func tyspec_none() -> TySpecCount {
+    return TySpecCount {
+        n_void: 0 as I64, n_char: 0 as I64, n_short: 0 as I64, n_int: 0 as I64,
+        n_long: 0 as I64, n_signed: 0 as I64, n_unsigned: 0 as I64,
+        n_float: 0 as I64, n_double: 0 as I64, n_bool: 0 as I64, n_complex: 0 as I64
+    }
+}
+
+func fold_tyspec(c: TySpecCount) -> Maybe[CBaseType] {
+    if c.n_unsigned > 0 as I64 and c.n_signed > 0 as I64 { return Nothing }
+    if c.n_bool == 1 as I64 { return Just(CBaseType::Bool) }
+    if c.n_void == 1 as I64 { return Just(CBaseType::Void) }
+    if c.n_char == 1 as I64 {
+        if c.n_unsigned > 0 as I64 { return Just(CBaseType::UChar) }
+        if c.n_signed > 0 as I64 { return Just(CBaseType::SChar) }
+        return Just(CBaseType::Char)
+    }
+    if c.n_float == 1 as I64 { return Just(CBaseType::Float) }
+    if c.n_double == 1 as I64 {
+        if c.n_long == 1 as I64 { return Just(CBaseType::LongDouble) }
+        return Just(CBaseType::Double)
+    }
+    if c.n_short == 1 as I64 {
+        if c.n_unsigned > 0 as I64 { return Just(CBaseType::UShort) }
+        return Just(CBaseType::Short)
+    }
+    if c.n_long == 1 as I64 {
+        if c.n_unsigned > 0 as I64 { return Just(CBaseType::ULong) }
+        return Just(CBaseType::Long)
+    }
+    if c.n_long == 2 as I64 {
+        if c.n_unsigned > 0 as I64 { return Just(CBaseType::ULongLong) }
+        return Just(CBaseType::LongLong)
+    }
+    if c.n_int == 1 as I64 or c.n_signed > 0 as I64 or c.n_unsigned > 0 as I64 {
+        if c.n_unsigned > 0 as I64 { return Just(CBaseType::UInt) }
+        return Just(CBaseType::Int)
+    }
+    if c.n_complex == 1 as I64 { return Just(CBaseType::Complex) }
+    return Nothing
+}
+
+// ============================================================================
+// Compiler-extension attribute skipping (phase0z)
+// ============================================================================
+
+// Returns true when `name` matches an MSVC / GCC compiler extension that
+// can appear in declaration position and should be skipped by the parser.
+// Names are duplicated in `cp_skip_attribute_specifiers` so the caller's
+// CToken can drop safely; this predicate operates on a borrowed Str.
+func cp_is_attribute_name(name: Str) -> Bool {
+    if name == "__attribute__" { return true }
+    if name == "__attribute" { return true }
+    if name == "__declspec" { return true }
+    if name == "__cdecl" { return true }
+    if name == "__stdcall" { return true }
+    if name == "__fastcall" { return true }
+    if name == "__thiscall" { return true }
+    if name == "__vectorcall" { return true }
+    if name == "__forceinline" { return true }
+    if name == "__inline" { return true }
+    if name == "__inline__" { return true }
+    if name == "__restrict" { return true }
+    if name == "__restrict__" { return true }
+    if name == "__extension__" { return true }
+    if name == "__volatile__" { return true }
+    if name == "__const" { return true }
+    if name == "__const__" { return true }
+    if name == "__signed" { return true }
+    if name == "__signed__" { return true }
+    return false
+}
+
+// Skip a balanced parenthesised group starting at `pos` (which must point
+// at an `LParen`). Returns the position of the token *after* the matching
+// `RParen`. If parens are unbalanced, returns the original `pos` so the
+// caller can detect and stop.
+func cp_skip_paren_group(tokens: List[CToken], pos: I64) -> I64 {
+    let n: I64 = tokens.len() as I64
+    if pos >= n { return pos }
+    if not cp_check_punct(tokens, pos, CPunct::LParen) { return pos }
+    var p: I64 = pos + 1
+    var depth: I64 = 1 as I64
+    loop (p < n and depth > 0 as I64) {
+        if cp_check_punct(tokens, p, CPunct::LParen) {
+            depth = depth + 1 as I64
+        } else if cp_check_punct(tokens, p, CPunct::RParen) {
+            depth = depth - 1 as I64
+            if depth == 0 as I64 {
+                return p + 1
+            }
+        }
+        p = p + 1
+    }
+    // Unbalanced — bail by returning original pos so caller stops.
+    return pos
+}
+
+// Skip any contiguous run of MSVC `__declspec(...)` / GCC `__attribute__((...))`
+// and other compiler-extension keywords (`__cdecl`, `__forceinline`, etc.)
+// at `pos`. Returns the new position. Safe to call when there are no
+// attributes to skip — returns `pos` unchanged.
+pub func cp_skip_attribute_specifiers(parser: CParser, pos: I64) -> I64 {
+    let n: I64 = parser.tokens.len() as I64
+    var p: I64 = pos
+    loop (p < n) {
+        let tok: CToken = cp_peek(parser.tokens, p)
+        var matched: I64 = 0 as I64
+        when tok.kind {
+            Ident => {
+                if cp_is_attribute_name(tok.text) {
+                    matched = 1 as I64
+                    let after_name: I64 = p + 1
+                    if cp_check_punct(parser.tokens, after_name, CPunct::LParen) {
+                        let after_group: I64 = cp_skip_paren_group(parser.tokens, after_name)
+                        if after_group == after_name {
+                            // Unbalanced parens — give up to avoid infinite loop.
+                            return p
+                        }
+                        p = after_group
+                    } else {
+                        // Bare keyword like `__forceinline` / `__cdecl` — just consume the ident.
+                        p = after_name
+                    }
+                }
+            },
+            _ => {}
+        }
+        if matched == 0 as I64 { return p }
+    }
+    return p
+}
+
+// ============================================================================
+// Declaration specifier parsing (item 2.1)
+// ============================================================================
+
+pub func cp_parse_specifiers(parser: CParser, pos: I64) -> Outcome[CParsedSpecs, CParseError] {
+    var storage: CStorageClass = CStorageClass::None
+    var storage_set: I64 = 0 as I64
+    var quals: CQualifiers = c_quals_none()
+    var funcspec: CFuncSpec = c_funcspec_none()
+    var alignas_bytes: I64 = 0 as I64
+    var counts: TySpecCount = tyspec_none()
+    var base_override: Maybe[CBaseType] = Nothing
+    var has_base: I64 = 0 as I64
+
+    var p: I64 = pos
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        // Skip MSVC `__declspec(...)` / GCC `__attribute__((...))` and other
+        // compiler-extension attributes that may appear interleaved with
+        // real specifiers (e.g. `static __forceinline int f(...)`).
+        let after_attrs: I64 = cp_skip_attribute_specifiers(parser, p)
+        if after_attrs != p {
+            p = after_attrs
+            // Re-enter the loop to peek the next token after the attribute(s).
+        }
+        if p >= n { break }
+        // cp_peek deep-duplicates Str fields so dropping `tok` at end of
+        // iteration does not free strings still owned by parser.tokens.
+        let tok: CToken = cp_peek(parser.tokens, p)
+        when tok.kind {
+            Keyword(k) => {
+                let kind: I64 = specifier_kind(k)
+                if kind == 0 as I64 { break }
+                if kind == 1 as I64 {
+                    if storage_set == 1 as I64 {
+                        return Err(c_parse_err("multiple storage classes in declaration", tok))
+                    }
+                    storage_set = 1 as I64
+                    when k {
+                        Auto => storage = CStorageClass::Auto,
+                        Register => storage = CStorageClass::Register,
+                        Static => storage = CStorageClass::Static,
+                        Extern => storage = CStorageClass::Extern,
+                        Typedef => storage = CStorageClass::Typedef,
+                        KwThreadLocal => storage = CStorageClass::KwThreadLocal,
+                        _ => {}
+                    }
+                    p = p + 1
+                } else if kind == 2 as I64 {
+                    when k {
+                        Void => counts.n_void = counts.n_void + 1 as I64,
+                        Char => counts.n_char = counts.n_char + 1 as I64,
+                        Short => counts.n_short = counts.n_short + 1 as I64,
+                        Int => counts.n_int = counts.n_int + 1 as I64,
+                        Long => counts.n_long = counts.n_long + 1 as I64,
+                        Float => counts.n_float = counts.n_float + 1 as I64,
+                        Double => counts.n_double = counts.n_double + 1 as I64,
+                        Signed => counts.n_signed = counts.n_signed + 1 as I64,
+                        Unsigned => counts.n_unsigned = counts.n_unsigned + 1 as I64,
+                        KwBool => counts.n_bool = counts.n_bool + 1 as I64,
+                        KwComplex => counts.n_complex = counts.n_complex + 1 as I64,
+                        _ => {}
+                    }
+                    p = p + 1
+                } else if kind == 3 as I64 {
+                    when k {
+                        Const => quals.is_const = 1 as I64,
+                        Volatile => quals.is_volatile = 1 as I64,
+                        Restrict => quals.is_restrict = 1 as I64,
+                        KwAtomic => quals.is_atomic = 1 as I64,
+                        _ => {}
+                    }
+                    p = p + 1
+                } else if kind == 4 as I64 {
+                    when k {
+                        Inline => funcspec.is_inline = 1 as I64,
+                        KwNoreturn => funcspec.is_noreturn = 1 as I64,
+                        _ => {}
+                    }
+                    p = p + 1
+                } else if kind == 5 as I64 {
+                    if has_base == 1 as I64 {
+                        return Err(c_parse_err("multiple type specifiers in declaration", tok))
+                    }
+                    let agg_res: Outcome[CParsedSpecs, CParseError] = cp_parse_aggregate_specifier(parser, p, storage, quals, funcspec, alignas_bytes)
+                    let Ok(agg) = agg_res else {
+                        let Err(e) = agg_res else { return Err(c_parse_err("internal: agg", tok)) }
+                        return Err(e)
+                    }
+                    return Ok(agg)
+                } else if kind == 6 as I64 {
+                    p = p + 1
+                    let lp_res: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after _Alignas")
+                    let Ok(ap) = lp_res else {
+                        let Err(e) = lp_res else { return Err(c_parse_err("internal: alignas lp", tok)) }
+                        return Err(e)
+                    }
+                    let ntok: CToken = cp_peek(parser.tokens, ap)
+                    when ntok.kind {
+                        IntLit(lit) => {
+                            alignas_bytes = lit.value as I64
+                            p = ap + 1
+                        },
+                        _ => return Err(c_parse_err("expected integer constant in _Alignas", ntok))
+                    }
+                    let rp_res: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close _Alignas")
+                    let Ok(np) = rp_res else {
+                        let Err(e) = rp_res else { return Err(c_parse_err("internal: alignas rp", tok)) }
+                        return Err(e)
+                    }
+                    p = np
+                } else {
+                    break
+                }
+            },
+            Ident => {
+                if has_base == 1 as I64 { break }
+                if parser.typedefs.has(tok.text) {
+                    // Duplicate so the variant owns its own Str storage
+                    // independent of the local `tok` lifetime.
+                    base_override = Just(CBaseType::Typedef(tok.text.duplicate()))
+                    has_base = 1 as I64
+                    p = p + 1
+                } else {
+                    break
+                }
+            },
+            _ => break
+        }
+    }
+
+    var resolved: CBaseType = CBaseType::Int
+    if has_base == 1 as I64 {
+        let Just(bt) = base_override else {
+            return Err(c_parse_err("internal: base override missing", cp_peek(parser.tokens, pos)))
+        }
+        resolved = bt
+    } else {
+        let folded: Maybe[CBaseType] = fold_tyspec(counts)
+        let Just(bt) = folded else {
+            if p == pos {
+                let tok: CToken = cp_peek(parser.tokens, pos)
+                return Err(c_parse_err("expected type specifier", tok))
+            }
+            // Implicit int (C89 compatibility).
+            resolved = CBaseType::Int
+            return Ok(CParsedSpecs {
+                specs: CDeclSpecifiers {
+                    storage: storage, base_type: resolved, quals: quals,
+                    funcspec: funcspec, alignas_bytes: alignas_bytes
+                },
+                pos: p
+            })
+        }
+        resolved = bt
+    }
+
+    return Ok(CParsedSpecs {
+        specs: CDeclSpecifiers {
+            storage: storage, base_type: resolved, quals: quals,
+            funcspec: funcspec, alignas_bytes: alignas_bytes
+        },
+        pos: p
+    })
+}
+
+// ============================================================================
+// Aggregate specifier (struct/union/enum) — reference only, body parsed
+// by the top-level decl handler as a side product.
+// ============================================================================
+
+func cp_parse_aggregate_specifier(parser: CParser, start: I64, storage: CStorageClass, quals_in: CQualifiers, funcspec_in: CFuncSpec, alignas_bytes_in: I64) -> Outcome[CParsedSpecs, CParseError] {
+    let kw_tok: CToken = cp_peek(parser.tokens, start)
+    var is_struct: I64 = 0 as I64
+    var is_union: I64 = 0 as I64
+    var is_enum: I64 = 0 as I64
+    when kw_tok.kind {
+        Keyword(k) => {
+            when k {
+                Struct => is_struct = 1 as I64,
+                Union => is_union = 1 as I64,
+                Enum => is_enum = 1 as I64,
+                _ => return Err(c_parse_err("expected struct/union/enum", kw_tok))
+            }
+        },
+        _ => return Err(c_parse_err("expected struct/union/enum keyword", kw_tok))
+    }
+    var p: I64 = start + 1 as I64
+    var tag: Str = ""
+    let tag_tok: CToken = cp_peek(parser.tokens, p)
+    when tag_tok.kind {
+        Ident => {
+            // Duplicate so `tag` outlives tag_tok's drop.
+            tag = tag_tok.text.duplicate()
+            p = p + 1
+        },
+        _ => {}
+    }
+
+    var bt: CBaseType = CBaseType::Int
+    if is_struct == 1 as I64 { bt = CBaseType::StructRef(tag) }
+    else if is_union == 1 as I64 { bt = CBaseType::UnionRef(tag) }
+    else { bt = CBaseType::EnumRef(tag) }
+
+    return Ok(CParsedSpecs {
+        specs: CDeclSpecifiers {
+            storage: storage, base_type: bt, quals: quals_in,
+            funcspec: funcspec_in, alignas_bytes: alignas_bytes_in
+        },
+        pos: p
+    })
+}
+
+// ============================================================================
+// Type qualifier list (after `*` in a pointer)
+// ============================================================================
+
+func cp_parse_quals_list(parser: CParser, pos: I64) -> CParsedQuals {
+    var quals: CQualifiers = c_quals_none()
+    var p: I64 = pos
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        let tok: CToken = cp_peek(parser.tokens, p)
+        when tok.kind {
+            Keyword(k) => {
+                when k {
+                    Const => { quals.is_const = 1 as I64; p = p + 1 },
+                    Volatile => { quals.is_volatile = 1 as I64; p = p + 1 },
+                    Restrict => { quals.is_restrict = 1 as I64; p = p + 1 },
+                    KwAtomic => { quals.is_atomic = 1 as I64; p = p + 1 },
+                    _ => break
+                }
+            },
+            _ => break
+        }
+    }
+    return CParsedQuals { quals: quals, pos: p }
+}
+
+// ============================================================================
+// Expression parser (precedence climbing)
+// ============================================================================
+
+pub const CP_PREC_NONE: I64 = 0 as I64
+pub const CP_PREC_COMMA: I64 = 1 as I64
+pub const CP_PREC_ASSIGN: I64 = 2 as I64
+pub const CP_PREC_COND: I64 = 3 as I64
+pub const CP_PREC_LOR: I64 = 4 as I64
+pub const CP_PREC_LAND: I64 = 5 as I64
+pub const CP_PREC_BOR: I64 = 6 as I64
+pub const CP_PREC_BXOR: I64 = 7 as I64
+pub const CP_PREC_BAND: I64 = 8 as I64
+pub const CP_PREC_EQ: I64 = 9 as I64
+pub const CP_PREC_REL: I64 = 10 as I64
+pub const CP_PREC_SHIFT: I64 = 11 as I64
+pub const CP_PREC_ADD: I64 = 12 as I64
+pub const CP_PREC_MUL: I64 = 13 as I64
+
+func cp_parse_primary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        IntLit(lit) => {
+            let is_ul: I64 = if lit.is_hex_or_octal == 1 as I64 { 1 as I64 } else { 0 as I64 }
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::IntLit(lit.value, is_ul))
+            return Ok(CParsedExpr { expr: e, pos: pos + 1 })
+        },
+        FloatLit(lit) => {
+            let is_f: I64 = lit.is_hex
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::FloatLit(lit.value, is_f))
+            return Ok(CParsedExpr { expr: e, pos: pos + 1 })
+        },
+        CharLit(lit) => {
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::CharLit(lit.value))
+            return Ok(CParsedExpr { expr: e, pos: pos + 1 })
+        },
+        StringLit(lit) => {
+            var bytes: List[U8] = lit.bytes
+            var p: I64 = pos + 1
+            let n: I64 = parser.tokens.len() as I64
+            loop (p < n) {
+                let nxt: CToken = cp_peek(parser.tokens, p)
+                when nxt.kind {
+                    StringLit(next_lit) => {
+                        var i: I64 = 0 as I64
+                        let nb: I64 = next_lit.bytes.len() as I64
+                        loop (i < nb) {
+                            bytes.push(next_lit.bytes.get(i))
+                            i = i + 1
+                        }
+                        p = p + 1
+                    },
+                    _ => break
+                }
+            }
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::StringLit(bytes))
+            return Ok(CParsedExpr { expr: e, pos: p })
+        },
+        Ident => {
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Ident(tok.text.duplicate()))
+            return Ok(CParsedExpr { expr: e, pos: pos + 1 })
+        },
+        Punct(op) => {
+            if (op as I64) == (CPunct::LParen as I64) {
+                let inner: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, pos + 1)
+                let Ok(ie) = inner else {
+                    let Err(e) = inner else { return Err(c_parse_err("internal: paren", tok)) }
+                    return Err(e)
+                }
+                let rp_res: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, ie.pos, CPunct::RParen, "expected ')' after expression")
+                let Ok(np) = rp_res else {
+                    let Err(e) = rp_res else { return Err(c_parse_err("internal: paren rp", tok)) }
+                    return Err(e)
+                }
+                let pe: Shared[CExpr] = Shared[CExpr]::new(CExpr::Paren(ie.expr.duplicate()))
+                return Ok(CParsedExpr { expr: pe, pos: np })
+            }
+            return Err(c_parse_err("expected expression", tok))
+        },
+        Keyword(k) => {
+            // C11 `_Generic ( assignment-expr , generic-assoc-list )`. The
+            // controlling expression is never evaluated at run-time; its
+            // type at compile time selects the matching association.
+            if (k as I64) == (CKeyword::KwGeneric as I64) {
+                return cp_parse_generic(parser, pos)
+            }
+            return Err(c_parse_err("unexpected keyword in primary expression", tok))
+        },
+        _ => return Err(c_parse_err("expected expression", tok))
+    }
+}
+
+// `_Generic` selection (C11 §6.5.1.1). `_Generic` is a primary expression
+// that evaluates to the association value whose `type-name` matches the
+// controlling expression's type (after the usual arithmetic conversions for
+// integer promotion). `default` is a catch-all and may appear at most once.
+func cp_parse_generic(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    // `_Generic` already verified by caller.
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after _Generic")
+    let Ok(after_lp) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: generic lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_lp
+    let ctrl_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+    let Ok(ctrl) = ctrl_res else {
+        let Err(e) = ctrl_res else { return Err(c_parse_err("internal: generic ctrl", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = ctrl.pos
+    let comma: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Comma, "expected ',' after controlling expression")
+    let Ok(after_comma) = comma else {
+        let Err(e) = comma else { return Err(c_parse_err("internal: generic comma", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_comma
+    var assocs: List[CGenericAssoc] = List[CGenericAssoc]::new(2 as I64)
+    var cont: I64 = 1 as I64
+    loop (cont == 1 as I64) {
+        var is_default: I64 = 0 as I64
+        // Dummy type-name used for `default:` associations.
+        var ty: CTypeName = CTypeName {
+            specifiers: CDeclSpecifiers {
+                storage: CStorageClass::None,
+                base_type: CBaseType::Void,
+                quals: c_quals_none(),
+                funcspec: c_funcspec_none(),
+                alignas_bytes: 0 as I64
+            },
+            declarator: CDeclarator::Abstract
+        }
+        if cp_check_kw(parser.tokens, p, CKeyword::Default) {
+            is_default = 1 as I64
+            p = p + 1
+        } else {
+            let tn: Outcome[CParsedTypeName, CParseError] = cp_parse_type_name(parser, p)
+            let Ok(tnp) = tn else {
+                let Err(e) = tn else { return Err(c_parse_err("internal: generic assoc ty", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            ty = tnp.ty
+            p = tnp.pos
+        }
+        let colon: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Colon, "expected ':' in _Generic association")
+        let Ok(after_colon) = colon else {
+            let Err(e) = colon else { return Err(c_parse_err("internal: generic colon", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = after_colon
+        let val_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+        let Ok(val) = val_res else {
+            let Err(e) = val_res else { return Err(c_parse_err("internal: generic val", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = val.pos
+        assocs.push(CGenericAssoc { is_default: is_default, ty: ty.duplicate(), value: val.expr.duplicate() })
+        if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+            p = p + 1
+            continue
+        }
+        cont = 0 as I64
+    }
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close _Generic")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: generic rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let gen: Shared[CExpr] = Shared[CExpr]::new(CExpr::Generic(ctrl.expr.duplicate(), assocs))
+    return Ok(CParsedExpr { expr: gen, pos: after_rp })
+}
+
+func cp_parse_postfix(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let prim: Outcome[CParsedExpr, CParseError] = cp_parse_primary(parser, pos)
+    let Ok(first) = prim else {
+        let Err(e) = prim else { return Err(c_parse_err("internal: postfix primary", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var expr: Shared[CExpr] = first.expr.duplicate()
+    var p: I64 = first.pos
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        let tok: CToken = cp_peek(parser.tokens, p)
+        when tok.kind {
+            Punct(op) => {
+                let code: I64 = op as I64
+                if code == (CPunct::LBracket as I64) {
+                    let idx: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p + 1)
+                    let Ok(ie) = idx else {
+                        let Err(e) = idx else { return Err(c_parse_err("internal: postfix idx", tok)) }
+                        return Err(e)
+                    }
+                    let after: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, ie.pos, CPunct::RBracket, "expected ']'")
+                    let Ok(np) = after else {
+                        let Err(e) = after else { return Err(c_parse_err("internal: postfix rbracket", tok)) }
+                        return Err(e)
+                    }
+                    expr = Shared[CExpr]::new(CExpr::Index(expr.duplicate(), ie.expr.duplicate()))
+                    p = np
+                } else if code == (CPunct::LParen as I64) {
+                    var args: List[Shared[CExpr]] = List[Shared[CExpr]]::new(0 as I64)
+                    var ap: I64 = p + 1
+                    if cp_check_punct(parser.tokens, ap, CPunct::RParen) {
+                        ap = ap + 1
+                    } else {
+                        var cont: I64 = 1 as I64
+                        loop (cont == 1 as I64) {
+                            let arg: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, ap)
+                            let Ok(ae) = arg else {
+                                let Err(e) = arg else { return Err(c_parse_err("internal: call arg", tok)) }
+                                return Err(e)
+                            }
+                            args.push(ae.expr.duplicate())
+                            ap = ae.pos
+                            if cp_check_punct(parser.tokens, ap, CPunct::Comma) {
+                                ap = ap + 1
+                                continue
+                            }
+                            let close: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, ap, CPunct::RParen, "expected ')' or ',' in call")
+                            let Ok(np) = close else {
+                                let Err(e) = close else { return Err(c_parse_err("internal: call close", tok)) }
+                                return Err(e)
+                            }
+                            ap = np
+                            cont = 0 as I64
+                        }
+                    }
+                    expr = Shared[CExpr]::new(CExpr::Call(expr.duplicate(), args))
+                    p = ap
+                } else if code == (CPunct::Dot as I64) {
+                    let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p + 1, "expected field name after '.'")
+                    let Ok(nmp) = nm else {
+                        let Err(e) = nm else { return Err(c_parse_err("internal: dot", tok)) }
+                        return Err(e)
+                    }
+                    expr = Shared[CExpr]::new(CExpr::Member(expr.duplicate(), nmp.name.duplicate()))
+                    p = nmp.pos
+                } else if code == (CPunct::Arrow as I64) {
+                    let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p + 1, "expected field name after '->'")
+                    let Ok(nmp) = nm else {
+                        let Err(e) = nm else { return Err(c_parse_err("internal: arrow", tok)) }
+                        return Err(e)
+                    }
+                    expr = Shared[CExpr]::new(CExpr::Arrow(expr.duplicate(), nmp.name.duplicate()))
+                    p = nmp.pos
+                } else if code == (CPunct::PlusPlus as I64) {
+                    expr = Shared[CExpr]::new(CExpr::PostInc(expr.duplicate()))
+                    p = p + 1
+                } else if code == (CPunct::MinusMinus as I64) {
+                    expr = Shared[CExpr]::new(CExpr::PostDec(expr.duplicate()))
+                    p = p + 1
+                } else {
+                    break
+                }
+            },
+            _ => break
+        }
+    }
+    return Ok(CParsedExpr { expr: expr.duplicate(), pos: p })
+}
+
+pub func cp_at_type_start(parser: CParser, pos: I64) -> Bool {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        Keyword(k) => {
+            when k {
+                Void => return true, Char => return true, Short => return true,
+                Int => return true, Long => return true, Float => return true,
+                Double => return true, Signed => return true, Unsigned => return true,
+                KwBool => return true, KwComplex => return true,
+                Const => return true, Volatile => return true, Restrict => return true,
+                KwAtomic => return true,
+                Struct => return true, Union => return true, Enum => return true,
+                _ => return false
+            }
+        },
+        Ident => return parser.typedefs.has(tok.text),
+        _ => return false
+    }
+}
+
+func cp_parse_unary(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        Punct(op) => {
+            let code: I64 = op as I64
+            if code == (CPunct::PlusPlus as I64) {
+                let inner: Outcome[CParsedExpr, CParseError] = cp_parse_unary(parser, pos + 1)
+                let Ok(ie) = inner else {
+                    let Err(e) = inner else { return Err(c_parse_err("internal: pre-inc", tok)) }
+                    return Err(e)
+                }
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(CUnaryOp::PreInc, ie.expr.duplicate()))
+                return Ok(CParsedExpr { expr: e, pos: ie.pos })
+            }
+            if code == (CPunct::MinusMinus as I64) {
+                let inner: Outcome[CParsedExpr, CParseError] = cp_parse_unary(parser, pos + 1)
+                let Ok(ie) = inner else {
+                    let Err(e) = inner else { return Err(c_parse_err("internal: pre-dec", tok)) }
+                    return Err(e)
+                }
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(CUnaryOp::PreDec, ie.expr.duplicate()))
+                return Ok(CParsedExpr { expr: e, pos: ie.pos })
+            }
+            var op_enum: CUnaryOp = CUnaryOp::Plus
+            var matched: I64 = 0 as I64
+            if code == (CPunct::Plus as I64) { op_enum = CUnaryOp::Plus; matched = 1 as I64 }
+            else if code == (CPunct::Minus as I64) { op_enum = CUnaryOp::Neg; matched = 1 as I64 }
+            else if code == (CPunct::Tilde as I64) { op_enum = CUnaryOp::BitNot; matched = 1 as I64 }
+            else if code == (CPunct::Bang as I64) { op_enum = CUnaryOp::LogNot; matched = 1 as I64 }
+            else if code == (CPunct::Amp as I64) { op_enum = CUnaryOp::AddrOf; matched = 1 as I64 }
+            else if code == (CPunct::Star as I64) { op_enum = CUnaryOp::Deref; matched = 1 as I64 }
+            if matched == 1 as I64 {
+                let inner: Outcome[CParsedExpr, CParseError] = cp_parse_cast(parser, pos + 1)
+                let Ok(ie) = inner else {
+                    let Err(e) = inner else { return Err(c_parse_err("internal: unary op", tok)) }
+                    return Err(e)
+                }
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Unary(op_enum, ie.expr.duplicate()))
+                return Ok(CParsedExpr { expr: e, pos: ie.pos })
+            }
+            return cp_parse_postfix(parser, pos)
+        },
+        Keyword(k) => {
+            if (k as I64) == (CKeyword::Sizeof as I64) {
+                let after_kw: I64 = pos + 1
+                if cp_check_punct(parser.tokens, after_kw, CPunct::LParen) and cp_at_type_start(parser, after_kw + 1) {
+                    let tn: Outcome[CParsedTypeName, CParseError] = cp_parse_type_name(parser, after_kw + 1)
+                    let Ok(te) = tn else {
+                        let Err(e) = tn else { return Err(c_parse_err("internal: sizeof type", tok)) }
+                        return Err(e)
+                    }
+                    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, te.pos, CPunct::RParen, "expected ')' after sizeof")
+                    let Ok(np) = rp else {
+                        let Err(e) = rp else { return Err(c_parse_err("internal: sizeof rp", tok)) }
+                        return Err(e)
+                    }
+                    let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+                    let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::SizeofType(tnh.duplicate()))
+                    return Ok(CParsedExpr { expr: e, pos: np })
+                }
+                let inner: Outcome[CParsedExpr, CParseError] = cp_parse_unary(parser, after_kw)
+                let Ok(ie) = inner else {
+                    let Err(e) = inner else { return Err(c_parse_err("internal: sizeof expr", tok)) }
+                    return Err(e)
+                }
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::SizeofExpr(ie.expr.duplicate()))
+                return Ok(CParsedExpr { expr: e, pos: ie.pos })
+            }
+            if (k as I64) == (CKeyword::KwAlignof as I64) {
+                let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::LParen, "expected '(' after _Alignof")
+                let Ok(ap) = lp else {
+                    let Err(e) = lp else { return Err(c_parse_err("internal: alignof lp", tok)) }
+                    return Err(e)
+                }
+                let tn: Outcome[CParsedTypeName, CParseError] = cp_parse_type_name(parser, ap)
+                let Ok(te) = tn else {
+                    let Err(e) = tn else { return Err(c_parse_err("internal: alignof type", tok)) }
+                    return Err(e)
+                }
+                let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, te.pos, CPunct::RParen, "expected ')' after _Alignof")
+                let Ok(np) = rp else {
+                    let Err(e) = rp else { return Err(c_parse_err("internal: alignof rp", tok)) }
+                    return Err(e)
+                }
+                let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+                let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::AlignofType(tnh.duplicate()))
+                return Ok(CParsedExpr { expr: e, pos: np })
+            }
+            return cp_parse_postfix(parser, pos)
+        },
+        _ => return cp_parse_postfix(parser, pos)
+    }
+}
+
+func cp_parse_cast(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    if cp_check_punct(parser.tokens, pos, CPunct::LParen) and cp_at_type_start(parser, pos + 1) {
+        let tn: Outcome[CParsedTypeName, CParseError] = cp_parse_type_name(parser, pos + 1)
+        let Ok(te) = tn else {
+            let Err(e) = tn else { return Err(c_parse_err("internal: cast type", cp_peek(parser.tokens, pos))) }
+            return Err(e)
+        }
+        let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, te.pos, CPunct::RParen, "expected ')' after type-name")
+        let Ok(np) = rp else {
+            let Err(e) = rp else { return Err(c_parse_err("internal: cast rp", cp_peek(parser.tokens, pos))) }
+            return Err(e)
+        }
+        if cp_check_punct(parser.tokens, np, CPunct::LBrace) {
+            let init_res: Outcome[CParsedInit, CParseError] = cp_parse_initializer(parser, np)
+            let Ok(iu) = init_res else {
+                let Err(e) = init_res else { return Err(c_parse_err("internal: compound", cp_peek(parser.tokens, pos))) }
+                return Err(e)
+            }
+            let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Compound(tnh.duplicate(), iu.init.duplicate()))
+            return Ok(CParsedExpr { expr: e, pos: iu.pos })
+        }
+        let inner: Outcome[CParsedExpr, CParseError] = cp_parse_cast(parser, np)
+        let Ok(ie) = inner else {
+            let Err(e) = inner else { return Err(c_parse_err("internal: cast inner", cp_peek(parser.tokens, pos))) }
+            return Err(e)
+        }
+        let tnh: Shared[CTypeName] = Shared[CTypeName]::new(te.ty.duplicate())
+        let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Cast(tnh.duplicate(), ie.expr.duplicate()))
+        return Ok(CParsedExpr { expr: e, pos: ie.pos })
+    }
+    return cp_parse_unary(parser, pos)
+}
+
+// Packed as (prec << 8) | binop_code; -1 for not-binary.
+func infix_info(op: CPunct) -> I64 {
+    let code: I64 = op as I64
+    if code == (CPunct::Star as I64) { return (CP_PREC_MUL * 256) | (CBinaryOp::Mul as I64) }
+    if code == (CPunct::Slash as I64) { return (CP_PREC_MUL * 256) | (CBinaryOp::Div as I64) }
+    if code == (CPunct::Percent as I64) { return (CP_PREC_MUL * 256) | (CBinaryOp::Mod as I64) }
+    if code == (CPunct::Plus as I64) { return (CP_PREC_ADD * 256) | (CBinaryOp::Add as I64) }
+    if code == (CPunct::Minus as I64) { return (CP_PREC_ADD * 256) | (CBinaryOp::Sub as I64) }
+    if code == (CPunct::LShift as I64) { return (CP_PREC_SHIFT * 256) | (CBinaryOp::Shl as I64) }
+    if code == (CPunct::RShift as I64) { return (CP_PREC_SHIFT * 256) | (CBinaryOp::Shr as I64) }
+    if code == (CPunct::Lt as I64) { return (CP_PREC_REL * 256) | (CBinaryOp::Lt as I64) }
+    if code == (CPunct::Gt as I64) { return (CP_PREC_REL * 256) | (CBinaryOp::Gt as I64) }
+    if code == (CPunct::LtEq as I64) { return (CP_PREC_REL * 256) | (CBinaryOp::Le as I64) }
+    if code == (CPunct::GtEq as I64) { return (CP_PREC_REL * 256) | (CBinaryOp::Ge as I64) }
+    if code == (CPunct::EqEq as I64) { return (CP_PREC_EQ * 256) | (CBinaryOp::Eq as I64) }
+    if code == (CPunct::NotEq as I64) { return (CP_PREC_EQ * 256) | (CBinaryOp::Ne as I64) }
+    if code == (CPunct::Amp as I64) { return (CP_PREC_BAND * 256) | (CBinaryOp::BitAnd as I64) }
+    if code == (CPunct::Caret as I64) { return (CP_PREC_BXOR * 256) | (CBinaryOp::BitXor as I64) }
+    if code == (CPunct::Pipe as I64) { return (CP_PREC_BOR * 256) | (CBinaryOp::BitOr as I64) }
+    if code == (CPunct::AmpAmp as I64) { return (CP_PREC_LAND * 256) | (CBinaryOp::LogAnd as I64) }
+    if code == (CPunct::PipePipe as I64) { return (CP_PREC_LOR * 256) | (CBinaryOp::LogOr as I64) }
+    return -1 as I64
+}
+
+func binop_from_code(op_code: I64) -> CBinaryOp {
+    if op_code == (CBinaryOp::Add as I64) { return CBinaryOp::Add }
+    if op_code == (CBinaryOp::Sub as I64) { return CBinaryOp::Sub }
+    if op_code == (CBinaryOp::Mul as I64) { return CBinaryOp::Mul }
+    if op_code == (CBinaryOp::Div as I64) { return CBinaryOp::Div }
+    if op_code == (CBinaryOp::Mod as I64) { return CBinaryOp::Mod }
+    if op_code == (CBinaryOp::Shl as I64) { return CBinaryOp::Shl }
+    if op_code == (CBinaryOp::Shr as I64) { return CBinaryOp::Shr }
+    if op_code == (CBinaryOp::Lt as I64) { return CBinaryOp::Lt }
+    if op_code == (CBinaryOp::Gt as I64) { return CBinaryOp::Gt }
+    if op_code == (CBinaryOp::Le as I64) { return CBinaryOp::Le }
+    if op_code == (CBinaryOp::Ge as I64) { return CBinaryOp::Ge }
+    if op_code == (CBinaryOp::Eq as I64) { return CBinaryOp::Eq }
+    if op_code == (CBinaryOp::Ne as I64) { return CBinaryOp::Ne }
+    if op_code == (CBinaryOp::BitAnd as I64) { return CBinaryOp::BitAnd }
+    if op_code == (CBinaryOp::BitXor as I64) { return CBinaryOp::BitXor }
+    if op_code == (CBinaryOp::BitOr as I64) { return CBinaryOp::BitOr }
+    if op_code == (CBinaryOp::LogAnd as I64) { return CBinaryOp::LogAnd }
+    if op_code == (CBinaryOp::LogOr as I64) { return CBinaryOp::LogOr }
+    return CBinaryOp::Add
+}
+
+func cp_parse_binary(parser: CParser, pos: I64, min_prec: I64) -> Outcome[CParsedExpr, CParseError] {
+    let left_res: Outcome[CParsedExpr, CParseError] = cp_parse_cast(parser, pos)
+    let Ok(first) = left_res else {
+        let Err(e) = left_res else { return Err(c_parse_err("internal: binary lhs", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var left: Shared[CExpr] = first.expr.duplicate()
+    var p: I64 = first.pos
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        let tok: CToken = cp_peek(parser.tokens, p)
+        var info: I64 = -1 as I64
+        when tok.kind {
+            Punct(op) => info = infix_info(op),
+            _ => {}
+        }
+        if info < 0 { break }
+        let prec: I64 = (info / 256) as I64
+        if prec < min_prec { break }
+        let op_code: I64 = info - (prec * 256)
+        let rhs_res: Outcome[CParsedExpr, CParseError] = cp_parse_binary(parser, p + 1, prec + 1 as I64)
+        let Ok(rhs) = rhs_res else {
+            let Err(e) = rhs_res else { return Err(c_parse_err("internal: binary rhs", tok)) }
+            return Err(e)
+        }
+        let bop: CBinaryOp = binop_from_code(op_code)
+        left = Shared[CExpr]::new(CExpr::Binary(bop, left.duplicate(), rhs.expr.duplicate()))
+        p = rhs.pos
+    }
+    return Ok(CParsedExpr { expr: left.duplicate(), pos: p })
+}
+
+func cp_parse_cond(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let cond_res: Outcome[CParsedExpr, CParseError] = cp_parse_binary(parser, pos, CP_PREC_LOR)
+    let Ok(cond) = cond_res else {
+        let Err(e) = cond_res else { return Err(c_parse_err("internal: cond lhs", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    if not cp_check_punct(parser.tokens, cond.pos, CPunct::Question) {
+        return Ok(cond)
+    }
+    let then_res: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, cond.pos + 1)
+    let Ok(then_e) = then_res else {
+        let Err(e) = then_res else { return Err(c_parse_err("internal: cond then", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let colon_res: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, then_e.pos, CPunct::Colon, "expected ':' in conditional")
+    let Ok(after_colon) = colon_res else {
+        let Err(e) = colon_res else { return Err(c_parse_err("internal: cond colon", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let else_res: Outcome[CParsedExpr, CParseError] = cp_parse_cond(parser, after_colon)
+    let Ok(else_e) = else_res else {
+        let Err(e) = else_res else { return Err(c_parse_err("internal: cond else", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Cond(cond.expr.duplicate(), then_e.expr.duplicate(), else_e.expr.duplicate()))
+    return Ok(CParsedExpr { expr: e, pos: else_e.pos })
+}
+
+func assign_op_from_punct(p: CPunct) -> Maybe[CAssignOp] {
+    let c: I64 = p as I64
+    if c == (CPunct::Assign as I64) { return Just(CAssignOp::Assign) }
+    if c == (CPunct::PlusAssign as I64) { return Just(CAssignOp::AddAssign) }
+    if c == (CPunct::MinusAssign as I64) { return Just(CAssignOp::SubAssign) }
+    if c == (CPunct::StarAssign as I64) { return Just(CAssignOp::MulAssign) }
+    if c == (CPunct::SlashAssign as I64) { return Just(CAssignOp::DivAssign) }
+    if c == (CPunct::PercentAssign as I64) { return Just(CAssignOp::ModAssign) }
+    if c == (CPunct::LShiftAssign as I64) { return Just(CAssignOp::ShlAssign) }
+    if c == (CPunct::RShiftAssign as I64) { return Just(CAssignOp::ShrAssign) }
+    if c == (CPunct::AmpAssign as I64) { return Just(CAssignOp::BitAndAssign) }
+    if c == (CPunct::CaretAssign as I64) { return Just(CAssignOp::BitXorAssign) }
+    if c == (CPunct::PipeAssign as I64) { return Just(CAssignOp::BitOrAssign) }
+    return Nothing
+}
+
+pub func cp_parse_assign_expr(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let lhs_res: Outcome[CParsedExpr, CParseError] = cp_parse_cond(parser, pos)
+    let Ok(lhs) = lhs_res else {
+        let Err(e) = lhs_res else { return Err(c_parse_err("internal: assign lhs", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let tok: CToken = cp_peek(parser.tokens, lhs.pos)
+    when tok.kind {
+        Punct(op) => {
+            let aop_m: Maybe[CAssignOp] = assign_op_from_punct(op)
+            let Just(aop) = aop_m else {
+                return Ok(lhs)
+            }
+            let rhs_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, lhs.pos + 1)
+            let Ok(rhs) = rhs_res else {
+                let Err(e) = rhs_res else { return Err(c_parse_err("internal: assign rhs", tok)) }
+                return Err(e)
+            }
+            let e: Shared[CExpr] = Shared[CExpr]::new(CExpr::Assign(aop, lhs.expr.duplicate(), rhs.expr.duplicate()))
+            return Ok(CParsedExpr { expr: e, pos: rhs.pos })
+        },
+        _ => return Ok(lhs)
+    }
+}
+
+pub func cp_parse_expr(parser: CParser, pos: I64) -> Outcome[CParsedExpr, CParseError] {
+    let first_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, pos)
+    let Ok(first) = first_res else {
+        let Err(e) = first_res else { return Err(c_parse_err("internal: comma lhs", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var left: Shared[CExpr] = first.expr.duplicate()
+    var p: I64 = first.pos
+    loop (cp_check_punct(parser.tokens, p, CPunct::Comma)) {
+        let rhs_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
+        let Ok(rhs) = rhs_res else {
+            let Err(e) = rhs_res else { return Err(c_parse_err("internal: comma rhs", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        left = Shared[CExpr]::new(CExpr::Comma(left.duplicate(), rhs.expr.duplicate()))
+        p = rhs.pos
+    }
+    return Ok(CParsedExpr { expr: left.duplicate(), pos: p })
+}
+
+// ============================================================================
+// Declarator parsing
+// ============================================================================
+//
+// A declarator can be direct or abstract (no identifier). The outermost
+// function / array / pointer layer nests towards the identifier; e.g.
+// `int (*fp)(char)` reads as: fp is a pointer to a function taking char
+// returning int. Implementation follows the standard "parse pointers, then
+// direct-declarator, then postfix array/function modifiers" recipe.
+
+func cp_parse_pointer_prefix(parser: CParser, pos: I64, inner: CDeclarator) -> CParsedDeclarator {
+    var p: I64 = pos
+    var d: CDeclarator = inner
+    loop (cp_check_punct(parser.tokens, p, CPunct::Star)) {
+        p = p + 1
+        let pq: CParsedQuals = cp_parse_quals_list(parser, p)
+        p = pq.pos
+        d = CDeclarator::Pointer(Shared[CDeclarator]::new(d), pq.quals)
+    }
+    return CParsedDeclarator { decl: d, pos: p }
+}
+
+// The "direct declarator" is the piece after any leading `*`s — an
+// identifier, or a parenthesised declarator, or abstract. Modifiers
+// (array `[N]`, function `(params)`) attach *after* the direct declarator.
+func cp_parse_direct(parser: CParser, pos: I64, allow_abstract: I64) -> Outcome[CParsedDeclarator, CParseError] {
+    var p: I64 = pos
+    var leaf: CDeclarator = CDeclarator::Abstract
+
+    let tok: CToken = cp_peek(parser.tokens, p)
+    when tok.kind {
+        Ident => {
+            // Duplicate so the variant payload outlives `tok`'s drop.
+            leaf = CDeclarator::Ident(tok.text.duplicate())
+            p = p + 1
+        },
+        Punct(op) => {
+            if (op as I64) == (CPunct::LParen as I64) {
+                // Could be a parenthesized inner-declarator or the start of
+                // a function's parameter list in abstract context. We
+                // disambiguate by looking at the next token: `*`, an ident
+                // (when not a typedef), `(` → inner declarator. Otherwise
+                // treat as function-modifier (params start immediately).
+                let nxt: CToken = cp_peek_at(parser.tokens, p, 1 as I64)
+                var is_inner: I64 = 0 as I64
+                when nxt.kind {
+                    Punct(q) => {
+                        if (q as I64) == (CPunct::Star as I64) { is_inner = 1 as I64 }
+                        else if (q as I64) == (CPunct::LParen as I64) { is_inner = 1 as I64 }
+                    },
+                    Ident => {
+                        if not parser.typedefs.has(nxt.text) { is_inner = 1 as I64 }
+                    },
+                    _ => {}
+                }
+                if is_inner == 1 as I64 {
+                    let inner_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_declarator_inner(parser, p + 1, allow_abstract)
+                    let Ok(inner) = inner_res else {
+                        let Err(e) = inner_res else { return Err(c_parse_err("internal: paren-inner", tok)) }
+                        return Err(e)
+                    }
+                    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, inner.pos, CPunct::RParen, "expected ')' after inner declarator")
+                    let Ok(np) = rp else {
+                        let Err(e) = rp else { return Err(c_parse_err("internal: paren-inner close", tok)) }
+                        return Err(e)
+                    }
+                    // Explicit `.duplicate()` so the source `inner` retains
+                    // ownership of its `decl` field (a refcounted
+                    // `Shared[CDeclarator]` payload) for its end-of-scope
+                    // drop. Without this, the partial-field move would
+                    // bitwise-copy the variant and double-decrement the
+                    // contained `Shared` when both `inner.decl` (via the
+                    // source struct's drop) and `leaf` (via its own drop)
+                    // ran. See phase24h.
+                    leaf = inner.decl.duplicate()
+                    p = np
+                } else {
+                    if allow_abstract == 0 as I64 {
+                        return Err(c_parse_err("expected identifier in declarator", tok))
+                    }
+                    // Leaf stays Abstract; modifiers picked up by suffix loop.
+                }
+            } else {
+                if allow_abstract == 0 as I64 {
+                    return Err(c_parse_err("expected identifier in declarator", tok))
+                }
+            }
+        },
+        _ => {
+            if allow_abstract == 0 as I64 {
+                return Err(c_parse_err("expected identifier in declarator", tok))
+            }
+        }
+    }
+
+    // Suffix modifiers: `[...]` or `(...)`. Nest outward: `a[2][3]` means
+    // `a` is array of 2 arrays of 3 — so Array(Array(Ident, 3), 2). We
+    // build in source order but wrap right-to-left logically.
+    var current: CDeclarator = leaf
+    var cp: I64 = p
+    let n: I64 = parser.tokens.len() as I64
+    loop (cp < n) {
+        if cp_check_punct(parser.tokens, cp, CPunct::LBracket) {
+            cp = cp + 1
+            // Qualifiers in array brackets (`[const 5]`) are a C99 feature
+            // legal only in function-parameter declarators. We skip them to
+            // keep the array-size parse simple.
+            let sq: CParsedQuals = cp_parse_quals_list(parser, cp)
+            cp = sq.pos
+            var size_opt: Maybe[Shared[CExpr]] = Nothing
+            if not cp_check_punct(parser.tokens, cp, CPunct::RBracket) {
+                let se: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, cp)
+                let Ok(sep) = se else {
+                    let Err(e) = se else { return Err(c_parse_err("internal: array size", cp_peek(parser.tokens, cp))) }
+                    return Err(e)
+                }
+                size_opt = Just(sep.expr.duplicate())
+                cp = sep.pos
+            }
+            let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, cp, CPunct::RBracket, "expected ']' in array declarator")
+            let Ok(np) = rb else {
+                let Err(e) = rb else { return Err(c_parse_err("internal: array rb", cp_peek(parser.tokens, cp))) }
+                return Err(e)
+            }
+            current = CDeclarator::Array(Shared[CDeclarator]::new(current), size_opt)
+            cp = np
+        } else if cp_check_punct(parser.tokens, cp, CPunct::LParen) {
+            // Function declarator
+            let pp: Outcome[CParsedParams, CParseError] = cp_parse_param_list(parser, cp + 1)
+            let Ok(pps) = pp else {
+                let Err(e) = pp else { return Err(c_parse_err("internal: params", cp_peek(parser.tokens, cp))) }
+                return Err(e)
+            }
+            let fn_part: CFuncDeclPart = CFuncDeclPart {
+                inner: Shared[CDeclarator]::new(current),
+                params: pps.params,
+                is_variadic: pps.is_variadic
+            }
+            current = CDeclarator::Func(fn_part)
+            cp = pps.pos
+        } else {
+            break
+        }
+    }
+
+    return Ok(CParsedDeclarator { decl: current, pos: cp })
+}
+
+func cp_parse_declarator_inner(parser: CParser, pos: I64, allow_abstract: I64) -> Outcome[CParsedDeclarator, CParseError] {
+    // Strip leading `*`s, then parse direct, then the pointer layers apply
+    // outward.
+    var p: I64 = pos
+    var ptr_quals: List[CQualifiers] = List[CQualifiers]::new(0 as I64)
+    loop (cp_check_punct(parser.tokens, p, CPunct::Star)) {
+        p = p + 1
+        let pq: CParsedQuals = cp_parse_quals_list(parser, p)
+        ptr_quals.push(pq.quals)
+        p = pq.pos
+    }
+    let direct_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_direct(parser, p, allow_abstract)
+    let Ok(direct) = direct_res else {
+        let Err(e) = direct_res else { return Err(c_parse_err("internal: direct", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    // Wrap direct with pointer layers in reverse order (innermost `*`
+    // closest to the identifier).
+    // Explicit `.duplicate()` on the partial-field-move (`direct.decl`)
+    // so the source `direct` retains a live `decl` for its drop. See
+    // phase24h.
+    var d: CDeclarator = direct.decl.duplicate()
+    var i: I64 = ptr_quals.len() - 1 as I64
+    loop (i >= 0) {
+        d = CDeclarator::Pointer(Shared[CDeclarator]::new(d), ptr_quals.get(i))
+        i = i - 1
+    }
+    return Ok(CParsedDeclarator { decl: d, pos: direct.pos })
+}
+
+pub func cp_parse_declarator(parser: CParser, pos: I64) -> Outcome[CParsedDeclarator, CParseError] {
+    return cp_parse_declarator_inner(parser, pos, 0 as I64)
+}
+
+pub func cp_parse_abstract_declarator(parser: CParser, pos: I64) -> Outcome[CParsedDeclarator, CParseError] {
+    return cp_parse_declarator_inner(parser, pos, 1 as I64)
+}
+
+// ============================================================================
+// Parameter list
+// ============================================================================
+//
+// `( )` empty (K&R unspecified — treated as "no prototype" here),
+// `(void)` explicit empty, `(type, type, ...)`, `(type name, ...)` etc.
+// Returns `is_variadic = 1` if `...` appears.
+
+func cp_parse_param_list(parser: CParser, pos: I64) -> Outcome[CParsedParams, CParseError] {
+    var params: List[CParam] = List[CParam]::new(0 as I64)
+    var p: I64 = pos
+    var is_variadic: I64 = 0 as I64
+
+    if cp_check_punct(parser.tokens, p, CPunct::RParen) {
+        return Ok(CParsedParams { params: params, is_variadic: 0 as I64, pos: p + 1 })
+    }
+
+    // `(void)` — single param whose type is void and declarator is abstract.
+    // We recognise it when the only token inside is `void` immediately
+    // followed by `)`.
+    let tok: CToken = cp_peek(parser.tokens, p)
+    when tok.kind {
+        Keyword(k) => {
+            if (k as I64) == (CKeyword::Void as I64) {
+                let nxt: CToken = cp_peek_at(parser.tokens, p, 1 as I64)
+                when nxt.kind {
+                    Punct(op) => {
+                        if (op as I64) == (CPunct::RParen as I64) {
+                            return Ok(CParsedParams { params: params, is_variadic: 0 as I64, pos: p + 2 })
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        },
+        _ => {}
+    }
+
+    var cont: I64 = 1 as I64
+    loop (cont == 1 as I64) {
+        if cp_check_punct(parser.tokens, p, CPunct::Ellipsis) {
+            is_variadic = 1 as I64
+            p = p + 1
+            break
+        }
+        let specs_res: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, p)
+        let Ok(sp) = specs_res else {
+            let Err(e) = specs_res else { return Err(c_parse_err("internal: param specs", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = sp.pos
+        let d_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_abstract_declarator(parser, p)
+        let Ok(dp) = d_res else {
+            let Err(e) = d_res else { return Err(c_parse_err("internal: param decl", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = dp.pos
+        let name: Str = declarator_name(dp.decl)
+        params.push(CParam {
+            name: name,
+            specifiers: sp.specs,
+            declarator: dp.decl
+        })
+        if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+            p = p + 1
+            continue
+        }
+        cont = 0 as I64
+    }
+
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' after parameter list")
+    let Ok(np) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: param rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    return Ok(CParsedParams { params: params, is_variadic: is_variadic, pos: np })
+}
+
+// ============================================================================
+// Helpers: recover the identifier name from a declarator spine.
+// ============================================================================
+
+pub func declarator_name(d: CDeclarator) -> Str {
+    // Always return an owned Str — the variant payload behind `d` may
+    // drop before the returned name is consumed (callers store it into
+    // long-lived structures like CFuncDecl.name and HashMap keys).
+    when d {
+        Ident(name) => return name.duplicate(),
+        Abstract => return "",
+        Pointer(inner, _) => return declarator_name_heap(inner),
+        Array(inner, _) => return declarator_name_heap(inner),
+        Func(part) => return declarator_name_heap(part.inner)
+    }
+}
+
+// With `Shared[CDeclarator]`, the allocation is refcounted: dropping
+// our local handle just decrements the count, leaving the caller's
+// reference (and bucket entries, list slots) intact. Natural recursion
+// is safe — no `into_raw()` workaround needed.
+func declarator_name_heap(d: Shared[CDeclarator]) -> Str {
+    return declarator_name(d.get())
+}
+
+// ============================================================================
+// Type-name (for cast, sizeof, compound literal)
+// ============================================================================
+
+pub func cp_parse_type_name(parser: CParser, pos: I64) -> Outcome[CParsedTypeName, CParseError] {
+    let sp_res: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, pos)
+    let Ok(sp) = sp_res else {
+        let Err(e) = sp_res else { return Err(c_parse_err("internal: tyname specs", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let d_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_abstract_declarator(parser, sp.pos)
+    let Ok(dp) = d_res else {
+        let Err(e) = d_res else { return Err(c_parse_err("internal: tyname decl", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let ty: CTypeName = CTypeName { specifiers: sp.specs, declarator: dp.decl }
+    return Ok(CParsedTypeName { ty: ty, pos: dp.pos })
+}
+
+// ============================================================================
+// Initializer (item 2.2)
+// ============================================================================
+
+pub func cp_parse_initializer(parser: CParser, pos: I64) -> Outcome[CParsedInit, CParseError] {
+    if cp_check_punct(parser.tokens, pos, CPunct::LBrace) {
+        var elems: List[CInitElement] = List[CInitElement]::new(0 as I64)
+        var p: I64 = pos + 1
+        if cp_check_punct(parser.tokens, p, CPunct::RBrace) {
+            p = p + 1
+            let empty: Shared[CInit] = Shared[CInit]::new(CInit::Brace(elems))
+            return Ok(CParsedInit { init: empty, pos: p })
+        }
+        var cont: I64 = 1 as I64
+        loop (cont == 1 as I64) {
+            var designators: List[CDesignator] = List[CDesignator]::new(0 as I64)
+            var dcont: I64 = 1 as I64
+            loop (dcont == 1 as I64) {
+                if cp_check_punct(parser.tokens, p, CPunct::Dot) {
+                    let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p + 1, "expected field name after '.'")
+                    let Ok(nmp) = nm else {
+                        let Err(e) = nm else { return Err(c_parse_err("internal: dsgn dot", cp_peek(parser.tokens, p))) }
+                        return Err(e)
+                    }
+                    designators.push(CDesignator::Field(nmp.name.duplicate()))
+                    p = nmp.pos
+                } else if cp_check_punct(parser.tokens, p, CPunct::LBracket) {
+                    let ie: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
+                    let Ok(iep) = ie else {
+                        let Err(e) = ie else { return Err(c_parse_err("internal: dsgn idx", cp_peek(parser.tokens, p))) }
+                        return Err(e)
+                    }
+                    let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, iep.pos, CPunct::RBracket, "expected ']' after index designator")
+                    let Ok(np) = rb else {
+                        let Err(e) = rb else { return Err(c_parse_err("internal: dsgn rb", cp_peek(parser.tokens, p))) }
+                        return Err(e)
+                    }
+                    designators.push(CDesignator::Index(iep.expr.duplicate()))
+                    p = np
+                } else {
+                    dcont = 0 as I64
+                }
+            }
+            if designators.len() > 0 as I64 {
+                let eq: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Assign, "expected '=' after designator")
+                let Ok(np) = eq else {
+                    let Err(e) = eq else { return Err(c_parse_err("internal: dsgn eq", cp_peek(parser.tokens, p))) }
+                    return Err(e)
+                }
+                p = np
+            }
+            let elem_init: Outcome[CParsedInit, CParseError] = cp_parse_initializer(parser, p)
+            let Ok(eip) = elem_init else {
+                let Err(e) = elem_init else { return Err(c_parse_err("internal: elem init", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            elems.push(CInitElement { designators: designators, init: eip.init.duplicate() })
+            p = eip.pos
+            if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+                p = p + 1
+                if cp_check_punct(parser.tokens, p, CPunct::RBrace) {
+                    p = p + 1
+                    cont = 0 as I64
+                    break
+                }
+                continue
+            }
+            let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RBrace, "expected '}' or ',' in initializer list")
+            let Ok(np) = rb else {
+                let Err(e) = rb else { return Err(c_parse_err("internal: init rb", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            p = np
+            cont = 0 as I64
+        }
+        let brace: Shared[CInit] = Shared[CInit]::new(CInit::Brace(elems))
+        return Ok(CParsedInit { init: brace, pos: p })
+    }
+    let sc_res: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, pos)
+    let Ok(sc) = sc_res else {
+        let Err(e) = sc_res else { return Err(c_parse_err("internal: scalar init", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let scalar: Shared[CInit] = Shared[CInit]::new(CInit::Scalar(sc.expr.duplicate()))
+    return Ok(CParsedInit { init: scalar, pos: sc.pos })
+}
+
+// ============================================================================
+// Top-level declarations (items 2.2 – 2.5)
+// ============================================================================
+
+pub func cp_parse_translation_unit(parser: CParser, file: Str) -> Outcome[CTranslationUnit, CParseError] {
+    var unit: CTranslationUnit = c_tu(file)
+    var p: I64 = 0 as I64
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        if cp_is_eof(parser.tokens, p) { break }
+        let one: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, p)
+        let Ok(pd) = one else {
+            let Err(e) = one else { return Err(c_parse_err("internal: TU", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        var i: I64 = 0 as I64
+        let m: I64 = pd.decls.len() as I64
+        loop (i < m) {
+            // Refcount-increment when transferring ownership across lists
+            // — both `pd.decls` (which drops at end of this iteration) and
+            // `unit.decls` (the long-lived consumer) need their own ref.
+            unit.decls.push(pd.decls.get(i).duplicate())
+            i = i + 1
+        }
+        p = pd.pos
+    }
+    return Ok(unit)
+}
+
+// A single top-level "decl line" can expand to multiple CDecls (multiple
+// declarators in one declaration), plus potentially an aggregate definition
+// if the specifier contained `struct ... { }`.
+pub func cp_parse_top_decl(parser: CParser, pos: I64) -> Outcome[CParsedDecls, CParseError] {
+    let start_tok: CToken = cp_peek(parser.tokens, pos)
+    var decls: List[Shared[CDecl]] = List[Shared[CDecl]]::new(0 as I64)
+
+    let sp_res: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, pos)
+    let Ok(sp) = sp_res else {
+        let Err(e) = sp_res else { return Err(c_parse_err("internal: top specs", start_tok)) }
+        return Err(e)
+    }
+    var p: I64 = sp.pos
+    var specs: CDeclSpecifiers = sp.specs
+
+    // If the specifier was struct/union/enum and the next token is `{`, we
+    // must parse a body and emit a separate StructDef / UnionDef / EnumDef
+    // BEFORE returning (the specifier already recorded a ...Ref(tag)).
+    let agg_kind: I64 = aggregate_kind(specs.base_type)
+    if agg_kind != 0 as I64 and cp_check_punct(parser.tokens, p, CPunct::LBrace) {
+        let tag: Str = aggregate_tag(specs.base_type)
+        if agg_kind == 1 as I64 {
+            let body: Outcome[CParsedFields, CParseError] = cp_parse_struct_body(parser, p)
+            let Ok(bp) = body else {
+                let Err(e) = body else { return Err(c_parse_err("internal: struct body", start_tok)) }
+                return Err(e)
+            }
+            p = bp.pos
+            let def: CStructDef = CStructDef {
+                tag: tag, fields: bp.fields, is_forward: 0 as I64,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::StructDef(def)))
+        } else if agg_kind == 2 as I64 {
+            let body: Outcome[CParsedFields, CParseError] = cp_parse_struct_body(parser, p)
+            let Ok(bp) = body else {
+                let Err(e) = body else { return Err(c_parse_err("internal: union body", start_tok)) }
+                return Err(e)
+            }
+            p = bp.pos
+            let def: CUnionDef = CUnionDef {
+                tag: tag, fields: bp.fields, is_forward: 0 as I64,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::UnionDef(def)))
+        } else {
+            // enum
+            let body: Outcome[CParsedVariants, CParseError] = cp_parse_enum_body(parser, p)
+            let Ok(bp) = body else {
+                let Err(e) = body else { return Err(c_parse_err("internal: enum body", start_tok)) }
+                return Err(e)
+            }
+            p = bp.pos
+            let def: CEnumDef = CEnumDef {
+                tag: tag, variants: bp.variants, is_forward: 0 as I64,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::EnumDef(def)))
+        }
+    }
+
+    // `struct X;` / `union X;` / `enum X;` forward declaration — no
+    // declarators follow.
+    if cp_check_punct(parser.tokens, p, CPunct::Semi) {
+        if agg_kind != 0 as I64 and decls.len() == 0 as I64 {
+            let tag: Str = aggregate_tag(specs.base_type)
+            if agg_kind == 1 as I64 {
+                let def: CStructDef = CStructDef {
+                    tag: tag, fields: List[CStructField]::new(0 as I64),
+                    is_forward: 1 as I64,
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+                }
+                decls.push(Shared[CDecl]::new(CDecl::StructDef(def)))
+            } else if agg_kind == 2 as I64 {
+                let def: CUnionDef = CUnionDef {
+                    tag: tag, fields: List[CStructField]::new(0 as I64),
+                    is_forward: 1 as I64,
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+                }
+                decls.push(Shared[CDecl]::new(CDecl::UnionDef(def)))
+            } else {
+                let def: CEnumDef = CEnumDef {
+                    tag: tag, variants: List[CEnumVariantDef]::new(0 as I64),
+                    is_forward: 1 as I64,
+                    file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+                }
+                decls.push(Shared[CDecl]::new(CDecl::EnumDef(def)))
+            }
+        }
+        return Ok(CParsedDecls { decls: decls, pos: p + 1 })
+    }
+
+    // Parse declarator list.
+    var cont: I64 = 1 as I64
+    var first_decl: I64 = 1 as I64
+    loop (cont == 1 as I64) {
+        let d_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_declarator(parser, p)
+        let Ok(dp) = d_res else {
+            let Err(e) = d_res else { return Err(c_parse_err("internal: top decl", start_tok)) }
+            return Err(e)
+        }
+        p = dp.pos
+        let name: Str = declarator_name(dp.decl)
+
+        // Function definition? `int f(params) { ... }` — only allowed for the
+        // first declarator, and only when the outermost declarator layer is
+        // Func and the next token is `{`.
+        if first_decl == 1 as I64 and declarator_is_func(dp.decl) and cp_check_punct(parser.tokens, p, CPunct::LBrace) {
+            // Collect params + variadic from the declarator for the AST node.
+            let params: List[CParam] = declarator_func_params(dp.decl)
+            let is_variadic: I64 = declarator_func_variadic(dp.decl)
+            let body_res: Outcome[CParsedStmt, CParseError] = cp_parse_compound_stmt(parser, p)
+            let Ok(bp) = body_res else {
+                let Err(e) = body_res else { return Err(c_parse_err("internal: func body", start_tok)) }
+                return Err(e)
+            }
+            p = bp.pos
+            let fd: CFuncDecl = CFuncDecl {
+                name: name, specifiers: specs, declarator: dp.decl,
+                params: params, is_variadic: is_variadic,
+                kr_decls: List[CVarDecl]::new(0 as I64),
+                body: Just(bp.stmt.duplicate()),
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::Func(fd)))
+            return Ok(CParsedDecls { decls: decls, pos: p })
+        }
+
+        // Register typedef name if this declaration has typedef storage.
+        // `name` is reused on the next line in the CTypedefDef literal; we
+        // pass a duplicated copy to `parser.typedefs.set` so the caller's
+        // `name` stays valid for the second use. Without the duplicate, the
+        // `set` callee's parameter drop frees the Str buffer that `name`
+        // also references, leaving `td.name` dangling.
+        if (specs.storage as I64) == (CStorageClass::Typedef as I64) and name.len() > 0 as I64 {
+            parser.typedefs.set(name.duplicate(), 1 as I64)
+            let td: CTypedefDef = CTypedefDef {
+                name: name, specifiers: specs, declarator: dp.decl,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::TypedefDef(td)))
+        } else if declarator_is_func(dp.decl) and not cp_check_punct(parser.tokens, p, CPunct::Assign) {
+            // Prototype (no body) — emit a Func with body=Nothing.
+            let params: List[CParam] = declarator_func_params(dp.decl)
+            let is_variadic: I64 = declarator_func_variadic(dp.decl)
+            let fd: CFuncDecl = CFuncDecl {
+                name: name, specifiers: specs, declarator: dp.decl,
+                params: params, is_variadic: is_variadic,
+                kr_decls: List[CVarDecl]::new(0 as I64),
+                body: Nothing,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            decls.push(Shared[CDecl]::new(CDecl::Func(fd)))
+        } else {
+            // Variable declaration, possibly with initializer.
+            var init_opt: Maybe[Shared[CInit]] = Nothing
+            if cp_check_punct(parser.tokens, p, CPunct::Assign) {
+                let ir: Outcome[CParsedInit, CParseError] = cp_parse_initializer(parser, p + 1)
+                let Ok(ip) = ir else {
+                    let Err(e) = ir else { return Err(c_parse_err("internal: init", cp_peek(parser.tokens, p))) }
+                    return Err(e)
+                }
+                init_opt = Just(ip.init.duplicate())
+                p = ip.pos
+            }
+            let vd: CVarDecl = CVarDecl {
+                name: name, specifiers: specs, declarator: dp.decl,
+                init: init_opt,
+                file: start_tok.file.duplicate(), line: start_tok.line, col: start_tok.col
+            }
+            // Natural form after bug #7 fix — no Heap wrapping needed, no
+            // stepwise let bindings. Keep as regression guard for bugs #7/#8/#9.
+            decls.push(Shared[CDecl]::new(CDecl::Var(vd)))
+        }
+
+        if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+            p = p + 1
+            first_decl = 0 as I64
+            continue
+        }
+        cont = 0 as I64
+    }
+
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after declaration")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: top semi", start_tok)) }
+        return Err(e)
+    }
+    return Ok(CParsedDecls { decls: decls, pos: np })
+}
+
+// Classify an aggregate base: 1 = struct, 2 = union, 3 = enum, 0 = neither.
+func aggregate_kind(b: CBaseType) -> I64 {
+    when b {
+        StructRef(_) => return 1 as I64,
+        UnionRef(_) => return 2 as I64,
+        EnumRef(_) => return 3 as I64,
+        _ => return 0 as I64
+    }
+}
+
+func aggregate_tag(b: CBaseType) -> Str {
+    when b {
+        StructRef(s) => return s,
+        UnionRef(s) => return s,
+        EnumRef(s) => return s,
+        _ => return ""
+    }
+}
+
+// True iff the declarator describes a function (possibly returning a
+// pointer/pointers). C declarator semantics: `*f(void)` is "f is a function
+// returning pointer", parsed as `Pointer(Func(Ident("f")))`. The outermost
+// AST layer is `Pointer`, but `f` itself is still a function. We must
+// recurse through `Pointer` layers (the return-type modifiers) to find
+// the underlying `Func`.
+//
+// Note: `Array(Func(...))` would mean "array of functions" which is
+// invalid in C; `Func(Pointer(...))` means `f` is a pointer-to-function,
+// NOT a function — those cases correctly return false.
+func declarator_is_func(d: CDeclarator) -> Bool {
+    when d {
+        Func(_) => return true,
+        Pointer(inner, _) => return declarator_is_func(inner.get()),
+        _ => return false
+    }
+}
+
+func declarator_func_params(d: CDeclarator) -> List[CParam] {
+    when d {
+        Func(part) => return part.params,
+        Pointer(inner, _) => return declarator_func_params(inner.get()),
+        _ => return List[CParam]::new(0 as I64)
+    }
+}
+
+func declarator_func_variadic(d: CDeclarator) -> I64 {
+    when d {
+        Func(part) => return part.is_variadic,
+        Pointer(inner, _) => return declarator_func_variadic(inner.get()),
+        _ => return 0 as I64
+    }
+}
+
+// ============================================================================
+// Struct / union body (item 2.4)
+// ============================================================================
+
+func cp_parse_struct_body(parser: CParser, pos: I64) -> Outcome[CParsedFields, CParseError] {
+    // Precondition: current token is `{`.
+    let lb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos, CPunct::LBrace, "expected '{' for struct/union body")
+    let Ok(p0) = lb else {
+        let Err(e) = lb else { return Err(c_parse_err("internal: struct body lb", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var fields: List[CStructField] = List[CStructField]::new(0 as I64)
+    var p: I64 = p0
+    loop (not cp_check_punct(parser.tokens, p, CPunct::RBrace)) {
+        if cp_is_eof(parser.tokens, p) {
+            return Err(c_parse_err("unexpected EOF in struct body", cp_peek(parser.tokens, p)))
+        }
+        // Each member = specifiers + declarator(s) + `;`
+        let sp_res: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, p)
+        let Ok(sp) = sp_res else {
+            let Err(e) = sp_res else { return Err(c_parse_err("internal: field specs", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = sp.pos
+        // Anonymous struct/union member: `struct { ... };` with no declarator
+        if cp_check_punct(parser.tokens, p, CPunct::Semi) and aggregate_kind(sp.specs.base_type) != 0 as I64 {
+            fields.push(CStructField {
+                name: "", specifiers: sp.specs,
+                declarator: CDeclarator::Abstract, bit_width: -1 as I64
+            })
+            p = p + 1
+            continue
+        }
+        var fcont: I64 = 1 as I64
+        loop (fcont == 1 as I64) {
+            // Bit field without declarator: `int : 2;` — unnamed bit field
+            if cp_check_punct(parser.tokens, p, CPunct::Colon) {
+                let be: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
+                let Ok(bep) = be else {
+                    let Err(e) = be else { return Err(c_parse_err("internal: anon bitfield", cp_peek(parser.tokens, p))) }
+                    return Err(e)
+                }
+                let width: I64 = const_expr_to_i64(bep.expr)
+                fields.push(CStructField {
+                    name: "", specifiers: sp.specs,
+                    declarator: CDeclarator::Abstract, bit_width: width
+                })
+                p = bep.pos
+            } else {
+                let d_res: Outcome[CParsedDeclarator, CParseError] = cp_parse_declarator(parser, p)
+                let Ok(dp) = d_res else {
+                    let Err(e) = d_res else { return Err(c_parse_err("internal: field decl", cp_peek(parser.tokens, p))) }
+                    return Err(e)
+                }
+                p = dp.pos
+                var width: I64 = -1 as I64
+                if cp_check_punct(parser.tokens, p, CPunct::Colon) {
+                    let be: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
+                    let Ok(bep) = be else {
+                        let Err(e) = be else { return Err(c_parse_err("internal: bitfield", cp_peek(parser.tokens, p))) }
+                        return Err(e)
+                    }
+                    width = const_expr_to_i64(bep.expr)
+                    p = bep.pos
+                }
+                let fname: Str = declarator_name(dp.decl)
+                fields.push(CStructField {
+                    name: fname, specifiers: sp.specs,
+                    declarator: dp.decl, bit_width: width
+                })
+            }
+            if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+                p = p + 1
+                continue
+            }
+            fcont = 0 as I64
+        }
+        let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after struct member")
+        let Ok(np) = semi else {
+            let Err(e) = semi else { return Err(c_parse_err("internal: field semi", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = np
+    }
+    let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RBrace, "expected '}' to close struct body")
+    let Ok(np) = rb else {
+        let Err(e) = rb else { return Err(c_parse_err("internal: struct body rb", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    return Ok(CParsedFields { fields: fields, pos: np })
+}
+
+// Extract a constant integer value from an expression built by the parser.
+// Currently only handles bare IntLit; more folding (unary neg, arithmetic)
+// is the type checker's job (phase 5). Negative bit-widths surface as
+// diagnostics there.
+func const_expr_to_i64(e: Shared[CExpr]) -> I64 {
+    when e.get() {
+        IntLit(v, _) => return v as I64,
+        _ => return -1 as I64
+    }
+}
+
+// ============================================================================
+// Enum body (item 2.4)
+// ============================================================================
+
+func cp_parse_enum_body(parser: CParser, pos: I64) -> Outcome[CParsedVariants, CParseError] {
+    let lb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos, CPunct::LBrace, "expected '{' in enum definition")
+    let Ok(p0) = lb else {
+        let Err(e) = lb else { return Err(c_parse_err("internal: enum lb", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var variants: List[CEnumVariantDef] = List[CEnumVariantDef]::new(0 as I64)
+    var p: I64 = p0
+    loop (not cp_check_punct(parser.tokens, p, CPunct::RBrace)) {
+        if cp_is_eof(parser.tokens, p) {
+            return Err(c_parse_err("unexpected EOF in enum", cp_peek(parser.tokens, p)))
+        }
+        let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, p, "expected enum variant name")
+        let Ok(nmp) = nm else {
+            let Err(e) = nm else { return Err(c_parse_err("internal: enum name", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = nmp.pos
+        var value_opt: Maybe[Shared[CExpr]] = Nothing
+        if cp_check_punct(parser.tokens, p, CPunct::Assign) {
+            let ve: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p + 1)
+            let Ok(vep) = ve else {
+                let Err(e) = ve else { return Err(c_parse_err("internal: enum value", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            value_opt = Just(vep.expr.duplicate())
+            p = vep.pos
+        }
+        variants.push(CEnumVariantDef { name: nmp.name.duplicate(), value: value_opt })
+        if cp_check_punct(parser.tokens, p, CPunct::Comma) {
+            p = p + 1
+            continue
+        }
+        break
+    }
+    let rb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RBrace, "expected '}' to close enum")
+    let Ok(np) = rb else {
+        let Err(e) = rb else { return Err(c_parse_err("internal: enum rb", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    return Ok(CParsedVariants { variants: variants, pos: np })
+}
+
+// ============================================================================
+// Statement parsing (phase 23b Phase 4)
+// ============================================================================
+//
+// Entry point: `cp_parse_compound_stmt` consumes a `{ ... }` block and
+// returns `CStmt::Compound(List[CBlockItem])`. Each item inside a compound
+// statement is either a declaration (C99 allows mixed decls+stmts anywhere
+// in a block) or a statement. A single statement is parsed by
+// `cp_parse_stmt`, which dispatches on the current token to the
+// appropriate sub-parser (if / for / while / do / switch / goto / label /
+// break / continue / return / `{...}` / `_Static_assert` / expression-stmt).
+
+pub func cp_parse_compound_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    let lb: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos, CPunct::LBrace, "expected '{' for compound statement")
+    let Ok(p0) = lb else {
+        let Err(e) = lb else { return Err(c_parse_err("internal: block lb", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    var p: I64 = p0
+    var items: List[CBlockItem] = List[CBlockItem]::new(0 as I64)
+    let n: I64 = parser.tokens.len() as I64
+    loop (p < n) {
+        if cp_check_punct(parser.tokens, p, CPunct::RBrace) {
+            p = p + 1
+            break
+        }
+        if cp_is_eof(parser.tokens, p) {
+            return Err(c_parse_err("unexpected EOF in compound statement", cp_peek(parser.tokens, p)))
+        }
+        // Declaration? A block-item is a declaration when the leading tokens
+        // are declaration specifiers (`static int x;`) OR a typedef-name
+        // followed by a declarator. Fall through to statement parsing if
+        // neither matches.
+        if cp_at_decl_specifier(parser, p) and not label_ahead(parser, p) {
+            let dres: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, p)
+            let Ok(dp) = dres else {
+                let Err(e) = dres else { return Err(c_parse_err("internal: block decl", cp_peek(parser.tokens, p))) }
+                return Err(e)
+            }
+            var i: I64 = 0 as I64
+            let m: I64 = dp.decls.len() as I64
+            loop (i < m) {
+                // `.duplicate()` so both `dp.decls` (drops at end of arm)
+                // and the new CBlockItem::DeclItem own independent refs.
+                items.push(CBlockItem::DeclItem(dp.decls.get(i).duplicate()))
+                i = i + 1
+            }
+            p = dp.pos
+            continue
+        }
+        let sres: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, p)
+        let Ok(sp) = sres else {
+            let Err(e) = sres else { return Err(c_parse_err("internal: block stmt", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        items.push(CBlockItem::StmtItem(sp.stmt.duplicate()))
+        p = sp.pos
+    }
+    let body: Shared[CStmt] = Shared[CStmt]::new(CStmt::Compound(items))
+    return Ok(CParsedStmt { stmt: body, pos: p })
+}
+
+// A label statement looks like `ident :` — disambiguate from a
+// declaration whose first token is an identifier (typedef-name). Peek one
+// extra token to see if a `:` follows the identifier.
+func label_ahead(parser: CParser, pos: I64) -> Bool {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        Ident => {
+            let nxt: CToken = cp_peek_at(parser.tokens, pos, 1 as I64)
+            when nxt.kind {
+                Punct(op) => return (op as I64) == (CPunct::Colon as I64),
+                _ => return false
+            }
+        },
+        _ => return false
+    }
+}
+
+pub func cp_parse_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    let tok: CToken = cp_peek(parser.tokens, pos)
+    when tok.kind {
+        Punct(op) => {
+            let code: I64 = op as I64
+            if code == (CPunct::Semi as I64) {
+                // Empty statement.
+                let es: Shared[CStmt] = Shared[CStmt]::new(CStmt::Empty)
+                return Ok(CParsedStmt { stmt: es, pos: pos + 1 })
+            }
+            if code == (CPunct::LBrace as I64) {
+                return cp_parse_compound_stmt(parser, pos)
+            }
+            return cp_parse_expr_stmt(parser, pos)
+        },
+        Keyword(k) => {
+            let kc: I64 = k as I64
+            if kc == (CKeyword::If as I64) { return cp_parse_if(parser, pos) }
+            if kc == (CKeyword::For as I64) { return cp_parse_for(parser, pos) }
+            if kc == (CKeyword::While as I64) { return cp_parse_while(parser, pos) }
+            if kc == (CKeyword::Do as I64) { return cp_parse_do_while(parser, pos) }
+            if kc == (CKeyword::Switch as I64) { return cp_parse_switch(parser, pos) }
+            if kc == (CKeyword::Case as I64) { return cp_parse_case(parser, pos) }
+            if kc == (CKeyword::Default as I64) { return cp_parse_default(parser, pos) }
+            if kc == (CKeyword::Break as I64) {
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Break)
+                let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::Semi, "expected ';' after break")
+                let Ok(np) = semi else {
+                    let Err(e) = semi else { return Err(c_parse_err("internal: break semi", tok)) }
+                    return Err(e)
+                }
+                return Ok(CParsedStmt { stmt: s, pos: np })
+            }
+            if kc == (CKeyword::Continue as I64) {
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Continue)
+                let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::Semi, "expected ';' after continue")
+                let Ok(np) = semi else {
+                    let Err(e) = semi else { return Err(c_parse_err("internal: continue semi", tok)) }
+                    return Err(e)
+                }
+                return Ok(CParsedStmt { stmt: s, pos: np })
+            }
+            if kc == (CKeyword::Return as I64) { return cp_parse_return(parser, pos) }
+            if kc == (CKeyword::Goto as I64) { return cp_parse_goto(parser, pos) }
+            if kc == (CKeyword::KwStaticAssert as I64) { return cp_parse_static_assert_stmt(parser, pos) }
+            // No other keyword can start a statement on its own — fall
+            // through to expression statement (which may fail cleanly).
+            return cp_parse_expr_stmt(parser, pos)
+        },
+        Ident => {
+            // Label? `ident :` introduces a labelled statement.
+            let nxt: CToken = cp_peek_at(parser.tokens, pos, 1 as I64)
+            var is_label: I64 = 0 as I64
+            when nxt.kind {
+                Punct(op) => {
+                    if (op as I64) == (CPunct::Colon as I64) { is_label = 1 as I64 }
+                },
+                _ => {}
+            }
+            if is_label == 1 as I64 {
+                let name: Str = tok.text.duplicate()
+                let body_res: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, pos + 2)
+                let Ok(bp) = body_res else {
+                    let Err(e) = body_res else { return Err(c_parse_err("internal: label body", tok)) }
+                    return Err(e)
+                }
+                let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Label(name, bp.stmt.duplicate()))
+                return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+            }
+            return cp_parse_expr_stmt(parser, pos)
+        },
+        _ => return cp_parse_expr_stmt(parser, pos)
+    }
+}
+
+func cp_parse_expr_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    if cp_check_punct(parser.tokens, pos, CPunct::Semi) {
+        let es: Shared[CStmt] = Shared[CStmt]::new(CStmt::Empty)
+        return Ok(CParsedStmt { stmt: es, pos: pos + 1 })
+    }
+    let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, pos)
+    let Ok(ep) = er else {
+        let Err(e) = er else { return Err(c_parse_err("internal: expr-stmt", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, ep.pos, CPunct::Semi, "expected ';' after expression")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: expr-stmt semi", cp_peek(parser.tokens, pos))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Expr(ep.expr.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: np })
+}
+
+func cp_parse_if(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after 'if'")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: if lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let cond: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, ap)
+    let Ok(cp_c) = cond else {
+        let Err(e) = cond else { return Err(c_parse_err("internal: if cond", cp_peek(parser.tokens, ap))) }
+        return Err(e)
+    }
+    p = cp_c.pos
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' after if condition")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: if rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let then_res: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_rp)
+    let Ok(then_sp) = then_res else {
+        let Err(e) = then_res else { return Err(c_parse_err("internal: if then", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    p = then_sp.pos
+    var else_opt: Maybe[Shared[CStmt]] = Nothing
+    if cp_check_kw(parser.tokens, p, CKeyword::Else) {
+        let else_res: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, p + 1)
+        let Ok(else_sp) = else_res else {
+            let Err(e) = else_res else { return Err(c_parse_err("internal: if else", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        else_opt = Just(else_sp.stmt.duplicate())
+        p = else_sp.pos
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::If(cp_c.expr.duplicate(), then_sp.stmt.duplicate(), else_opt))
+    return Ok(CParsedStmt { stmt: s, pos: p })
+}
+
+func cp_parse_while(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after 'while'")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: while lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let cond: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, ap)
+    let Ok(cp_c) = cond else {
+        let Err(e) = cond else { return Err(c_parse_err("internal: while cond", cp_peek(parser.tokens, ap))) }
+        return Err(e)
+    }
+    p = cp_c.pos
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' after while condition")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: while rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_rp)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: while body", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::While(cp_c.expr.duplicate(), bp.stmt.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+}
+
+func cp_parse_do_while(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, p)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: do body", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = bp.pos
+    if not cp_check_kw(parser.tokens, p, CKeyword::While) {
+        return Err(c_parse_err("expected 'while' after do-body", cp_peek(parser.tokens, p)))
+    }
+    p = p + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after 'while'")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: do while lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let cond: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, ap)
+    let Ok(cp_c) = cond else {
+        let Err(e) = cond else { return Err(c_parse_err("internal: do while cond", cp_peek(parser.tokens, ap))) }
+        return Err(e)
+    }
+    p = cp_c.pos
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' after do-while condition")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: do while rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, after_rp, CPunct::Semi, "expected ';' after do-while")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: do while semi", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::DoWhile(bp.stmt.duplicate(), cp_c.expr.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: np })
+}
+
+func cp_parse_for(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after 'for'")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: for lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = ap
+    // Init clause: either a declaration (C99) or an expression-statement
+    // (or empty). The for-init lexical scope belongs to the for loop.
+    var init_opt: Maybe[Shared[CBlockItem]] = Nothing
+    if cp_check_punct(parser.tokens, p, CPunct::Semi) {
+        p = p + 1
+    } else if cp_at_decl_specifier(parser, p) {
+        let dres: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, p)
+        let Ok(dp) = dres else {
+            let Err(e) = dres else { return Err(c_parse_err("internal: for init-decl", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = dp.pos
+        // One declaration may expand to multiple CDecls; the loop lowers them
+        // as a compound block-item in the MIR pass, so we only keep the first
+        // for structural use. Store them all via DeclItem chain by wrapping
+        // in a compound-like list held on the CStmt::For CBlockItem slot.
+        if dp.decls.len() > 0 as I64 {
+            // `dp.decls` is `List[Shared[CDecl]]`. `.get(0).duplicate()`
+            // returns a refcount-incremented `Shared[CDecl]` so the
+            // consumer (init_opt) and the bucket entry both own
+            // independent strong references — no into_raw/from_raw
+            // workaround needed.
+            let first: Shared[CDecl] = dp.decls.get(0).duplicate()
+            init_opt = Just(Shared[CBlockItem]::new(CBlockItem::DeclItem(first)))
+        }
+    } else {
+        let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
+        let Ok(ep) = er else {
+            let Err(e) = er else { return Err(c_parse_err("internal: for init-expr", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, ep.pos, CPunct::Semi, "expected ';' after for-init expression")
+        let Ok(np) = semi else {
+            let Err(e) = semi else { return Err(c_parse_err("internal: for init-expr semi", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        p = np
+        let stmt_val: CStmt = CStmt::Expr(ep.expr.duplicate())
+        let stmt_heap: Shared[CStmt] = Shared[CStmt]::new(stmt_val)
+        init_opt = Just(Shared[CBlockItem]::new(CBlockItem::StmtItem(stmt_heap)))
+    }
+    // Condition (optional).
+    var cond_opt: Maybe[Shared[CExpr]] = Nothing
+    if not cp_check_punct(parser.tokens, p, CPunct::Semi) {
+        let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
+        let Ok(ep) = er else {
+            let Err(e) = er else { return Err(c_parse_err("internal: for cond", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        cond_opt = Just(ep.expr.duplicate())
+        p = ep.pos
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after for-cond")
+    let Ok(after_cond_semi) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: for cond semi", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_cond_semi
+    // Update (optional).
+    var update_opt: Maybe[Shared[CExpr]] = Nothing
+    if not cp_check_punct(parser.tokens, p, CPunct::RParen) {
+        let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
+        let Ok(ep) = er else {
+            let Err(e) = er else { return Err(c_parse_err("internal: for update", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        update_opt = Just(ep.expr.duplicate())
+        p = ep.pos
+    }
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close for header")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: for rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_rp)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: for body", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::For(init_opt, cond_opt, update_opt, bp.stmt.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+}
+
+func cp_parse_switch(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after 'switch'")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: switch lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let ctrl: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, ap)
+    let Ok(cp_c) = ctrl else {
+        let Err(e) = ctrl else { return Err(c_parse_err("internal: switch ctrl", cp_peek(parser.tokens, ap))) }
+        return Err(e)
+    }
+    p = cp_c.pos
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' after switch expression")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: switch rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_rp)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: switch body", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Switch(cp_c.expr.duplicate(), bp.stmt.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+}
+
+func cp_parse_case(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let val: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+    let Ok(vp) = val else {
+        let Err(e) = val else { return Err(c_parse_err("internal: case val", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = vp.pos
+    let colon: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Colon, "expected ':' after case value")
+    let Ok(after_colon) = colon else {
+        let Err(e) = colon else { return Err(c_parse_err("internal: case colon", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_colon)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: case body", cp_peek(parser.tokens, after_colon))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Case(vp.expr.duplicate(), bp.stmt.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+}
+
+func cp_parse_default(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    let colon: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, pos + 1, CPunct::Colon, "expected ':' after default")
+    let Ok(after_colon) = colon else {
+        let Err(e) = colon else { return Err(c_parse_err("internal: default colon", cp_peek(parser.tokens, pos + 1))) }
+        return Err(e)
+    }
+    let body: Outcome[CParsedStmt, CParseError] = cp_parse_stmt(parser, after_colon)
+    let Ok(bp) = body else {
+        let Err(e) = body else { return Err(c_parse_err("internal: default body", cp_peek(parser.tokens, after_colon))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Default(bp.stmt.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: bp.pos })
+}
+
+func cp_parse_return(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    var val_opt: Maybe[Shared[CExpr]] = Nothing
+    if not cp_check_punct(parser.tokens, p, CPunct::Semi) {
+        let er: Outcome[CParsedExpr, CParseError] = cp_parse_expr(parser, p)
+        let Ok(ep) = er else {
+            let Err(e) = er else { return Err(c_parse_err("internal: return val", cp_peek(parser.tokens, p))) }
+            return Err(e)
+        }
+        val_opt = Just(ep.expr.duplicate())
+        p = ep.pos
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Semi, "expected ';' after return")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: return semi", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Return(val_opt))
+    return Ok(CParsedStmt { stmt: s, pos: np })
+}
+
+func cp_parse_goto(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    let nm: Outcome[CParsedName, CParseError] = cp_expect_ident(parser.tokens, pos + 1, "expected label name after 'goto'")
+    let Ok(nmp) = nm else {
+        let Err(e) = nm else { return Err(c_parse_err("internal: goto name", cp_peek(parser.tokens, pos + 1))) }
+        return Err(e)
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, nmp.pos, CPunct::Semi, "expected ';' after goto")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: goto semi", cp_peek(parser.tokens, nmp.pos))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::Goto(nmp.name.duplicate()))
+    return Ok(CParsedStmt { stmt: s, pos: np })
+}
+
+// `_Static_assert ( constant-expression , string-literal ) ;` (C11 §6.7.10).
+// At statement position we wrap it in a CStmt variant; at file scope it
+// would be a CDecl::StaticAssert — both carry the same shape.
+func cp_parse_static_assert_stmt(parser: CParser, pos: I64) -> Outcome[CParsedStmt, CParseError] {
+    var p: I64 = pos + 1
+    let lp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::LParen, "expected '(' after _Static_assert")
+    let Ok(ap) = lp else {
+        let Err(e) = lp else { return Err(c_parse_err("internal: sa lp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = ap
+    let cond: Outcome[CParsedExpr, CParseError] = cp_parse_assign_expr(parser, p)
+    let Ok(cp_c) = cond else {
+        let Err(e) = cond else { return Err(c_parse_err("internal: sa cond", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = cp_c.pos
+    let comma: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::Comma, "expected ',' after _Static_assert condition")
+    let Ok(after_comma) = comma else {
+        let Err(e) = comma else { return Err(c_parse_err("internal: sa comma", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    p = after_comma
+    let msg_tok: CToken = cp_peek(parser.tokens, p)
+    var msg: Str = ""
+    when msg_tok.kind {
+        StringLit(_) => { msg = msg_tok.text.duplicate(); p = p + 1 },
+        _ => return Err(c_parse_err("expected string literal as _Static_assert message", msg_tok))
+    }
+    let rp: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, p, CPunct::RParen, "expected ')' to close _Static_assert")
+    let Ok(after_rp) = rp else {
+        let Err(e) = rp else { return Err(c_parse_err("internal: sa rp", cp_peek(parser.tokens, p))) }
+        return Err(e)
+    }
+    let semi: Outcome[I64, CParseError] = cp_expect_punct(parser.tokens, after_rp, CPunct::Semi, "expected ';' after _Static_assert")
+    let Ok(np) = semi else {
+        let Err(e) = semi else { return Err(c_parse_err("internal: sa semi", cp_peek(parser.tokens, after_rp))) }
+        return Err(e)
+    }
+    let s: Shared[CStmt] = Shared[CStmt]::new(CStmt::StaticAssert(cp_c.expr.duplicate(), msg))
+    return Ok(CParsedStmt { stmt: s, pos: np })
+}

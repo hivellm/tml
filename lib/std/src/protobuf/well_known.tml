@@ -1,0 +1,163 @@
+/// Protobuf well-known types (google.protobuf.*).
+///
+/// Implements the wire-compatible subset of the standard well-known types:
+///   - Timestamp (seconds + nanos)
+///   - Duration  (seconds + nanos)
+///   - Any       (type_url + value)
+///
+/// These types have fixed field numbers per the `google.protobuf` package and
+/// are fully interoperable with protobuf runtimes in other languages.
+
+use std::protobuf::writer::ProtoWriter
+use std::protobuf::reader::ProtoReader
+use std::time::datetime::DateTime
+
+// ============================================================================
+// Timestamp
+// ============================================================================
+
+/// `google.protobuf.Timestamp` — wall-clock time measured as seconds since the
+/// Unix epoch, plus a non-negative nanosecond offset in `[0, 999_999_999]`.
+pub type Timestamp {
+    seconds: I64,
+    nanos: I32
+}
+
+impl Timestamp {
+    /// Creates a timestamp from Unix seconds (nanos = 0).
+    pub func from_unix(seconds: I64) -> Timestamp {
+        Timestamp { seconds: seconds, nanos: 0 as I32 }
+    }
+
+    /// Creates a timestamp from seconds and nanoseconds.
+    pub func from_parts(seconds: I64, nanos: I32) -> Timestamp {
+        Timestamp { seconds: seconds, nanos: nanos }
+    }
+
+    /// Current Unix time as a Timestamp (nanosecond precision is not provided).
+    pub func now() -> Timestamp {
+        let dt = DateTime::now()
+        let s: I64 = dt.timestamp()
+        return Timestamp { seconds: s, nanos: 0 as I32 }
+    }
+
+    /// Encodes this timestamp: seconds=field 1 (int64), nanos=field 2 (int32).
+    pub func encode(this, writer: mut ref ProtoWriter) {
+        if this.seconds != 0 {
+            writer.write_field_int64(1, this.seconds)
+        }
+        if this.nanos != (0 as I32) {
+            writer.write_field_int32(2, this.nanos)
+        }
+    }
+
+    /// Decodes a timestamp from a protobuf reader.
+    pub func decode(reader: mut ref ProtoReader) -> Outcome[Timestamp, Str] {
+        var seconds: I64 = 0
+        var nanos: I32 = 0 as I32
+        loop (reader.has_more()) {
+            let tag = when reader.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                seconds = when reader.read_varint() { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v = when reader.read_varint() { Ok(v) => v, Err(e) => { return Err(e) } }
+                nanos = v as I32
+            } else {
+                let sk = reader.skip_field(tag.wire_type)
+                when sk { Ok(_) => {}, Err(e) => { return Err(e) } }
+            }
+        }
+        return Ok(Timestamp { seconds: seconds, nanos: nanos })
+    }
+}
+
+// ============================================================================
+// Duration
+// ============================================================================
+
+/// `google.protobuf.Duration` — signed, fixed-length span of time (seconds +
+/// nanos). Wire-compatible with Timestamp (identical field layout).
+pub type Duration {
+    seconds: I64,
+    nanos: I32
+}
+
+impl Duration {
+    pub func from_seconds(seconds: I64) -> Duration {
+        Duration { seconds: seconds, nanos: 0 as I32 }
+    }
+
+    pub func from_parts(seconds: I64, nanos: I32) -> Duration {
+        Duration { seconds: seconds, nanos: nanos }
+    }
+
+    pub func encode(this, writer: mut ref ProtoWriter) {
+        if this.seconds != 0 {
+            writer.write_field_int64(1, this.seconds)
+        }
+        if this.nanos != (0 as I32) {
+            writer.write_field_int32(2, this.nanos)
+        }
+    }
+
+    pub func decode(reader: mut ref ProtoReader) -> Outcome[Duration, Str] {
+        var seconds: I64 = 0
+        var nanos: I32 = 0 as I32
+        loop (reader.has_more()) {
+            let tag = when reader.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                seconds = when reader.read_varint() { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v = when reader.read_varint() { Ok(v) => v, Err(e) => { return Err(e) } }
+                nanos = v as I32
+            } else {
+                let sk = reader.skip_field(tag.wire_type)
+                when sk { Ok(_) => {}, Err(e) => { return Err(e) } }
+            }
+        }
+        return Ok(Duration { seconds: seconds, nanos: nanos })
+    }
+}
+
+// ============================================================================
+// Any
+// ============================================================================
+
+/// `google.protobuf.Any` — a container that holds an arbitrary message encoded
+/// as `bytes`, together with a type URL that identifies its schema.
+pub type Any {
+    type_url: Str,
+    value: Str
+}
+
+impl Any {
+    pub func new(type_url: Str, value: Str) -> Any {
+        Any { type_url: type_url, value: value }
+    }
+
+    pub func encode(this, writer: mut ref ProtoWriter) {
+        if this.type_url != "" {
+            writer.write_field_string(1, this.type_url)
+        }
+        if this.value != "" {
+            writer.write_field_bytes(2, this.value)
+        }
+    }
+
+    pub func decode(reader: mut ref ProtoReader) -> Outcome[Any, Str] {
+        var type_url: Str = ""
+        var value: Str = ""
+        loop (reader.has_more()) {
+            let tag = when reader.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 2 {
+                type_url = when reader.read_string() { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 2 {
+                value = when reader.read_bytes() { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let sk = reader.skip_field(tag.wire_type)
+                when sk { Ok(_) => {}, Err(e) => { return Err(e) } }
+            }
+        }
+        return Ok(Any { type_url: type_url, value: value })
+    }
+}

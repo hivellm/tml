@@ -1,0 +1,60 @@
+//! Summary tests — phase 5.4.
+
+use test::*
+use coverage::types::*
+use coverage::summary::{summarize, pct}
+use std::collections::List
+
+@test("pct — total=0 returns 0.0")
+func test_pct_zero() {
+    assert_true(pct(0, 0) == 0.0, "0/0 -> 0.0")
+}
+
+@test("pct — 50%")
+func test_pct_half() {
+    let p = pct(5, 10)
+    assert_true(p == 50.0, "5/10 -> 50.0")
+}
+
+@test("summarize — no files")
+func test_summary_empty() {
+    let r = CoverageReport {
+        files: List[FileCoverage]::new(),
+        source_roots: List[Str]::new(),
+        tool: "", version: "", generated_at: 0,
+    }
+    let s = summarize(r)
+    assert_eq(s.total_lines, 0, "no lines")
+    assert_true(s.pct_lines == 0.0, "0%")
+}
+
+@test("summarize — basic counts")
+func test_summary_counts() {
+    let lines: List[LineHit] = List[LineHit]::new()
+    lines.push(LineHit { line: 1, count: 5, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 2, count: 0, branch_count: 0, branch_taken: 0 })
+    lines.push(LineHit { line: 3, count: 1, branch_count: 0, branch_taken: 0 })
+
+    let brs: List[BranchHit] = List[BranchHit]::new()
+    brs.push(BranchHit { line: 1, block_id: 0, branch_id: 0, hit_count: 2 })
+    brs.push(BranchHit { line: 1, block_id: 0, branch_id: 1, hit_count: 0 })
+
+    let fns: List[FuncHit] = List[FuncHit]::new()
+    fns.push(FuncHit { name: "a", start_line: 1, hit_count: 10 })
+    fns.push(FuncHit { name: "b", start_line: 5, hit_count: 0 })
+
+    let files: List[FileCoverage] = List[FileCoverage]::new()
+    files.push(FileCoverage { path: "f", lines: lines, functions: fns, branches: brs })
+
+    let r = CoverageReport {
+        files: files, source_roots: List[Str]::new(),
+        tool: "", version: "", generated_at: 0,
+    }
+    let s = summarize(r)
+    assert_eq(s.total_lines, 3, "3 lines")
+    assert_eq(s.covered_lines, 2, "2 covered (line 2 is zero)")
+    assert_eq(s.total_branches, 2, "2 branches")
+    assert_eq(s.covered_branches, 1, "1 covered branch")
+    assert_eq(s.total_functions, 2, "2 funcs")
+    assert_eq(s.covered_functions, 1, "1 covered func")
+}

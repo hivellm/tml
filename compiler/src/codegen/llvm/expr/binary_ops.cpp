@@ -690,6 +690,8 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
     std::string int_type = "i32";
     if (is_bool) {
         int_type = "i1";
+    } else if (left_type == "i128" || right_type == "i128") {
+        int_type = "i128";
     } else if (left_type == "i64" || right_type == "i64") {
         int_type = "i64";
     } else if (is_i16) {
@@ -751,17 +753,21 @@ auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
                       ptr_operand + ", i64 " + idx_operand);
             last_expr_type_ = "ptr";
         } else if (is_string) {
-            // String concatenation using str_concat_opt (O(1) amortized)
-            emit_line("  " + result + " = call ptr @str_concat_opt(ptr " + left + ", ptr " + right +
+            // String concatenation using `str_append` (phase1i) — amortized
+            // O(1) per append. When the left operand is a heap allocation
+            // with slack, the append lands in place (no realloc). When it
+            // must grow, we realloc with exponential doubling. The caller
+            // never frees the left operand after this call (it's been
+            // consumed), so aliasing the input as the result is safe.
+            emit_line("  " + result + " = call ptr @str_append(ptr " + left + ", ptr " + right +
                       ")");
-            // Free consumed operands that are heap-allocated Str temporaries.
-            // This prevents leaks in chains like "0x" + to_hex_str(x) where the
-            // to_hex_str result is consumed by concat but never freed.
-            // Literals and identifiers return false — safe to skip.
-            // Also remove freed operands from pending_str_temps_ to avoid double-free
-            // (gen_expr() for sub-expressions may have already tracked them).
+            // Free the right operand if it's a heap temporary we own; the
+            // left operand's buffer is now owned by the result (possibly
+            // the same pointer when in-place succeeds).
             if (is_heap_str_producer(*bin.left)) {
-                emit_line("  call void @tml_str_free(ptr " + left + ")");
+                // Left is consumed by str_append — just drop it from the
+                // pending-free list without emitting a tml_str_free (doing
+                // so would double-free in the in-place path).
                 auto it = std::find(pending_str_temps_.begin(), pending_str_temps_.end(), left);
                 if (it != pending_str_temps_.end())
                     pending_str_temps_.erase(it);

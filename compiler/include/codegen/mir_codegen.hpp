@@ -95,10 +95,51 @@ private:
     IREmitter emitter_{output_, temp_counter_}; // Typed IR emission helper
     int spill_counter_ = 0;                     // Counter for struct-to-ptr spill allocas
     int bounds_check_counter_ = 0;              // Dedicated counter for bc.panic.N / bc.ok.N labels
+    int loop_metadata_counter_ = 9000;          // Metadata node IDs for !llvm.loop vectorization
+    std::vector<std::string> loop_metadata_;    // Deferred !N = ... metadata lines emitted at end
 
     // Current function context
     std::string current_func_;
     std::string current_func_ret_type_; // LLVM return type of the current function
+
+    // NRVO (Named Return Value Optimization) tracking.
+    // When a sret-returning function calls another sret-returning function and
+    // returns that result directly, we can pass %sret through to the callee
+    // instead of creating an intermediate alloca+load+store sequence.
+    bool current_func_has_sret_ = false;          // true if current function uses sret convention
+    std::string current_func_sret_param_;         // LLVM register of sret param, e.g. "%sret"
+    mir::ValueId current_func_sret_param_id_ = mir::INVALID_VALUE; // value_id of sret param
+    // Set of call-result ValueIds that flow directly to the sret return slot (NRVO candidates)
+    std::unordered_set<mir::ValueId> nrvo_call_results_;
+
+    // phase1k — Str accumulator pattern detection.
+    //
+    // For each `var s: Str = ...; s = s + expr` accumulator in a loop,
+    // we emit a shadow i64 length alloca (LLVM SROA promotes it to a
+    // phi node) so the inner str_append can read/write the cached
+    // length from an SSA register instead of loading from the heap
+    // header — the key optimization that closes the gap vs Rust's
+    // `String::push_str` (which keeps len in a struct field / SSA).
+    //
+    // `str_accumulator_allocas_`: maps the alloca ValueId that holds
+    // the Str var to the LLVM register name of its shadow i64 alloca
+    // (e.g. `%str_len_shadow_42`). Populated by a pre-scan of each
+    // function's MIR before emission.
+    //
+    // `str_accumulator_adds_`: result ValueIds of BinaryInst(Add) nodes
+    // that matched the accumulator pattern. When `emit_binary_inst`
+    // sees these, it emits an SSA-tracked str_append path instead of
+    // the generic call.
+    std::unordered_map<mir::ValueId, std::string> str_accumulator_allocas_;
+    std::unordered_set<mir::ValueId> str_accumulator_adds_;
+    // Per-add mapping: result value ID → alloca ID whose shadow-len
+    // this add updates. Needed to find the shadow register for the
+    // store on the Add's hot path.
+    std::unordered_map<mir::ValueId, mir::ValueId> str_accumulator_add_to_alloca_;
+    // IR snippet emitted at the start of each function's entry block —
+    // declares the shadow alloca(s). Prepared by emit_function(),
+    // consumed by emit_block() once per function.
+    std::string str_shadow_entry_ir_;
 
     // Profiler entry IR snippet to inject at the start of the entry block.
     // Prepared by emit_function(), consumed (and cleared) by emit_block() on first call.
@@ -287,6 +328,8 @@ private:
     // exactly the same LLVM IR as the original if/else chain it was extracted from.
     void emit_intrinsic_ptr_read(const mir::CallInst& i, const std::string& result_reg,
                                  const mir::InstructionData& inst);
+    void emit_intrinsic_ptr_read_clone(const mir::CallInst& i, const std::string& result_reg,
+                                       const mir::InstructionData& inst);
     void emit_intrinsic_ptr_write(const mir::CallInst& i);
     void emit_intrinsic_ptr_read_volatile(const mir::CallInst& i, const std::string& result_reg,
                                           const mir::InstructionData& inst);

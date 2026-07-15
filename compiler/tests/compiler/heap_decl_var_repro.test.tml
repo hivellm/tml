@@ -1,0 +1,47 @@
+//! Regression test for `phase0x_heap-decl-codegen-crash`.
+//!
+//! Minimum reproducer for the codegen crash that blocks
+//! `cp_parse_translation_unit` on `int x;`. After bisect (steps A–S),
+//! the smallest shape that reliably crashes is:
+//!
+//!   - outer struct with 2× Str + I64 + nested enum(Str)
+//!   - outer enum wrapping the struct as a variant payload
+//!   - `Heap[OuterEnum]::new(...)` push into a `List`
+//!
+//! Reducing any one of those (drop a Str, drop the I64, drop the nested
+//! enum, skip the Heap wrap, skip the List push, or just construct
+//! locally without push) makes the test pass.
+//!
+//! Filed bisect notes:
+//!   - 5× Str alone (R): PASS — size isn't the trigger
+//!   - { Str, InnerEnum, I64 } (S): PASS — needs 2 outer Strs
+//!   - { Str, Str, I64 } no inner (O): PASS — needs the inner enum
+//!   - { Str, InnerEnum, Str } no I64 (M): PASS — needs the I64
+//!   - Local construct without push (I) / Heap-only no list (J): PASS
+
+use test::{assert, assert_eq}
+use core::alloc::heap::Heap
+use std::collections::list::List
+
+pub enum InnerWithStr { A(Str), B }
+
+pub type MinVarDecl {
+    name: Str,
+    inner: InnerWithStr,
+    file: Str,
+    line: I64
+}
+
+pub enum MinDecl {
+    Var(MinVarDecl),
+    Other(Str)
+}
+
+@test func test_heap_decl_var_min_repro() {
+    let decls: List[Heap[MinDecl]] = List[Heap[MinDecl]]::new(0 as I64)
+    let vd: MinVarDecl = MinVarDecl {
+        name: "x", inner: InnerWithStr::A("y"), file: "t.c", line: 1
+    }
+    decls.push(Heap[MinDecl]::new(MinDecl::Var(vd)))
+    assert_eq(decls.len() as I32, 1)
+}

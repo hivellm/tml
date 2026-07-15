@@ -92,13 +92,18 @@ void LLVMIRGen::init_runtime_catalog() {
     add("printf", "declare dso_local i32 @printf(ptr, ...)");
     add("puts", "declare dso_local i32 @puts(ptr)");
     add("putchar", "declare dso_local i32 @putchar(i32)");
-    add("malloc", "declare dso_local ptr @malloc(i64)");
-    add("free", "declare dso_local void @free(ptr)");
+    add("malloc", "declare dso_local noalias ptr @malloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
+    add("free", "declare dso_local void @free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
     add("tml_str_free", "declare dso_local void @tml_str_free(ptr)");
     add("exit", "declare dso_local void @exit(i32) noreturn");
-    add("strlen", "declare dso_local i64 @strlen(ptr)");
-    add("strcmp", "declare dso_local i32 @strcmp(ptr, ptr)");
-    add("memcmp", "declare dso_local i32 @memcmp(ptr, ptr, i64)");
+    // strlen/strcmp/memcmp carry the attribute set LLVM's SimplifyLibCalls
+    // uses to recognize them as canonical libc functions. `readonly` +
+    // `nounwind` + `willreturn` is enough for the optimizer to constant-
+    // fold `strlen` of a compile-time literal (phase1h) and keeps
+    // backward compatibility with older LLVM attribute syntax.
+    add("strlen", "declare dso_local i64 @strlen(ptr) readonly nounwind willreturn");
+    add("strcmp", "declare dso_local i32 @strcmp(ptr, ptr) readonly nounwind willreturn");
+    add("memcmp", "declare dso_local i32 @memcmp(ptr, ptr, i64) readonly nounwind willreturn");
     add("getenv", "declare dso_local ptr @getenv(ptr)");
     add("tml_coverage_write_file", "declare dso_local void @tml_coverage_write_file(ptr)");
 
@@ -171,10 +176,29 @@ void LLVMIRGen::init_runtime_catalog() {
     add("tml_profiler_is_active", "declare dso_local i32 @tml_profiler_is_active()");
 
     // --- Memory functions ---
-    add("mem_alloc", "declare dso_local ptr @mem_alloc(i64)");
-    add("mem_alloc_zeroed", "declare dso_local ptr @mem_alloc_zeroed(i64)");
-    add("mem_realloc", "declare dso_local ptr @mem_realloc(ptr, i64)");
-    add("mem_free", "declare dso_local void @mem_free(ptr)");
+    add("mem_alloc", "declare dso_local noalias ptr @mem_alloc(i64) allocsize(0) allockind(\"alloc,uninitialized\") \"alloc-family\"=\"malloc\"");
+    add("mem_alloc_zeroed", "declare dso_local noalias ptr @mem_alloc_zeroed(i64) allocsize(0) allockind(\"alloc,zeroed\") \"alloc-family\"=\"malloc\"");
+    add("mem_realloc", "declare dso_local noalias ptr @mem_realloc(ptr, i64) allocsize(1) allockind(\"realloc\") \"alloc-family\"=\"malloc\"");
+    add("mem_free", "declare dso_local void @mem_free(ptr) nounwind allockind(\"free\") \"alloc-family\"=\"malloc\"");
+    // mem_usable_size: wraps `_msize` (Windows) / `malloc_usable_size` (glibc)
+    // / `malloc_size` (macOS). Guarded against non-heap pointers — returns 0
+    // for `.rdata` literals. Used by `str_append` (phase1i) to amortize
+    // repeated string concatenation to O(1) per append.
+    add("mem_usable_size", "declare dso_local i64 @mem_usable_size(ptr) readonly nounwind willreturn");
+
+    // phase1k length-prefixed Str buffers. Heap strings carry a 16-byte
+    // header `[cap:i64 | len:i64]` at offset -16 so `Str.len()` is O(1)
+    // and `str_append` skips the O(n) `strlen(accumulator)` that dominated
+    // the phase1i timings. Literals in `.rdata` transparently fall back
+    // to `strlen` via tml_str_len's image-range check.
+    add("tml_str_alloc", "declare dso_local noalias ptr @tml_str_alloc(i64) nounwind");
+    add("tml_str_alloc_len", "declare dso_local noalias ptr @tml_str_alloc_len(i64) nounwind");
+    add("tml_str_alloc_with_cap", "declare dso_local noalias ptr @tml_str_alloc_with_cap(i64, i64) nounwind");
+    add("tml_str_len", "declare dso_local i64 @tml_str_len(ptr) nounwind");
+    add("tml_str_set_len", "declare dso_local void @tml_str_set_len(ptr, i64) nounwind");
+    add("tml_str_cap", "declare dso_local i64 @tml_str_cap(ptr) nounwind");
+    add("tml_str_realloc", "declare dso_local ptr @tml_str_realloc(ptr, i64) nounwind");
+
     add("mem_copy", "declare dso_local void @mem_copy(ptr, ptr, i64)");
     add("mem_move", "declare dso_local void @mem_move(ptr, ptr, i64)");
     add("mem_set", "declare dso_local void @mem_set(ptr, i32, i64)");
@@ -519,6 +543,206 @@ void LLVMIRGen::init_runtime_catalog() {
         "}",
         {"strlen", "mem_alloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
 
+    // str_append — amortized O(1) string append (phase1i).
+    //
+    // Semantics: consumes `%a`, produces a result that may alias `%a`. MIR
+    // codegen emits this for `ptr + ptr` `Add` instructions — the result is
+    // a fresh SSA value, so aliasing with the input is transparent to the
+    // caller. When the input is a heap allocation with enough capacity, we
+    // append in place (single memcpy + NUL store, zero alloc). When the
+    // block must grow, we realloc with exponential doubling so subsequent
+    // appends keep hitting the fast path. Literals (`.rdata`) take a
+    // `fresh` path that allocates with initial slack so the next concat on
+    // the returned buffer starts amortizing.
+    //
+    // Result: `s = s + "x"` in a loop goes from O(n²) (fresh alloc + full
+    // copy per iter) to O(n) total, matching Rust's `String::push_str`.
+    // phase1k — length-prefixed buffers. `tml_str_len` reads the cached
+    // `len` at `ptr[-8]` in O(1) for heap strings (falls back to `strlen`
+    // for literals). `tml_str_cap` drives the in-place / grow / fresh
+    // branch; allocations go through `tml_str_alloc_with_cap` /
+    // `tml_str_realloc` so the returned buffer is always length-prefixed
+    // and subsequent `str_append` calls hit the fast path.
+    add("str_append",
+        "define internal ptr @str_append(ptr %a, ptr %b) alwaysinline {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_a = call i64 @tml_str_len(ptr %a_safe)\n"
+        "  %len_b = call i64 @tml_str_len(ptr %b_safe)\n"
+        "  %total = add i64 %len_a, %len_b\n"
+        "  %cap = call i64 @tml_str_cap(ptr %a_safe)\n"
+        "  %is_heap = icmp ugt i64 %cap, 0\n"
+        "  %fits = icmp uge i64 %cap, %total\n"
+        "  %inplace_ok = and i1 %is_heap, %fits\n"
+        "  br i1 %inplace_ok, label %app_inplace, label %app_check\n"
+        "app_inplace:\n"
+        "  %dst_ip = getelementptr i8, ptr %a_safe, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_ip, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_ip = getelementptr i8, ptr %a_safe, i64 %total\n"
+        "  store i8 0, ptr %end_ip\n"
+        "  call void @tml_str_set_len(ptr %a_safe, i64 %total)\n"
+        "  ret ptr %a_safe\n"
+        "app_check:\n"
+        "  br i1 %is_heap, label %app_grow, label %app_fresh\n"
+        "app_grow:\n"
+        "  %cap2 = shl i64 %cap, 1\n"
+        "  %grow_hint = add i64 %cap2, 16\n"
+        "  %grow_cmp = icmp ugt i64 %total, %grow_hint\n"
+        "  %grow_sz = select i1 %grow_cmp, i64 %total, i64 %grow_hint\n"
+        "  %buf_g = call ptr @tml_str_realloc(ptr %a_safe, i64 %grow_sz)\n"
+        "  %dst_g = getelementptr i8, ptr %buf_g, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_g, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_g = getelementptr i8, ptr %buf_g, i64 %total\n"
+        "  store i8 0, ptr %end_g\n"
+        "  call void @tml_str_set_len(ptr %buf_g, i64 %total)\n"
+        "  ret ptr %buf_g\n"
+        "app_fresh:\n"
+        "  %la2 = shl i64 %len_a, 1\n"
+        "  %slack_hint = add i64 %la2, 32\n"
+        "  %fresh_cmp = icmp ugt i64 %total, %slack_hint\n"
+        "  %alloc_fresh = select i1 %fresh_cmp, i64 %total, i64 %slack_hint\n"
+        "  %buf_f = call ptr @tml_str_alloc_with_cap(i64 %total, i64 %alloc_fresh)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf_f, ptr %a_safe, i64 %len_a, i1 false)\n"
+        "  %dst_f = getelementptr i8, ptr %buf_f, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst_f, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end_f = getelementptr i8, ptr %buf_f, i64 %total\n"
+        "  store i8 0, ptr %end_f\n"
+        "  ret ptr %buf_f\n"
+        "}",
+        {"tml_str_len", "tml_str_cap", "tml_str_set_len",
+         "tml_str_alloc_with_cap", "tml_str_realloc",
+         "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
+    // phase1k — str_append_tracked: the augmented-concat call site emits
+    // this variant (instead of str_append) when a shadow i64 alloca is
+    // available for the accumulator's length. The caller pre-allocates
+    // the shadow in its own stack frame; `str_append_tracked` reads
+    // `len_a` from the shadow (SSA-promoted by LLVM SROA across loop
+    // iterations) and writes the updated length back, skipping the
+    // O(n) `strlen(a)` and the heap-header load/store that otherwise
+    // keep `len` in memory every iteration. This is the same shape
+    // rustc's `String::push_str` produces — `len` lives in a register
+    // / phi-node for the duration of the loop.
+    add("str_append_tracked",
+        "define internal ptr @str_append_tracked(ptr %a, ptr %b, ptr %len_slot) alwaysinline {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  %a_safe = select i1 %a_null, ptr @.str.empty, ptr %a\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %shadow_len = load i64, ptr %len_slot, align 8\n"
+        "  %a_magic_p = getelementptr i8, ptr %a_safe, i64 -24\n"
+        "  %a_magic = load i64, ptr %a_magic_p\n"
+        "  %a_is_ours = icmp eq i64 %a_magic, 3552126293525794637\n"
+        "  br i1 %a_is_ours, label %at_has_hdr, label %at_literal\n"
+        "at_has_hdr:\n"
+        "  %at_cap_p = getelementptr i8, ptr %a_safe, i64 -16\n"
+        "  %at_cap_hdr = load i64, ptr %at_cap_p\n"
+        "  br label %at_done_a\n"
+        "at_literal:\n"
+        "  %at_lit_len = call i64 @strlen(ptr %a_safe)\n"
+        "  br label %at_done_a\n"
+        "at_done_a:\n"
+        "  %at_len_a = phi i64 [ %shadow_len, %at_has_hdr ], [ %at_lit_len, %at_literal ]\n"
+        "  %at_cap = phi i64 [ %at_cap_hdr, %at_has_hdr ], [ 0, %at_literal ]\n"
+        "  %bt_magic_p = getelementptr i8, ptr %b_safe, i64 -24\n"
+        "  %bt_magic = load i64, ptr %bt_magic_p\n"
+        "  %bt_is_ours = icmp eq i64 %bt_magic, 3552126293525794637\n"
+        "  br i1 %bt_is_ours, label %bt_has_hdr, label %bt_literal\n"
+        "bt_has_hdr:\n"
+        "  %bt_len_p = getelementptr i8, ptr %b_safe, i64 -8\n"
+        "  %bt_len_hdr = load i64, ptr %bt_len_p\n"
+        "  br label %bt_done\n"
+        "bt_literal:\n"
+        "  %bt_len_slow = call i64 @strlen(ptr %b_safe)\n"
+        "  br label %bt_done\n"
+        "bt_done:\n"
+        "  %at_len_b = phi i64 [ %bt_len_hdr, %bt_has_hdr ], [ %bt_len_slow, %bt_literal ]\n"
+        "  %at_total = add i64 %at_len_a, %at_len_b\n"
+        "  %at_is_heap = icmp ugt i64 %at_cap, 0\n"
+        "  %at_fits = icmp uge i64 %at_cap, %at_total\n"
+        "  %at_inplace_ok = and i1 %at_is_heap, %at_fits\n"
+        "  br i1 %at_inplace_ok, label %at_app_inplace, label %at_app_check\n"
+        "at_app_inplace:\n"
+        "  %at_dst_ip = getelementptr i8, ptr %a_safe, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_ip, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_ip = getelementptr i8, ptr %a_safe, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_ip\n"
+        "  %at_hdr_len_p = getelementptr i8, ptr %a_safe, i64 -8\n"
+        "  store i64 %at_total, ptr %at_hdr_len_p\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %a_safe\n"
+        "at_app_check:\n"
+        "  br i1 %at_is_heap, label %at_app_grow, label %at_app_fresh\n"
+        "at_app_grow:\n"
+        "  %at_cap2 = shl i64 %at_cap, 1\n"
+        "  %at_grow_hint = add i64 %at_cap2, 16\n"
+        "  %at_grow_cmp = icmp ugt i64 %at_total, %at_grow_hint\n"
+        "  %at_grow_sz = select i1 %at_grow_cmp, i64 %at_total, i64 %at_grow_hint\n"
+        "  %at_buf_g = call ptr @tml_str_realloc(ptr %a_safe, i64 %at_grow_sz)\n"
+        "  %at_dst_g = getelementptr i8, ptr %at_buf_g, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_g, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_g = getelementptr i8, ptr %at_buf_g, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_g\n"
+        "  %at_g_hdr_len_p = getelementptr i8, ptr %at_buf_g, i64 -8\n"
+        "  store i64 %at_total, ptr %at_g_hdr_len_p\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %at_buf_g\n"
+        "at_app_fresh:\n"
+        "  %at_la2 = shl i64 %at_len_a, 1\n"
+        "  %at_slack_hint = add i64 %at_la2, 32\n"
+        "  %at_fresh_cmp = icmp ugt i64 %at_total, %at_slack_hint\n"
+        "  %at_alloc_fresh = select i1 %at_fresh_cmp, i64 %at_total, i64 %at_slack_hint\n"
+        "  %at_buf_f = call ptr @tml_str_alloc_with_cap(i64 %at_total, i64 %at_alloc_fresh)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_buf_f, ptr %a_safe, i64 %at_len_a, i1 false)\n"
+        "  %at_dst_f = getelementptr i8, ptr %at_buf_f, i64 %at_len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %at_dst_f, ptr %b_safe, i64 %at_len_b, i1 false)\n"
+        "  %at_end_f = getelementptr i8, ptr %at_buf_f, i64 %at_total\n"
+        "  store i8 0, ptr %at_end_f\n"
+        "  store i64 %at_total, ptr %len_slot, align 8\n"
+        "  ret ptr %at_buf_f\n"
+        "}",
+        {"strlen", "tml_str_alloc_with_cap", "tml_str_realloc",
+         "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
+    // str_concat_reuse: reallocs the left operand's buffer with exponential growth.
+    // Used for augmented concat (result = result + expr) when left is known heap-allocated.
+    // Allocates total*2+1 bytes to amortize future appends (O(1) amortized per iteration).
+    // The extra capacity is preserved by realloc — strlen still returns the actual length.
+    add("str_concat_reuse",
+        "define internal ptr @str_concat_reuse(ptr %a, ptr %b) {\n"
+        "entry:\n"
+        "  %a_null = icmp eq ptr %a, null\n"
+        "  br i1 %a_null, label %fallback, label %check_b\n"
+        "check_b:\n"
+        "  %b_null = icmp eq ptr %b, null\n"
+        "  %b_safe = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_a = call i64 @strlen(ptr %a)\n"
+        "  %len_b = call i64 @strlen(ptr %b_safe)\n"
+        "  %total = add i64 %len_a, %len_b\n"
+        "  %double = shl i64 %total, 1\n"
+        "  %alloc = add i64 %double, 1\n"
+        "  %buf = call ptr @mem_realloc(ptr %a, i64 %alloc)\n"
+        "  %dst = getelementptr i8, ptr %buf, i64 %len_a\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %b_safe, i64 %len_b, i1 false)\n"
+        "  %end = getelementptr i8, ptr %buf, i64 %total\n"
+        "  store i8 0, ptr %end\n"
+        "  ret ptr %buf\n"
+        "fallback:\n"
+        "  %b2 = select i1 %b_null, ptr @.str.empty, ptr %b\n"
+        "  %len_b2 = call i64 @strlen(ptr %b2)\n"
+        "  %alloc2 = add i64 %len_b2, 1\n"
+        "  %buf2 = call ptr @mem_alloc(i64 %alloc2)\n"
+        "  call void @llvm.memcpy.p0.p0.i64(ptr %buf2, ptr %b2, i64 %len_b2, i1 false)\n"
+        "  %end2 = getelementptr i8, ptr %buf2, i64 %len_b2\n"
+        "  store i8 0, ptr %end2\n"
+        "  ret ptr %buf2\n"
+        "}",
+        {"strlen", "mem_alloc", "mem_realloc", "llvm.memcpy.p0.p0.i64", ".str.empty"});
+
     // Black box functions (no dependencies)
     add("black_box_i32", "; Black box (inline IR)\n"
                          "define internal i32 @black_box_i32(i32 %val) noinline {\n"
@@ -536,6 +760,48 @@ void LLVMIRGen::init_runtime_catalog() {
                          "  call void asm sideeffect \"\", \"r\"(double %val)\n"
                          "  ret double %val\n"
                          "}");
+
+    // --- C frontend FFI bridge (phase24 Phase 2.3) ---
+    //
+    // Declared in compiler/include/cc/cc_bridge.hpp, implemented in
+    // compiler/src/cc/cc_bridge.cpp. Every handle type
+    // (`CcTokenStream`, `CcTranslationUnit`, `CcMirModule`,
+    // `CcDiagnostics`) is an opaque forward-declared struct, so at
+    // the ABI level all handles are plain `ptr`s. `CcAbiTarget` is a
+    // plain `int32_t` enum — see the header for the encoded values.
+    // `CcDiagnostic` is a POD aggregate of two pointers and three
+    // int32s (32 bytes with trailing pad); on x86_64 (both SysV and
+    // Windows x64) it's returned via an sret slot. LLVM's backend
+    // handles the ABI lowering from the direct-aggregate return
+    // shape declared here, matching what the C++ side emits.
+    //
+    // Registering these names in the catalogue means the TML-
+    // compiled cc_driver and any future in-process consumer can
+    // reference them through `@extern("c")` without the name being
+    // dropped as unresolved at link time.
+    add("cc_bridge_diagnostics_new",
+        "declare dso_local ptr @cc_bridge_diagnostics_new()");
+    add("cc_bridge_diagnostics_count",
+        "declare dso_local i64 @cc_bridge_diagnostics_count(ptr)");
+    add("cc_bridge_diagnostics_get",
+        "declare dso_local { ptr, i32, i32, i32, ptr } "
+        "@cc_bridge_diagnostics_get(ptr, i64)");
+    add("cc_bridge_free_diagnostics",
+        "declare dso_local void @cc_bridge_free_diagnostics(ptr)");
+    add("cc_bridge_preproc",
+        "declare dso_local ptr @cc_bridge_preproc(ptr, ptr, ptr, ptr, ptr)");
+    add("cc_bridge_free_token_stream",
+        "declare dso_local void @cc_bridge_free_token_stream(ptr)");
+    add("cc_bridge_parse",
+        "declare dso_local ptr @cc_bridge_parse(ptr, ptr)");
+    add("cc_bridge_free_translation_unit",
+        "declare dso_local void @cc_bridge_free_translation_unit(ptr)");
+    add("cc_bridge_lower",
+        "declare dso_local ptr @cc_bridge_lower(ptr, i32, ptr, ptr)");
+    add("cc_bridge_free_mir_module",
+        "declare dso_local void @cc_bridge_free_mir_module(ptr)");
+    add("cc_bridge_mir_borrow",
+        "declare dso_local ptr @cc_bridge_mir_borrow(ptr)");
 
     // --- Format string globals ---
     add(".fmt.int", "@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");

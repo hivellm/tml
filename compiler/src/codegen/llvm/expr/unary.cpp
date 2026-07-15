@@ -547,7 +547,7 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     if (unary.op == parser::UnaryOp::Deref) {
         // Infer the inner type from the operand's type
         types::TypePtr operand_type = infer_expr_type(*unary.operand);
-        std::string inner_llvm_type = "i32"; // default
+        std::string inner_llvm_type;
 
         // Check for smart pointer types that implement Deref (like MutexGuard)
         // These need special handling - we need to access the inner data through fields
@@ -806,6 +806,10 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
         suppress_mut_ref_auto_deref_ = true;
         std::string ptr = gen_expr(*unary.operand);
         suppress_mut_ref_auto_deref_ = false;
+        if (inner_llvm_type.empty()) {
+            // Pointer type not resolved — use i64 as pointer-sized load
+            inner_llvm_type = "i64";
+        }
         std::string result = fresh_reg();
         emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + ptr);
         last_expr_type_ = inner_llvm_type;

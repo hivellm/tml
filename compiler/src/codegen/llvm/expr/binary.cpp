@@ -78,6 +78,58 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 } else if (target_type == "i64") {
                     expected_literal_type_ = "i64";
                     expected_literal_is_unsigned_ = false;
+                } else if (target_type.starts_with("%struct.") ||
+                           target_type.starts_with("%union.")) {
+                    // Struct/enum LHS — propagate as expected_enum_type_ so that
+                    // bare enum constructors (`Just(expr)`, `Ok(v)`, `Nothing`)
+                    // on the RHS pick up the full monomorphised type instead of
+                    // falling back to the default Maybe__I32 / Outcome__I32 shape.
+                    //
+                    // Without this, `init_opt: Maybe[Heap[CBlockItem]]` followed by
+                    // `init_opt = Just(Heap[CBlockItem]::new(item))` would emit
+                    // the Just() payload as Maybe__I32 and cause a K001 on the
+                    // final store (i32 payload slot vs i64 Heap pointer).
+                    expected_enum_type_ = target_type;
+                }
+            }
+        }
+
+        // Detect augmented Str concat: result = result + expr
+        // When holds_heap_str is true, use str_concat_reuse (realloc in-place)
+        if (bin.left->is<parser::IdentExpr>() && bin.right->is<parser::BinaryExpr>()) {
+            const auto& lhs_name = bin.left->as<parser::IdentExpr>().name;
+            const auto& rhs_bin = bin.right->as<parser::BinaryExpr>();
+            if (rhs_bin.op == parser::BinaryOp::Add &&
+                rhs_bin.left->is<parser::IdentExpr>() &&
+                rhs_bin.left->as<parser::IdentExpr>().name == lhs_name) {
+                auto var_it = locals_.find(lhs_name);
+                if (var_it != locals_.end() && var_it->second.type == "ptr") {
+                    // Pattern matched: result = result + expr
+                    // Restore expected types before generating RHS expr
+                    expected_enum_type_ = saved_expected_enum_type;
+                    expected_literal_type_ = saved_expected_literal_type;
+                    expected_literal_is_unsigned_ = saved_expected_literal_is_unsigned;
+
+                    std::string old_val = fresh_reg();
+                    emit_line("  " + old_val + " = load ptr, ptr " + var_it->second.reg);
+                    std::string rhs_val = gen_expr(*rhs_bin.right);
+                    std::string new_val = fresh_reg();
+
+                    // `str_append` (phase1i + 1k) handles both heap and
+                    // literal left operands, uses the length-prefix
+                    // header for O(1) `len`/`cap` access, and amortizes
+                    // to O(1) per iteration via exponential growth.
+                    emit_line("  " + new_val + " = call ptr @str_append(ptr " +
+                              old_val + ", ptr " + rhs_val + ")");
+                    // Free right operand if heap temp
+                    if (is_heap_str_producer(*rhs_bin.right)) {
+                        emit_line("  call void @tml_str_free(ptr " + rhs_val + ")");
+                    }
+                    emit_line("  store ptr " + new_val + ", ptr " + var_it->second.reg);
+                    var_it->second.holds_heap_str = true;
+                    if (!pending_str_temps_.empty())
+                        consume_last_str_temp();
+                    return new_val;
                 }
             }
         }
@@ -148,8 +200,22 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                         }
                     }
 
+                    // For Str vars: free old heap string before overwriting to prevent leaks.
+                    // This enables O(n) total allocation in `result = result + "x"` loops
+                    // (instead of O(n²) from leaked intermediates).
+                    if (target_type == "ptr" && it->second.holds_heap_str) {
+                        std::string old_val = fresh_reg();
+                        emit_line("  " + old_val + " = load ptr, ptr " + it->second.reg);
+                        emit_line("  call void @tml_str_free(ptr " + old_val + ")");
+                    }
+
                     emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
                               it->second.reg);
+
+                    // Track whether this var now holds a heap Str
+                    if (target_type == "ptr") {
+                        it->second.holds_heap_str = is_heap_str_producer(*bin.right);
+                    }
 
                     // If assigning a heap Str to a var, consume the pending Str temp
                     // so it won't be double-freed at statement end.
@@ -165,7 +231,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // IMPORTANT: Don't use last_semantic_type_ here - it's from the RHS!
                 // We need to infer the type of the LHS operand specifically.
                 types::TypePtr operand_type = infer_expr_type(*unary.operand);
-                std::string inner_llvm_type = "i32"; // default
+                std::string inner_llvm_type;
                 TML_DEBUG_LN("[DEREF_ASSIGN] operand_type="
                              << (operand_type ? types::type_to_string(operand_type) : "null"));
 
@@ -256,6 +322,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     }
                 }
 
+                if (inner_llvm_type.empty()) {
+                    inner_llvm_type = last_expr_type_; // use RHS type as last resort
+                }
                 emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr);
                 last_expr_type_ = inner_llvm_type; // Assignment returns the assigned value's type
             }
@@ -801,11 +870,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Get element type from array type
                 // Array type is like "[5 x i32]", we need "i32"
-                std::string elem_type = "i32"; // default
+                std::string elem_type;
                 types::TypePtr semantic_type = infer_expr_type(*idx_expr.object);
                 if (semantic_type && semantic_type->is<types::ArrayType>()) {
                     const auto& arr = semantic_type->as<types::ArrayType>();
                     elem_type = llvm_type_from_semantic(arr.element);
+                }
+                if (elem_type.empty()) {
+                    // Extract element type from LLVM array type string "[N x T]"
+                    auto x_pos = arr_type.find(" x ");
+                    if (x_pos != std::string::npos) {
+                        elem_type = arr_type.substr(x_pos + 3, arr_type.size() - x_pos - 4);
+                    } else {
+                        elem_type = "i64"; // array element type unresolvable
+                    }
                 }
 
                 // Get element pointer

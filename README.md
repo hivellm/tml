@@ -3,24 +3,25 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 
-**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM+LLD backend, Tracy profiler integration, and self-documenting syntax designed for deterministic LLM code generation.
+**TML is a batteries-included programming language built for the AI era.** It ships a native MCP server inside the compiler, integrated documentation, built-in test/coverage/bench/fuzz tooling, an embedded LLVM backend with native OS linker integration, a persistent compilation daemon (22ms cached builds), Tracy profiler integration, and self-documenting syntax designed for deterministic LLM code generation.
 
-One binary. Zero external tools. 11,000+ tests. 99% library coverage. Everything you need from code to production.
+One binary. Zero external tools. 12,000+ tests. 99% library coverage. Rust-parity performance. Everything you need from code to production.
 
-> **Status:** The C++ compiler is **100% functional (beta)** — all language features, standard library, and tooling are fully implemented and test-covered. The self-hosted TML compiler (written in TML itself) is **actively in development** on the `feat/self-hosting-compiler` branch as part of the self-hosting roadmap.
+> **Status:** The C++ compiler is **100% functional (beta)** — all language features, standard library, and tooling are fully implemented and test-covered.
+>
+> **Self-hosting paused by strategic decision (2026-07):** the self-hosted TML compiler (written in TML itself) was **not finished** — work on it was deliberately paused, not abandoned. Building it surfaced foundational issues in the language's memory model (RAII drop insertion over raw-pointer smart pointers causing a double-free/use-after-free bug class) and codegen stability (invalid-IR and non-deterministic failures) that must be fixed **before** self-hosting can succeed. The project's current focus is the **Stabilization roadmap (ERA 0)**: memory-model soundness, codegen reliability, and a real-application acceptance gate. Full analysis and corrective plan: [`docs/analysis/tml-table-analysis/`](docs/analysis/tml-table-analysis/README.md).
 
 ```tml
-use std::json::{Json}
-use std::hash::{fnv1a64}
+use std::json::Json
+use std::hash::fnv1a64
 
-func main() -> I32 {
+func main() {
     let data = Json::parse("{\"name\": \"TML\", \"year\": 2026}")
     let name = data.get_string("name")
     let hash = fnv1a64(name)
 
     println("Language: " + name)
     println("Hash: " + hash.to_hex())
-    return 0
 }
 ```
 
@@ -30,7 +31,7 @@ func main() -> I32 {
 
 ### Prerequisites
 
-- **Zig 0.14+** (recommended — fastest builds, no Visual Studio required)
+- **Zig 0.14–0.15.x** (recommended — fastest builds, no Visual Studio required; **Zig 0.16+ is NOT supported**, see note below)
 - **CMake 3.20+**
 - **Ninja** (required for Zig CC and Clang builds, recommended for MSVC)
 - **LLVM 15+** (pre-built static libraries)
@@ -42,18 +43,27 @@ func main() -> I32 {
 **Install Zig:**
 
 ```bash
-# Windows (winget)
-winget install zig.zig
+# Windows (winget — pin to 0.15.2)
+winget install zig.zig --version 0.15.2
 
 # Windows (scoop)
-scoop install zig
+scoop install zig@0.15.2
 
 # Linux
-# Download from https://ziglang.org/download/
+# Download 0.15.2 from https://ziglang.org/download/
 
 # macOS (Homebrew)
-brew install zig
+brew install zig@0.15
 ```
+
+> **Zig 0.16+ breaks the build.** Zig 0.16 changed how it links the Windows UCRT
+> (Universal C Runtime). When building executables with `-D_DLL -D_MT`, zig 0.16's
+> lld-link fails to resolve `__declspec(dllimport)` symbols like `strtol`, `fopen`,
+> `getenv` etc. — it finds them in `libucrt.lib` (static) but rejects them because
+> they are "not an import library". Additionally, the pre-built LLVM static libraries
+> use `/MT` (static CRT) which causes `lld-link: error: /failifmismatch` for
+> `RuntimeLibrary` when TML compiles with `/MD` (dynamic CRT). Since lld-link does
+> not support `/FORCE:MULTIPLE` (MSVC-only), there is no workaround. **Use Zig 0.15.2.**
 
 **Install Ninja:**
 
@@ -77,7 +87,23 @@ vcpkg install --x-install-root=vcpkg_installed --triplet=x64-windows  # or x64-l
 
 ### Build
 
-The build system automatically selects the best available compiler:
+**First-time bootstrap** — build the vendored LLVM submodule once.
+Subsequent compiler builds reuse the output and take seconds.
+
+```bash
+git submodule update --init --recursive src/llvm-project
+
+# Windows (one-time, 30-90 minutes)
+scripts\build-llvm.bat         # Release build of build/llvm/
+
+# Linux/Mac
+./scripts/build-llvm.sh        # Equivalent
+```
+
+Once `build/llvm/` exists, CMake's `find_package(LLVM CONFIG)` picks
+it up automatically — no `LLVM_DIR` environment variable needed.
+
+The compiler build system then auto-selects the best host compiler:
 
 | Priority | Compiler | Flag | Requirements |
 |----------|----------|------|-------------|
@@ -116,6 +142,8 @@ tml test --suite=core/str      # Run one module's tests
 tml test --coverage            # Tests + coverage report
 tml fmt src/                   # Format code
 tml lint src/                  # Lint code
+tml daemon start               # Start persistent compiler daemon
+tml daemon stop                # Stop daemon
 tml mcp                        # Start MCP server
 tml build app.tml --emit-ir    # Emit LLVM IR
 tml build app.tml --release    # Optimized build
@@ -167,7 +195,7 @@ Most languages require a constellation of separate tools. TML ships everything i
 
 | Capability | Traditional | TML |
 |-----------|-------------|-----|
-| **Compilation** | `gcc`/`clang` + `ld`/`lld` | Embedded LLVM + LLD (in-process) |
+| **Compilation** | `gcc`/`clang` + `ld`/`lld` | Embedded LLVM + native OS linker |
 | **Testing** | External frameworks (gtest, pytest, jest) | `@test` decorator + DLL-based runner |
 | **Coverage** | Separate tools (gcov, tarpaulin, istanbul) | `--coverage` flag |
 | **Benchmarking** | External (criterion, hyperfine) | `@bench` decorator + baseline comparison |
@@ -177,6 +205,7 @@ Most languages require a constellation of separate tools. TML ships everything i
 | **Documentation** | External (rustdoc, godoc, jsdoc) | `tml doc` (JSON, HTML, Markdown) |
 | **Profiling** | External (perf, valgrind, Instruments) | `--profile` (Chrome DevTools format) |
 | **Package management** | External (cargo, npm, pip) | `tml deps` / `tml add` |
+| **Compilation daemon** | External (ccache, sccache) | `tml daemon` (22ms cached, 4.5x faster than `cargo check`) |
 | **AI integration** | None / LSP workarounds | Native MCP server |
 
 ```bash
@@ -192,19 +221,19 @@ tml mcp                              # Start MCP server for AI
 
 ---
 
-### 3. Embedded LLVM + LLD (In-Process Compilation)
+### 3. Embedded LLVM Backend (In-Process Compilation)
 
-TML doesn't shell out to `clang` or call an external linker. The compiler **embeds ~55 LLVM static libraries and the LLD linker directly**. Compilation from source to executable happens entirely in-process:
+TML compiles source to object code entirely in-process via an **embedded LLVM backend** (55+ static libraries). Only the final link step uses the native OS linker:
 
 ```
 Source (.tml) -> Lex -> Parse -> Typecheck -> Borrow Check
              -> HIR -> THIR -> MIR -> LLVM IR -> Object File -> Executable
                         ^                         ^                ^
-                   Coercions, dispatch        Embedded LLVM     Embedded LLD
-                   exhaustiveness             (in-process)      (in-process)
+                   Coercions, dispatch        Embedded LLVM     Native OS linker
+                   exhaustiveness             (in-process)      (link.exe/ld)
 ```
 
-No subprocesses. No temporary `.o` files piped between tools. The compiler IS the backend.
+No clang/gcc subprocess for compilation. The LLVM IR-to-object pipeline runs in-process with O2 optimization, producing AVX-512 SIMD code competitive with Rust.
 
 This also means cross-compilation is built in:
 
@@ -329,7 +358,7 @@ Every syntax decision in TML eliminates ambiguity that confuses language models.
 | Ownership | Move semantics | GC | Copy semantics | Move semantics |
 | Borrow checker | Yes | No | No | Yes |
 | Interior mutability | `Cell<T>`, `RefCell<T>` | implicit | — | `Cell[T]`, `RefCell[T]` |
-| RAII / cleanup | `Drop` trait | `defer` | Destructors | `Disposable` behavior |
+| RAII / cleanup | `Drop` trait | `defer` | Destructors | `Drop` behavior |
 | Memory safety | Compile-time | Runtime (GC) | Manual | Compile-time |
 | Null safety | No null | `nil` | `nullptr` | No null (use `Maybe[T]`) |
 
@@ -343,7 +372,7 @@ TML's test runner uses a **Go-inspired subprocess architecture**: each test suit
 
 | Metric | Value |
 |--------|-------|
-| **Total tests** | 11,000+ across 1,400+ files |
+| **Total tests** | 12,000+ across 1,500+ files |
 | **Full suite (no cache)** | ~43 seconds |
 | **Full suite (cached)** | ~8 seconds |
 | **Single file (filtered)** | Milliseconds |
@@ -372,11 +401,10 @@ This performance is not accidental — it's designed for **LLM-assisted debuggin
 use test
 
 @test
-func test_json_parsing() -> I32 {
+func test_json_parsing() {
     let data = Json::parse("{\"key\": 42}")
     assert(data.is_object(), "should parse as object")
     assert_eq(data.get_i64("key"), 42 as I64, "key should be 42")
-    return 0
 }
 
 @bench
@@ -387,10 +415,9 @@ func bench_hash_fnv(b: Bencher) {
 }
 
 @fuzz
-func fuzz_parser(input: Slice[U8]) -> I32 {
+func fuzz_parser(input: Slice[U8]) {
     let s = Str::from_utf8(input).unwrap_or("")
     let _ = Json::parse(s)  // Should never crash
-    return 0
 }
 ```
 
@@ -493,7 +520,7 @@ TML's JSON parser is not a library written in TML — it's a **native C++ engine
 The JSON engine is exposed to TML code through a handle-based FFI:
 
 ```tml
-use std::json::{Json}
+use std::json::Json
 
 let data = Json::parse("{\"users\": [{\"name\": \"Alice\"}]}")
 let name = data.get_path_string("users.0.name")  // "Alice"
@@ -511,7 +538,7 @@ TML's concurrency model draws directly from Go's design, implemented as native C
 **Channels** — Go-style bounded MPMC (Multi-Producer Multi-Consumer):
 
 ```tml
-use std::sync::{channel, Sender, Receiver}
+use std::sync::channel
 
 let (tx, rx) = channel[I32](10)  // Bounded channel, capacity 10
 
@@ -551,7 +578,7 @@ TML ships a full HTTP/1.1 server built entirely in TML (52 source files), achiev
 ```tml
 use std::http::{HttpServer, Request, Response, Router}
 
-func main() -> I32 {
+func main() {
     let router = Router::new()
     router.get("/", do(req: Request) -> Response {
         Response::ok("Hello, World!")
@@ -563,7 +590,6 @@ func main() -> I32 {
 
     let server = HttpServer::new(router)
     server.listen(8080)
-    return 0
 }
 ```
 
@@ -740,8 +766,25 @@ TML ships with a comprehensive standard library covering:
 | `std::os` | Environment variables, system info, CLI args |
 | `std::log` | Structured logging with levels and sinks |
 | `std::search` | BM25 text index, HNSW vector index, TF-IDF vectorizer, SIMD distance |
+| `std::msgpack` | MessagePack binary serialization — encoder, decoder, type system |
+| `std::protobuf` | Protocol Buffers wire format — full proto3, .proto parser, TML codegen |
 | `std::promise` | JavaScript-style Promise[T] with resolve/reject/then/catch/all/race |
 | `std::observable` | Reactive streams with 8 operators + Subject variants |
+
+---
+
+## Performance
+
+TML generates code competitive with Rust via LLVM optimization:
+
+| Benchmark | TML | Rust | Ratio |
+|-----------|-----|------|-------|
+| List iteration sum (10M I64, AVX-512) | 4.32B ops/s | 4.57B ops/s | **1.06×** |
+| Binary size (hello world) | 42 KB | 127 KB | **TML 3× smaller** |
+| Cold `tml check` (with meta cache) | 0.68s | — | — |
+
+The list iteration benchmark produces identical optimized IR to Rust: 5-instruction
+scalar loop, `<8 x i64>` AVX-512 SIMD with 4 accumulators (32 elements/iteration).
 
 ---
 
@@ -760,7 +803,7 @@ tml/
 │   │   ├── mir/        # Mid-level IR (SSA, 30+ optimization passes)
 │   │   ├── codegen/    # LLVM IR generation
 │   │   ├── query/      # Demand-driven query system (red-green incremental)
-│   │   ├── backend/    # Embedded LLVM + LLD
+│   │   ├── backend/    # Embedded LLVM backend (in-process IR → .obj)
 │   │   ├── testing/    # Subprocess test coordinator (NDJSON protocol)
 │   │   ├── mcp/        # MCP server (JSON-RPC 2.0, 14 tools)
 │   │   ├── doc/        # Documentation generator + semantic search
@@ -784,8 +827,7 @@ tml/
 - **Rust** - Ownership model, borrow checking, pattern matching, THIR/MIR architecture, query-based compilation
 - **V8 (Google)** - JSON parser design: SIMD whitespace skipping, SWAR hex parsing, lookup-table character classification
 - **Go** - Channel-based concurrency, bounded MPMC channels, goroutine-inspired async runtime, thread-safe primitives design
-- **LLVM** - Code generation backend (embedded as static libraries)
-- **LLD** - In-process linker (COFF/ELF/MachO)
+- **LLVM** - Code generation backend (55+ static libraries, in-process IR → .obj)
 - **Tracy** - Real-time frame profiler with 70+ instrumented zones
 - **Zig** - Default C/C++ compiler toolchain (Zig CC = Clang 20 + bundled libc + LLD)
 - **MCP (Anthropic)** - Model Context Protocol specification for AI-compiler integration

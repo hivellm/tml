@@ -61,6 +61,7 @@ void print_usage() {
               << "  remove    Remove a dependency from tml.toml\n"
               << "  explain   Show detailed error code explanation\n"
               << "  demangle  Decode a mangled TML symbol\n"
+              << "  daemon    Start/stop persistent compilation daemon\n"
               << "  lex       Tokenize a file (debug)\n"
               << "  parse     Parse a file (debug)\n"
               << "\nGlobal Options:\n"

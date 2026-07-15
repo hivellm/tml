@@ -1,22 +1,15 @@
 {
-  "version": "5.3.3",
-  "installedAt": "2026-04-10T12:34:54.414Z",
-  "updatedAt": "2026-04-10T12:34:54.414Z",
-  "projectId": "tml",
+  "version": "7.0.0",
+  "installedAt": "2026-07-15T06:00:16.143Z",
+  "updatedAt": "2026-07-15T06:00:16.143Z",
+  "projectId": "Tml",
   "mode": "full",
   "features": {
-    "watcher": false,
-    "agent": false,
     "logging": true,
-    "telemetry": false,
-    "notifications": false,
-    "dryRun": false,
     "gitHooks": true,
-    "repl": false,
     "templates": true,
     "context": true,
     "health": true,
-    "plugins": false,
     "parallel": true,
     "smartContinue": true
   },
@@ -29,38 +22,6 @@
     "taskExecution": 300000,
     "cliResponse": 60000,
     "testRun": 120000
-  },
-  "memory": {
-    "enabled": false,
-    "autoCapture": true,
-    "dbPath": ".rulebook/memory/memory.db",
-    "maxSizeBytes": 524288000,
-    "vectorDimensions": 256
-  },
-  "ralph": {
-    "enabled": true,
-    "maxIterations": 10,
-    "tool": "claude",
-    "maxContextLoss": 3,
-    "autoInit": true,
-    "generatePRD": true,
-    "validatePhases": true,
-    "pauseOnError": false,
-    "stateDir": ".rulebook/ralph/state",
-    "historyFile": ".rulebook/ralph/history.json",
-    "defaultTasks": [
-      "parallel-test-execution",
-      "coverage-migration"
-    ],
-    "parallel": {
-      "enabled": false,
-      "maxWorkers": 3
-    },
-    "planCheckpoint": {
-      "enabled": false,
-      "autoApproveAfterSeconds": 0,
-      "requireApprovalForStories": "all"
-    }
   },
   "skills": {
     "enabled": [

@@ -1,0 +1,380 @@
+//! Smoke tests for the C17 parser (phase 23b Phase 2). Tests the parser at
+//! the sub-translation-unit level: specifier folding, declarator shape and
+//! initializer parsing. Full `cp_parse_translation_unit` integration is
+//! exercised in phase 23b item 7 (self-compilation of essential.c / mem.c)
+//! once supporting phases land.
+
+use test::{assert, assert_eq}
+use compiler::cc::parser::*
+use compiler::cc::lexer::*
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+use std::collections::list::List
+
+@test func test_parser_constructs_from_empty_tokens() {
+    let pp = List[PpToken]::new(0 as I64)
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    // 0 source + 1 synthetic EOF
+    assert_eq(parser.tokens.len() as I32, 1)
+}
+
+@test func test_parser_specifiers_for_int() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let sp: Outcome[CParsedSpecs, CParseError] = cp_parse_specifiers(parser, 0 as I64)
+    when sp {
+        Ok(parsed) => assert_eq(parsed.pos as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// Regression: `cp_parse_translation_unit` on `int x;` previously
+// segfaulted because of two compounding bugs:
+//   1. dangling-Str leaks in the parser (CToken Str fields aliased
+//      list slots — fixed in commit 7e70a7bc7), and
+//   2. an ABI mismatch in the static-method dispatch path: generic
+//      impl methods like `Heap[T]::new` registered FuncInfo only
+//      after queued instantiation ran, so the call-site struct→ptr
+//      fixup at method_static_dispatch.cpp could not find param
+//      types and skipped the conversion. The callee then dereferenced
+//      a struct value as a pointer and crashed at 0x0.
+@test func test_parse_top_decl_int_x() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 3)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+@test func test_parse_translation_unit_int_x() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// phase24b regression: `typedef int int32_t; int32_t x;` —
+// after the first typedef, subsequent declarations using the new
+// type name silently crash `cp_parse_translation_unit`. Diagnosed
+// in phase24b: the parser registers the typedef in
+// `parser.typedefs` correctly, but the second declaration's
+// specifier-parsing path misses the lookup. Active investigation;
+// reproducer landed first.
+@test func test_typedef_then_use_minimal() {
+    let pp = List[PpToken]::new(8 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 2 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 10 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => {
+            // Two top-level decls: the typedef and the var decl.
+            assert_eq(unit.decls.len() as I32, 2)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// Direct phase24b reproducer for the function-form crash:
+// `typedef int int32_t; int32_t add(int32_t a, int32_t b) { return a + b; }`
+@test func test_typedef_then_use_in_function() {
+    let pp = List[PpToken]::new(20 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 20 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "add", "t.c", 2 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 2 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "a", "t.c", 2 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ",", "t.c", 2 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int32_t", "t.c", 2 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "b", "t.c", 2 as I64, 32 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 2 as I64, 33 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 2 as I64, 35 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "return", "t.c", 2 as I64, 37 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "a", "t.c", 2 as I64, 44 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "+", "t.c", 2 as I64, 46 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "b", "t.c", 2 as I64, 48 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 2 as I64, 49 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 2 as I64, 51 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 2),
+        Err(_) => assert(false)
+    }
+}
+
+@test func test_parser_declarator_for_ident() {
+    let pp = List[PpToken]::new(3 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let dr: Outcome[CParsedDeclarator, CParseError] = cp_parse_declarator(parser, 1 as I64)
+    when dr {
+        Ok(parsed) => assert_eq(parsed.pos as I32, 2),
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: `__declspec(dllexport) int x;` — MSVC compiler
+// extension attribute. Real-world headers (compiler/runtime/diagnostics/
+// backtrace.h:261) define `TML_EXPORT` as `__declspec(dllexport)` and
+// apply it to function/variable declarations. Without an attribute-
+// skipping pass, the parser bails at `__declspec` with "expected type
+// specifier" because `__declspec` is an Ident, not a known specifier
+// keyword. The fix adds `cp_skip_attribute_specifiers` which strips
+// MSVC `__declspec(...)` and GCC `__attribute__((...))` runs at the
+// top of the specifier loop.
+@test func test_parser_skip_declspec_dllexport() {
+    let pp = List[PpToken]::new(8 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "__declspec", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 11 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "dllexport", "t.c", 1 as I64, 12 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 28 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            // 4 attribute tokens skipped + `int x ;` = pos 7
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 7)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: `__attribute__((noreturn)) void abort_now();` —
+// GCC extension attribute with double-paren. Same root cause as the
+// `__declspec` test: attribute skipping must handle nested parens
+// (single-paren-wrapped attribute list inside the outer attribute call).
+@test func test_parser_skip_attribute_noreturn() {
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "__attribute__", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "noreturn", "t.c", 1 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "abort_now", "t.c", 1 as I64, 32 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 41 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 42 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 43 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            // 6 attribute tokens skipped + `void abort_now ( ) ;` = pos 11
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 11)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: bare compiler-extension keywords like `__forceinline`
+// (no parentheses) must be skipped between the storage class and type.
+@test func test_parser_skip_bare_forceinline() {
+    let pp = List[PpToken]::new(5 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "static", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "__forceinline", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "x", "t.c", 1 as I64, 26 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 27 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            assert_eq(pd.pos as I32, 5)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase24h regression: `int (*p);` (parenthesized pointer-only declarator)
+// previously SIGSEGV'd non-deterministically (~50% of runs) because the
+// partial-field move `leaf = inner.decl` in `cp_parse_direct` bitwise-
+// copied the `Pointer(Shared[CDeclarator], ...)` variant payload, then the
+// drop on the source `CParsedDeclarator` decremented the contained
+// `Shared` a second time. Fixed by giving `CDeclarator` an explicit
+// `Duplicate` impl and inserting `.duplicate()` at the partial-move sites
+// (`cp_parse_direct` line 1246 and `cp_parse_declarator_inner` line 1338).
+@test func test_paren_pointer_declarator_no_crash() {
+    let pp = List[PpToken]::new(6 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 5 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "p", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 9 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// phase24h regression: `typedef void (*sig_t)(int);` — the function-pointer
+// typedef path goes through the same partial-field-move sites twice (once
+// for the inner `(*sig_t)` declarator, once for the outer `(int)` function
+// suffix), so the crash window was wider than for `int (*p);`. Successful
+// parse must register `sig_t` as a typedef name and emit one TypedefDef
+// declaration.
+@test func test_funcptr_typedef_no_crash() {
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "typedef", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 14 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "sig_t", "t.c", 1 as I64, 16 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 21 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 22 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "int", "t.c", 1 as I64, 23 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 26 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 27 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "extra_eof_pad", "t.c", 2 as I64, 1 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let res: Outcome[CParsedDecls, CParseError] = cp_parse_top_decl(parser, 0 as I64)
+    when res {
+        Ok(pd) => {
+            assert_eq(pd.decls.len() as I32, 1)
+            // sig_t must be registered in the typedef table now.
+            assert(parser.typedefs.has("sig_t"))
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: `void *f(void) { return 0; }` — function definition
+// returning pointer-to-T. The leading `*` of the declarator is wrapped
+// outside the `Func` AST node by `cp_parse_declarator_inner`, producing
+// `Pointer(Func(Ident("f"), [void]))`. Previously, `declarator_is_func`
+// only matched the outermost `Func` variant, so the function-definition
+// path at `cp_parse_top_decl:1711` did not fire — the parser fell into
+// the variable-declaration path, expected `;` after the declarator, and
+// hit `{` instead, raising "expected ';' after declaration". Fixed by
+// recursing through `Pointer` layers in `declarator_is_func`,
+// `declarator_func_params`, and `declarator_func_variadic`.
+@test func test_func_def_returning_pointer() {
+    // Tokens for `void *f(void) { return 0; }`
+    let pp = List[PpToken]::new(11 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "f", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "{", "t.c", 1 as I64, 15 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "return", "t.c", 1 as I64, 17 as I64))
+    pp.push(pp_token(PpTokenKind::IntLit, "0", "t.c", 1 as I64, 24 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 25 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "}", "t.c", 1 as I64, 27 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => {
+            // One Func decl with a body (definition, not prototype).
+            assert_eq(unit.decls.len() as I32, 1)
+        },
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: prototype `void *g(void);` must still parse as a
+// Func decl (with body=Nothing), confirming the recursion through
+// `Pointer` in `declarator_is_func` correctly identifies prototypes too,
+// not just definitions.
+@test func test_func_prototype_returning_pointer() {
+    let pp = List[PpToken]::new(7 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "g", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "(", "t.c", 1 as I64, 8 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 9 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ")", "t.c", 1 as I64, 13 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 14 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}
+
+// phase0z regression: a plain pointer variable like `void *p;` must NOT
+// be classified as a function definition/prototype. The recursion in
+// `declarator_is_func` must bottom out at `Ident` (returning false), not
+// erroneously match.
+@test func test_pointer_variable_not_func() {
+    let pp = List[PpToken]::new(4 as I64)
+    pp.push(pp_token(PpTokenKind::Ident, "void", "t.c", 1 as I64, 1 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, "*", "t.c", 1 as I64, 6 as I64))
+    pp.push(pp_token(PpTokenKind::Ident, "p", "t.c", 1 as I64, 7 as I64))
+    pp.push(pp_token(PpTokenKind::Punct, ";", "t.c", 1 as I64, 8 as I64))
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+    let parser: CParser = c_parser(toks)
+    let tu: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, "t.c")
+    when tu {
+        Ok(unit) => assert_eq(unit.decls.len() as I32, 1),
+        Err(_) => assert(false)
+    }
+}

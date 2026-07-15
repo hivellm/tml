@@ -5,6 +5,20 @@ All notable changes to the TML compiler will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.23] — 2026-04-15
+
+### Added
+
+- **Persistent compilation daemon** — `tml daemon start/stop/status` with named-pipe IPC (Windows) and Unix domain socket; in-process result cache returns 22ms on cache hit (4.5x faster than `cargo check`); DLL staleness detection auto-restarts daemon on compiler rebuild
+- **`match` keyword diagnostic** — parser detects `match` (Rust/Swift/C#) and emits `error[S001]: use 'when' instead` with correct span; skips braced body to suppress cascading errors
+
+### Fixed
+
+- **K001 struct forward-reference** — `llvm_type_name` and `llvm_type_from_semantic` now emit struct definitions on-demand from the module registry when an unknown struct type is referenced; fixes `EventEmitter`/`ReadableStream` undefined type that blocked all `std::file` tests
+- **i128 binary ops** — `int_type` determination in `binary_ops.cpp` was missing `i128` check; all U128/I128 comparisons and arithmetic (`==`, `%`, `/`, `<`, `>`, `+`, `-`, `*`) emitted `i32` instructions instead of `i128`
+- **Embedded LLD removed** — linking now uses native OS linker via subprocess (`link.exe` on Windows, `ld` on Unix); `tml_codegen_x86.dll` reduced from 78 MB to 58 MB (−26%)
+- **PID file location** — daemon PID file moved from project root to system temp directory (`<temp>/tml-daemon-<crc32>.pid`)
+
 ## [0.3.1] — 2026-04-12
 
 ### Changed

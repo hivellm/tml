@@ -1,0 +1,177 @@
+/// Interop validation against canonical protobuf wire format (phase1a items 6.1-6.5).
+///
+/// Rather than depending on an external Go toolchain at test-time, these tests
+/// encode messages and verify against well-known canonical wire bytes derived
+/// directly from the protobuf specification:
+///
+/// * Tag = (field_number << 3) | wire_type
+/// * wire_type: 0 = VARINT, 1 = I64, 2 = LEN, 5 = I32
+/// * String field = tag(LEN) + varint(len) + utf8_bytes
+/// * Int32/Int64 field = tag(VARINT) + varint(value)
+///
+/// The hex byte sequences below are byte-for-byte identical to what
+/// `google.golang.org/protobuf` and `google.protobuf` (C++/Python) emit.
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader, write_packed_varints}
+use std::collections::{Buffer, List}
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+// ========================================================================
+// Person { name = "Alice", id = 123, email = "alice@test.com" }
+// ========================================================================
+
+@test func test_interop_person_encode_matches_canonical() {
+    var w = ProtoWriter::new()
+    w.write_field_string(1, "Alice")                 // name
+    w.write_field_int64(2, 123)                      // id (canonical int32/64 share wire form for small values)
+    w.write_field_string(3, "alice@test.com")        // email
+
+    let buf = w.to_buffer()
+    // Canonical bytes (from protobuf wire spec):
+    //   0A 05 41 6C 69 63 65                -- name="Alice"
+    //   10 7B                                -- id=123
+    //   1A 0E 61 6C 69 63 65 40 74 65 73 74 2E 63 6F 6D
+    //                                       -- email="alice@test.com"
+    // Total = 7 + 2 + 16 = 25 bytes
+    assert_eq(buf.len(), 25)
+
+    // Name field
+    assert_eq(buf_byte(ref buf, 0),  0x0A)  // tag (1<<3)|2
+    assert_eq(buf_byte(ref buf, 1),  0x05)  // length=5
+    assert_eq(buf_byte(ref buf, 2),  0x41)  // 'A'
+    assert_eq(buf_byte(ref buf, 3),  0x6C)  // 'l'
+    assert_eq(buf_byte(ref buf, 4),  0x69)  // 'i'
+    assert_eq(buf_byte(ref buf, 5),  0x63)  // 'c'
+    assert_eq(buf_byte(ref buf, 6),  0x65)  // 'e'
+
+    // Id field
+    assert_eq(buf_byte(ref buf, 7),  0x10)  // tag (2<<3)|0
+    assert_eq(buf_byte(ref buf, 8),  0x7B)  // varint 123
+
+    // Email field
+    assert_eq(buf_byte(ref buf, 9),  0x1A)  // tag (3<<3)|2
+    assert_eq(buf_byte(ref buf, 10), 0x0E)  // length=14
+    // Skip content-byte-by-byte verification: check first and last
+    assert_eq(buf_byte(ref buf, 11), 0x61)  // 'a'
+    assert_eq(buf_byte(ref buf, 24), 0x6D)  // 'm'
+}
+
+@test func test_interop_decode_canonical_person_bytes() {
+    // Construct the canonical byte sequence byte-by-byte, then decode and
+    // assert the decoded Person matches the original.
+    var bytes = Buffer::new(32)
+    bytes.write_byte(0x0A); bytes.write_byte(0x05)
+    bytes.write_byte(0x41); bytes.write_byte(0x6C); bytes.write_byte(0x69)
+    bytes.write_byte(0x63); bytes.write_byte(0x65)
+    bytes.write_byte(0x10); bytes.write_byte(0x7B)
+    bytes.write_byte(0x1A); bytes.write_byte(0x0E)
+    bytes.write_byte(0x61); bytes.write_byte(0x6C); bytes.write_byte(0x69)
+    bytes.write_byte(0x63); bytes.write_byte(0x65); bytes.write_byte(0x40)
+    bytes.write_byte(0x74); bytes.write_byte(0x65); bytes.write_byte(0x73)
+    bytes.write_byte(0x74); bytes.write_byte(0x2E); bytes.write_byte(0x63)
+    bytes.write_byte(0x6F); bytes.write_byte(0x6D)
+
+    var r = ProtoReader::from_buffer(ref bytes)
+    var got_name: Str = ""
+    var got_id: I64 = 0
+    var got_email: Str = ""
+    loop (r.has_more()) {
+        let tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+        if tag.field_num == 1 {
+            got_name = when r.read_string() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+        } else if tag.field_num == 2 {
+            got_id = when r.read_varint() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+        } else if tag.field_num == 3 {
+            got_email = when r.read_string() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+        }
+    }
+    assert_eq(got_name, "Alice")
+    assert_eq(got_id, 123)
+    assert_eq(got_email, "alice@test.com")
+}
+
+@test func test_interop_encode_then_decode_identity() {
+    var w = ProtoWriter::new()
+    w.write_field_string(1, "Alice")
+    w.write_field_int64(2, 123)
+    w.write_field_string(3, "alice@test.com")
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    // Re-encode what we read; bytes must match.
+    var w2 = ProtoWriter::new()
+    loop (r.has_more()) {
+        let tag = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+        if tag.field_num == 1 or tag.field_num == 3 {
+            let s = when r.read_string() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+            w2.write_field_string(tag.field_num, s)
+        } else if tag.field_num == 2 {
+            let v = when r.read_varint() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+            w2.write_field_int64(tag.field_num, v)
+        }
+    }
+
+    let wb2: Buffer = w2.to_buffer()
+    assert_eq(wb.len(), wb2.len())
+    for i in 0 to wb.len() {
+        assert_eq(buf_byte(ref wb, i), buf_byte(ref wb2, i))
+    }
+}
+
+// ========================================================================
+// Nested + repeated + enum: Address { street="Main", tags=[1,2,3] }
+// ========================================================================
+
+@test func test_interop_repeated_packed_varints() {
+    // packed int32 tags=[1, 2, 3] → single field_num=4, wire_type=2 (LEN)
+    // payload = varint(1) varint(2) varint(3) = 0x01 0x02 0x03
+    // Full: tag=0x22 (4<<3|2), len=0x03, 0x01 0x02 0x03
+    var w = ProtoWriter::new()
+    var values: List[I64] = List[I64]::new()
+    values.push(1)
+    values.push(2)
+    values.push(3)
+    write_packed_varints(ref w, 4, ref values)
+
+    let buf = w.to_buffer()
+    assert_eq(buf.len(), 5)
+    assert_eq(buf_byte(ref buf, 0), 0x22)
+    assert_eq(buf_byte(ref buf, 1), 0x03)
+    assert_eq(buf_byte(ref buf, 2), 0x01)
+    assert_eq(buf_byte(ref buf, 3), 0x02)
+    assert_eq(buf_byte(ref buf, 4), 0x03)
+}
+
+@test func test_interop_enum_wire_form_is_varint() {
+    // Enum values are encoded as varints — same wire form as int32.
+    var w = ProtoWriter::new()
+    w.write_field_enum(5, 2)  // enum value 2 at field 5
+
+    let buf = w.to_buffer()
+    // tag = (5<<3)|0 = 0x28
+    assert_eq(buf_byte(ref buf, 0), 0x28)
+    assert_eq(buf_byte(ref buf, 1), 0x02)
+}
+
+@test func test_interop_nested_message() {
+    // Outer { inner: Inner { value = 42 } } with inner at field 1.
+    // Inner wire: 0x08 (tag field=1 varint) 0x2A (value=42)  — 2 bytes total.
+    // Outer wire: 0x0A (tag field=1 LEN) 0x02 (length) 0x08 0x2A
+    var inner_w = ProtoWriter::new()
+    inner_w.write_field_int64(1, 42)
+
+    var outer_w = ProtoWriter::new()
+    outer_w.write_field_message(1, ref inner_w)
+
+    let buf = outer_w.to_buffer()
+    assert_eq(buf.len(), 4)
+    assert_eq(buf_byte(ref buf, 0), 0x0A)  // outer tag (1<<3)|2
+    assert_eq(buf_byte(ref buf, 1), 0x02)  // outer length
+    assert_eq(buf_byte(ref buf, 2), 0x08)  // inner tag (1<<3)|0
+    assert_eq(buf_byte(ref buf, 3), 0x2A)  // inner value=42
+}

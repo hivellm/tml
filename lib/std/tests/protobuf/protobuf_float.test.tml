@@ -1,0 +1,96 @@
+/// Tests for protobuf float/double encoding (IEEE 754 via Buffer bitcast).
+///
+/// Covers task phase1a_protobuf-complete-implementation items 1.1-1.6:
+///   - write_float / read_float (F32 <-> fixed32 wire)
+///   - write_double / read_double (F64 <-> fixed64 wire)
+///   - Wire byte order matches IEEE 754 little-endian.
+///
+/// NOTE: binary wire bytes may contain NUL (0x00), so readers must be
+/// constructed via `ProtoReader::from_buffer(ref buf)`, NOT via
+/// `ProtoReader::new(writer.to_bytes())` — the latter truncates at NUL.
+
+use test::*
+use std::protobuf::{ProtoWriter, ProtoReader}
+use std::collections::Buffer
+
+func buf_byte(buf: ref Buffer, i: I64) -> I64 {
+    return buf.read_u8(i) as I64
+}
+
+@test func test_float_wire_bytes_pi_ieee754() {
+    // 3.14f = 0x4048F5C3 in IEEE 754 -> little-endian bytes: C3 F5 48 40
+    var w = ProtoWriter::new()
+    w.write_field_float(1, 3.14 as F32)
+    let buf = w.to_buffer()
+    // tag: (1 << 3) | 5 = 0x0D
+    assert_eq(buf_byte(ref buf, 0), 0x0D)
+    assert_eq(buf_byte(ref buf, 1), 0xC3)
+    assert_eq(buf_byte(ref buf, 2), 0xF5)
+    assert_eq(buf_byte(ref buf, 3), 0x48)
+    assert_eq(buf_byte(ref buf, 4), 0x40)
+}
+
+@test func test_double_wire_bytes_one_ieee754() {
+    // 1.0 (F64) = 0x3FF0000000000000 -> LE bytes: 00 00 00 00 00 00 F0 3F
+    var w = ProtoWriter::new()
+    w.write_field_double(1, 1.0)
+    let buf = w.to_buffer()
+    // tag: (1 << 3) | 1 = 0x09
+    assert_eq(buf_byte(ref buf, 0), 0x09)
+    assert_eq(buf_byte(ref buf, 1), 0x00)
+    assert_eq(buf_byte(ref buf, 2), 0x00)
+    assert_eq(buf_byte(ref buf, 3), 0x00)
+    assert_eq(buf_byte(ref buf, 4), 0x00)
+    assert_eq(buf_byte(ref buf, 5), 0x00)
+    assert_eq(buf_byte(ref buf, 6), 0x00)
+    assert_eq(buf_byte(ref buf, 7), 0xF0)
+    assert_eq(buf_byte(ref buf, 8), 0x3F)
+}
+
+@test func test_float_roundtrip_exact() {
+    var w = ProtoWriter::new()
+    w.write_field_float(11, 0.0 as F32)
+    w.write_field_float(11, 1.5 as F32)
+    w.write_field_float(11, -2.25 as F32)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t1.field_num, 11)
+    assert_eq(t1.wire_type, 5)
+    let f1: F32 = when r.read_float() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(f1 == (0.0 as F32), "0.0 roundtrip")
+
+    let _t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    let f2: F32 = when r.read_float() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(f2 == (1.5 as F32), "1.5 roundtrip")
+
+    let _t3 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    let f3: F32 = when r.read_float() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(f3 == (-2.25 as F32), "-2.25 roundtrip")
+}
+
+@test func test_double_roundtrip_exact() {
+    var w = ProtoWriter::new()
+    w.write_field_double(12, 0.0)
+    w.write_field_double(12, 1.0)
+    w.write_field_double(12, -0.5)
+
+    let wb: Buffer = w.to_buffer()
+    var r = ProtoReader::from_buffer(ref wb)
+
+    let t1 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    assert_eq(t1.field_num, 12)
+    assert_eq(t1.wire_type, 1)
+    let d1: F64 = when r.read_double() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(d1 == 0.0, "0.0 roundtrip")
+
+    let _t2 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    let d2: F64 = when r.read_double() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(d2 == 1.0, "1.0 roundtrip")
+
+    let _t3 = when r.read_tag() { Ok(t) => t, Err(e) => { assert(false, e); return } }
+    let d3: F64 = when r.read_double() { Ok(v) => v, Err(e) => { assert(false, e); return } }
+    assert(d3 == -0.5, "-0.5 roundtrip")
+}

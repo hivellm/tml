@@ -1,0 +1,58 @@
+//! Protocol Buffers wire type constants and tag manipulation helpers.
+//!
+//! Wire types define how values are encoded on the wire. Each field
+//! in a protobuf message is identified by a tag that combines the
+//! field number and wire type.
+
+/// Varint wire type (0). Used for int32, int64, uint32, uint64, sint32, sint64, bool, enum.
+pub const WIRE_VARINT: I64 = 0
+
+/// 64-bit wire type (1). Used for fixed64, sfixed64, double.
+pub const WIRE_FIXED64: I64 = 1
+
+/// Length-delimited wire type (2). Used for string, bytes, embedded messages, packed repeated.
+pub const WIRE_LEN: I64 = 2
+
+/// Start group wire type (3). Deprecated.
+pub const WIRE_SGROUP: I64 = 3
+
+/// End group wire type (4). Deprecated.
+pub const WIRE_EGROUP: I64 = 4
+
+/// 32-bit wire type (5). Used for fixed32, sfixed32, float.
+pub const WIRE_FIXED32: I64 = 5
+
+/// Returns a human-readable name for a wire type constant.
+pub func wire_type_name(wt: I64) -> Str {
+    if wt == 0 {
+        return "VARINT"
+    } else if wt == 1 {
+        return "FIXED64"
+    } else if wt == 2 {
+        return "LEN"
+    } else if wt == 3 {
+        return "SGROUP"
+    } else if wt == 4 {
+        return "EGROUP"
+    } else if wt == 5 {
+        return "FIXED32"
+    } else {
+        return "UNKNOWN"
+    }
+}
+
+/// Constructs a tag from a field number and wire type.
+/// Tag = (field_number << 3) | wire_type
+pub func make_tag(field_num: I64, wire_type: I64) -> I64 {
+    return (field_num << 3) | wire_type
+}
+
+/// Extracts the field number from a tag.
+pub func tag_field_number(tag: I64) -> I64 {
+    return ((tag as U64) >> 3) as I64
+}
+
+/// Extracts the wire type from a tag.
+pub func tag_wire_type(tag: I64) -> I64 {
+    return tag & 7
+}

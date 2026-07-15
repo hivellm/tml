@@ -19,7 +19,9 @@ TML_MODULE("compiler")
 
 #include <algorithm>
 #include <functional>
+#include <future>
 #include <sstream>
+#include <thread>
 #include <unordered_map>
 
 namespace tml::codegen {
@@ -144,34 +146,81 @@ auto CodegenPartitioner::partition(const mir::Module& module) -> PartitionResult
         cgu_functions[cgu_idx].push_back(i);
     }
 
-    // Generate IR for each non-empty CGU
+    // Collect non-empty CGU specs (index + function indices + fingerprints)
+    struct CGUSpec {
+        int cgu_index;
+        std::vector<size_t> func_indices;
+        std::vector<std::string> function_names;
+        std::vector<FunctionFingerprint> function_fingerprints;
+        std::string fingerprint;
+    };
+    std::vector<CGUSpec> specs;
     for (int cgu_idx = 0; cgu_idx < effective_cgus; ++cgu_idx) {
         auto it = cgu_functions.find(cgu_idx);
         if (it == cgu_functions.end()) {
-            continue; // Skip empty CGUs (hash distribution gap)
+            continue;
+        }
+        CGUSpec spec;
+        spec.cgu_index = cgu_idx;
+        spec.func_indices = it->second;
+        for (size_t idx : spec.func_indices) {
+            spec.function_names.push_back(module.functions[idx].name);
+            spec.function_fingerprints.push_back(all_func_fps[idx]);
+        }
+        spec.fingerprint = compose_cgu_fingerprint(spec.function_fingerprints);
+        specs.push_back(std::move(spec));
+    }
+
+    // Generate IR for each CGU in parallel.
+    // Each MirCodegen instance is independent (own state, own output buffer),
+    // so no synchronization is needed during IR generation.
+    int num_threads = static_cast<int>(std::thread::hardware_concurrency());
+    if (num_threads < 1)
+        num_threads = 1;
+    if (num_threads > 8)
+        num_threads = 8;
+    bool use_parallel = static_cast<int>(specs.size()) >= 2 && num_threads >= 2;
+
+    if (use_parallel) {
+        // Launch async tasks for IR generation
+        struct IRResult {
+            int cgu_index;
+            std::string llvm_ir;
+        };
+        std::vector<std::future<IRResult>> futures;
+        for (const auto& spec : specs) {
+            futures.push_back(std::async(std::launch::async, [&module, &spec, this]() -> IRResult {
+                MirCodegen codegen(options_.codegen_opts);
+                return IRResult{spec.cgu_index, codegen.generate_cgu(module, spec.func_indices)};
+            }));
         }
 
-        const auto& func_indices = it->second;
-
-        CGUResult cgu;
-        cgu.cgu_index = cgu_idx;
-
-        // Collect per-function fingerprints for this CGU
-        for (size_t idx : func_indices) {
-            cgu.function_names.push_back(module.functions[idx].name);
-            cgu.function_fingerprints.push_back(all_func_fps[idx]);
+        // Collect results in order
+        for (size_t i = 0; i < specs.size(); ++i) {
+            auto ir_result = futures[i].get();
+            CGUResult cgu;
+            cgu.cgu_index = specs[i].cgu_index;
+            cgu.function_names = std::move(specs[i].function_names);
+            cgu.function_fingerprints = std::move(specs[i].function_fingerprints);
+            cgu.fingerprint = std::move(specs[i].fingerprint);
+            cgu.llvm_ir = std::move(ir_result.llvm_ir);
+            result.cgus.push_back(std::move(cgu));
         }
 
-        // Compose CGU fingerprint from function MIR fingerprints.
-        // This is stable across builds when functions don't change,
-        // enabling cache hits without regenerating IR.
-        cgu.fingerprint = compose_cgu_fingerprint(cgu.function_fingerprints);
-
-        // Generate IR for this CGU
-        MirCodegen codegen(options_.codegen_opts);
-        cgu.llvm_ir = codegen.generate_cgu(module, func_indices);
-
-        result.cgus.push_back(std::move(cgu));
+        TML_LOG_INFO("codegen", "Parallel IR generation: " << specs.size() << " CGUs on "
+                                                           << num_threads << " threads");
+    } else {
+        // Sequential fallback for 1 CGU or 1 thread
+        for (auto& spec : specs) {
+            CGUResult cgu;
+            cgu.cgu_index = spec.cgu_index;
+            cgu.function_names = std::move(spec.function_names);
+            cgu.function_fingerprints = std::move(spec.function_fingerprints);
+            cgu.fingerprint = std::move(spec.fingerprint);
+            MirCodegen codegen(options_.codegen_opts);
+            cgu.llvm_ir = codegen.generate_cgu(module, spec.func_indices);
+            result.cgus.push_back(std::move(cgu));
+        }
     }
 
     TML_LOG_DEBUG("codegen", "CGU partitioning: " << module.functions.size() << " functions -> "

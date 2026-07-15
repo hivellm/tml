@@ -1,0 +1,130 @@
+//! LCOV `.info` emit.
+//!
+//! Writes a `CoverageReport` as a text `.info` file in the canonical
+//! LCOV record order per file section:
+//!
+//! ```text
+//! SF:<path>
+//! FN:<start_line>,<name>           (one per function)
+//! FNDA:<hit_count>,<name>          (one per function)
+//! FNF:<total_functions>
+//! FNH:<covered_functions>
+//! BRDA:<line>,<block>,<branch>,<hit>   (one per branch)
+//! BRF:<total_branches>
+//! BRH:<covered_branches>
+//! DA:<line>,<hit>                  (one per line)
+//! LF:<total_lines>
+//! LH:<covered_lines>
+//! end_of_record
+//! ```
+//!
+//! Totals (`FNF/FNH/BRF/BRH/LF/LH`) are recomputed from the records to
+//! guarantee self-consistency; stale totals on the input are ignored.
+
+use coverage::types::*
+use std::file::File
+
+/// Write a `CoverageReport` as an LCOV `.info` file at `path`.
+pub func write_lcov(report: CoverageReport, path: Str) -> Outcome[(), EmitError] {
+    let text = render_report(report)
+    let ok = File::write_all(path, text)
+    if not ok {
+        return Err(EmitError::WriteError(`failed to write {path}`.as_str()))
+    }
+    Ok(())
+}
+
+/// Render a `CoverageReport` as LCOV text (exposed for tests + round-trip).
+pub func render_report(report: CoverageReport) -> Str {
+    var out: Str = ""
+    var i: I64 = 0
+    loop (i < report.files.len()) {
+        out = out + render_file(report.files.get(i))
+        i = i + 1
+    }
+    out
+}
+
+/// Render one `FileCoverage` section (SF: … end_of_record).
+func render_file(f: FileCoverage) -> Str {
+    var out: Str = `SF:{f.path}\n`.as_str()
+
+    // FN / FNDA
+    var i: I64 = 0
+    loop (i < f.functions.len()) {
+        let fh = f.functions.get(i)
+        out = out + `FN:{fh.start_line},{fh.name}\n`.as_str()
+        i = i + 1
+    }
+    i = 0
+    loop (i < f.functions.len()) {
+        let fh = f.functions.get(i)
+        out = out + `FNDA:{fh.hit_count},{fh.name}\n`.as_str()
+        i = i + 1
+    }
+    let fnf = f.functions.len()
+    let fnh = count_fn_hit(f.functions)
+    out = out + `FNF:{fnf}\n`.as_str()
+    out = out + `FNH:{fnh}\n`.as_str()
+
+    // BRDA
+    i = 0
+    loop (i < f.branches.len()) {
+        let b = f.branches.get(i)
+        out = out + `BRDA:{b.line},{b.block_id},{b.branch_id},{b.hit_count}\n`.as_str()
+        i = i + 1
+    }
+    let brf = f.branches.len()
+    let brh = count_br_hit(f.branches)
+    out = out + `BRF:{brf}\n`.as_str()
+    out = out + `BRH:{brh}\n`.as_str()
+
+    // DA
+    i = 0
+    loop (i < f.lines.len()) {
+        let l = f.lines.get(i)
+        out = out + `DA:{l.line},{l.count}\n`.as_str()
+        i = i + 1
+    }
+    let lf = f.lines.len()
+    let lh = count_ln_hit(f.lines)
+    out = out + `LF:{lf}\n`.as_str()
+    out = out + `LH:{lh}\n`.as_str()
+
+    out = out + "end_of_record\n"
+    out
+}
+
+// ============================================================================
+// Totals helpers (recomputed from records)
+// ============================================================================
+
+func count_fn_hit(functions: List[FuncHit]) -> I64 {
+    var n: I64 = 0
+    var i: I64 = 0
+    loop (i < functions.len()) {
+        if functions.get(i).hit_count > 0 { n = n + 1 }
+        i = i + 1
+    }
+    n
+}
+
+func count_br_hit(branches: List[BranchHit]) -> I64 {
+    var n: I64 = 0
+    var i: I64 = 0
+    loop (i < branches.len()) {
+        if branches.get(i).hit_count > 0 { n = n + 1 }
+        i = i + 1
+    }
+    n
+}
+
+func count_ln_hit(lines: List[LineHit]) -> I64 {
+    var n: I64 = 0
+    var i: I64 = 0
+    loop (i < lines.len()) {
+        if lines.get(i).count > 0 { n = n + 1 }
+        i = i + 1
+    }
+    n
+}

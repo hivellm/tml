@@ -41,6 +41,12 @@ func ffi_file_size(handle: *Unit) -> I64
 @extern("file_flush")
 func ffi_file_flush(handle: *Unit) -> Bool
 
+@extern("file_sync")
+func ffi_file_sync(handle: *Unit) -> Bool
+
+@extern("file_datasync")
+func ffi_file_datasync(handle: *Unit) -> Bool
+
 @extern("file_seek_from")
 func ffi_file_seek_from(handle: *Unit, offset: I64, whence: I32) -> I64
 
@@ -160,6 +166,20 @@ impl File {
     /// Flush buffered data to disk.
     pub func flush(this) -> Bool {
         return ffi_file_flush(this.handle)
+    }
+
+    /// Flush all buffered data and metadata to permanent storage (fsync).
+    /// Guarantees that data survives a power failure or OS crash.
+    /// On Windows, calls `_commit(fd)`. On Unix, calls `fsync(fd)`.
+    pub func sync(this) -> Bool {
+        return ffi_file_sync(this.handle)
+    }
+
+    /// Flush buffered data (but not necessarily metadata) to permanent storage.
+    /// Like `sync()` but may skip metadata updates (file size, mtime) for performance.
+    /// On Linux, calls `fdatasync(fd)`. On Windows/macOS, falls back to `fsync(fd)`.
+    pub func datasync(this) -> Bool {
+        return ffi_file_datasync(this.handle)
     }
 
     /// Close the file

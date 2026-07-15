@@ -1,0 +1,396 @@
+//! Top-level preprocessor directive sweep.
+//!
+//! Walks a `List[PpToken]`, recognises directives at start-of-line
+//! (`#include`, `#define`, `#undef`, `#if`, `#ifdef`, `#ifndef`, `#elif`,
+//! `#else`, `#endif`, `#error`, `#pragma`, `#line`), updates the
+//! `Preprocessor` state, and produces a filtered token stream that the
+//! C lexer can consume.
+//!
+//! Phase 24a item 1.2.
+
+use compiler::cc::preproc::token::*
+use compiler::cc::preproc::macros::*
+use compiler::cc::preproc::conditionals::*
+use compiler::cc::preproc::include::*
+use compiler::cc::preproc::tokenize::pp_tokenize_source
+use std::collections::list::List
+use std::file::File
+
+/// Walk `tokens` and apply directive logic. Returns a new token list
+/// that contains only the non-directive tokens that survive the
+/// active-conditional gate. Whitespace and Newline tokens are stripped
+/// because the C lexer ignores them anyway.
+///
+/// The convenience entry point — equivalent to `pp_sweep_in_file(pp,
+/// tokens, "")`. Use `pp_sweep_in_file` when you have a known source
+/// path so `#include "..."` lookups can resolve relative to it.
+pub func pp_sweep(pp: Preprocessor, tokens: List[PpToken]) -> List[PpToken] {
+    return pp_sweep_in_file(pp, tokens, "")
+}
+
+/// Same as `pp_sweep` but takes the absolute path of the file the
+/// tokens were produced from so `#include "..."` references can be
+/// resolved relative to it.
+pub func pp_sweep_in_file(pp: Preprocessor, tokens: List[PpToken], current_file: Str) -> List[PpToken] {
+    let n: I64 = tokens.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+
+    var i: I64 = 0 as I64
+    var at_line_start: I64 = 1 as I64
+    loop (i < n) {
+        let tok: PpToken = tokens.get(i)
+        let kind_code: I64 = pp_kind_code(tok.kind)
+
+        if kind_code == 7 as I64 {
+            // Whitespace — does not break "start of line" for # detection
+            i = i + 1 as I64
+            continue
+        }
+        if kind_code == 6 as I64 {
+            // Newline
+            at_line_start = 1 as I64
+            i = i + 1 as I64
+            continue
+        }
+
+        let is_directive_marker: I64 = if kind_code == 5 as I64 and tok.text == "#" and at_line_start == 1 as I64 { 1 as I64 } else { 0 as I64 }
+        if is_directive_marker == 1 as I64 {
+            // Skip whitespace after the `#` until the directive name.
+            var j: I64 = i + 1 as I64
+            var found_name: I64 = 0 as I64
+            loop (j < n and found_name == 0 as I64) {
+                let kc: I64 = pp_kind_code(tokens.get(j).kind)
+                if kc == 7 as I64 {
+                    j = j + 1 as I64
+                } else {
+                    found_name = 1 as I64
+                }
+            }
+            if j >= n { break }
+            let name_tok: PpToken = tokens.get(j)
+            var name: Str = ""
+            if pp_kind_code(name_tok.kind) == 0 as I64 {
+                name = name_tok.text.duplicate()
+            }
+            // Collect tokens after the directive name up to the next Newline.
+            var k: I64 = j + 1 as I64
+            let body: List[PpToken] = List[PpToken]::new(8 as I64)
+            var hit_newline: I64 = 0 as I64
+            loop (k < n and hit_newline == 0 as I64) {
+                let t: PpToken = tokens.get(k)
+                let tc: I64 = pp_kind_code(t.kind)
+                if tc == 6 as I64 {
+                    hit_newline = 1 as I64
+                } else {
+                    // Deep-clone: `tokens.get(k)` is a bitwise alias
+                    // whose Str / List fields reference tokens'
+                    // backing storage. (phase24m.)
+                    body.push(dup_pp_token(t))
+                    k = k + 1 as I64
+                }
+            }
+            // Advance i past the trailing Newline (or to n).
+            i = if k < n { k + 1 as I64 } else { k }
+            at_line_start = 1 as I64
+            pp_handle_directive(pp, name, body, current_file, out)
+            continue
+        }
+
+        // Non-directive token. Append when the current conditional is active.
+        if cond_is_active(pp) == 1 as I64 {
+            let consumed: I64 = expand_macro_at(pp, tokens, i, out)
+            if consumed > 0 as I64 {
+                at_line_start = 0 as I64
+                i = i + consumed
+                continue
+            }
+            // No expansion — push the token (deep-cloned so the
+            // returned stream survives the raw_pp drop).
+            out.push(dup_pp_token(tok))
+        }
+        at_line_start = 0 as I64
+        i = i + 1 as I64
+    }
+    return out
+}
+
+/// Try to expand a macro starting at position `i` in `tokens`.
+/// Pushes the expanded tokens (or the original token if no expansion
+/// happens) into `out`. Returns the number of input tokens consumed
+/// (1 for object-like or no-match; >1 for function-like invocation
+/// covering the trailing `(...)` argument list). Returns 0 to signal
+/// "do nothing — caller must handle as a non-expanded token".
+func expand_macro_at(pp: Preprocessor, tokens: List[PpToken], i: I64, out: List[PpToken]) -> I64 {
+    let n: I64 = tokens.len() as I64
+    let tok: PpToken = tokens.get(i)
+    let kind_code: I64 = pp_kind_code(tok.kind)
+    if kind_code != 0 as I64 { return 0 as I64 }
+    if pp.defines.has(tok.text) == false { return 0 as I64 }
+    // `pp.defines.get` returns a bitwise alias of HashMap's stored
+    // MacroDef — the inner `List[PpToken]` field shares the HashMap's
+    // backing buffer. Dropping the local would free that buffer, so we
+    // immediately deep-clone via `dup_macro_def` (phase24m fix). The
+    // bitwise alias is consumed by `dup_macro_def`'s pattern-match
+    // (each variant arm constructs a fresh value with deep-cloned
+    // payloads), so no scope-exit drop fires on the alias.
+    let def: MacroDef = dup_macro_def(pp.defines.get(tok.text))
+    when def {
+        ObjectLike(body) => {
+            // Substitute body tokens into out. Deep-clone Str fields so
+            // the emitted tokens don't alias the macro-store buffer
+            // (the pre-existing alias was the same Heap-borrow-drop
+            // class of bug that haunted the C parser; see dup_pp_token
+            // in macros.tml).
+            let bn: I64 = body.len() as I64
+            for bi in 0 to bn {
+                out.push(dup_pp_token(body.get(bi)))
+            }
+            return 1 as I64
+        },
+        FunctionLike(fdef) => {
+            // Look ahead for `(` (skipping whitespace tokens). If not
+            // found, treat as a bare identifier (per C17: a function-like
+            // macro that's not followed by `(` is left as-is).
+            var j: I64 = i + 1 as I64
+            loop (j < n) {
+                let kc: I64 = pp_kind_code(tokens.get(j).kind)
+                if kc == 6 as I64 or kc == 7 as I64 {
+                    j = j + 1 as I64
+                } else {
+                    break
+                }
+            }
+            if j >= n { return 0 as I64 }
+            let lparen: PpToken = tokens.get(j)
+            if pp_kind_code(lparen.kind) != 5 as I64 or lparen.text != "(" {
+                return 0 as I64
+            }
+            // Collect arguments. j currently points to `(`.
+            let collected_opt: Maybe[CollectedArgs] = collect_macro_args(tokens, j, n)
+            let Just(collected) = collected_opt else {
+                pp.errors.push("unterminated function-like macro invocation: " + tok.text)
+                return 0 as I64
+            }
+            // Substitute and emit. Deep-clone: `expanded.get(ei)` is a
+            // bitwise alias whose Str / List fields reference the
+            // expanded list's storage; that storage is freed when
+            // `expanded` drops at end of scope. (phase24m.)
+            let expanded: List[PpToken] = substitute_func_macro(fdef, collected)
+            let en: I64 = expanded.len() as I64
+            for ei in 0 to en {
+                out.push(dup_pp_token(expanded.get(ei)))
+            }
+            // Tokens consumed = (j - i) + (collected.end - j + 1)
+            //                 = collected.end - i + 1
+            return collected.end - i + 1 as I64
+        }
+    }
+    return 0 as I64
+}
+
+/// Numeric code for a PpTokenKind so the sweep can branch on plain I64.
+/// Mirrors the enum order in `compiler::cc::preproc::token::PpTokenKind`.
+func pp_kind_code(k: PpTokenKind) -> I64 {
+    when k {
+        Ident => return 0 as I64,
+        IntLit => return 1 as I64,
+        FloatLit => return 2 as I64,
+        CharLit => return 3 as I64,
+        StringLit => return 4 as I64,
+        Punct => return 5 as I64,
+        Newline => return 6 as I64,
+        Whitespace => return 7 as I64,
+        Eof => return 8 as I64
+    }
+}
+
+/// Dispatch a single directive. `body` is the tokens after the
+/// directive name, in order, with whitespace tokens still embedded.
+/// `current_file` is the path of the file the directive came from
+/// (used for relative `#include "..."` resolution). `out` is the
+/// running output stream — `#include` appends its expanded content
+/// here.
+func pp_handle_directive(
+    pp: Preprocessor,
+    name: Str,
+    body: List[PpToken],
+    current_file: Str,
+    out: List[PpToken]
+) {
+    let active: I64 = cond_is_active(pp)
+
+    // Conditionals are evaluated even when an outer block is inactive
+    // because they change the depth of the conditional stack. Other
+    // directives are silently dropped when inactive.
+    if name == "ifdef" {
+        let arg: Str = first_ident_text(body)
+        let v: I64 = if active == 1 as I64 { pp_is_defined(pp, arg) } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "ifndef" {
+        let arg: Str = first_ident_text(body)
+        let raw: I64 = if active == 1 as I64 { pp_is_defined(pp, arg) } else { 1 as I64 }
+        let v: I64 = if raw == 0 as I64 { 1 as I64 } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "if" {
+        let v: I64 = if active == 1 as I64 { eval_const_expr(pp, strip_ws(body)) } else { 0 as I64 }
+        cond_push(pp, v)
+        return
+    }
+    if name == "elif" {
+        let v: I64 = eval_const_expr(pp, strip_ws(body))
+        cond_elif(pp, v)
+        return
+    }
+    if name == "else" {
+        cond_else(pp)
+        return
+    }
+    if name == "endif" {
+        cond_endif(pp)
+        return
+    }
+
+    // From here on, only act when the surrounding conditional is active.
+    if active == 0 as I64 { return }
+
+    if name == "define" {
+        // `#define NAME body` (object-like) or
+        // `#define NAME(params) body` (function-like).
+        // Function-like is recognised when `(` immediately follows the
+        // macro name with NO whitespace separating them (C17 §6.10.3).
+        let arg: Str = first_ident_text(body)
+        if arg == "" { return }
+        let body_after_name: List[PpToken] = drop_first_ident(body)
+        // Detect function-like by inspecting the very first remaining
+        // token (no whitespace skip): if it's `(`, this is function-like.
+        let is_func_like: I64 = is_function_like_define(body_after_name)
+        if is_func_like == 1 as I64 {
+            let parsed_opt: Maybe[ParsedFuncMacro] = parse_func_macro_def(body_after_name)
+            let Just(parsed) = parsed_opt else {
+                pp.errors.push("malformed function-like #define for " + arg)
+                return
+            }
+            pp_define_function(pp, arg, parsed.params, parsed.is_variadic, parsed.body)
+            return
+        }
+        let body_clean: List[PpToken] = strip_ws(body_after_name)
+        pp_define_object(pp, arg, body_clean)
+        return
+    }
+    if name == "undef" {
+        let arg: Str = first_ident_text(body)
+        if arg != "" { pp_undef(pp, arg) }
+        return
+    }
+    if name == "include" {
+        let parsed_opt: Maybe[ParsedInclude] = pp_parse_include_body(body)
+        let Just(parsed) = parsed_opt else {
+            pp.errors.push("malformed #include directive")
+            return
+        }
+        let resolved_opt: Maybe[Str] = pp_resolve_include(
+            parsed.name, parsed.is_system, current_file,
+            pp.user_paths, pp.system_paths)
+        let Just(path) = resolved_opt else {
+            // Header not found. For a self-hosted compiler bring-up we
+            // tolerate missing system headers (the real `<stdio.h>` is
+            // only fully needed at link time); record an error so the
+            // caller can surface it but otherwise treat the include as
+            // a no-op.
+            pp.errors.push("could not resolve #include " + parsed.name)
+            return
+        }
+        if pp_is_circular(pp, path) == 1 as I64 {
+            pp.errors.push("circular #include of " + path)
+            return
+        }
+        if pp_is_guarded(pp, path) == 1 as I64 {
+            // Already included once with `#pragma once` or guarded —
+            // skip silently per C17 §6.10.2.
+            return
+        }
+        // CRITICAL: `pp_push_include(pp, path)` MOVES `path` into the
+        // IncludeFrame stored in `pp.include_stack`. Subsequent uses of
+        // `path` would be use-after-move — the Str's heap allocation is
+        // owned by the include_stack frame. Each downstream consumer
+        // needs its own owned copy. (phase24m: this is the actual root
+        // cause of the residual essential.c SIGSEGV — `current_file`
+        // template-literal output showed binary garbage in trace logs,
+        // confirming dangling Str data flowed through pp_sweep_in_file.)
+        pp_push_include(pp, path.duplicate())
+        let included_source: Str = File::read_all(path.duplicate())
+        let included_pp: List[PpToken] = pp_tokenize_source(included_source, path.duplicate())
+        let included_swept: List[PpToken] = pp_sweep_in_file(pp, included_pp, path.duplicate())
+        let m: I64 = included_swept.len() as I64
+        for k in 0 to m {
+            // Deep-clone the token: `included_swept.get(k)` returns a
+            // bitwise alias whose `blue_set: List[Str]` field aliases
+            // the source list's buffer. Pushing the alias into `out`
+            // would create a UAF when `included_swept` drops at end
+            // of scope. (phase24m.)
+            out.push(dup_pp_token(included_swept.get(k)))
+        }
+        pp_pop_include(pp)
+        return
+    }
+    // `#error`, `#pragma`, `#line` and any unknown directive: drop.
+}
+
+/// Return the text of the first Ident token in `body`, or empty Str.
+func first_ident_text(body: List[PpToken]) -> Str {
+    let n: I64 = body.len() as I64
+    var found: Str = ""
+    var done: I64 = 0 as I64
+    var i: I64 = 0 as I64
+    loop (i < n and done == 0 as I64) {
+        let t: PpToken = body.get(i)
+        if pp_kind_code(t.kind) == 0 as I64 {
+            found = t.text.duplicate()
+            done = 1 as I64
+        }
+        i = i + 1 as I64
+    }
+    return found
+}
+
+/// Drop the first non-whitespace identifier from `body`, returning the
+/// rest. Whitespace before the identifier is dropped; whitespace after
+/// is preserved (the caller decides whether to strip it).
+func drop_first_ident(body: List[PpToken]) -> List[PpToken] {
+    let n: I64 = body.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    var seen_ident: I64 = 0 as I64
+    for i in 0 to n {
+        let t: PpToken = body.get(i)
+        if seen_ident == 0 as I64 {
+            if pp_kind_code(t.kind) == 0 as I64 {
+                seen_ident = 1 as I64
+            }
+        } else {
+            // Deep-clone: bitwise alias of body's storage. (phase24m.)
+            out.push(dup_pp_token(t))
+        }
+    }
+    return out
+}
+
+/// Return a copy of `body` with Whitespace and Newline tokens removed.
+/// Tokens are deep-cloned so the returned list is safe to outlive the
+/// caller's `body` (Str fields are heap-owned aliases otherwise — see
+/// `dup_pp_token` in macros.tml).
+func strip_ws(body: List[PpToken]) -> List[PpToken] {
+    let n: I64 = body.len() as I64
+    let out: List[PpToken] = List[PpToken]::new(n)
+    for i in 0 to n {
+        let t: PpToken = body.get(i)
+        let kc: I64 = pp_kind_code(t.kind)
+        if kc != 6 as I64 and kc != 7 as I64 {
+            out.push(dup_pp_token(t))
+        }
+    }
+    return out
+}

@@ -1,0 +1,231 @@
+//! Merge multiple `CoverageReport` values into one (phase 5.1).
+//!
+//! Merge semantics:
+//!
+//! - Files are grouped by `path`. Files absent from a given report
+//!   contribute zero on the hit-count axis (i.e. they are simply not
+//!   included in that report's contribution to the merged record).
+//! - Per-line records are merged by `line` number; `count` is summed.
+//! - Per-function records are merged by `name`; `hit_count` is summed,
+//!   `start_line` is taken from the first occurrence.
+//! - Per-branch records are merged by `(line, block_id, branch_id)`;
+//!   `hit_count` is summed.
+//! - `source_roots` is the order-preserving deduplicated union.
+
+use coverage::types::*
+use std::collections::List
+
+/// Combine a list of reports into one.
+pub func merge(reports: List[CoverageReport]) -> CoverageReport {
+    if reports.len() == 0 {
+        return CoverageReport {
+            files: List[FileCoverage]::new(),
+            source_roots: List[Str]::new(),
+            tool: "coverage-merge",
+            version: "",
+            generated_at: 0,
+        }
+    }
+
+    // 1. Collect unique file paths in first-seen order.
+    let paths: List[Str] = List[Str]::new()
+    var ri: I64 = 0
+    loop (ri < reports.len()) {
+        let r = reports.get(ri)
+        var fi: I64 = 0
+        loop (fi < r.files.len()) {
+            let p = r.files.get(fi).path
+            if not list_contains_str(paths, p) {
+                paths.push(p)
+            }
+            fi = fi + 1
+        }
+        ri = ri + 1
+    }
+
+    // 2. For each path, merge all matching file entries.
+    let merged: List[FileCoverage] = List[FileCoverage]::new()
+    var pi: I64 = 0
+    loop (pi < paths.len()) {
+        let path = paths.get(pi)
+        merged.push(merge_one_path(path, reports))
+        pi = pi + 1
+    }
+
+    // 3. Union source_roots preserving order.
+    let roots: List[Str] = List[Str]::new()
+    ri = 0
+    loop (ri < reports.len()) {
+        let r = reports.get(ri)
+        var si: I64 = 0
+        loop (si < r.source_roots.len()) {
+            let s = r.source_roots.get(si)
+            if not list_contains_str(roots, s) {
+                roots.push(s)
+            }
+            si = si + 1
+        }
+        ri = ri + 1
+    }
+
+    CoverageReport {
+        files: merged,
+        source_roots: roots,
+        tool: "coverage-merge",
+        version: "",
+        generated_at: reports.get(0).generated_at,
+    }
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+func merge_one_path(path: Str, reports: List[CoverageReport]) -> FileCoverage {
+    let lines_keys: List[I64] = List[I64]::new()
+    let lines_count: List[I64] = List[I64]::new()
+
+    // Function records keyed by name
+    let fn_names: List[Str] = List[Str]::new()
+    let fn_start: List[I64] = List[I64]::new()
+    let fn_hits: List[I64] = List[I64]::new()
+
+    // Branch records keyed by (line, block, branch)
+    let br_line: List[I64] = List[I64]::new()
+    let br_block: List[I64] = List[I64]::new()
+    let br_branch: List[I64] = List[I64]::new()
+    let br_hits: List[I64] = List[I64]::new()
+
+    var ri: I64 = 0
+    loop (ri < reports.len()) {
+        let r = reports.get(ri)
+        var fi: I64 = 0
+        loop (fi < r.files.len()) {
+            let f = r.files.get(fi)
+            if f.path == path {
+                // lines
+                var li: I64 = 0
+                loop (li < f.lines.len()) {
+                    let lh = f.lines.get(li)
+                    add_line_hit(lines_keys, lines_count, lh.line, lh.count)
+                    li = li + 1
+                }
+                // functions
+                var ki: I64 = 0
+                loop (ki < f.functions.len()) {
+                    let fh = f.functions.get(ki)
+                    add_fn_hit(fn_names, fn_start, fn_hits, fh.name, fh.start_line, fh.hit_count)
+                    ki = ki + 1
+                }
+                // branches
+                var bi: I64 = 0
+                loop (bi < f.branches.len()) {
+                    let bh = f.branches.get(bi)
+                    add_br_hit(br_line, br_block, br_branch, br_hits,
+                               bh.line, bh.block_id, bh.branch_id, bh.hit_count)
+                    bi = bi + 1
+                }
+            }
+            fi = fi + 1
+        }
+        ri = ri + 1
+    }
+
+    // Materialize parallel arrays back into typed records.
+    let lines_out: List[LineHit] = List[LineHit]::new()
+    var li2: I64 = 0
+    loop (li2 < lines_keys.len()) {
+        lines_out.push(LineHit {
+            line: lines_keys.get(li2),
+            count: lines_count.get(li2),
+            branch_count: 0,
+            branch_taken: 0,
+        })
+        li2 = li2 + 1
+    }
+
+    let fns_out: List[FuncHit] = List[FuncHit]::new()
+    var ki2: I64 = 0
+    loop (ki2 < fn_names.len()) {
+        fns_out.push(FuncHit {
+            name: fn_names.get(ki2),
+            start_line: fn_start.get(ki2),
+            hit_count: fn_hits.get(ki2),
+        })
+        ki2 = ki2 + 1
+    }
+
+    let brs_out: List[BranchHit] = List[BranchHit]::new()
+    var bi2: I64 = 0
+    loop (bi2 < br_line.len()) {
+        brs_out.push(BranchHit {
+            line: br_line.get(bi2),
+            block_id: br_block.get(bi2),
+            branch_id: br_branch.get(bi2),
+            hit_count: br_hits.get(bi2),
+        })
+        bi2 = bi2 + 1
+    }
+
+    FileCoverage {
+        path: path,
+        lines: lines_out,
+        functions: fns_out,
+        branches: brs_out,
+    }
+}
+
+func add_line_hit(keys: List[I64], vals: List[I64], line: I64, count: I64) {
+    var i: I64 = 0
+    loop (i < keys.len()) {
+        if keys.get(i) == line {
+            vals.set(i, vals.get(i) + count)
+            return
+        }
+        i = i + 1
+    }
+    keys.push(line)
+    vals.push(count)
+}
+
+func add_fn_hit(names: List[Str], starts: List[I64], hits: List[I64],
+                name: Str, start: I64, hit: I64) {
+    var i: I64 = 0
+    loop (i < names.len()) {
+        if names.get(i) == name {
+            hits.set(i, hits.get(i) + hit)
+            return
+        }
+        i = i + 1
+    }
+    names.push(name)
+    starts.push(start)
+    hits.push(hit)
+}
+
+func add_br_hit(lines: List[I64], blocks: List[I64], branches: List[I64], hits: List[I64],
+                line: I64, block: I64, branch: I64, hit: I64) {
+    var i: I64 = 0
+    loop (i < lines.len()) {
+        if lines.get(i) == line and blocks.get(i) == block and branches.get(i) == branch {
+            hits.set(i, hits.get(i) + hit)
+            return
+        }
+        i = i + 1
+    }
+    lines.push(line)
+    blocks.push(block)
+    branches.push(branch)
+    hits.push(hit)
+}
+
+func list_contains_str(list: List[Str], target: Str) -> Bool {
+    var i: I64 = 0
+    loop (i < list.len()) {
+        if list.get(i) == target {
+            return true
+        }
+        i = i + 1
+    }
+    false
+}

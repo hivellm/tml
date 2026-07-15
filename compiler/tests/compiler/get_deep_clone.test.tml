@@ -1,0 +1,67 @@
+// Regression test for phase24n: HashMap.get and List.get auto-emit
+// T::duplicate when V/T contains nested refcounted handles (Shared[T] etc.).
+// Without this fix, multiple .get() calls on the same key would alias the
+// same refcount, causing double-free at drop time.
+
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+use std::collections::hashmap::HashMap
+
+@derive(Duplicate)
+type Inner { val: I32 }
+
+@test
+func test_list_shared_inner_get_independent() -> I32 {
+    var l: List[Shared[Inner]] = List::new(4)
+    l.push(Shared::new(Inner { val: 1 }))
+    l.push(Shared::new(Inner { val: 2 }))
+
+    let s1: Shared[Inner] = l.get(0)
+    let s2: Shared[Inner] = l.get(0)
+    let s3: Shared[Inner] = l.get(1)
+
+    let i1: Inner = s1.get_clone()
+    let i2: Inner = s2.get_clone()
+    let i3: Inner = s3.get_clone()
+
+    assert_eq(i1.val, 1, "first get of slot 0 should return val=1")
+    assert_eq(i2.val, 1, "second get of slot 0 should still return val=1 (no alias-induced corruption)")
+    assert_eq(i3.val, 2, "get of slot 1 should return val=2")
+    return 0
+}
+
+@test
+func test_list_primitive_get_unchanged() -> I32 {
+    // For primitive T, ptr_read_clone falls through to bitwise read.
+    var l: List[I64] = List::new(4)
+    l.push(42 as I64)
+    l.push(100 as I64)
+
+    let v0: I64 = l.get(0)
+    let v1: I64 = l.get(1)
+
+    assert_eq(v0, 42 as I64, "primitive List get should be unchanged")
+    assert_eq(v1, 100 as I64, "primitive List get should be unchanged")
+    return 0
+}
+
+@test
+func test_list_repeated_get_no_corruption() -> I32 {
+    // Stress test: 10 reads of the same Shared slot. Without auto-clone,
+    // each read aliases the same refcount; drops at scope exit double-free.
+    var l: List[Shared[Inner]] = List::new(4)
+    l.push(Shared::new(Inner { val: 99 }))
+
+    let s1 = l.get(0)
+    let s2 = l.get(0)
+    let s3 = l.get(0)
+    let s4 = l.get(0)
+    let s5 = l.get(0)
+
+    assert_eq(s1.get_clone().val, 99, "repeated get should not corrupt slot")
+    assert_eq(s2.get_clone().val, 99, "repeated get should not corrupt slot")
+    assert_eq(s3.get_clone().val, 99, "repeated get should not corrupt slot")
+    assert_eq(s4.get_clone().val, 99, "repeated get should not corrupt slot")
+    assert_eq(s5.get_clone().val, 99, "repeated get should not corrupt slot")
+    return 0
+}

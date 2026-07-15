@@ -329,31 +329,25 @@ impl[T] Extend[T] for List[T] {
 
 /// An iterator over elements of a [`List`].
 ///
-/// This struct is created by the [`into_iter`](IntoIterator::into_iter) method
-/// on [`List`]. See its documentation for more.
-///
-/// Stores a raw handle to the list's internal data rather than the List itself,
-/// to avoid copying the List value (which would cause double-free on drop).
+/// Uses pointer-stepping (like Rust's slice::Iter) for maximum performance.
+/// The `ptr` field advances by `stride` bytes each iteration, enabling LLVM
+/// to auto-vectorize with SIMD loads (`<2 x i64>`, `<4 x i64>`).
 pub type ListIter[T] {
-    handle: *Unit,
-    len: I64,
-    stride: I64,
-    index: I64
+    ptr: *Unit,
+    end: *Unit,
+    stride: I64
 }
 
 impl[T] Iterator for ListIter[T] {
     type Item = T
 
+    @inline
     pub func next(mut this) -> Maybe[T] {
-        if this.index >= this.len {
+        if this.ptr == this.end {
             return Nothing
         }
-        // Read data pointer from handle offset 0
-        let data_addr: I64 = lowlevel { ptr_read[I64](this.handle as *I64) }
-        // Read element at data[index]
-        let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
-        let item: T = lowlevel { ptr_read[T](elem_ptr) }
-        this.index = this.index + 1
+        let item: T = lowlevel { ptr_read[T](this.ptr as *T) }
+        this.ptr = lowlevel { ptr_offset(this.ptr, this.stride) }
         return Just(item)
     }
 }
@@ -389,11 +383,18 @@ impl[T] IntoIterator for List[T] {
     type Item = T
     type IntoIter = ListIter[T]
 
+    @inline
     pub func into_iter(this) -> ListIter[T] {
-        let hdr: I64 = this.handle as I64
-        let len: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
-        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
-        return ListIter[T] { handle: this.handle, len: len, stride: stride, index: 0 }
+        // Read data pointer, len, and stride from the list header using GEP
+        let data: *Unit = lowlevel { ptr_read[*Unit](this.handle as *(*Unit)) }
+        let len_ptr: *I64 = lowlevel { ptr_offset(this.handle, 8) } as *I64
+        let len: I64 = lowlevel { ptr_read[I64](len_ptr) }
+        let stride_ptr: *I64 = lowlevel { ptr_offset(this.handle, 24) } as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](stride_ptr) }
+        // end = data + len * stride (pointer one-past-the-end)
+        let end_offset: I64 = lowlevel { unchecked_mul(len, stride) }
+        let end: *Unit = lowlevel { ptr_offset(data, end_offset) }
+        return ListIter[T] { ptr: data, end: end, stride: stride }
     }
 }
 
@@ -408,11 +409,17 @@ impl[T] List[T] {
     ///     println(item.to_string())
     /// }
     /// ```
+    @inline
     pub func iter(this) -> ListIter[T] {
-        let hdr: I64 = this.handle as I64
-        let len: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
-        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
-        return ListIter[T] { handle: this.handle, len: len, stride: stride, index: 0 }
+        // Same pointer-stepping setup as into_iter — extract ptr, end, stride
+        let data: *Unit = lowlevel { ptr_read[*Unit](this.handle as *(*Unit)) }
+        let len_ptr: *I64 = lowlevel { ptr_offset(this.handle, 8) } as *I64
+        let len: I64 = lowlevel { ptr_read[I64](len_ptr) }
+        let stride_ptr: *I64 = lowlevel { ptr_offset(this.handle, 24) } as *I64
+        let stride: I64 = lowlevel { ptr_read[I64](stride_ptr) }
+        let end_offset: I64 = lowlevel { unchecked_mul(len, stride) }
+        let end: *Unit = lowlevel { ptr_offset(data, end_offset) }
+        return ListIter[T] { ptr: data, end: end, stride: stride }
     }
 }
 

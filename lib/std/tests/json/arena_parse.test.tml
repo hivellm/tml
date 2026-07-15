@@ -1,0 +1,71 @@
+/// JSON Arena parsing regression tests.
+///
+/// Verifies: create, parse, accessor access, reset, re-parse, destroy.
+
+use std::json
+use std::json::arena::JsonArena
+use test
+
+@test
+func test_arena_create_destroy() -> I32 {
+    let arena: JsonArena = JsonArena::new(64)
+    arena.drop()
+    0
+}
+
+@test
+func test_arena_parse_object() -> I32 {
+    let arena: JsonArena = JsonArena::new(64)
+    let h: I64 = arena.parse("{\"name\": \"Alice\", \"age\": 30}")
+    assert(h >= 0 as I64, "parse should return valid handle")
+
+    let name: Str = json::object_get_string(h, "name")
+    assert_eq(name, "Alice", "name field")
+
+    let age: I64 = json::object_get_i64(h, "age")
+    assert_eq(age, 30 as I64, "age field")
+
+    arena.drop()
+    0
+}
+
+@test
+func test_arena_reset_reuse() -> I32 {
+    let arena: JsonArena = JsonArena::new(64)
+
+    // First parse
+    let h1: I64 = arena.parse("{\"x\": 1}")
+    assert(h1 >= 0 as I64, "first parse ok")
+    let x1: I64 = json::object_get_i64(h1, "x")
+    assert_eq(x1, 1 as I64, "x=1")
+
+    // Reset
+    arena.reset()
+
+    // Second parse (reuses handle slots)
+    let h2: I64 = arena.parse("{\"y\": 2}")
+    assert(h2 >= 0 as I64, "second parse ok")
+    let y: I64 = json::object_get_i64(h2, "y")
+    assert_eq(y, 2 as I64, "y=2")
+
+    arena.drop()
+    0
+}
+
+@test
+func test_arena_multiple_parses() -> I32 {
+    let arena: JsonArena = JsonArena::new(64)
+
+    let h1: I64 = arena.parse("{\"a\": 1}")
+    let h2: I64 = arena.parse("{\"b\": 2}")
+    let h3: I64 = arena.parse("{\"c\": 3}")
+
+    assert_eq(json::object_get_i64(h1, "a"), 1 as I64, "a=1")
+    assert_eq(json::object_get_i64(h2, "b"), 2 as I64, "b=2")
+    assert_eq(json::object_get_i64(h3, "c"), 3 as I64, "c=3")
+
+    // Reset frees all three
+    arena.reset()
+    arena.drop()
+    0
+}

@@ -700,9 +700,14 @@ auto Parser::parse_lowlevel_expr() -> Result<ExprPtr, ParseError> {
 
 auto Parser::parse_base_expr() -> Result<ExprPtr, ParseError> {
     auto start_span = peek().span;
-    auto base_tok = expect(lexer::TokenKind::KwBase, "Expected 'base'");
-    if (is_err(base_tok))
-        return unwrap_err(base_tok);
+    // `base` is a contextual keyword — caller has already verified the
+    // current token is an Identifier with lexeme "base" (see
+    // parse_primary_expr). Consume it as a plain identifier here.
+    if (!(check(lexer::TokenKind::Identifier) && peek().lexeme == "base")) {
+        return ParseError{"Expected 'base'", peek().span, {}, {}, "P009"};
+    }
+    auto base_tok = peek();
+    advance();
 
     // Require dot for member access: base.member
     auto dot = expect(lexer::TokenKind::Dot, "Expected '.' after 'base'");

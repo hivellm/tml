@@ -1,0 +1,140 @@
+//! `#include` directive handling — header-name reconstruction and
+//! filesystem lookup.
+//!
+//! Phase 24a item 2.
+
+use compiler::cc::preproc::token::*
+use std::collections::list::List
+use std::file::Path
+
+/// Reconstructed `#include` reference: the resolved-or-unresolved
+/// path string and a flag distinguishing `<...>` (system) from
+/// `"..."` (user) form.
+pub type ParsedInclude {
+    name: Str,
+    is_system: I64
+}
+
+/// Parse the body of a `#include` directive into a `ParsedInclude`.
+///
+/// The body is the token sequence after the `include` keyword and up
+/// to the trailing newline. Whitespace tokens may still be present.
+/// Two C17 forms are recognised:
+///
+/// - `#include <foo/bar.h>` — header-name reconstructed by concatenating
+///   the `text` of every token between `<` and `>`.
+/// - `#include "foo/bar.h"` — taken from the single `StringLit` token
+///   (the surrounding quotes stripped).
+///
+/// Returns `Nothing` when the body does not fit either form, so the
+/// caller can decide whether to emit an error.
+pub func pp_parse_include_body(body: List[PpToken]) -> Maybe[ParsedInclude] {
+    let total: I64 = body.len() as I64
+    var i: I64 = 0 as I64
+    // Skip leading whitespace.
+    loop (i < total) {
+        let t: PpToken = body.get(i)
+        when t.kind {
+            Whitespace => i = i + 1 as I64,
+            _ => return parse_at(body, i)
+        }
+    }
+    return Nothing
+}
+
+/// Inner helper invoked once we have skipped to the first non-WS token.
+func parse_at(body: List[PpToken], start: I64) -> Maybe[ParsedInclude] {
+    let n: I64 = body.len() as I64
+    let head: PpToken = body.get(start)
+    when head.kind {
+        StringLit => {
+            // `"foo.h"` form. Strip the surrounding quotes.
+            let raw: Str = head.text
+            let len: I64 = raw.len() as I64
+            if len < 2 as I64 { return Nothing }
+            let inner: Str = raw.slice(1 as I64, len - 1 as I64)
+            return Just(ParsedInclude { name: inner, is_system: 0 as I64 })
+        },
+        Punct => return parse_angle_form(body, start),
+        _ => return Nothing
+    }
+}
+
+/// Parse the `<foo/bar.h>` form, given that `body[start]` is the `<`
+/// punctuator. Returns `Nothing` when the angle bracket is not closed
+/// before the trailing newline.
+func parse_angle_form(body: List[PpToken], start: I64) -> Maybe[ParsedInclude] {
+    let head: PpToken = body.get(start)
+    if head.text != "<" { return Nothing }
+    let n: I64 = body.len() as I64
+    var name: Str = ""
+    var j: I64 = start + 1 as I64
+    var done: I64 = 0 as I64
+    loop (j < n and done == 0 as I64) {
+        let t: PpToken = body.get(j)
+        let kind_code: I64 = pp_kind_code(t.kind)
+        if kind_code == 5 as I64 and t.text == ">" {
+            done = 1 as I64
+        } else {
+            if kind_code != 7 as I64 {
+                name = name + t.text
+            }
+            j = j + 1 as I64
+        }
+    }
+    if done == 0 as I64 { return Nothing }
+    return Just(ParsedInclude { name: name, is_system: 1 as I64 })
+}
+
+/// Numeric code mirror of `compiler::cc::preproc::token::PpTokenKind`.
+/// Inlined here so this module does not depend on directives.tml.
+func pp_kind_code(k: PpTokenKind) -> I64 {
+    when k {
+        Ident => return 0 as I64,
+        IntLit => return 1 as I64,
+        FloatLit => return 2 as I64,
+        CharLit => return 3 as I64,
+        StringLit => return 4 as I64,
+        Punct => return 5 as I64,
+        Newline => return 6 as I64,
+        Whitespace => return 7 as I64,
+        Eof => return 8 as I64
+    }
+}
+
+/// Resolve a header reference against the active search paths.
+///
+/// Search order (C17 §6.10.2):
+///
+/// 1. For `"..."` (`is_system == 0`), search relative to the directory
+///    of the file currently being preprocessed first.
+/// 2. Then walk the user-include path list (`-I`) in order.
+/// 3. Finally fall back to the system include list (`-isystem` plus
+///    project-bundled stubs).
+///
+/// Returns the first absolute path that resolves to an existing file,
+/// or `Nothing` when nothing matches.
+pub func pp_resolve_include(
+    name: Str,
+    is_system: I64,
+    current_file: Str,
+    user_paths: List[Str],
+    system_paths: List[Str]
+) -> Maybe[Str] {
+    if is_system == 0 as I64 and current_file != "" {
+        let dir: Str = Path::parent(current_file)
+        let candidate: Str = Path::join(dir, name)
+        if Path::exists(candidate) { return Just(candidate) }
+    }
+    let un: I64 = user_paths.len() as I64
+    for i in 0 to un {
+        let candidate: Str = Path::join(user_paths.get(i), name)
+        if Path::exists(candidate) { return Just(candidate) }
+    }
+    let sn: I64 = system_paths.len() as I64
+    for i in 0 to sn {
+        let candidate: Str = Path::join(system_paths.get(i), name)
+        if Path::exists(candidate) { return Just(candidate) }
+    }
+    return Nothing
+}

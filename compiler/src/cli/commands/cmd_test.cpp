@@ -307,6 +307,7 @@ int run_test(int argc, char* argv[], bool verbose) {
     tc.debug_layers = opts.debug_layers;
     tc.use_unified_binary = opts.unified_binary;
     tc.stage_overrides = opts.stage_overrides;
+    tc.optimization_level = opts.release ? 3 : 0;
 
     auto result = testing::run_tests(tc);
 

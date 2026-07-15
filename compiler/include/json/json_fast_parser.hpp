@@ -11,6 +11,7 @@
 
 #include "common.hpp"
 
+#include "json/json_allocator.hpp"
 #include "json/json_error.hpp"
 #include "json/json_value.hpp"
 #include <cstdint>
@@ -251,6 +252,12 @@ class FastJsonParser {
 public:
     explicit FastJsonParser(std::string_view input);
 
+    /// Construct a parser bound to an external arena. The parser uses the
+    /// arena to intern repeated object keys, which amortizes allocation
+    /// cost across parses and improves cache locality. The arena must
+    /// outlive the parser.
+    FastJsonParser(std::string_view input, JsonArena* arena);
+
     /// Parse JSON and return result
     [[nodiscard]] auto parse() -> Result<JsonValue, JsonError>;
 
@@ -265,6 +272,9 @@ private:
 
     // Pre-allocated string buffer for reuse
     std::string string_buffer_;
+
+    // Optional arena used to intern object keys. Null means no interning.
+    JsonArena* arena_ = nullptr;
 
     /// Skip whitespace (uses SIMD when available)
     void skip_ws();
@@ -325,5 +335,9 @@ private:
 
 /// Fast JSON parsing entry point
 [[nodiscard]] auto parse_json_fast(std::string_view input) -> Result<JsonValue, JsonError>;
+
+/// Fast JSON parsing with an arena for key interning.
+[[nodiscard]] auto parse_json_fast(std::string_view input, JsonArena* arena)
+    -> Result<JsonValue, JsonError>;
 
 } // namespace tml::json::fast

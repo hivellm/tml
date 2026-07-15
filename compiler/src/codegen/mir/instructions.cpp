@@ -66,6 +66,15 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
 
             } else if constexpr (std::is_same_v<T, mir::StoreInst>) {
+                // NRVO: skip the sret store when the call result was already forwarded
+                // directly to %sret by emit_sret_call with NRVO. Without this, we would
+                // emit `store %struct.T %sret, ptr %sret` which is a no-op copy to itself.
+                if (current_func_has_sret_ &&
+                    current_func_sret_param_id_ != mir::INVALID_VALUE &&
+                    i.ptr.id == current_func_sret_param_id_ &&
+                    nrvo_call_results_.count(i.value.id) > 0) {
+                    return; // Value is already in %sret via NRVO — skip redundant store
+                }
                 std::string value = get_value_reg(i.value);
                 std::string ptr = get_value_reg(i.ptr);
                 mir::MirTypePtr type_ptr = i.value_type ? i.value_type : i.value.type;
@@ -471,9 +480,14 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 // payload (field 1) from the Poll struct.
                 std::string poll_val = get_value_reg(i.poll_value);
                 // Determine the inner type from the AwaitInst's result_type
-                std::string inner_type = "i32"; // default
+                std::string inner_type;
                 if (i.result_type) {
                     inner_type = mir_type_to_llvm(i.result_type);
+                }
+                if (inner_type.empty()) {
+                    emit("  ; ERROR: AwaitInst has no result_type — cannot resolve inner type");
+                    emit("  unreachable");
+                    return;
                 }
                 // Determine the Poll struct type from the poll_value's type
                 std::string poll_type;
@@ -691,10 +705,33 @@ void MirCodegen::emit_binary_inst(const mir::BinaryInst& i, const std::string& r
             cg_values_[inst.result] = CGValue::immediate(result_reg, "i1", nullptr);
         }
     } else {
-        // Special case: string concatenation when adding two pointers (strings)
-        // Use str_concat_opt for O(1) amortized complexity
+        // Special case: string concatenation when adding two pointers (strings).
+        // Uses `str_append` (phase1i) for truly amortized O(1) — when the
+        // left operand is a heap allocation with slack, the append lands in
+        // place without a realloc. Falls back to a fresh allocation with
+        // initial slack for literal inputs so subsequent concats hit the
+        // fast path. The MIR result is a new SSA value, so the aliasing
+        // between `result` and `left` introduced by `str_append`'s in-place
+        // path is transparent to the caller.
         if (type_str == "ptr" && i.op == mir::BinOp::Add) {
-            emitln("    " + result_reg + " = call ptr @str_concat_opt(ptr " + left + ", ptr " +
+            // phase1k — accumulator pattern: emit a tracked-length
+            // variant that reads/writes the shadow i64 alloca set up
+            // by emit_function(). LLVM SROA promotes that alloca into
+            // a phi across loop iterations, giving us SSA-tracked len
+            // like Rust's String::push_str.
+            auto acc_it = str_accumulator_add_to_alloca_.find(inst.result);
+            if (acc_it != str_accumulator_add_to_alloca_.end()) {
+                auto shadow_it = str_accumulator_allocas_.find(acc_it->second);
+                if (shadow_it != str_accumulator_allocas_.end()) {
+                    emitln("    " + result_reg + " = call ptr @str_append_tracked(ptr " +
+                           left + ", ptr " + right + ", ptr " + shadow_it->second + ")");
+                    if (inst.result != mir::INVALID_VALUE) {
+                        cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);
+                    }
+                    return;
+                }
+            }
+            emitln("    " + result_reg + " = call ptr @str_append(ptr " + left + ", ptr " +
                    right + ")");
             if (inst.result != mir::INVALID_VALUE) {
                 cg_values_[inst.result] = CGValue::immediate(result_reg, "ptr", nullptr);

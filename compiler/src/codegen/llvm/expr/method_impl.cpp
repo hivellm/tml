@@ -330,6 +330,7 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
 
     if (!func_sig) {
+        TML_DEBUG_LN("[IMPL_METHOD] MISS: " << qualified_name);
         return std::nullopt;
     }
 
@@ -362,13 +363,36 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
     }
     // Infer method-level type parameters from argument types
     else if (call.type_args.empty() && !func_sig->type_params.empty()) {
-        size_t impl_param_count = named.type_args.size();
-        // If the receiver has more type_args than the func_sig has type_params,
-        // the impl-level params were already substituted in the func_sig. All remaining
-        // type_params are method-level (e.g., fold[B] on ListIter[I64] where
-        // func_sig->type_params=["B"] but named.type_args=["I64"]).
-        if (impl_param_count >= func_sig->type_params.size()) {
-            impl_param_count = 0;
+        // Determine how many of func_sig->type_params are impl-level (vs method-level).
+        //
+        // Two registration shapes exist:
+        //   (1) impl method (env_module_load_decls.cpp:466-475): func_sig->type_params
+        //       starts with the impl block's generics, then the method's own generics.
+        //       For `impl[T] List[T] { func push(this, value: T) }`, func_sig->type_params=["T"]
+        //       and we MUST treat T as impl-level (already bound via named.type_args[0]),
+        //       NOT as a method-level param to re-infer from args.
+        //   (2) trait method (env_module_load_decls.cpp:904-909): func_sig->type_params
+        //       contains ONLY the method's own generics (impl-level were substituted away
+        //       at registration). For `fold[B]` on `ListIter[I64]`, func_sig->type_params=["B"]
+        //       and named.type_args=["I64"]. Here B is method-level.
+        //
+        // Distinguish via func_sig->impl_self_type_args, which is set ONLY for shape (1).
+        // Its size = number of impl-level entries at the head of type_params.
+        size_t impl_param_count;
+        if (!func_sig->impl_self_type_args.empty()) {
+            // Shape (1): first N entries of type_params are impl-level
+            impl_param_count = func_sig->impl_self_type_args.size();
+            if (impl_param_count > func_sig->type_params.size()) {
+                impl_param_count = func_sig->type_params.size();
+            }
+        } else {
+            // Shape (2) or unknown: fall back to legacy heuristic (named.type_args.size(),
+            // collapsed to 0 if it would consume all type_params, indicating impl-level
+            // params were already substituted at registration).
+            impl_param_count = named.type_args.size();
+            if (impl_param_count >= func_sig->type_params.size()) {
+                impl_param_count = 0;
+            }
         }
         // Two-pass inference: first infer from FuncType/ClosureType params (more specific,
         // e.g., closure return type), then from bare type params (less specific, e.g., literals).
@@ -1415,6 +1439,20 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
                 emit_line("  " + fat1 + " = insertvalue { ptr, ptr } undef, ptr " + val + ", 0");
                 emit_line("  " + fat2 + " = insertvalue { ptr, ptr } " + fat1 + ", ptr null, 1");
                 val = fat2;
+            }
+            // int -> ptr coercion (e.g., user wrote `s as I64` to pack a Str pointer
+            // into an integer slot, then passes it to a ptr-typed parameter).
+            // Mirrors the inttoptr fallback used in cast lowering.
+            else if (is_int_actual && expected_type == "ptr") {
+                std::string coerced = fresh_reg();
+                emit_line("  " + coerced + " = inttoptr " + actual_type + " " + val + " to ptr");
+                val = coerced;
+            }
+            // ptr -> int coercion (mirror of the above).
+            else if (actual_type == "ptr" && is_int_expected) {
+                std::string coerced = fresh_reg();
+                emit_line("  " + coerced + " = ptrtoint ptr " + val + " to " + expected_type);
+                val = coerced;
             }
         }
         // Array-to-slice coercion: when parameter expects ref [T] (slice) but argument

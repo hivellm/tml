@@ -18,6 +18,7 @@ static const std::unordered_map<std::string, IntrinsicInfo>& intrinsic_table() {
     static const std::unordered_map<std::string, IntrinsicInfo> table = {
         // ---- Pointer operations ----
         {"ptr_read", {IntrinsicKind::PtrRead, 1, true}},
+        {"ptr_read_clone", {IntrinsicKind::PtrReadClone, 1, true}},
         {"ptr_write", {IntrinsicKind::PtrWrite, 2, false}},
         {"ptr_offset", {IntrinsicKind::PtrOffset, 2, true}},
         {"ptr_read_volatile", {IntrinsicKind::PtrReadVolatile, 1, true}},

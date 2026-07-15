@@ -1,0 +1,43 @@
+/// Str concat reuse regression tests.
+///
+/// Verifies that `result = result + expr` correctly produces the expected
+/// string and doesn't crash (realloc safety for heap strings).
+
+use test
+
+@test
+func test_concat_loop_correctness() -> I32 {
+    var result: Str = ""
+    for i in 0 to 10 {
+        result = result + "ab"
+    }
+    assert_eq(result, "abababababababababab", "10x ab concat")
+    0
+}
+
+@test
+func test_concat_loop_short() -> I32 {
+    var s: Str = "hello"
+    s = s + " world"
+    assert_eq(s, "hello world", "hello + world")
+    0
+}
+
+@test
+func test_concat_chain() -> I32 {
+    var s: Str = ""
+    s = s + "a"
+    s = s + "b"
+    s = s + "c"
+    assert_eq(s, "abc", "chain abc")
+    0
+}
+
+@test
+func test_concat_non_augmented() -> I32 {
+    let a: Str = "hello"
+    let b: Str = " world"
+    let c: Str = a + b
+    assert_eq(c, "hello world", "non-augmented concat")
+    0
+}

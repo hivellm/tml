@@ -1,0 +1,34 @@
+//! # MessagePack Binary Serialization
+//!
+//! Compact binary serialization format compatible with the MessagePack specification.
+//! Same data model as JSON (maps, arrays, strings, integers, floats, booleans, nil,
+//! binary) but 2-5x smaller on the wire and faster to encode/decode.
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::msgpack::{MsgPackWriter, MsgPackReader}
+//!
+//! // Encode
+//! var w: MsgPackWriter = MsgPackWriter::new()
+//! w.write_map_header(2)
+//! w.write_str("name")
+//! w.write_str("TML")
+//! w.write_str("version")
+//! w.write_u64(321 as U64)
+//! let data: Buffer = w.to_buffer()
+//!
+//! // Decode
+//! var r: MsgPackReader = MsgPackReader::from_buffer(ref data)
+//! let n: I64 = r.read_map_header()
+//! let key1: Str = r.read_str()
+//! let val1: Str = r.read_str()
+//! ```
+
+pub mod writer
+pub mod reader
+pub mod types
+
+pub use std::msgpack::writer::MsgPackWriter
+pub use std::msgpack::reader::MsgPackReader
+pub use std::msgpack::types::{MsgPackType, MsgPackError, ExtValue, Timestamp, MsgPackValue}

@@ -56,12 +56,13 @@
 
 #include "common.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <iosfwd>
 #include <limits>
-#include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -76,8 +77,14 @@ struct JsonValue;
 /// A JSON array containing ordered values.
 using JsonArray = std::vector<JsonValue>;
 
-/// A JSON object containing key-value pairs (ordered by key).
-using JsonObject = std::map<std::string, JsonValue>;
+/// A JSON object containing key-value pairs (preserves insertion order).
+///
+/// Backed by a contiguous `std::vector<std::pair<...>>` rather than a tree-based
+/// map. For typical JSON objects (≤16 fields) the linear scan is faster than
+/// a red-black tree because of cache locality and single-allocation layout.
+/// Key uniqueness is the caller's responsibility — use `JsonValue::set` to
+/// upsert safely.
+using JsonObject = std::vector<std::pair<std::string, JsonValue>>;
 
 // ============================================================================
 // JsonNumber
@@ -692,9 +699,10 @@ struct JsonValue {
     /// Pointer to the value, or `nullptr` if not found.
     [[nodiscard]] auto get(const std::string& key) const -> const JsonValue* {
         if (auto* obj = std::get_if<Box<JsonObject>>(&data)) {
-            auto it = (*obj)->find(key);
-            if (it != (*obj)->end()) {
-                return &it->second;
+            for (const auto& kv : **obj) {
+                if (kv.first == key) {
+                    return &kv.second;
+                }
             }
         }
         return nullptr;
@@ -711,9 +719,10 @@ struct JsonValue {
     /// Pointer to the value, or `nullptr` if not found.
     [[nodiscard]] auto get_mut(const std::string& key) -> JsonValue* {
         if (auto* obj = std::get_if<Box<JsonObject>>(&data)) {
-            auto it = (*obj)->find(key);
-            if (it != (*obj)->end()) {
-                return &it->second;
+            for (auto& kv : **obj) {
+                if (kv.first == key) {
+                    return &kv.second;
+                }
             }
         }
         return nullptr;
@@ -724,7 +733,11 @@ struct JsonValue {
     /// Returns `false` if this is not an object.
     [[nodiscard]] auto contains(const std::string& key) const -> bool {
         if (auto* obj = std::get_if<Box<JsonObject>>(&data)) {
-            return (*obj)->find(key) != (*obj)->end();
+            for (const auto& kv : **obj) {
+                if (kv.first == key) {
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -779,11 +792,21 @@ struct JsonValue {
 
     /// Sets a key-value pair in an object.
     ///
+    /// Replaces the value if the key already exists, preserving its position,
+    /// otherwise appends at the end. O(n) in the number of keys.
+    ///
     /// # Panics
     ///
     /// Throws `std::bad_variant_access` if this is not an object.
     void set(const std::string& key, JsonValue value) {
-        as_object_mut()[key] = std::move(value);
+        auto& obj = as_object_mut();
+        for (auto& kv : obj) {
+            if (kv.first == key) {
+                kv.second = std::move(value);
+                return;
+            }
+        }
+        obj.emplace_back(key, std::move(value));
     }
 
     /// Removes a key from an object.
@@ -796,7 +819,14 @@ struct JsonValue {
     ///
     /// Throws `std::bad_variant_access` if this is not an object.
     auto remove(const std::string& key) -> bool {
-        return as_object_mut().erase(key) > 0;
+        auto& obj = as_object_mut();
+        for (auto it = obj.begin(); it != obj.end(); ++it) {
+            if (it->first == key) {
+                obj.erase(it);
+                return true;
+            }
+        }
+        return false;
     }
 
     // ========================================================================
@@ -962,8 +992,9 @@ struct JsonValue {
         }
         if (is_object()) {
             JsonObject obj;
-            for (const auto& [key, val] : as_object()) {
-                obj[key] = val.clone();
+            obj.reserve(as_object().size());
+            for (const auto& kv : as_object()) {
+                obj.emplace_back(kv.first, kv.second.clone());
             }
             return JsonValue(std::move(obj));
         }

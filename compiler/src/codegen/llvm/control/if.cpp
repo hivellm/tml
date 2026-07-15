@@ -5,8 +5,55 @@ TML_MODULE("codegen_x86")
 //! This file implements if, ternary, and if-let expression code generation.
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
 
 namespace tml::codegen {
+
+// ============================================================================
+// Select optimization helpers
+// ============================================================================
+
+/// Returns true if expr can be evaluated inline as a scalar with no side
+/// effects or control flow (eligible for LLVM `select` instead of br+phi).
+/// Conservative: only allows literals, identifiers, empty-block wrappers,
+/// and recursively-eligible nested if-else chains.
+static auto is_simple_scalar_branch(const parser::Expr& expr) -> bool {
+    if (expr.is<parser::LiteralExpr>()) {
+        const auto& lit = expr.as<parser::LiteralExpr>();
+        switch (lit.token.kind) {
+        case lexer::TokenKind::IntLiteral:
+        case lexer::TokenKind::FloatLiteral:
+        case lexer::TokenKind::BoolLiteral:
+            return true;
+        default:
+            return false;
+        }
+    }
+    if (expr.is<parser::IdentExpr>()) {
+        return true;
+    }
+    // Block with no statements and a single simple trailing expression.
+    if (expr.is<parser::BlockExpr>()) {
+        const auto& block = expr.as<parser::BlockExpr>();
+        return block.stmts.empty() && block.expr.has_value() &&
+               is_simple_scalar_branch(*block.expr.value());
+    }
+    // Nested if-else: eligible only if the nested form is also select-eligible
+    // (ensures the recursive gen_if call stays on the select path — no br emitted).
+    if (expr.is<parser::IfExpr>()) {
+        const auto& nested = expr.as<parser::IfExpr>();
+        return nested.else_branch.has_value() &&
+               is_simple_scalar_branch(*nested.then_branch) &&
+               is_simple_scalar_branch(*nested.else_branch.value());
+    }
+    return false;
+}
+
+/// Returns true if `type` is an LLVM scalar type that can appear in a `select`.
+static auto is_scalar_llvm_type(const std::string& type) -> bool {
+    return type == "i1" || type == "i8" || type == "i16" || type == "i32" ||
+           type == "i64" || type == "float" || type == "double" || type == "ptr";
+}
 
 auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string cond = gen_expr(*if_expr.condition);
@@ -19,6 +66,33 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         std::string bool_cond = fresh_reg();
         emit_line("  " + bool_cond + " = icmp ne " + cond_type + " " + cond + ", 0");
         cond = bool_cond;
+    }
+
+    // -----------------------------------------------------------------------
+    // Select optimization: when both branches are simple scalars (no side
+    // effects, no control flow), emit `select i1 %cond, T %then, T %else`
+    // instead of br+phi. Maps to CMOV on x86-64, eliminating branch
+    // misprediction. Chained if-else-if produces nested selects automatically
+    // via the recursive gen_if call on the else branch.
+    // -----------------------------------------------------------------------
+    if (if_expr.else_branch.has_value() && is_simple_scalar_branch(*if_expr.then_branch) &&
+        is_simple_scalar_branch(*if_expr.else_branch.value())) {
+
+        std::string then_val = gen_expr(*if_expr.then_branch);
+        std::string then_type = last_expr_type_;
+        std::string else_val = gen_expr(*if_expr.else_branch.value());
+        std::string else_type = last_expr_type_;
+
+        if (then_type == else_type && is_scalar_llvm_type(then_type)) {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = select i1 " + cond + ", " + then_type + " " +
+                      then_val + ", " + then_type + " " + else_val);
+            last_expr_type_ = then_type;
+            return result;
+        }
+        // Type mismatch or non-scalar (rare in valid TML) — fall through to
+        // br+phi. The loads already emitted (if any) become dead code but
+        // do not affect correctness.
     }
 
     std::string label_then = fresh_label("if.then");

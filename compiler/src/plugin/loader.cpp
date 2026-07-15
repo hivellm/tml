@@ -5,11 +5,15 @@
 #include "plugin/loader.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 // zstd decoder — minimal header from third_party/zstd/
@@ -27,15 +31,99 @@
 namespace tml::plugin {
 
 // ============================================================================
+// Process-level DLL handle cache
+//
+// Stores loaded handles keyed by canonical DLL path. Each entry includes
+// the file mtime at load time so stale entries are evicted after a rebuild.
+// dl_open() checks this cache before calling LoadLibrary/dlopen; dl_close()
+// skips FreeLibrary for cached handles (the OS cleans up at process exit).
+// ============================================================================
+
+struct DllCacheEntry {
+    void* handle = nullptr;
+    fs::file_time_type mtime;
+};
+
+static std::mutex g_dll_cache_mutex;
+static std::unordered_map<std::string, DllCacheEntry> g_dll_cache;
+
+// Preload state
+static std::atomic<int> g_preload_count{0};
+
+// Daemon mode: when true, unload_all() keeps DLLs resident in g_dll_cache
+// instead of calling FreeLibrary. Set by cmd_daemon_server() at startup.
+static std::atomic<bool> g_daemon_mode{false};
+
+/// Retrieve mtime for a path; returns default (epoch) on error.
+static auto get_path_mtime(const fs::path& p) -> fs::file_time_type {
+    std::error_code ec;
+    auto t = fs::last_write_time(p, ec);
+    return ec ? fs::file_time_type{} : t;
+}
+
+/// Core platform DLL load (always does real OS load — no cache check).
+static auto platform_dl_open(const fs::path& path) -> void* {
+#ifdef _WIN32
+    // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: search app dir, System32, and %PATH%
+    // dirs added via AddDllDirectory. Provides deterministic search order and
+    // mitigates DLL hijacking. Fall back to plain LoadLibraryW on older Windows.
+    HMODULE h = LoadLibraryExW(path.wstring().c_str(), nullptr,
+                               LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+                               LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!h) {
+        h = LoadLibraryW(path.wstring().c_str());
+    }
+    return static_cast<void*>(h);
+#else
+    return dlopen(path.c_str(), RTLD_LAZY | RTLD_LOCAL);
+#endif
+}
+
+/// Platform DLL unload (unconditional).
+static void platform_dl_close(void* handle) {
+    if (!handle) return;
+#ifdef _WIN32
+    FreeLibrary(static_cast<HMODULE>(handle));
+#else
+    dlclose(handle);
+#endif
+}
+
+// ============================================================================
 // Platform-specific dynamic library operations
 // ============================================================================
 
 auto Loader::dl_open(const fs::path& path) -> void* {
-#ifdef _WIN32
-    return static_cast<void*>(LoadLibraryW(path.wstring().c_str()));
-#else
-    return dlopen(path.c_str(), RTLD_LAZY | RTLD_LOCAL);
-#endif
+    std::string key = path.string();
+    fs::file_time_type current_mtime = get_path_mtime(path);
+
+    {
+        std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+        auto it = g_dll_cache.find(key);
+        if (it != g_dll_cache.end()) {
+            // Cache hit: validate mtime — evict only if the DLL was rebuilt.
+            if (it->second.mtime == current_mtime) {
+                return it->second.handle; // O(1) — no OS call needed
+            }
+            // Mtime changed (rebuild): close the stale handle and reload.
+            platform_dl_close(it->second.handle);
+            g_dll_cache.erase(it);
+        }
+    }
+
+    // Cache miss: do the real OS load.
+    void* handle = platform_dl_open(path);
+    if (handle) {
+        std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+        // Another thread might have loaded it concurrently.
+        auto [it, inserted] = g_dll_cache.emplace(key, DllCacheEntry{handle, current_mtime});
+        if (!inserted) {
+            // Duplicate load: close the handle we just opened and use the cached one.
+            platform_dl_close(handle);
+            return it->second.handle;
+        }
+    }
+    return handle;
 }
 
 auto Loader::dl_sym(void* handle, const char* symbol) -> void* {
@@ -49,11 +137,19 @@ auto Loader::dl_sym(void* handle, const char* symbol) -> void* {
 void Loader::dl_close(void* handle) {
     if (!handle)
         return;
-#ifdef _WIN32
-    FreeLibrary(static_cast<HMODULE>(handle));
-#else
-    dlclose(handle);
-#endif
+    // Handles that live in the static cache are kept resident until process
+    // exit for performance — calling FreeLibrary would evict the DLL from the
+    // process's module list and force a fresh load on the next invocation.
+    // The OS reclaims all module mappings at process exit automatically.
+    {
+        std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+        for (const auto& [path, entry] : g_dll_cache) {
+            if (entry.handle == handle) {
+                return; // Cached handle — skip FreeLibrary.
+            }
+        }
+    }
+    platform_dl_close(handle);
 }
 
 auto Loader::dl_error() -> std::string {
@@ -98,6 +194,9 @@ auto Loader::exe_dir() -> fs::path {
 // ============================================================================
 
 Loader::Loader() {
+    // Join any outstanding preload threads so the cache is warm by the
+    // time the first load() call is made.
+    wait_preload_done();
     discover_paths();
 }
 
@@ -108,15 +207,45 @@ Loader::~Loader() {
 void Loader::discover_paths() {
     auto exe = exe_dir();
 
-    // Plugins live at plugins/ relative to exe dir (build/debug/bin/plugins/)
-    plugins_dir_ = exe / "plugins";
-
-    // Cache directory: cache/plugins/ next to executable
+    // Cache directory: always adjacent to the debug exe for consistency.
     cache_dir_ = exe / "cache" / "plugins";
-
-    // Create cache dir if it doesn't exist
     std::error_code ec;
     fs::create_directories(cache_dir_, ec);
+
+    // Priority 1: explicit override via TML_PLUGIN_DIR env var.
+    const char* plugin_dir_env = std::getenv("TML_PLUGIN_DIR");
+    if (plugin_dir_env && plugin_dir_env[0] != '\0') {
+        plugins_dir_ = fs::path(plugin_dir_env);
+        return;
+    }
+
+    // Priority 2: TML_COMPILER_BUILD=release — load DLLs from the release
+    // build directory so the debug tml.exe can use the optimized compiler
+    // without changing PATH.  Layout: build/<type>/bin/ (exe lives here),
+    // so release plugins are at build/release/bin/plugins/ or build/release/plugins/.
+    const char* build_override = std::getenv("TML_COMPILER_BUILD");
+    if (build_override && std::string(build_override) == "release") {
+        auto build_dir = exe.parent_path().parent_path(); // build/debug → build/
+        auto release_bin_plugins = build_dir / "release" / "bin" / "plugins";
+        auto release_plugins = build_dir / "release" / "plugins";
+        if (fs::exists(release_bin_plugins)) {
+            plugins_dir_ = release_bin_plugins;
+            return;
+        }
+        if (fs::exists(release_plugins)) {
+            plugins_dir_ = release_plugins;
+            return;
+        }
+        // Release build not found — warn and fall through to debug.
+        std::cerr << "warning: TML_COMPILER_BUILD=release set but no release plugins found at:\n"
+                  << "  " << release_bin_plugins.string() << "\n"
+                  << "  " << release_plugins.string() << "\n"
+                  << "  Run: scripts\\build.bat release\n"
+                  << "  Falling back to debug build.\n";
+    }
+
+    // Default: plugins next to the exe (build/debug/bin/plugins/).
+    plugins_dir_ = exe / "plugins";
 }
 
 auto Loader::plugins_dir() const -> const fs::path& {
@@ -248,13 +377,38 @@ auto Loader::load(const std::string& name) -> LoadedPlugin* {
     return &it->second;
 }
 
+void Loader::set_daemon_mode(bool enabled) {
+    g_daemon_mode.store(enabled, std::memory_order_relaxed);
+}
+
 void Loader::unload_all() {
+    bool daemon = g_daemon_mode.load(std::memory_order_relaxed);
     // Shutdown in reverse load order (approximation: just iterate)
     for (auto& [name, plugin] : loaded_) {
         if (plugin.initialized && plugin.shutdown) {
             plugin.shutdown();
         }
-        dl_close(plugin.handle);
+        if (plugin.handle) {
+            if (daemon) {
+                // Daemon mode: keep DLL resident in g_dll_cache so the next
+                // request reuses the already-loaded handle. DLLs are only
+                // truly unloaded when the daemon process exits.
+                // (No FreeLibrary — the OS cleans up at process exit.)
+            } else {
+                // Normal mode: evict from process-level cache and release
+                // the OS handle so DllMain(DLL_PROCESS_DETACH) fires now,
+                // under controlled teardown. This avoids static destructor
+                // ordering issues at process exit (LLVM global registry
+                // destructors crash if the DLL is unloaded by ExitProcess
+                // after the C runtime has already cleaned up).
+                std::string key = plugin.dll_path.string();
+                {
+                    std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+                    g_dll_cache.erase(key);
+                }
+                platform_dl_close(plugin.handle);
+            }
+        }
         plugin.handle = nullptr;
         plugin.initialized = false;
     }
@@ -418,6 +572,87 @@ auto Loader::decompress_to_cache(const fs::path& zst_path, const fs::path& cache
     }
 
     return true;
+}
+
+// ============================================================================
+// Background preloading
+// ============================================================================
+
+void Loader::wait_preload_done() {
+    // Spin until all background preload threads have decremented the counter.
+    // Each thread is detached so the process can exit cleanly without waiting
+    // on a joinable thread. The spin is bounded by DLL load time (~100ms warm).
+    while (g_preload_count.load(std::memory_order_acquire) > 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+    }
+}
+
+void Loader::preload_async(const std::vector<std::string>& plugin_names) {
+    // Discover the plugins directory the same way discover_paths() does.
+    auto exe = exe_dir();
+    auto primary_dir = exe / "plugins";
+    auto sibling_dir = primary_dir.parent_path().parent_path() / "plugins";
+
+#ifdef _WIN32
+    const std::string dll_ext = ".dll";
+#else
+    const std::string dll_ext = ".so";
+#endif
+
+    for (const auto& name : plugin_names) {
+        // Resolve the DLL path: try the same search order as Loader::load().
+        fs::path load_path;
+        for (const auto& dir : {primary_dir, sibling_dir}) {
+            // MSVC layout: tml_foo.dll
+            fs::path p = dir / (name + dll_ext);
+            if (fs::exists(p)) { load_path = p; break; }
+            // Zig CC / MinGW layout: libtml_foo.dll
+            p = dir / ("lib" + name + dll_ext);
+            if (fs::exists(p)) { load_path = p; break; }
+        }
+
+        if (load_path.empty()) {
+            continue; // Plugin not found — nothing to preload.
+        }
+
+        // Skip if already in the cache.
+        {
+            std::lock_guard<std::mutex> lock(g_dll_cache_mutex);
+            if (g_dll_cache.count(load_path.string())) {
+                continue;
+            }
+        }
+
+        // Increment counter before spawning so wait_preload_done() sees it.
+        g_preload_count.fetch_add(1, std::memory_order_relaxed);
+
+        // Detach the thread so process exit is not blocked waiting on it.
+        // g_preload_count tracks completion; wait_preload_done() spins on it.
+        fs::path dll_path = load_path;
+        std::thread([dll_path]() {
+            std::string key = dll_path.string();
+            fs::file_time_type mtime = get_path_mtime(dll_path);
+
+            // Check cache again inside the thread — another thread may have beaten us.
+            {
+                std::lock_guard<std::mutex> lk(g_dll_cache_mutex);
+                if (g_dll_cache.count(key)) {
+                    g_preload_count.fetch_sub(1, std::memory_order_release);
+                    return;
+                }
+            }
+
+            void* handle = platform_dl_open(dll_path);
+            if (handle) {
+                std::lock_guard<std::mutex> lk(g_dll_cache_mutex);
+                auto [it, inserted] = g_dll_cache.emplace(key, DllCacheEntry{handle, mtime});
+                if (!inserted) {
+                    platform_dl_close(handle); // Lost race — close our duplicate.
+                }
+            }
+            g_preload_count.fetch_sub(1, std::memory_order_release);
+        }).detach();
+    }
 }
 
 } // namespace tml::plugin

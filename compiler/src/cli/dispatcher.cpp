@@ -49,7 +49,9 @@ TML_MODULE("compiler")
 #include "builder/parallel_build.hpp"
 #include "commands/cmd_build.hpp"
 #include "commands/cmd_cache.hpp"
+#include "commands/cmd_cc.hpp"
 #include "commands/cmd_coverage.hpp"
+#include "commands/cmd_daemon.hpp"
 #include "commands/cmd_debug.hpp"
 #include "commands/cmd_doc.hpp"
 #include "commands/cmd_explain.hpp"
@@ -66,6 +68,7 @@ TML_MODULE("compiler")
 #include "common.hpp"
 #include "log/log.hpp"
 #include "query/query_context.hpp"
+#include "tty_output.hpp"
 #include "utils.hpp"
 
 #include <filesystem>
@@ -99,6 +102,20 @@ namespace tml::cli {
 /// tml fmt src/*.tml               # Format source files
 /// ```
 int tml_main(int argc, char* argv[]) {
+    // Detect TTY and wire line buffering + atexit flush BEFORE anything emits
+    // output. This is what prevents `tml check file.tml > out.txt` from
+    // deadlocking on the 64 KB Windows pipe buffer (reported by UzDB/MCP).
+    {
+        bool force_no_color = false;
+        bool force_non_interactive = false;
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--no-color") force_no_color = true;
+            else if (arg == "--non-interactive") force_non_interactive = true;
+        }
+        tty::init_runtime_mode(force_no_color, force_non_interactive);
+    }
+
     if (argc < 2) {
         print_usage();
         return 0;
@@ -172,6 +189,17 @@ int tml_main(int argc, char* argv[]) {
             return 1;
         }
         return run_explain(argv[2], verbose);
+    }
+
+    // Daemon forwarding: if TML_DAEMON=1 is set and a daemon is running for
+    // this project directory, forward build/run/check requests to it.
+    // Falls through to direct compilation if no daemon is reachable.
+    if ((command == "build" || command == "run" || command == "check") &&
+        std::getenv("TML_DAEMON") != nullptr &&
+        std::string(std::getenv("TML_DAEMON")) == "1") {
+        int result = try_daemon_forward(argc, argv);
+        if (result >= 0) return result;
+        // Daemon not reachable — fall through to direct compilation
     }
 
     if (command == "build") {
@@ -883,6 +911,10 @@ int tml_main(int argc, char* argv[]) {
         return run_coverage(argc, argv, verbose);
     }
 
+    if (command == "cc") {
+        return run_cc(argc, argv, verbose);
+    }
+
     if (command == "profile") {
         return run_profile(argc, argv, verbose);
     }
@@ -925,6 +957,23 @@ int tml_main(int argc, char* argv[]) {
             args.push_back(argv[i]);
         }
         return cmd_mcp(args);
+    }
+
+    if (command == "daemon") {
+        std::vector<std::string> args;
+        for (int i = 2; i < argc; ++i) {
+            args.push_back(argv[i]);
+        }
+        return cmd_daemon(args);
+    }
+
+    // Hidden internal command: the daemon server spawns itself with this.
+    if (command == "__daemon_server") {
+        std::vector<std::string> args;
+        for (int i = 2; i < argc; ++i) {
+            args.push_back(argv[i]);
+        }
+        return cmd_daemon_server(args);
     }
 
     if (command == "demangle") {

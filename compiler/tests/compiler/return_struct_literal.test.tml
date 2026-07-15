@@ -1,0 +1,82 @@
+//! Regression test for parser bug #2 (phase0v):
+//! `return StructName { ... }` inside an `if` was reported during the
+//! phase23b bring-up as confusing the parser (reading `{` as a trailing
+//! block of the return statement). The workaround was to bind to a typed
+//! local first. This test exercises every shape of struct-literal return
+//! to guard against regression.
+
+use test::{assert, assert_eq}
+
+pub type Point { x: I64, y: I64 }
+pub type CIntLit { value: U64, suffix: I64, is_hex: I64 }
+
+func ret_struct_top() -> Point {
+    return Point { x: 1 as I64, y: 2 as I64 }
+}
+
+func ret_struct_in_if(flag: Bool) -> Point {
+    if flag {
+        return Point { x: 1 as I64, y: 2 as I64 }
+    }
+    return Point { x: 0 as I64, y: 0 as I64 }
+}
+
+func ret_struct_with_U64(n: I64) -> CIntLit {
+    if n == 0 as I64 {
+        return CIntLit { value: 0 as U64, suffix: 0 as I64, is_hex: 0 as I64 }
+    }
+    return CIntLit { value: n as U64, suffix: 1 as I64, is_hex: 0 as I64 }
+}
+
+func ret_struct_in_when(v: I64) -> Point {
+    when v {
+        0 => return Point { x: 0 as I64, y: 0 as I64 },
+        _ => return Point { x: v, y: v * 2 as I64 }
+    }
+    return Point { x: -1 as I64, y: -1 as I64 }
+}
+
+func ret_struct_in_loop() -> Point {
+    var i: I64 = 0 as I64
+    loop (i < 3 as I64) {
+        if i == 2 as I64 {
+            return Point { x: i, y: i * 10 as I64 }
+        }
+        i = i + 1 as I64
+    }
+    return Point { x: 0 as I64, y: 0 as I64 }
+}
+
+@test func test_ret_struct_top() {
+    let p: Point = ret_struct_top()
+    assert_eq(p.x as I32, 1)
+    assert_eq(p.y as I32, 2)
+}
+
+@test func test_ret_struct_in_if_true() {
+    let p: Point = ret_struct_in_if(true)
+    assert_eq(p.x as I32, 1)
+}
+
+@test func test_ret_struct_in_if_false() {
+    let p: Point = ret_struct_in_if(false)
+    assert_eq(p.x as I32, 0)
+}
+
+@test func test_ret_struct_u64() {
+    let lit: CIntLit = ret_struct_with_U64(42 as I64)
+    assert_eq(lit.value as I32, 42)
+    assert_eq(lit.suffix as I32, 1)
+}
+
+@test func test_ret_struct_in_when() {
+    let p: Point = ret_struct_in_when(3 as I64)
+    assert_eq(p.x as I32, 3)
+    assert_eq(p.y as I32, 6)
+}
+
+@test func test_ret_struct_in_loop() {
+    let p: Point = ret_struct_in_loop()
+    assert_eq(p.x as I32, 2)
+    assert_eq(p.y as I32, 20)
+}

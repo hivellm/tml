@@ -1,0 +1,150 @@
+//! Cobertura XML emit (phase 8.1).
+//!
+//! Emits the XML shape accepted by GitLab CI, Jenkins, and every other
+//! tool that speaks Cobertura. Schema:
+//!
+//! ```xml
+//! <?xml version="1.0" ?>
+//! <coverage line-rate="0.87" branch-rate="0.64" lines-covered="1234"
+//!           lines-valid="1413" branches-covered="321" branches-valid="501"
+//!           version="1.0" timestamp="1713398400">
+//!   <packages>
+//!     <package name="lib.core" line-rate="0.91" branch-rate="0.70">
+//!       <classes>
+//!         <class name="str" filename="lib/core/src/str.tml"
+//!                line-rate="0.95" branch-rate="0.80">
+//!           <methods>
+//!             <method name="split" signature="" line-rate="1.0" branch-rate="1.0">
+//!               <lines><line number="42" hits="7"/></lines>
+//!             </method>
+//!           </methods>
+//!           <lines>
+//!             <line number="1" hits="42" branch="false"/>
+//!             <line number="5" hits="7" branch="true" condition-coverage="50% (1/2)"/>
+//!           </lines>
+//!         </class>
+//!       </classes>
+//!     </package>
+//!   </packages>
+//! </coverage>
+//! ```
+
+use coverage::types::*
+use coverage::summary::{summarize, summarize_file, pct}
+use std::collections::List
+use std::file::File
+
+/// Write a `CoverageReport` as Cobertura XML at `path`.
+pub func write_cobertura(report: CoverageReport, path: Str) -> Outcome[(), EmitError] {
+    let text = render_cobertura(report)
+    let ok = File::write_all(path, text)
+    if not ok {
+        return Err(EmitError::WriteError(`failed to write {path}`.as_str()))
+    }
+    Ok(())
+}
+
+/// Render a `CoverageReport` as Cobertura XML (exposed for tests).
+pub func render_cobertura(report: CoverageReport) -> Str {
+    let s = summarize(report)
+    let line_rate = s.pct_lines / 100.0
+    let branch_rate = s.pct_branches / 100.0
+
+    var out: Str = "<?xml version=\"1.0\" ?>\n"
+    out = out + `<coverage line-rate="{line_rate}" branch-rate="{branch_rate}" lines-covered="{s.covered_lines}" lines-valid="{s.total_lines}" branches-covered="{s.covered_branches}" branches-valid="{s.total_branches}" version="1.0" timestamp="{report.generated_at}">\n`.as_str()
+    out = out + "  <packages>\n"
+    out = out + "    <package name=\"root\" line-rate=\"" + f64_str(line_rate) + "\" branch-rate=\"" + f64_str(branch_rate) + "\">\n"
+    out = out + "      <classes>\n"
+
+    var i: I64 = 0
+    loop (i < report.files.len()) {
+        out = out + render_class(report.files.get(i))
+        i = i + 1
+    }
+
+    out = out + "      </classes>\n"
+    out = out + "    </package>\n"
+    out = out + "  </packages>\n"
+    out = out + "</coverage>\n"
+    out
+}
+
+// ============================================================================
+// Internal — per-file (Cobertura `<class>`)
+// ============================================================================
+
+func render_class(f: FileCoverage) -> Str {
+    let s = summarize_file(f)
+    let lr = s.pct_lines / 100.0
+    let br = s.pct_branches / 100.0
+    let cname = class_name_from_path(f.path)
+
+    var out: Str = `        <class name="{xml_escape(cname)}" filename="{xml_escape(f.path)}" line-rate="{lr}" branch-rate="{br}">\n`.as_str()
+
+    // Methods
+    out = out + "          <methods>\n"
+    var fi: I64 = 0
+    loop (fi < f.functions.len()) {
+        let fh = f.functions.get(fi)
+        let rate: F64 = if fh.hit_count > 0 { 1.0 } else { 0.0 }
+        out = out + `            <method name="{xml_escape(fh.name)}" signature="" line-rate="{rate}" branch-rate="{rate}">\n`.as_str()
+        out = out + "              <lines>\n"
+        out = out + `                <line number="{fh.start_line}" hits="{fh.hit_count}"/>\n`.as_str()
+        out = out + "              </lines>\n"
+        out = out + "            </method>\n"
+        fi = fi + 1
+    }
+    out = out + "          </methods>\n"
+
+    // Lines
+    out = out + "          <lines>\n"
+    var li: I64 = 0
+    loop (li < f.lines.len()) {
+        let lh = f.lines.get(li)
+        out = out + `            <line number="{lh.line}" hits="{lh.count}" branch="false"/>\n`.as_str()
+        li = li + 1
+    }
+    out = out + "          </lines>\n"
+    out = out + "        </class>\n"
+    out
+}
+
+/// Derive a class name from a path: `lib/core/src/str.tml` → `str`.
+func class_name_from_path(path: Str) -> Str {
+    let parts = path.split("/")
+    if parts.len() == 0 { return path }
+    let last = parts.get(parts.len() - 1)
+    // Strip extension
+    let dot = last.split(".")
+    if dot.len() > 0 { return dot.get(0) }
+    last
+}
+
+/// Minimal XML escape: `<`, `>`, `&`, `"`, `'`.
+func xml_escape(s: Str) -> Str {
+    var out: Str = ""
+    var i: I64 = 0
+    loop (i < s.len()) {
+        let c = core::str::basic::char_at(s, i)
+        if c == 60 {
+            out = out + "&lt;"
+        } else if c == 62 {
+            out = out + "&gt;"
+        } else if c == 38 {
+            out = out + "&amp;"
+        } else if c == 34 {
+            out = out + "&quot;"
+        } else if c == 39 {
+            out = out + "&apos;"
+        } else {
+            out = out + core::str::basic::substring(s, i, i + 1)
+        }
+        i = i + 1
+    }
+    out
+}
+
+/// F64 to Str helper (template-literal interpolation produces Text).
+func f64_str(v: F64) -> Str {
+    `{v}`.as_str()
+}

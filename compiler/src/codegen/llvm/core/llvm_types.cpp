@@ -38,6 +38,7 @@ TML_MODULE("codegen_x86")
 #include "parser/parser.hpp"
 
 #include <cctype>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -173,7 +174,63 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return llvm_type_name(current_impl_type_);
     }
 
-    // User-defined type - return struct type
+    // User-defined type — ensure struct type is defined before referencing it.
+    // When a struct from module A references a struct from module B as a field,
+    // module B's struct may not have been emitted yet. Look it up in the module
+    // registry and emit it now if needed.
+    // Guard against re-entrancy: if we're already resolving this type, skip.
+    static thread_local std::unordered_set<std::string> resolving_types;
+    if (struct_types_.find(name) == struct_types_.end() && env_.module_registry() &&
+        resolving_types.find(name) == resolving_types.end()) {
+        resolving_types.insert(name);
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            const types::StructDef* sdef_ptr = nullptr;
+            auto pub_it = mod.structs.find(name);
+            if (pub_it != mod.structs.end()) {
+                sdef_ptr = &pub_it->second;
+            } else {
+                auto priv_it = mod.internal_structs.find(name);
+                if (priv_it != mod.internal_structs.end()) {
+                    sdef_ptr = &priv_it->second;
+                }
+            }
+            if (sdef_ptr) {
+                const auto& sdef = *sdef_ptr;
+                if (sdef.type_params.empty()) {
+                    // Non-generic: emit now. Register FIRST to prevent infinite
+                    // recursion if fields reference each other (A→B→A).
+                    std::string tn = "%struct." + name;
+                    struct_types_[name] = tn;
+                    std::string def = tn + " = type { ";
+                    bool first = true;
+                    for (const auto& field : sdef.fields) {
+                        if (!first)
+                            def += ", ";
+                        first = false;
+                        std::string ft = llvm_type_from_semantic(field.type, true);
+                        if (field.type && field.type->is<types::FuncType>())
+                            ft = "{ ptr, ptr }";
+                        def += ft;
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                    // Register fields
+                    std::vector<FieldInfo> fields;
+                    for (size_t i = 0; i < sdef.fields.size(); ++i) {
+                        std::string ft = llvm_type_from_semantic(sdef.fields[i].type, true);
+                        if (sdef.fields[i].type && sdef.fields[i].type->is<types::FuncType>())
+                            ft = "{ ptr, ptr }";
+                        fields.push_back(
+                            {sdef.fields[i].name, static_cast<int>(i), ft, sdef.fields[i].type});
+                    }
+                    struct_fields_[name] = fields;
+                }
+                break;
+            }
+        }
+        resolving_types.erase(name);
+    }
     return "%struct." + name;
 }
 
@@ -628,7 +685,19 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                     auto struct_it = mod.structs.find(named.name);
                     if (struct_it != mod.structs.end()) {
                         const auto& struct_def = struct_it->second;
-                        // Emit the struct type definition
+                        // Recursively ensure field types are defined first
+                        // (prevents forward-reference like ReadableStream → EventEmitter)
+                        for (const auto& field : struct_def.fields) {
+                            if (field.type && field.type->is<types::NamedType>()) {
+                                const auto& fld_named = field.type->as<types::NamedType>();
+                                if (struct_types_.find(fld_named.name) == struct_types_.end()) {
+                                    // Recurse: llvm_type_from_semantic will trigger this same
+                                    // block for the field type, defining it before we use it.
+                                    llvm_type_from_semantic(field.type, true);
+                                }
+                            }
+                        }
+                        // Now emit the struct type definition
                         std::string type_name = "%struct." + named.name;
                         std::string def = type_name + " = type { ";
                         bool first = true;
@@ -899,7 +968,11 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "{ ptr, ptr }";
         }
 
-        return "%struct." + named.name;
+        // Ensure the struct type is defined before referencing it.
+        // This is the central fix for K001 forward-reference bugs where struct A
+        // (e.g. ReadableStream) references struct B (e.g. EventEmitter) as a field,
+        // but B hasn't been emitted to the IR yet.
+        return llvm_type_name(named.name);
     } else if (type->is<types::GenericType>()) {
         // Check if there's a substitution available for this generic type parameter
         const auto& generic = type->as<types::GenericType>();
@@ -1126,6 +1199,25 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
                     if (!struct_it->second.type_params.empty()) {
                         return;
                     }
+                    // Recursively ensure all field types are defined BEFORE
+                    // emitting this struct (prevents forward references like
+                    // ReadableStream referencing undefined EventEmitter).
+                    for (const auto& fld : struct_it->second.fields) {
+                        if (fld.type && fld.type->is<types::NamedType>()) {
+                            const auto& fld_named = fld.type->as<types::NamedType>();
+                            if (struct_types_.find(fld_named.name) == struct_types_.end()) {
+                                // Forward-declare to break cycles, then recurse
+                                // (cycle: A has field B, B has field A — both use ptr)
+                                // For non-cyclic cases, the recursive call emits the full def.
+                                // We check again after because recursion may have defined it.
+                                // Use a temporary parser NamedType to call ensure_type_defined
+                                auto fld_parser_type = std::make_unique<parser::Type>(
+                                    parser::NamedType{.path = {.segments = {fld_named.name}}});
+                                ensure_type_defined(fld_parser_type);
+                            }
+                        }
+                    }
+
                     // Emit non-generic struct type
                     std::string type_name = "%struct." + base_name;
                     std::string def = type_name + " = type { ";

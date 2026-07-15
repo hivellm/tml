@@ -37,11 +37,13 @@ void LLVMInitializeX86TargetMC(void);
 void LLVMInitializeX86AsmParser(void);
 void LLVMInitializeX86AsmPrinter(void);
 
+#ifdef TML_LLVM_HAS_AARCH64
 void LLVMInitializeAArch64TargetInfo(void);
 void LLVMInitializeAArch64Target(void);
 void LLVMInitializeAArch64TargetMC(void);
 void LLVMInitializeAArch64AsmParser(void);
 void LLVMInitializeAArch64AsmPrinter(void);
+#endif
 }
 
 namespace tml::backend {
@@ -105,11 +107,13 @@ auto LLVMBackend::initialize() -> bool {
         LLVMInitializeX86AsmParser();
         LLVMInitializeX86AsmPrinter();
 
+#ifdef TML_LLVM_HAS_AARCH64
         LLVMInitializeAArch64TargetInfo();
         LLVMInitializeAArch64Target();
         LLVMInitializeAArch64TargetMC();
         LLVMInitializeAArch64AsmParser();
         LLVMInitializeAArch64AsmPrinter();
+#endif
     });
 
     // Create per-instance LLVM context (thread-safe)

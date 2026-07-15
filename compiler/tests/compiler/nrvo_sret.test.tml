@@ -1,0 +1,153 @@
+// Regression test for NRVO (Named Return Value Optimization) in the MIR→LLVM path.
+//
+// NRVO fires when a sret-returning function calls another sret-returning function and
+// immediately returns that result. The intermediate alloca+load+store sequence is
+// eliminated by forwarding `%sret` directly to the callee's sret slot.
+//
+// These tests verify correctness of the optimized calling convention — the values
+// produced must be identical whether or not the optimization fires.
+
+use test::assert_eq
+
+// Two-field struct (>8 bytes → sret)
+type Point { x: I64, y: I64 }
+// Four-field struct (>8 bytes → sret)
+type Rect { x: I64, y: I64, w: I64, h: I64 }
+// Three-field struct
+type Vec3 { x: I64, y: I64, z: I64 }
+
+// --- Base constructors (sret callee) ---
+
+func make_point(x: I64, y: I64) -> Point {
+    Point { x: x, y: y }
+}
+
+func make_rect(x: I64, y: I64, w: I64, h: I64) -> Rect {
+    Rect { x: x, y: y, w: w, h: h }
+}
+
+func make_vec3(x: I64, y: I64, z: I64) -> Vec3 {
+    Vec3 { x: x, y: y, z: z }
+}
+
+// --- NRVO candidates: wrapper returns callee result directly ---
+
+func wrap_point(x: I64, y: I64) -> Point {
+    make_point(x, y)
+}
+
+func wrap_rect(x: I64, y: I64, w: I64, h: I64) -> Rect {
+    make_rect(x, y, w, h)
+}
+
+func wrap_vec3(x: I64, y: I64, z: I64) -> Vec3 {
+    make_vec3(x, y, z)
+}
+
+// --- Double-wrap: NRVO through two call levels ---
+
+func double_wrap_point(x: I64, y: I64) -> Point {
+    wrap_point(x, y)
+}
+
+// --- Conditional return with NRVO (only one branch is NRVO-eligible) ---
+
+func clamp_point(x: I64, y: I64, lo: I64, hi: I64) -> Point {
+    if x < lo {
+        make_point(lo, y)
+    } else if x > hi {
+        make_point(hi, y)
+    } else {
+        make_point(x, y)
+    }
+}
+
+// --- Helper ---
+func sum_point(p: Point) -> I64 { p.x + p.y }
+func sum_rect(r: Rect) -> I64 { r.x + r.y + r.w + r.h }
+func sum_vec3(v: Vec3) -> I64 { v.x + v.y + v.z }
+
+// ======== Tests ========
+
+@test
+func test_nrvo_point_basic() {
+    let p: Point = wrap_point(3, 7)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 7)
+    assert_eq(sum_point(p), 10)
+}
+
+@test
+func test_nrvo_rect_basic() {
+    let r: Rect = wrap_rect(1, 2, 10, 20)
+    assert_eq(r.x, 1)
+    assert_eq(r.y, 2)
+    assert_eq(r.w, 10)
+    assert_eq(r.h, 20)
+    assert_eq(sum_rect(r), 33)
+}
+
+@test
+func test_nrvo_vec3_basic() {
+    let v: Vec3 = wrap_vec3(5, 10, 15)
+    assert_eq(v.x, 5)
+    assert_eq(v.y, 10)
+    assert_eq(v.z, 15)
+    assert_eq(sum_vec3(v), 30)
+}
+
+@test
+func test_nrvo_double_wrap() {
+    let p: Point = double_wrap_point(8, 9)
+    assert_eq(p.x, 8)
+    assert_eq(p.y, 9)
+    assert_eq(sum_point(p), 17)
+}
+
+@test
+func test_nrvo_clamp_below() {
+    let p: Point = clamp_point(2, 5, 10, 20)
+    assert_eq(p.x, 10)
+    assert_eq(p.y, 5)
+}
+
+@test
+func test_nrvo_clamp_above() {
+    let p: Point = clamp_point(25, 5, 10, 20)
+    assert_eq(p.x, 20)
+    assert_eq(p.y, 5)
+}
+
+@test
+func test_nrvo_clamp_within() {
+    let p: Point = clamp_point(15, 5, 10, 20)
+    assert_eq(p.x, 15)
+    assert_eq(p.y, 5)
+}
+
+@test
+func test_nrvo_in_loop() {
+    var total: I64 = 0
+    for i in 0 to 10 {
+        let p: Point = wrap_point(i, i * 2)
+        total = total + sum_point(p)
+    }
+    // sum of (i + 2i) = 3i for i in 0..9 = 3 * 45 = 135
+    assert_eq(total, 135)
+}
+
+@test
+func test_nrvo_negative_values() {
+    let p: Point = wrap_point(-5, -3)
+    assert_eq(p.x, -5)
+    assert_eq(p.y, -3)
+    assert_eq(sum_point(p), -8)
+}
+
+@test
+func test_nrvo_zero_values() {
+    let p: Point = wrap_point(0, 0)
+    assert_eq(p.x, 0)
+    assert_eq(p.y, 0)
+    assert_eq(sum_point(p), 0)
+}

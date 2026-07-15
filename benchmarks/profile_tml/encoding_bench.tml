@@ -8,6 +8,12 @@ use core::encoding::hex
 use core::encoding::base32
 use std::time::Instant
 
+/// Free a heap-allocated Str returned by encoding functions.
+func free_str(s: Str) {
+    let p: I64 = s as I64
+    lowlevel { mem_free(p as *Unit) }
+}
+
 func run_and_print(name: Str, iterations: I64, total_ns: I64) {
     let per_op: I64 = if total_ns > 0 { total_ns / iterations } else { 0 }
     let ops_sec: I64 = if total_ns > 0 {
@@ -30,6 +36,7 @@ func bench_b64_encode_short(iterations: I64) -> I64 {
     loop (i < iterations) {
         let encoded: Str = base64::encode(input)
         total = total + encoded.len()
+        free_str(encoded)
         i = i + 1
     }
     total
@@ -43,6 +50,7 @@ func bench_b64_encode_medium(iterations: I64) -> I64 {
     loop (i < iterations) {
         let encoded: Str = base64::encode(input)
         total = total + encoded.len()
+        free_str(encoded)
         i = i + 1
     }
     total
@@ -56,7 +64,10 @@ func bench_b64_decode(iterations: I64) -> I64 {
     loop (i < iterations) {
         let result: Outcome[Str, Str] = base64::decode(encoded)
         when result {
-            Ok(decoded) => { total = total + decoded.len() }
+            Ok(decoded) => {
+                total = total + decoded.len()
+                free_str(decoded)
+            }
             Err(_) => {}
         }
         i = i + 1
@@ -72,6 +83,7 @@ func bench_hex_encode(iterations: I64) -> I64 {
     loop (i < iterations) {
         let encoded: Str = hex::encode(input)
         total = total + encoded.len()
+        free_str(encoded)
         i = i + 1
     }
     total
@@ -85,7 +97,10 @@ func bench_hex_decode(iterations: I64) -> I64 {
     loop (i < iterations) {
         let result: Outcome[Str, Str] = hex::decode(encoded)
         when result {
-            Ok(decoded) => { total = total + decoded.len() }
+            Ok(decoded) => {
+                total = total + decoded.len()
+                free_str(decoded)
+            }
             Err(_) => {}
         }
         i = i + 1
@@ -101,6 +116,7 @@ func bench_b32_encode(iterations: I64) -> I64 {
     loop (i < iterations) {
         let encoded: Str = base32::encode(input)
         total = total + encoded.len()
+        free_str(encoded)
         i = i + 1
     }
     total
@@ -117,7 +133,8 @@ pub func main() -> I32 {
     // Warmup
     var w: I64 = 0
     loop (w < 100) {
-        let _: Str = base64::encode("warmup")
+        let tmp: Str = base64::encode("warmup")
+        free_str(tmp)
         w = w + 1
     }
 

@@ -3,6 +3,10 @@
 use core::str::basic::{len, substring, substring_from}
 use core::str::search::{starts_with, ends_with}
 
+// phase1k: length-prefix allocator for Str producers.
+@extern("tml_str_alloc_len")
+func c_tml_str_alloc_len(len: I64) -> *U8
+
 // ============================================================================
 // Repetition and Padding
 // ============================================================================
@@ -31,12 +35,12 @@ pub func repeat(s: Str, n: I64) -> Str {
         return ""
     }
     let total: I64 = s_len * n
-    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    // phase1k — length-prefix buffer; NUL written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(total)
     let dst: I64 = buf as I64
     for i in 0 to n {
         lowlevel { copy_nonoverlapping(s as *U8, (dst + i * s_len) as *U8, s_len) }
     }
-    lowlevel { ptr_write[U8]((dst + total) as *U8, 0 as U8) }
     return buf as Str
 }
 
@@ -140,7 +144,8 @@ pub func join(parts: List[Str], separator: Str) -> Str {
     if total == 0 {
         return ""
     }
-    let buf: *Unit = lowlevel { mem_alloc(total + 1) }
+    // phase1k — length-prefix buffer; NUL written by allocator.
+    let buf: *U8 = c_tml_str_alloc_len(total)
     let dst: I64 = buf as I64
     var di: I64 = 0
     for idx in 0 to count {
@@ -155,7 +160,6 @@ pub func join(parts: List[Str], separator: Str) -> Str {
             di = di + sep_len
         }
     }
-    lowlevel { ptr_write[U8]((dst + di) as *U8, 0 as U8) }
     return buf as Str
 }
 

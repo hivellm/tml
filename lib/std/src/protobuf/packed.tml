@@ -1,0 +1,177 @@
+//! Packed repeated field support for Protocol Buffers.
+//!
+//! In proto3, repeated scalar fields use packed encoding by default:
+//! a single tag followed by a varint byte-count followed by the
+//! concatenated encoded elements. This is more compact than writing
+//! a separate tag for each element.
+//!
+//! Only scalar numeric types support packed encoding (not string, bytes,
+//! or embedded messages).
+
+use std::collections::{Buffer, List}
+use std::protobuf::wire::{WIRE_LEN, WIRE_FIXED32, WIRE_FIXED64}
+use std::protobuf::writer::ProtoWriter
+use std::protobuf::reader::ProtoReader
+use std::protobuf::varint::zigzag_encode
+
+// ==================================================================
+// Packed writers
+// ==================================================================
+
+/// Writes a packed repeated varint field.
+/// Encodes all values as varints, then wraps in a single length-delimited field.
+pub func write_packed_varints(writer: mut ref ProtoWriter, field_num: I64, values: ref List[I64]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    // First encode all varints into a temporary buffer to know the total size
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 2)
+    for i in 0 to count {
+        let v: I64 = values.get(i)
+        tmp.write_varint(v)
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+/// Writes a packed repeated sint64 field (zigzag-encoded varints).
+pub func write_packed_sint64(writer: mut ref ProtoWriter, field_num: I64, values: ref List[I64]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 2)
+    for i in 0 to count {
+        let v: I64 = values.get(i)
+        tmp.write_varint(zigzag_encode(v))
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+/// Writes a packed repeated fixed32 field.
+/// Each element is 4 bytes little-endian.
+pub func write_packed_fixed32(writer: mut ref ProtoWriter, field_num: I64, values: ref List[I32]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 4)
+    for i in 0 to count {
+        let v: I32 = values.get(i)
+        tmp.write_fixed32(v)
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+/// Writes a packed repeated fixed64 field.
+/// Each element is 8 bytes little-endian.
+pub func write_packed_fixed64(writer: mut ref ProtoWriter, field_num: I64, values: ref List[I64]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 8)
+    for i in 0 to count {
+        let v: I64 = values.get(i)
+        tmp.write_fixed64(v)
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+/// Writes a packed repeated float field.
+/// Each element is 4 bytes little-endian.
+pub func write_packed_float(writer: mut ref ProtoWriter, field_num: I64, values: ref List[F32]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 4)
+    for i in 0 to count {
+        let v: F32 = values.get(i)
+        tmp.write_float(v)
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+/// Writes a packed repeated double field.
+/// Each element is 8 bytes little-endian.
+pub func write_packed_double(writer: mut ref ProtoWriter, field_num: I64, values: ref List[F64]) {
+    let count: I64 = values.len()
+    if count == 0 {
+        return
+    }
+    var tmp: ProtoWriter = ProtoWriter::with_capacity(count * 8)
+    for i in 0 to count {
+        let v: F64 = values.get(i)
+        tmp.write_double(v)
+    }
+    let tmp_buf: Buffer = tmp.to_buffer()
+    writer.write_field_raw_bytes(field_num, ref tmp_buf)
+}
+
+// ==================================================================
+// Packed readers
+// ==================================================================
+
+/// Reads a packed repeated varint field.
+/// The reader should be positioned at the start of the length-delimited payload.
+/// Call `reader.read_varint()` first to get the byte count, then use this
+/// on a sub-reader limited to those bytes.
+pub func read_packed_varints(reader: mut ref ProtoReader) -> Outcome[List[I64], Str] {
+    var result: List[I64] = List[I64]::new()
+    loop (reader.has_more()) {
+        let v_r = reader.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        result.push(v)
+    }
+    return Ok(result)
+}
+
+/// Reads a packed repeated fixed32 field.
+pub func read_packed_fixed32(reader: mut ref ProtoReader) -> Outcome[List[I32], Str] {
+    var result: List[I32] = List[I32]::new()
+    loop (reader.has_more()) {
+        let v_r = reader.read_fixed32()
+        let v: I32 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        result.push(v)
+    }
+    return Ok(result)
+}
+
+/// Reads a packed repeated fixed64 field.
+pub func read_packed_fixed64(reader: mut ref ProtoReader) -> Outcome[List[I64], Str] {
+    var result: List[I64] = List[I64]::new()
+    loop (reader.has_more()) {
+        let v_r = reader.read_fixed64()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        result.push(v)
+    }
+    return Ok(result)
+}
+
+/// Reads a packed repeated float field.
+pub func read_packed_float(reader: mut ref ProtoReader) -> Outcome[List[F32], Str] {
+    var result: List[F32] = List[F32]::new()
+    loop (reader.has_more()) {
+        let v_r = reader.read_float()
+        let v: F32 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        result.push(v)
+    }
+    return Ok(result)
+}
+
+/// Reads a packed repeated double field.
+pub func read_packed_double(reader: mut ref ProtoReader) -> Outcome[List[F64], Str] {
+    var result: List[F64] = List[F64]::new()
+    loop (reader.has_more()) {
+        let v_r = reader.read_double()
+        let v: F64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        result.push(v)
+    }
+    return Ok(result)
+}

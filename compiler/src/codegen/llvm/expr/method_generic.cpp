@@ -703,7 +703,7 @@ auto LLVMIRGen::gen_method_fn_trait_call(const parser::MethodCallExpr& call,
 
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string arg_val = gen_expr(*call.args[i]);
-                    std::string arg_type = "i32"; // default
+                    std::string arg_type = last_expr_type_;
                     if (i < closure_type.params.size()) {
                         arg_type = llvm_type_from_semantic(closure_type.params[i]);
                     }
@@ -714,7 +714,7 @@ auto LLVMIRGen::gen_method_fn_trait_call(const parser::MethodCallExpr& call,
                 }
 
                 // Determine return type
-                std::string ret_type = "i32";
+                std::string ret_type = "void";
                 if (closure_type.return_type) {
                     ret_type = llvm_type_from_semantic(closure_type.return_type);
                 }
@@ -782,7 +782,7 @@ auto LLVMIRGen::gen_method_fn_trait_call(const parser::MethodCallExpr& call,
                 // Generate user arguments
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string arg_val = gen_expr(*call.args[i]);
-                    std::string arg_type = "i32"; // default
+                    std::string arg_type = last_expr_type_;
                     if (i < func_type.params.size()) {
                         arg_type = llvm_type_from_semantic(func_type.params[i]);
                     }
@@ -847,14 +847,14 @@ auto LLVMIRGen::gen_method_fn_trait_call(const parser::MethodCallExpr& call,
             }
             for (size_t i = 0; i < call.args.size(); ++i) {
                 std::string arg_val = gen_expr(*call.args[i]);
-                std::string arg_type = last_expr_type_.empty() ? "i32" : last_expr_type_;
+                std::string arg_type = last_expr_type_;
                 if (!args_str.empty())
                     args_str += ", ";
                 args_str += arg_type + " " + arg_val;
                 arg_types.push_back(arg_type);
             }
 
-            std::string ret_type = "i32"; // default
+            std::string ret_type = "void"; // no semantic info — assume void
             std::string func_type_sig = ret_type + " (";
             for (size_t i = 0; i < arg_types.size(); ++i) {
                 if (i > 0)

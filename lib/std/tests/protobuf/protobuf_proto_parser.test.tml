@@ -1,0 +1,181 @@
+/// Tests that parse .proto files and validate the resulting descriptors.
+/// Verifies the parser correctly extracts messages, fields, enums,
+/// nested types, map fields, and oneof from real .proto definitions.
+
+use test::*
+use std::protobuf::proto_parser::{parse_proto, ProtoFile}
+use std::protobuf::types::FieldType
+
+// ============================================================================
+// person.proto
+// ============================================================================
+
+const PERSON_PROTO: Str = "syntax = \"proto3\";\npackage examples;\n\nenum PhoneType {\n  PHONE_TYPE_UNSPECIFIED = 0;\n  PHONE_TYPE_MOBILE = 1;\n  PHONE_TYPE_HOME = 2;\n  PHONE_TYPE_WORK = 3;\n}\n\nmessage PhoneNumber {\n  string number = 1;\n  PhoneType type = 2;\n}\n\nmessage Person {\n  string name = 1;\n  int32 id = 2;\n  string email = 3;\n  repeated PhoneNumber phones = 4;\n}\n\nmessage AddressBook {\n  repeated Person people = 1;\n}"
+
+@test func test_parse_person_proto() {
+    let proto = parse_proto(PERSON_PROTO)
+    assert_eq(proto.syntax, "proto3")
+    assert_eq(proto.package, "examples")
+
+    // 1 enum: PhoneType
+    assert_eq(proto.enums.len(), 1)
+    let phone_enum = proto.enums.get(0)
+    assert_eq(phone_enum.name, "PhoneType")
+    assert_eq(phone_enum.values.len(), 4)
+    assert_eq(phone_enum.values.get(0).name, "PHONE_TYPE_UNSPECIFIED")
+    assert_eq(phone_enum.values.get(0).number, 0)
+    assert_eq(phone_enum.values.get(1).name, "PHONE_TYPE_MOBILE")
+    assert_eq(phone_enum.values.get(1).number, 1)
+
+    // 3 messages: PhoneNumber, Person, AddressBook
+    assert_eq(proto.messages.len(), 3)
+
+    let phone_msg = proto.messages.get(0)
+    assert_eq(phone_msg.name, "PhoneNumber")
+    assert_eq(phone_msg.field_count(), 2)
+
+    let person_msg = proto.messages.get(1)
+    assert_eq(person_msg.name, "Person")
+    assert_eq(person_msg.field_count(), 4)
+}
+
+@test func test_person_field_types() {
+    let proto = parse_proto(PERSON_PROTO)
+    let person = proto.messages.get(1)
+
+    // field 1: string name
+    let f1 = when person.field_by_number(1) { Just(f) => f, Nothing => { assert(false, "missing field 1"); return } }
+    assert_eq(f1.name, "name")
+    assert_eq(f1.number, 1)
+
+    // field 2: int32 id
+    let f2 = when person.field_by_number(2) { Just(f) => f, Nothing => { assert(false, "missing field 2"); return } }
+    assert_eq(f2.name, "id")
+
+    // field 3: string email
+    let f3 = when person.field_by_number(3) { Just(f) => f, Nothing => { assert(false, "missing field 3"); return } }
+    assert_eq(f3.name, "email")
+
+    // field 4: repeated PhoneNumber phones
+    let f4 = when person.field_by_number(4) { Just(f) => f, Nothing => { assert(false, "missing field 4"); return } }
+    assert_eq(f4.name, "phones")
+    assert(f4.is_repeated, "phones should be repeated")
+}
+
+// ============================================================================
+// scalars.proto
+// ============================================================================
+
+const SCALARS_PROTO: Str = "syntax = \"proto3\";\npackage examples;\n\nmessage AllScalars {\n  double   field_double   = 1;\n  float    field_float    = 2;\n  int32    field_int32    = 3;\n  int64    field_int64    = 4;\n  uint32   field_uint32   = 5;\n  uint64   field_uint64   = 6;\n  sint32   field_sint32   = 7;\n  sint64   field_sint64   = 8;\n  fixed32  field_fixed32  = 9;\n  fixed64  field_fixed64  = 10;\n  sfixed32 field_sfixed32 = 11;\n  sfixed64 field_sfixed64 = 12;\n  bool     field_bool     = 13;\n  string   field_string   = 14;\n  bytes    field_bytes    = 15;\n}"
+
+@test func test_parse_all_scalars() {
+    let proto = parse_proto(SCALARS_PROTO)
+    assert_eq(proto.messages.len(), 1)
+    let msg = proto.messages.get(0)
+    assert_eq(msg.name, "AllScalars")
+    assert_eq(msg.field_count(), 15)
+
+    // Verify each field number maps to correct name
+    let f1 = when msg.field_by_number(1) { Just(f) => f, Nothing => { assert(false, "f1"); return } }
+    assert_eq(f1.name, "field_double")
+    let f7 = when msg.field_by_number(7) { Just(f) => f, Nothing => { assert(false, "f7"); return } }
+    assert_eq(f7.name, "field_sint32")
+    let f15 = when msg.field_by_number(15) { Just(f) => f, Nothing => { assert(false, "f15"); return } }
+    assert_eq(f15.name, "field_bytes")
+}
+
+// ============================================================================
+// packed.proto
+// ============================================================================
+
+const PACKED_PROTO: Str = "syntax = \"proto3\";\npackage examples;\n\nmessage PackedArrays {\n  repeated int32 values = 1;\n  repeated int64 ids = 2;\n  repeated sint32 deltas = 3;\n  repeated fixed32 hashes = 4;\n  repeated fixed64 timestamps = 5;\n  repeated double readings = 6;\n  repeated float weights = 7;\n  repeated bool flags = 8;\n}"
+
+@test func test_parse_packed() {
+    let proto = parse_proto(PACKED_PROTO)
+    let msg = proto.messages.get(0)
+    assert_eq(msg.name, "PackedArrays")
+    assert_eq(msg.field_count(), 8)
+
+    // All fields should be repeated + packed (scalar types in proto3)
+    let f1 = when msg.field_by_number(1) { Just(f) => f, Nothing => { assert(false, "f1"); return } }
+    assert(f1.is_repeated, "values should be repeated")
+    assert(f1.is_packed, "values should be packed (int32 in proto3)")
+
+    let f6 = when msg.field_by_number(6) { Just(f) => f, Nothing => { assert(false, "f6"); return } }
+    assert(f6.is_repeated, "readings should be repeated")
+    assert(f6.is_packed, "readings should be packed (double in proto3)")
+}
+
+// ============================================================================
+// nested.proto with map, oneof, optional
+// ============================================================================
+
+const NESTED_PROTO: Str = "syntax = \"proto3\";\npackage examples;\n\nmessage GeoPoint {\n  double latitude = 1;\n  double longitude = 2;\n}\n\nmessage Contact {\n  string name = 1;\n  int32 age = 2;\n  map<string, string> metadata = 5;\n  oneof identifier {\n    string email = 6;\n    string phone = 7;\n    int64 user_id = 8;\n  }\n  optional string nickname = 9;\n  repeated string tags = 10;\n}"
+
+@test func test_parse_nested() {
+    let proto = parse_proto(NESTED_PROTO)
+    // GeoPoint + Contact
+    assert_eq(proto.messages.len(), 2)
+
+    let geo = proto.messages.get(0)
+    assert_eq(geo.name, "GeoPoint")
+    assert_eq(geo.field_count(), 2)
+}
+
+@test func test_parse_map_field() {
+    let proto = parse_proto(NESTED_PROTO)
+    let contact = proto.messages.get(1)
+    assert_eq(contact.name, "Contact")
+
+    // field 5: map<string, string> metadata
+    let f5 = when contact.field_by_number(5) { Just(f) => f, Nothing => { assert(false, "f5"); return } }
+    assert_eq(f5.name, "metadata")
+    assert(f5.is_map, "metadata should be map")
+}
+
+@test func test_parse_oneof_fields() {
+    let proto = parse_proto(NESTED_PROTO)
+    let contact = proto.messages.get(1)
+
+    // oneof fields are parsed as optional
+    let f6 = when contact.field_by_number(6) { Just(f) => f, Nothing => { assert(false, "f6"); return } }
+    assert_eq(f6.name, "email")
+    assert(f6.is_optional, "oneof email should be optional")
+
+    let f7 = when contact.field_by_number(7) { Just(f) => f, Nothing => { assert(false, "f7"); return } }
+    assert_eq(f7.name, "phone")
+    assert(f7.is_optional, "oneof phone should be optional")
+}
+
+@test func test_parse_optional_field() {
+    let proto = parse_proto(NESTED_PROTO)
+    let contact = proto.messages.get(1)
+
+    let f9 = when contact.field_by_number(9) { Just(f) => f, Nothing => { assert(false, "f9"); return } }
+    assert_eq(f9.name, "nickname")
+    assert(f9.is_optional, "nickname should be optional")
+}
+
+// ============================================================================
+// Minimal proto
+// ============================================================================
+
+@test func test_parse_minimal() {
+    let proto = parse_proto("syntax = \"proto3\"; message Empty {}")
+    assert_eq(proto.syntax, "proto3")
+    assert_eq(proto.messages.len(), 1)
+    assert_eq(proto.messages.get(0).name, "Empty")
+    assert_eq(proto.messages.get(0).field_count(), 0)
+}
+
+// ============================================================================
+// Comments handling
+// ============================================================================
+
+@test func test_parse_with_comments() {
+    let src = "syntax = \"proto3\";\n// This is a comment\nmessage Foo {\n  /* block comment */ int32 bar = 1; // inline\n}"
+    let proto = parse_proto(src)
+    assert_eq(proto.messages.len(), 1)
+    assert_eq(proto.messages.get(0).name, "Foo")
+    assert_eq(proto.messages.get(0).field_count(), 1)
+}

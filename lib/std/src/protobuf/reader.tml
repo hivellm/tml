@@ -1,0 +1,455 @@
+//! Protocol Buffers decoder.
+//!
+//! Reads protobuf binary wire format from a Buffer, advancing a cursor.
+//! Supports all protobuf field types including varint, fixed, zigzag,
+//! float/double, bool, string, bytes, enum, and sub-messages.
+
+use std::collections::Buffer
+use std::protobuf::types::ProtoTag
+use std::protobuf::varint::zigzag_decode
+
+/// Result of decoding a `map<string, string>` entry.
+pub type MapEntrySS {
+    key: Str,
+    value: Str,
+}
+
+/// Result of decoding a `map<string, int64>` entry.
+pub type MapEntrySI {
+    key: Str,
+    value: I64,
+}
+
+/// Result of decoding a `map<int64, string>` entry.
+pub type MapEntryIS {
+    key: I64,
+    value: Str,
+}
+
+/// Result of decoding a `map<int64, int64>` entry.
+pub type MapEntryII {
+    key: I64,
+    value: I64,
+}
+
+/// A Protocol Buffers decoder that reads from a byte buffer.
+pub type ProtoReader {
+    buf: Buffer,
+    pos: I64,
+    limit: I64
+}
+
+impl ProtoReader {
+    /// Creates a new reader from a raw byte string.
+    pub func new(data: Str) -> ProtoReader {
+        let b: Buffer = Buffer::from_string(data)
+        let n: I64 = b.len()
+        ProtoReader { buf: b, pos: 0, limit: n }
+    }
+
+    /// Creates a new reader from a Buffer reference (duplicates the buffer).
+    pub func from_buffer(data: ref Buffer) -> ProtoReader {
+        let b: Buffer = data.duplicate()
+        let n: I64 = b.len()
+        ProtoReader { buf: b, pos: 0, limit: n }
+    }
+
+    /// Creates a limited reader over a sub-range of a buffer.
+    /// Used for decoding embedded messages.
+    pub func from_buffer_range(data: ref Buffer, start: I64, length: I64) -> ProtoReader {
+        let b: Buffer = data.duplicate()
+        ProtoReader { buf: b, pos: start, limit: start + length }
+    }
+
+    /// Returns the current read position.
+    pub func position(this) -> I64 {
+        return this.pos
+    }
+
+    /// Returns the number of remaining bytes.
+    pub func remaining(this) -> I64 {
+        return this.limit - this.pos
+    }
+
+    /// Returns true if there are more bytes to read.
+    pub func has_more(this) -> Bool {
+        return this.pos < this.limit
+    }
+
+    // ==================================================================
+    // Internal helpers
+    // ==================================================================
+
+    /// Reads a single byte and advances. Returns Err on EOF.
+    pub func next_byte(mut this) -> Outcome[I32, Str] {
+        if this.pos >= this.limit {
+            return Err("unexpected end of input")
+        }
+        let b: I32 = this.buf.read_u8(this.pos)
+        this.pos = this.pos + 1
+        return Ok(b)
+    }
+
+    // ==================================================================
+    // Varint
+    // ==================================================================
+
+    /// Reads an unsigned varint (LEB128 decoding).
+    pub func read_varint(mut this) -> Outcome[I64, Str] {
+        var result: I64 = 0
+        var shift: I64 = 0
+        loop (true) {
+            if shift >= 70 {
+                return Err("varint too long")
+            }
+            let byte_result = this.next_byte()
+            let b: I32 = when byte_result {
+                Ok(v) => v,
+                Err(e) => { return Err(e) },
+            }
+            let value_bits: I64 = (b & 0x7F) as I64
+            result = result | (value_bits << shift)
+            if b < 128 {
+                return Ok(result)
+            }
+            shift = shift + 7
+        }
+    }
+
+    // ==================================================================
+    // Fixed-width
+    // ==================================================================
+
+    /// Reads a 32-bit value in little-endian byte order.
+    pub func read_fixed32(mut this) -> Outcome[I32, Str] {
+        if this.remaining() < 4 {
+            return Err("not enough bytes for fixed32")
+        }
+        let b0_r = this.next_byte()
+        let b0: I32 = when b0_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        let b1_r = this.next_byte()
+        let b1: I32 = when b1_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        let b2_r = this.next_byte()
+        let b2: I32 = when b2_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        let b3_r = this.next_byte()
+        let b3: I32 = when b3_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        let result: I64 = (b0 as I64) | ((b1 as I64) << 8) | ((b2 as I64) << 16) | ((b3 as I64) << 24)
+        return Ok(result as I32)
+    }
+
+    /// Reads a 64-bit value in little-endian byte order.
+    pub func read_fixed64(mut this) -> Outcome[I64, Str] {
+        if this.remaining() < 8 {
+            return Err("not enough bytes for fixed64")
+        }
+        var result: I64 = 0
+        for i in 0 to 8 {
+            let b_r = this.next_byte()
+            let b: I32 = when b_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            let shift: I64 = i * 8
+            result = result | ((b as I64) << shift)
+        }
+        return Ok(result)
+    }
+
+    // ==================================================================
+    // Length-delimited
+    // ==================================================================
+
+    /// Reads length-prefixed bytes and returns them as a Str.
+    pub func read_bytes(mut this) -> Outcome[Str, Str] {
+        let len_r = this.read_varint()
+        let n: I64 = when len_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        if n < 0 {
+            return Err("negative length in bytes field")
+        }
+        if this.remaining() < n {
+            return Err("not enough bytes for length-delimited field")
+        }
+        let str_ptr: *U8 = lowlevel { mem_alloc(n + 1) } as *U8
+        let addr: I64 = str_ptr as I64
+        for i in 0 to n {
+            let b_r = this.next_byte()
+            let b: I32 = when b_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            lowlevel { ptr_write[U8]((addr + i) as *U8, b as U8) }
+        }
+        lowlevel { ptr_write[U8]((addr + n) as *U8, 0 as U8) }
+        return Ok(str_ptr as Str)
+    }
+
+    /// Reads a length-prefixed UTF-8 string.
+    pub func read_string(mut this) -> Outcome[Str, Str] {
+        return this.read_bytes()
+    }
+
+    // ==================================================================
+    // Tag
+    // ==================================================================
+
+    /// Reads a field tag and returns a ProtoTag with field_num and wire_type.
+    pub func read_tag(mut this) -> Outcome[ProtoTag, Str] {
+        let tag_r = this.read_varint()
+        let tag: I64 = when tag_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        let wire_type: I64 = tag & 7
+        let field_num: I64 = ((tag as U64) >> 3) as I64
+        return Ok(ProtoTag { field_num: field_num, wire_type: wire_type })
+    }
+
+    // ==================================================================
+    // Bool / Float / Double / Enum
+    // ==================================================================
+
+    /// Reads a boolean value (varint, true if non-zero).
+    pub func read_bool(mut this) -> Outcome[Bool, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(v != 0)
+    }
+
+    /// Reads a 32-bit float in little-endian byte order.
+    pub func read_float(mut this) -> Outcome[F32, Str] {
+        if this.remaining() < 4 {
+            return Err("not enough bytes for float")
+        }
+        let offset: I64 = this.pos
+        this.pos = this.pos + 4
+        return Ok(this.buf.read_f32_le(offset))
+    }
+
+    /// Reads a 64-bit double in little-endian byte order.
+    pub func read_double(mut this) -> Outcome[F64, Str] {
+        if this.remaining() < 8 {
+            return Err("not enough bytes for double")
+        }
+        let offset: I64 = this.pos
+        this.pos = this.pos + 8
+        return Ok(this.buf.read_f64_le(offset))
+    }
+
+    /// Reads an enum value as a varint (returned as I32).
+    pub func read_enum(mut this) -> Outcome[I32, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(v as I32)
+    }
+
+    // ==================================================================
+    // Signed integers (zigzag decoding)
+    // ==================================================================
+
+    /// Reads a sint32 value (zigzag-decoded varint, returned as I32).
+    pub func read_sint32(mut this) -> Outcome[I32, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(zigzag_decode(v) as I32)
+    }
+
+    /// Reads a sint64 value (zigzag-decoded varint).
+    pub func read_sint64(mut this) -> Outcome[I64, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(zigzag_decode(v))
+    }
+
+    // ==================================================================
+    // Integer type helpers
+    // ==================================================================
+
+    /// Reads an int32 value (varint, truncated to 32 bits).
+    pub func read_int32(mut this) -> Outcome[I32, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(v as I32)
+    }
+
+    /// Reads an int64 value (varint).
+    pub func read_int64(mut this) -> Outcome[I64, Str] {
+        return this.read_varint()
+    }
+
+    /// Reads a uint32 value (varint, truncated to 32 bits).
+    pub func read_uint32(mut this) -> Outcome[I32, Str] {
+        let v_r = this.read_varint()
+        let v: I64 = when v_r { Ok(val) => val, Err(e) => { return Err(e) } }
+        return Ok(v as I32)
+    }
+
+    /// Reads a uint64 value (varint).
+    pub func read_uint64(mut this) -> Outcome[I64, Str] {
+        return this.read_varint()
+    }
+
+    // ==================================================================
+    // Sub-message / embedded message
+    // ==================================================================
+
+    /// Reads a length-delimited embedded message, returning a new ProtoReader
+    /// limited to the message bytes. The parent reader advances past them.
+    pub func read_message_bytes(mut this) -> Outcome[ProtoReader, Str] {
+        let len_r = this.read_varint()
+        let n: I64 = when len_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        if n < 0 {
+            return Err("negative length in message field")
+        }
+        if this.remaining() < n {
+            return Err("not enough bytes for embedded message")
+        }
+        let start: I64 = this.pos
+        this.pos = this.pos + n
+        return Ok(ProtoReader::from_buffer_range(ref this.buf, start, n))
+    }
+
+    // ==================================================================
+    // Skip
+    // ==================================================================
+
+    /// Skips a field value based on its wire type.
+    pub func skip_field(mut this, wire_type: I64) -> Outcome[Unit, Str] {
+        if wire_type == 0 {
+            // Varint: read and discard
+            let discard_r = this.read_varint()
+            when discard_r {
+                Ok(v) => {},
+                Err(e) => { return Err(e) },
+            }
+            return Ok(())
+        } else if wire_type == 1 {
+            // 64-bit: skip 8 bytes
+            if this.remaining() < 8 {
+                return Err("not enough bytes to skip fixed64")
+            }
+            this.pos = this.pos + 8
+            return Ok(())
+        } else if wire_type == 2 {
+            // Length-delimited: read length, skip that many bytes
+            let len_r = this.read_varint()
+            let n: I64 = when len_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            if this.remaining() < n {
+                return Err("not enough bytes to skip length-delimited field")
+            }
+            this.pos = this.pos + n
+            return Ok(())
+        } else if wire_type == 5 {
+            // 32-bit: skip 4 bytes
+            if this.remaining() < 4 {
+                return Err("not enough bytes to skip fixed32")
+            }
+            this.pos = this.pos + 4
+            return Ok(())
+        } else {
+            return Err("unknown wire type")
+        }
+    }
+
+    /// Reads and skips the next complete field (tag + value).
+    /// Returns Ok(()) on success or Err if the stream is malformed.
+    pub func skip_unknown(mut this) -> Outcome[Unit, Str] {
+        let tag_r = this.read_tag()
+        let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return Err(e) } }
+        return this.skip_field(tag.wire_type)
+    }
+
+    // ==================================================================
+    // Map entry helpers
+    // ==================================================================
+    //
+    // proto3 map entries are submessages with field 1 = key, field 2 = value.
+    // Missing fields get the zero value per proto3 semantics.
+    //
+    // Usage: after `read_tag()` returns a tag whose `field_num` matches a
+    // map field, call `read_message_bytes()` to get a sub-reader and pass
+    // it to the appropriate `decode_map_entry_*` helper.
+
+    /// Decodes a map entry submessage with string key and string value.
+    /// Unknown fields in the entry are skipped. Missing fields default to "".
+    pub func decode_map_entry_ss(mut this) -> Outcome[MapEntrySS, Str] {
+        var key: Str = ""
+        var value: Str = ""
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 2 {
+                let k_r = this.read_string()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 2 {
+                let v_r = this.read_string()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntrySS { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with string key and int64 value.
+    pub func decode_map_entry_si(mut this) -> Outcome[MapEntrySI, Str] {
+        var key: Str = ""
+        var value: I64 = 0
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 2 {
+                let k_r = this.read_string()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v_r = this.read_varint()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntrySI { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with int64 key and string value.
+    pub func decode_map_entry_is(mut this) -> Outcome[MapEntryIS, Str] {
+        var key: I64 = 0
+        var value: Str = ""
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                let k_r = this.read_varint()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 2 {
+                let v_r = this.read_string()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntryIS { key: key, value: value })
+    }
+
+    /// Decodes a map entry submessage with int64 key and int64 value.
+    pub func decode_map_entry_ii(mut this) -> Outcome[MapEntryII, Str] {
+        var key: I64 = 0
+        var value: I64 = 0
+        loop (this.has_more()) {
+            let tag = when this.read_tag() { Ok(t) => t, Err(e) => { return Err(e) } }
+            if tag.field_num == 1 and tag.wire_type == 0 {
+                let k_r = this.read_varint()
+                key = when k_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else if tag.field_num == 2 and tag.wire_type == 0 {
+                let v_r = this.read_varint()
+                value = when v_r { Ok(v) => v, Err(e) => { return Err(e) } }
+            } else {
+                let skip_r = this.skip_field(tag.wire_type)
+                when skip_r {
+                    Ok(_) => {},
+                    Err(e) => { return Err(e) },
+                }
+            }
+        }
+        return Ok(MapEntryII { key: key, value: value })
+    }
+}

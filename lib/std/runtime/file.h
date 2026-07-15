@@ -47,8 +47,10 @@ bool file_write_str(TmlFile* file, const char* str);
 bool file_write_all(const char* path, const char* content);
 bool file_append_all(const char* path, const char* content);
 
-// Flush
+// Flush / Sync
 bool file_flush(TmlFile* file);
+bool file_sync(TmlFile* file);     // fsync() — flush to disk
+bool file_datasync(TmlFile* file); // fdatasync() — flush data only (no metadata)
 
 // Position/Size
 int64_t file_size(TmlFile* file);

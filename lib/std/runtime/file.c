@@ -229,6 +229,38 @@ bool file_flush(TmlFile* file) {
     return fflush((FILE*)file->handle) == 0;
 }
 
+bool file_sync(TmlFile* file) {
+    if (!file || !file->is_open || !file->handle)
+        return false;
+    // Flush CRT buffers first, then force OS to write to disk
+    if (fflush((FILE*)file->handle) != 0)
+        return false;
+#ifdef _WIN32
+    // _commit() is the Windows equivalent of fsync()
+    return _commit(_fileno((FILE*)file->handle)) == 0;
+#else
+    return fsync(fileno((FILE*)file->handle)) == 0;
+#endif
+}
+
+bool file_datasync(TmlFile* file) {
+    if (!file || !file->is_open || !file->handle)
+        return false;
+    if (fflush((FILE*)file->handle) != 0)
+        return false;
+#ifdef _WIN32
+    // Windows has no fdatasync; _commit() is equivalent to fsync()
+    return _commit(_fileno((FILE*)file->handle)) == 0;
+#else
+#ifdef __linux__
+    return fdatasync(fileno((FILE*)file->handle)) == 0;
+#else
+    // macOS/BSD: fall back to fsync
+    return fsync(fileno((FILE*)file->handle)) == 0;
+#endif
+#endif
+}
+
 int64_t file_size(TmlFile* file) {
     return file ? file->size : 0;
 }

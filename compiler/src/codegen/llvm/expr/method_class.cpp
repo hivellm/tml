@@ -67,7 +67,7 @@ auto LLVMIRGen::try_gen_class_instance_call(const parser::MethodCallExpr& call,
                                 "@" + mangle_impl_method(current_mangled, method);
 
                             // Resolve return type with type substitutions for generic params
-                            std::string ret_type = "i32"; // Default fallback
+                            std::string ret_type = "void";
                             if (m.return_type) {
                                 // Build type substitution map from class type args
                                 std::unordered_map<std::string, types::TypePtr> type_subs;

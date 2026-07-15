@@ -1,0 +1,294 @@
+//! `cc_driver` — standalone TML binary invoked by `tml cc`.
+//!
+//! Mirrors the `coverage_cli` dispatch pattern: `cmd_cc.cpp` detects
+//! this binary under `build/{debug,release}/bin/` and re-invokes it
+//! with the original argv so the actual lexer / parser / lowerer run
+//! inside a real TML process.
+//!
+//! Today it drives the phase23b pipeline end to end against an empty
+//! preprocessor token stream, which is enough to prove
+//! (a) the binary builds, (b) the TML cc modules link, and (c) the
+//! pipeline runs to completion on trivial inputs. Adding a
+//! source-text → `List[PpToken]` entry point (still missing in
+//! `compiler-tml/src/cc/preproc/`) is the next step that lights up
+//! real C compilation.
+//!
+//! ## CLI surface
+//!
+//! ```
+//! cc_driver <input.c> [--emit=<stage>] [--target=<triple>] [-o <path>]
+//! ```
+//!
+//! Supported `--emit` stages:
+//! - `pipeline` (default): run the full pipeline and print a one-line
+//!   status. Exits 0 on success, 1 on any error.
+//! - `ast`: print a trivial summary of the parsed translation unit
+//!   (decl count).
+//! - `mir`: print the lowered MIR module's function-list size.
+
+use test::{assert, assert_eq}
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token, Preprocessor, pp_new}
+use compiler::cc::preproc::tokenize::pp_tokenize_source
+use compiler::cc::preproc::directives::{pp_sweep, pp_sweep_in_file}
+use compiler::cc::preproc::predefined::{register_predefined_macros, register_linux_macros}
+use compiler::cc::lexer::*
+use compiler::cc::parser::*
+use compiler::cc::ast::*
+use compiler::cc::types::*
+use compiler::cc::lower::*
+use std::collections::list::List
+use std::file::File
+use std::os
+
+enum DriverEmit {
+    Pipeline,
+    Ast,
+    Mir,
+    Tokens
+}
+
+type DriverArgs {
+    input: Str,
+    output: Str,
+    target: Str,
+    emit: DriverEmit,
+    user_paths: List[Str],
+    system_paths: List[Str]
+}
+
+/// Collect argv into `List[Str]` via the `os::Args` iterator.
+/// `os::args()` returns an iterator struct, not a List.
+func collect_argv() -> List[Str] {
+    let out: List[Str] = List[Str]::new(8 as I64)
+    var it = os::args()
+    loop (it.has_next()) {
+        out.push(it.next())
+    }
+    out
+}
+
+func parse_argv(argv: List[Str]) -> Outcome[DriverArgs, Str] {
+    var input: Str = ""
+    var output: Str = ""
+    var target: Str = ""
+    var emit: DriverEmit = DriverEmit::Pipeline
+    let user_paths: List[Str] = List[Str]::new(4 as I64)
+    let system_paths: List[Str] = List[Str]::new(4 as I64)
+
+    var i: I64 = 1 as I64
+    loop (i < argv.len()) {
+        let a = argv.get(i)
+        if a == "--emit=pipeline" {
+            emit = DriverEmit::Pipeline
+        } else if a == "--emit=ast" {
+            emit = DriverEmit::Ast
+        } else if a == "--emit=mir" {
+            emit = DriverEmit::Mir
+        } else if a == "--emit=tokens" {
+            emit = DriverEmit::Tokens
+        } else if a.starts_with("--target=") {
+            target = a.slice(9 as I64, a.len())
+        } else if a == "-o" {
+            i = i + 1
+            if i >= argv.len() {
+                return Err("cc_driver: -o requires a value")
+            }
+            output = argv.get(i)
+        } else if a == "-I" {
+            i = i + 1
+            if i >= argv.len() { return Err("cc_driver: -I requires a path") }
+            user_paths.push(argv.get(i))
+        } else if a.starts_with("-I") {
+            user_paths.push(a.slice(2 as I64, a.len()))
+        } else if a == "-isystem" {
+            i = i + 1
+            if i >= argv.len() { return Err("cc_driver: -isystem requires a path") }
+            system_paths.push(argv.get(i))
+        } else if a.starts_with("-") {
+            return Err(`cc_driver: unknown option '{a}'`.as_str())
+        } else {
+            if input == "" {
+                input = a
+            } else {
+                return Err(`cc_driver: more than one input file is not supported (got '{a}' after '{input}')`.as_str())
+            }
+        }
+        i = i + 1
+    }
+
+    if input == "" {
+        return Err("cc_driver: no input file")
+    }
+    Ok(DriverArgs {
+        input: input, output: output, target: target, emit: emit,
+        user_paths: user_paths, system_paths: system_paths
+    })
+}
+
+/// Pick the `CAbiTarget` matching a `clang -target`-style triple.
+/// Empty / unrecognised input falls back to `WindowsX64` which is
+/// the phase23b harness's default.
+func abi_for_target(target: Str) -> CAbiTarget {
+    if target == "" {
+        return CAbiTarget::WindowsX64
+    }
+    if target.contains("windows") and target.contains("x86_64") {
+        return CAbiTarget::WindowsX64
+    }
+    if target.contains("linux") or target.contains("unknown") {
+        return CAbiTarget::SysvAmd64
+    }
+    // Unknown triple — fall back to the host default.
+    return CAbiTarget::WindowsX64
+}
+
+/// Run the TML-side cc pipeline against an empty pp-token stream.
+/// Returns the lowered MIR module or an error message.
+///
+/// A text-to-PpToken entry point still lives outside
+/// `compiler-tml/src/cc/preproc/` (the phase23a C preprocessor is
+/// exposed at lower granularity — macro expansion, conditionals,
+/// etc.), so this driver currently exercises the parser and lowerer
+/// on a synthetic empty translation unit. Once the missing
+/// `preprocess_source(text) -> List[PpToken]` lands, this function
+/// feeds it the file contents.
+func run_pipeline(
+    input_path: Str,
+    target: CAbiTarget,
+    user_paths: List[Str],
+    system_paths: List[Str]
+) -> Outcome[CLower, Str] {
+    // Stage 0 — read the file.
+    let source: Str = File::read_all(input_path)
+
+    // Stage 1a — pp-tokenise the source text. This is the minimum-
+    // viable scanner shipped with phase24 Phase 2.2; it covers the
+    // common C17 §6.4 lexical classes (identifiers, pp-numbers,
+    // char/string literals, multi-char punctuators, line + block
+    // comments).
+    let raw_pp: List[PpToken] = pp_tokenize_source(source, input_path)
+
+    // Stage 1b — directive sweep + macro expansion (phase24a items 1.x + 2.x).
+    // `pp_sweep_in_file` walks the pp-token stream, applies `#define`/`#undef`,
+    // pushes/pops conditional frames, recursively expands `#include`
+    // directives via `pp_resolve_include` against the user (`-I`) and
+    // system (`-isystem`) include paths, drops `#error` / `#pragma` /
+    // `#line` no-ops, and produces a filtered stream that the C lexer
+    // can consume. Object-like macros are inlined during the sweep.
+    let preproc: Preprocessor = pp_new(system_paths, user_paths)
+    register_predefined_macros(preproc)
+    when target {
+        SysvAmd64 => register_linux_macros(preproc),
+        _ => {}
+    }
+    let pp: List[PpToken] = pp_sweep_in_file(preproc, raw_pp, input_path)
+
+    // Stage 1c — C token classifier. Turns the pp-token stream into
+    // CToken records (keyword resolution, literal decoding).
+    let lex: CLexer = c_lexer(pp)
+    let toks: List[CToken] = tokenize(lex)
+
+    // Stage 2 — parse.
+    let parser: CParser = c_parser(toks)
+    let tu_name = input_path
+    let tu_r: Outcome[CTranslationUnit, CParseError] = cp_parse_translation_unit(parser, tu_name)
+    let tu = when tu_r {
+        Ok(t) => t,
+        Err(e) => {
+            // Also write to a sandbox file so the error survives stdout/stderr buffering crashes.
+            let msg: Str = `cc_driver: parse failed at {e.file}:{e.line}:{e.col}: {e.message}`.as_str()
+            File::write_all(".sandbox/cc_driver_lasterr.log", msg)
+            return Err(msg)
+        }
+    }
+
+    // Stage 3 — lower. `lower_translation_unit` mutates the CLower
+    // in place; we return it so the caller can inspect `lw.module`.
+    let module_name = input_path
+    let lw: CLower = c_lower(target, module_name)
+    lower_translation_unit(lw, tu)
+
+    Ok(lw)
+}
+
+/// Emit the pp-token stream produced by `pp_tokenize_source` — a
+/// human-readable listing for debugging the lexical phase. Runs
+/// `pp_sweep` after tokenisation so the listing reflects what the C
+/// lexer actually receives (directives consumed, macros expanded,
+/// `#include` content spliced).
+func emit_tokens_stub(args: DriverArgs) -> I32 {
+    let source: Str = File::read_all(args.input)
+    let raw: List[PpToken] = pp_tokenize_source(source, args.input)
+    let preproc: Preprocessor = pp_new(args.system_paths, args.user_paths)
+    register_predefined_macros(preproc)
+    let pp: List[PpToken] = pp_sweep_in_file(preproc, raw, args.input)
+    let n: I64 = pp.len()
+    println(`cc_driver: pp-tokenized {args.input} ({n} tokens)`.as_str())
+    for i in 0 to n {
+        let t = pp.get(i)
+        println(`  [{i}] kind={t.kind as I32} text='{t.text}'`.as_str())
+    }
+    0
+}
+
+func emit_ast_summary(args: DriverArgs) -> I32 {
+    let abi = abi_for_target(args.target)
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
+        Ok(_lw) => {
+            println(`cc_driver: parsed {args.input}`.as_str())
+            0
+        },
+        Err(msg) => {
+            println(msg)
+            1
+        }
+    }
+}
+
+func emit_mir_summary(args: DriverArgs) -> I32 {
+    let abi = abi_for_target(args.target)
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
+        Ok(lw) => {
+            let n = lw.module.functions.len()
+            println(`cc_driver: lowered {args.input} (module={lw.module.name}, functions={n})`.as_str())
+            0
+        },
+        Err(msg) => {
+            println(msg)
+            1
+        }
+    }
+}
+
+func emit_pipeline_status(args: DriverArgs) -> I32 {
+    let abi = abi_for_target(args.target)
+    when run_pipeline(args.input, abi, args.user_paths, args.system_paths) {
+        Ok(_lw) => {
+            println(`cc_driver: pipeline OK for {args.input}`.as_str())
+            0
+        },
+        Err(msg) => {
+            println(msg)
+            1
+        }
+    }
+}
+
+func main() -> I32 {
+    let argv = collect_argv()
+    let parsed = parse_argv(argv)
+    when parsed {
+        Ok(args) => {
+            when args.emit {
+                DriverEmit::Pipeline => return emit_pipeline_status(args),
+                DriverEmit::Ast      => return emit_ast_summary(args),
+                DriverEmit::Mir      => return emit_mir_summary(args),
+                DriverEmit::Tokens   => return emit_tokens_stub(args)
+            }
+        },
+        Err(msg) => {
+            println(msg)
+            return 2
+        }
+    }
+}

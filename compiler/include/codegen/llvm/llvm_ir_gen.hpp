@@ -422,6 +422,11 @@ private:
     // (preserving its value). Used by closure codegen for implicit return.
     bool closure_wants_implicit_return_ = false;
 
+    // Precomputed iterator value for IntoIterator dispatch (set by gen_for)
+    std::string precomputed_iter_val_;
+    std::string precomputed_iter_type_;
+    bool use_precomputed_iter_ = false;
+
     // Current namespace context for qualified names
     std::vector<std::string> current_namespace_;
     auto qualified_name(const std::string& name) const -> std::string;
@@ -512,6 +517,8 @@ public:
         bool is_direct_param = false; ///< True if reg is a direct parameter (not an alloca).
         bool is_capturing_closure =
             false; ///< True if this is a capturing closure (fat ptr with env).
+        bool holds_heap_str =
+            false; ///< True if this Str var holds a heap-allocated string (for free-on-reassign).
     };
 
     /// Drop tracking information for RAII.
@@ -1085,6 +1092,20 @@ private:
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
     auto gen_for_iterator(const parser::ForExpr& for_expr, const std::string& type_name)
         -> std::string;
+    auto gen_for_iterator_with_value(const parser::ForExpr& for_expr,
+                                     const std::string& type_name,
+                                     const std::string& precomputed_iter_val,
+                                     const std::string& precomputed_iter_type,
+                                     const std::vector<types::TypePtr>& collection_type_args)
+        -> std::string;
+    auto gen_for_pointer_stepping(const parser::ForExpr& for_expr,
+                                  const std::string& iter_val,
+                                  const std::string& iter_llvm_type,
+                                  const std::string& elem_llvm_type,
+                                  const std::string& saved_loop_start,
+                                  const std::string& saved_loop_end,
+                                  const std::string& saved_loop_stack_save,
+                                  int saved_loop_metadata_id) -> std::string;
     auto gen_for_unrolled(const parser::ForExpr& for_expr, const std::string& var_name,
                           const std::string& type_name, size_t iteration_count) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;

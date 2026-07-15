@@ -1,0 +1,161 @@
+//! TML Coverage Library.
+//!
+//! Pure-TML reporting layer for code coverage data. Ingests LCOV,
+//! `llvm-cov export` JSON, and the legacy TML collector format; emits
+//! LCOV, Cobertura XML, compact JSON for the HTML viewer, and a static
+//! HTML SPA that works offline via `file://`.
+//!
+//! # Modules
+//!
+//! - [`types`] — core types (`CoverageReport`, `FileCoverage`, `LineHit`, `Summary`, ...)
+//! - [`ingest`] — parsers (`read_lcov`, `read_llvm_json`, `read_legacy_json`)
+//! - [`emit`] — writers (`write_lcov`, `write_json`, `write_html`, `write_cobertura`)
+//! - [`merge`] — combine multiple reports into one
+//! - [`filter`] — include/exclude by path glob
+//! - [`summary`] — compute aggregate percentages
+//!
+//! # Example
+//!
+//! ```tml
+//! use coverage::ingest::lcov::read_lcov
+//! use coverage::{merge, filter, summary}
+//! use coverage::emit::html::write_html
+//!
+//! let a = read_lcov("run1.info")?
+//! let b = read_lcov("run2.info")?
+//! let merged = merge::merge([a, b])
+//! let filtered = filter::filter(merged, ["lib/**"], ["**/tests/**"])
+//! write_html(filtered, "coverage-report/")?
+//! ```
+
+// Submodules are accessed via their fully qualified paths
+// (e.g. `use coverage::types::*`, `use coverage::ingest::lcov::read_lcov`).
+
+use coverage::types::*
+use coverage::ingest::lcov::read_lcov
+// Re-enabled after the EventEmitter struct-emission K001 was fixed in
+// commit 66bc0232 (phase0w). `std::stream` now emits cleanly, so the
+// transitive import that pulls `read_llvm_json` in is once again safe.
+use coverage::ingest::llvm_json::read_llvm_json
+use coverage::ingest::legacy_json::read_legacy_json
+use coverage::merge::merge
+use coverage::filter::filter_paths
+use coverage::summary::summarize
+use coverage::emit::lcov::write_lcov
+use coverage::emit::json::write_json
+use coverage::emit::html::write_html
+use coverage::emit::cobertura::write_cobertura
+use std::file::Path
+use std::collections::List
+use std::os
+
+/// Orchestration entry point used by `tml coverage`.
+///
+/// Reads every input path (format detected by extension), merges the
+/// resulting reports, filters by include/exclude, and writes the
+/// requested formats into `args.output_dir`. Returns a process exit
+/// code: `0` on success, `1` on ingest / emit failure, `2` on
+/// `--fail-under` violation.
+pub func run(args: CliArgs) -> I32 {
+    if args.help {
+        return 0
+    }
+
+    // 1. Ingest every input (format inferred by extension).
+    let reports: List[CoverageReport] = List[CoverageReport]::new()
+    var i: I64 = 0
+    loop (i < args.inputs.len()) {
+        let path = args.inputs.get(i)
+        let r = ingest_one(path)
+        when r {
+            Ok(rep) => reports.push(rep),
+            Err(e) => {
+                println("coverage: ingest failed")
+                return 1
+            }
+        }
+        i = i + 1
+    }
+
+    // 2. Merge.
+    let merged = merge(reports)
+
+    // 3. Filter.
+    let final_report: CoverageReport = filter_paths(merged, args.include, args.exclude)
+
+    // 4. Emit (one or many formats).
+    let emit_result = emit_all(final_report, args.output_dir, args.format, args.compact_json)
+    when emit_result {
+        Err(e) => {
+            println("coverage: emit failed")
+            return 1
+        },
+        Ok(()) => {}
+    }
+
+    // 5. --fail-under gate.
+    when args.fail_under {
+        Just(threshold) => {
+            let s = summarize(final_report)
+            if s.pct_lines < threshold {
+                println("coverage: below --fail-under threshold")
+                return 2
+            }
+        },
+        Nothing => {}
+    }
+
+    0
+}
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/// Detect format by extension and dispatch to the matching reader.
+func ingest_one(path: Str) -> Outcome[CoverageReport, IngestError] {
+    if path.ends_with(".info") or path.ends_with(".lcov") {
+        return read_lcov(path)
+    }
+    if path.ends_with(".json") {
+        return read_llvm_json(path)
+    }
+    if path.ends_with(".txt") {
+        return read_legacy_json(path)
+    }
+    Err(IngestError::UnknownFormat(path))
+}
+
+/// Write every requested output artifact under `out_dir`.
+///
+/// Creates `out_dir` (and any missing parent directories) before writing
+/// so callers don't have to pre-mkdir. Matches the ergonomics of `cargo
+/// tarpaulin`, `go test -coverprofile`, and similar tools that
+/// materialise their report directory on demand.
+func emit_all(report: CoverageReport, out_dir: Str, format: OutputFormat, compact: Bool) -> Outcome[(), EmitError] {
+    if not Path::create_dir_all(out_dir) {
+        return Err(EmitError::WriteError(`failed to create output directory {out_dir}`.as_str()))
+    }
+    when format {
+        OutputFormat::Lcov => return write_lcov(report, out_dir + "/coverage.lcov"),
+        OutputFormat::Json => return write_json(report, out_dir + "/coverage.json", compact),
+        OutputFormat::Html => return write_html(report, out_dir),
+        OutputFormat::Cobertura => return write_cobertura(report, out_dir + "/coverage.xml"),
+        OutputFormat::All => {
+            when write_lcov(report, out_dir + "/coverage.lcov") {
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+            when write_json(report, out_dir + "/coverage.json", compact) {
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+            when write_cobertura(report, out_dir + "/coverage.xml") {
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+            // HTML last — it writes coverage.json too (idempotent).
+            return write_html(report, out_dir)
+        }
+    }
+}

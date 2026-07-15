@@ -1,0 +1,68 @@
+//! Smoke test — verifies the coverage library imports cleanly and the
+//! stub API returns its documented placeholder values.
+
+use test::*
+use coverage::types::*
+use coverage::merge::merge
+use coverage::filter::filter
+use coverage::summary::summarize
+use coverage::ingest::lcov::read_lcov
+use coverage::ingest::llvm_json::read_llvm_json
+use coverage::ingest::legacy_json::read_legacy_json
+use coverage::emit::lcov::write_lcov
+use coverage::emit::json::write_json
+use coverage::emit::cobertura::write_cobertura
+use coverage::emit::html::write_html
+
+@test("ingest stubs return Err")
+func test_ingest_stubs_err() {
+    let lcov = read_lcov("nonexistent.info")
+    assert_true(lcov.is_err(), "read_lcov stub must return Err")
+
+    let llvm = read_llvm_json("nonexistent.json")
+    assert_true(llvm.is_err(), "read_llvm_json stub must return Err")
+
+    let legacy = read_legacy_json("nonexistent.json")
+    assert_true(legacy.is_err(), "read_legacy_json stub must return Err")
+}
+
+@test("emit stubs return Err")
+func test_emit_stubs_err() {
+    let r = empty_report()
+    assert_true(write_lcov(r, "out.info").is_err(), "write_lcov stub must return Err")
+    assert_true(write_json(r, "out.json", true).is_err(), "write_json stub must return Err")
+    assert_true(write_cobertura(r, "out.xml").is_err(), "write_cobertura stub must return Err")
+    assert_true(write_html(r, "out/").is_err(), "write_html stub must return Err")
+}
+
+@test("merge of empty list returns empty report")
+func test_merge_empty() {
+    let r = merge(List::new())
+    assert_eq(r.files.len(), 0, "empty merge -> zero files")
+    assert_eq(r.tool, "coverage-stub", "empty merge -> stub marker")
+}
+
+@test("filter returns input unchanged (stub)")
+func test_filter_passthrough() {
+    let r = empty_report()
+    let out = filter(r, List::new(), List::new())
+    assert_eq(out.tool, r.tool, "stub filter passes through")
+}
+
+@test("summarize returns all-zero (stub)")
+func test_summarize_zero() {
+    let s = summarize(empty_report())
+    assert_eq(s.total_lines, 0, "stub total_lines = 0")
+    assert_eq(s.covered_lines, 0, "stub covered_lines = 0")
+}
+
+/// Helper: construct an empty `CoverageReport` literal for tests.
+func empty_report() -> CoverageReport {
+    CoverageReport {
+        files: List::new(),
+        source_roots: List::new(),
+        tool: "test",
+        version: "0.0.0",
+        generated_at: 0,
+    }
+}

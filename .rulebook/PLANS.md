@@ -13,20 +13,415 @@ At **session end**: Write a summary to the Session History section.
 ## Active Context
 
 <!-- PLANS:CONTEXT:START -->
-No active task. Last completed: phase0d_codegen-switch-when-dense — ARCHIVED (2026-04-14).
-Branch: feat/self-hosting-compiler. Version: 0.3.6.
-Pre-existing failures: c_preprocessor K001, hir_types K001, infer_differential K001, core/any T056, std/collections K001 (btreeset/btreemap/arraylist).
+## ⚡ STRATEGIC PIVOT (2026-07-15) — Stabilization ERA 0 (READ FIRST)
+
+User decision after the state-of-language analysis
+(`docs/analysis/tml-table-analysis/` — motivated by the abandoned UzDB app):
+
+1. **`feat/self-hosting-compiler` merges to main AS-IS** — self-hosting is
+   **paused by strategic decision, not finished** (stated in README). A new
+   branch off main hosts the stabilization work.
+2. **Task board reorganized** (`TASKS-INDEX.md`): new ERA 0 tasks
+   phase25a/25b (determinism harness + LLVM verifier CI) →
+   phase26a/26b/26c (ADR-009 memory-model decision → implementation →
+   band-aid revert) → phase27a/27b (K001 / X002-X003 root-cause) →
+   phase28a/28b (UzDB-core acceptance soak + async-file hardening).
+3. **Frozen**: phase23c, 31–34 (self-hosting/native) and 35–39 (DB/AI/HTTP/
+   toolchain features). phase38a (package registry) unfreezes first after ERA 0.
+4. **Superseded**: phase0z, phase24i–n band-aid line — per-site fixes proven
+   non-convergent (phase24l Attempt log); the class closes at the root in
+   phase26. Keep their repros for the phase25a corpus.
+5. Next concrete step: **phase25a + phase25b (parallel)**, then phase26a
+   (ADR-009 — requires user sign-off on B1 drop-flags vs B2 ARC).
+
+Historical context below describes the pre-pivot phase24 grind.
+
+---
+
+Last completed (2026-05-01): phase24b_cc-typedef-name-resolution
+items 1–5 done. Fix selected option (a) from proposal — type-system
+entry points in `compiler-tml/src/cc/types.tml` and callers in
+`compiler-tml/src/cc/lower.tml` take `env: ref CTypeEnv` instead of
+by-value `CTypeEnv`. Eliminates the value-pass + drop-glue path that
+freed the caller's HashMap buckets on `base_to_ctype` callee exit.
+Regression `test_phase24b_base_to_ctype_typedef_repeat` lands in
+`c_frontend.test.tml`. Compiler suite: 299/318 (baseline preserved).
+phase24c/24d/24e all shipped:
+- 24c (v0.3.41): Typedef arm Heap-borrow-drop fix via `into_raw`.
+- 24d (v0.3.42): same pattern in StructRef/UnionRef/EnumRef arms.
+- 24e (v0.3.43): replaced `into_raw`+`from_raw` aliasing hack with
+  proper deep-clone via `impl Duplicate for CType` + `@auto(duplicate)`
+  on CFuncType / CArrayType / CAggregateField / CAggregate /
+  CEnumValue / CEnumType. The env's bucket and consumer's CType are
+  fully decoupled — no double-free hazard regardless of drop order.
+
+cc_driver now parses every typedef/struct/union/enum-as-param
+shape we tested (`typed_simple`, `typed_two`, `typed_ptr`,
+`struct_ref`, `union_ref`, `enum_ref`, `test_no_inc`). All exit 0
+with `cc_driver: parsed`. 5/5 regression tests pass.
+
+phase24f shipped (v0.3.44, partial): `declarator_name_heap` had
+the same Heap-borrow-drop pattern at the parser level. Replaced
+the recursive `declarator_name → declarator_name_heap →
+declarator_name` loop with `declarator_name_value_leak` using
+`into_raw()` at every Heap layer. `sig_alone.c` improved from
+0% → 60% deterministic; full determinism requires structural
+Heap[T] refcounting.
+
+Filed `phase24g_heap-rc-or-borrow-language-fix` as the structural
+fix: upgrade `Heap[T]` from unique-owning to refcounted-shared in
+`lib/core/src/alloc/heap.tml`. Closes the entire Heap-borrow-drop
+bug class in one shot; surgical phase24c/24d/24e/24f patches can
+then be reverted in favor of the simpler refcount semantics.
+`essential.c` self-compile remains gated on phase24g.
+Branch: feat/self-hosting-compiler. Version: 0.3.40.
+coverage_cli.exe now builds and runs end-to-end — `--format=all` on the
+golden LCOV fixtures materialises LCOV + JSON + Cobertura XML + HTML
+SPA and exits 0.
+Pre-existing failures (unchanged, pre-session): c_preprocessor K001,
+hir_types K001, infer_differential K001, core/any T056, std/collections
+K001 (btreeset/btreemap/arraylist), builtins_imports X002 timeout,
+slice_split_pred X002 timeout, let_patterns X002 timeout,
+other/closure_codegen X003/X002, c_frontend K001 (Maybe[Heap[CBlockItem]]).
 <!-- PLANS:CONTEXT:END -->
 
 ## Current Task
 
 <!-- PLANS:TASK:START -->
-No active task.
+phase24l shipped (partial): added `Shared.get_clone(this) -> T where
+T: Duplicate` to `lib/core/src/alloc/shared.tml` (new opt-in method,
+preserves existing `.get()` bitwise semantics). Migrated ONLY the
+typedef arm in `compiler-tml/src/cc/types.tml::base_to_ctype` to use
+it. Closes `c_essential_repro.c` minimal trigger (28/30 vs 29/30
+baseline; within noise band). Preserves sig_alone 10/10, `int (*p);`
+30/30, `typedef void (*sig_t)(int);` 30/30, compiler suite 290/295.
+
+essential.c x 5 = 0/5 NOT met. Per task spec (phase24l 3.1), VERSION
+bump deferred to phase24m. ADR #9 records the hybrid (a)+(b) decision
+with full attempt log. phase24m filed as the residual essential.c
+follow-up — covers options (a)+audit, (b) compiler-codegen, or (c)
+HashMap.get specialization.
+
+Phase24l attempts that REGRESSED and were reverted:
+- Broader (b) migration to ~40 call sites in cc/types.tml + lower.tml
+  + parser.tml: minimal repro fell to 25/30.
+- Pure (a): change `Shared.get` to `where T: Duplicate { value.duplicate() }`:
+  REGRESSED lib/core (cache_aligned_box, cache, cache_soavec_set,
+  future_fuse fail K001).
+
+Active follow-up: `phase24c_cc-driver-runtime-link` to restore
+`tml build cc_driver.tml` linking `lib/std/runtime/file.c`. Once
+that lands, phase24b items 4.1 / 4.2 (end-to-end `tml cc`
+verification) become runnable in CI.
+
+Old fix-candidate analysis preserved here for context (superseded
+by option (a) ship): proposal.md candidates were
+(a) `env: ref CTypeEnv` everywhere — SHIPPED;
+(b) codegen elides field-level drops on a value-passed local
+when the field is a single pointer; (c) explicit borrow semantics
+for struct value parameters.
+
+Next active task: phase24b_cc-typedef-name-resolution Phase 3
+(codegen / type-system fix). Secondary option: phase0w Phase 10
+(delete C++ HTML generator — destructive, awaits user OK).
 <!-- PLANS:TASK:END -->
 
 ## Session History
 
 <!-- PLANS:HISTORY:START -->
+### 2026-05-04 — phase24k_essential-cleanup-segv DIAGNOSED (filed phase24l)
+
+### Accomplished
+
+Bisected the residual `essential.c × 5 = 0/5` SIGSEGV down to a 3-line
+minimal reproducer:
+
+```c
+typedef void (*sig_t)(int);
+sig_t f(int sig, sig_t handler);
+int main(void) { return 0; }
+```
+
+Saved as `compiler-tml/tests/native/c_essential_repro.c` with full
+trigger-pattern documentation in the file header.
+
+### Root cause precisely identified
+
+`Shared.get(this) -> T` (`lib/core/src/alloc/shared.tml:126`) returns
+the inner T by bitwise copy via `(*this.ptr).value`. When T contains
+nested `Shared[...]` fields (e.g., the recursive `CType` enum), those
+nested Shareds are aliased into the returned value WITHOUT bumping
+their refcounts. When the returned value drops, its drop-glue
+decrements those refcounts to 0, freeing the env's stored
+sub-allocations. Subsequent typedef lookups operate on the resulting
+dangling pointers.
+
+Crash trace pinpointed the failure to recursive `lower_type` calls
+on the SECOND typedef use in a single function declaration. First
+use of `sig_t` (return type) succeeds; its CType drop frees the
+env's `Shared[CFuncType]`. Second use (param) returns CType wrapping
+the now-dangling pointer; `lower_type`'s `when t {` discriminant
+read crashes.
+
+### Fix attempts (both reverted)
+
+1. `let v = ...get(); return v.duplicate()` in `base_to_ctype` typedef
+   arm. Result: minimal repro near baseline; essential.c REGRESSED
+   from 5/5 → 30/30 crashes.
+2. `expand_typedef_value(h: Shared[CType]) -> CType` helper that
+   manually walks the variant calling `inner.duplicate()` per Shared
+   field. Result: minimal repro fixed (0/30); but essential_top50.c
+   regressed 2/10 → 10/10. essential.c stayed 5/5.
+
+Per fail-twice rule + T0 (no "blocked"), filed
+`phase24l_shared-get-aliasing-deep-fix` for the structural fix.
+Three options proposed: (a) make `Shared.get()` deep-clone for
+`T: Duplicate`, (b) audit-and-fix every `.get()` call site in
+compiler-tml/src/cc, (c) compiler-codegen-level fix.
+
+### Verified preserved baselines
+
+- minimal repro × 30: 0/30 crashes
+- sig_alone.c × 10: 10/10 OK
+- `int (*p);` × 30: 30/30 OK
+- typedef sig_t × 30: 30/30 OK
+- essential.c × 5: 0/5 (residual SIGSEGV — gate NOT met)
+
+### Files touched
+
+- NEW: `compiler-tml/tests/native/c_essential_repro.c` (regression fixture)
+- NEW: `.rulebook/tasks/phase24l_shared-get-aliasing-deep-fix/` (follow-up)
+- UPD: `.rulebook/tasks/phase24k_essential-cleanup-segv/tasks.md` (status)
+- (no compiler-tml/src/cc/ changes — both attempted fixes were reverted)
+
+### Next session starter
+
+Active follow-up: `phase24l_shared-get-aliasing-deep-fix`. Start at
+item 1.1 — choose between options (a/b/c) for the structural fix
+to `Shared.get()` aliasing. Phase24k stays open until phase24l
+ships and essential.c × 5 = 5/5.
+
+NO VERSION bump (no behavior shipped).
+
+### 2026-05-01 (session 2) — phase0x_heap-decl-codegen-crash COMPLETE
+
+### Accomplished
+
+Fixed the codegen ABI mismatch that crashed `cp_parse_translation_unit`
+on `int x;` after the dangling-Str fix in commit 7e70a7bc7 exposed it.
+
+**Bisect path** (sentinels at every `= call` emit site):
+1. `gen_call_user_function` (call_user.cpp) — not invoked.
+2. `gen_call_generic_struct_method` (call_generic_struct.cpp) — not invoked.
+3. `gen_call` top of dispatch (call.cpp) — not invoked!
+4. `gen_method_call` (method.cpp) — fires for `method=new`.
+5. `gen_method_static_dispatch` (method_static_dispatch.cpp) — fires
+   for `method=new, receiver_seg0=Heap`. The actual emitter.
+
+So the call to `Heap[T]::new(value)` is parsed as a `MethodCallExpr`
+with PathExpr receiver, NOT a CallExpr — explains why the previous
+audit of CallExpr handlers turned up nothing.
+
+**Diagnostic via emit_line in the fixup site** showed
+`functions_.find("Heap__MinDecl_new")` returned `end()` at
+arg-processing time. Generic instantiations are queued at
+method_static_dispatch.cpp:953-956 and the FuncInfo registers later
+when `gen_impl_method_instantiation` runs as part of a subsequent
+pass. The existing fixup at line 1010-1020 had nothing to read.
+
+**Fix** (method_static_dispatch.cpp:1006-1029): added a fallback
+that mirrors the impl.cpp:392-395 rule unconditionally when:
+- the FuncInfo lookup misses, AND
+- `i == 0` (first user-visible param), AND
+- the resolved arg type starts with `%struct.` or `%enum.`
+
+Scoped to the `func_sig` branch only; the other branches (1081+,
+1162+) handle their own cases through `pending_generic_impls_`.
+
+### Verification
+
+- `compiler/tests/compiler/heap_decl_var_repro.test.tml` PASS.
+- Bug #7/#8/#9 regression tests (`nested_constructor_push`,
+  `large_enum_by_value_duplicate`) still pass.
+- `compiler-tml/tests/native/c_parser.test.tml`:
+  `test_parse_top_decl_int_x` and `test_parse_translation_unit_int_x`
+  added and pass.
+- `tml cc .sandbox/int_x.c --emit=ast` exits 0 with output
+  `cc_driver: parsed .sandbox/int_x.c`.
+- Compiler suite (`tml test --suite=compiler --no-fail-fast`): 298/317
+  pass. The 19 failures are all pre-existing K001 self-host tests
+  (lexer_basic, parser_basic, hir_types, infer_differential,
+  c_preprocessor, parse_*, test_*) plus one X002 timeout
+  (builtins_imports). Verified by re-running on `git stash` (without
+  the fix) — same failure set, no regressions introduced.
+
+### Bisect data point worth keeping
+
+Static method calls via `Type::method(args)` syntax in TML are
+parsed as `MethodCallExpr`, not `CallExpr`. The dispatch path lives
+in `method.cpp::gen_method_call → gen_method_static_dispatch`, NOT
+`call.cpp::gen_call`. Future ABI-mismatch debugging on static-method
+calls should start at method_static_dispatch.cpp.
+
+### Files changed
+
+- `compiler/src/codegen/llvm/expr/method_static_dispatch.cpp`
+  (+15 / −9, the actual fix).
+- `compiler-tml/tests/native/c_parser.test.tml` (+34 / −3, regression
+  tests).
+- `compiler/tests/compiler/heap_decl_var_repro.test.tml` (already
+  landed in 0e814621; no new changes).
+- `VERSION`: 0.3.38 → 0.3.39.
+- `CHANGELOG.md`: 0.3.39 row.
+- `docs/patches/v0.3.39.md`: full release notes.
+- `.rulebook/tasks/phase0x_heap-decl-codegen-crash/tasks.md`: all
+  items checked.
+
+### Next session starter
+
+phase24 Phase 3 (cmd_cc.cpp CLI subcommand) and Phase 4
+(self-compile essential.c / mem.c via `tml cc`) are now unblocked.
+
+### 2026-05-01 — cc parser dangling-Str fix + Heap[CDecl] crash isolation
+
+### Accomplished
+
+Audited every `tok.text` / `tok.file` site in
+`compiler-tml/src/cc/parser.tml`. `cp_dup_token` already deep-
+duplicated Str fields on `cp_peek`, but five raw `parser.tokens.get(p)`
+calls inside loops bypassed it: dropping the local `tok` at end of
+iteration freed Str pointers still owned by `parser.tokens`. Fixed:
+all five raw `.get(p)` → `cp_peek(parser.tokens, p)` (lines 287, 478,
+536, 677, 960).
+
+Added `.duplicate()` at every Str escape site where `tok.text` or
+`tok.file` flows into a value outliving the local `tok`:
+`c_parse_err.file`, `cp_expect_ident.name`,
+`CBaseType::Typedef(tok.text)`, `tag = tag_tok.text`,
+`CExpr::Ident(tok.text)`, `CDeclarator::Ident(tok.text)`,
+10× `start_tok.file` across CStructDef/CUnionDef/CEnumDef/CFuncDecl/
+CTypedefDef/CVarDecl, label `name = tok.text`, and
+`_Static_assert msg = msg_tok.text`. Also made `declarator_name`
+return an owned Str so HashMap/struct captures of the returned name
+don't dangle.
+
+Type-check clean; `c_lexer`, `c_parser`, `c_frontend` test suites all
+pass after the fix (no regressions).
+
+### Crash isolation: discovered Heap[CDecl] codegen bug
+
+After dangling-Str fixes, the `cp_parse_translation_unit` segfault on
+`int x;` moved to `decls.push(Heap[CDecl]::new(CDecl::Var(vd)))`.
+Bisected via `File::append_all` instrumentation (println is buffered
+and lost on SIGSEGV — direct file appends survive). Reduced to:
+
+```tml
+let vd: CVarDecl = CVarDecl {
+    name: "x", specifiers: specs, declarator: CDeclarator::Ident("x"),
+    init: Nothing,
+    file: "t.c", line: 1, col: 1
+}
+decls.push(Heap[CDecl]::new(CDecl::Var(vd)))
+```
+
+Crashes with ACCESS_VIOLATION at `Heap[CDecl]::new(...)` even with
+literal Strs — so it's **not** in my fix; it's a pre-existing codegen
+bug in `Heap[T]::new` for `T = CDecl`-shaped values (large enum +
+nested struct fields with Str payloads). The phase0v bug #7/#8/#9
+regression tests pass because their synthetic types differ from the
+`CVarDecl` / `CDeclSpecifiers` / `CDeclarator` shape.
+
+Filed as `phase0x_heap-decl-codegen-crash` with bisect plan and
+Rust-as-Reference IR methodology. This is the actual blocker for
+phase24 Phase 4.
+
+### Files modified this session (uncommitted)
+- `compiler-tml/src/cc/parser.tml` — dangling-Str fix (~25 sites).
+- `.rulebook/tasks/phase0x_heap-decl-codegen-crash/` — new follow-up.
+
+### Next session starter
+
+Active task: `phase0x_heap-decl-codegen-crash`. Start at item 1.1 —
+land the minimal `heap_decl_var_repro.test.tml` fixture and confirm it
+crashes on a clean checkout. Item 2.1 (`emit-ir` on the fixture) is
+where the actual codegen bug becomes visible.
+
+### 2026-04-18 (session 2) — phase24 Phase 2.3 + parser bug bisection
+
+### Accomplished
+- **phase24 item 2.3 COMPLETE** (commit c44afd2f): registered 11
+  `cc_bridge_*` FFI symbols in `runtime.cpp::init_runtime_catalog`.
+  Handles all map to `ptr`; `CcDiagnostic` struct return declared as
+  `{ ptr, i32, i32, i32, ptr }`; `CcAbiTarget` passed as `i32`. Build
+  clean, no regressions, all 11 symbol strings present in the
+  compiler DLL.
+
+### cp_parse_translation_unit segfault — partial root-cause found
+
+Bisected the `int x;` crash inside `cp_parse_translation_unit` via
+`File::append_all` instrumentation (println buffered and discarded
+on SIGSEGV — use direct file append for crash debugging).
+
+Crash trail:
+1. `pp_tokenize_source`, `c_lexer`, `tokenize`, `c_parser` all pass.
+2. `cp_parse_top_decl` enters, `cp_parse_specifiers` returns Ok at p=1.
+3. `aggregate_kind` returns 0 (non-aggregate).
+4. `cp_parse_declarator` returns Ok with dp.pos=2.
+5. **`declarator_name(dp.decl)` returns `'larator\n'` instead of `'x'`.**
+   This is the first garbage — reading from an offset inside the string
+   "top_decl-post-declarator\n" (one of my own instrumentation strings).
+
+Root cause hypothesis: `tok.text` captured from `cp_peek(parser.tokens,
+p)` is a `Str` whose pointer aliases the source heap slot inside
+`parser.tokens`. When `tok` drops at end of scope, the Str is freed /
+the memory gets reused, and the `CDeclarator::Ident(tok.text)` payload
+dangles. Adding `tok.text.duplicate()` before storing into the enum
+made the name come back correctly in instrumented runs, but the full
+pipeline still crashes downstream (other sites use the same pattern).
+
+Confirmed mechanisms NOT at fault:
+- Not bug #7/#8/#9 (phase0v regression tests still pass).
+- Not a missing catalogue entry.
+- Not specific to the MIR path — same crash via `--stage=parser:cpp`.
+
+### Next steps for the parser crash
+1. Audit `cp_parse_*` for every `tok.text` / `tok.file` / Str-from-peek
+   site and insert `.duplicate()` or change `cp_peek` to return a
+   deep-cloned `CToken`. Probably 20+ call sites in `parser.tml`.
+2. Better long-term fix: make `List[T].get(i)` deep-duplicate when T
+   contains `Str`, or flip `cp_peek` to return an owned `CToken` by
+   construction. That's a language/runtime-level fix with wider blast
+   radius — should be scoped to its own task.
+
+### Files modified this session (committed)
+- `compiler/src/codegen/llvm/core/runtime.cpp` (+42 lines, cc_bridge
+  catalogue entries)
+- `.rulebook/tasks/phase24_cc-cli-integration/tasks.md` (item 2.3
+  marked [x])
+
+### Next session starter
+Next item: phase24 Phase 3.2 or create a follow-up task for the
+`tok.text` dangling-Str audit in `parser.tml`. The latter is the real
+unblocker for 4.1/4.2 (self-compile essential.c / mem.c).
+
+### 2026-04-14
+## phase0h_cmov-select-if-else — COMPLETE
+
+### Accomplished
+Implemented LLVM `select` instruction optimization for scalar if-else expressions in AST codegen (`compiler/src/codegen/llvm/control/if.cpp`).
+- Added `is_simple_scalar_branch()`: eligible when branch is literal/ident/empty-block-wrapper/recursively eligible nested if-else
+- Added `is_scalar_llvm_type()`: i1/i8/i16/i32/i64/float/double/ptr
+- In `gen_if`: before emitting br+label, checks eligibility → emits `select i1 %cond, T %then, T %else`
+- Chained if-else-if naturally produces nested selects via recursive `gen_if`
+- Parser limitation: `{ identifier } else { ... }` fails LL(1) parse — identifier branches can't be block-wrapped
+
+### Results
+- +20% on ternary chain at debug; LLVM DCE folds at -O2 (benchmark loops have no external output)
+- No regressions: compiler 184/184, core 750/751 (pre-existing slice_split_pred X002)
+- Regression test: `compiler/tests/compiler/select_if_else.test.tml` (9 tests)
+- Commits: `12d0302d`, `a9b7ebce`
+- Version bumped to 0.3.10, docs/patches/v0.3.10.md created
+
 ### 2026-04-14
 ## phase0_codegen-fixes — core test suite K001 fixes COMPLETE
 
@@ -463,5 +858,57 @@ Phase 5 (Switchover) + Tail items fully implemented.
 
 ### Next Steps
 - phase13d: wire TML parser into compiler pipeline — create `main_frontend.tml` binary, add `ParseModuleTml` query in C++, implement `--stage=parser:tml` flag.
+
+### 2026-04-18
+## phase0v + phase23b ARCHIVED + coverage_cli end-to-end
+
+### Accomplished
+Fixed `%struct.EventEmitter = type { }` empty-body emission bug that
+prevented `coverage_cli.exe` (and any other consumer of `std::stream`)
+from building. Three interacting root causes:
+
+1. **Iterator UB in `llvm_types.cpp::llvm_type_name`** — the struct-
+   resolution loop reassigned `it` from `mod.internal_structs.find()`
+   and then compared against `mod.structs.end()`, which is UB per the
+   C++ standard. On MSVC the comparison returned true for end-
+   iterators of different containers, and the subsequent `it->second`
+   dereferenced `end()`, producing a garbage `StructDef` with empty
+   `fields`. Fix: use separate iterators, promote to a pointer only
+   after a verified hit.
+2. **Sibling-file type-imports skipped** — `env_module_load_decls.cpp`
+   had an optimization that only loaded `use` imports for `mod.tml`
+   files or intra-module references. External type imports (the last
+   path segment starts uppercase) from sibling files never triggered
+   the load. Fix: add `last_seg_is_type_like` to the `should_load`
+   predicate.
+3. **`std::events` missing from `lib/std/src/mod.tml`** — without the
+   `pub mod events` declaration, `preload_all_meta_caches` never
+   discovered the module, so `GlobalModuleCache::put` never ran, and
+   downstream compilation units could not resolve `EventEmitter`.
+   Fix: declare `pub mod events`.
+
+Secondary fix: `emit_all` in `lib/coverage/src/mod.tml` now calls
+`Path::create_dir_all(out_dir)` before writing, so coverage_cli no
+longer exits non-zero on a non-existent output directory.
+
+### Archived tasks
+- `phase0v_codegen-bringup-bugs` (all 9 bring-up bugs fixed; workarounds
+  un-applied in `compiler-tml/src/cc/`; regression tests shipped).
+- `phase23b_c-frontend` (C17 frontend complete: lexer, parser, types,
+  MIR lowerer; component suites green).
+
+### Key commits
+- `66bc0232` fix(codegen): EventEmitter 3 fields
+- `546a2cfc` fix(coverage): auto-create output directory
+- `72d7d87d` test(cli): cmd_coverage regression (phase0w 9.3)
+- `6a05eca5` archive phase0v
+- `6d26046e` archive phase23b
+
+### Next Steps
+- phase0w still in-progress but every actionable item is closed; what
+  remains is manual / external-tool (genhtml, llvm-cov, browser
+  verify) or the Phase 10 C++ HTML generator removal (destructive).
+- phase24_cc-cli-integration Phase 1 already done via phase0v; next
+  tractable work is Phase 2 (cc_bridge FFI) + Phase 3 (cmd_cc.cpp).
 
 <!-- PLANS:HISTORY:END -->

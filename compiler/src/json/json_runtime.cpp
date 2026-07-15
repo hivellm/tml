@@ -82,12 +82,21 @@ public:
 
 // We use a simple handle system to manage JSON values from TML
 // The handle is an index into a global vector of JsonValues
+//
+// Phase 1d adds "borrowed" handles: they do not own a JsonValue, they point
+// into a JsonValue held by another (owning) handle. Borrowed handles are
+// safe because `JsonArray` and `JsonObject` keep their elements in heap-
+// allocated containers (via `Box`), so pointer stability is preserved even
+// when the outer `json_values` vector reallocates. A borrowed handle must
+// never outlive its parent — this is the caller's responsibility, matching
+// serde_json's `&Value` borrow semantics.
 
 static std::vector<tml::json::JsonValue> json_values;
 static std::vector<bool> json_values_free;
+static std::vector<const tml::json::JsonValue*> json_borrowed;
 static size_t json_values_next_free = 0;
 
-// Allocate a new handle for a JsonValue
+// Allocate a new handle that OWNS the given JsonValue.
 static int64_t alloc_json_handle(tml::json::JsonValue&& value) {
     ScopedTimer timer(g_json_stats.handle_alloc_time_ns, g_json_stats.enabled);
     if (g_json_stats.enabled)
@@ -98,6 +107,7 @@ static int64_t alloc_json_handle(tml::json::JsonValue&& value) {
         if (json_values_free[i]) {
             json_values[i] = std::move(value);
             json_values_free[i] = false;
+            json_borrowed[i] = nullptr;
             json_values_next_free = i + 1;
             return static_cast<int64_t>(i);
         }
@@ -106,19 +116,55 @@ static int64_t alloc_json_handle(tml::json::JsonValue&& value) {
     size_t idx = json_values.size();
     json_values.push_back(std::move(value));
     json_values_free.push_back(false);
+    json_borrowed.push_back(nullptr);
     json_values_next_free = idx + 1;
     return static_cast<int64_t>(idx);
 }
 
-// Get JsonValue by handle (returns nullptr if invalid)
+// Allocate a new handle that BORROWS from `ptr`. The caller guarantees
+// `ptr` outlives the returned handle.
+static int64_t alloc_borrowed_handle(const tml::json::JsonValue* ptr) {
+    if (!ptr)
+        return -1;
+    ScopedTimer timer(g_json_stats.handle_alloc_time_ns, g_json_stats.enabled);
+    if (g_json_stats.enabled)
+        g_json_stats.handle_alloc_count++;
+
+    for (size_t i = json_values_next_free; i < json_values_free.size(); ++i) {
+        if (json_values_free[i]) {
+            // Put a default-constructed JsonValue in the owned slot so the
+            // destructor has a valid object to destroy when the handle is
+            // freed. The actual value returned by `get_json_value` comes
+            // from the borrowed pointer.
+            json_values[i] = tml::json::JsonValue();
+            json_values_free[i] = false;
+            json_borrowed[i] = ptr;
+            json_values_next_free = i + 1;
+            return static_cast<int64_t>(i);
+        }
+    }
+    size_t idx = json_values.size();
+    json_values.push_back(tml::json::JsonValue());
+    json_values_free.push_back(false);
+    json_borrowed.push_back(ptr);
+    json_values_next_free = idx + 1;
+    return static_cast<int64_t>(idx);
+}
+
+// Get JsonValue by handle (returns nullptr if invalid). Transparently
+// dereferences borrowed handles to the pointee.
 static tml::json::JsonValue* get_json_value(int64_t handle) {
     if (handle < 0 || static_cast<size_t>(handle) >= json_values.size()) {
         return nullptr;
     }
-    if (json_values_free[static_cast<size_t>(handle)]) {
+    size_t idx = static_cast<size_t>(handle);
+    if (json_values_free[idx]) {
         return nullptr;
     }
-    return &json_values[static_cast<size_t>(handle)];
+    if (json_borrowed[idx] != nullptr) {
+        return const_cast<tml::json::JsonValue*>(json_borrowed[idx]);
+    }
+    return &json_values[idx];
 }
 
 // ============================================================================
@@ -139,6 +185,13 @@ TML_EXPORT int64_t tml_json_parse_fast(const char* json_str) {
         g_json_stats.parse_count++;
     ScopedTimer timer(g_json_stats.parse_time_ns, g_json_stats.enabled);
 
+    // The `parse_json_fast(input, JsonArena*)` overload exists for callers
+    // that can also switch `JsonValue` to arena-backed string storage.
+    // Without that storage change, plumbing an arena through the parser
+    // only adds the per-parse intern-table overhead (reset +
+    // intern_common_keys) without any offsetting savings, so the FFI
+    // entry point keeps the non-arena path until phase1f refactors
+    // `JsonValue` to consume arena-backed `string_view`s.
     auto result = tml::json::fast::parse_json_fast(json_str);
     if (tml::is_ok(result)) {
         return alloc_json_handle(std::move(tml::unwrap(result)));
@@ -399,11 +452,13 @@ TML_EXPORT int64_t tml_json_array_len(int64_t handle) {
 }
 
 /**
- * @brief Get array element (clones the value - use direct access for primitives).
+ * @brief Get array element. Returns a borrowed handle that references the
+ * element in-place — no clone, no allocation beyond the handle slot itself.
+ * The returned handle must not outlive the parent array handle.
  *
  * @param handle Handle to the JsonValue (array)
  * @param index Array index
- * @return Handle to the element, or -1 on failure
+ * @return Borrowed handle to the element, or -1 on failure
  */
 TML_EXPORT int64_t tml_json_array_get(int64_t handle, int64_t index) {
     auto* value = get_json_value(handle);
@@ -414,13 +469,7 @@ TML_EXPORT int64_t tml_json_array_get(int64_t handle, int64_t index) {
     if (index < 0 || static_cast<size_t>(index) >= arr.size())
         return -1;
 
-    // Profile clone operation
-    if (g_json_stats.enabled)
-        g_json_stats.clone_count++;
-    ScopedTimer timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
-
-    // Clone the element to a new handle (JsonValue has deleted copy ctor)
-    return alloc_json_handle(arr[static_cast<size_t>(index)].clone());
+    return alloc_borrowed_handle(&arr[static_cast<size_t>(index)]);
 }
 
 // ============================================================================
@@ -441,11 +490,13 @@ TML_EXPORT int64_t tml_json_object_len(int64_t handle) {
 }
 
 /**
- * @brief Get object field by key (clones the value - use direct access for primitives).
+ * @brief Get object field by key. Returns a borrowed handle that references
+ * the field in-place — no clone, no allocation beyond the handle slot.
+ * The returned handle must not outlive the parent object handle.
  *
  * @param handle Handle to the JsonValue (object)
  * @param key Field key (null-terminated)
- * @return Handle to the field value, or -1 if not found
+ * @return Borrowed handle to the field value, or -1 if not found
  */
 TML_EXPORT int64_t tml_json_object_get(int64_t handle, const char* key) {
     auto* value = get_json_value(handle);
@@ -460,13 +511,7 @@ TML_EXPORT int64_t tml_json_object_get(int64_t handle, const char* key) {
     if (!field)
         return -1;
 
-    // Profile clone operation
-    if (g_json_stats.enabled)
-        g_json_stats.clone_count++;
-    ScopedTimer clone_timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
-
-    // Clone the field value to a new handle (JsonValue has deleted copy ctor)
-    return alloc_json_handle(field->clone());
+    return alloc_borrowed_handle(field);
 }
 
 /**
@@ -498,7 +543,11 @@ TML_EXPORT void tml_json_free(int64_t handle) {
 
     size_t idx = static_cast<size_t>(handle);
     if (!json_values_free[idx]) {
-        json_values[idx] = tml::json::JsonValue(); // Reset to null
+        // Reset the owned slot to null. For borrowed handles, this only
+        // clears the default JsonValue in the slot — the pointed-to value
+        // is owned by the parent handle and must not be freed here.
+        json_values[idx] = tml::json::JsonValue();
+        json_borrowed[idx] = nullptr;
         json_values_free[idx] = true;
         if (idx < json_values_next_free) {
             json_values_next_free = idx;
@@ -512,6 +561,7 @@ TML_EXPORT void tml_json_free(int64_t handle) {
 TML_EXPORT void tml_json_free_all() {
     json_values.clear();
     json_values_free.clear();
+    json_borrowed.clear();
     json_values_next_free = 0;
 }
 
@@ -948,7 +998,7 @@ TML_EXPORT const char* tml_json_object_key_at(int64_t handle, int64_t index) {
     if (index < 0 || static_cast<size_t>(index) >= obj.size())
         return nullptr;
 
-    // Iterate to the index (std::map is ordered)
+    // Iterate to the index (flat-vector preserves insertion order)
     auto it = obj.begin();
     std::advance(it, static_cast<std::ptrdiff_t>(index));
 
@@ -977,14 +1027,78 @@ TML_EXPORT int64_t tml_json_object_value_at(int64_t handle, int64_t index) {
     if (index < 0 || static_cast<size_t>(index) >= obj.size())
         return -1;
 
-    // Iterate to the index
+    // Iterate to the index and return a borrowed handle to the value.
     auto it = obj.begin();
     std::advance(it, static_cast<std::ptrdiff_t>(index));
+    return alloc_borrowed_handle(&it->second);
+}
 
-    // Clone the value
-    if (g_json_stats.enabled)
-        g_json_stats.clone_count++;
-    ScopedTimer timer(g_json_stats.clone_time_ns, g_json_stats.enabled);
+// ============================================================================
+// Arena-based JSON Parsing
+// ============================================================================
 
-    return alloc_json_handle(it->second.clone());
+// Arena: holds a set of parsed JSON handles for bulk reset
+struct JsonArena {
+    std::vector<int64_t> handles;  // handles allocated in this arena
+    size_t capacity;
+
+    explicit JsonArena(size_t cap) : capacity(cap) {
+        handles.reserve(cap);
+    }
+};
+
+static std::vector<JsonArena*> json_arenas;
+
+TML_EXPORT int64_t tml_json_arena_create(int64_t capacity) {
+    auto* arena = new JsonArena(capacity > 0 ? static_cast<size_t>(capacity) : 64);
+    json_arenas.push_back(arena);
+    return static_cast<int64_t>(json_arenas.size() - 1);
+}
+
+TML_EXPORT int64_t tml_json_arena_parse(int64_t arena_id, const char* json_str) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return -1;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena || !json_str) return -1;
+
+    // Parse using fast parser
+    auto result = tml::json::fast::parse_json_fast(json_str);
+    if (!tml::is_ok(result)) return -1;
+
+    int64_t handle = alloc_json_handle(std::move(tml::unwrap(result)));
+    arena->handles.push_back(handle);
+    return handle;
+}
+
+TML_EXPORT void tml_json_arena_reset(int64_t arena_id) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena) return;
+
+    // Free all handles in this arena
+    for (int64_t h : arena->handles) {
+        if (h >= 0 && static_cast<size_t>(h) < json_values.size()) {
+            json_values[static_cast<size_t>(h)] = tml::json::JsonValue();
+            json_borrowed[static_cast<size_t>(h)] = nullptr;
+            json_values_free[static_cast<size_t>(h)] = true;
+            if (static_cast<size_t>(h) < json_values_next_free)
+                json_values_next_free = static_cast<size_t>(h);
+        }
+    }
+    arena->handles.clear();
+}
+
+TML_EXPORT void tml_json_arena_destroy(int64_t arena_id) {
+    if (arena_id < 0 || static_cast<size_t>(arena_id) >= json_arenas.size())
+        return;
+    auto* arena = json_arenas[static_cast<size_t>(arena_id)];
+    if (!arena) return;
+
+    // Free all handles
+    tml_json_arena_reset(arena_id);
+
+    // Delete arena
+    delete arena;
+    json_arenas[static_cast<size_t>(arena_id)] = nullptr;
 }

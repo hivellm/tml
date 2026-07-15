@@ -280,7 +280,26 @@ static void print_report(const std::string& package_name, const fs::path& projec
 // Main Entry Point
 // ============================================================================
 
+// Forward: new-mode dispatcher to the TML-native coverage_cli binary.
+// Declared here and defined below so `run_coverage` can route without
+// needing a header change mid-task.
+static int run_coverage_new_mode(int argc, char* argv[]);
+
 int run_coverage(int argc, char* argv[], bool verbose) {
+    // New-mode routing (phase0w task): any `--input=` or `--format=` in
+    // argv switches to the TML-native coverage_cli dispatcher. Legacy
+    // `tml cv` (source-to-test static mapping) stays reachable with
+    // its own flags intact.
+    for (int i = 2; i < argc; i++) {
+        std::string a = argv[i];
+        if (a.starts_with("--input=") || a.starts_with("--format=") ||
+            a.starts_with("--output=") || a.starts_with("--include=") ||
+            a.starts_with("--exclude=") || a.starts_with("--baseline=") ||
+            a.starts_with("--fail-under=") || a == "--pretty-json") {
+            return run_coverage_new_mode(argc, argv);
+        }
+    }
+
     CoverageOptions opts;
     opts.verbose = verbose;
 
@@ -407,6 +426,58 @@ int run_coverage(int argc, char* argv[], bool verbose) {
                  (int)test_files.size(), test_pass, test_fail, total_test_funcs, subsystems);
 
     return (src_fail > 0 || test_fail > 0) ? 1 : 0;
+}
+
+// ============================================================================
+// New-mode dispatcher — delegates to coverage_cli (built from
+// lib/coverage/src/bin/coverage_cli.tml). This path produces LCOV,
+// Cobertura XML, JSON, or a static HTML SPA instead of the legacy
+// source-to-test static mapping report.
+// ============================================================================
+
+static int run_coverage_new_mode(int argc, char* argv[]) {
+    // Search for coverage_cli.exe in the standard build output locations.
+    fs::path exe_dir = fs::current_path() / "build";
+    std::vector<fs::path> candidates = {
+        exe_dir / "debug" / "bin" / "coverage_cli.exe",
+        exe_dir / "release" / "bin" / "coverage_cli.exe",
+        exe_dir / "debug" / "coverage_cli.exe",
+        exe_dir / "release" / "coverage_cli.exe",
+    };
+
+    fs::path chosen;
+    for (const auto& c : candidates) {
+        if (fs::exists(c)) {
+            chosen = c;
+            break;
+        }
+    }
+
+    if (chosen.empty()) {
+        std::cerr << cv::red << "coverage_cli.exe not found." << cv::reset << "\n"
+                  << "Build it with:\n"
+                  << "  tml build lib/coverage/src/bin/coverage_cli.tml -o build/debug/bin/coverage_cli.exe\n"
+                  << "Once built, `tml coverage --input=... --format=...` will route here.\n"
+                  << "Searched:\n";
+        for (const auto& c : candidates) {
+            std::cerr << "  - " << c.string() << "\n";
+        }
+        return 127;
+    }
+
+    // Build quoted command line. argv[0]/argv[1] are tml.exe and
+    // "coverage" — skip them; forward argv[2..].
+    std::string cmd = "\"" + chosen.string() + "\"";
+    for (int i = 2; i < argc; i++) {
+        cmd += " ";
+        std::string a = argv[i];
+        if (a.find(' ') != std::string::npos) {
+            cmd += "\"" + a + "\"";
+        } else {
+            cmd += a;
+        }
+    }
+    return std::system(cmd.c_str());
 }
 
 } // namespace tml::cli

@@ -14,7 +14,10 @@
       "WebSearch(*)",
       "Skill(*)",
       "mcp__tml__*",
-      "mcp__rulebook__*"
+      "mcp__rulebook__*",
+      "WebSearch",
+      "TodoWrite",
+      "mcp__rulebook"
     ]
   },
   "env": {
@@ -40,30 +43,6 @@
         ]
       },
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-deferred.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-shortcuts.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-mcp-for-tasks.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -71,33 +50,13 @@
             "command": "bash F:/Node/hivellm/tml/.claude/hooks/enforce-no-bash-grep.sh"
           }
         ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/on-compact-reinject.sh"
-          }
-        ]
       },
       {
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/resume-from-handoff.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash F:/Node/hivellm/tml/.claude/hooks/check-context-and-handoff.sh"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/protect-task-scaffolding.sh"
           }
         ]
       }

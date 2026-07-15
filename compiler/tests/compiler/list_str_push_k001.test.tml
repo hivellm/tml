@@ -1,0 +1,53 @@
+//! Regression test for `phase0y_list-str-push-i64-ptr-k001`.
+//!
+//! Two interacting codegen bugs in the AST legacy path:
+//!
+//! 1) `gen_method_static_dispatch` / `try_gen_impl_method_call` treated the
+//!    impl-level type parameter T of `impl[T] List[T] { func push(this, value: T) }`
+//!    as if it were a method-level generic and tried to *re-infer* it from
+//!    the call argument. When the argument was an `I64` literal (e.g.
+//!    `tokens.push(s as I64)` in `compiler-tml/src/intern.tml`), this minted
+//!    a bogus `push__I64` specialization and produced an LLVM symbol like
+//!    `tml_N3std11collections4list9List__Str9push__I64E` whose declared
+//!    signature was `(ptr, ptr)` but whose call site passed `i64` for the
+//!    value argument — failing LLVM verification with K001.
+//!
+//! 2) The argument coercion path in `method_impl.cpp` had no `int → ptr`
+//!    or `ptr → int` fallback, so once the function name was correct, a
+//!    user-written `as I64` cast on a `Str` value still produced an `i64`
+//!    SSA value passed to a `ptr`-typed parameter.
+//!
+//! Both fixes live in `compiler/src/codegen/llvm/expr/method_impl.cpp`.
+
+use test::{assert, assert_eq}
+use std::collections::list::List
+
+@test func test_list_str_push_str_literal() {
+    var l: List[Str] = List[Str]::new(0 as I64)
+    l.push("hello")
+    assert_eq(l.len() as I32, 1)
+}
+
+@test func test_list_str_push_str_variable() {
+    var l: List[Str] = List[Str]::new(0 as I64)
+    let s: Str = "world"
+    l.push(s)
+    assert_eq(l.len() as I32, 1)
+}
+
+@test func test_list_str_push_str_cast_to_i64() {
+    // Mirrors `compiler-tml/src/intern.tml::InternTable::intern` — explicit
+    // `as I64` cast on a Str value, then push into a `List[Str]`.
+    var l: List[Str] = List[Str]::new(0 as I64)
+    let s: Str = "intern"
+    l.push(s as I64)
+    assert_eq(l.len() as I32, 1)
+}
+
+@test func test_list_str_push_multiple() {
+    var l: List[Str] = List[Str]::new(0 as I64)
+    l.push("a")
+    l.push("b")
+    l.push("c")
+    assert_eq(l.len() as I32, 3)
+}

@@ -34,3 +34,8 @@
 - [ ] 5.1 Update `docs/analyses/iouring/06-implementation-plan.md` with actual implementation notes
 - [ ] 5.2 Write tests: basic request round-trip, keep-alive, high-concurrency (1K conns), fallback when unavailable
 - [ ] 5.3 Run tests and confirm they pass (io_uring tests are guarded by `tml_iouring_available() == 0` check at runtime)
+
+## 6. Tail (mandatory — enforced by rulebook v5.3.0)
+- [ ] 6.1 Update or create documentation covering the implementation
+- [ ] 6.2 Write tests covering the new behavior
+- [ ] 6.3 Run tests and confirm they pass

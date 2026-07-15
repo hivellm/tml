@@ -1,0 +1,390 @@
+//! Source-text → `List[PpToken]` — minimum-viable pp-tokenizer.
+//!
+//! C17 §6.4 defines seven pp-token classes: header-name, identifier,
+//! pp-number, character-constant, string-literal, punctuator, and
+//! "each non-whitespace character that cannot be one of the above".
+//! This module handles the common subset used by typical C sources:
+//!
+//! - **Identifier**: `[A-Za-z_][A-Za-z_0-9]*`
+//! - **pp-number** (simplified): `[0-9][0-9A-Za-z._]*`
+//! - **Character constant**: `'...'` with `\` escape pass-through
+//! - **String literal**: `"..."` with `\` escape pass-through
+//! - **Punctuator** (longest-match against a small multi-char list,
+//!   then any single ASCII punctuation byte)
+//! - **Whitespace** tokens (single PpToken per run of spaces/tabs)
+//! - **Newline** tokens (one per `\n`; `\r\n` collapses to one)
+//! - **Line comments** `// ...` — skipped (not emitted)
+//! - **Block comments** `/* ... */` — skipped
+//!
+//! Not yet handled (tracked for the full phase23a parity milestone):
+//! - Preprocessing directives (`#` treated as an ordinary punctuator)
+//! - Header names inside `#include <...>` / `#include "..."`
+//! - Universal character names (`\uXXXX`, `\UXXXXXXXX`)
+//! - Numeric literal suffix / exponent parsing refinements — the
+//!   pp-number form keeps the raw text and leaves suffix decoding to
+//!   the C lexer (`lexer.tml`).
+//! - Trigraphs and digraphs (dropped from C23 anyway).
+//!
+//! The output feeds straight into `c_lexer` without further massaging;
+//! `tokenize(c_lexer(pp_tokens))` gives you a `List[CToken]` ready for
+//! the phase23b parser.
+
+use std::collections::list::List
+use compiler::cc::preproc::token::{PpToken, PpTokenKind, pp_token}
+
+// ---------------------------------------------------------------------------
+// Character classification — plain ASCII byte predicates. Unicode
+// identifiers are not supported yet; that's a phase23a-parity task.
+// ---------------------------------------------------------------------------
+
+func is_ident_start(c: I32) -> Bool {
+    if c == ('_' as I32) {
+        return true
+    }
+    if c >= ('A' as I32) and c <= ('Z' as I32) {
+        return true
+    }
+    if c >= ('a' as I32) and c <= ('z' as I32) {
+        return true
+    }
+    false
+}
+
+func is_ident_cont(c: I32) -> Bool {
+    if is_ident_start(c) {
+        return true
+    }
+    if c >= ('0' as I32) and c <= ('9' as I32) {
+        return true
+    }
+    false
+}
+
+func is_digit(c: I32) -> Bool {
+    c >= ('0' as I32) and c <= ('9' as I32)
+}
+
+/// C17 §6.4.8 pp-number continuation: digits, letters, `_`, `.`,
+/// and the exponent sign after `e|E|p|P`. This lite version ignores
+/// the sign-after-exponent rule; numeric literal suffixes (like `ul`
+/// or `f`) still fall under the identifier-continuation set so they
+/// stay attached to the number.
+func is_pp_number_cont(c: I32) -> Bool {
+    is_ident_cont(c) or c == ('.' as I32)
+}
+
+// ---------------------------------------------------------------------------
+// Scanner state
+// ---------------------------------------------------------------------------
+
+type Scanner {
+    src: Str,
+    pos: List[I64],   // one-slot list so `pos` is shared by value ref (K001b idiom)
+    line: List[I64],
+    col: List[I64],
+    len: I64
+}
+
+func scanner_new(src: Str, _file: Str) -> Scanner {
+    let len_val: I64 = src.len()
+    let pos_box: List[I64] = List[I64]::new(1 as I64)
+    pos_box.push(0 as I64)
+    let line_box: List[I64] = List[I64]::new(1 as I64)
+    line_box.push(1 as I64)
+    let col_box: List[I64] = List[I64]::new(1 as I64)
+    col_box.push(1 as I64)
+    Scanner { src: src, pos: pos_box, line: line_box, col: col_box, len: len_val }
+}
+
+func scanner_pos(sc: Scanner) -> I64 {
+    sc.pos.get(0 as I64)
+}
+
+func scanner_set_pos(sc: Scanner, p: I64) {
+    sc.pos.set(0 as I64, p)
+}
+
+func scanner_line(sc: Scanner) -> I64 {
+    sc.line.get(0 as I64)
+}
+
+func scanner_set_line(sc: Scanner, l: I64) {
+    sc.line.set(0 as I64, l)
+}
+
+func scanner_col(sc: Scanner) -> I64 {
+    sc.col.get(0 as I64)
+}
+
+func scanner_set_col(sc: Scanner, c: I64) {
+    sc.col.set(0 as I64, c)
+}
+
+func scanner_eof(sc: Scanner) -> Bool {
+    scanner_pos(sc) >= sc.len
+}
+
+func scanner_peek(sc: Scanner) -> I32 {
+    if scanner_eof(sc) {
+        return 0 as I32
+    }
+    sc.src.char_at(scanner_pos(sc))
+}
+
+func scanner_peek_at(sc: Scanner, offset: I64) -> I32 {
+    let idx: I64 = scanner_pos(sc) + offset
+    if idx >= sc.len or idx < 0 as I64 {
+        return 0 as I32
+    }
+    sc.src.char_at(idx)
+}
+
+/// Advance one byte, maintaining (line, col). `\r\n` is handled by
+/// the caller: `\n` alone bumps the line; `\r` is transparent.
+func scanner_advance(sc: Scanner) {
+    if scanner_eof(sc) {
+        return
+    }
+    let c: I32 = scanner_peek(sc)
+    scanner_set_pos(sc, scanner_pos(sc) + 1 as I64)
+    if c == ('\n' as I32) {
+        scanner_set_line(sc, scanner_line(sc) + 1 as I64)
+        scanner_set_col(sc, 1 as I64)
+    } else {
+        scanner_set_col(sc, scanner_col(sc) + 1 as I64)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Token emission helpers
+// ---------------------------------------------------------------------------
+
+func emit(tokens: List[PpToken], kind: PpTokenKind, text: Str, file: Str, line: I64, col: I64) {
+    tokens.push(pp_token(kind, text, file, line, col))
+}
+
+/// Copy `src[start..end]` into a fresh Str. Uses `slice` which
+/// returns a heap-owned substring.
+func slice_src(sc: Scanner, start: I64, end: I64) -> Str {
+    sc.src.slice(start, end)
+}
+
+// ---------------------------------------------------------------------------
+// Individual scanners
+// ---------------------------------------------------------------------------
+
+/// Skip `/* ... */` block comments. Leaves the scanner pointing at the
+/// byte after the closing `*/`. Handles nested-looking cases per C17
+/// (the first `*/` always wins — C block comments do NOT nest).
+func scan_block_comment(sc: Scanner) {
+    // Caller has already consumed `/*`.
+    loop (not scanner_eof(sc)) {
+        let c: I32 = scanner_peek(sc)
+        if c == ('*' as I32) and scanner_peek_at(sc, 1 as I64) == ('/' as I32) {
+            scanner_advance(sc)
+            scanner_advance(sc)
+            return
+        }
+        scanner_advance(sc)
+    }
+}
+
+/// Skip `// ...` line comments. Leaves the scanner at the newline (not
+/// past it — the outer loop emits that newline as a Newline token).
+func scan_line_comment(sc: Scanner) {
+    loop (not scanner_eof(sc) and scanner_peek(sc) != ('\n' as I32)) {
+        scanner_advance(sc)
+    }
+}
+
+func scan_identifier(sc: Scanner, tokens: List[PpToken], file: Str) {
+    let start_pos: I64 = scanner_pos(sc)
+    let start_line: I64 = scanner_line(sc)
+    let start_col: I64 = scanner_col(sc)
+    loop (not scanner_eof(sc) and is_ident_cont(scanner_peek(sc))) {
+        scanner_advance(sc)
+    }
+    let text: Str = slice_src(sc, start_pos, scanner_pos(sc))
+    emit(tokens, PpTokenKind::Ident, text, file, start_line, start_col)
+}
+
+func scan_pp_number(sc: Scanner, tokens: List[PpToken], file: Str) {
+    let start_pos: I64 = scanner_pos(sc)
+    let start_line: I64 = scanner_line(sc)
+    let start_col: I64 = scanner_col(sc)
+    loop (not scanner_eof(sc) and is_pp_number_cont(scanner_peek(sc))) {
+        scanner_advance(sc)
+    }
+    let text: Str = slice_src(sc, start_pos, scanner_pos(sc))
+    emit(tokens, PpTokenKind::IntLit, text, file, start_line, start_col)
+}
+
+/// Quoted scan — walks `"..."` or `'...'` while honouring `\` as an
+/// escape-pass-through (the escape sequence itself isn't decoded;
+/// that's the C lexer's job). Unterminated literals are closed at EOF
+/// / newline so the tokenizer still makes progress on malformed input.
+func scan_quoted(sc: Scanner, tokens: List[PpToken], file: Str, qch: I32, kind: PpTokenKind) {
+    let start_pos: I64 = scanner_pos(sc)
+    let start_line: I64 = scanner_line(sc)
+    let start_col: I64 = scanner_col(sc)
+    scanner_advance(sc) // consume opening quote
+    loop (not scanner_eof(sc)) {
+        let c: I32 = scanner_peek(sc)
+        if c == ('\n' as I32) {
+            // Unterminated literal — stop before the newline.
+            break
+        }
+        if c == qch {
+            scanner_advance(sc)
+            break
+        }
+        if c == ('\\' as I32) {
+            scanner_advance(sc)
+            if not scanner_eof(sc) {
+                scanner_advance(sc)
+            }
+            continue
+        }
+        scanner_advance(sc)
+    }
+    let text: Str = slice_src(sc, start_pos, scanner_pos(sc))
+    emit(tokens, kind, text, file, start_line, start_col)
+}
+
+/// Punctuator longest-match. Tries a small set of 2-char sequences
+/// first; falls back to a single byte. This covers enough of §6.4.6
+/// for simple tests; the C lexer phase handles the full punctuator
+/// table.
+func scan_punct(sc: Scanner, tokens: List[PpToken], file: Str) {
+    let start_line: I64 = scanner_line(sc)
+    let start_col: I64 = scanner_col(sc)
+    let c0: I32 = scanner_peek(sc)
+    let c1: I32 = scanner_peek_at(sc, 1 as I64)
+
+    // 2-char punctuators we care about early.
+    var take2: Bool = false
+    if c0 == ('=' as I32) and c1 == ('=' as I32) { take2 = true }
+    if c0 == ('!' as I32) and c1 == ('=' as I32) { take2 = true }
+    if c0 == ('<' as I32) and c1 == ('=' as I32) { take2 = true }
+    if c0 == ('>' as I32) and c1 == ('=' as I32) { take2 = true }
+    if c0 == ('&' as I32) and c1 == ('&' as I32) { take2 = true }
+    if c0 == ('|' as I32) and c1 == ('|' as I32) { take2 = true }
+    if c0 == ('<' as I32) and c1 == ('<' as I32) { take2 = true }
+    if c0 == ('>' as I32) and c1 == ('>' as I32) { take2 = true }
+    if c0 == ('+' as I32) and c1 == ('+' as I32) { take2 = true }
+    if c0 == ('-' as I32) and c1 == ('-' as I32) { take2 = true }
+    if c0 == ('-' as I32) and c1 == ('>' as I32) { take2 = true }
+    if c0 == (':' as I32) and c1 == (':' as I32) { take2 = true }
+    if c0 == ('#' as I32) and c1 == ('#' as I32) { take2 = true }
+    if c0 == ('.' as I32) and c1 == ('.' as I32) and
+       scanner_peek_at(sc, 2 as I64) == ('.' as I32) {
+        // 3-char ellipsis.
+        let start_pos3: I64 = scanner_pos(sc)
+        scanner_advance(sc)
+        scanner_advance(sc)
+        scanner_advance(sc)
+        emit(tokens, PpTokenKind::Punct, slice_src(sc, start_pos3, scanner_pos(sc)),
+             file, start_line, start_col)
+        return
+    }
+
+    let start_pos: I64 = scanner_pos(sc)
+    scanner_advance(sc)
+    if take2 {
+        scanner_advance(sc)
+    }
+    emit(tokens, PpTokenKind::Punct, slice_src(sc, start_pos, scanner_pos(sc)),
+         file, start_line, start_col)
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+/// Turn a C source buffer into a flat pp-token stream.
+///
+/// The returned list is ready to be fed into `c_lexer(pp_tokens)` —
+/// no `Eof` sentinel is appended (the downstream lexer adds one).
+pub func pp_tokenize_source(source: Str, file: Str) -> List[PpToken] {
+    let tokens: List[PpToken] = List[PpToken]::new(64 as I64)
+    let sc: Scanner = scanner_new(source, file)
+
+    loop (not scanner_eof(sc)) {
+        let c: I32 = scanner_peek(sc)
+
+        // Line comments / block comments are skipped entirely.
+        if c == ('/' as I32) and scanner_peek_at(sc, 1 as I64) == ('/' as I32) {
+            scan_line_comment(sc)
+            continue
+        }
+        if c == ('/' as I32) and scanner_peek_at(sc, 1 as I64) == ('*' as I32) {
+            scanner_advance(sc)
+            scanner_advance(sc)
+            scan_block_comment(sc)
+            continue
+        }
+
+        // Newline — one token per physical `\n`. `\r\n` already
+        // advances two bytes because `\r` is treated as ordinary
+        // whitespace below.
+        if c == ('\n' as I32) {
+            let nl_line: I64 = scanner_line(sc)
+            let nl_col: I64 = scanner_col(sc)
+            scanner_advance(sc)
+            emit(tokens, PpTokenKind::Newline, "\n", file, nl_line, nl_col)
+            continue
+        }
+
+        // Horizontal whitespace — collapse runs into a single token.
+        if c == (' ' as I32) or c == ('\t' as I32) or c == ('\r' as I32)
+           or c == (0x0B as I32) or c == (0x0C as I32) {
+            let ws_start: I64 = scanner_pos(sc)
+            let ws_line: I64 = scanner_line(sc)
+            let ws_col: I64 = scanner_col(sc)
+            loop (not scanner_eof(sc)) {
+                let cc: I32 = scanner_peek(sc)
+                if cc == (' ' as I32) or cc == ('\t' as I32) or cc == ('\r' as I32)
+                   or cc == (0x0B as I32) or cc == (0x0C as I32) {
+                    scanner_advance(sc)
+                } else {
+                    break
+                }
+            }
+            emit(tokens, PpTokenKind::Whitespace, slice_src(sc, ws_start, scanner_pos(sc)),
+                 file, ws_line, ws_col)
+            continue
+        }
+
+        if is_ident_start(c) {
+            scan_identifier(sc, tokens, file)
+            continue
+        }
+
+        if is_digit(c) {
+            scan_pp_number(sc, tokens, file)
+            continue
+        }
+        // `.digit` also opens a pp-number (e.g. `.5f`).
+        if c == ('.' as I32) and is_digit(scanner_peek_at(sc, 1 as I64)) {
+            scan_pp_number(sc, tokens, file)
+            continue
+        }
+
+        if c == ('"' as I32) {
+            scan_quoted(sc, tokens, file, c, PpTokenKind::StringLit)
+            continue
+        }
+        if c == ('\'' as I32) {
+            scan_quoted(sc, tokens, file, c, PpTokenKind::CharLit)
+            continue
+        }
+
+        // Everything else falls under §6.4: "each non-whitespace
+        // character that cannot be one of the above." We route these
+        // through the punctuator scanner which takes care of multi-
+        // byte operators and single-byte fall-through.
+        scan_punct(sc, tokens, file)
+    }
+
+    tokens
+}

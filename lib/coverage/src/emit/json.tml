@@ -1,0 +1,200 @@
+//! Compact / pretty JSON emit for the HTML SPA (phase 6.2).
+//!
+//! Emits the schema documented in
+//! [`docs/html-schema.md`](../../docs/html-schema.md). Compact mode
+//! uses short keys and drops zero-hit lines (listed separately in `z`);
+//! pretty mode uses full key names and includes every line.
+
+use coverage::types::*
+use coverage::summary::{summarize, summarize_file}
+use std::collections::List
+use std::file::File
+
+/// Write a `CoverageReport` as JSON.
+pub func write_json(report: CoverageReport, path: Str, compact: Bool) -> Outcome[(), EmitError] {
+    let text = render_json(report, compact)
+    let ok = File::write_all(path, text)
+    if not ok {
+        return Err(EmitError::WriteError(`failed to write {path}`.as_str()))
+    }
+    Ok(())
+}
+
+/// Render a `CoverageReport` as a JSON string (exposed for tests +
+/// the HTML emitter).
+pub func render_json(report: CoverageReport, compact: Bool) -> Str {
+    var out: Str = "{"
+    let s = summarize(report)
+
+    out = out + kv_str("tool", report.tool, compact) + ","
+    out = out + kv_str("version", report.version, compact) + ","
+    out = out + kv_i64("generated_at", report.generated_at, compact) + ","
+    out = out + `"summary":{summary_json(s)}`.as_str() + ","
+
+    out = out + "\"files\":["
+    var i: I64 = 0
+    loop (i < report.files.len()) {
+        if i > 0 { out = out + "," }
+        out = out + file_json(report.files.get(i), compact)
+        i = i + 1
+    }
+    out = out + "]"
+
+    out = out + "}"
+    out
+}
+
+// ============================================================================
+// Internal — per-file serialization
+// ============================================================================
+
+func file_json(f: FileCoverage, compact: Bool) -> Str {
+    let p_key = if compact { "p" } else { "path" }
+    let s_key = if compact { "s" } else { "summary" }
+    let l_key = if compact { "l" } else { "lines" }
+    let fn_key = if compact { "fn" } else { "functions" }
+    let br_key = if compact { "br" } else { "branches" }
+
+    var out: Str = "{"
+    out = out + kv_str_raw(p_key, f.path) + ","
+    out = out + `"{s_key}":{summary_json(summarize_file(f))}`.as_str() + ","
+
+    // lines
+    out = out + `"{l_key}":[`.as_str()
+    var li: I64 = 0
+    var first: Bool = true
+    loop (li < f.lines.len()) {
+        let lh = f.lines.get(li)
+        if compact and lh.count == 0 {
+            // zero-hit lines are stored in `z` instead
+        } else {
+            if not first { out = out + "," }
+            first = false
+            out = out + line_json(lh, compact)
+        }
+        li = li + 1
+    }
+    out = out + "]"
+
+    // zero-hit lines index (compact only)
+    if compact {
+        out = out + ",\"z\":["
+        var zi: I64 = 0
+        var zfirst: Bool = true
+        loop (zi < f.lines.len()) {
+            let lh = f.lines.get(zi)
+            if lh.count == 0 {
+                if not zfirst { out = out + "," }
+                zfirst = false
+                out = out + `{lh.line}`.as_str()
+            }
+            zi = zi + 1
+        }
+        out = out + "]"
+    }
+
+    // functions
+    out = out + `,"{fn_key}":[`.as_str()
+    var fi: I64 = 0
+    loop (fi < f.functions.len()) {
+        if fi > 0 { out = out + "," }
+        out = out + fn_json(f.functions.get(fi), compact)
+        fi = fi + 1
+    }
+    out = out + "]"
+
+    // branches
+    out = out + `,"{br_key}":[`.as_str()
+    var bi: I64 = 0
+    loop (bi < f.branches.len()) {
+        if bi > 0 { out = out + "," }
+        out = out + br_json(f.branches.get(bi), compact)
+        bi = bi + 1
+    }
+    out = out + "]"
+
+    out = out + "}"
+    out
+}
+
+func line_json(lh: LineHit, compact: Bool) -> Str {
+    let l_key = if compact { "l" } else { "line" }
+    let c_key = if compact { "c" } else { "count" }
+    `{`.as_str() +
+      `"{l_key}":{lh.line},"{c_key}":{lh.count}`.as_str() +
+      `}`.as_str()
+}
+
+func fn_json(fh: FuncHit, compact: Bool) -> Str {
+    let n_key = if compact { "n" } else { "name" }
+    let sl_key = if compact { "sl" } else { "start_line" }
+    let h_key = if compact { "h" } else { "hit_count" }
+    `{`.as_str() +
+      kv_str_raw(n_key, fh.name) + "," +
+      `"{sl_key}":{fh.start_line},"{h_key}":{fh.hit_count}`.as_str() +
+      `}`.as_str()
+}
+
+func br_json(bh: BranchHit, compact: Bool) -> Str {
+    let l_key = if compact { "l" } else { "line" }
+    let k_key = if compact { "k" } else { "block_id" }
+    let r_key = if compact { "r" } else { "branch_id" }
+    let h_key = if compact { "h" } else { "hit_count" }
+    `{`.as_str() +
+      `"{l_key}":{bh.line},"{k_key}":{bh.block_id},"{r_key}":{bh.branch_id},"{h_key}":{bh.hit_count}`.as_str() +
+      `}`.as_str()
+}
+
+func summary_json(s: Summary) -> Str {
+    `{`.as_str() +
+      `"pct_lines":{s.pct_lines},`.as_str() +
+      `"pct_branches":{s.pct_branches},`.as_str() +
+      `"pct_functions":{s.pct_functions},`.as_str() +
+      `"covered_lines":{s.covered_lines},`.as_str() +
+      `"total_lines":{s.total_lines},`.as_str() +
+      `"covered_branches":{s.covered_branches},`.as_str() +
+      `"total_branches":{s.total_branches},`.as_str() +
+      `"covered_functions":{s.covered_functions},`.as_str() +
+      `"total_functions":{s.total_functions}`.as_str() +
+      `}`.as_str()
+}
+
+// ============================================================================
+// Low-level key/value helpers
+// ============================================================================
+
+func kv_str(key: Str, value: Str, _compact: Bool) -> Str {
+    `"{key}":"{escape_str(value)}"`.as_str()
+}
+
+func kv_str_raw(key: Str, value: Str) -> Str {
+    `"{key}":"{escape_str(value)}"`.as_str()
+}
+
+func kv_i64(key: Str, value: I64, _compact: Bool) -> Str {
+    `"{key}":{value}`.as_str()
+}
+
+/// Escape a string for JSON: backslash, quote, control chars.
+func escape_str(s: Str) -> Str {
+    var out: Str = ""
+    var i: I64 = 0
+    loop (i < s.len()) {
+        let c = core::str::basic::char_at(s, i)
+        if c == 34 {
+            out = out + "\\\""
+        } else if c == 92 {
+            out = out + "\\\\"
+        } else if c == 10 {
+            out = out + "\\n"
+        } else if c == 13 {
+            out = out + "\\r"
+        } else if c == 9 {
+            out = out + "\\t"
+        } else {
+            out = out + core::str::basic::substring(s, i, i + 1)
+        }
+        i = i + 1
+    }
+    out
+}

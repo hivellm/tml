@@ -1,0 +1,206 @@
+/// SSO (Small String Optimization) regression tests for Text.
+///
+/// Verifies that the 24-byte tagged-union layout correctly handles:
+/// - Inline strings (≤23 chars, zero allocation)
+/// - Heap strings (>23 chars, single allocation)
+/// - Inline-to-heap promotion on push
+/// - Boundary cases (0, 8, 16, 23, 24 chars)
+
+use std::text::Text
+use test
+
+// ============================================================================
+// Construction and basic properties
+// ============================================================================
+
+@test
+func test_sso_empty_text() -> I32 {
+    let t: Text = Text::new()
+    assert_eq(t.len(), 0 as I64, "empty len")
+    assert(t.is_empty(), "empty is_empty")
+    assert_eq(t.capacity(), 23 as I64, "empty cap is 23 (inline)")
+    assert_eq(t.as_str(), "", "empty as_str")
+    0
+}
+
+@test
+func test_sso_1char() -> I32 {
+    let t: Text = Text::from("x")
+    assert_eq(t.len(), 1 as I64, "1char len")
+    assert_eq(t.as_str(), "x", "1char as_str")
+    assert_eq(t.byte_at(0), 120 as I32, "byte_at 0 = x")
+    0
+}
+
+@test
+func test_sso_short_5() -> I32 {
+    let t: Text = Text::from("hello")
+    assert_eq(t.len(), 5 as I64, "5char len")
+    assert_eq(t.as_str(), "hello", "5char as_str")
+    0
+}
+
+@test
+func test_sso_boundary_8() -> I32 {
+    let t: Text = Text::from("12345678")
+    assert_eq(t.len(), 8 as I64, "8char len")
+    assert_eq(t.as_str(), "12345678", "8char as_str")
+    0
+}
+
+@test
+func test_sso_spans_w1() -> I32 {
+    let t: Text = Text::from("hello world 123")
+    assert_eq(t.len(), 15 as I64, "15char len")
+    assert_eq(t.as_str(), "hello world 123", "15char as_str")
+    0
+}
+
+@test
+func test_sso_boundary_16() -> I32 {
+    let t: Text = Text::from("1234567890123456")
+    assert_eq(t.len(), 16 as I64, "16char len")
+    assert_eq(t.as_str(), "1234567890123456", "16char as_str")
+    0
+}
+
+@test
+func test_sso_spans_w2() -> I32 {
+    let t: Text = Text::from("12345678901234567890")
+    assert_eq(t.len(), 20 as I64, "20char len")
+    assert_eq(t.as_str(), "12345678901234567890", "20char as_str")
+    0
+}
+
+@test
+func test_sso_max_inline_23() -> I32 {
+    let t: Text = Text::from("12345678901234567890123")
+    assert_eq(t.len(), 23 as I64, "23char len")
+    assert_eq(t.as_str(), "12345678901234567890123", "23char as_str")
+    assert_eq(t.capacity(), 23 as I64, "23char cap still inline")
+    0
+}
+
+@test
+func test_sso_heap_24() -> I32 {
+    let t: Text = Text::from("123456789012345678901234")
+    assert_eq(t.len(), 24 as I64, "24char len")
+    assert_eq(t.as_str(), "123456789012345678901234", "24char as_str")
+    assert(t.capacity() >= 24 as I64, "24char cap >= 24 (heap)")
+    0
+}
+
+// ============================================================================
+// Mutation: push within inline
+// ============================================================================
+
+@test
+func test_sso_push_str_inline() -> I32 {
+    var t: Text = Text::from("hi")
+    t.push_str(" there")
+    assert_eq(t.len(), 8 as I64, "push inline len")
+    assert_eq(t.as_str(), "hi there", "push inline as_str")
+    0
+}
+
+@test
+func test_sso_push_byte_inline() -> I32 {
+    var t: Text = Text::from("AB")
+    t.push(67)   // 'C'
+    t.push(68)   // 'D'
+    assert_eq(t.len(), 4 as I64, "push byte len")
+    assert_eq(t.as_str(), "ABCD", "push byte as_str")
+    0
+}
+
+// ============================================================================
+// Mutation: inline → heap promotion
+// ============================================================================
+
+@test
+func test_sso_push_promotes_to_heap() -> I32 {
+    var t: Text = Text::from("12345678901234567890")
+    t.push_str("abcde")
+    assert_eq(t.len(), 25 as I64, "promote len")
+    assert_eq(t.as_str(), "12345678901234567890abcde", "promote as_str")
+    0
+}
+
+// ============================================================================
+// Clone and drop
+// ============================================================================
+
+@test
+func test_sso_clone_inline() -> I32 {
+    let t1: Text = Text::from("hello")
+    let t2: Text = t1.clone()
+    assert_eq(t2.as_str(), "hello", "clone inline")
+    0
+}
+
+@test
+func test_sso_clone_heap() -> I32 {
+    let t1: Text = Text::from("this is a long string for heap")
+    let t2: Text = t1.clone()
+    assert_eq(t2.as_str(), "this is a long string for heap", "clone heap")
+    0
+}
+
+@test
+func test_sso_drop_inline() -> I32 {
+    var t: Text = Text::from("hello")
+    t.drop()
+    assert_eq(t.len(), 0 as I64, "drop resets len")
+    assert(t.is_empty(), "drop makes empty")
+    0
+}
+
+// ============================================================================
+// Transformations
+// ============================================================================
+
+@test
+func test_sso_trim() -> I32 {
+    let t: Text = Text::from("  hello  ")
+    let trimmed: Text = t.trim()
+    assert_eq(trimmed.as_str(), "hello", "trim")
+    0
+}
+
+@test
+func test_sso_upper_lower() -> I32 {
+    let t: Text = Text::from("Hello")
+    assert_eq(t.to_upper_case().as_str(), "HELLO", "upper")
+    assert_eq(t.to_lower_case().as_str(), "hello", "lower")
+    0
+}
+
+@test
+func test_sso_substring() -> I32 {
+    let t: Text = Text::from("hello world")
+    let sub: Text = t.substring(6, 11)
+    assert_eq(sub.as_str(), "world", "substring")
+    0
+}
+
+// ============================================================================
+// Search
+// ============================================================================
+
+@test
+func test_sso_search() -> I32 {
+    let t: Text = Text::from("hello world")
+    assert(t.starts_with("hello"), "starts_with")
+    assert(t.ends_with("world"), "ends_with")
+    assert(t.contains("lo wo"), "contains")
+    assert_eq(t.index_of("world"), 6 as I64, "index_of")
+    0
+}
+
+@test
+func test_sso_replace() -> I32 {
+    let t: Text = Text::from("hello world")
+    let r: Text = t.replace("world", "there")
+    assert_eq(r.as_str(), "hello there", "replace")
+    0
+}

@@ -65,10 +65,16 @@ constexpr int BITAND = 9;     ///< `&` bitwise AND.
 constexpr int SHIFT = 10;     ///< `<<`, `>>` / `shl`, `shr`.
 constexpr int TERM = 11;      ///< `+`, `-` addition/subtraction.
 constexpr int FACTOR = 12;    ///< `*`, `/`, `%` multiplication/division.
-constexpr int CAST = 13;      ///< `as` type casting.
-constexpr int UNARY = 14;     ///< `-`, `not`, `~`, `ref`, `*`.
-constexpr int CALL = 15;      ///< `()`, `[]`, `.` call and access.
-constexpr int RANGE = 16;     ///< `to`, `through` ranges.
+// RANGE is placed BELOW CAST so that `0 as I64 to n as I64` parses as
+// `(0 as I64) to (n as I64)` rather than `(0 as (I64 to n)) as I64`. This
+// matches Rust's precedence (Range is very low there; ours is higher to
+// allow `a + b to c` = `(a + b) to c` without forcing the TERM < RANGE
+// Rust behaviour, but still below CAST so the idiomatic cast-inside-range
+// works without parens).
+constexpr int RANGE = 13;     ///< `to`, `through` ranges.
+constexpr int CAST = 14;      ///< `as` type casting.
+constexpr int UNARY = 15;     ///< `-`, `not`, `~`, `ref`, `*`.
+constexpr int CALL = 16;      ///< `()`, `[]`, `.` call and access.
 } // namespace precedence
 
 /// A suggested fix for a parse error.

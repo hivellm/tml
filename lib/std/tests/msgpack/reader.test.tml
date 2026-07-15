@@ -1,0 +1,129 @@
+// Tests for MsgPackReader — MessagePack decoding
+use test
+use std::msgpack::writer::MsgPackWriter
+use std::msgpack::reader::MsgPackReader
+use std::collections::Buffer
+
+@test
+func test_roundtrip_nil() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_nil()
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let ok: Bool = r.read_nil()
+    assert(ok, "should read nil successfully")
+    return 0
+}
+
+@test
+func test_roundtrip_bool() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_bool(true)
+    w.write_bool(false)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(v1) = r.read_bool() else { return 1 }
+    let Just(v2) = r.read_bool() else { return 1 }
+    assert_eq(v1, true, "first bool should be true")
+    assert_eq(v2, false, "second bool should be false")
+    return 0
+}
+
+@test
+func test_roundtrip_u64_fixint() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_u64(42 as U64)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(v) = r.read_u64() else { return 1 }
+    assert_eq(v as I64, 42, "should read 42")
+    return 0
+}
+
+@test
+func test_roundtrip_u64_uint8() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_u64(200 as U64)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(v) = r.read_u64() else { return 1 }
+    assert_eq(v as I64, 200, "should read 200")
+    return 0
+}
+
+@test
+func test_roundtrip_i64_negative() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_i64(-10)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(v) = r.read_i64() else { return 1 }
+    assert_eq(v, -10, "should read -10")
+    return 0
+}
+
+@test
+func test_roundtrip_str() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_str("hello world")
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(s) = r.read_str() else { return 1 }
+    assert_eq(s, "hello world", "should read 'hello world'")
+    return 0
+}
+
+@test
+func test_roundtrip_array() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_array_header(3)
+    w.write_u64(10 as U64)
+    w.write_u64(20 as U64)
+    w.write_u64(30 as U64)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let n: I64 = r.read_array_header()
+    assert_eq(n, 3, "array should have 3 elements")
+    let Just(v0) = r.read_u64() else { return 1 }
+    let Just(v1) = r.read_u64() else { return 1 }
+    let Just(v2) = r.read_u64() else { return 1 }
+    assert_eq(v0 as I64, 10, "element 0 = 10")
+    assert_eq(v1 as I64, 20, "element 1 = 20")
+    assert_eq(v2 as I64, 30, "element 2 = 30")
+    return 0
+}
+
+@test
+func test_roundtrip_map() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_map_header(2)
+    w.write_str("name")
+    w.write_str("TML")
+    w.write_str("year")
+    w.write_u64(2026 as U64)
+    let buf: Buffer = w.to_buffer()
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let n: I64 = r.read_map_header()
+    assert_eq(n, 2, "map should have 2 entries")
+    let Just(k1) = r.read_str() else { return 1 }
+    let Just(v1) = r.read_str() else { return 1 }
+    let Just(k2) = r.read_str() else { return 1 }
+    let Just(v2) = r.read_u64() else { return 1 }
+    assert_eq(k1, "name", "key1 = 'name'")
+    assert_eq(v1, "TML", "val1 = 'TML'")
+    assert_eq(k2, "year", "key2 = 'year'")
+    assert_eq(v2 as I64, 2026, "val2 = 2026")
+    return 0
+}
+
+@test
+func test_empty_str() -> I32 {
+    var w: MsgPackWriter = MsgPackWriter::new()
+    w.write_str("")
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "empty string = 1 byte (fixstr 0)")
+    var r: MsgPackReader = MsgPackReader::from_buffer(ref buf)
+    let Just(s) = r.read_str() else { return 1 }
+    assert_eq(s, "", "should read empty string")
+    return 0
+}

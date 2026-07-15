@@ -71,6 +71,7 @@ impl[T] Heap[T] {
     /// let boxed = Heap::new(42)
     /// assert_eq(boxed.get(), 42)
     /// ```
+    @inline
     pub func new(value: T) -> Heap[T] {
         let size: I64 = size_of[T]()
         let ptr: *Unit = mem_alloc(size)
@@ -108,6 +109,7 @@ impl[T] Heap[T] {
     /// let value = boxed.get()
     /// assert_eq(value, 42)
     /// ```
+    @inline
     pub func get(this) -> T {
         if this.ptr == null {
             panic("Heap::get: null pointer")
@@ -259,6 +261,7 @@ impl[T] Heap[T] {
 
 // Automatic cleanup when Heap[T] goes out of scope
 impl[T] Drop for Heap[T] {
+    @inline
     func drop(mut this) {
         if this.ptr != null {
             mem_free(this.ptr as *Unit)

@@ -1,0 +1,422 @@
+// Tests for protobuf module — field encoding, fixed types, strings, nested messages
+use test
+use std::protobuf::{ProtoWriter, ProtoReader, ProtoTag}
+use std::collections::Buffer
+
+// =============================================================================
+// Tag encoding
+// =============================================================================
+
+@test
+func test_tag_encoding() -> I32 {
+    // Field 1, wire type 0 (varint) -> tag = (1 << 3) | 0 = 8
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_tag(1, 0)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.len(), 1, "tag 1:varint = 1 byte")
+    assert_eq(buf.read_u8(0), 8, "tag = 0x08")
+    return 0
+}
+
+@test
+func test_tag_encoding_field2_string() -> I32 {
+    // Field 2, wire type 2 (length-delimited) -> tag = (2 << 3) | 2 = 18
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_tag(2, 2)
+    let buf: Buffer = w.to_buffer()
+    assert_eq(buf.read_u8(0), 18, "tag field 2 wire 2 = 18")
+    return 0
+}
+
+@test
+func test_tag_roundtrip() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_tag(1, 0)
+    w.write_tag(2, 2)
+    w.write_tag(15, 5)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t1.field_num, 1, "field 1")
+    assert_eq(t1.wire_type, 0, "wire varint")
+
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "field 2")
+    assert_eq(t2.wire_type, 2, "wire length-delimited")
+
+    let t3_r = r.read_tag()
+    let t3: ProtoTag = when t3_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t3.field_num, 15, "field 15")
+    assert_eq(t3.wire_type, 5, "wire fixed32")
+
+    return 0
+}
+
+// =============================================================================
+// Field varint
+// =============================================================================
+
+@test
+func test_field_varint() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_varint(1, 150)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 1, "field num 1")
+    assert_eq(tag.wire_type, 0, "wire varint")
+
+    let val_r = r.read_varint()
+    let val: I64 = when val_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(val, 150, "value 150")
+
+    return 0
+}
+
+// =============================================================================
+// Field string
+// =============================================================================
+
+@test
+func test_field_string() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_string(2, "testing")
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 2, "field num 2")
+    assert_eq(tag.wire_type, 2, "wire length-delimited")
+
+    let val_r = r.read_string()
+    let val: Str = when val_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(val, "testing", "string value")
+
+    return 0
+}
+
+@test
+func test_field_string_empty() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_string(1, "")
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 1, "field 1")
+
+    let val_r = r.read_string()
+    let val: Str = when val_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(val, "", "empty string")
+
+    return 0
+}
+
+// =============================================================================
+// Fixed32 / Fixed64
+// =============================================================================
+
+@test
+func test_field_fixed32() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_fixed32(3, 42)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 3, "field 3")
+    assert_eq(tag.wire_type, 5, "wire fixed32")
+
+    let val_r = r.read_fixed32()
+    let val: I32 = when val_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(val, 42, "fixed32 = 42")
+
+    return 0
+}
+
+@test
+func test_field_fixed64() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_fixed64(4, 123456789)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let tag_r = r.read_tag()
+    let tag: ProtoTag = when tag_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(tag.field_num, 4, "field 4")
+    assert_eq(tag.wire_type, 1, "wire fixed64")
+
+    let val_r = r.read_fixed64()
+    let val: I64 = when val_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(val, 123456789, "fixed64 = 123456789")
+
+    return 0
+}
+
+// =============================================================================
+// Multi-field roundtrip
+// =============================================================================
+
+@test
+func test_multi_field_roundtrip() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_varint(1, 42)
+    w.write_field_string(2, "hello")
+    w.write_field_fixed32(3, 100)
+    w.write_field_fixed64(4, 999999)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    // Field 1: varint
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t1.field_num, 1, "f1 num")
+    let v1_r = r.read_varint()
+    let v1: I64 = when v1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v1, 42, "f1 val")
+
+    // Field 2: string
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "f2 num")
+    let v2_r = r.read_string()
+    let v2: Str = when v2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v2, "hello", "f2 val")
+
+    // Field 3: fixed32
+    let t3_r = r.read_tag()
+    let t3: ProtoTag = when t3_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t3.field_num, 3, "f3 num")
+    let v3_r = r.read_fixed32()
+    let v3: I32 = when v3_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v3, 100, "f3 val")
+
+    // Field 4: fixed64
+    let t4_r = r.read_tag()
+    let t4: ProtoTag = when t4_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t4.field_num, 4, "f4 num")
+    let v4_r = r.read_fixed64()
+    let v4: I64 = when v4_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v4, 999999, "f4 val")
+
+    assert_true(not r.has_more(), "no more bytes")
+    return 0
+}
+
+// =============================================================================
+// Nested message
+// =============================================================================
+
+@test
+func test_nested_message() -> I32 {
+    // Inner message: field 1 = varint 99
+    var inner: ProtoWriter = ProtoWriter::new()
+    inner.write_field_varint(1, 99)
+
+    // Outer message: field 1 = varint 1, field 2 = nested inner
+    var outer: ProtoWriter = ProtoWriter::new()
+    outer.write_field_varint(1, 1)
+    outer.write_field_message(2, ref inner)
+
+    let buf: Buffer = outer.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    // Read outer field 1
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t1.field_num, 1, "outer f1")
+    let v1_r = r.read_varint()
+    let v1: I64 = when v1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v1, 1, "outer f1 val")
+
+    // Read outer field 2 (nested message bytes)
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "outer f2")
+    assert_eq(t2.wire_type, 2, "wire length-delimited")
+
+    // Read the submessage bytes, then decode
+    let sub_r = r.read_bytes()
+    let sub_bytes: Str = when sub_r { Ok(v) => v, Err(e) => { return 1 } }
+    var sub_r2: ProtoReader = ProtoReader::new(sub_bytes)
+
+    let inner_t_r = sub_r2.read_tag()
+    let inner_t: ProtoTag = when inner_t_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(inner_t.field_num, 1, "inner f1")
+    let inner_v_r = sub_r2.read_varint()
+    let inner_v: I64 = when inner_v_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(inner_v, 99, "inner f1 val")
+
+    return 0
+}
+
+// =============================================================================
+// Skip field
+// =============================================================================
+
+@test
+func test_skip_varint_field() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_varint(1, 999)
+    w.write_field_varint(2, 42)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    // Read tag of field 1, skip its value
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t1.field_num, 1, "field 1")
+    let skip_r = r.skip_field(t1.wire_type)
+    when skip_r { Ok(v) => {}, Err(e) => { return 1 } }
+
+    // Now read field 2
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "field 2 after skip")
+    let v2_r = r.read_varint()
+    let v2: I64 = when v2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v2, 42, "value after skip")
+
+    return 0
+}
+
+@test
+func test_skip_string_field() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_string(1, "skip me")
+    w.write_field_varint(2, 77)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    // Skip field 1 (string)
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    let skip_r = r.skip_field(t1.wire_type)
+    when skip_r { Ok(v) => {}, Err(e) => { return 1 } }
+
+    // Read field 2
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "field 2 after skip string")
+    let v2_r = r.read_varint()
+    let v2: I64 = when v2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(v2, 77, "value after skip string")
+
+    return 0
+}
+
+@test
+func test_skip_fixed32_field() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_fixed32(1, 12345)
+    w.write_field_varint(2, 88)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    let skip_r = r.skip_field(t1.wire_type)
+    when skip_r { Ok(v) => {}, Err(e) => { return 1 } }
+
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "f2 after skip fixed32")
+    let v2_r = r.read_varint()
+    assert_eq(when v2_r { Ok(v) => v, Err(e) => -1 }, 88, "val after skip")
+
+    return 0
+}
+
+@test
+func test_skip_fixed64_field() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_field_fixed64(1, 99999)
+    w.write_field_varint(2, 55)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    let t1_r = r.read_tag()
+    let t1: ProtoTag = when t1_r { Ok(v) => v, Err(e) => { return 1 } }
+    let skip_r = r.skip_field(t1.wire_type)
+    when skip_r { Ok(v) => {}, Err(e) => { return 1 } }
+
+    let t2_r = r.read_tag()
+    let t2: ProtoTag = when t2_r { Ok(v) => v, Err(e) => { return 1 } }
+    assert_eq(t2.field_num, 2, "f2 after skip fixed64")
+    let v2_r = r.read_varint()
+    assert_eq(when v2_r { Ok(v) => v, Err(e) => -1 }, 55, "val after skip")
+
+    return 0
+}
+
+// =============================================================================
+// has_more / reader position
+// =============================================================================
+
+@test
+func test_has_more() -> I32 {
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_varint(42)
+
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+
+    assert_true(r.has_more(), "should have more before read")
+    let v_r = r.read_varint()
+    assert_true(not r.has_more(), "should not have more after read")
+
+    return 0
+}
+
+// =============================================================================
+// Error conditions
+// =============================================================================
+
+@test
+func test_read_varint_eof() -> I32 {
+    // Empty buffer
+    var r: ProtoReader = ProtoReader::new("")
+    let v_r = r.read_varint()
+    let is_err: Bool = when v_r {
+        Ok(v) => false,
+        Err(e) => true,
+    }
+    assert_true(is_err, "should error on empty buffer")
+    return 0
+}
+
+@test
+func test_read_fixed32_eof() -> I32 {
+    // Only 2 bytes — not enough for fixed32
+    var w: ProtoWriter = ProtoWriter::new()
+    w.write_varint(1)
+    w.write_varint(2)
+    let buf: Buffer = w.to_buffer()
+    var r: ProtoReader = ProtoReader::from_buffer(ref buf)
+    let v_r = r.read_fixed32()
+    let is_err: Bool = when v_r {
+        Ok(v) => false,
+        Err(e) => true,
+    }
+    assert_true(is_err, "should error on short buffer for fixed32")
+    return 0
+}

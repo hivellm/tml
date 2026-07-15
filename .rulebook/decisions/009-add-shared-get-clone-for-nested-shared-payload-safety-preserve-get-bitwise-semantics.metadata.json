@@ -1,0 +1,15 @@
+{
+  "id": 9,
+  "slug": "add-shared-get-clone-for-nested-shared-payload-safety-preserve-get-bitwise-semantics",
+  "title": "Add Shared.get_clone for nested-Shared payload safety; preserve .get bitwise semantics",
+  "status": "proposed",
+  "date": "2026-05-05",
+  "relatedTasks": [
+    "phase24l_shared-get-aliasing-deep-fix",
+    "phase24k_essential-cleanup-segv",
+    "phase24g_heap-rc-or-borrow-language-fix",
+    "phase24m_essential-c-residual-segv",
+    "phase0z_cc-driver-essential-c-residual"
+  ],
+  "supersededBy": null
+}

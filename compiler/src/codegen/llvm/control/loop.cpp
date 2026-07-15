@@ -347,29 +347,147 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string range_start = "0";
     std::string range_end = "0";
     bool inclusive = false;
-    std::string range_type = "i32"; // Default type for range
+    std::string range_type = "i64"; // Default integer type (TML I64)
     if (for_expr.iter->is<parser::RangeExpr>()) {
         const auto& range = for_expr.iter->as<parser::RangeExpr>();
         inclusive = range.inclusive;
+        std::string start_type = "";
         if (range.start.has_value()) {
             range_start = gen_expr(*range.start.value());
+            start_type = last_expr_type_;
         }
         if (range.end.has_value()) {
             range_end = gen_expr(*range.end.value());
-            range_type = last_expr_type_; // Use type of end value
+            range_type = last_expr_type_;
+            // Promote to i64 — TML's native integer. Avoids i32 truncation
+            // when loop index is used in i64 contexts (pointer arithmetic, List access).
+            if (range_type == "i32" || range_type == "i16" || range_type == "i8") {
+                std::string ext_reg = fresh_reg();
+                emit_line("  " + ext_reg + " = sext " + range_type + " " + range_end + " to i64");
+                range_end = ext_reg;
+                range_type = "i64";
+            }
+        }
+        // Symmetrically promote range_start so its LLVM type matches the
+        // final range_type. Without this, a range like `for i in start to end`
+        // where both are I32 would emit `store i64 %start_i32, ptr ...` and
+        // fail LLVM verification. Skip literal "0" (the default) — it parses
+        // as untyped and LLVM coerces it to any integer width automatically.
+        if (!start_type.empty() && start_type != range_type && range_start != "0") {
+            if (start_type == "i32" || start_type == "i16" || start_type == "i8") {
+                std::string ext_reg = fresh_reg();
+                emit_line("  " + ext_reg + " = sext " + start_type + " " + range_start +
+                          " to " + range_type);
+                range_start = ext_reg;
+            }
         }
     } else {
-        // Check if the iter expression is a type implementing Iterator behavior
         auto iter_semantic_type = infer_expr_type(*for_expr.iter);
         if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
             const auto& named = iter_semantic_type->as<types::NamedType>();
+            // Check if type implements Iterator directly
             if (env_.type_implements(named.name, "Iterator")) {
-                // Restore loop labels before delegating
                 current_loop_start_ = saved_loop_start;
                 current_loop_end_ = saved_loop_end;
                 current_loop_stack_save_ = saved_loop_stack_save;
                 current_loop_metadata_id_ = saved_loop_metadata_id;
                 return gen_for_iterator(for_expr, named.name);
+            }
+            // Check if type implements IntoIterator — call into_iter() first,
+            // then use the result as Iterator (like Rust's for-in desugaring).
+            if (env_.type_implements(named.name, "IntoIterator")) {
+                // Generate the collection expression
+                std::string collection_val = gen_expr(*for_expr.iter);
+                std::string collection_type = last_expr_type_;
+
+                // Look up the IntoIter associated type to find the iterator type name
+                auto into_iter_sig = env_.lookup_func(named.name + "::into_iter");
+                std::string iter_type_name;
+                if (into_iter_sig && into_iter_sig->return_type &&
+                    into_iter_sig->return_type->is<types::NamedType>()) {
+                    iter_type_name = into_iter_sig->return_type->as<types::NamedType>().name;
+                }
+                if (iter_type_name.empty()) {
+                    iter_type_name = "ListIter"; // fallback for List's IntoIterator
+                }
+
+                // Build mangled into_iter function name with type args
+                std::string mangled_collection = named.name;
+                if (!named.type_args.empty()) {
+                    mangled_collection = named.name + "__" + mangle_type_args(named.type_args);
+                }
+                std::string into_iter_fn = mangle_impl_method(mangled_collection, "into_iter");
+
+                // Call into_iter(this) — returns the iterator by value
+                std::string iter_val = fresh_reg();
+                std::string iter_llvm_type = "%struct." + iter_type_name;
+                if (!named.type_args.empty()) {
+                    iter_llvm_type = "%struct." + iter_type_name + "__" +
+                                    mangle_type_args(named.type_args);
+                }
+
+                // Store collection to alloca for into_iter (takes ptr to self)
+                std::string coll_alloca = fresh_reg();
+                emit_line("  " + coll_alloca + " = alloca " + collection_type);
+                emit_line("  store " + collection_type + " " + collection_val + ", ptr " +
+                          coll_alloca);
+
+                // Call into_iter
+                emit_line("  " + iter_val + " = call " + iter_llvm_type + " @" + into_iter_fn +
+                          "(ptr " + coll_alloca + ")");
+                last_expr_type_ = iter_llvm_type;
+
+                // Request instantiation of into_iter for this generic type
+                if (!named.type_args.empty()) {
+                    std::unordered_map<std::string, types::TypePtr> subs;
+                    auto struct_def = env_.lookup_struct(named.name);
+                    if (struct_def) {
+                        for (size_t i = 0; i < struct_def->type_params.size() &&
+                                           i < named.type_args.size(); ++i) {
+                            subs[struct_def->type_params[i]] = named.type_args[i];
+                        }
+                    }
+                    pending_impl_method_instantiations_.push_back(
+                        PendingImplMethod{mangled_collection, "into_iter", subs,
+                                          named.name, "", true});
+                }
+
+                // ============================================================
+                // Pointer-stepping optimization for ListIter-based iterators.
+                // Instead of calling next() -> Maybe[T] per iteration (which
+                // prevents LLVM vectorization due to discriminant branch),
+                // emit a direct phi-based pointer-stepping loop:
+                //   %ptr = phi ptr [init, preheader], [next, body]
+                //   %done = icmp eq ptr %ptr, %end
+                //   br i1 %done, exit, body
+                //   body: %val = load T, ptr %ptr
+                //         %ptr.next = gep i8, ptr %ptr, i64 %stride
+                // This is the exact pattern Rust generates for slice::Iter.
+                // ============================================================
+                if (iter_type_name == "ListIter") {
+                    // Determine element LLVM type from collection type args
+                    std::string elem_llvm_type;
+                    if (!named.type_args.empty()) {
+                        elem_llvm_type = llvm_type_from_semantic(named.type_args[0]);
+                    }
+                    if (elem_llvm_type.empty()) {
+                        elem_llvm_type = "i64"; // safe default for List[I64]
+                    }
+
+                    return gen_for_pointer_stepping(
+                        for_expr, iter_val, iter_llvm_type, elem_llvm_type,
+                        saved_loop_start, saved_loop_end, saved_loop_stack_save,
+                        saved_loop_metadata_id);
+                }
+
+                // Fallback: use gen_for_iterator for non-ListIter iterators
+                current_loop_start_ = saved_loop_start;
+                current_loop_end_ = saved_loop_end;
+                current_loop_stack_save_ = saved_loop_stack_save;
+                current_loop_metadata_id_ = saved_loop_metadata_id;
+
+                return gen_for_iterator_with_value(for_expr, iter_type_name, iter_val,
+                                                   iter_llvm_type, named.type_args);
             }
         }
         // Treat as simple range 0 to iter
@@ -378,31 +496,38 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         range_type = last_expr_type_;
     }
 
-    // Preheader block - loop initialization (for loop-invariant code motion)
+    // Preheader block - loop initialization
     emit_line("  br label %" + label_preheader);
     emit_line(label_preheader + ":");
 
-    // Allocate and initialize loop variable
+    // Allocate loop variable for address-taking code in body
     std::string var_alloca = fresh_reg();
     emit_line("  " + var_alloca + " = alloca " + range_type);
     emit_line("  store " + range_type + " " + range_start + ", ptr " + var_alloca);
     locals_[var_name] = VarInfo{var_alloca, range_type, nullptr, std::nullopt};
 
-    // Jump to header
     emit_line("  br label %" + label_header);
 
-    // Header block - condition check
+    // Header block — PHI-based canonical loop form for LLVM vectorizer.
+    // Pre-allocate the next_val register name so the phi can reference it.
     emit_line(label_header + ":");
     current_block_ = label_header;
     block_terminated_ = false;
-    std::string current = fresh_reg();
-    emit_line("  " + current + " = load " + range_type + ", ptr " + var_alloca);
+
+    std::string phi_var = fresh_reg();
+    std::string next_val = fresh_reg(); // pre-allocate for latch increment
+    emit_line("  " + phi_var + " = phi " + range_type +
+        " [ " + range_start + ", %" + label_preheader +
+        " ], [ " + next_val + ", %" + label_latch + " ]");
+    // Sync alloca with phi so body code reading from alloca sees correct value
+    emit_line("  store " + range_type + " " + phi_var + ", ptr " + var_alloca);
+
     std::string cmp_result = fresh_reg();
     if (inclusive) {
-        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + current + ", " +
+        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + phi_var + ", " +
                   range_end);
     } else {
-        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + current + ", " +
+        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + phi_var + ", " +
                   range_end);
     }
     emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_exit);
@@ -411,22 +536,14 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line(label_body + ":");
     current_block_ = label_body;
     block_terminated_ = false;
-
-    // No stacksave/stackrestore — allocas are hoisted to entry block
     current_loop_stack_save_ = "";
 
-    // Push a lifetime scope for the loop body
     push_lifetime_scope();
 
-    // Emit llvm.assume(i ult n) for 0-based ranges: informs LLVM the index is
-    // always in [0, n), enabling LICM of loop-invariant header loads (stride,
-    // data_addr) and allowing the vectorizer to treat the loop as safe.
-    // Only applied when range starts at 0 and type is a machine integer.
+    // Emit llvm.assume(i ult n) for 0-based ranges
     if (range_start == "0" && range_type != "i1") {
-        std::string assume_i = fresh_reg();
-        emit_line("  " + assume_i + " = load " + range_type + ", ptr " + var_alloca);
         std::string assume_cond = fresh_reg();
-        emit_line("  " + assume_cond + " = icmp ult " + range_type + " " + assume_i + ", " +
+        emit_line("  " + assume_cond + " = icmp ult " + range_type + " " + phi_var + ", " +
                   range_end);
         emit_line("  call void @llvm.assume(i1 " + assume_cond + ")");
     }
@@ -434,24 +551,17 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     gen_expr(*for_expr.body);
 
     if (!block_terminated_) {
-        // Emit lifetime.end for allocas in this iteration
         emit_scope_lifetime_ends();
         emit_line("  br label %" + label_latch);
     }
-
-    // Clear the scope (lifetime.end already emitted)
     clear_lifetime_scope();
 
-    // Latch block - increment and backedge (single backedge for canonical form)
+    // Latch block — increment induction variable using pre-allocated register
     emit_line(label_latch + ":");
     current_block_ = label_latch;
     block_terminated_ = false;
-    std::string next_val = fresh_reg();
-    std::string current2 = fresh_reg();
-    emit_line("  " + current2 + " = load " + range_type + ", ptr " + var_alloca);
-    emit_line("  " + next_val + " = add nsw " + range_type + " " + current2 + ", 1");
+    emit_line("  " + next_val + " = add nsw " + range_type + " " + phi_var + ", 1");
     emit_line("  store " + range_type + " " + next_val + ", ptr " + var_alloca);
-    // Add loop metadata to back-edge for LLVM optimization hints
     std::string loop_meta = current_loop_metadata_id_ >= 0
                                 ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
                                 : "";
@@ -508,27 +618,92 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     }
 
     // Evaluate the iterable and store it to a mutable alloca so next() can take &mut self
-    std::string iter_val = gen_expr(*for_expr.iter);
-    std::string iter_llvm_type = last_expr_type_;
+    std::string iter_val;
+    std::string iter_llvm_type;
+    if (use_precomputed_iter_) {
+        iter_val = precomputed_iter_val_;
+        iter_llvm_type = precomputed_iter_type_;
+    } else {
+        iter_val = gen_expr(*for_expr.iter);
+        iter_llvm_type = last_expr_type_;
+    }
+
+    // Build the mangled type name for generic iterators (e.g. BTreeMapIter__I64__I64).
+    std::string mangled_type_name = type_name;
+    {
+        auto iter_semantic_type = infer_expr_type(*for_expr.iter);
+        if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
+            const auto& iter_named = iter_semantic_type->as<types::NamedType>();
+            if (!iter_named.type_args.empty()) {
+                mangled_type_name = type_name + "__" + mangle_type_args(iter_named.type_args);
+            }
+        }
+    }
 
     // Look up next() return type to determine item type
-    std::string next_fn = mangle_impl_method(type_name, "next");
-    std::string item_llvm_type = "i32"; // fallback
+    std::string next_fn = mangle_impl_method(mangled_type_name, "next");
+    std::string item_llvm_type; // must be resolved — no i32 fallback
     auto next_sig = env_.lookup_func(type_name + "::next");
+
+    // Build generic substitution map for the iterator type.
+    // E.g. BTreeMapIter[I64, I64] => {K -> I64, V -> I64} so that
+    // MapEntry[K, V] becomes MapEntry[I64, I64] in LLVM type resolution.
+    std::unordered_map<std::string, types::TypePtr> iter_subs;
+    {
+        auto iter_semantic_type = infer_expr_type(*for_expr.iter);
+        if (iter_semantic_type && iter_semantic_type->is<types::NamedType>()) {
+            const auto& iter_named = iter_semantic_type->as<types::NamedType>();
+            if (!iter_named.type_args.empty()) {
+                auto struct_def = env_.lookup_struct(iter_named.name);
+                if (struct_def && struct_def->type_params.size() == iter_named.type_args.size()) {
+                    for (size_t i = 0; i < struct_def->type_params.size(); ++i) {
+                        iter_subs[struct_def->type_params[i]] = iter_named.type_args[i];
+                    }
+                }
+            }
+        }
+    }
+
     if (next_sig && next_sig->return_type) {
+        auto resolved_ret = iter_subs.empty()
+            ? next_sig->return_type
+            : types::substitute_type(next_sig->return_type, iter_subs);
         // next() returns Maybe[Item]; get the struct layout for item extraction
-        if (next_sig->return_type->is<types::NamedType>()) {
-            const auto& ret = next_sig->return_type->as<types::NamedType>();
+        if (resolved_ret->is<types::NamedType>()) {
+            const auto& ret = resolved_ret->as<types::NamedType>();
             if ((ret.name == "Maybe" || ret.name == "Option") && !ret.type_args.empty()) {
                 item_llvm_type = llvm_type_from_semantic(ret.type_args[0]);
             }
         }
     }
 
+    if (item_llvm_type.empty()) {
+        emit_line("  ; ERROR: could not resolve Iterator::Item type for " + type_name);
+        emit_line("  unreachable");
+        block_terminated_ = true;
+        current_loop_start_ = saved_loop_start;
+        current_loop_end_ = saved_loop_end;
+        current_loop_stack_save_ = saved_loop_stack_save;
+        current_loop_metadata_id_ = saved_loop_metadata_id;
+        return "0";
+    }
+
     // Determine the LLVM type for Maybe[Item] (the return type of next())
-    std::string maybe_llvm_type = iter_llvm_type; // fallback
+    std::string maybe_llvm_type = iter_llvm_type;
     if (next_sig && next_sig->return_type) {
-        maybe_llvm_type = llvm_type_from_semantic(next_sig->return_type);
+        auto resolved_ret = iter_subs.empty()
+            ? next_sig->return_type
+            : types::substitute_type(next_sig->return_type, iter_subs);
+        maybe_llvm_type = llvm_type_from_semantic(resolved_ret);
+    }
+
+    // Request instantiation of the next() method for this generic iterator.
+    // Without this, the generic impl Iterator for BTreeMapIter[K,V] won't
+    // emit the concrete next() body for BTreeMapIter__I64__I64 etc.
+    if (mangled_type_name != type_name) {
+        pending_impl_method_instantiations_.push_back(
+            PendingImplMethod{mangled_type_name, "next", iter_subs, type_name, "",
+                              /*is_library_type=*/true});
     }
 
     // Preheader: allocate iterator storage
@@ -588,14 +763,17 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
         block_terminated_ = false;
 
         push_lifetime_scope();
-        std::string item_val = fresh_reg();
-        emit_line("  " + item_val + " = extractvalue " + maybe_llvm_type + " " + next_result +
-                  ", 1");
 
-        // Store item to alloca so pattern binding works uniformly
+        // Store the entire Maybe result to memory, then GEP to the payload field.
+        // This avoids extractvalue type mismatches when the Maybe enum packs the
+        // payload as an array (e.g. MapEntry{i64,i64} stored as [2 x i64]).
+        std::string maybe_alloca = fresh_reg();
+        emit_line("  " + maybe_alloca + " = alloca " + maybe_llvm_type);
+        emit_line("  store " + maybe_llvm_type + " " + next_result + ", ptr " + maybe_alloca);
+        // GEP to field 1 (payload) — this ptr aliases the item data
         std::string item_alloca = fresh_reg();
-        emit_line("  " + item_alloca + " = alloca " + item_llvm_type);
-        emit_line("  store " + item_llvm_type + " " + item_val + ", ptr " + item_alloca);
+        emit_line("  " + item_alloca + " = getelementptr inbounds " + maybe_llvm_type + ", ptr " +
+                  maybe_alloca + ", i32 0, i32 1");
         locals_[var_name] = VarInfo{item_alloca, item_llvm_type, nullptr, std::nullopt};
     }
 
@@ -614,6 +792,192 @@ auto LLVMIRGen::gen_for_iterator(const parser::ForExpr& for_expr, const std::str
     block_terminated_ = false;
 
     // Restore loop labels
+    current_loop_start_ = saved_loop_start;
+    current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
+
+    return "0";
+}
+
+auto LLVMIRGen::gen_for_iterator_with_value(
+    const parser::ForExpr& for_expr, const std::string& type_name,
+    const std::string& precomputed_iter_val, const std::string& precomputed_iter_type,
+    const std::vector<types::TypePtr>& collection_type_args) -> std::string {
+    // Temporarily override last_expr_type_ and set up state so gen_for_iterator
+    // skips the gen_expr(*for_expr.iter) call and uses our precomputed value.
+    // We achieve this by storing the iterator to a local and calling gen_for_iterator.
+    precomputed_iter_val_ = precomputed_iter_val;
+    precomputed_iter_type_ = precomputed_iter_type;
+    use_precomputed_iter_ = true;
+    auto result = gen_for_iterator(for_expr, type_name);
+    use_precomputed_iter_ = false;
+    precomputed_iter_val_.clear();
+    precomputed_iter_type_.clear();
+    return result;
+}
+
+auto LLVMIRGen::gen_for_pointer_stepping(
+    const parser::ForExpr& for_expr,
+    const std::string& iter_val,
+    const std::string& iter_llvm_type,
+    const std::string& elem_llvm_type,
+    const std::string& saved_loop_start,
+    const std::string& saved_loop_end,
+    const std::string& saved_loop_stack_save,
+    int saved_loop_metadata_id) -> std::string {
+    // =========================================================================
+    // Direct pointer-stepping for-in loop (SIMD-friendly).
+    //
+    // Emits the same loop structure as Rust's slice::Iter at O2:
+    //   preheader: extract ptr, end, stride from ListIter struct
+    //   header:    phi ptr [init, preheader], [next, body]
+    //              icmp eq ptr %ptr, %end → exit or body
+    //   body:      load T from ptr (direct, no Maybe wrapper)
+    //              ... user body ...
+    //              gep i8, ptr, stride → ptr.next
+    //              br header  (with !llvm.loop vectorize metadata)
+    //   exit:
+    //
+    // This bypasses next() → Maybe[T] entirely, eliminating the discriminant
+    // branch that blocks LLVM's LoopVectorizer.
+    // =========================================================================
+
+    std::string label_preheader = fresh_label("pstep.preheader");
+    std::string label_header = fresh_label("pstep.header");
+    std::string label_body = fresh_label("pstep.body");
+    std::string label_latch = fresh_label("pstep.latch");
+    std::string label_exit = fresh_label("pstep.exit");
+
+    // Set loop labels for break/continue
+    current_loop_start_ = label_latch; // continue → go to latch (advance pointer)
+    current_loop_end_ = label_exit;
+    current_loop_stack_save_ = "";
+
+    // Create aggressive vectorization metadata (width=0 means auto-select)
+    current_loop_metadata_id_ = create_loop_metadata(true, 0);
+
+    // Get loop variable name from pattern
+    std::string var_name = "_for_item";
+    if (for_expr.pattern->is<parser::IdentPattern>()) {
+        var_name = for_expr.pattern->as<parser::IdentPattern>().name;
+    }
+
+    // ---- Preheader: extract ptr, end, stride from ListIter ----
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+    current_block_ = label_preheader;
+    block_terminated_ = false;
+
+    // Store iter struct to alloca so we can GEP its fields
+    std::string iter_alloca = fresh_reg();
+    emit_line("  " + iter_alloca + " = alloca " + iter_llvm_type);
+    emit_line("  store " + iter_llvm_type + " " + iter_val + ", ptr " + iter_alloca);
+
+    // Extract field 0: ptr (current position)
+    std::string ptr_field = fresh_reg();
+    emit_line("  " + ptr_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+              iter_alloca + ", i32 0, i32 0");
+    std::string ptr_init = fresh_reg();
+    emit_line("  " + ptr_init + " = load ptr, ptr " + ptr_field);
+
+    // Extract field 1: end (one-past-end pointer)
+    std::string end_field = fresh_reg();
+    emit_line("  " + end_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+              iter_alloca + ", i32 0, i32 1");
+    std::string end_ptr = fresh_reg();
+    emit_line("  " + end_ptr + " = load ptr, ptr " + end_field);
+
+    // Stride: use compile-time constant when element size is known (enables SIMD).
+    // Rust always has constant stride because sizeof(T) is compile-time.
+    // For TML, primitive types and pointers have known sizes; structs need runtime stride.
+    std::string stride_val;
+    int known_stride = 0;
+    if (elem_llvm_type == "i64" || elem_llvm_type == "double" || elem_llvm_type == "ptr") {
+        known_stride = 8;
+    } else if (elem_llvm_type == "i32" || elem_llvm_type == "float") {
+        known_stride = 4;
+    } else if (elem_llvm_type == "i16") {
+        known_stride = 2;
+    } else if (elem_llvm_type == "i8" || elem_llvm_type == "i1") {
+        known_stride = 1;
+    }
+
+    if (known_stride > 0) {
+        stride_val = std::to_string(known_stride);
+    } else {
+        // Fall back to runtime stride from ListIter field 2
+        std::string stride_field = fresh_reg();
+        emit_line("  " + stride_field + " = getelementptr inbounds " + iter_llvm_type + ", ptr " +
+                  iter_alloca + ", i32 0, i32 2");
+        stride_val = fresh_reg();
+        emit_line("  " + stride_val + " = load i64, ptr " + stride_field);
+    }
+
+    emit_line("  br label %" + label_header);
+
+    // ---- Header: phi-based pointer comparison ----
+    emit_line(label_header + ":");
+    current_block_ = label_header;
+    block_terminated_ = false;
+
+    // Pre-allocate next pointer reg name for phi back-reference from latch
+    std::string phi_ptr = fresh_reg();
+    std::string ptr_next = fresh_reg();
+    emit_line("  " + phi_ptr + " = phi ptr [ " + ptr_init + ", %" + label_preheader +
+              " ], [ " + ptr_next + ", %" + label_latch + " ]");
+
+    std::string done_cmp = fresh_reg();
+    emit_line("  " + done_cmp + " = icmp eq ptr " + phi_ptr + ", " + end_ptr);
+    emit_line("  br i1 " + done_cmp + ", label %" + label_exit + ", label %" + label_body);
+
+    // ---- Body: direct element load + user code ----
+    emit_line(label_body + ":");
+    current_block_ = label_body;
+    block_terminated_ = false;
+
+    push_lifetime_scope();
+
+    // Load element directly from pointer — no Maybe wrapper, no discriminant
+    std::string elem_val = fresh_reg();
+    emit_line("  " + elem_val + " = load " + elem_llvm_type + ", ptr " + phi_ptr + ", align 8");
+
+    // Bind loop variable: store to alloca so body code can take address
+    std::string var_alloca = fresh_reg();
+    emit_line("  " + var_alloca + " = alloca " + elem_llvm_type);
+    emit_line("  store " + elem_llvm_type + " " + elem_val + ", ptr " + var_alloca);
+    locals_[var_name] = VarInfo{var_alloca, elem_llvm_type, nullptr, std::nullopt};
+
+    // Generate user body
+    gen_expr(*for_expr.body);
+
+    if (!block_terminated_) {
+        emit_scope_lifetime_ends();
+        // Fall through to latch
+        emit_line("  br label %" + label_latch);
+    }
+    clear_lifetime_scope();
+
+    // ---- Latch: advance pointer and branch back to header ----
+    // Separate latch block ensures the phi predecessor is always this block,
+    // regardless of how many blocks the body generates (overflow checks, etc.)
+    emit_line(label_latch + ":");
+    current_block_ = label_latch;
+    block_terminated_ = false;
+
+    emit_line("  " + ptr_next + " = getelementptr inbounds i8, ptr " + phi_ptr +
+              ", i64 " + stride_val);
+    std::string loop_meta = current_loop_metadata_id_ >= 0
+                                ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                : "";
+    emit_line("  br label %" + label_header + loop_meta);
+
+    // ---- Exit ----
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
+    block_terminated_ = false;
+
+    // Restore saved loop labels
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
     current_loop_stack_save_ = saved_loop_stack_save;

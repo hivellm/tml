@@ -223,7 +223,10 @@ impl[K, V] HashMap[K, V] {
     // NOTE: SSE2 SIMD probing works for non-generic functions (4ns/op vs 9ns scalar)
     // but generic instantiation has codegen bugs with SIMD intrinsics inside lowlevel blocks.
     // Reverted to scalar until generic+SIMD codegen is fixed.
-    /// Returns the value associated with the given key, or the zero value of V if not found.
+    /// Returns the value associated with the given key, or the zero value
+    /// of V if not found. Pair with `has(key)` when the caller needs to
+    /// distinguish "key maps to zero-value" from "key absent" — or use
+    /// `get_opt(key)` for the `Maybe[V]` form.
     pub func get(this, key: K) -> V {
         let hdr: I64 = this.handle as I64
         let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
@@ -249,11 +252,48 @@ impl[K, V] HashMap[K, V] {
                 let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
                 if HashMap[K, V].keys_equal(e_key, key) {
                     let val_ptr: *V = (entries_addr + h * esz + 8) as *V
-                    return lowlevel { ptr_read[V](val_ptr) }
+                    return lowlevel { ptr_read_clone[V](val_ptr) }
                 }
             }
             h = (h + 1) & mask
             if h == start { return 0 as V }
+        }
+    }
+
+    /// Maybe-returning sibling of `get`. Returns `Just(value)` if the key
+    /// is present, `Nothing` if absent. Preferred over `has(k) + get(k)`
+    /// when the caller wants a single lookup — one probe instead of two.
+    pub func get_opt(this, key: K) -> Maybe[V] {
+        let hdr: I64 = this.handle as I64
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+        if cur_len == 0 {
+            return Nothing
+        }
+
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_typed(key)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
+        let start: I64 = h
+
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return Nothing }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
+                if HashMap[K, V].keys_equal(e_key, key) {
+                    let val_ptr: *V = (entries_addr + h * esz + 8) as *V
+                    let v: V = lowlevel { ptr_read_clone[V](val_ptr) }
+                    return Just(v)
+                }
+            }
+            h = (h + 1) & mask
+            if h == start { return Nothing }
         }
     }
 

@@ -131,7 +131,7 @@ auto LLVMIRGen::try_gen_dyn_dispatch_call(const parser::MethodCallExpr& call,
     emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
 
     // Get method signature from behavior definition
-    std::string return_llvm_type = "i32";
+    std::string return_llvm_type = "void";
     auto behavior_def = env_.lookup_behavior(behavior_name);
 
     if (!behavior_def && env_.module_registry()) {
