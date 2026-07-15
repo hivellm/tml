@@ -315,10 +315,16 @@ impl[T] Shared[T] {
     }
 
     /// Increments the reference count (used internally by duplicate).
+    ///
+    /// SOUNDNESS (ADR-009 / F-013): read the counter through a direct field
+    /// access — NEVER `let inner: SharedInner[T] = *this.ptr`. That bitwise
+    /// copy materializes `value: T` in a local whose drop-glue decrements any
+    /// nested `Shared`/`Heap` handles for real (confirmed at IR + runtime:
+    /// nested counts went 2 → 1 → -1 per duplicate on the AST codegen path).
     pub func increment_count(this) {
         if this.ptr != null {
-            let inner: SharedInner[T] = *this.ptr
-            let new_count: I32 = inner.strong_count + 1
+            let old_count: I32 = (*this.ptr).strong_count
+            let new_count: I32 = old_count + 1
             lowlevel { (*this.ptr).strong_count = new_count }
         }
     }
@@ -330,8 +336,9 @@ impl[T] Shared[T] {
             return
         }
 
-        let inner: SharedInner[T] = *this.ptr
-        let new_strong: I32 = inner.strong_count - 1
+        // SOUNDNESS: direct field read — see increment_count (F-013).
+        let old_strong: I32 = (*this.ptr).strong_count
+        let new_strong: I32 = old_strong - 1
         lowlevel { (*this.ptr).strong_count = new_strong }
 
         if new_strong == 0 {

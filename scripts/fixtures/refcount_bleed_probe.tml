@@ -1,0 +1,35 @@
+// Harness fixture (phase26b step 1, ADR-009/F-013): detects the refcount
+// bleed on the USER build path (tml run/build → AST codegen). The test
+// framework compiles via the query/MIR pipeline where the bleed never
+// manifested, so this MUST run via `tml run` — that is exactly why it lives
+// under scripts/fixtures/ (out of test discovery) and is registered in the
+// determinism corpus as a `tml run` target.
+//
+// Correct behavior: nested handle strong_count stays 2 across duplicates
+// of the outer handle → exit 0. Bleed: count drops (2→1→…negative), the
+// nested allocation is freed with its owner alive → exit 1.
+use core::alloc::shared::Shared
+use std::os
+
+type Payload {
+    id: I64,
+    nested: Shared[I64],
+}
+
+func main() {
+    let payload = Shared::new(42 as I64)
+    let outer = Shared::new(Payload { id: 1, nested: payload.duplicate() })
+    if payload.strong_count() != 2 {
+        os::process_exit(1)
+    }
+
+    let alias1 = outer.duplicate()
+    let alias2 = outer.duplicate()
+    let alias3 = outer.duplicate()
+    if payload.strong_count() != 2 {
+        os::process_exit(1)
+    }
+    if payload.get() != 42 {
+        os::process_exit(1)
+    }
+}

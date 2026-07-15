@@ -11,8 +11,8 @@
 ## 1. Implementation
 
 ### Step 1 — Immediate F-013 mitigation (live production bleed)
-- [ ] 1.1 Rewrite `Shared::increment_count`/`decrement_count` (`lib/core/src/alloc/shared.tml:318-346`) to read/write `strong_count`/`weak_count` through a field pointer — NEVER materialize a `SharedInner[T]` copy (whose drop-glue decrements nested handles). Audit `Shared::take`, `Heap::into_inner` for the same shape
-- [ ] 1.2 Regression test: the bleed probe shape (nested `Shared` count printed across duplicates: must stay 2) added to `compiler/tests/determinism/` as a corpus canary that FAILS at HEAD and passes after the fix; run corpus ×100 both modes and update `07-determinism-baseline.md`
+- [x] 1.1 `increment_count`/`decrement_count` rewritten to direct field reads (`(*this.ptr).strong_count`) — no `SharedInner[T]` copy, no drop-glue. IR verified: GEP+load i32 only, zero `load %struct.SharedInner`, zero drop calls. Audit: the only two whole-inner copies in shared.tml were these; `try_unwrap`'s `(*this.ptr).value` is an intentional unique-owner move-out (left as-is); `Heap::into_inner` same intentional shape (deferred to step 4.4 semantics work)
+- [x] 1.2 Canary added: `scripts/fixtures/refcount_bleed_probe.tml` run via `tml run` (USER/AST path — test-framework exes take query/MIR and mask the class), registered in the corpus as `tml_refcount_bleed_userpath`. Before fix: bleeds (2→1→−1, exit 1). After: **100/100 normal + 100/100 adversarial**; core/alloc 41/41 and determinism 5/5 clean. Baseline doc updated (footnote ¹)
 
 ### Step 2 — MIR pipeline gap closure + flip
 - [ ] 2.1 Inventory exactly why `build.cpp:320-407` forces the AST fallback (imported-module functions, generic instantiation, generic enum construct/destructure) and map each to the query pipeline's existing solution (the test framework compiles the same programs via `testing_compile.cpp` — reuse that machinery)

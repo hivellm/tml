@@ -15,6 +15,7 @@ not involved). Run as prebuilt ADR-004 test exes (`--run-all`).
 
 | Target | Shape | Normal | Adversarial | Exit codes |
 |--------|-------|--------|-------------|------------|
+| tml_refcount_bleed_userpath¹ | F-013 bleed canary via `tml run` (USER/AST path) | **100/100** | **100/100** | 0 ×100 |
 | tml_f002_hashmap | undecorated struct + Shared via HashMap.get | **100/100** | **100/100** | 0 ×100 |
 | tml_f002_list | undecorated struct + 2 Shared via List.get | **100/100** | **100/100** | 0 ×100 |
 | tml_partial_move_enum | phase24h shape, recursive enum, no band-aid | **100/100** | **100/100** | 0 ×100 |
@@ -27,6 +28,12 @@ hold this ground. Their value is as **regression sentinels**: any phase26/27 cha
 that drops one below 100/100 under the gate is an immediate red flag. They are NOT
 proof of soundness — the C-frontend workload (below) exercises deeper composition
 and still fails.
+
+¹ **Added 2026-07-15 (v0.3.55, phase26b step 1):** unlike the other primary
+targets (test-framework exes → query/MIR pipeline), this canary runs via
+`tml run` because the F-013 refcount bleed only manifests on the USER build
+path (AST codegen) — see ADR-009. Measured 0/N before the shared.tml
+counter-read fix (nested count 2→1→−1, silent UAF); 100/100 both modes after.
 
 **Collateral finding:** authoring these five small files surfaced **4 new
 checker/codegen divergences** (constructs that pass `tml check` and fail compile) —

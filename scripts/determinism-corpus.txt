@@ -20,6 +20,11 @@
 # These target the C++ compiler's codegen + lib/core stdlib ONLY — no
 # dependency on the frozen compiler-tml/ tree.
 
+# USER-PATH canary (runs via `tml run` on purpose: the AST codegen path that
+# real programs use — the test-framework exes take the query/MIR path and
+# would mask this class; see ADR-009). Detects the F-013 refcount bleed.
+tml_refcount_bleed_userpath: ./build/debug/bin/tml.exe run scripts/fixtures/refcount_bleed_probe.tml
+
 tml_f002_hashmap: ./build/debug/cache/tests/compiler_determinism_f002_hashmap.exe --run-all
 tml_f002_list: ./build/debug/cache/tests/compiler_determinism_f002_list.exe --run-all
 tml_partial_move_enum: ./build/debug/cache/tests/compiler_determinism_partial_move_enum.exe --run-all
