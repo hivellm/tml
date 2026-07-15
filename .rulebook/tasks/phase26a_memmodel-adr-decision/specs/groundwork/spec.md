@@ -80,8 +80,24 @@ questions (F-013 MIR elaboration; AST-path fallback frequency).
 - MIR path registers any non-trivially-destructible `let` for drop
   (`thir_mir_builder.cpp:663-668`) and drop recurses into fields
   (thir_mir_builder_expr.cpp:1097-1135) → the `inner` local plausibly drop-decrements
-  nested handles. **Dynamic confirmation pending: emit MIR for increment_count
-  (phase26a item 1.1, needs the compiler free).**
+  nested handles.
+- **DYNAMICALLY CONFIRMED (2026-07-15, item 1.1, emit-ir on a
+  Shared[Payload{id, nested: Shared[I64]}] probe):** the emitted
+  `Shared[Payload]::increment_count` (a) `load %struct.SharedInner__Payload` —
+  full bitwise copy to a stack alloca, (b) bumps the counter, (c) then calls
+  `Shared__I64::drop` on the `nested` field INSIDE the stack copy; that drop →
+  `decrement_count` → **writes the decrement to the REAL allocation's
+  strong_count via this.ptr and `mem_free`s it at 0**. So on the emit-ir path,
+  every `outer.duplicate()` leaks one real decrement of each nested handle.
+- **OPEN QUESTION for the spikes (item 1.4):** the f013 corpus test
+  (2000 duplicate/drop cycles + `payload.strong_count()==2` assert) passes
+  100/100 at runtime — the refcount bleed does NOT manifest in the test
+  binary. Most plausible explanation: `--emit-ir` forces the LEGACY AST path
+  (build.cpp:413 `emit_ir_only`), while the test binary's codegen elaborates
+  the inner-copy drop differently (or not at all). Determining WHICH path the
+  test binary takes and WHERE the two diverge is decision-critical: it tells
+  us which drop-elaboration subsystem is live in practice and which one B1
+  must fix first.
 - Same read-whole-inner shape: `Shared::take` (shared.tml:287-290),
   `Heap::into_inner` (heap.tml:152-157), plus the F-002 getters
   (`shared.tml:149`, `heap.tml:117`). Safe forms exist: `get_clone` (:177-182),

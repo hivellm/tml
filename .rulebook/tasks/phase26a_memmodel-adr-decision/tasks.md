@@ -7,7 +7,7 @@
 > phase26b implementation starts.**
 
 ## 1. Implementation
-- [ ] 1.1 Verify F-013: emit MIR for `Shared::increment_count`/`decrement_count` (`lib/core/src/alloc/shared.tml:320-333`) and confirm whether the `inner: SharedInner[T]` bitwise-copy local gets drop-elaborated (would explain phase24l Attempt-2 refcount imbalance)
+- [x] 1.1 Verify F-013 — CONFIRMED at IR level (emit-ir, 2026-07-15): `Shared[T]::increment_count` bitwise-copies the whole `SharedInner[T]` to a stack alloca and its drop-glue calls `Shared[U]::drop` on nested handle fields of the COPY, which decrements the REAL allocation and `mem_free`s at 0 — every `duplicate()` leaks one real decrement per nested handle on this path. Evidence + IR excerpts in `specs/groundwork/spec.md` (Q5). NEW decision-critical finding: the f013 corpus test does NOT bleed at runtime (100/100), so the emit-ir (AST-legacy) path and the test binary's path elaborate this drop DIFFERENTLY — identifying which subsystem is live in practice is now a mandatory spike input (folded into 1.4)
 - [ ] 1.2 Document Option B1 (Rust-faithful): MIR move/init-state + drop-flag elaboration — per-local initialization state through the CFG, conditional drops guarded by drop flags, `.get()` becomes borrow-then-clone or explicit move; estimate compiler work (thir_mir_builder, drop.cpp, borrow checker integration)
 - [ ] 1.3 Document Option B2 (ARC/Swift-style): compiler-inserted retain/release on every copy/drop of refcounted owning types; estimate runtime cost + later elision-pass work; document impact on the zero-cost performance story
 - [ ] 1.4 Prototype spike for each option on the minimal repro corpus (`c_essential_repro.c`, `sig_alone.c` classes) — enough to validate feasibility claims, not production code
