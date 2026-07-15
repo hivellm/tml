@@ -1,6 +1,32 @@
 # ADR-009: Memory-Model Soundness — Drop Elaboration for Owned Handles
 
-**Status:** ACCEPTED — **Option B3** (user decision, 2026-07-15) · **Date:** 2026-07-15
+**Status:** REVISED — **Option B1-on-AST** (user decision, 2026-07-15 · supersedes the
+same-day B3 acceptance after its premise was refuted) · **Date:** 2026-07-15
+
+> ## Revision (2026-07-15) — B3 premise refuted, pivot to fixing the AST path directly
+>
+> Step-2 scoping (`.rulebook/tasks/phase26b_memmodel-implementation/specs/step2-scoping/`)
+> plus direct code verification (`query_core.cpp:931`) established that B3's founding
+> premise is **false**: the test framework does NOT compile stdlib/generic programs
+> through MIR. Both `tml build` and the test framework use the **identical** AST-vs-MIR
+> gate and route any stdlib-importing or generic program to the **AST `LLVMIRGen`
+> path**. "Query pipeline" ≠ "MIR codegen." So unifying onto MIR is not a routing
+> change (~5%) but a ~8,000-LOC MIR codegen project (imported-function emission +
+> generic monomorphization worklist + derives + unions + generic-enum lowering, all
+> AST-only today). B3 = that migration PLUS the drop-flag work — MORE total effort, not
+> less; its "avoid double implementation" justification no longer holds.
+>
+> **New decision (B1-on-AST):** implement real move/init-state + drop-flag elaboration
+> on the **AST-legacy path** — the path 100% of real programs AND all tests actually
+> run. It already has partial move tracking (`consumed_vars_`, ~30 sites) and the drop
+> machinery (`drop.cpp`); the borrow checker already computes the needed
+> OwnershipState/init-state facts (`checker.hpp:799-816`) and merely discards them
+> before codegen. Fixing there fixes reality directly, with no migration prerequisite.
+> **MIR unification is deferred** to the self-hosting / native-backend era (phases
+> 30–33, already frozen) — realidade primeiro, arquitetura ideal depois. The B1/B2/B3
+> analysis below is retained for the record; the accepted plan is the revised phase26b.
+>
+> **Date:** 2026-07-15
 **Deciders:** project owner + ERA 0 stabilization effort
 **Evidence base:** `docs/analysis/tml-table-analysis/` (F-001..F-014),
 `.rulebook/tasks/phase26a_memmodel-adr-decision/specs/groundwork/spec.md` (file:line
@@ -143,8 +169,18 @@ Sequencing under B3 (phase26b restructure):
 
 ## Decision
 
-**B3 accepted by the project owner on 2026-07-15.** phase26b implements the
-sequencing in the Recommendation section: (1) shared.tml counter-read mitigation,
-(2) MIR imported-module/generics gap closure + pipeline flip for `tml build`/`run`,
-(3) AST-legacy path retirement, (4) move/init-state + drop-flag elaboration in MIR
-(once). phase26c reverts the phase24 band-aids and raises the gates.
+**Superseded same-day (see the Revision banner at the top).** B3 was accepted, then
+its premise was refuted by Step-2 scoping; the project owner re-decided on
+**B1-on-AST**. The accepted plan is now:
+1. shared.tml counter-read mitigation (F-013) — **done, v0.3.55**.
+2. Consume the borrow checker's move/init-state facts in the AST codegen (they are
+   computed at `checker.hpp:799-816` and discarded before codegen) → real per-place
+   initialization tracking instead of name-based `consumed_vars_`.
+3. Sound container/smart-pointer read-out on the AST path: every read is a balanced
+   clone (`ptr_read_clone`) or a tracked move; remove the `drop.cpp:460-471` leak
+   special-case once reads are sound.
+4. Drop-flag elaboration for control-flow-dependent drops; the F-016 hazard sites and
+   F-022 leaks become sound by construction.
+5. phase26c reverts the phase24 band-aids and raises the gates.
+
+MIR unification (the old B3 Steps 2–3) is deferred to phases 30–33 (frozen).

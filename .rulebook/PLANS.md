@@ -41,14 +41,23 @@ User decision after the state-of-language analysis
    query/MIR pipeline, user builds via AST-legacy fallback — **the 12k-test
    suite validates a path real programs never run** (testing_compile.cpp:69-74
    vs build.cpp:413).
-6. **phase26b IN PROGRESS (B3 sequencing)**: Step 1 DONE (v0.3.55 — Shared
-   counter direct-field-read fix; user-path canary `tml_refcount_bleed_userpath`
-   100/100 both modes, was 0/N). NEXT: **Step 2** — inventory build.cpp:320-407
-   AST-fallback conditions, reuse testing_compile.cpp query machinery, wire
-   `TML_PIPELINE=query` flag for tml build/run, full-suite triage, then flip
-   default. Step 3 retires AST path (+ make --emit-ir truthful); Step 4 =
-   drop-flag elaboration once (DropInst, wire mark_moved, port init-state
-   dataflow).
+6. **ADR-009 REVISED 2026-07-15 → B1-on-AST** (rulebook decision #11, supersedes
+   the same-day B3). Step-2 scoping refuted B3's premise: query_core.cpp:931
+   proves the test framework uses the SAME AST gate as build.cpp — tests AND
+   users run the AST path for stdlib/generic programs; MIR is unused there. B3's
+   "unify onto the already-tested MIR path" would be an ~8,000-LOC MIR codegen
+   project, not routing. So: **fix the AST-legacy path directly** (what everyone
+   runs); defer MIR unification to phases 30-33 (frozen).
+7. **phase26b IN PROGRESS (B1-on-AST, tasks.md rewritten)**: Step 1 DONE (v0.3.55
+   F-013 fix). NEXT: **Step 2** — surface the borrow checker's OwnershipState/
+   init-state facts (checker.hpp:799-816, discarded at query_core.cpp:575-593)
+   into the AST codegen, replacing name-based consumed_vars_ with per-place init
+   tracking, extended below lowlevel. Step 3 = sound read-out (balanced clone/
+   move, destroy runs per-element Drop, REMOVE drop.cpp:460-471 leak special-case).
+   Step 4 = drop-flag elaboration for control-flow-dependent drops.
+8. **phase26d IN PROGRESS (parallel, library-level)**: F-017/018/023 correctness
+   fixes (Arc/AnyValue forget-source, Sync get_ref/get_clone, try_unwrap weak-aware)
+   dispatched to an agent; ref-migration F-020 is a later wave.
 
 Historical context below describes the pre-pivot phase24 grind.
 

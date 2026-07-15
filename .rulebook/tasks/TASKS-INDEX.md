@@ -28,7 +28,7 @@ green. Rationale + evidence: [`docs/analysis/tml-table-analysis/`](../../docs/an
 | ID | Task | Status | Depends on |
 |----|------|--------|------------|
 | 26a | ADR-009: Memory-Model Decision | **✅ Done — B3 ACCEPTED** (unify paths → drop-flags once). Archived | — |
-| 26b | [Memory-Model Implementation (B3)](phase26b_memmodel-implementation/) | **In progress** — Step 1 done (v0.3.55 F-013 fix); Step 2 next (MIR gap closure + pipeline flip) | 26a ✅ |
+| 26b | [Memory-Model Implementation (B1-on-AST)](phase26b_memmodel-implementation/) | **In progress** — Step 1 done (v0.3.55 F-013 fix); ADR-009 REVISED (B3 premise refuted — fix AST path directly, not MIR migration); Step 2 next (surface borrow-checker init facts into AST codegen) | 26a ✅ |
 | 26c | [Revert phase24 Band-Aids + Close Bug Class](phase26c_memmodel-bandaid-revert/) | Pending | 26b |
 | 26d | [Stdlib Copy-Hazard Sweep (library-level, parallel)](phase26d_stdlib-copy-hazards-sweep/) | Pending — F-017/018/020, model-independent safe wins | none (parallel w/ 26b) |
 | 26e | [Collection Borrow Accessors (the zero-cost enabler)](phase26e_collection-borrow-accessors/) | Pending — F-021, new lang+codegen surface | 26b |

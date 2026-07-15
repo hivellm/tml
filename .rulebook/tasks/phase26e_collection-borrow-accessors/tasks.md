@@ -6,7 +6,8 @@
 > "zero-cost" (the actual Rust-parity thesis). Depends on phase26b (real move/drop
 > model) being landed first — a borrow into a container is only sound once the
 > drop model can track its lifetime. New language + codegen surface, not a stdlib
-> patch.
+> patch. NOTE (ADR-009 revised): the interior-pointer codegen targets the AST-legacy
+> path (what real programs run), not MIR; the MIR flip was deferred to phases 30-33.
 
 ## 1. Implementation
 - [ ] 1.1 Interior-pointer codegen: emit a GEP into the type-erased `*Unit` backing buffer of `List`/`HashMap`/`BTreeMap`/`Deque` that yields a `ref T`/`mut ref T` without copying the element (both codegen paths, or the unified MIR path if 26b step 3 retired the AST path)
