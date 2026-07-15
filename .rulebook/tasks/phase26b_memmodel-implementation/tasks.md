@@ -1,16 +1,35 @@
-# phase26b — Memory-Model Implementation (Stabilization ERA 0, Phase B)
+# phase26b — Memory-Model Implementation via B3 (Stabilization ERA 0, Phase B)
 
-> Implements the model chosen in ADR-009 (phase26a). Checklist below assumes
-> either option; refine after the ADR decision. Analysis:
-> `docs/analysis/tml-table-analysis/02-memory-model-unsoundness.md` + `06-execution-plan.md`.
+> Implements **ADR-009 Option B3** (ACCEPTED 2026-07-15): unify user builds onto
+> the query/MIR pipeline the test framework already validates, then land
+> move/drop-flag elaboration ONCE. Evidence: `docs/adr/ADR-009-memory-model-soundness.md`
+> + `../phase26a_memmodel-adr-decision/specs/groundwork/spec.md` (archived at
+> `archive/2026-07-15-phase26a_memmodel-adr-decision/`).
+> Every step gates on: determinism corpus (adversarial ON) + affected suites +
+> K002 verifier green.
 
 ## 1. Implementation
-- [ ] 1.1 Land the core mechanism per ADR-009 (B1: move/init-state tracking + drop-flag elaboration in MIR; B2: auto retain/release insertion in codegen for refcounted owning types)
-- [ ] 1.2 Make container read-out well-defined: `Shared/Heap/HashMap/List/BTreeMap.get` semantics are sound by construction (no bitwise-copy aliasing of nested owned handles) — supersedes the `ptr_read_clone` conservative-detection intrinsic
-- [ ] 1.3 Fix the refcount machinery itself: `Shared::increment_count`/`decrement_count` must not bitwise-copy `SharedInner[T]` (F-013)
-- [ ] 1.4 Extend the borrow checker (NLL/Polonius) or MIR lowering so the stdlib's `lowlevel` raw-pointer internals are covered by the model (F-004) — drop insertion must never fire on moved-from/aliased values
-- [ ] 1.5 Determinism gates (uses phase25a harness, adversarial mode ON): `sig_alone.c` 100/100, `c_essential_repro.c` 100/100 (was 28/30), `essential.c --emit=ast` 100/100 (was 0/5)
-- [ ] 1.6 No regressions: compiler suite + lib/core + lib/std baselines preserved or improved; document any suite deltas with root cause
+
+### Step 1 — Immediate F-013 mitigation (live production bleed)
+- [ ] 1.1 Rewrite `Shared::increment_count`/`decrement_count` (`lib/core/src/alloc/shared.tml:318-346`) to read/write `strong_count`/`weak_count` through a field pointer — NEVER materialize a `SharedInner[T]` copy (whose drop-glue decrements nested handles). Audit `Shared::take`, `Heap::into_inner` for the same shape
+- [ ] 1.2 Regression test: the bleed probe shape (nested `Shared` count printed across duplicates: must stay 2) added to `compiler/tests/determinism/` as a corpus canary that FAILS at HEAD and passes after the fix; run corpus ×100 both modes and update `07-determinism-baseline.md`
+
+### Step 2 — MIR pipeline gap closure + flip
+- [ ] 2.1 Inventory exactly why `build.cpp:320-407` forces the AST fallback (imported-module functions, generic instantiation, generic enum construct/destructure) and map each to the query pipeline's existing solution (the test framework compiles the same programs via `testing_compile.cpp` — reuse that machinery)
+- [ ] 2.2 Wire `tml build`/`tml run` to the query/MIR pipeline behind `TML_PIPELINE=query` env/flag; determinism corpus + bleed probes must pass under the flag
+- [ ] 2.3 Run the full compiler + core + std suites under the flag; triage deltas (differences = latent MIR-path holes currently masked — fix or file with owner)
+- [ ] 2.4 Flip the default (`tml build`/`run` use query/MIR); keep `TML_PIPELINE=legacy` escape for one release; gates ×100 green
+
+### Step 3 — AST-legacy path retirement
+- [ ] 3.1 Make `--emit-ir` emit from the LIVE pipeline (today it lies: emits AST-path IR that users run but tests don't — after the flip it must show query/MIR output)
+- [ ] 3.2 Remove the AST-fallback selection from `build.cpp`/`parallel_build.cpp` and delete/deprecate the dead emission path; record removed-LOC and any @-risk features in the patch notes
+
+### Step 4 — Move/init-state + drop-flag elaboration (B1 mechanics, once)
+- [ ] 4.1 First-class `DropInst` in MIR (instruction set, builder, printer, validator) replacing eager `CallInst("Type::drop")` lowering; migrate the string-matching passes (`remove_unneeded_drops`, `destructor_hoist`, `batch_destruction`)
+- [ ] 4.2 Wire `BuildContext::mark_moved` (currently dead) at every move site in the THIR→MIR builder; moved-from locals are never dropped
+- [ ] 4.3 Port the borrow checker's init-state merge dataflow (checker.hpp:799-816) to MIR drop elaboration; conditional drops via flags only where control-flow-dependent
+- [ ] 4.4 Extend the discipline below `lowlevel` for stdlib internals (container read-out = borrow or explicit clone; `.get()` semantics well-defined; supersedes `ptr_read_clone` conservative detection)
+- [ ] 4.5 Gates: `sig_alone.c` 100/100, `c_essential_repro.c` 100/100 (was 86), `essential.c --emit=ast` 100/100 (was 0), corpus canaries 100/100, full suites at/above baseline — all under adversarial allocator
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
 - [ ] 2.1 Update or create documentation covering the implementation

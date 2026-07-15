@@ -1,6 +1,6 @@
 # ADR-009: Memory-Model Soundness — Drop Elaboration for Owned Handles
 
-**Status:** PROPOSED (awaiting user decision) · **Date:** 2026-07-15
+**Status:** ACCEPTED — **Option B3** (user decision, 2026-07-15) · **Date:** 2026-07-15
 **Deciders:** project owner + ERA 0 stabilization effort
 **Evidence base:** `docs/analysis/tml-table-analysis/` (F-001..F-014),
 `.rulebook/tasks/phase26a_memmodel-adr-decision/specs/groundwork/spec.md` (file:line
@@ -143,4 +143,8 @@ Sequencing under B3 (phase26b restructure):
 
 ## Decision
 
-_Pending user sign-off. Options: **B3 (recommended)** · B1 · B2 · other._
+**B3 accepted by the project owner on 2026-07-15.** phase26b implements the
+sequencing in the Recommendation section: (1) shared.tml counter-read mitigation,
+(2) MIR imported-module/generics gap closure + pipeline flip for `tml build`/`run`,
+(3) AST-legacy path retirement, (4) move/init-state + drop-flag elaboration in MIR
+(once). phase26c reverts the phase24 band-aids and raises the gates.
