@@ -26,13 +26,22 @@ User decision after the state-of-language analysis
    phase26a/26b/26c (ADR-009 memory-model decision → implementation →
    band-aid revert) → phase27a/27b (K001 / X002-X003 root-cause) →
    phase28a/28b (UzDB-core acceptance soak + async-file hardening).
-3. **Frozen**: phase23c, 31–34 (self-hosting/native) and 35–39 (DB/AI/HTTP/
-   toolchain features). phase38a (package registry) unfreezes first after ERA 0.
-4. **Superseded**: phase0z, phase24i–n band-aid line — per-site fixes proven
-   non-convergent (phase24l Attempt log); the class closes at the root in
-   phase26. Keep their repros for the phase25a corpus.
-5. Next concrete step: **phase25a + phase25b (parallel)**, then phase26a
-   (ADR-009 — requires user sign-off on B1 drop-flags vs B2 ARC).
+3. **Re-sequenced (2026-07-15, user request)**: one continuous future timeline —
+   registry → phase29a/b (was 38a/b, FIRST to unfreeze), native/self-hosting →
+   phase30–33 (was 31–34), C++ frontend → phase34a (was 23c), features 35–37
+   unchanged, toolchain → phase38a–d (was 38c–f), 39a unchanged. Renamed
+   proposals note their old ids; analysis docs cite pre-resequence ids.
+4. **Archived (superseded)**: phase0z, phase24i–n band-aid line — per-site fixes
+   proven non-convergent (phase24l Attempt log); the class closes at the root in
+   phase26. Repros live in the phase25a corpus; dirs in archive/2026-07-15-*.
+5. Progress: **phase25a DONE (v0.3.53** — determinism harness, adversarial
+   allocator, baseline ×100, pre-push gate**)**; **phase25b DONE (v0.3.54** —
+   LLVM verifier hard-error on all 3 emission paths, zero fallout across 209
+   suites, known-failures manifest**)**. **phase26a IN PROGRESS** — F-013
+   confirmed at IR level (increment_count's inner copy drop-glue decrements the
+   REAL nested allocation); open spike question: emit-ir (AST) path vs test
+   binary path elaborate this drop differently. Next: B1/B2 spikes → ADR-009 →
+   **user sign-off required**.
 
 Historical context below describes the pre-pivot phase24 grind.
 
