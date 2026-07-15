@@ -34,14 +34,21 @@ User decision after the state-of-language analysis
 4. **Archived (superseded)**: phase0z, phase24i–n band-aid line — per-site fixes
    proven non-convergent (phase24l Attempt log); the class closes at the root in
    phase26. Repros live in the phase25a corpus; dirs in archive/2026-07-15-*.
-5. Progress: **phase25a DONE (v0.3.53** — determinism harness, adversarial
-   allocator, baseline ×100, pre-push gate**)**; **phase25b DONE (v0.3.54** —
-   LLVM verifier hard-error on all 3 emission paths, zero fallout across 209
-   suites, known-failures manifest**)**. **phase26a IN PROGRESS** — F-013
-   confirmed at IR level (increment_count's inner copy drop-glue decrements the
-   REAL nested allocation); open spike question: emit-ir (AST) path vs test
-   binary path elaborate this drop differently. Next: B1/B2 spikes → ADR-009 →
-   **user sign-off required**.
+5. Progress: **phase25a DONE (v0.3.53)**, **phase25b DONE (v0.3.54)**,
+   **phase26a DONE — ADR-009 Option B3 ACCEPTED by user 2026-07-15** (rulebook
+   decision #10). Key spike findings: (a) F-013 bleed REAL on user path
+   (`tml run` probe: nested count 2→1→−1, silent UAF); (b) tests compile via
+   query/MIR pipeline, user builds via AST-legacy fallback — **the 12k-test
+   suite validates a path real programs never run** (testing_compile.cpp:69-74
+   vs build.cpp:413).
+6. **phase26b IN PROGRESS (B3 sequencing)**: Step 1 DONE (v0.3.55 — Shared
+   counter direct-field-read fix; user-path canary `tml_refcount_bleed_userpath`
+   100/100 both modes, was 0/N). NEXT: **Step 2** — inventory build.cpp:320-407
+   AST-fallback conditions, reuse testing_compile.cpp query machinery, wire
+   `TML_PIPELINE=query` flag for tml build/run, full-suite triage, then flip
+   default. Step 3 retires AST path (+ make --emit-ir truthful); Step 4 =
+   drop-flag elaboration once (DropInst, wire mark_moved, port init-state
+   dataflow).
 
 Historical context below describes the pre-pivot phase24 grind.
 
