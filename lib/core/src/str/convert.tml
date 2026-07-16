@@ -118,16 +118,16 @@ pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
 ///
 /// ```tml
 /// let words = ["hello", "world"]
-/// assert(join(words, " ") == "hello world")
+/// assert(join(ref words, " ") == "hello world")
 ///
 /// let nums = ["1", "2", "3"]
-/// assert(join(nums, ", ") == "1, 2, 3")
+/// assert(join(ref nums, ", ") == "1, 2, 3")
 ///
 /// let empty: List[Str] = []
-/// assert(join(empty, ",") == "")
+/// assert(join(ref empty, ",") == "")
 /// ```
 @allocates
-pub func join(parts: List[Str], separator: Str) -> Str {
+pub func join(parts: ref List[Str], separator: Str) -> Str {
     let count: I64 = parts.len()
     if count == 0 {
         return ""
@@ -191,13 +191,13 @@ pub func concat(a: Str, b: Str) -> Str {
 ///
 /// ```tml
 /// let parts = ["a", "b", "c"]
-/// assert(concat_all(parts) == "abc")
+/// assert(concat_all(ref parts) == "abc")
 ///
 /// let words = ["Hello", " ", "World"]
-/// assert(concat_all(words) == "Hello World")
+/// assert(concat_all(ref words) == "Hello World")
 /// ```
 @allocates
-pub func concat_all(parts: List[Str]) -> Str {
+pub func concat_all(parts: ref List[Str]) -> Str {
     return join(parts, "")
 }
 

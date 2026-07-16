@@ -541,7 +541,9 @@ impl[K, V] HashMap[K, V] {
 
     /// Inserts all key-value pairs from the given parallel lists.
     /// `keys` and `values` must have the same length.
-    pub func extend_from(this, keys: List[K], values: List[V]) {
+    /// Borrows both lists (F-020): the caller keeps ownership — previously the
+    /// by-value params' drop-glue freed the caller's lists on return.
+    pub func extend_from(this, keys: ref List[K], values: ref List[V]) {
         let count: I64 = keys.len()
         for i in 0 to count {
             this.set(keys.get(i), values.get(i))

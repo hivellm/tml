@@ -226,10 +226,10 @@ impl File {
     /// var buf: Buffer = Buffer::new(4)
     /// buf.write_byte(0x89)
     /// buf.write_byte(0x50)
-    /// let written: I64 = file.write_bytes(buf)
+    /// let written: I64 = file.write_bytes(ref buf)
     /// file.close()
     /// ```
-    pub func write_bytes(this, data: Buffer) -> I64 {
+    pub func write_bytes(this, data: ref Buffer) -> I64 {
         let ptr: I64 = data.data_ptr()
         let count: I64 = data.len()
         return ffi_file_write_bytes(this.handle, ptr, count)
@@ -289,9 +289,9 @@ impl File {
     /// ```tml
     /// var buf: Buffer = Buffer::new(16)
     /// buf.write_str("hello binary")
-    /// File::write_all_bytes("output.bin", buf)
+    /// File::write_all_bytes("output.bin", ref buf)
     /// ```
-    pub func write_all_bytes(path: Str, data: Buffer) -> Bool {
+    pub func write_all_bytes(path: Str, data: ref Buffer) -> Bool {
         let ptr: I64 = data.data_ptr()
         let count: I64 = data.len()
         return ffi_file_write_all_bytes(path, ptr, count)

@@ -177,7 +177,7 @@ func substitute_locals(line: Str, map: ref HashMap[Str, Str]) -> Str {
     if seg_start < n {
         parts.push(substring(line, seg_start, n))
     }
-    return concat_all(parts)
+    return concat_all(ref parts)
 }
 
 // ============================================================================

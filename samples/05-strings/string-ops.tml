@@ -80,7 +80,7 @@ pub func main() {
     }
 
     // ── Join ───────────────────────────────────────
-    let joined: Str = str::join(parts, " | ")
+    let joined: Str = str::join(ref parts, " | ")
     show("joined: ", joined)
 
     parts.destroy()

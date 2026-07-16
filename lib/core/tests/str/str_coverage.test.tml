@@ -56,7 +56,7 @@ func test_str_ends_with() -> I32 {
 @test
 func test_str_join_basic() -> I32 {
     let mut parts: List[Str] = str::split("hello world", " ")
-    let result: Str = str::join(parts, "-")
+    let result: Str = str::join(ref parts, "-")
     assert_eq(result, "hello-world", "join with dash")
     parts.destroy()
     return 0
@@ -65,7 +65,7 @@ func test_str_join_basic() -> I32 {
 @test
 func test_str_join_comma() -> I32 {
     let mut parts: List[Str] = str::split("a,b,c", ",")
-    let result: Str = str::join(parts, " + ")
+    let result: Str = str::join(ref parts, " + ")
     assert_eq(result, "a + b + c", "join with plus")
     parts.destroy()
     return 0
@@ -74,7 +74,7 @@ func test_str_join_comma() -> I32 {
 @test
 func test_str_join_empty_sep() -> I32 {
     let mut parts: List[Str] = str::split("x-y-z", "-")
-    let result: Str = str::join(parts, "")
+    let result: Str = str::join(ref parts, "")
     assert_eq(result, "xyz", "join with empty separator")
     parts.destroy()
     return 0
@@ -87,7 +87,7 @@ func test_str_join_empty_sep() -> I32 {
 @test
 func test_str_concat_all() -> I32 {
     let mut parts: List[Str] = str::split("a,b,c", ",")
-    let result: Str = str::concat_all(parts)
+    let result: Str = str::concat_all(ref parts)
     assert_eq(result, "abc", "concat_all")
     parts.destroy()
     return 0

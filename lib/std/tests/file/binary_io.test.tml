@@ -14,7 +14,7 @@ func test_write_and_read_bytes() -> Outcome[Unit, Str] {
     buf.write_byte(0x6F)  // o
 
     let file_w: File = File::open_write(path)
-    let written: I64 = file_w.write_bytes(buf)
+    let written: I64 = file_w.write_bytes(ref buf)
     file_w.close()
 
     assert_eq(written, 5)
@@ -46,7 +46,7 @@ func test_read_all_bytes_write_all_bytes() -> Outcome[Unit, Str] {
     data.write_byte(0xCD)
 
     // Write all bytes
-    let ok: Bool = File::write_all_bytes(path, data)
+    let ok: Bool = File::write_all_bytes(path, ref data)
     assert_true(ok)
 
     // Read all bytes
@@ -71,7 +71,7 @@ func test_read_bytes_partial() -> Outcome[Unit, Str] {
         data.write_byte(i as I32)
         i = i + 1
     }
-    File::write_all_bytes(path, data)
+    File::write_all_bytes(path, ref data)
 
     // Read only 3 bytes
     let file_r: File = File::open_read(path)
