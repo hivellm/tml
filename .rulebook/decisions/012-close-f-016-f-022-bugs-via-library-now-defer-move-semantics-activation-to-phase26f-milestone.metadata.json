@@ -1,0 +1,11 @@
+{
+  "id": 12,
+  "slug": "close-f-016-f-022-bugs-via-library-now-defer-move-semantics-activation-to-phase26f-milestone",
+  "title": "Close F-016/F-022 bugs via library now; defer move-semantics activation to phase26f milestone",
+  "status": "proposed",
+  "date": "2026-07-16",
+  "relatedTasks": [
+    "phase26b_memmodel-implementation"
+  ],
+  "supersededBy": null
+}
