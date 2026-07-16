@@ -31,6 +31,12 @@ tml_partial_move_enum: ./build/debug/cache/tests/compiler_determinism_partial_mo
 tml_f013_refcount_cycles: ./build/debug/cache/tests/compiler_determinism_f013_refcount_cycles.exe --run-all
 tml_churn_uzdb_shape: ./build/debug/cache/tests/compiler_determinism_churn_uzdb_shape.exe --run-all
 
+# phase26b step 3 canaries (F-016 read-out soundness + F-022 destroy releases)
+tml_f016_list_iter: ./build/debug/cache/tests/compiler_determinism_f016_list_iter.exe --run-all
+tml_f016_retain: ./build/debug/cache/tests/compiler_determinism_f016_retain.exe --run-all
+tml_f016_arc_makemut: ./build/debug/cache/tests/compiler_determinism_f016_arc_makemut.exe --run-all
+tml_f022_destroy_releases: ./build/debug/cache/tests/compiler_determinism_f022_destroy_releases.exe --run-all
+
 # ============================================================================
 # LEGACY (secondary) — cc_driver repros from the phase24 era
 # ============================================================================

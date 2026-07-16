@@ -15,13 +15,17 @@
 # --- K001 / K002 invalid-IR class (owner: phase27a) ---
 std/collections/btreeset        | K001 | phase27a_codegen-k001-root-cause
 std/collections/btreemap        | K001 | phase27a_codegen-k001-root-cause
-std/collections/arraylist       | K001 | phase27a_codegen-k001-root-cause
+std/collections/arraylist       | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: ir:773 '{i64,i64}' vs i32)
+std/sync/once_lock_get_or_init  | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: ir:1027 'void type only allowed for function results')
+std/sync/sync_barrier.consolidated | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...IsoDualMutexInner4dropE)
+std/sync/sync_isolation         | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...DualMutexInner4dropE — the mono-queueing class, specimen family #4)
 compiler/hir_types              | K001 | phase27a_codegen-k001-root-cause
 compiler/infer_differential     | K001 | phase27a_codegen-k001-root-cause
 compiler/c_preprocessor         | K001 | phase27a_codegen-k001-root-cause
 compiler/c_frontend             | K001 | phase27a_codegen-k001-root-cause (Maybe[Heap[CBlockItem]])
 
 # --- X002 timeout / X003 crash class (owner: phase27b) ---
+std/sync/mutex                  | X002 runtime timeout | phase27b_codegen-x002-x003-hangs (verified identical at HEAD 2026-07-16)
 compiler/builtins_imports       | X002 | phase27b_codegen-x002-x003-hangs
 compiler/slice_split_pred       | X002 | phase27b_codegen-x002-x003-hangs
 compiler/let_patterns           | X002 | phase27b_codegen-x002-x003-hangs

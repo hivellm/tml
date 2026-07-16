@@ -19,6 +19,12 @@
 > 4. `@derive(Duplicate)` glue referencing nested `Shared[I64]::duplicate`
 >    without queueing its instantiation → same undefined-value K001 even in a
 >    single-file module (when an explicit `.duplicate()` loop coexists).
+> 5. (2026-07-16, phase26b step 3) `HashMap[I64, Shared[I64]]` — a smart
+>    pointer as the map VALUE type directly — K001 `'%tN' defined with type
+>    'ptr' but expected '%struct.HashMap__I64__Shared__I64'`. The
+>    struct-wrapped shape (`HashMap[I64, ValRow{payload: Shared[I64]}]`)
+>    compiles fine; see the workaround note in
+>    `compiler/tests/determinism/f022_destroy_releases.test.tml`.
 
 ## 1. Implementation
 - [ ] 1.1 Root-cause `std/collections` K001 (btreeset / btreemap / arraylist) — these are the flagship container suites; trace the exact verifier error to the emitting code path (MIR vs legacy)

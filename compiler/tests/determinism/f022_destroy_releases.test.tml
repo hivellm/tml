@@ -1,0 +1,56 @@
+// Determinism corpus (phase26b step 3) — F-022 destroy-releases canary.
+//
+// Before the fix, `List::destroy`/`HashMap::destroy` only freed the backing
+// buffers — every element handle (Shared/Heap/Str/...) LEAKED on container
+// drop. After the fix, destroy takes ownership of each live element/entry so
+// its drop releases the handles exactly once.
+//
+// Detector: an independent handle to the payload; its strong_count must
+// return to 1 after the container (holding N duplicates) is destroyed.
+// `destroy()` is called explicitly (it is public and idempotent — the
+// scope-end drop then no-ops on the nulled handle), which keeps the assert
+// AFTER the release without needing helper-function scopes.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+use std::collections::hashmap::HashMap
+
+@test
+func test_f022_list_destroy_releases_elements() -> I32 {
+    let payload = Shared::new(3 as I64)
+    var l: List[Shared[I64]] = List::new(4)
+    for i in 0 to 8 {
+        l.push(payload.duplicate())
+    }
+    assert_eq(payload.strong_count(), 9 as I64, "8 dups + original before destroy")
+
+    l.destroy()
+
+    assert_eq(payload.strong_count(), 1 as I64,
+              "list destroy must release element handles (F-022)")
+    return 0
+}
+
+// Wrapper struct for the map value: `HashMap[I64, Shared[I64]]` directly
+// trips a PRE-EXISTING monomorphization K001 ("%tN ptr vs
+// %struct.HashMap__I64__Shared__I64") — recorded as specimen #5 in
+// phase27a. The struct-wrapped shape (same as the churn canary) compiles
+// and exercises the same destroy-release path through the entry drop-glue.
+type ValRow {
+    payload: Shared[I64],
+}
+
+@test
+func test_f022_hashmap_destroy_releases_values() -> I32 {
+    let payload = Shared::new(4 as I64)
+    var m: HashMap[I64, ValRow] = HashMap::new(16)
+    for i in 0 to 8 {
+        m.set(i, ValRow { payload: payload.duplicate() })
+    }
+
+    m.destroy()
+
+    assert_eq(payload.strong_count(), 1 as I64,
+              "hashmap destroy must release stored value handles (F-022)")
+    return 0
+}

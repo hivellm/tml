@@ -392,12 +392,29 @@ impl[K, V] HashMap[K, V] {
         }
         let hdr: I64 = this.handle as I64
 
-        // Free entries array
         let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
+
+        // F-022 (phase26b step 3): release each live entry's key/value handles
+        // before freeing — previously only the arrays were freed, leaking every
+        // stored handle. Occupied slots have ctrl byte >= 0 (empty/tombstone
+        // are negative). Taking ownership into locals runs their drops exactly
+        // once; no-op for primitive K/V.
+        for i in 0 to cur_cap {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + i) as *I8) }
+            if c >= (0 as I8) {
+                let base: I64 = entries_addr + i * esz
+                let _key: K = lowlevel { ptr_read[K](base as *K) }
+                let _val: V = lowlevel { ptr_read[V]((base + 8) as *V) }
+            }
+        }
+
+        // Free entries array
         lowlevel { mem_free(entries_addr as *Unit) }
 
         // Free ctrl array
-        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
         lowlevel { mem_free(ctrl_addr as *Unit) }
 
         // Free header
@@ -633,7 +650,11 @@ impl[K, V] HashMapIter[K, V] {
         let esz: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 32) as *I64) }
 
         let val_ptr: *V = (entries_addr + cur_idx * esz + 8) as *V
-        return lowlevel { ptr_read[V](val_ptr) }
+        // ptr_read_clone (not ptr_read): the map keeps owning the value — a
+        // bitwise read would alias nested handles and double-free on the
+        // returned value's drop (F-016, phase26b step 3; `get`/`get_opt` were
+        // already migrated in phase24n, the iterator had been missed).
+        return lowlevel { ptr_read_clone[V](val_ptr) }
     }
 
     /// Destroys the iterator and frees all associated memory.

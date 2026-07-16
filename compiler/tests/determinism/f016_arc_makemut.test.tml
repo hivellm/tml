@@ -1,0 +1,38 @@
+// Determinism corpus (phase26b step 3) — F-016 Arc::make_mut CoW canary.
+//
+// Before the fix, the clone-on-write branch bitwise-copied the data into the
+// new ArcInner: old and new allocations ALIASED nested handles (no refcount
+// bump) → double-free when both dropped. After the fix, CoW deep-clones via
+// T::duplicate, so the nested payload gains a fresh refcount.
+
+use test::{assert, assert_eq}
+use std::sync::Arc
+use core::alloc::shared::Shared
+
+@derive(Duplicate)
+type RowDup {
+    id: I64,
+    payload: Shared[I64],
+}
+
+@test
+func test_make_mut_cow_deep_clones_nested_handles() -> I32 {
+    let payload = Shared::new(9 as I64)
+    var a = Arc::new(RowDup { id: 1, payload: payload.duplicate() })
+    assert_eq(payload.strong_count(), 2 as I64, "original + a's row")
+
+    // Second Arc owner forces the CoW branch in make_mut.
+    let b = a.duplicate()
+
+    // CoW path (strong > 1): must deep-clone the data into the new inner.
+    // (No ref a/ref b asserts around this call — the returned mut ref keeps
+    // `a` mutably borrowed, and earlier shared borrows would conflict.)
+    let _mr = Arc::make_mut(mut ref a)
+
+    // Deep clone ⇒ the nested payload now has a THIRD refcount (original +
+    // b's row + a's cloned row). A bitwise CoW would have left it at 2 with
+    // two aliasing owners → double-free on drop.
+    assert_eq(payload.strong_count(), 3 as I64,
+              "CoW must duplicate nested handles (F-016)")
+    return 0
+}

@@ -1,0 +1,42 @@
+// Determinism corpus (phase26b step 3) — F-016 iterator-yield canary.
+//
+// Before the fix, `ListIter::next` yielded a BITWISE alias of each element:
+// the list kept owning the handles, and every yielded value's drop
+// decremented a refcount the list still relied on — iterating a
+// List[Shared[...]] bled its refcounts (silent UAF). After the fix the
+// iterator yields balanced clones (ptr_read_clone).
+//
+// NOTE: the loop deliberately does not call methods on `x` — the yielded
+// value's DROP at each iteration end is what exercises the bug; the
+// strong_count assert after the loop is the detector.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+
+@test
+func test_list_iter_yields_do_not_bleed_refcounts() -> I32 {
+    let payload = Shared::new(7 as I64)
+    var items: List[Shared[I64]] = List::new(4)
+    for i in 0 to 16 {
+        items.push(payload.duplicate())
+    }
+    assert_eq(payload.strong_count(), 17 as I64, "16 dups + original before iteration")
+
+    var count: I64 = 0
+    for x in items {
+        count = count + 1
+    }
+    assert_eq(count, 16 as I64, "iterator must visit every element")
+
+    assert_eq(payload.strong_count(), 17 as I64,
+              "iteration must not decrement refcounts the list still owns (F-016)")
+
+    // Data integrity through the (already-balanced) indexed read.
+    var total: I64 = 0
+    for i in 0 to 16 {
+        let item = items.get(i)
+        total = total + item.get()
+    }
+    assert_eq(total, 112 as I64, "16 * 7")
+    return 0
+}

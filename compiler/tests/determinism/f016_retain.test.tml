@@ -1,0 +1,44 @@
+// Determinism corpus (phase26b step 3) — F-016 retain canary.
+//
+// Before the fix, `List::retain` bitwise-copied EVERY slot into a local whose
+// drop at loop end decremented handles the buffer still owned — keeping an
+// element bled its refcount (removal was the only accidentally-correct case).
+// After the fix: the predicate borrows the slot, kept elements move byte-wise,
+// and only removed elements are read into an owning (dropping) local.
+
+use test::{assert_eq}
+use core::alloc::shared::Shared
+
+@test
+func test_retain_keep_all_does_not_bleed() -> I32 {
+    let payload = Shared::new(5 as I64)
+    var items: List[Shared[I64]] = List::new(4)
+    for i in 0 to 10 {
+        items.push(payload.duplicate())
+    }
+    assert_eq(payload.strong_count(), 11 as I64, "10 dups + original")
+
+    items.retain(do(x: ref Shared[I64]) true)
+
+    assert_eq(items.len(), 10 as I64, "keep-all preserves length")
+    assert_eq(payload.strong_count(), 11 as I64,
+              "keeping elements must not decrement their refcounts (F-016)")
+    return 0
+}
+
+@test
+func test_retain_remove_all_releases_exactly_once() -> I32 {
+    let payload = Shared::new(5 as I64)
+    var items: List[Shared[I64]] = List::new(4)
+    for i in 0 to 10 {
+        items.push(payload.duplicate())
+    }
+    assert_eq(payload.strong_count(), 11 as I64, "10 dups + original")
+
+    items.retain(do(x: ref Shared[I64]) false)
+
+    assert_eq(items.len(), 0 as I64, "remove-all empties the list")
+    assert_eq(payload.strong_count(), 1 as I64,
+              "removed elements must be released exactly once")
+    return 0
+}

@@ -346,7 +346,11 @@ impl[T] Iterator for ListIter[T] {
         if this.ptr == this.end {
             return Nothing
         }
-        let item: T = lowlevel { ptr_read[T](this.ptr as *T) }
+        // ptr_read_clone (not ptr_read): the iterator borrows the list, which
+        // keeps owning the elements — a bitwise read would alias nested
+        // refcounted handles and double-free on the yielded value's drop
+        // (F-016, phase26b step 3). Identity for primitive T.
+        let item: T = lowlevel { ptr_read_clone[T](this.ptr as *T) }
         this.ptr = lowlevel { ptr_offset(this.ptr, this.stride) }
         return Just(item)
     }
@@ -530,7 +534,9 @@ impl[T] Iterator for HashSetIter[T] {
         let hdr: I64 = this.list_handle as I64
         let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
-        let item: T = lowlevel { ptr_read[T](elem_ptr) }
+        // ptr_read_clone: the set keeps owning the element — a bitwise read
+        // would alias nested handles and double-free (F-016, phase26b step 3).
+        let item: T = lowlevel { ptr_read_clone[T](elem_ptr) }
         this.index = this.index + 1
         return Just(item)
     }

@@ -151,38 +151,29 @@ impl[T] Sync[T] {
         return Sync::new(T::default())
     }
 
-    /// Returns a bitwise copy of the inner value.
+    /// Returns a copy of the inner value.
     ///
-    /// ## Aliasing hazard for nested Shared / Sync / Heap fields
+    /// Reads through `ptr_read_clone`, which auto-emits `T::duplicate()` when
+    /// `T` contains nested refcounted handles (`Sync` / `Shared` / `Heap` /
+    /// `Str` …) so the returned value carries fresh refcounts — the bitwise
+    /// aliasing double-free (F-016/F-018, fixed phase26b step 3) cannot occur.
+    /// For primitive `T` it is a plain load (zero cost).
     ///
-    /// `get` is a **bitwise copy** of `(*this.ptr).value`. If `T` contains
-    /// nested `Sync[U]`, `Shared[U]`, `Heap[U]`, or other refcounted handles
-    /// as fields, those handles are aliased into the returned value WITHOUT
-    /// bumping their refcounts. When the returned value drops, its drop-glue
-    /// decrements those nested refcounts — potentially freeing storage that
-    /// the original `Sync`'s allocation still expects to own. This is the
-    /// `Sync.get` aliasing class of bug (F-018 / phase24k diagnosis).
-    ///
-    /// **Use `get` only when**:
-    /// - `T` is a primitive (`I32`, `Bool`, `Ptr`, etc.), OR
-    /// - `T` is a flat struct with NO nested refcounted fields, OR
-    /// - The returned value is consumed immediately and never dropped.
-    ///
-    /// **For all other cases**, prefer `get_clone(this) -> T where T:
-    /// Duplicate` which deep-clones via `T::duplicate()` and bumps every
-    /// nested refcount, or `get_ref(this) -> ref T` to borrow without copying.
+    /// For a zero-copy read, prefer `get_ref(this) -> ref T`.
     ///
     /// ## Examples
     ///
     /// ```tml
     /// let sync = Sync::new(42)
-    /// assert_eq(sync.get(), 42)  // safe — I32 has no nested handles
+    /// assert_eq(sync.get(), 42)
     /// ```
     pub func get(this) -> T {
         if this.ptr == null {
             panic("Sync::get: null pointer")
         }
-        return (*this.ptr).value
+        // `value` is field 0 of SyncInner[T], so this.ptr doubles as *T.
+        let val_ptr: *T = this.ptr as *T
+        return lowlevel { ptr_read_clone[T](val_ptr) }
     }
 
     /// Returns a deep clone of the inner value via `T::duplicate()`.

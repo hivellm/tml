@@ -312,7 +312,9 @@ impl[T] HashSetIter[T] {
         let hdr: I64 = this.list_handle as I64
         let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
-        lowlevel { ptr_read[T](elem_ptr) }
+        // ptr_read_clone: the set keeps owning the element — a bitwise read
+        // would alias nested handles and double-free (F-016, phase26b step 3).
+        lowlevel { ptr_read_clone[T](elem_ptr) }
     }
 
     /// Advances the iterator to the next element.
@@ -331,7 +333,8 @@ impl[T] HashSetIter[T] {
         let hdr: I64 = this.list_handle as I64
         let data_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
         let elem_ptr: *T = (data_addr + this.index * this.stride) as *T
-        let item: T = lowlevel { ptr_read[T](elem_ptr) }
+        // ptr_read_clone: see `current` — F-016, phase26b step 3.
+        let item: T = lowlevel { ptr_read_clone[T](elem_ptr) }
         this.index = this.index + 1
         return Just(item)
     }

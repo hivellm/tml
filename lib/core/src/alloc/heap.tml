@@ -114,7 +114,11 @@ impl[T] Heap[T] {
         if this.ptr == null {
             panic("Heap::get: null pointer")
         }
-        return lowlevel { *this.ptr }
+        // ptr_read_clone (not a bitwise deref): the box keeps owning the
+        // value — a bitwise copy would alias nested refcounted handles and
+        // double-free on the returned value's drop (F-016, phase26b step 3).
+        // Identity for primitive T.
+        return lowlevel { ptr_read_clone[T](this.ptr) }
     }
 
     /// Replaces the value in the box.
@@ -280,7 +284,11 @@ impl[T] Duplicate for Heap[T] where T: Duplicate {
     /// assert_eq(copy.get(), 42)
     /// ```
     pub func duplicate(this) -> Heap[T] {
-        return Heap::new(this.get().duplicate())
+        // `get` is already a balanced clone (ptr_read_clone, phase26b step 3),
+        // so the previous `.duplicate()` here would clone twice — and before
+        // the get fix, the bitwise temp it operated on double-freed nested
+        // handles (F-016 site #9).
+        return Heap::new(this.get())
     }
 }
 

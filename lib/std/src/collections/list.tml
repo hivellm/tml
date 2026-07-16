@@ -239,9 +239,22 @@ impl[T] List[T] {
         }
         let hdr: I64 = this.handle as I64
 
-        // Free data buffer
+        // Read layout
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+        let stride: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+
+        // F-022 (phase26b step 3): release each live element's handles before
+        // freeing the buffer — previously only the buffer was freed, so every
+        // element handle (Shared/Heap/Str/...) leaked. Taking ownership into a
+        // local runs its drop exactly once; no-op for primitive T.
+        for i in 0 to cur_len {
+            let elem_ptr: *T = (data_addr + i * stride) as *T
+            let _elem: T = lowlevel { ptr_read[T](elem_ptr) }
+        }
+
+        // Free data buffer
         lowlevel { mem_free(data_addr as *Unit) }
 
         // Free header
@@ -275,18 +288,33 @@ impl[T] List[T] {
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
 
-        // Two-pointer compaction: write_idx tracks where to write next
+        // Two-pointer compaction: write_idx tracks where to write next.
+        //
+        // F-016 (phase26b step 3): the old body bitwise-copied every slot into
+        // a local (`let elem: T = ptr_read`), whose drop at loop end aliased
+        // and double-freed the handles of KEPT elements. Now: the predicate
+        // borrows the slot (no copy, no drop-glue); kept elements that shift
+        // are moved byte-wise with no typed local; only REMOVED elements are
+        // read into an owning local — whose drop, exactly once, releases them
+        // (previously removal was the only accidentally-correct case).
         var write_idx: I64 = 0
         for read_idx in 0 to cur_len {
             let elem_ptr: *T = (data_addr + read_idx * stride) as *T
-            let elem: T = lowlevel { ptr_read[T](elem_ptr) }
-            if pred(ref elem) {
-                // Keep this element — write it at write_idx
+            let slot_ref: ref T = lowlevel { ref (*elem_ptr) }
+            if pred(slot_ref) {
+                // Keep this element — move it byte-wise to write_idx (no
+                // typed local, so no spurious drop-glue; the stale source
+                // slot ends up beyond the compacted length and is never
+                // dropped because its bits were moved).
                 if write_idx != read_idx {
-                    let dst_ptr: *T = (data_addr + write_idx * stride) as *T
-                    lowlevel { ptr_write[T](dst_ptr, elem) }
+                    let dst_ptr: *Unit = (data_addr + write_idx * stride) as *Unit
+                    lowlevel { mem_copy(dst_ptr, elem_ptr as *Unit, stride) }
                 }
                 write_idx = write_idx + 1
+            } else {
+                // Removed element: take ownership so its drop releases the
+                // handles (otherwise removal would leak them).
+                let _removed: T = lowlevel { ptr_read[T](elem_ptr) }
             }
         }
 

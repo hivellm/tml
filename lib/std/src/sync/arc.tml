@@ -371,7 +371,7 @@ impl[T] Arc[T] {
     /// *Arc::make_mut(mut ref data) = 42
     /// assert_eq(*data, 42)
     /// ```
-    pub func make_mut(this: mut ref Arc[T]) -> Maybe[mut ref T] {
+    pub func make_mut(this: mut ref Arc[T]) -> Maybe[mut ref T] where T: Duplicate {
         lowlevel {
             let strong: U64 = (*this.ptr).strong.load(Ordering::Acquire)
 
@@ -380,9 +380,12 @@ impl[T] Arc[T] {
                 return Just(ref (*this.ptr).data)
             }
 
-            // Multiple owners — clone the data into a new Arc
-            // First, read the current data
-            let old_data: T = (*this.ptr).data
+            // Multiple owners — clone-on-write. MUST be a deep clone
+            // (T::duplicate): a bitwise read would alias nested refcounted
+            // handles between the old and new allocations → double-free
+            // (F-016 site #10, phase26b step 3). Same sound shape as
+            // Shared::get_clone (duplicate invoked directly on the storage).
+            let old_data: T = (*this.ptr).data.duplicate()
 
             // Decrement strong count on old allocation (we're giving it up)
             (*this.ptr).strong.fetch_sub(1, Ordering::Release)
