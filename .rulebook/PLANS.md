@@ -48,16 +48,25 @@ User decision after the state-of-language analysis
    "unify onto the already-tested MIR path" would be an ~8,000-LOC MIR codegen
    project, not routing. So: **fix the AST-legacy path directly** (what everyone
    runs); defer MIR unification to phases 30-33 (frozen).
-7. **phase26b IN PROGRESS (B1-on-AST, tasks.md rewritten)**: Step 1 DONE (v0.3.55
-   F-013 fix). NEXT: **Step 2** — surface the borrow checker's OwnershipState/
-   init-state facts (checker.hpp:799-816, discarded at query_core.cpp:575-593)
-   into the AST codegen, replacing name-based consumed_vars_ with per-place init
-   tracking, extended below lowlevel. Step 3 = sound read-out (balanced clone/
-   move, destroy runs per-element Drop, REMOVE drop.cpp:460-471 leak special-case).
-   Step 4 = drop-flag elaboration for control-flow-dependent drops.
-8. **phase26d IN PROGRESS (parallel, library-level)**: F-017/018/023 correctness
-   fixes (Arc/AnyValue forget-source, Sync get_ref/get_clone, try_unwrap weak-aware)
-   dispatched to an agent; ref-migration F-020 is a later wave.
+7. **phase26b PROGRESS (B1-on-AST)**: Step 1 DONE (v0.3.55 F-013). Step 2.1-2.3
+   DONE (v0.3.57 — borrow facts exported, def-span join proven 100%; DISCOVERY:
+   move_value is DEAD CODE — checker never tracked moves, root of F-015).
+   **User decision #12 (2026-07-16)**: close concrete bugs first; Step 2.4 +
+   3.4 + Step 4 deferred to phase26f milestone. Step 3 DONE (v0.3.58 — 13
+   F-016 read-out sites → balanced clones/borrow-pred retain, Arc::make_mut
+   deep-clone, F-022 destroy releases elements; 4 new corpus canaries).
+8. **phase26d COMPLETE + ARCHIVED (2026-07-16)**: wave 1 (v0.3.56 —
+   F-017/018/023) + wave 2 (v0.3.59 — F-020 ref migration, ~120 edits:
+   BigInt/str::join/extend_from/File/events/HTTP-2/controller; consuming
+   constructors kept by-value; console::table reverted → pre-existing K001).
+9. **ALL CONCRETE MEMORY BUGS CLOSED** (F-013/016/017/018/020/022/023,
+   v0.3.55-59). Remaining: F-015 moves (phase26f, IN PROGRESS — agent on
+   items 1.1/1.2: activate move_value behind TML_STRICT_MOVES, measure blast
+   radius), F-021 borrow accessors (26e, after 26f), band-aid revert (26c).
+10. **10 pre-existing failures newly verified-at-HEAD + catalogued** in
+   scripts/known-failures.txt during v0.3.58/59 verification (9 K001 + 1
+   X002) — direct input for phase27a/27b root-causing (6 fresh K001
+   specimens now listed in phase27a tasks.md).
 
 Historical context below describes the pre-pivot phase24 grind.
 
