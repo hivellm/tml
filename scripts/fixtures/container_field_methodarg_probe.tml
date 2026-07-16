@@ -1,0 +1,40 @@
+// Harness fixture (phase26f 1.4 risk (a)): the by-value METHOD-arg copy shape.
+//
+// The borrow checker's method-arg SAFE-FALLBACK (phase26f 1.2b) does NOT set
+// `moved_out` for bare-identifier method args (param-kind is unresolvable without
+// method resolution). So a container-bearing struct passed by value to a METHOD
+// is an UNTRACKED copy from the fact side — it relies on the syntactic
+// `consumed_vars_` set (or the callee not dropping its param) to avoid a
+// double-free once the container field-drop special-case is removed.
+//
+// This is the adversarial probe: run under TML_ALLOC_POISON + TML_ALLOC_QUARANTINE
+// so any double-free of the inner List buffer becomes a detectable crash (nonzero
+// exit). Correct = no double-free, no leak → exit 0.
+use std::collections::list::List
+use std::os
+
+type Box {
+    items: List[I64],
+}
+
+type Consumer {
+    tag: I64,
+}
+
+impl Consumer {
+    func eat(this, b: Box) -> I64 {
+        b.items.len() // `b`'s List field would drop at method exit if removal active
+    }
+}
+
+func main() {
+    var l = List[I64]::new(4 as I64)
+    l.push(1 as I64)
+    l.push(2 as I64)
+    let b = Box { items: l } // `l` moved into field
+    let c = Consumer { tag: 0 }
+    let n = c.eat(b) // `b` passed by value to a METHOD arg (safe-fallback: not moved_out)
+    if n != 2 {
+        os::process_exit(1)
+    }
+}

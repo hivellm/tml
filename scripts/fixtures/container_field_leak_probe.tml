@@ -1,0 +1,35 @@
+// Harness fixture (phase26f 1.4): the container field-drop LEAK.
+//
+// A struct with a `List[I64]` field is held in a LOCAL `let` binding and dropped
+// at scope exit. Before removing the `drop.cpp` container leak special-case,
+// field-level drops SKIPPED List/Heap/HashMap/Buffer/Binary* fields (because
+// pre-move-semantics struct copies double-freed) — so the inner List heap buffer
+// was NEVER freed = a leak. The struct's `l` source is moved into the field
+// (struct-literal init → tracked move → source drop suppressed by phase26f 1.3),
+// so the local `b` is the single owner and its container field can be dropped
+// exactly once when `b` leaves scope.
+//
+// Repeated-alloc loop: with the skip present the inner List buffer leaks once per
+// iteration (the `tml run` debug leak reporter flags the residual); with the skip
+// removed every buffer is freed at loop-body scope exit → zero residual → exit 0.
+use std::collections::list::List
+use std::os
+
+type Box {
+    items: List[I64],
+}
+
+func main() {
+    var total: I64 = 0
+    for i in 0 to 500 {
+        var l = List[I64]::new(4 as I64)
+        l.push(i)
+        l.push(i + 1 as I64)
+        let b = Box { items: l } // `l` moved into field; `b` is a local owner
+        total = total + b.items.len()
+        // loop-body scope exit: `b` drops → its List field must be freed once.
+    }
+    if total != 1000 {
+        os::process_exit(1)
+    }
+}

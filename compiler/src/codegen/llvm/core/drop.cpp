@@ -501,18 +501,21 @@ void LLVMIRGen::emit_field_level_drops(const DropInfo& info) {
             }
         }
 
-        // Skip field-level drops for heap-owning container types.
-        // TML doesn't have move semantics, so these types are copied (not moved)
-        // when assigned to another variable. Auto-dropping the field frees the
-        // internal heap allocation while the copy still references it →
-        // use-after-free / heap corruption.
-        if (field_has_drop) {
-            std::string base = field_base_type.empty() ? field_type_name : field_base_type;
-            if (base == "Heap" || base == "List" || base == "HashMap" || base == "Buffer" ||
-                base == "BinaryWriter" || base == "BinaryReader") {
-                continue;
-            }
-        }
+        // NOTE (phase26f 1.4): the container field-drop leak special-case that
+        // used to SKIP field drops for Heap/List/HashMap/Buffer/BinaryWriter/
+        // BinaryReader fields is REMOVED. It existed because, pre-move-semantics,
+        // a struct assigned to another variable was bitwise-copied (not moved),
+        // so dropping a container field freed a heap buffer still aliased by the
+        // copy = double-free. With fact-driven drop suppression (phase26f 1.3),
+        // a struct moved via a tracked site (let-init, by-value call arg, struct
+        // literal init, return, `..base`) has its SOURCE drop suppressed, so the
+        // surviving copy's field drop is the ONLY one — dropping the container
+        // field is now sound and closes the F-022-style leak. Remaining untracked
+        // copy shapes are covered: container read-outs/iterator yields are
+        // balanced clones (phase26b Step 3), raw `ptr_read` in lib only yields
+        // primitives, and by-value method args are covered by the syntactic
+        // `consumed_vars_` set (the fact side's method-arg safe-fallback blind
+        // spot, phase26f 1.2b/1.3 union).
         bool field_needs_recursive = false;
         if (!field_has_drop) {
             field_needs_recursive = env_.type_needs_drop(field_type_name);

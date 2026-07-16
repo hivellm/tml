@@ -44,6 +44,16 @@ tml_f016_retain: ./build/debug/cache/tests/compiler_determinism_f016_retain.exe 
 tml_f016_arc_makemut: ./build/debug/cache/tests/compiler_determinism_f016_arc_makemut.exe --run-all
 tml_f022_destroy_releases: ./build/debug/cache/tests/compiler_determinism_f022_destroy_releases.exe --run-all
 
+# phase26f 1.4 canary (F-022 container field-drop): removing the drop.cpp
+# container leak special-case now drops container struct fields. This is the
+# DOUBLE-FREE direction — a container-bearing struct passed by value to a METHOD
+# arg (the fact-side safe-fallback blind spot) must NOT double-free the inner
+# List buffer once the field drop fires. Under the gate's poison+quarantine a
+# double-free becomes a crash (nonzero exit); correct = exit 0. (The LEAK
+# direction is verified out-of-band via scripts/fixtures/container_field_leak_probe.tml,
+# whose residual is only observable through the debug leak reporter, not an exit code.)
+tml_container_field_methodarg: ./build/debug/bin/tml.exe run scripts/fixtures/container_field_methodarg_probe.tml
+
 # ============================================================================
 # LEGACY (secondary) — cc_driver repros from the phase24 era
 # ============================================================================
