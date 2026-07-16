@@ -310,7 +310,7 @@ impl H2Frame {
 ///   - Bytes 9+: payload
 ///
 /// Parameters are passed individually to avoid struct-by-value codegen issues.
-pub func h2_encode_frame_raw(frame_type: I32, flags: I32, stream_id: I64, payload: Buffer) -> Buffer {
+pub func h2_encode_frame_raw(frame_type: I32, flags: I32, stream_id: I64, payload: ref Buffer) -> Buffer {
     let payload_len: I64 = payload.len()
     let total: I64 = 9 + payload_len
     let buf = Buffer::new(total)
@@ -340,14 +340,14 @@ pub func h2_encode_frame_raw(frame_type: I32, flags: I32, stream_id: I64, payloa
 
 /// Convenience wrapper: encode an H2Frame using its method.
 pub func h2_encode_frame(frame: H2Frame) -> Buffer {
-    h2_encode_frame_raw(frame.frame_type.to_u8(), frame.flags, frame.stream_id, frame.payload)
+    h2_encode_frame_raw(frame.frame_type.to_u8(), frame.flags, frame.stream_id, ref frame.payload)
 }
 
 impl H2Frame {
     /// Encode this frame into a Buffer (9-byte header + payload).
     /// This method avoids struct-by-value issues by using `this` (pointer receiver).
     pub func encode(this) -> Buffer {
-        h2_encode_frame_raw(this.frame_type.to_u8(), this.flags, this.stream_id, this.payload)
+        h2_encode_frame_raw(this.frame_type.to_u8(), this.flags, this.stream_id, ref this.payload)
     }
 }
 
@@ -530,7 +530,7 @@ impl H2SettingsResult {
 /// Unknown setting IDs are included as-is (RFC 7540 Section 6.5.2:
 /// "An endpoint that receives a SETTINGS frame with any unknown or
 /// unsupported identifier MUST ignore that setting.")
-pub func h2_decode_settings(payload: Buffer) -> Outcome[H2SettingsResult, H2Error] {
+pub func h2_decode_settings(payload: ref Buffer) -> Outcome[H2SettingsResult, H2Error] {
     let plen: I64 = payload.len()
     if plen % 6 != 0 {
         return Err(H2Error::settings_invalid_length())

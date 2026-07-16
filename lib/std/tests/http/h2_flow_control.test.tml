@@ -17,7 +17,7 @@ func test_connection_recv_window_decrements() -> Outcome[Unit, Str] {
     var h: List[HpackEntry] = List::new(4)
     h.push(HpackEntry::new(":method", "POST"))
     let hb = hpack_encode_headers(mut ref ctx, h)
-    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, hb)!
+    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, ref hb)!
 
     // Send 100 bytes of DATA
     let data = Buffer::new(100)
@@ -26,7 +26,7 @@ func test_connection_recv_window_decrements() -> Outcome[Unit, Str] {
         data.write_byte(0x41)
         i = i + 1
     }
-    let ev = conn.process_frame(0, 0, 1, data)!
+    let ev = conn.process_frame(0, 0, 1, ref data)!
     assert_eq(ev.event_type, H2_CONN_EVENT_DATA)
     assert_eq(ev.data_len, 100)
     assert_eq(conn.get_recv_window(), 65535 - 100)
@@ -38,7 +38,7 @@ func test_connection_send_window_update() -> Outcome[Unit, Str] {
     var conn = H2Connection::new()
     let payload = Buffer::new(4)
     payload.write_u32_be(100000, 0)
-    conn.process_frame(8, 0, 0, payload)!
+    conn.process_frame(8, 0, 0, ref payload)!
     assert_eq(conn.get_send_window(), 65535 + 100000)
     Ok(())
 }
@@ -48,7 +48,7 @@ func test_window_update_zero_error() -> Outcome[Unit, Str] {
     var conn = H2Connection::new()
     let payload = Buffer::new(4)
     payload.write_u32_be(0, 0)
-    let result = conn.process_frame(8, 0, 0, payload)
+    let result = conn.process_frame(8, 0, 0, ref payload)
     assert_true(result.is_err())
     Ok(())
 }

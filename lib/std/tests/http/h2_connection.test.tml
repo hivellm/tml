@@ -39,7 +39,7 @@ func test_settings_encode_decode() -> Outcome[Unit, Str] {
     // 6 settings * 6 bytes = 36 bytes
     assert_eq(encoded.len(), 36)
     // Decode them back
-    let result = h2_decode_settings(encoded)!
+    let result = h2_decode_settings(ref encoded)!
     assert_eq(result.count(), 6)
     // First setting should be HEADER_TABLE_SIZE=4096
     assert_eq(result.get_id(0), 1)

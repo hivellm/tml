@@ -394,13 +394,13 @@ impl H2Connection {
     /// Encode our SETTINGS frame into a Buffer for sending.
     pub func encode_settings(this) -> Buffer {
         let payload = this.local_settings.encode()
-        h2_encode_frame_raw(4, 0, 0, payload)  // type=SETTINGS, no flags, stream 0
+        h2_encode_frame_raw(4, 0, 0, ref payload)  // type=SETTINGS, no flags, stream 0
     }
 
     /// Encode a SETTINGS ACK frame.
     pub func encode_settings_ack(this) -> Buffer {
         let empty = Buffer::new(0)
-        h2_encode_frame_raw(4, H2_FLAG_ACK, 0, empty)  // type=SETTINGS, ACK flag
+        h2_encode_frame_raw(4, H2_FLAG_ACK, 0, ref empty)  // type=SETTINGS, ACK flag
     }
 
     /// Encode a GOAWAY frame.
@@ -409,26 +409,26 @@ impl H2Connection {
         let buf = Buffer::new(8)
         buf.write_u32_be(this.last_client_stream_id & 0x7FFFFFFF, 0)
         buf.write_u32_be(error_code, 4)
-        h2_encode_frame_raw(7, 0, 0, buf)  // type=GOAWAY, stream 0
+        h2_encode_frame_raw(7, 0, 0, ref buf)  // type=GOAWAY, stream 0
     }
 
     /// Encode a WINDOW_UPDATE frame for the given stream (or stream 0 for connection).
     pub func encode_window_update(this, stream_id: I64, increment: I64) -> Buffer {
         let buf = Buffer::new(4)
         buf.write_u32_be(increment & 0x7FFFFFFF, 0)
-        h2_encode_frame_raw(8, 0, stream_id, buf)  // type=WINDOW_UPDATE
+        h2_encode_frame_raw(8, 0, stream_id, ref buf)  // type=WINDOW_UPDATE
     }
 
     /// Encode a PING ACK frame with the given 8 bytes of opaque data.
     pub func encode_ping_ack(this, ping_data: Buffer) -> Buffer {
-        h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ping_data)  // type=PING, ACK flag
+        h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ref ping_data)  // type=PING, ACK flag
     }
 
     /// Encode a RST_STREAM frame.
     pub func encode_rst_stream(this, stream_id: I64, error_code: I64) -> Buffer {
         let buf = Buffer::new(4)
         buf.write_u32_be(error_code, 0)
-        h2_encode_frame_raw(3, 0, stream_id, buf)  // type=RST_STREAM
+        h2_encode_frame_raw(3, 0, stream_id, ref buf)  // type=RST_STREAM
     }
 
     /// Encode a HEADERS response frame for the given stream.
@@ -441,7 +441,7 @@ impl H2Connection {
         if end_stream == 1 {
             flags = flags | H2_FLAG_END_STREAM
         }
-        h2_encode_frame_raw(1, flags, stream_id, header_block)  // type=HEADERS
+        h2_encode_frame_raw(1, flags, stream_id, ref header_block)  // type=HEADERS
     }
 
     /// Encode a DATA frame for the given stream.
@@ -450,7 +450,7 @@ impl H2Connection {
         if end_stream == 1 {
             flags = H2_FLAG_END_STREAM
         }
-        h2_encode_frame_raw(0, flags, stream_id, data)  // type=DATA
+        h2_encode_frame_raw(0, flags, stream_id, ref data)  // type=DATA
     }
 
     // ── Frame processing ───────────────────────────────────────────
@@ -468,7 +468,7 @@ impl H2Connection {
     ///   - H2_CONN_EVENT_DATA: accumulate request body
     ///   - H2_CONN_EVENT_GOAWAY: stop accepting new streams
     ///   etc.
-    pub func process_frame(this, frame_type: I32, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func process_frame(this, frame_type: I32, flags: I32, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         // Connection-level frames (stream_id == 0)
         if stream_id == 0 {
             if frame_type == 4 {
@@ -516,7 +516,7 @@ impl H2Connection {
     // ── Internal handlers ──────────────────────────────────────────
 
     /// Handle a SETTINGS frame (stream 0).
-    pub func handle_settings(this, flags: I32, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_settings(this, flags: I32, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if (flags & H2_FLAG_ACK) != 0 {
             // SETTINGS ACK — peer acknowledged our settings
             return Ok(H2ConnectionEvent::settings_ack())
@@ -559,7 +559,7 @@ impl H2Connection {
     }
 
     /// Handle a PING frame (stream 0).
-    pub func handle_ping(this, flags: I32, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_ping(this, flags: I32, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if payload.len() != 8 {
             return Err(H2Error::protocol_error("PING payload must be 8 bytes"))
         }
@@ -570,12 +570,12 @@ impl H2Connection {
         // Queue a PING ACK in the outbound buffer
         // Use h2_encode_frame_raw directly to avoid H2Frame struct-by-value issues
         let pong = h2_encode_frame_raw(6, H2_FLAG_ACK, 0, payload)  // type=PING, ACK flag
-        h2_conn_append_buf(this.outbound, pong)
+        h2_conn_append_buf(ref this.outbound, ref pong)
         Ok(H2ConnectionEvent::ping())
     }
 
     /// Handle a GOAWAY frame (stream 0).
-    pub func handle_goaway(this, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_goaway(this, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if payload.len() < 8 {
             return Err(H2Error::protocol_error("GOAWAY payload too short"))
         }
@@ -587,7 +587,7 @@ impl H2Connection {
     }
 
     /// Handle a connection-level WINDOW_UPDATE (stream 0).
-    pub func handle_connection_window_update(this, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_connection_window_update(this, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if payload.len() != 4 {
             return Err(H2Error::protocol_error("WINDOW_UPDATE payload must be 4 bytes"))
         }
@@ -603,7 +603,7 @@ impl H2Connection {
     }
 
     /// Handle a HEADERS frame on a stream.
-    pub func handle_headers(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_headers(this, flags: I32, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         // Look up or create the stream
         var stream_ptr: I64 = this.streams.find(stream_id)
         if stream_ptr == 0 {
@@ -639,7 +639,7 @@ impl H2Connection {
     }
 
     /// Handle a CONTINUATION frame on a stream.
-    pub func handle_continuation(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_continuation(this, flags: I32, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         let stream_ptr: I64 = this.streams.find(stream_id)
         if stream_ptr == 0 {
             return Err(H2Error::protocol_error("CONTINUATION on unknown stream"))
@@ -657,7 +657,7 @@ impl H2Connection {
     }
 
     /// Handle a DATA frame on a stream.
-    pub func handle_data(this, flags: I32, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_data(this, flags: I32, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         let stream_ptr: I64 = this.streams.find(stream_id)
         if stream_ptr == 0 {
             return Err(H2Error::protocol_error("DATA on unknown stream"))
@@ -680,7 +680,7 @@ impl H2Connection {
     }
 
     /// Handle a RST_STREAM frame on a stream.
-    pub func handle_rst_stream(this, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_rst_stream(this, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if payload.len() != 4 {
             return Err(H2Error::protocol_error("RST_STREAM payload must be 4 bytes"))
         }
@@ -699,7 +699,7 @@ impl H2Connection {
     }
 
     /// Handle a stream-level WINDOW_UPDATE.
-    pub func handle_stream_window_update(this, stream_id: I64, payload: Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
+    pub func handle_stream_window_update(this, stream_id: I64, payload: ref Buffer) -> Outcome[H2ConnectionEvent, H2Error] {
         if payload.len() != 4 {
             return Err(H2Error::protocol_error("WINDOW_UPDATE payload must be 4 bytes"))
         }
@@ -773,7 +773,7 @@ func h2_conn_create_stream(id: I64, send_window: I64, recv_window: I64) -> I64 {
 }
 
 /// Append one buffer's bytes to another.
-func h2_conn_append_buf(dst: Buffer, src: Buffer) {
+func h2_conn_append_buf(dst: ref Buffer, src: ref Buffer) {
     let dst_len: I64 = dst.len()
     let src_len: I64 = src.len()
     src.copy_to(ref dst, dst_len, 0, src_len)

@@ -21,7 +21,7 @@ func test_headers_new_stream() -> Outcome[Unit, Str] {
     let hblock = hpack_encode_headers(mut ref ctx, headers)
 
     let flags: I32 = H2_FLAG_END_HEADERS | H2_FLAG_END_STREAM
-    let ev = conn.process_frame(1, flags, 1, hblock)!
+    let ev = conn.process_frame(1, flags, 1, ref hblock)!
     assert_eq(ev.event_type, H2_CONN_EVENT_REQUEST)
     assert_eq(ev.stream_id, 1)
     assert_eq(ev.end_stream, 1)
@@ -39,7 +39,7 @@ func test_headers_multiple_streams() -> Outcome[Unit, Str] {
     h1.push(HpackEntry::new(":method", "GET"))
     h1.push(HpackEntry::new(":path", "/a"))
     let hb1 = hpack_encode_headers(mut ref ctx1, h1)
-    let ev1 = conn.process_frame(1, H2_FLAG_END_HEADERS | H2_FLAG_END_STREAM, 1, hb1)!
+    let ev1 = conn.process_frame(1, H2_FLAG_END_HEADERS | H2_FLAG_END_STREAM, 1, ref hb1)!
     assert_eq(ev1.event_type, H2_CONN_EVENT_REQUEST)
     assert_eq(ev1.stream_id, 1)
 
@@ -49,7 +49,7 @@ func test_headers_multiple_streams() -> Outcome[Unit, Str] {
     h3.push(HpackEntry::new(":method", "POST"))
     h3.push(HpackEntry::new(":path", "/b"))
     let hb3 = hpack_encode_headers(mut ref ctx3, h3)
-    let ev3 = conn.process_frame(1, H2_FLAG_END_HEADERS, 3, hb3)!
+    let ev3 = conn.process_frame(1, H2_FLAG_END_HEADERS, 3, ref hb3)!
     assert_eq(ev3.event_type, H2_CONN_EVENT_REQUEST)
     assert_eq(ev3.stream_id, 3)
 
@@ -67,7 +67,7 @@ func test_data_frame() -> Outcome[Unit, Str] {
     headers.push(HpackEntry::new(":method", "POST"))
     headers.push(HpackEntry::new(":path", "/upload"))
     let hblock = hpack_encode_headers(mut ref ctx, headers)
-    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, hblock)!
+    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, ref hblock)!
 
     // Send DATA frame (type=0)
     let data = Buffer::new(16)
@@ -76,7 +76,7 @@ func test_data_frame() -> Outcome[Unit, Str] {
         data.write_byte(0x41)
         i = i + 1
     }
-    let ev = conn.process_frame(0, 0, 1, data)!
+    let ev = conn.process_frame(0, 0, 1, ref data)!
     assert_eq(ev.event_type, H2_CONN_EVENT_DATA)
     assert_eq(ev.stream_id, 1)
     assert_eq(ev.data_len, 10)
@@ -93,12 +93,12 @@ func test_rst_stream() -> Outcome[Unit, Str] {
     var headers: List[HpackEntry] = List::new(4)
     headers.push(HpackEntry::new(":method", "GET"))
     let hblock = hpack_encode_headers(mut ref ctx, headers)
-    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, hblock)!
+    conn.process_frame(1, H2_FLAG_END_HEADERS, 1, ref hblock)!
 
     // RST_STREAM (type=3)
     let rst_payload = Buffer::new(4)
     rst_payload.write_u32_be(8, 0)  // CANCEL
-    let ev = conn.process_frame(3, 0, 1, rst_payload)!
+    let ev = conn.process_frame(3, 0, 1, ref rst_payload)!
     assert_eq(ev.event_type, H2_CONN_EVENT_STREAM_RESET)
     assert_eq(ev.stream_id, 1)
     assert_eq(ev.error_code, 8)
@@ -114,14 +114,14 @@ func test_stream_id_must_increase() -> Outcome[Unit, Str] {
     var h: List[HpackEntry] = List::new(4)
     h.push(HpackEntry::new(":method", "GET"))
     let hb = hpack_encode_headers(mut ref ctx, h)
-    conn.process_frame(1, H2_FLAG_END_HEADERS, 3, hb)!
+    conn.process_frame(1, H2_FLAG_END_HEADERS, 3, ref hb)!
 
     // Try stream 1 (lower than 3 — should fail)
     var ctx2 = HpackContext::new(4096)
     var h2: List[HpackEntry] = List::new(4)
     h2.push(HpackEntry::new(":method", "GET"))
     let hb2 = hpack_encode_headers(mut ref ctx2, h2)
-    let result = conn.process_frame(1, H2_FLAG_END_HEADERS, 1, hb2)
+    let result = conn.process_frame(1, H2_FLAG_END_HEADERS, 1, ref hb2)
     assert_true(result.is_err())
     Ok(())
 }

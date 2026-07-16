@@ -149,7 +149,7 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
     // Encode HEADERS frame
     let end_stream_on_headers: I64 = if has_body == 0 { 1 } else { 0 }
     let headers_frame = conn.encode_headers(stream_id, resp_headers, end_stream_on_headers)
-    h2_buf_append(result, headers_frame)
+    h2_buf_append(ref result, ref headers_frame)
 
     // Encode DATA frame if there's a body
     if has_body == 1 {
@@ -157,8 +157,8 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
         for i in 0 to body_len {
             body_buf.write_byte(str::char_at(body, i))
         }
-        let data_frame = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, stream_id, body_buf)
-        h2_buf_append(result, data_frame)
+        let data_frame = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, stream_id, ref body_buf)
+        h2_buf_append(ref result, ref data_frame)
     }
 
     result
@@ -166,7 +166,7 @@ pub func h2_build_response(conn: H2Connection, stream_id: I64, status: I64, cont
 
 
 /// Append src buffer bytes to dst buffer.
-func h2_buf_append(dst: Buffer, src: Buffer) {
+func h2_buf_append(dst: ref Buffer, src: ref Buffer) {
     let slen: I64 = src.len()
     for i in 0 to slen {
         dst.write_byte(src.get(i))

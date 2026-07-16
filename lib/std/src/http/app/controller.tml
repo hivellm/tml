@@ -249,10 +249,10 @@ impl ControllerInfo {
 /// controllers.push(ControllerInfo::new("/products", register_product_routes))
 ///
 /// var app: App = App::new()
-/// register_all(ref app, controllers)
+/// register_all(ref app, ref controllers)
 /// app.listen(3000)
 /// ```
-pub func register_all(app: mut ref App, controllers: List[ControllerInfo]) {
+pub func register_all(app: mut ref App, controllers: ref List[ControllerInfo]) {
     let len: I64 = controllers.len()
     for i in 0 to len {
         let info: ControllerInfo = controllers.get(i)

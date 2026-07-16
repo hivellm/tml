@@ -21,7 +21,7 @@ func test_decode_settings_frame() -> I32 {
     h2_encode_settings_pair(payload, H2Setting::MaxConcurrentStreams(), 100)
     h2_encode_settings_pair(payload, H2Setting::InitialWindowSize(), 65535)
 
-    let encoded = h2_encode_frame_raw(4, 0, 0, payload)
+    let encoded = h2_encode_frame_raw(4, 0, 0, ref payload)
     let result = h2_decode_frame(encoded)
     assert(result.is_ok(), "decode ok")
 
@@ -45,7 +45,7 @@ func test_decode_ping_frame() -> I32 {
         ping_data.write_u8((0xAA + i) as I32, i)
         i = i + 1
     }
-    let encoded = h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ping_data)
+    let encoded = h2_encode_frame_raw(6, H2_FLAG_ACK, 0, ref ping_data)
     let result = h2_decode_frame(encoded)
     assert(result.is_ok(), "decode ping ok")
 
@@ -68,7 +68,7 @@ func test_decode_data_frame() -> I32 {
     payload.write_u8(0x6C, 3)
     payload.write_u8(0x6F, 4)
 
-    let encoded = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, 1, payload)
+    let encoded = h2_encode_frame_raw(0, H2_FLAG_END_STREAM, 1, ref payload)
     let result = h2_decode_frame(encoded)
     assert(result.is_ok(), "decode data ok")
 
@@ -128,7 +128,7 @@ func test_decode_settings_payload() -> I32 {
     h2_encode_settings_pair(payload, H2Setting::HeaderTableSize(), 8192)
     h2_encode_settings_pair(payload, H2Setting::MaxFrameSize(), 32768)
 
-    let result = h2_decode_settings(payload)
+    let result = h2_decode_settings(ref payload)
     assert(result.is_ok(), "decode settings ok")
 
     let settings = result.unwrap()
@@ -151,7 +151,7 @@ func test_decode_settings_invalid_length() -> I32 {
         payload.write_u8(0, i)
         i = i + 1
     }
-    let result = h2_decode_settings(payload)
+    let result = h2_decode_settings(ref payload)
     assert(result.is_err(), "invalid settings length -> error")
     return 0
 }
@@ -178,7 +178,7 @@ func test_setting_from_id() -> I32 {
 func test_decode_roundtrip_window_update() -> I32 {
     let payload = Buffer::new(4)
     payload.write_u32_be(32768, 0)
-    let encoded = h2_encode_frame_raw(8, 0, 42, payload)
+    let encoded = h2_encode_frame_raw(8, 0, 42, ref payload)
 
     let result = h2_decode_frame(encoded)
     assert(result.is_ok(), "roundtrip ok")
@@ -200,11 +200,11 @@ func test_decode_multiple_frames() -> I32 {
         p1.write_u8(0x11, i)
         i = i + 1
     }
-    let f1 = h2_encode_frame_raw(6, 0, 0, p1)  // PING
+    let f1 = h2_encode_frame_raw(6, 0, 0, ref p1)  // PING
 
     let p2 = Buffer::new(4)
     p2.write_u32_be(1, 0)
-    let f2 = h2_encode_frame_raw(8, 0, 1, p2)  // WINDOW_UPDATE
+    let f2 = h2_encode_frame_raw(8, 0, 1, ref p2)  // WINDOW_UPDATE
 
     // Combine both frames into one buffer
     let combined = Buffer::new(f1.len() + f2.len())
