@@ -1,0 +1,11 @@
+{
+  "id": 10,
+  "slug": "adr-009-b3-unify-codegen-paths-on-query-mir-pipeline-then-drop-flag-elaboration-once",
+  "title": "ADR-009: B3 — unify codegen paths on query/MIR pipeline, then drop-flag elaboration once",
+  "status": "proposed",
+  "date": "2026-07-15",
+  "relatedTasks": [
+    "phase26b_memmodel-implementation"
+  ],
+  "supersededBy": null
+}

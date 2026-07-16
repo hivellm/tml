@@ -1,0 +1,11 @@
+{
+  "id": 11,
+  "slug": "adr-009-revised-b1-on-ast-fix-drop-move-on-the-ast-legacy-path-directly-defer-mir-unification",
+  "title": "ADR-009 revised: B1-on-AST — fix drop/move on the AST-legacy path directly; defer MIR unification",
+  "status": "proposed",
+  "date": "2026-07-15",
+  "relatedTasks": [
+    "phase26b_memmodel-implementation"
+  ],
+  "supersededBy": null
+}
