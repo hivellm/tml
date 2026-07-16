@@ -139,7 +139,7 @@ pub func observable_of3_i32(a: I32, b: I32, c: I32) -> ObservableI32 {
 }
 
 /// Emits values from a List[I32].
-pub func observable_from_list_i32(list: List[I32]) -> ObservableI32 {
+pub func observable_from_list_i32(list: ref List[I32]) -> ObservableI32 {
     return ObservableI32 { source: ObsSourceI32::FromList(list) }
 }
 

@@ -408,7 +408,7 @@ pub func promise_finally_i32(p: Promise[I32], cleanup: func()) -> Promise[I32] {
 /// let all: Promise[List[I32]] = promise_all_i32(promises)
 /// assert(all.is_fulfilled())
 /// ```
-pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
+pub func promise_all_i32(promises: ref List[Promise[I32]]) -> Promise[List[I32]] {
     let len: I64 = promises.len()
     var results: List[I32] = List::new(len)
     var has_pending: Bool = false
@@ -452,7 +452,7 @@ pub func promise_all_i32(promises: List[Promise[I32]]) -> Promise[List[I32]] {
 /// let winner: Promise[I32] = promise_race_i32(promises)
 /// assert_eq(winner.unwrap(), 42)
 /// ```
-pub func promise_race_i32(promises: List[Promise[I32]]) -> Promise[I32] {
+pub func promise_race_i32(promises: ref List[Promise[I32]]) -> Promise[I32] {
     let len: I64 = promises.len()
     for i in 0 to len {
         let p: Promise[I32] = promises.get(i)
@@ -472,7 +472,7 @@ pub func promise_race_i32(promises: List[Promise[I32]]) -> Promise[I32] {
 /// - Fulfills with the first fulfilled value
 /// - Rejects with "All promises rejected" if ALL reject
 /// - Remains pending if any is pending and none fulfilled
-pub func promise_any_i32(promises: List[Promise[I32]]) -> Promise[I32] {
+pub func promise_any_i32(promises: ref List[Promise[I32]]) -> Promise[I32] {
     let len: I64 = promises.len()
     var all_rejected: Bool = true
     var has_pending: Bool = false
@@ -500,7 +500,7 @@ pub func promise_any_i32(promises: List[Promise[I32]]) -> Promise[I32] {
 /// Always fulfills (never rejects). The result is a list of `PromiseState[I32]`
 /// values, one per input promise. Each state is either `Fulfilled(v)` or
 /// `Rejected(e)`. If any input is still pending, the result promise is pending.
-pub func promise_all_settled_i32(promises: List[Promise[I32]]) -> Promise[List[PromiseState[I32]]] {
+pub func promise_all_settled_i32(promises: ref List[Promise[I32]]) -> Promise[List[PromiseState[I32]]] {
     let len: I64 = promises.len()
     var results: List[PromiseState[I32]] = List::new(len)
     var has_pending: Bool = false

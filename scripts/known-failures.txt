@@ -20,6 +20,8 @@ std/sync/once_lock_get_or_init  | K001 | phase27a_codegen-k001-root-cause (verif
 std/sync/sync_barrier.consolidated | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...IsoDualMutexInner4dropE)
 std/sync/sync_isolation         | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...DualMutexInner4dropE — the mono-queueing class, specimen family #4)
 std/console/grouping_assert_table | K001 | phase27a_codegen-k001-root-cause (verified at HEAD AND pre-Step3 v0.3.57 2026-07-16: 'Cannot allocate unsized type')
+std/math/bigint                 | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: i64-vs-i32 class; blocks runtime validation of the wave-2b BigInt ref migration — typecheck/borrowcheck pass in the full pipeline)
+std/observable/replay_subject   | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: i64-vs-i32 class)
 compiler/hir_types              | K001 | phase27a_codegen-k001-root-cause
 compiler/infer_differential     | K001 | phase27a_codegen-k001-root-cause
 compiler/c_preprocessor         | K001 | phase27a_codegen-k001-root-cause

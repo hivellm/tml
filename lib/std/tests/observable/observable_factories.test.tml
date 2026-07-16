@@ -29,7 +29,7 @@ func test_of3_zero_values() -> I32 {
 func test_from_empty_list() -> I32 {
     var items: List[I32] = List::new(4)
     var count: I64 = 0
-    let obs: ObservableI32 = observable_from_list_i32(items)
+    let obs: ObservableI32 = observable_from_list_i32(ref items)
     obs_subscribe_next_i32(obs, do(v: I32) { count = count + 1 })
     assert_eq(count, 0, "empty list should emit no values")
     return 0
@@ -40,7 +40,7 @@ func test_from_single_item_list() -> I32 {
     var items: List[I32] = List::new(1)
     items.push(99)
     var received: I32 = 0
-    let obs: ObservableI32 = observable_from_list_i32(items)
+    let obs: ObservableI32 = observable_from_list_i32(ref items)
     obs_subscribe_next_i32(obs, do(v: I32) { received = v })
     assert_eq(received, 99, "should receive 99")
     return 0

@@ -262,7 +262,7 @@ impl BigInt {
     // ========================================================================
 
     /// Add two BigInts.
-    pub func add(this, other: BigInt) -> BigInt {
+    pub func add(this, other: ref BigInt) -> BigInt {
         if this.negative == other.negative {
             var d = BigInt::add_magnitudes(ref this.digits, ref other.digits)
             var r = BigInt { negative: this.negative, digits: d }
@@ -287,9 +287,9 @@ impl BigInt {
     }
 
     /// Subtract: this - other.
-    pub func sub(this, other: BigInt) -> BigInt {
+    pub func sub(this, other: ref BigInt) -> BigInt {
         let neg_other = other.neg()
-        return this.add(neg_other)
+        return this.add(ref neg_other)
     }
 
     // ========================================================================
@@ -297,7 +297,7 @@ impl BigInt {
     // ========================================================================
 
     /// Multiply two BigInts (schoolbook O(n²)).
-    pub func mul(this, other: BigInt) -> BigInt {
+    pub func mul(this, other: ref BigInt) -> BigInt {
         if this.is_zero() or other.is_zero() {
             return BigInt::zero()
         }
@@ -348,19 +348,19 @@ impl BigInt {
     }
 
     /// Integer division: this / other. Panics if other is zero.
-    pub func div(this, other: BigInt) -> BigInt {
+    pub func div(this, other: ref BigInt) -> BigInt {
         let qr = this.divmod(other)
         return qr.0
     }
 
     /// Remainder: this % other. Panics if other is zero.
-    pub func rem(this, other: BigInt) -> BigInt {
+    pub func rem(this, other: ref BigInt) -> BigInt {
         let qr = this.divmod(other)
         return qr.1
     }
 
     /// Divmod: returns (quotient, remainder).
-    pub func divmod(this, other: BigInt) -> (BigInt, BigInt) {
+    pub func divmod(this, other: ref BigInt) -> (BigInt, BigInt) {
         if other.is_zero() {
             // Division by zero — return (0, 0) as sentinel
             return (BigInt::zero(), BigInt::zero())
@@ -408,7 +408,7 @@ impl BigInt {
             // Binary search for how many times shifted_divisor fits
             var count: I64 = 0
             loop (remainder.cmp_magnitude(ref shifted_big) >= 0) {
-                remainder = remainder.sub(shifted_big)
+                remainder = remainder.sub(ref shifted_big)
                 count = count + 1
             }
             // Add count * BASE^shift to quotient
@@ -419,7 +419,7 @@ impl BigInt {
                 }
                 count_digits.push(count)
                 let count_big = BigInt { negative: false, digits: count_digits }
-                quotient = quotient.add(count_big)
+                quotient = quotient.add(ref count_big)
             }
             shift = shift - 1
         }
@@ -524,8 +524,8 @@ impl BigInt {
         var hex_chars: Str = ""
         let sixteen = BigInt::from_i64(16)
         loop (not temp.is_zero()) {
-            let remainder = temp.rem(sixteen)
-            temp = temp.div(sixteen)
+            let remainder = temp.rem(ref sixteen)
+            temp = temp.div(ref sixteen)
             var r: I64 = 0
             if not remainder.is_zero() {
                 r = remainder.digits.get(0)
@@ -554,20 +554,20 @@ impl BigInt {
         var e: I64 = exp
         loop (e > 0) {
             if e % 2 == 1 {
-                result = result.mul(base_val)
+                result = result.mul(ref base_val)
             }
-            base_val = base_val.mul(base_val)
+            base_val = base_val.mul(ref base_val)
             e = e / 2
         }
         return result
     }
 
     /// Greatest common divisor (Euclidean algorithm).
-    pub func gcd(this, other: BigInt) -> BigInt {
+    pub func gcd(this, other: ref BigInt) -> BigInt {
         var a = this.abs()
         var b = other.abs()
         loop (not b.is_zero()) {
-            let r = a.rem(b)
+            let r = a.rem(ref b)
             a = b
             b = r
         }
@@ -611,7 +611,7 @@ impl BigInt {
 
     /// Modular exponentiation: (this^exp) % modulus.
     /// Uses binary exponentiation with modular reduction at each step.
-    pub func mod_pow(this, exp: BigInt, modulus: BigInt) -> BigInt {
+    pub func mod_pow(this, exp: ref BigInt, modulus: ref BigInt) -> BigInt {
         if modulus.is_zero() { return BigInt::zero() }
         let one = BigInt::one()
         if exp.is_zero() { return one.rem(modulus) }
@@ -622,12 +622,12 @@ impl BigInt {
         let two = BigInt::from_i64(2)
         loop (not e.is_zero()) {
             // Check if e is odd: e % 2 != 0
-            let e_rem = e.rem(two)
+            let e_rem = e.rem(ref two)
             if not e_rem.is_zero() {
-                result = result.mul(base_val).rem(modulus)
+                result = result.mul(ref base_val).rem(modulus)
             }
-            base_val = base_val.mul(base_val).rem(modulus)
-            e = e.div(two)
+            base_val = base_val.mul(ref base_val).rem(modulus)
+            e = e.div(ref two)
         }
         return result
     }
@@ -635,7 +635,7 @@ impl BigInt {
     /// Modular multiplicative inverse: a^(-1) mod m.
     /// Returns Nothing if gcd(this, modulus) != 1.
     /// Uses extended Euclidean algorithm.
-    pub func mod_inverse(this, modulus: BigInt) -> Maybe[BigInt] {
+    pub func mod_inverse(this, modulus: ref BigInt) -> Maybe[BigInt] {
         if modulus.is_zero() { return Nothing }
         let a = this.rem(modulus)
         var old_r = a.abs()
@@ -643,12 +643,14 @@ impl BigInt {
         var old_s = BigInt::one()
         var s = BigInt::zero()
         loop (not r.is_zero()) {
-            let q = old_r.div(r)
+            let q = old_r.div(ref r)
             let temp_r = r
-            r = old_r.sub(q.mul(temp_r))
+            let q_tr = q.mul(ref temp_r)
+            r = old_r.sub(ref q_tr)
             old_r = temp_r
             let temp_s = s
-            s = old_s.sub(q.mul(temp_s))
+            let q_ts = q.mul(ref temp_s)
+            s = old_s.sub(ref q_ts)
             old_s = temp_s
         }
         // Check gcd == 1
@@ -658,7 +660,8 @@ impl BigInt {
         }
         // Ensure positive result
         if old_s.negative {
-            old_s = old_s.add(modulus.abs())
+            let mod_abs = modulus.abs()
+            old_s = old_s.add(ref mod_abs)
         }
         return Just(old_s)
     }
@@ -672,7 +675,7 @@ impl BigInt {
         var bits: I64 = 0
         let two = BigInt::from_i64(2)
         loop (not temp.is_zero()) {
-            temp = temp.div(two)
+            temp = temp.div(ref two)
             bits = bits + 1
         }
         return bits
@@ -687,7 +690,7 @@ impl BigInt {
         var result = BigInt { negative: this.negative, digits: this.clone_digits() }
         let two = BigInt::from_i64(2)
         for i in 0 to n {
-            result = result.mul(two)
+            result = result.mul(ref two)
         }
         return result
     }
@@ -701,7 +704,7 @@ impl BigInt {
         var result = BigInt { negative: this.negative, digits: this.clone_digits() }
         let two = BigInt::from_i64(2)
         for i in 0 to n {
-            result = result.div(two)
+            result = result.div(ref two)
         }
         return result
     }
@@ -717,20 +720,20 @@ impl BigInt {
         // Small cases
         if this.cmp(ref two) == 0 or this.cmp(ref three) == 0 { return true }
         // Even numbers
-        let rem2 = this.rem(two)
+        let rem2 = this.rem(ref two)
         if rem2.is_zero() { return false }
         // Less than 2
         if this.lt(ref two) { return false }
         // Write n-1 = 2^r * d
-        var d = this.sub(one)
+        var d = this.sub(ref one)
         var r: I64 = 0
         var extracting: Bool = true
         loop (extracting) {
-            let d_rem = d.rem(two)
+            let d_rem = d.rem(ref two)
             if not d_rem.is_zero() {
                 extracting = false
             } else {
-                d = d.div(two)
+                d = d.div(ref two)
                 r = r + 1
             }
         }
@@ -744,7 +747,7 @@ impl BigInt {
         witnesses.push(13)
         witnesses.push(17)
         witnesses.push(19)
-        let n_minus_one = this.sub(one)
+        let n_minus_one = this.sub(ref one)
         // Need a copy of this for mod_pow (can't dereference this)
         let n_copy = BigInt { negative: this.negative, digits: this.clone_digits() }
         var wi: I64 = 0
@@ -756,7 +759,7 @@ impl BigInt {
                 skip = true
             }
             if not skip {
-                var x = a.mod_pow(d, n_copy)
+                var x = a.mod_pow(ref d, ref n_copy)
                 if x.cmp(ref one) == 0 or x.cmp(ref n_minus_one) == 0 {
                     skip = true
                 }
@@ -764,7 +767,7 @@ impl BigInt {
                     var found: Bool = false
                     var j: I64 = 0
                     loop (j < r - 1 and not found) {
-                        x = x.mod_pow(two, n_copy)
+                        x = x.mod_pow(ref two, ref n_copy)
                         if x.cmp(ref n_minus_one) == 0 {
                             found = true
                         }
@@ -793,13 +796,13 @@ impl BigInt {
         var temp = this.abs()
         let two = BigInt::from_i64(2)
         loop (not temp.is_zero()) {
-            let rem = temp.rem(two)
+            let rem = temp.rem(ref two)
             if rem.is_zero() {
                 bits.push(0)
             } else {
                 bits.push(1)
             }
-            temp = temp.div(two)
+            temp = temp.div(ref two)
         }
         return bits
     }
@@ -811,9 +814,9 @@ impl BigInt {
         let two = BigInt::from_i64(2)
         for i in 0 to bits.len() {
             if bits.get(i) == 1 {
-                result = result.add(power)
+                result = result.add(ref power)
             }
-            power = power.mul(two)
+            power = power.mul(ref two)
         }
         result.negative = negative
         if result.is_zero() { result.negative = false }
@@ -821,7 +824,7 @@ impl BigInt {
     }
 
     /// Bitwise AND: this & other (operates on absolute values).
-    pub func bitand(this, other: BigInt) -> BigInt {
+    pub func bitand(this, other: ref BigInt) -> BigInt {
         let a_bits = this.to_bits()
         let b_bits = other.to_bits()
         var min_len: I64 = a_bits.len()
@@ -838,7 +841,7 @@ impl BigInt {
     }
 
     /// Bitwise OR: this | other (operates on absolute values).
-    pub func bitor(this, other: BigInt) -> BigInt {
+    pub func bitor(this, other: ref BigInt) -> BigInt {
         let a_bits = this.to_bits()
         let b_bits = other.to_bits()
         var max_len: I64 = a_bits.len()
@@ -859,7 +862,7 @@ impl BigInt {
     }
 
     /// Bitwise XOR: this ^ other (operates on absolute values).
-    pub func bitxor(this, other: BigInt) -> BigInt {
+    pub func bitxor(this, other: ref BigInt) -> BigInt {
         let a_bits = this.to_bits()
         let b_bits = other.to_bits()
         var max_len: I64 = a_bits.len()

@@ -55,7 +55,7 @@ func test_observable_from_list_i32() -> I32 {
     items.push(300)
 
     var sum: I32 = 0
-    let obs: ObservableI32 = observable_from_list_i32(items)
+    let obs: ObservableI32 = observable_from_list_i32(ref items)
     obs_subscribe_next_i32(obs, do(v: I32) { sum = sum + v })
     assert_eq(sum, 600, "sum should be 600")
     return 0
