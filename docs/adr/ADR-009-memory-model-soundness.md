@@ -184,3 +184,26 @@ its premise was refuted by Step-2 scoping; the project owner re-decided on
 5. phase26c reverts the phase24 band-aids and raises the gates.
 
 MIR unification (the old B3 Steps 2–3) is deferred to phases 30–33 (frozen).
+
+## Implementation status (2026-07-16)
+
+Executed across phase26b (steps 1–3) and phase26f (the move-semantics milestone the
+deferred steps 2.4/3.4/4 moved into, user decision #12):
+
+| Plan item | Landed as | Version |
+|---|---|---|
+| 1. shared.tml counter-read mitigation (F-013) | direct field reads, no `SharedInner[T]` copy; canary `tml_refcount_bleed_userpath` 0→100/100 | v0.3.55 |
+| 2. Export + join borrow facts into AST codegen | `PlaceOwnershipFact` keyed by **definition `SourceSpan`** (join proven 100%, 0 MISS-no-fact); `DropInfo::def_span` threaded at all `gen_let_stmt` sites | v0.3.57 |
+| 3. Sound container/smart-pointer read-out | `ptr_read_clone` in all iterator `next`/`value`, `List::retain` borrow-then-move rebuild, `Heap/Sync::get`, `Arc::make_mut` CoW `where T: Duplicate`; `List/HashMap::destroy` drop live elements (F-016/F-022/F-023) | v0.3.58–59 |
+| — Move dataflow activation (prereq found by 2.3 join-proof: `move_value` was dead code) | checker invokes `move_value`/`move_projection` at let-init/args/struct-init/return/assign; strict diagnostics staged behind `TML_STRICT_MOVES=1` | v0.3.60 |
+| — Rust-faithful Copy classification | `PtrType` Copy, alias resolution, Copy/Drop mutual exclusion, stdlib `impl Copy` (Layout/Interval/Point); strict-moves blast radius **53 → 0** | v0.3.61 |
+| 2.4 Fact-driven drop suppression | UNION `consumed_vars_ OR moved_out` (method-arg safe-fallback makes facts under-report); fixed a real `let b = a` double-drop, canary `tml_let_move_double_drop` | v0.3.62 |
+| 3.4 Remove `drop.cpp` container leak special-case | phase26f 1.4 (in flight at time of writing) | v0.3.63 |
+| 4. Drop-flag elaboration (conditional drops) | phase26f 1.5 (pending) | — |
+| 5. Band-aid reverts + raised gates | phase26c (pending) | — |
+
+Key mechanism discovered during Step 2.3 (decision-critical, recorded in the task):
+`moved_out` was uniformly false because `BorrowChecker::move_value()` — the sole
+writer of `OwnershipState::Moved` — was never called anywhere (the F-015 "no move
+semantics is systemic" dormancy). Activation had to precede the suppression swap,
+which is why 2.4 executed inside phase26f rather than here.

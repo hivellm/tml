@@ -13,6 +13,30 @@ not heap-copied. Today they are copied, and the compiler chooses per-site betwee
 
 ---
 
+## Closure status (updated 2026-07-16, v0.3.62)
+
+Every finding below has an owning task; the concrete bugs are **closed**, the model
+gaps are milestone work in flight. Statuses:
+
+| Finding | Status | Closed by |
+|---|---|---|
+| F-013 (refcount bleed, from doc 01) | **CLOSED** | v0.3.55 direct field reads + `tml_refcount_bleed_userpath` canary 100/100 |
+| F-015 no move semantics (ROOT) | **IN PROGRESS** — dataflow live | phase26f: `move_value` activated (v0.3.60), Copy classification blast-radius 53→0 (v0.3.61), fact-driven drop suppression (v0.3.62); remaining: leak special-case removal (1.4), drop flags (1.5) |
+| F-016 13 double-free/UAF read-out sites | **CLOSED** | v0.3.58 `ptr_read_clone` in iterators + `List::retain` rebuild + canaries `f016_*` |
+| F-017 broken move-outs (unconditional double-free) | **CLOSED** | v0.3.56 (stdlib sweep wave 1) |
+| F-018 `Sync::get` copying, no safe alternative | **CLOSED** | v0.3.56–58: `get` balanced-clone via field-0 ptr; `get_ref`/`get_clone` added |
+| F-019 read/iterate asymmetry | **MITIGATED** | safe path everywhere (F-016 fix); the *fast* borrow default is F-021/phase26e |
+| F-020 pass-by-value MUST-BORROW class | **CLOSED** (concrete sites) | v0.3.59 ref-migration wave (bigint 14 ops, h2 handlers); model fix = phase26f |
+| F-021 no borrow accessor (language gap) | **OPEN — owned** | phase26e (borrow accessors, the zero-cost enabler) |
+| F-022 `destroy` leaks elements | **CLOSED** | v0.3.58 per-element drop in `List/HashMap::destroy` + `f022_destroy_releases` canary |
+| F-023 `try_unwrap` weak-ref UAF | **CLOSED** | v0.3.56 weak-aware `try_unwrap` |
+
+Plus one bug the audit did NOT catch, found by the activated facts: plain
+`let b = a` **double-dropped** (no `mark_var_consumed` at the let handler); fixed by
+the v0.3.62 union suppression, canary `tml_let_move_double_drop`.
+
+---
+
 ## Executive verdict
 
 **TML has no real move semantics at the codegen level (F-015).** Every read of an

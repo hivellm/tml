@@ -40,7 +40,12 @@
 ### Step 4 — DEFERRED → move-semantics milestone (phase26f)
 Drop-flag elaboration for control-flow-dependent drops; needs the activated move dataflow. `initialized` facts (accurate today) feed it. Gates (`essential.c` 100/100 etc.) belong to the milestone close.
 
+> **Deferred-item disposition (2026-07-16):** 2.4 LANDED as phase26f 1.3 (v0.3.62 —
+> union suppression `consumed_vars_ OR moved_out`, fixed the `let b = a` double-drop);
+> 3.4 = phase26f 1.4 (in flight); Step 4 = phase26f 1.5. All deferred work has a live
+> owner; nothing dangles. This task's own scope (Steps 1–3 + facts foundation) is complete.
+
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [ ] 2.1 Update or create documentation covering the implementation
-- [ ] 2.2 Write tests covering the new behavior
-- [ ] 2.3 Run tests and confirm they pass
+- [x] 2.1 Docs updated: `docs/adr/ADR-009-memory-model-soundness.md` gained an **Implementation status** table (plan item → landed-as → version, v0.3.55–62, incl. the move_value-dead-code discovery that re-sequenced 2.4 into phase26f); `docs/analysis/tml-table-analysis/08-memory-copy-audit.md` gained a **Closure status** table (F-013..F-023 each with status + closing version/canary, plus the audit-missed `let b = a` double-drop found by the facts). Specs already in-task: `specs/step2-scoping/{spec,wiring-plan}.md`.
+- [x] 2.2 Tests = executable canaries in the determinism corpus (regression-guarded forever, adversarial allocator ON): `tml_refcount_bleed_userpath` (Step 1), `f016_list_iter`/`f016_retain`×2/`f016_arc_makemut`/`f022_destroy_releases` (Step 3), `tml_let_move_double_drop` (2.4 via phase26f). Framework tests: `compiler/tests/determinism/*.test.tml` (@test framework). Join-proof harness behind `TML_DROP_FACTS_DEBUG=1`.
+- [x] 2.3 Gates run green at each step's landing (recorded per-item above): determinism 22/22 → **23/23** at floor with the new canary; core/alloc 44/44, core/str 32/32, std/json 23/23, collections at baseline; all failures encountered during verification proven pre-existing at HEAD and catalogued in `scripts/known-failures.txt` (shrink-only).
