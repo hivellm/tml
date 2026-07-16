@@ -222,6 +222,13 @@ auto BorrowChecker::is_copy_type(const types::TypePtr& type) const -> bool {
             } else if constexpr (std::is_same_v<T, types::RefType>) {
                 // References are Copy (the reference, not the data)
                 return true;
+            } else if constexpr (std::is_same_v<T, types::PtrType>) {
+                // Raw pointers (`*T` / `*mut T`) are Copy, exactly as Rust
+                // treats `*const T` / `*mut T`. Copying a raw pointer duplicates
+                // the address only; ownership of the pointee is unaffected. This
+                // removes the `ptr`/`p` reuse false-positives across allocator
+                // code (blast-radius Gap 1).
+                return true;
             } else if constexpr (std::is_same_v<T, types::TupleType>) {
                 // Tuple is Copy if all elements are Copy
                 for (const auto& elem : t.elements) {
@@ -233,12 +240,44 @@ auto BorrowChecker::is_copy_type(const types::TypePtr& type) const -> bool {
                 // Array is Copy if element type is Copy
                 return is_copy_type(t.element);
             } else if constexpr (std::is_same_v<T, types::NamedType>) {
-                // Check if the named type implements the Copy behavior
+                // A type that needs drop can never be Copy — Rust makes `Copy`
+                // and `Drop` mutually exclusive so that a bit-copy can never
+                // duplicate a resource whose destructor would then run twice.
+                // Enforce it here even if a (malformed) `impl Copy` exists.
+                if (type_env_ && type_env_->type_implements(t.name, "Drop")) {
+                    return false;
+                }
+                // Otherwise the named type is Copy iff it derives the `Copy`
+                // marker behavior (Rust-faithful: an explicit derive, not an
+                // implicit all-fields-Copy rule).
                 if (type_env_ && type_env_->type_implements(t.name, "Copy")) {
                     return true;
                 }
+                // Transparent type aliases (e.g. `Ptr = *Unit`, `Ptr[U8]`):
+                // aliases are transparent in Rust, so an alias to a raw pointer
+                // or other Copy type is itself Copy. Resolve the alias and
+                // classify by its underlying type. This removes the residual
+                // `Ptr`/`RawPtr` reuse false-positives in allocator code that
+                // the raw-`PtrType` case cannot reach (the pointer arrives via
+                // an alias name, not a `*T` literal type). The alias definition
+                // may live in a library module (`core::ptr`) not imported by the
+                // current file, so resolution consults the global library cache.
+                if (type_env_) {
+                    if (auto aliased = resolve_named_alias(t.name)) {
+                        // Guard against a self-referential alias to avoid
+                        // unbounded recursion (`type X = X`).
+                        if (!(aliased->template is<types::NamedType>() &&
+                              aliased->template as<types::NamedType>().name == t.name)) {
+                            return is_copy_type(aliased);
+                        }
+                    }
+                }
                 return false;
             } else if constexpr (std::is_same_v<T, types::ClassType>) {
+                // Same Drop/Copy exclusion as for named types.
+                if (type_env_ && type_env_->type_implements(t.name, "Drop")) {
+                    return false;
+                }
                 // Check if the class type implements the Copy behavior
                 if (type_env_ && type_env_->type_implements(t.name, "Copy")) {
                     return true;
@@ -250,6 +289,51 @@ auto BorrowChecker::is_copy_type(const types::TypePtr& type) const -> bool {
             }
         },
         type->kind);
+}
+
+/// Resolves a named type alias to its underlying type (see header). Consults,
+/// in order: the memo table, the local/imported alias table, the module
+/// registry, and finally the global library-module cache (which holds
+/// `core::*`/`std::*` even when not explicitly imported — this is how `Ptr =
+/// *Unit` is reached from a file that only imports `core::alloc`). The result
+/// (including "not an alias" = null) is memoized so the global-cache scan runs
+/// at most once per distinct name.
+auto BorrowChecker::resolve_named_alias(const std::string& name) const -> types::TypePtr {
+    auto cached = alias_resolution_cache_.find(name);
+    if (cached != alias_resolution_cache_.end()) {
+        return cached->second;
+    }
+
+    types::TypePtr resolved; // null = not an alias
+
+    if (type_env_) {
+        if (auto a = type_env_->lookup_type_alias(name)) {
+            resolved = *a;
+        }
+        if (!resolved) {
+            if (auto reg = type_env_->module_registry()) {
+                for (const auto& [mod_path, mod] : reg->get_all_modules()) {
+                    auto it = mod.type_aliases.find(name);
+                    if (it != mod.type_aliases.end()) {
+                        resolved = it->second;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!resolved) {
+            for (const auto& [mod_path, mod] : types::GlobalModuleCache::instance().get_all()) {
+                auto it = mod.type_aliases.find(name);
+                if (it != mod.type_aliases.end()) {
+                    resolved = it->second;
+                    break;
+                }
+            }
+        }
+    }
+
+    alias_resolution_cache_.emplace(name, resolved);
+    return resolved;
 }
 
 /// Returns the move semantics (Copy or Move) for a given type.

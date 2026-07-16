@@ -979,6 +979,18 @@ private:
     /// Determines if a type implements Copy semantics.
     auto is_copy_type(const types::TypePtr& type) const -> bool;
 
+    /// Resolves a named type that is a transparent type alias (e.g. `Ptr =
+    /// *Unit`) to its underlying type, consulting the local alias table, the
+    /// module registry, and the global library-module cache. Returns null when
+    /// the name is not a known alias. Memoized per name (the loaded module set
+    /// is stable for a given `BorrowChecker` run) so the global-cache scan runs
+    /// at most once per distinct alias name. `std::nullopt` mapped value means
+    /// "resolved to: not an alias".
+    auto resolve_named_alias(const std::string& name) const -> types::TypePtr;
+
+    /// Memo table for `resolve_named_alias`.
+    mutable std::unordered_map<std::string, types::TypePtr> alias_resolution_cache_;
+
     /// Gets the move semantics for a type.
     auto get_move_semantics(const types::TypePtr& type) const -> MoveSemantics;
 

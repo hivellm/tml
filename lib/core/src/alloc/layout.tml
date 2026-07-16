@@ -60,12 +60,19 @@ impl LayoutError {
 ///
 /// (Zero-sized layouts are allowed, and the alignment must still be
 /// a power of two.)
+@auto(duplicate)
 pub type Layout {
     /// The size of the memory block in bytes.
     size_: I64,
     /// The alignment of the memory block in bytes (must be power of two).
     align_: I64
 }
+
+// `Layout` is a trivially-copyable value type (two `I64` fields, no `Drop`),
+// so — like Rust's `core::alloc::Layout` — it is `Copy`. Marking it `Copy`
+// lets allocator code pass a `layout` by value to several calls and keep using
+// it, without an explicit `.duplicate()` at every reuse.
+impl Copy for Layout {}
 
 impl Layout {
     // ========================================================================

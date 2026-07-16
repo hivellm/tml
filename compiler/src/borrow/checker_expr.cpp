@@ -366,19 +366,32 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
     }
     end_two_phase_borrow();
 
-    // phase26f 1.1: the receiver is a borrow (two-phase), never a move. Method
-    // arguments are passed by value and move their identifier operands (e.g.
-    // `list.push(x)`, `map.insert(k, v)`). GAP: the borrow checker has no method
-    // resolution, so it cannot see whether a specific method parameter is
-    // declared `ref T` (auto-ref) — an identifier passed to such a parameter is
-    // conservatively recorded as a move. This only over-counts move FACTS; it
-    // never suppresses drops today (Step 1.3 consumes the facts) and, with the
-    // strict flag ON, contributes to the measured blast radius rather than to
-    // shipped diagnostics. Explicit `ref x` / `mut ref x` arguments are
-    // UnaryExpr, so they are correctly left as borrows.
-    for (const auto& arg : call.args) {
-        move_if_owned_ident(*arg);
-    }
+    // phase26f 1.2b: the receiver is a borrow (two-phase), never a move.
+    //
+    // Method arguments would move their by-value identifier operands, but the
+    // borrow checker has NO method resolution — it cannot see whether a given
+    // method parameter is declared `ref T` (auto-ref, a borrow) or by value.
+    // Recording every bare identifier as a move (the 1.1 behaviour) therefore
+    // OVER-COUNTS `moved_out` for any `ref` method parameter.
+    //
+    // Safety asymmetry that dictates the choice (see item 1.3):
+    //   - OVER-move  ⇒ a value borrowed into a method has its drop suppressed
+    //                  ⇒ LEAK.
+    //   - UNDER-move ⇒ moved_out simply misses a genuine by-value method move;
+    //                  the syntactic `consumed_vars_` set still drives drop
+    //                  suppression until Step 1.3 swaps it, so this is exactly
+    //                  today's status quo — safe.
+    // A full fix (thread each resolved method signature from the type checker
+    // into a MethodCallExpr side table, mirroring the v0.3.60 IdentPattern type
+    // recording) is deferred: `check_method_call` in the type checker has many
+    // resolution branches (named/generic/builtin/module-cache) and a partial
+    // recording would silently leave the unrecorded ones over-counting. Until
+    // that lands, method-arg param-kind is treated as UNKNOWN and we do NOT set
+    // `moved_out` for it — the safe (under-move) direction. Explicit `ref x` /
+    // `mut ref x` arguments are UnaryExpr and were never moves regardless.
+    //
+    // NOTE: this makes `moved_out` reliable (no false moves) — the prerequisite
+    // for driving drop suppression from it in item 1.3.
 }
 
 /// Checks field access for partial move violations.

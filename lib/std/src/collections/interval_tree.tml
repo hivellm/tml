@@ -21,10 +21,15 @@ use std::collections::List
 // ============================================================================
 
 /// A half-open interval [start, end) with I64 endpoints.
+@auto(duplicate)
 pub type Interval {
     pub start: I64,
     pub end: I64,
 }
+
+// `Interval` is a trivially-copyable value type (two `I64` fields, no `Drop`),
+// so it is `Copy`: it can be passed by value to `overlaps`/`equals` and reused.
+impl Copy for Interval {}
 
 impl Interval {
     /// Create a new interval [start, end).

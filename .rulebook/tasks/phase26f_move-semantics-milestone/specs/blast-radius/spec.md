@@ -1,12 +1,58 @@
 # phase26f 1.2 — Strict-Moves Blast-Radius Measurement
 
-**Version:** v0.3.60 · **Date:** 2026-07-16 · **Author:** codegen-debugger
+**Version:** v0.3.60 (measured) → v0.3.61 (collapsed) · **Date:** 2026-07-16
+· **Author:** codegen-debugger
 **Flag:** `TML_STRICT_MOVES` (default OFF — facts only, zero behaviour change)
 
 This spec records the measured blast radius of turning use-after-move into a
 hard error, gathered by compiling four corpora with `TML_STRICT_MOVES=1` after
 activating the move dataflow (item 1.1). **No fallout was fixed** — this is a
 measurement, per the task. It is the number that decides how phase26f proceeds.
+
+## v0.3.61 UPDATE — classifier fixes landed, radius collapsed 53 → 0
+
+Item 1.2b (v0.3.61) closed all three classifier gaps below. **Re-measuring the
+identical 176-file set gives 0 move-errors / 0 files** (was 53 / 7). See
+"Re-measurement (v0.3.61)" at the end.
+
+| Metric | v0.3.60 (measured) | v0.3.61 (after classifier fixes) |
+|---|---|---|
+| Files compiled | 176 | 176 |
+| Files with ≥1 move error | 7 (4.0%) | **0 (0.0%)** |
+| Total move-error lines | 53 | **0** |
+
+The fixes (all in `is_copy_type`, plus stdlib derives):
+1. **Gap 1 — raw pointers `*T` are now Copy** (`PtrType` branch added). Also
+   the `Ptr = *Unit` type-alias case: `is_copy_type` now resolves transparent
+   named-type aliases (local table → module registry → global library cache)
+   and classifies by the underlying type, so `Ptr[U8]` reused across allocator
+   calls is Copy. This also means the deliberate `double_free_probe` raw-pointer
+   double-free is **no longer** a strict-moves error — the Rust-faithful outcome
+   (Rust does not track raw-pointer double-free either; the Category A caveat
+   already predicted this). The double-free remains a real defect, just not one
+   the *move* checker is responsible for.
+2. **Gap 2 — trivially-copyable value structs are Copy via an explicit derive.**
+   `Layout` (core/alloc/layout), `Interval` (std/collections/interval_tree), and
+   the `Point` test struct got `@auto(duplicate)` + `impl Copy for T {}` — the
+   idiomatic stdlib pattern (cf. `Ipv4Addr`, `Duration`). `is_copy_type` already
+   consulted `type_env_->type_implements(name, "Copy")`; the gap was purely the
+   missing derives. **Copy/Drop are now mutually exclusive in the classifier: a
+   type with an `impl Drop` never classifies as Copy**, even if a stray `impl
+   Copy` exists (Rust rule, enforced defensively).
+3. **Gap 3 — method-arg param-kind: SAFE-FALLBACK (under-move).** The borrow
+   checker has no method resolution, so it cannot tell a `ref T` method param
+   (borrow) from a by-value one. Recording every bare-identifier method arg as a
+   move (the 1.1 behaviour) OVER-counted `moved_out` for `ref` params → would
+   suppress a needed drop in item 1.3 = LEAK. Fixed by NOT setting `moved_out`
+   for method args at all: param-kind is UNKNOWN, and under-move is the safe
+   direction (syntactic `consumed_vars_` still drives drop suppression until 1.3
+   swaps). A full fix (thread each resolved method signature from the type
+   checker into a MethodCallExpr side table) is deferred — `check_method_call`
+   in the type checker has many resolution branches and a partial recording
+   would silently leave the unrecorded ones over-counting. This makes
+   `moved_out` RELIABLE (no false moves), the prerequisite for item 1.3.
+
+--- ORIGINAL v0.3.60 MEASUREMENT (retained for the record) ---
 
 ## Method
 
@@ -123,3 +169,49 @@ future flag-flip (item 1.2 "make it hard") realistic once the stdlib value-type
   core/alloc **44/44**, core/str **32/32**, std/json **23/23**,
   std/collections **19/19** tests (pre-existing `arraylist` K001 unchanged,
   owned by phase27a).
+
+## Re-measurement (v0.3.61 — after classifier fixes)
+
+Same method, same 176 files (`TML_STRICT_MOVES=1 tml build <file> --emit-ir`),
+same move-error grep set.
+
+| Corpus | Files | Files w/ move-err (v0.3.60 → v0.3.61) | Move errors (v0.3.60 → v0.3.61) |
+|---|---|---|---|
+| (a) determinism | 11 | 1 → **0** | 2 → **0** |
+| (b) `lib/core/tests/alloc/*` | 44 | 4 → **0** | 42 → **0** |
+| (c) `lib/std/tests/collections/*` | 96 | 1 → **0** | 3 → **0** |
+| (d) `compiler/tests/compiler/*` (first 25) | 25 | 1 → **0** | 4 → **0** |
+| **Total** | **176** | **7 → 0** | **53 → 0** |
+
+Notes:
+- The `double_free_probe` (the only Category A "genuine bug caught") no longer
+  errors under strict moves, because its `p` is a raw pointer and raw pointers
+  are now Copy (Gap 1). This is Rust-faithful — Rust does not flag raw-pointer
+  double-free as use-after-move either. The double-free is still a real defect;
+  detecting it is the domain of a leak/UAF checker, not the move checker.
+- Residual signal is preserved: genuine moves of *owning* types (owning structs,
+  collections like `List`/`String`, non-Copy user types) still record
+  `moved_out=1` and would still error under the flag. The corpus simply contains
+  no such genuine use-after-move.
+
+### Flag-OFF regression (v0.3.61)
+
+- determinism gate **22/22** (adversarial ON);
+- core/alloc **44/44**, core/str **32/32**, std/json **23/23**;
+- std/collections: `interval_tree` (modified) passes; 92/95 non-`arraylist`
+  files pass. The 4 failures — `arraylist`, `class_coverage`,
+  `collections_advanced`, `stack` — are the **pre-existing phase27a K001
+  family** (`'%tN' defined with type '{ i64, i64 }' but expected 'i32'`), NONE
+  of which reference `Layout`/`Interval`/`Point`/`.duplicate()`. Proven
+  independent of these changes: neutralising the stdlib Copy derives and
+  recompiling `stack` with `--no_cache` reproduces the identical K001 at the
+  same IR line, so the failures are causally unrelated (owned by phase27a).
+
+### Join-proof (v0.3.61, `TML_DROP_FACTS_DEBUG=1`, `--legacy`)
+
+- `let y = x` on an owning struct → `var=x moved_out=1 … DISAGREE-payoff` (move
+  fact preserved).
+- `Layout` passed by value twice (`takes_layout(l); takes_layout(l)`) records NO
+  `moved_out=1` for `l` (Copy) and, flag ON, emits 0 errors.
+- `scripts/fixtures/refcount_bleed_probe.tml`: all join lines `moved_out=0`
+  (unchanged); `tml run` still exit 0.

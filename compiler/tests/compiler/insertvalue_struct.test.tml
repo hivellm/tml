@@ -6,7 +6,11 @@
 
 use test::assert_eq
 
+// Point is a trivially-copyable value struct (two I64 fields, no Drop): Copy,
+// so `sum_point(p1)` passes by value and `p1` stays valid afterwards.
+@auto(duplicate)
 type Point { x: I64, y: I64 }
+impl Copy for Point {}
 type Rect { x: I64, y: I64, w: I64, h: I64 }
 type Point3D { x: I64, y: I64, z: I64 }
 type Nested { a: Point, b: Point }
