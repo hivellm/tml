@@ -38,6 +38,9 @@ TML_MODULE("compiler")
 #include "borrow/checker.hpp"
 #include "types/env.hpp"
 
+#include <cstdlib>
+#include <string>
+
 #include <algorithm>
 #include <map>
 #include <set>
@@ -70,9 +73,22 @@ namespace tml::borrow {
 // BorrowChecker Implementation
 // ============================================================================
 
-BorrowChecker::BorrowChecker() = default;
+/// Reads the staged strict-moves policy gate once from the environment.
+/// `TML_STRICT_MOVES=1` (or any non-empty value other than "0"/"false") turns
+/// use-after-move into hard errors (phase26f 1.2). Default OFF.
+static auto read_strict_moves_env() -> bool {
+    const char* v = std::getenv("TML_STRICT_MOVES");
+    if (v == nullptr || v[0] == '\0') {
+        return false;
+    }
+    std::string s(v);
+    return !(s == "0" || s == "false" || s == "FALSE" || s == "off" || s == "OFF");
+}
 
-BorrowChecker::BorrowChecker(const types::TypeEnv& type_env) : type_env_(&type_env) {}
+BorrowChecker::BorrowChecker() : strict_moves_(read_strict_moves_env()) {}
+
+BorrowChecker::BorrowChecker(const types::TypeEnv& type_env)
+    : type_env_(&type_env), strict_moves_(read_strict_moves_env()) {}
 
 auto BorrowChecker::ownership_facts() const -> std::vector<PlaceOwnershipFact> {
     // Snapshot every tracked place into a codegen-facing fact keyed by its
@@ -244,6 +260,99 @@ auto BorrowChecker::get_move_semantics(const types::TypePtr& type) const -> Move
     return is_copy_type(type) ? MoveSemantics::Copy : MoveSemantics::Move;
 }
 
+/// Determines whether a bare by-value use of a value of this type is a MOVE.
+///
+/// Under Rust-faithful move semantics, a value moves on by-value assignment /
+/// argument passing unless it is trivially copyable. `is_copy_type` already
+/// captures the copyable set (primitives — including `Str`, references, and
+/// tuples/arrays thereof, and named/class types that derive `Copy`). Everything
+/// else — owning collections, smart pointers, and plain user structs without a
+/// `Copy` derive — moves. Types that need drop are a subset of the move set.
+///
+/// A null type means the checker never learned this place's type (e.g. a
+/// pattern binding whose resolved type was not threaded). We treat unknown as
+/// copy so we never fabricate a move fact from missing information.
+auto BorrowChecker::is_move_type(const types::TypePtr& type) const -> bool {
+    if (!type) {
+        return false;
+    }
+    return !is_copy_type(type);
+}
+
+/// Records a full move of a bare identifier operand when its type moves.
+///
+/// This is the shared entry point for every full-move site: let-init from an
+/// identifier, by-value argument passing, struct-field initialization, enum
+/// payload construction, and returning a local. It intentionally does nothing
+/// for non-identifier operands, so method-call results (`x.duplicate()`),
+/// references (`ref x`), and literals never move their subject. Method
+/// receivers are never routed here.
+void BorrowChecker::move_if_owned_ident(const parser::Expr& e) {
+    if (!e.is<parser::IdentExpr>()) {
+        return;
+    }
+    const auto& ident = e.as<parser::IdentExpr>();
+    auto place_id = env_.lookup(ident.name);
+    if (!place_id) {
+        return; // Not a tracked local (function name, global, etc.)
+    }
+    const auto& st = env_.get_state(*place_id);
+    if (!is_move_type(st.type)) {
+        return; // Copy semantics — source stays valid.
+    }
+    move_value(*place_id, current_location(e.span));
+}
+
+/// Records a partial move of `base.field` (or a deeper projection) when the
+/// projected leaf field needs drop (phase26f 1.1.3). Only fires when the base
+/// is a bare identifier whose struct field type is resolvable and non-copy.
+void BorrowChecker::move_if_owned_projection(const parser::Expr& e) {
+    if (!e.is<parser::FieldExpr>()) {
+        return;
+    }
+    const auto& fe = e.as<parser::FieldExpr>();
+    // Only handle single-level `ident.field` projections; deeper chains are
+    // conservatively skipped (recorded as signal only when resolvable).
+    if (!fe.object->is<parser::IdentExpr>()) {
+        return;
+    }
+    const auto& base_ident = fe.object->as<parser::IdentExpr>();
+    auto place_id = env_.lookup(base_ident.name);
+    if (!place_id) {
+        return;
+    }
+    const auto& st = env_.get_state(*place_id);
+    if (!st.type || !st.type->is<types::NamedType>()) {
+        return;
+    }
+    if (!type_env_) {
+        return;
+    }
+    // Resolve the field's declared type from the struct definition.
+    const auto& named = st.type->as<types::NamedType>();
+    auto struct_def = type_env_->lookup_struct(named.name);
+    if (!struct_def) {
+        return;
+    }
+    types::TypePtr field_type;
+    for (const auto& fld : struct_def->fields) {
+        if (fld.name == fe.field) {
+            field_type = fld.type;
+            break;
+        }
+    }
+    if (!is_move_type(field_type)) {
+        return; // Field is copy (or unknown) — no partial move.
+    }
+    std::vector<Projection> projections;
+    projections.push_back(Projection{
+        .kind = ProjectionKind::Field,
+        .field_name = fe.field,
+        .index_value = std::nullopt,
+    });
+    move_projection(*place_id, projections, current_location(e.span));
+}
+
 /// Checks a function declaration for borrow violations.
 ///
 /// This method sets up the borrow checking context for a function, processes
@@ -311,11 +420,19 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
         bool is_mut = false;
         bool is_mut_ref = false;
         std::string name;
+        // phase26f: resolved parameter type, threaded into the place so that
+        // by-value params classify as move sources and ref params do not. The
+        // type checker recorded it against the param's IdentPattern node in
+        // bind_pattern (types/checker/core.cpp check_func_body).
+        types::TypePtr param_type;
 
         if (param.pattern->template is<parser::IdentPattern>()) {
             const auto& ident = param.pattern->template as<parser::IdentPattern>();
             is_mut = ident.is_mut;
             name = ident.name;
+            if (type_env_) {
+                param_type = type_env_->get_expr_type(&ident);
+            }
 
             // Check for this parameter (self in method)
             if (name == "this") {
@@ -341,8 +458,7 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
         }
 
         auto loc = current_location(func.span);
-        // Note: We'd need the resolved type here - using nullptr for now
-        env_.define(name, nullptr, is_mut, loc, is_mut_ref);
+        env_.define(name, param_type, is_mut, loc, is_mut_ref);
     }
 
     // Check if return type is a reference and extract its lifetime

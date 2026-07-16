@@ -479,17 +479,22 @@ void BorrowChecker::move_value(PlaceId place, Location loc) {
     auto& state = env_.get_state_mut(place);
 
     if (state.state == OwnershipState::Moved) {
-        // Use rich error with move location
-        if (state.move_location) {
-            errors_.push_back(
-                BorrowError::use_after_move(state.name, loc.span, state.move_location->span));
-        } else {
-            error("use of moved value: `" + state.name + "`", loc.span);
+        // Double move. Under the staged policy (phase26f 1.2) only report when
+        // strict moves are enabled; otherwise stay silent but keep the terminal
+        // Moved state (the fact is already recorded).
+        if (strict_moves_) {
+            if (state.move_location) {
+                errors_.push_back(
+                    BorrowError::use_after_move(state.name, loc.span, state.move_location->span));
+            } else {
+                error("use of moved value: `" + state.name + "`", loc.span);
+            }
         }
         return;
     }
 
-    if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
+    if (strict_moves_ &&
+        (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed)) {
         // Find the active borrow span
         for (const auto& borrow : state.active_borrows) {
             if (!borrow.end) {
@@ -535,7 +540,7 @@ void BorrowChecker::check_can_use(PlaceId place, Location loc) {
         return;
     }
 
-    if (state.state == OwnershipState::Moved) {
+    if (strict_moves_ && state.state == OwnershipState::Moved) {
         if (state.move_location) {
             errors_.push_back(
                 BorrowError::use_after_move(state.name, loc.span, state.move_location->span));
@@ -620,7 +625,7 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
         }
     }
 
-    if (state.state == OwnershipState::Moved) {
+    if (strict_moves_ && state.state == OwnershipState::Moved) {
         if (state.move_location) {
             BorrowError err;
             err.code = BorrowErrorCode::UseAfterMove;
@@ -708,7 +713,7 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
 void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location loc) {
     const auto& state = env_.get_state(place);
 
-    if (state.state == OwnershipState::Moved) {
+    if (strict_moves_ && state.state == OwnershipState::Moved) {
         BorrowError err;
         err.code = BorrowErrorCode::BorrowAfterMove;
         err.message = "cannot borrow moved value: `" + state.name + "`";
@@ -936,7 +941,13 @@ void BorrowChecker::drop_scope_places() {
             }
         }
 
-        state.state = OwnershipState::Dropped;
+        // phase26f: a value that was moved out of is NOT dropped here — its
+        // ownership left with the move. Preserve the terminal Moved state so
+        // the end-of-function ownership snapshot (ownership_facts()) reports
+        // moved_out=true instead of having it clobbered by Dropped.
+        if (state.state != OwnershipState::Moved) {
+            state.state = OwnershipState::Dropped;
+        }
     }
 }
 

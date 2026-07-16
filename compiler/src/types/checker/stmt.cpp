@@ -237,6 +237,14 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                           "T008");
                 }
                 env_.current_scope()->define(p.name, type, p.is_mut, pattern.span);
+                // phase26f: record the binding's resolved type keyed on the
+                // IdentPattern node so the borrow checker can classify move vs
+                // copy at each variable's definition site. The borrow checker
+                // runs a separate AST walk after the type checker's scopes are
+                // gone, so it cannot re-derive binding types on its own. Keyed
+                // on the pattern node address (distinct from expression nodes;
+                // the HIR builder only consults expression keys, so no collision).
+                env_.set_expr_type(&p, type);
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
                 if (!type->is<TupleType>()) {
                     error("Cannot destructure non-tuple type with tuple pattern", pattern.span,

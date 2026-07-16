@@ -36,6 +36,7 @@ TML_MODULE("compiler")
 //! ```
 
 #include "borrow/checker.hpp"
+#include "types/env.hpp"
 
 namespace tml::borrow {
 
@@ -117,6 +118,14 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
     // Check initializer first
     if (let.init) {
         check_expr(**let.init);
+        // phase26f 1.1: record the move performed by the initializer BEFORE the
+        // pattern is bound, so that identifiers in the initializer still resolve
+        // to the outer scope (correct for shadowing: `let x = x` moves the outer
+        // `x`, not the freshly-bound one). `let y = x` moves x when x has move
+        // semantics; `let leaf = base.field` partially moves base.field. Borrows
+        // (`ref x`), method-call results (`x.duplicate()`) and copies are no-ops.
+        move_if_owned_ident(**let.init);
+        move_if_owned_projection(**let.init);
     }
 
     // Check if the type is a mutable reference
@@ -128,13 +137,18 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
     // Track whether variable is initialized (has an initializer expression)
     bool is_initialized = let.init.has_value();
 
-    // Bind the pattern
+    // Bind the pattern. phase26f: thread each binding's resolved type into the
+    // place so move-vs-copy classification works. The type checker recorded it
+    // against the IdentPattern node in bind_pattern (see types/checker/stmt.cpp);
+    // read it back via get_expr_type keyed on the same cached AST node.
     std::visit(
         [this, &let, is_mut_ref, is_initialized](const auto& p) {
             using T = std::decay_t<decltype(p)>;
             if constexpr (std::is_same_v<T, parser::IdentPattern>) {
                 auto loc = current_location(let.span);
-                env_.define(p.name, nullptr, p.is_mut, loc, is_mut_ref, is_initialized);
+                types::TypePtr bound_type =
+                    type_env_ ? type_env_->get_expr_type(&p) : nullptr;
+                env_.define(p.name, bound_type, p.is_mut, loc, is_mut_ref, is_initialized);
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
                 // For tuple patterns, we'd need to destructure
                 // For now, just register each sub-pattern
@@ -142,7 +156,9 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
                     if (sub->template is<parser::IdentPattern>()) {
                         const auto& ident = sub->template as<parser::IdentPattern>();
                         auto loc = current_location(let.span);
-                        env_.define(ident.name, nullptr, ident.is_mut, loc, is_mut_ref,
+                        types::TypePtr bound_type =
+                            type_env_ ? type_env_->get_expr_type(&ident) : nullptr;
+                        env_.define(ident.name, bound_type, ident.is_mut, loc, is_mut_ref,
                                     is_initialized);
                     }
                 }

@@ -474,27 +474,31 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
                                                      BorrowKind kind, Location loc) {
     const auto& state = env_.get_state(place);
 
-    if (state.state == OwnershipState::Moved) {
+    if (strict_moves_ && state.state == OwnershipState::Moved) {
         error("cannot borrow moved value: `" + state.name + "`", loc.span);
         return;
     }
 
-    // Check for partial moves
-    if (!full_place.projections.empty()) {
-        // Borrowing a field - check if that specific field was moved
-        if (full_place.projections[0].kind == ProjectionKind::Field) {
-            const auto& field = full_place.projections[0].field_name;
-            if (env_.is_field_moved(place, field)) {
-                error("cannot borrow `" + state.name + "." + field + "` because it has been moved",
+    // Check for partial moves (phase26f: only under the strict policy).
+    if (strict_moves_) {
+        if (!full_place.projections.empty()) {
+            // Borrowing a field - check if that specific field was moved
+            if (full_place.projections[0].kind == ProjectionKind::Field) {
+                const auto& field = full_place.projections[0].field_name;
+                if (env_.is_field_moved(place, field)) {
+                    error("cannot borrow `" + state.name + "." + field +
+                              "` because it has been moved",
+                          loc.span);
+                    return;
+                }
+            }
+        } else {
+            // Borrowing the whole value - check if any part is moved
+            if (env_.get_move_state(place) == MoveState::PartiallyMoved) {
+                error("cannot borrow `" + state.name + "` because part of it has been moved",
                       loc.span);
                 return;
             }
-        }
-    } else {
-        // Borrowing the whole value - check if any part is moved
-        if (env_.get_move_state(place) == MoveState::PartiallyMoved) {
-            error("cannot borrow `" + state.name + "` because part of it has been moved", loc.span);
-            return;
         }
     }
 
@@ -615,18 +619,23 @@ void BorrowChecker::move_projection(PlaceId place, const std::vector<Projection>
 
     // Check if already moved
     if (state.state == OwnershipState::Moved) {
-        error("use of moved value: `" + state.name + "`", loc.span);
+        if (strict_moves_) {
+            error("use of moved value: `" + state.name + "`", loc.span);
+        }
         return;
     }
 
     // Check if this specific projection was already moved
     if (env_.is_projection_moved(place, projections)) {
-        error("use of moved value: `" + path_str + "`", loc.span);
+        if (strict_moves_) {
+            error("use of moved value: `" + path_str + "`", loc.span);
+        }
         return;
     }
 
     // Check if borrowed
-    if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
+    if (strict_moves_ &&
+        (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed)) {
         // Check if the borrow is on this specific projection or the whole thing
         for (const auto& borrow : state.active_borrows) {
             if (borrow.end)
@@ -671,18 +680,18 @@ void BorrowChecker::check_can_use_projection(PlaceId place,
     const auto& state = env_.get_state(place);
     std::string path_str = projection_path_to_string(state.name, projections);
 
-    if (state.state == OwnershipState::Moved) {
+    if (strict_moves_ && state.state == OwnershipState::Moved) {
         error("use of moved value: `" + state.name + "`", loc.span);
         return;
     }
 
-    if (env_.is_projection_moved(place, projections)) {
+    if (strict_moves_ && env_.is_projection_moved(place, projections)) {
         error("use of moved value: `" + path_str + "`", loc.span);
         return;
     }
 
     // Check if trying to use the whole struct when it's partially moved
-    if (projections.empty() && env_.has_moved_children(place, projections)) {
+    if (strict_moves_ && projections.empty() && env_.has_moved_children(place, projections)) {
         error("use of partially moved value: `" + state.name + "`", loc.span);
         return;
     }

@@ -929,6 +929,15 @@ private:
     /// Current statement index for location tracking.
     size_t current_stmt_ = 0;
 
+    /// Staged use-after-move policy gate (phase26f 1.2). Read once from the
+    /// `TML_STRICT_MOVES` environment variable at construction. When false
+    /// (default), the checker still records `OwnershipState::Moved` at move
+    /// sites so ownership facts carry signal, but suppresses every
+    /// move-derived diagnostic — zero behaviour change vs. the pre-phase26f
+    /// checker. When true, use-after-move / move-while-borrowed / borrow- and
+    /// assign-after-move become hard B-class errors (Rust-strict).
+    bool strict_moves_ = false;
+
     /// Current loop nesting depth (for break/continue analysis).
     int loop_depth_ = 0;
 
@@ -972,6 +981,24 @@ private:
 
     /// Gets the move semantics for a type.
     auto get_move_semantics(const types::TypePtr& type) const -> MoveSemantics;
+
+    /// Determines whether a bare use of a value of this type is a MOVE rather
+    /// than a copy (phase26f 1.1). A type moves on by-value use when it is not
+    /// trivially copyable — i.e. NOT a primitive/reference/Copy-derived type. A
+    /// null type (unknown to the checker) is treated as a copy so we never
+    /// fabricate move facts from missing type information.
+    auto is_move_type(const types::TypePtr& type) const -> bool;
+
+    /// If `e` is a bare identifier bound to a move-type place, records the move
+    /// (phase26f 1.1). No-op for copies, references, method-call results,
+    /// literals, and any non-identifier operand. Never applied to method
+    /// receivers (those are borrows). Used at let-init, by-value argument,
+    /// struct-field-init, and return-of-local sites.
+    void move_if_owned_ident(const parser::Expr& e);
+
+    /// If `e` is a projection `base.field` (or deeper) whose leaf field needs
+    /// drop, records a partial move of that projection path (phase26f 1.1.3).
+    void move_if_owned_projection(const parser::Expr& e);
 
     /// Determines if a type has interior mutability (Cell, Mutex, etc.).
     /// Returns false if type_env_ is not available.
