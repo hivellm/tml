@@ -613,12 +613,15 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
 
         // Borrow checking (Polonius or NLL)
         std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+        // Ownership facts for the AST codegen below (phase26b Step 2.2).
+        std::vector<PlaceOwnershipFact> ownership_facts;
         if (options.polonius) {
             borrow::polonius::PoloniusChecker polonius_checker(env);
             borrow_result = polonius_checker.check_module(module);
         } else {
             borrow::BorrowChecker borrow_checker(env);
             borrow_result = borrow_checker.check_module(module);
+            ownership_facts = borrow_checker.ownership_facts();
         }
 
         if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -674,6 +677,7 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             gen_options.emit_comments = verbose;
             gen_options.lazy_library_defs = true; // Only emit library defs actually used
             codegen::LLVMIRGen llvm_gen(env, gen_options);
+            llvm_gen.set_ownership_facts(ownership_facts); // phase26b Step 2.2
 
             auto gen_result = llvm_gen.generate(module);
             if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {

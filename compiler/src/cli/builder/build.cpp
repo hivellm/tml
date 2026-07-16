@@ -154,6 +154,10 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Borrow-checker ownership facts, captured for the AST codegen below so the
+    // direct `tml build` path gets fact-driven drops too (phase26b Step 2.2).
+    std::vector<PlaceOwnershipFact> ownership_facts;
+
     // Run borrow checker (ownership and borrowing validation)
     // Use Polonius if --polonius flag is set, otherwise use default NLL checker
     if (options.polonius) {
@@ -172,6 +176,8 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             emit_all_borrow_errors(diag, errors);
             return 1;
         }
+        // Capture before the stack-local checker is destroyed.
+        ownership_facts = borrow_checker.ownership_facts();
     }
 
     // Emit HIR if requested (early exit before MIR/LLVM)
@@ -565,6 +571,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         llvm_gen_options.dll_export = (output_type == BuildOutputType::DynamicLib);
 #endif
         codegen::LLVMIRGen llvm_gen(env, llvm_gen_options);
+        llvm_gen.set_ownership_facts(ownership_facts); // phase26b Step 2.2
 
         auto gen_result = llvm_gen.generate(module);
         if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {

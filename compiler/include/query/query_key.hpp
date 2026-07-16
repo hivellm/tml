@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "common.hpp" // for tml::PlaceOwnershipFact / SourceSpan
+
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -196,6 +198,11 @@ struct TypecheckResult {
 struct BorrowcheckResult {
     bool success = false;
     std::vector<std::string> errors;
+    /// Per-binding ownership facts (move/init state) exported by the borrow
+    /// checker, keyed downstream by definition `SourceSpan`. Consumed by the
+    /// AST codegen to drive drop suppression (phase26b Step 2). Empty when the
+    /// Polonius checker is used (facts not yet exported there).
+    std::vector<PlaceOwnershipFact> ownership;
 };
 
 /// Result of HIR lowering.

@@ -370,6 +370,15 @@ public:
         return extern_link_libs_;
     }
 
+    /// Installs the borrow checker's per-binding ownership facts, keyed by
+    /// definition `SourceSpan`, for fact-based drop decisions (phase26b Step 2).
+    ///
+    /// Must be called before `generate()`. The facts are looked up by each
+    /// `DropInfo::def_span` at scope-exit drop emission. In Step 2 this only
+    /// drives a debug-only join proof (gated by `TML_DROP_FACTS_DEBUG`); the
+    /// actual drop decision still uses `consumed_vars_` until Step 2.4.
+    void set_ownership_facts(const std::vector<PlaceOwnershipFact>& facts);
+
 private:
     const types::TypeEnv& env_;
     LLVMGenOptions options_;
@@ -533,6 +542,7 @@ public:
         bool is_heap_str = false;       ///< True if this is a heap-allocated Str needing free().
         bool needs_field_drops = false; ///< True if type needs recursive field-level drops.
         bool needs_enum_drop = false;   ///< True if this is an enum with droppable variant fields.
+        SourceSpan def_span{}; ///< Binding definition span — join key into ownership facts.
     };
 
 private:
@@ -545,6 +555,20 @@ private:
     // Track variables that have been consumed (moved into struct fields, function args, etc.)
     // These should not be dropped when going out of scope
     std::unordered_set<std::string> consumed_vars_;
+
+    // Borrow-checker ownership facts, keyed by the binding's definition span
+    // (phase26b Step 2). Populated via set_ownership_facts() before generate().
+    // The key packs the def-span's byte offsets, which uniquely identify a
+    // binding within the single file of a codegen unit.
+    std::unordered_map<uint64_t, PlaceOwnershipFact> ownership_by_span_;
+
+    // Packs a definition SourceSpan into the ownership_by_span_ lookup key.
+    // Uses start+end byte offsets (file-relative, deterministic across the
+    // borrow-check and codegen passes since both read the same parsed module).
+    static uint64_t span_join_key(const SourceSpan& span) {
+        return (static_cast<uint64_t>(span.start.offset) << 32) |
+               static_cast<uint64_t>(span.end.offset);
+    }
 
     // Mark a variable as consumed (moved)
     void mark_var_consumed(const std::string& var_name);
@@ -559,11 +583,17 @@ private:
     void push_drop_scope();
     void pop_drop_scope();
     void register_for_drop(const std::string& var_name, const std::string& var_reg,
-                           const std::string& type_name, const std::string& llvm_type);
+                           const std::string& type_name, const std::string& llvm_type,
+                           const SourceSpan& def_span = {});
     void register_heap_str_for_drop(const std::string& var_name, const std::string& var_reg);
     bool is_heap_str_producer(const parser::Expr& expr) const;
     void emit_scope_drops(); // Emit drops for current scope only
     void emit_all_drops();   // Emit drops for all scopes (for return)
+    // phase26b Step 2 join proof: when TML_DROP_FACTS_DEBUG=1, log to stderr
+    // whether each drop-registered binding finds its ownership fact by def-span,
+    // and whether the fact's moved_out verdict agrees with consumed_vars_.
+    // Does NOT change the drop decision (still consumed_vars_-driven until 2.4).
+    void debug_prove_drop_join(const DropInfo& info, const char* site) const;
     void emit_drop_call(const DropInfo& info);
     void emit_field_level_drops(const DropInfo& info);
     void emit_partial_field_drops(const DropInfo& info);

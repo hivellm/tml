@@ -419,7 +419,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
         // Register for drop if type implements Drop
         std::string type_name = extract_type_name_for_drop(var_type);
-        register_for_drop(var_name, init_ptr, type_name, var_type);
+        register_for_drop(var_name, init_ptr, type_name, var_type, let.span);
         return;
     }
 
@@ -439,7 +439,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                 // Register for drop if type implements Drop
                 std::string type_name = extract_type_name_for_drop(class_type);
-                register_for_drop(var_name, init_ptr, type_name, class_type);
+                register_for_drop(var_name, init_ptr, type_name, class_type, let.span);
                 return;
             }
         }
@@ -556,7 +556,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                     // Register for drop if type implements Drop
                     std::string type_name = extract_type_name_for_drop(var_type);
-                    register_for_drop(var_name, alloca_reg, type_name, var_type);
+                    register_for_drop(var_name, alloca_reg, type_name, var_type, let.span);
                     return;
                 }
             }
@@ -654,7 +654,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             locals_[var_name] = VarInfo{alloca_reg, expr_type, semantic_type, std::nullopt};
             // Register for drop if type implements Drop
             std::string type_name = extract_type_name_for_drop(expr_type);
-            register_for_drop(var_name, alloca_reg, type_name, expr_type);
+            register_for_drop(var_name, alloca_reg, type_name, expr_type, let.span);
             return;
         }
 
@@ -701,7 +701,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     }
                 }
                 if (!drop_type_name.empty() && !env_.is_trivially_destructible(drop_type_name)) {
-                    register_for_drop(var_name, alloca_reg, drop_type_name, "ptr");
+                    register_for_drop(var_name, alloca_reg, drop_type_name, "ptr", let.span);
                 }
             }
         }
@@ -904,7 +904,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         locals_[var_name] = VarInfo{alloca_reg, struct_type, semantic_var_type, std::nullopt};
         // Register for drop if type implements Drop
         std::string type_name = extract_type_name_for_drop(struct_type);
-        register_for_drop(var_name, alloca_reg, type_name, struct_type);
+        register_for_drop(var_name, alloca_reg, type_name, struct_type, let.span);
         return;
     }
 
@@ -1269,11 +1269,11 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             }
         }
         if (has_direct_drop) {
-            register_for_drop(var_name, alloca_reg, type_name, var_type);
+            register_for_drop(var_name, alloca_reg, type_name, var_type, let.span);
         }
         // Skip registration — no field drops for non-owning let bindings
     } else {
-        register_for_drop(var_name, alloca_reg, type_name, var_type);
+        register_for_drop(var_name, alloca_reg, type_name, var_type, let.span);
     }
 
     // Register heap-allocated Str variables for automatic free at scope exit.

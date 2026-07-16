@@ -74,6 +74,29 @@ BorrowChecker::BorrowChecker() = default;
 
 BorrowChecker::BorrowChecker(const types::TypeEnv& type_env) : type_env_(&type_env) {}
 
+auto BorrowChecker::ownership_facts() const -> std::vector<PlaceOwnershipFact> {
+    // Snapshot every tracked place into a codegen-facing fact keyed by its
+    // definition span. `env_.all_places()` retains the end-of-function state
+    // for the last checked function (move_value mutates in place; there is no
+    // per-point history) — granularity (i), phase26b Step 2.
+    std::vector<PlaceOwnershipFact> facts;
+    const auto& places = env_.all_places();
+    facts.reserve(places.size());
+    for (const auto& [id, st] : places) {
+        (void)id;
+        PlaceOwnershipFact fact;
+        fact.def_span = st.definition.span;
+        fact.name = st.name;
+        // Monotonic "ever fully moved" verdict: OwnershipState::Moved is the
+        // terminal move state. Partial moves (moved_projections) are deferred
+        // to Step 4 and intentionally not folded into moved_out here.
+        fact.moved_out = (st.state == OwnershipState::Moved);
+        fact.initialized = st.is_initialized;
+        facts.push_back(std::move(fact));
+    }
+    return facts;
+}
+
 /// Determines if a type has interior mutability.
 ///
 /// Interior mutable types (Cell, Mutex, Shared, Sync) allow mutation through

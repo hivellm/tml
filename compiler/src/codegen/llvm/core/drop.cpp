@@ -34,7 +34,20 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 
+#include <cstdio>
+#include <cstdlib>
+
 namespace tml::codegen {
+
+// phase26b Step 2 join-proof gate: true when TML_DROP_FACTS_DEBUG is set to a
+// non-empty, non-"0" value. Cached on first query.
+static bool drop_facts_debug_enabled() {
+    static const bool enabled = [] {
+        const char* v = std::getenv("TML_DROP_FACTS_DEBUG");
+        return v != nullptr && v[0] != '\0' && !(v[0] == '0' && v[1] == '\0');
+    }();
+    return enabled;
+}
 
 // Helper to parse mangled type strings for drop instantiation
 // Handles: primitives, ptr_X (Ptr[X]), Nested__Y (Nested[Y])
@@ -125,8 +138,19 @@ void LLVMIRGen::pop_drop_scope() {
     }
 }
 
+void LLVMIRGen::set_ownership_facts(const std::vector<PlaceOwnershipFact>& facts) {
+    ownership_by_span_.clear();
+    ownership_by_span_.reserve(facts.size());
+    for (const auto& fact : facts) {
+        // Last-writer wins on key collision; within a single file the packed
+        // start/end offsets are unique per binding.
+        ownership_by_span_[span_join_key(fact.def_span)] = fact;
+    }
+}
+
 void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string& var_reg,
-                                  const std::string& type_name, const std::string& llvm_type) {
+                                  const std::string& type_name, const std::string& llvm_type,
+                                  const SourceSpan& def_span) {
     if (type_name.empty()) {
         return;
     }
@@ -273,6 +297,7 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         DropInfo di{var_name, var_reg, type_name, llvm_type};
         di.needs_field_drops = needs_field_drops;
         di.needs_enum_drop = needs_enum_drop;
+        di.def_span = def_span; // join key into ownership facts (phase26b Step 2)
         drop_scopes_.back().push_back(di);
 
         // For generic imported types, request Drop method instantiation
@@ -1156,6 +1181,34 @@ void LLVMIRGen::ensure_enum_drop_function(const std::string& enum_type_name) {
     enum_drop_output_ << fn.str();
 }
 
+void LLVMIRGen::debug_prove_drop_join(const DropInfo& info, const char* site) const {
+    if (!drop_facts_debug_enabled()) {
+        return;
+    }
+    // Current syntactic verdict: would this drop be suppressed today?
+    const bool consumed = consumed_vars_.find(info.var_name) != consumed_vars_.end();
+    const uint64_t key = span_join_key(info.def_span);
+    const auto it = ownership_by_span_.find(key);
+    if (it == ownership_by_span_.end()) {
+        // No fact for this span. Distinguish "no span recorded" (temp/when/const
+        // sites that don't thread let.span) from a genuine lookup miss.
+        const bool has_span = !(info.def_span.start.offset == 0 && info.def_span.end.offset == 0);
+        std::fprintf(stderr,
+                     "[DROP-JOIN] site=%s var=%s span=%u..%u %s consumed=%d\n", site,
+                     info.var_name.c_str(), info.def_span.start.offset, info.def_span.end.offset,
+                     has_span ? "MISS-no-fact" : "MISS-no-span", consumed ? 1 : 0);
+        return;
+    }
+    const PlaceOwnershipFact& fact = it->second;
+    const bool agree = (fact.moved_out == consumed);
+    std::fprintf(stderr,
+                 "[DROP-JOIN] site=%s var=%s span=%u..%u MATCH fact_name=%s moved_out=%d "
+                 "consumed=%d init=%d %s\n",
+                 site, info.var_name.c_str(), info.def_span.start.offset, info.def_span.end.offset,
+                 fact.name.c_str(), fact.moved_out ? 1 : 0, consumed ? 1 : 0,
+                 fact.initialized ? 1 : 0, agree ? "AGREE" : "DISAGREE-payoff");
+}
+
 void LLVMIRGen::emit_scope_drops() {
     if (drop_scopes_.empty()) {
         return;
@@ -1166,6 +1219,8 @@ void LLVMIRGen::emit_scope_drops() {
     // Also skip variables that have partial moves (some fields consumed)
     const auto& current_scope = drop_scopes_.back();
     for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
+        // phase26b Step 2 join proof (debug-only, does NOT change the decision).
+        debug_prove_drop_join(*it, "scope");
         // Skip if the whole variable was consumed
         if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
             continue;
@@ -1187,6 +1242,8 @@ void LLVMIRGen::emit_all_drops() {
     for (auto scope_it = drop_scopes_.rbegin(); scope_it != drop_scopes_.rend(); ++scope_it) {
         // Within each scope, drop in reverse declaration order
         for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
+            // phase26b Step 2 join proof (debug-only, does NOT change the decision).
+            debug_prove_drop_join(*it, "all");
             // Skip if the whole variable was consumed
             if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
                 continue;

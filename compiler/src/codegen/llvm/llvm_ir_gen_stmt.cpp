@@ -787,7 +787,7 @@ void LLVMIRGen::gen_nested_decl(const parser::Decl& decl) {
 
         // Register for drop if type implements Drop
         std::string type_name = extract_type_name_for_drop(var_type);
-        register_for_drop(const_decl.name, alloca_reg, type_name, var_type);
+        register_for_drop(const_decl.name, alloca_reg, type_name, var_type, const_decl.span);
 
         // Register heap Str for automatic free
         if (var_type == "ptr" && is_semantic_str(semantic_type) &&

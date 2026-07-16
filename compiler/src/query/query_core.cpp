@@ -487,6 +487,11 @@ std::any provide_borrowcheck_module(QueryContext& ctx, const QueryKey& key) {
     } else {
         borrow::BorrowChecker borrow_checker(*tc.env);
         borrow_result = borrow_checker.check_module(*parsed.module);
+        // Export per-binding ownership facts BEFORE the stack-local checker is
+        // destroyed (phase26b Step 2.1). These flow to the AST codegen via the
+        // cached BorrowcheckResult (the codegen_unit -> borrowcheck query edge
+        // already exists) and become the basis for fact-based drop suppression.
+        result.ownership = borrow_checker.ownership_facts();
     }
 
     if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
@@ -1028,6 +1033,9 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         }
 
         codegen::LLVMIRGen llvm_gen(*tc.env, llvm_gen_options);
+        // Install borrow-checker ownership facts (phase26b Step 2.2). Facts come
+        // from the cached BorrowcheckResult forced at the top of this provider.
+        llvm_gen.set_ownership_facts(bc.ownership);
         auto gen_result = llvm_gen.generate(*parsed.module);
 
         if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {

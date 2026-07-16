@@ -903,6 +903,16 @@ public:
         return warnings_;
     }
 
+    /// Exports per-binding ownership facts (move/init state) from the final
+    /// place environment, keyed by each place's definition `SourceSpan`.
+    ///
+    /// This snapshots `env_.all_places()` after `check_module` has run and
+    /// projects each `PlaceState` into a `PlaceOwnershipFact`
+    /// (`OwnershipState::Moved` -> `moved_out`; `is_initialized` ->
+    /// `initialized`). Must be called after `check_module`. Granularity (i):
+    /// the state is the end-of-function snapshot (phase26b Step 2).
+    [[nodiscard]] auto ownership_facts() const -> std::vector<PlaceOwnershipFact>;
+
 private:
     /// The borrow checking environment.
     BorrowEnv env_;

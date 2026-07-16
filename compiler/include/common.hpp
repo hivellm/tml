@@ -244,6 +244,31 @@ struct SourceSpan {
     }
 };
 
+/// Ownership fact exported by the borrow checker for a single named binding.
+///
+/// The borrow checker computes precise move/init state for every place but
+/// historically discarded it (`provide_borrowcheck_module` returned only
+/// success+errors). phase26b Step 2 exports these facts so the AST codegen can
+/// suppress drops of moved-out bindings instead of relying on the syntactic
+/// `consumed_vars_` set.
+///
+/// **Join key:** the binding's definition `SourceSpan` (`def_span`). Both the
+/// borrow checker (`PlaceState.definition.span`, set from `let.span`) and the
+/// AST codegen (`let.span` at each `register_for_drop` site) observe the SAME
+/// cached parsed module, so the spans are byte-identical and uniquely identify
+/// a binding (distinguishing shadowed names that a bare-name key cannot).
+///
+/// Granularity (i) only: `moved_out` is the monotonic "ever fully moved in the
+/// function" verdict (an end-of-function snapshot of `OwnershipState::Moved`).
+/// `moved_projections` (partial moves) and `conditional` (branch-dependent
+/// state) are deferred to phase26b Step 4.
+struct PlaceOwnershipFact {
+    SourceSpan def_span;     ///< Definition span of the binding — the join key.
+    std::string name;        ///< Source variable name (secondary/debug key).
+    bool moved_out = false;  ///< True if the place was moved out (OwnershipState::Moved).
+    bool initialized = true; ///< Whether the place is initialized at end of function.
+};
+
 // ============================================================================
 // Result Type
 // ============================================================================

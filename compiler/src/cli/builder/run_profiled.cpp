@@ -160,12 +160,15 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     // Phase 4.5: Borrow Checking (Polonius or NLL)
     phase_start = Clock::now();
     std::variant<bool, std::vector<borrow::BorrowError>> borrow_result;
+    // Ownership facts for the AST codegen below (phase26b Step 2.2).
+    std::vector<PlaceOwnershipFact> ownership_facts;
     if (CompilerOptions::polonius) {
         borrow::polonius::PoloniusChecker polonius_checker(env);
         borrow_result = polonius_checker.check_module(module);
     } else {
         borrow::BorrowChecker borrow_checker(env);
         borrow_result = borrow_checker.check_module(module);
+        ownership_facts = borrow_checker.ownership_facts();
     }
     record_phase("borrow_check", phase_start);
 
@@ -192,6 +195,7 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     options.source_file = path;
     options.lazy_library_defs = true; // Only emit library defs actually used
     codegen::LLVMIRGen llvm_gen(env, options);
+    llvm_gen.set_ownership_facts(ownership_facts); // phase26b Step 2.2
 
     auto gen_result = llvm_gen.generate(module);
     record_phase("codegen", phase_start);
