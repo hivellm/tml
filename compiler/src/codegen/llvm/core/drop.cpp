@@ -128,6 +128,25 @@ bool LLVMIRGen::has_consumed_fields(const std::string& var_name) const {
     return false;
 }
 
+bool LLVMIRGen::drop_suppressed_by_move(const DropInfo& info) const {
+    // UNION of the syntactic consumed set and the borrow-checker move fact
+    // (phase26f 1.3). See the header comment for why the union is required.
+    //
+    // Syntactic side (retained): covers by-value method args consumed via the
+    // ~30 mark_var_consumed sites (destroy(), function/enum/struct-init args,
+    // return, assignment, when bindings) — the method-arg blind spot the fact
+    // deliberately under-reports (safe-fallback, phase26f 1.2b).
+    if (consumed_vars_.find(info.var_name) != consumed_vars_.end()) {
+        return true;
+    }
+    // Fact side (adds precision): span-keyed, projection-aware, checker-
+    // authoritative. Catches ident moves the syntactic sites miss — notably
+    // plain `let b = a` let-init (moved_out=1, consumed=0), previously double-
+    // dropped. Span key distinguishes shadowed bindings a bare-name key cannot.
+    const auto it = ownership_by_span_.find(span_join_key(info.def_span));
+    return it != ownership_by_span_.end() && it->second.moved_out;
+}
+
 void LLVMIRGen::push_drop_scope() {
     drop_scopes_.push_back({});
 }
@@ -1221,11 +1240,15 @@ void LLVMIRGen::emit_scope_drops() {
     for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
         // phase26b Step 2 join proof (debug-only, does NOT change the decision).
         debug_prove_drop_join(*it, "scope");
-        // Skip if the whole variable was consumed
-        if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
+        // Skip if the whole variable was consumed OR moved out (phase26f 1.3 union).
+        if (drop_suppressed_by_move(*it)) {
             continue;
         }
-        // Partial move: some fields consumed, drop remaining fields individually
+        // Partial move: some fields consumed, drop remaining fields individually.
+        // Partial (projection) moves stay on the syntactic "var.field" prefix
+        // scan: the exported PlaceOwnershipFact carries only the monotonic
+        // whole-place moved_out (granularity (i)); moved_projections is deferred
+        // to phase26b Step 4, so there is no fact-side partial signal to union in.
         if (has_consumed_fields(it->var_name)) {
             TML_DEBUG_LN("[DROP] Partial move for " << it->var_name
                                                     << ", dropping non-consumed fields");
@@ -1244,11 +1267,12 @@ void LLVMIRGen::emit_all_drops() {
         for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
             // phase26b Step 2 join proof (debug-only, does NOT change the decision).
             debug_prove_drop_join(*it, "all");
-            // Skip if the whole variable was consumed
-            if (consumed_vars_.find(it->var_name) != consumed_vars_.end()) {
+            // Skip if the whole variable was consumed OR moved out (phase26f 1.3 union).
+            if (drop_suppressed_by_move(*it)) {
                 continue;
             }
             // Partial move: some fields consumed, drop remaining fields individually
+            // (syntactic prefix scan only — see emit_scope_drops for the rationale).
             if (has_consumed_fields(it->var_name)) {
                 TML_DEBUG_LN("[DROP] Partial move for "
                              << it->var_name << " in emit_all_drops, dropping non-consumed fields");

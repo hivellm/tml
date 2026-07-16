@@ -1,0 +1,40 @@
+// Harness fixture (phase26f 1.3): detects the let-init MOVE double-drop.
+//
+// The syntactic `consumed_vars_` set does NOT mark the source of a plain
+// `let b = a` binding as consumed (there is no mark_var_consumed at the
+// let-statement handler). The borrow checker's live move dataflow DOES:
+// `let b = a` records `a` as moved_out (v0.3.57 join-proof: moved_out=1,
+// consumed=0). Before the fact-driven union suppression (phase26f 1.3),
+// BOTH `a` and `b` were dropped at scope exit → the Shared control block
+// was decremented twice → a live independent handle was left dangling.
+//
+// This runs via `tml run` on purpose (AST codegen path — the same path the
+// double-drop manifests on; test-framework exes take the query/MIR path).
+//
+// Correct behavior: after the inner block exits, only `b`'s drop fires
+// (a's is suppressed by the move fact), so the independent `witness` handle
+// still observes strong_count == 1 → exit 0. Double-drop: count underflows
+// to 0 (or the payload is freed under the live witness) → exit 1 / crash.
+use core::alloc::shared::Shared
+use std::os
+
+func main() {
+    let witness = Shared::new(42 as I64) // count = 1 (witness)
+    {
+        let a = witness.duplicate() // count = 2 (witness + a)
+        let b = a                   // MOVE: a moved-out, b owns the handle
+        // block exit: b drops (count 2 -> 1). a's drop MUST be suppressed
+        // because `a` was moved into `b`. If a is ALSO dropped (the bug),
+        // count goes 1 -> 0 and the witness is left dangling.
+        if b.get() != 42 {
+            os::process_exit(1)
+        }
+    }
+    // Only `witness` remains alive here: correct strong_count is exactly 1.
+    if witness.strong_count() != 1 {
+        os::process_exit(1)
+    }
+    if witness.get() != 42 {
+        os::process_exit(1)
+    }
+}

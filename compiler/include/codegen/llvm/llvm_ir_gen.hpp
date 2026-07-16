@@ -579,6 +579,15 @@ private:
     // Check if any field of this variable has been consumed (partial move)
     [[nodiscard]] bool has_consumed_fields(const std::string& var_name) const;
 
+    // Fact-driven drop suppression (phase26f 1.3): a binding's scope-exit drop
+    // is suppressed when EITHER the syntactic `consumed_vars_` set OR the borrow
+    // checker's live move fact (`ownership_by_span_[def_span].moved_out`) reports
+    // it moved. The UNION is required because `moved_out` UNDER-reports: the
+    // method-arg safe-fallback (phase26f 1.2b) means by-value method args are
+    // tracked only syntactically. The fact ADDS precise ident moves the syntactic
+    // sites miss — notably plain `let b = a` let-init, which was double-dropped.
+    [[nodiscard]] bool drop_suppressed_by_move(const DropInfo& info) const;
+
     // Drop scope management
     void push_drop_scope();
     void pop_drop_scope();

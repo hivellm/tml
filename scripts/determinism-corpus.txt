@@ -25,6 +25,13 @@
 # would mask this class; see ADR-009). Detects the F-013 refcount bleed.
 tml_refcount_bleed_userpath: ./build/debug/bin/tml.exe run scripts/fixtures/refcount_bleed_probe.tml
 
+# USER-PATH canary (phase26f 1.3): the let-init MOVE double-drop. A plain
+# `let b = a` is not marked in the syntactic consumed_vars_ set but IS reported
+# moved_out by the borrow checker; before the fact-driven union suppression both
+# `a` and `b` were dropped, decrementing a Shared control block twice under a
+# live independent handle. Correct = witness strong_count stays 1 → exit 0.
+tml_let_move_double_drop: ./build/debug/bin/tml.exe run scripts/fixtures/let_move_double_drop_probe.tml
+
 tml_f002_hashmap: ./build/debug/cache/tests/compiler_determinism_f002_hashmap.exe --run-all
 tml_f002_list: ./build/debug/cache/tests/compiler_determinism_f002_list.exe --run-all
 tml_partial_move_enum: ./build/debug/cache/tests/compiler_determinism_partial_move_enum.exe --run-all
