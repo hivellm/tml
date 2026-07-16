@@ -280,7 +280,7 @@ impl[T] Arc[T] {
     /// let _y = x.clone()
     /// assert(Arc::try_unwrap(x).is_err())
     /// ```
-    pub func try_unwrap(this: Arc[T]) -> Outcome[T, Arc[T]] {
+    pub func try_unwrap(mut this: Arc[T]) -> Outcome[T, Arc[T]] {
         // Try to set strong count from 1 to 0
         lowlevel {
             let result: Outcome[U64, U64] = (*this.ptr).strong.compare_exchange(
@@ -297,7 +297,8 @@ impl[T] Arc[T] {
                     // Decrement weak count (remove implicit weak ref)
                     let old_weak: U64 = (*this.ptr).weak.fetch_sub(1, Ordering::Release)
 
-                    // If weak count is now 0, deallocate
+                    // If weak count is now 0, deallocate. When outstanding Weak
+                    // refs exist, the allocation stays alive; their drops free it.
                     if old_weak == 1 {
                         let inner_size: I64 = size_of[ArcInner[T]]()
                         let inner_align: I64 = align_of[ArcInner[T]]()
@@ -305,8 +306,11 @@ impl[T] Arc[T] {
                         dealloc_global(this.ptr as Ptr[U8], layout)
                     }
 
-                    // Prevent destructor from running
-                    // (In TML, we'd need to use mem::forget or similar)
+                    // Forget the source: the strong ref has already been given
+                    // up via the CAS above, so `Arc::drop` must NOT run on this
+                    // handle (it would double-decrement / use-after-free the
+                    // freed allocation). Null the pointer so drop is a no-op.
+                    this.ptr = null
 
                     return Ok(value)
                 },
@@ -441,6 +445,11 @@ impl[T] Deref for Arc[T] {
 
 impl[T] Drop for Arc[T] {
     func drop(mut this) {
+        // Guard against a forgotten handle (e.g. after `try_unwrap` nulls the
+        // pointer). A null `ptr` means the strong ref was already given up.
+        if this.ptr == null {
+            return
+        }
         lowlevel {
             // Decrement strong count
             let old_strong: U64 = (*this.ptr).strong.fetch_sub(1, Ordering::Release)

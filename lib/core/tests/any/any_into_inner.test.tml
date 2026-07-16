@@ -1,12 +1,41 @@
-// Tests for AnyValue::into_inner and TypeId::hash
-// BLOCKED:
-//   AnyValue::into_inner — heap corruption in lowlevel dealloc (STATUS_HEAP_CORRUPTION)
-//   TypeId::hash — requires generic Hasher parameter (H: Hasher) → generic trait dispatch bug
-//   type_id[T]() returns I64, not TypeId struct → "Type mismatch: expected TypeId, found I64"
-use test::{assert}
+// Tests for AnyValue::into_inner (phase26d item 1.2 / F-017).
+// Previously blocked by STATUS_HEAP_CORRUPTION: into_inner dealloc'd this.data
+// but never nulled it, so AnyValue::drop (which guards on data != null) freed
+// the same block again. The fix nulls this.data on BOTH the match and mismatch
+// paths, making the trailing drop a no-op.
+//
+// NOTE: uses `.unwrap()` / `.is_nothing()` rather than a `Just(v)` payload
+// binding (which mis-types the binder on a generic-method return — a separate,
+// pre-existing pattern-match codegen limitation).
+use test
+use core::types::any::AnyValue
 
 @test
-func test_any_into_inner_blocked() -> I32 {
-    assert(true, "AnyValue::into_inner blocked by heap corruption in dealloc")
-    return 0
+func test_any_into_inner_match() -> Outcome[Unit, Str] {
+    let any: AnyValue = AnyValue::from[I32](42)
+    // Store in a typed local before unwrap — chaining `.unwrap()` directly onto
+    // a method-generic call mis-types the extractvalue as Maybe__T.
+    let m: Maybe[I32] = any.into_inner[I32]()
+    let v: I32 = m.unwrap()
+    assert_eq(v, 42, "into_inner should return the stored I32")
+    // `any` is consumed; its drop is now a no-op (data nulled) — no double-free.
+    Ok(())
+}
+
+@test
+func test_any_into_inner_mismatch() -> Outcome[Unit, Str] {
+    let any: AnyValue = AnyValue::from[I32](7)
+    let m: Maybe[I64] = any.into_inner[I64]()
+    assert_true(m.is_nothing(), "into_inner must not match I64 for a stored I32")
+    // Mismatch path also frees + nulls; drop must not double-free.
+    Ok(())
+}
+
+@test
+func test_any_into_inner_i64_value() -> Outcome[Unit, Str] {
+    let any: AnyValue = AnyValue::from[I64](1234 as I64)
+    let m: Maybe[I64] = any.into_inner[I64]()
+    let v: I64 = m.unwrap()
+    assert_eq(v, 1234 as I64, "into_inner should return the stored I64")
+    Ok(())
 }

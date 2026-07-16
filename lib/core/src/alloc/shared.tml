@@ -284,9 +284,26 @@ impl[T] Shared[T] {
     /// ```
     pub func try_unwrap(mut this) -> Maybe[T] {
         if this.is_unique() {
+            // Move the value out (bitwise) — the source storage is orphaned
+            // without running value's drop-glue, so `value` is the sole owner.
             let value: T = (*this.ptr).value
-            mem_free(this.ptr as *Unit)
-            // Null the pointer so drop() is a no-op (prevents double-free)
+
+            // Strong 1 → 0. Mirror `decrement_count`: drop the implicit weak
+            // ref held by the strong refs, and free the allocation ONLY when
+            // `weak_count` also reaches 0. Outstanding SharedWeak refs (from
+            // `downgrade`) keep the inner alive; their `upgrade()` observes
+            // strong == 0 and returns Nothing, and their `drop` frees the block
+            // once weak reaches 0. Freeing here would dangle those weaks (F-023).
+            lowlevel { (*this.ptr).strong_count = 0 }
+            let old_weak: I32 = (*this.ptr).weak_count
+            let new_weak: I32 = old_weak - 1
+            lowlevel { (*this.ptr).weak_count = new_weak }
+            if new_weak == 0 {
+                mem_free(this.ptr as *Unit)
+            }
+
+            // Null the pointer so drop() is a no-op (the strong ref was already
+            // released manually above).
             this.ptr = null
             return Just(value)
         } else {

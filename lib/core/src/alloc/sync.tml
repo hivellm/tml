@@ -151,19 +151,95 @@ impl[T] Sync[T] {
         return Sync::new(T::default())
     }
 
-    /// Returns a copy of the inner value.
+    /// Returns a bitwise copy of the inner value.
+    ///
+    /// ## Aliasing hazard for nested Shared / Sync / Heap fields
+    ///
+    /// `get` is a **bitwise copy** of `(*this.ptr).value`. If `T` contains
+    /// nested `Sync[U]`, `Shared[U]`, `Heap[U]`, or other refcounted handles
+    /// as fields, those handles are aliased into the returned value WITHOUT
+    /// bumping their refcounts. When the returned value drops, its drop-glue
+    /// decrements those nested refcounts — potentially freeing storage that
+    /// the original `Sync`'s allocation still expects to own. This is the
+    /// `Sync.get` aliasing class of bug (F-018 / phase24k diagnosis).
+    ///
+    /// **Use `get` only when**:
+    /// - `T` is a primitive (`I32`, `Bool`, `Ptr`, etc.), OR
+    /// - `T` is a flat struct with NO nested refcounted fields, OR
+    /// - The returned value is consumed immediately and never dropped.
+    ///
+    /// **For all other cases**, prefer `get_clone(this) -> T where T:
+    /// Duplicate` which deep-clones via `T::duplicate()` and bumps every
+    /// nested refcount, or `get_ref(this) -> ref T` to borrow without copying.
     ///
     /// ## Examples
     ///
     /// ```tml
     /// let sync = Sync::new(42)
-    /// assert_eq(sync.get(), 42)
+    /// assert_eq(sync.get(), 42)  // safe — I32 has no nested handles
     /// ```
     pub func get(this) -> T {
         if this.ptr == null {
             panic("Sync::get: null pointer")
         }
         return (*this.ptr).value
+    }
+
+    /// Returns a deep clone of the inner value via `T::duplicate()`.
+    ///
+    /// Unlike `get` (which is a bitwise copy that aliases nested refcounted
+    /// fields without bumping their refcounts), `get_clone` invokes
+    /// `T::duplicate()` on the inner value, so every nested `Sync` / `Shared`
+    /// / `Heap` handle in the result carries its own fresh refcount bump — the
+    /// returned value's drop is harmless to storage owned by other `Sync`
+    /// references.
+    ///
+    /// **Always prefer `get_clone` over `get` when `T` contains nested
+    /// refcounted fields.**
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let sync = Sync::new(42)
+    /// assert_eq(sync.get_clone(), 42)
+    /// ```
+    pub func get_clone(this) -> T where T: Duplicate {
+        if this.ptr == null {
+            panic("Sync::get_clone: null pointer")
+        }
+        return (*this.ptr).value.duplicate()
+    }
+
+    /// Returns a reference to the inner value WITHOUT loading it by value.
+    ///
+    /// Unlike `get` (bitwise copy that aliases nested handles) and `get_clone`
+    /// (deep clone), `get_ref` returns a borrow into the allocation. No
+    /// bitwise temp is materialised, no drop-glue runs. This is the safe
+    /// pattern when the consumer wants to inspect the inner value without
+    /// taking ownership. Refcount semantics are unaffected — the original
+    /// `Sync` retains its strong reference.
+    ///
+    /// The `value` field is at offset 0 of `SyncInner[T]`, so a borrow of the
+    /// field aliases the allocation directly. This uses the same
+    /// `ref (*this.ptr).value` borrow pattern as `Arc::get` / `Deref::deref`
+    /// (a GEP into the inner, no aggregate load, no drop-glue) rather than the
+    /// `ptr_as_ref[T]` intrinsic, whose codegen currently mis-types the return
+    /// as `i32` (see `core/tests/ptr/non_null_blocked.test.tml`).
+    ///
+    /// ## Examples
+    ///
+    /// ```tml
+    /// let s = Sync::new(42)
+    /// let r: ref I32 = s.get_ref()
+    /// assert_eq(*r, 42)
+    /// ```
+    pub func get_ref(this) -> ref T {
+        if this.ptr == null {
+            panic("Sync::get_ref: null pointer")
+        }
+        lowlevel {
+            return ref (*this.ptr).value
+        }
     }
 
     /// Returns the current atomic strong reference count.
@@ -257,9 +333,25 @@ impl[T] Sync[T] {
     /// ```
     pub func try_unwrap(mut this) -> Maybe[T] {
         if this.is_unique() {
+            // Move the value out (bitwise) — the source storage is orphaned
+            // without running value's drop-glue, so `value` is the sole owner.
             let value: T = (*this.ptr).value
-            mem_free(this.ptr as *Unit)
-            // Null the pointer so drop() is a no-op (prevents double-free)
+
+            // Strong 1 → 0 (atomic). Mirror `decrement_count`: drop the
+            // implicit weak ref held by the strong refs, and free the
+            // allocation ONLY when `weak_count` also reaches 0. Outstanding
+            // SyncWeak refs (from `downgrade`) keep the inner alive; their
+            // `upgrade()` observes strong == 0 and returns Nothing, and their
+            // `drop` frees the block once weak reaches 0. Freeing here would
+            // dangle those weaks (F-023).
+            atomic_fetch_sub_i32(this.strong_count_ptr(), 1)
+            let prev_weak: I32 = atomic_fetch_sub_i32(this.weak_count_ptr(), 1)
+            if prev_weak == 1 {
+                mem_free(this.ptr as *Unit)
+            }
+
+            // Null the pointer so drop() is a no-op (the strong ref was already
+            // released manually above).
             this.ptr = null
             return Just(value)
         } else {

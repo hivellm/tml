@@ -1,0 +1,30 @@
+// Tests for Sync::get_ref and Sync::get_clone — the F-018 safe read accessors
+// (phase26d item 1.3). `get_ref` borrows without copying; `get_clone` deep-clones
+// via T::duplicate(). Neither changes the strong reference count.
+use test
+use core::alloc::Sync
+
+@test
+func test_sync_get_ref_borrows_value() -> Outcome[Unit, Str] {
+    let s: Sync[I64] = Sync::new(42 as I64)
+    let r: ref I64 = s.get_ref()
+    assert_eq(*r, 42 as I64, "get_ref should borrow the stored value")
+    Ok(())
+}
+
+@test
+func test_sync_get_ref_no_refcount_change() -> Outcome[Unit, Str] {
+    let s: Sync[I64] = Sync::new(7 as I64)
+    let _r: ref I64 = s.get_ref()
+    assert_eq(s.strong_count(), 1, "get_ref must not change the strong count")
+    Ok(())
+}
+
+@test
+func test_sync_get_clone_returns_value() -> Outcome[Unit, Str] {
+    let s: Sync[I32] = Sync::new(99)
+    let v: I32 = s.get_clone()
+    assert_eq(v, 99, "get_clone should return a clone of the stored value")
+    assert_eq(s.strong_count(), 1, "get_clone must not change the Sync strong count")
+    Ok(())
+}

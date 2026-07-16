@@ -1,0 +1,50 @@
+// Tests for Shared::try_unwrap weak-ref safety (phase26d item 1.3b / F-023).
+// try_unwrap on a strong-unique Shared must move the value out and free the
+// backing allocation ONLY when weak_count also reaches 0; outstanding
+// SharedWeak refs must keep the inner alive (freeing it would dangle them).
+//
+// NOTE: uses method-call syntax `s.try_unwrap()` (the static form
+// `Shared::try_unwrap(s)` does not monomorphize the Maybe[T] return) and
+// `.unwrap()` / `.is_nothing()` / `Just(_)` wildcard rather than a `Just(v)`
+// payload binding (which mis-types the binder as `%struct.T` — a separate,
+// pre-existing pattern-match codegen limitation).
+use test
+use core::alloc::Shared
+use core::alloc::SharedWeak
+
+@test
+func test_shared_try_unwrap_unique_ok() -> Outcome[Unit, Str] {
+    // No weak refs — sole owner: unwrap succeeds and frees cleanly (no regression).
+    let s: Shared[I64] = Shared::new(99 as I64)
+    let v: I64 = s.try_unwrap().unwrap()
+    assert_eq(v, 99 as I64, "try_unwrap of a unique Shared returns the value")
+    Ok(())
+}
+
+@test
+func test_shared_try_unwrap_keeps_weak_alive() -> Outcome[Unit, Str] {
+    // F-023 regression: a weak ref is outstanding when we unwrap the sole strong.
+    let s: Shared[I64] = Shared::new(42 as I64)
+    let w: SharedWeak[I64] = s.downgrade()
+    let v: I64 = s.try_unwrap().unwrap()
+    assert_eq(v, 42 as I64, "try_unwrap returns the value with a weak outstanding")
+    // The inner must still be alive: the weak observes strong==0 (value moved
+    // out) rather than reading freed memory.
+    assert_true(w.is_expired(), "weak should be expired after the value is unwrapped")
+    when w.upgrade() {
+        Just(_) => return Err("weak.upgrade must be Nothing after try_unwrap moved the value out"),
+        Nothing => assert_true(true, "weak correctly cannot upgrade"),
+    }
+    // w drops at scope end — it frees the still-alive inner without corruption.
+    Ok(())
+}
+
+@test
+func test_shared_try_unwrap_multiple_strong_fails() -> Outcome[Unit, Str] {
+    let s: Shared[I64] = Shared::new(5 as I64)
+    let s2: Shared[I64] = s.duplicate()
+    let m: Maybe[I64] = s.try_unwrap()
+    assert_true(m.is_nothing(), "try_unwrap with 2 strong refs must fail")
+    assert_eq(s2.get(), 5 as I64, "the surviving Shared is still usable")
+    Ok(())
+}

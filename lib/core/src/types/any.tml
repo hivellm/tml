@@ -397,18 +397,23 @@ impl AnyValue {
     ///     Nothing => print("Type mismatch\n")
     /// }
     /// ```
-    pub func into_inner[T](this) -> Maybe[T] {
+    pub func into_inner[T](mut this) -> Maybe[T] {
         let tid: U64 = type_id[T]()
         if this.type_id == tid {
             lowlevel {
                 let typed_ptr: *T = this.data as *T
                 let value: T = ptr_read(typed_ptr)
                 dealloc(this.data)
+                // Null the pointer so `AnyValue::drop` (which guards on
+                // `data != null`) does NOT dealloc the same block again.
+                this.data = null
                 return Just(value)
             }
         }
-        // Type mismatch - free memory and return Nothing
+        // Type mismatch - free memory and return Nothing.
         dealloc(this.data)
+        // Null so `AnyValue::drop` is a no-op (prevents the double-free).
+        this.data = null
         return Nothing
     }
 }
