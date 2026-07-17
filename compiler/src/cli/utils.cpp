@@ -79,7 +79,7 @@ void print_usage() {
               << "  --emit-pipeline[=/path]           Emit compilation pipeline stages (MIR/IR)\n"
               << "  --coverage                        Generate code coverage report\n"
               << "  --release                         Run tests in release mode\n"
-              << "  --no-suite                        1 DLL per test (vs. 8 per suite)\n"
+              << "  --no-suite                        1 EXE per test file (default: 25 per EXE)\n"
               << "  --no-cache                        Force full recompilation\n"
               << "  --verbose                         Show detailed compiler output\n"
               << "  --nocapture                       Show stdout/stderr during tests\n"

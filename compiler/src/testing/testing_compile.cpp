@@ -35,6 +35,7 @@ TML_MODULE("test")
 #include <condition_variable>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <llvm/Support/ErrorHandling.h>
 #include <mutex>
 #include <set>
@@ -592,10 +593,16 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     std::vector<FileCompileResult> file_results(suite.tests.size());
     std::atomic<int> next_file{0};
-    // Force single-threaded per-file compilation to avoid LLVM global state corruption.
-    // Each file gets its own QueryContext/LLVMContext, but shared LLVM globals
-    // (target registry, pass managers) are not thread-safe in all configurations.
-    int num_compile_threads = 1;
+    // Per-file codegen threads within this suite. Historically hardcoded to 1
+    // ("avoid LLVM global state corruption"), but suite-LEVEL parallelism has
+    // always run up to 8 concurrent codegen threads (one per suite worker),
+    // so per-file concurrency inside one suite is the same safety regime as
+    // long as the GLOBAL thread envelope is unchanged. compile_suites_parallel
+    // distributes its idle worker budget here (full runs: 8 workers x 1 thread,
+    // unchanged; targeted runs with few aggregated suites: fewer workers with
+    // multiple intra-suite threads). Each file gets its own QueryContext.
+    int num_compile_threads =
+        std::max(1, std::min(config.intra_suite_threads, static_cast<int>(suite.tests.size())));
 
     auto file_worker = [&]() {
         while (true) {
@@ -823,9 +830,44 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     std::shared_ptr<parser::Module> parsed_module_holder;
     std::set<size_t> compiled_indices;
 
+    // phase41a pre-link validation helper: every compiled object must define
+    // its `tml_test_<i>` entry symbol. A pre-existing codegen entry-emission
+    // bug can produce an object WITHOUT the entry; linking it into an
+    // aggregated EXE fails the WHOLE suite with "undefined symbol:
+    // tml_test_<i>" (and per-file linking of that same file fails
+    // identically). Excluding the offender up front keeps sibling files
+    // aggregated at zero extra link cost. Detection is a byte search for the
+    // NUL-terminated symbol name: `tml_test_N` is always >8 chars, so on COFF
+    // it lives NUL-terminated in the string table (ELF symbol names likewise).
+    auto object_defines_symbol = [](const fs::path& obj_path, const std::string& name) -> bool {
+        std::ifstream in(obj_path, std::ios::binary);
+        if (!in) {
+            return false;
+        }
+        std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::string needle = name;
+        needle.push_back('\0');
+        return data.find(needle) != std::string::npos;
+    };
+
     for (size_t i = 0; i < file_results.size(); ++i) {
         auto& fr = file_results[i];
         if (fr.success) {
+            std::string entry_name = "tml_test_" + std::to_string(i);
+            if (!object_defines_symbol(fr.object_file, entry_name)) {
+                fr.success = false;
+                fr.error_message = "Linking failed: compiled object does not define its test "
+                                   "entry '" +
+                                   entry_name +
+                                   "' (codegen entry-emission bug — this file fails to link in "
+                                   "per-file mode too)";
+                TML_LOG_ERROR("test", "  [compile] SKIP " << fr.file_path << ": "
+                                                          << fr.error_message);
+                result.per_file_errors.push_back({fr.file_path, fr.error_message});
+                result.loaded_source_files.insert(fr.loaded_source_files.begin(),
+                                                  fr.loaded_source_files.end());
+                continue;
+            }
             all_object_files.push_back(fr.object_file);
             all_link_libs.insert(fr.link_libs.begin(), fr.link_libs.end());
             compiled_indices.insert(i);
@@ -890,6 +932,9 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     if (!disp_result.success) {
         result.success = false;
         result.error_message = "[X001] Dispatcher compilation failed: " + disp_result.error_message;
+        // Per-file codegen succeeded — treat like a link-stage failure so the
+        // coordinator can fall back to per-file compilation.
+        result.link_stage_failure = true;
         auto end = Clock::now();
         result.compile_time_us =
             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -1300,6 +1345,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     if (!link_result.success) {
         result.success = false;
         result.error_message = "Linking failed: " + link_result.error_message;
+        // Codegen succeeded for the surviving files — the failure is confined to
+        // the link stage. Signal the coordinator so it can fall back to per-file
+        // compilation for this suite (offender isolation) instead of dropping it.
+        result.link_stage_failure = true;
         return result;
     }
 

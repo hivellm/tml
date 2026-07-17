@@ -138,6 +138,43 @@ execute_suites_parallel(const std::vector<Suite>& suites,
         max_concurrent = std::max(1, std::min(8, hw));
     }
 
+    // Initialize result structures for successful suites.
+    // Tests whose file failed to compile (per-file SKIP inside an aggregated
+    // suite) are marked failed up-front with the compile error — mirroring
+    // per-file mode, where a compile failure counts as a failed suite. They
+    // are also recorded in `prefailed` so the NDJSON bookkeeping below treats
+    // them as already resolved (they are not in the dispatcher).
+    std::vector<std::set<int>> prefailed(suites.size());
+    for (int i = 0; i < static_cast<int>(compile_results.size()); ++i) {
+        if (compile_results[i].success) {
+            auto& r = results[i];
+            const auto& suite = suites[i];
+            r.name = suite.name;
+            r.group = suite.group;
+            r.test_count = static_cast<int>(suite.tests.size());
+            r.compile_ok = true;
+            r.compile_time_us = compile_results[i].compile_time_us;
+            r.tests.resize(suite.tests.size());
+            for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
+                r.tests[t].index = t;
+                r.tests[t].name = suite.tests[t].test_name;
+                r.tests[t].file = suite.tests[t].file_path;
+            }
+            // Propagate per-file compile errors and mark the affected tests
+            for (const auto& pfe : compile_results[i].per_file_errors) {
+                r.per_file_compile_errors.push_back({pfe.file_path, pfe.error});
+                for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
+                    if (suite.tests[t].file_path == pfe.file_path && !prefailed[i].contains(t)) {
+                        r.tests[t].passed = false;
+                        r.tests[t].error = pfe.error;
+                        r.failed++;
+                        prefailed[i].insert(t);
+                    }
+                }
+            }
+        }
+    }
+
     // Build list of work items.
     // run_all_mode=true:  one item per suite  (test_index=-1), subprocess gets --run-all
     // run_all_mode=false: one item per test   (test_index=N),  subprocess gets --test-index=N
@@ -154,9 +191,12 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                 // One work item per suite — subprocess runs all tests sequentially
                 pending.push_back({i, -1, compile_results[i].exe_path});
             } else {
-                // Legacy: one work item per test for crash isolation
+                // Legacy: one work item per test for crash isolation.
+                // Compile-failed tests are not in the dispatcher — skip them.
                 for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
-                    pending.push_back({i, t, compile_results[i].exe_path});
+                    if (!prefailed[i].contains(t)) {
+                        pending.push_back({i, t, compile_results[i].exe_path});
+                    }
                 }
             }
         } else {
@@ -167,29 +207,6 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             r.compile_ok = false;
             r.compile_error = compile_results[i].error_message;
             r.compile_time_us = compile_results[i].compile_time_us;
-        }
-    }
-
-    // Initialize result structures for successful suites
-    for (int i = 0; i < static_cast<int>(compile_results.size()); ++i) {
-        if (compile_results[i].success) {
-            auto& r = results[i];
-            const auto& suite = suites[i];
-            r.name = suite.name;
-            r.group = suite.group;
-            r.test_count = static_cast<int>(suite.tests.size());
-            r.compile_ok = true;
-            r.compile_time_us = compile_results[i].compile_time_us;
-            r.tests.resize(suite.tests.size());
-            for (int t = 0; t < static_cast<int>(suite.tests.size()); ++t) {
-                r.tests[t].index = t;
-                r.tests[t].name = suite.tests[t].test_name;
-                r.tests[t].file = suite.tests[t].file_path;
-            }
-            // Propagate per-file compile errors
-            for (const auto& pfe : compile_results[i].per_file_errors) {
-                r.per_file_compile_errors.push_back({pfe.file_path, pfe.error});
-            }
         }
     }
 
@@ -240,8 +257,15 @@ execute_suites_parallel(const std::vector<Suite>& suites,
             } else {
                 opts.timeout = std::chrono::seconds(config.timeout_seconds);
             }
-            // Hard cap: no test executable may run longer than 60 seconds
-            opts.timeout = std::min(opts.timeout, std::chrono::milliseconds(60'000));
+            // Hard cap: a single-test subprocess may not run longer than 60 s.
+            // Aggregated run-all subprocesses scale the cap with the file count
+            // (the in-EXE per-test watchdog still enforces per-test limits);
+            // capping at a flat 60 s would spuriously kill large healthy suites.
+            int cap_files = 1;
+            if (work.test_index < 0) {
+                cap_files = std::max(1, static_cast<int>(suites[work.suite_index].tests.size()));
+            }
+            opts.timeout = std::min(opts.timeout, std::chrono::milliseconds(60'000) * cap_files);
 
             // Add native library directories to subprocess PATH so DLLs are found at runtime.
             // build_environment_block() prepends PATH entries, so setting opts.env["PATH"]
@@ -365,9 +389,12 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                     // ----------------------------------------------------------------
                     // run-all mode: parse a multi-test NDJSON stream.
                     // Track which tests have been started and which have been resolved.
+                    // Tests whose file failed to compile were already marked failed at
+                    // init (prefailed) — seed them as resolved so the crash/timeout
+                    // bookkeeping below never reclassifies or re-runs them.
                     // ----------------------------------------------------------------
                     std::set<int> started_indices;
-                    std::set<int> resolved_indices;
+                    std::set<int> resolved_indices = prefailed[si];
 
                     std::istringstream stream(it->accumulated_stdout);
                     std::string line;
@@ -444,40 +471,15 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                             parsed.event);
                     }
 
-                    // If the subprocess crashed mid-stream, handle unresolved tests.
-                    // Tests that had test_start but no outcome = crashed.
-                    // Tests that never got test_start = not reached (subprocess died).
-                    if (proc_result.timed_out) {
-                        // Mark all unresolved tests as timed out
-                        for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
-                            if (!resolved_indices.contains(idx)) {
-                                sr.tests[idx].passed = false;
-                                sr.tests[idx].error = "[X002] TIMEOUT";
-                                sr.failed++;
-                            }
-                        }
-                    } else if (proc_result.exit_code == 99 &&
-                               resolved_indices.size() < sr.tests.size()) {
-                        // Exit code 99 = per-test timeout watchdog killed the process.
-                        // The last started-but-unresolved test is the one that timed out.
-                        for (int idx = 0; idx < static_cast<int>(sr.tests.size()); ++idx) {
-                            if (resolved_indices.contains(idx)) {
-                                continue;
-                            }
-                            auto& t = sr.tests[idx];
-                            t.passed = false;
-                            if (started_indices.contains(idx)) {
-                                t.error = "[X002] TIMEOUT: test exceeded " +
-                                          std::to_string(config.per_test_timeout_us / 1000) +
-                                          "ms limit — killed";
-                                sr.failed++;
-                            } else {
-                                t.error = "NOT RUN: previous test timed out";
-                                sr.failed++;
-                            }
-                        }
-                    } else if (proc_result.exit_code != 0 &&
-                               resolved_indices.size() < sr.tests.size()) {
+                    // If the subprocess died mid-stream (crash, per-test watchdog kill,
+                    // or whole-process timeout), classify the OFFENDER (the started-
+                    // but-unresolved test) and RE-RUN the never-started siblings
+                    // individually via --test-index=N (phase41a crash-isolation
+                    // fallback). Their results are then parsed by the legacy per-test
+                    // path, so an aborting test never silently drops sibling results.
+                    bool abnormal_end = proc_result.timed_out || proc_result.exit_code == 99 ||
+                                        proc_result.exit_code != 0;
+                    if (abnormal_end && resolved_indices.size() < sr.tests.size()) {
                         std::string crash_err = !it->accumulated_stderr.empty()
                                                     ? it->accumulated_stderr
                                                     : "Process crashed with exit code " +
@@ -487,15 +489,37 @@ execute_suites_parallel(const std::vector<Suite>& suites,
                                 continue;
                             }
                             auto& t = sr.tests[idx];
-                            t.passed = false;
                             if (started_indices.contains(idx)) {
-                                // Started but no outcome = process crashed during this test
-                                t.error = "[X003] CRASH: " + crash_err;
-                                sr.crashed++;
+                                // The offender: started but produced no outcome.
+                                t.passed = false;
+                                if (proc_result.timed_out) {
+                                    t.error = "[X002] TIMEOUT";
+                                    sr.failed++;
+                                } else if (proc_result.exit_code == 99) {
+                                    t.error = "[X002] TIMEOUT: test exceeded " +
+                                              std::to_string(config.per_test_timeout_us / 1000) +
+                                              "ms limit — killed";
+                                    sr.failed++;
+                                } else {
+                                    t.error = "[X003] CRASH: " + crash_err;
+                                    sr.crashed++;
+                                }
                             } else {
-                                // Never reached = subprocess died before this test
-                                t.error = "[X003] NOT RUN: " + crash_err;
-                                sr.crashed++;
+                                // Never reached — re-run individually for isolation
+                                // (unless fail-fast already stopped the run).
+                                if (!should_stop.load(std::memory_order_relaxed)) {
+                                    pending.push_back({si, idx, compile_results[si].exe_path});
+                                } else {
+                                    t.passed = false;
+                                    t.error = proc_result.exit_code == 99
+                                                  ? "NOT RUN: previous test timed out"
+                                                  : "[X003] NOT RUN: " + crash_err;
+                                    if (proc_result.exit_code == 99 || proc_result.timed_out) {
+                                        sr.failed++;
+                                    } else {
+                                        sr.crashed++;
+                                    }
+                                }
                             }
                         }
                     } else if (resolved_indices.empty()) {
@@ -1362,6 +1386,55 @@ TestRunResult run_tests(const TestConfig& config) {
                 cache.save(cache_file_path);
                 TML_LOG_INFO("test", "  [cache] Saved " << cache.size() << " entries after batch "
                                                         << ((batch_start / batch_size) + 1));
+            }
+        }
+
+        // 7b (phase41a). Link-stage fallback: an aggregated suite that failed at
+        // the dispatcher-compile or link stage (e.g. duplicate symbols between
+        // test objects) is split into per-file suites and recompiled — the
+        // offending file fails alone, sibling files still build and run. The
+        // per-file retry mostly reuses the obj-cache, so the cost is N links.
+        {
+            std::vector<Suite> split_suites;
+            std::set<int> replaced_indices;
+            for (int i = 0; i < static_cast<int>(uncached_suites.size()); ++i) {
+                const auto& cr = new_compile_results[i];
+                if (!cr.success && cr.link_stage_failure && uncached_suites[i].tests.size() > 1) {
+                    TML_LOG_WARN("test", "[coordinator] Suite "
+                                             << uncached_suites[i].name
+                                             << " failed at link stage — falling back to "
+                                                "per-file EXEs for its "
+                                             << uncached_suites[i].tests.size() << " files");
+                    auto split = group_into_suites(uncached_suites[i].tests, 1);
+                    for (auto& s : split) {
+                        split_suites.push_back(std::move(s));
+                    }
+                    replaced_indices.insert(i);
+                }
+            }
+            if (!split_suites.empty() && !should_stop.load(std::memory_order_relaxed)) {
+                auto split_results =
+                    compile_suites_parallel(split_suites, compile_config, should_stop, nullptr);
+
+                // Rebuild the parallel suite/result vectors: drop the failed
+                // aggregates, append their per-file replacements.
+                std::vector<Suite> merged_suites;
+                std::vector<CompileResult> merged_results;
+                merged_suites.reserve(uncached_suites.size() + split_suites.size());
+                merged_results.reserve(uncached_suites.size() + split_suites.size());
+                for (int i = 0; i < static_cast<int>(uncached_suites.size()); ++i) {
+                    if (replaced_indices.contains(i)) {
+                        continue;
+                    }
+                    merged_suites.push_back(std::move(uncached_suites[i]));
+                    merged_results.push_back(std::move(new_compile_results[i]));
+                }
+                for (size_t i = 0; i < split_suites.size(); ++i) {
+                    merged_suites.push_back(std::move(split_suites[i]));
+                    merged_results.push_back(std::move(split_results[i]));
+                }
+                uncached_suites = std::move(merged_suites);
+                new_compile_results = std::move(merged_results);
             }
         }
 

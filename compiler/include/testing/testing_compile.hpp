@@ -37,6 +37,12 @@ struct CompileResult {
     };
     std::vector<FileError> per_file_errors;
 
+    /// True when per-file codegen succeeded (for at least the surviving files)
+    /// but the suite failed at the dispatcher-compile or link stage. The
+    /// coordinator uses this to fall back to per-file compilation for the
+    /// suite's files (offender isolation) instead of dropping the whole suite.
+    bool link_stage_failure = false;
+
     /// Total number of tests successfully compiled (for unified binary).
     int compiled_test_count = 0;
 
@@ -60,6 +66,14 @@ struct CompileConfig {
     bool fail_fast = false; ///< Stop immediately on first compile error
     int optimization_level = 0;
     int num_threads = 0; ///< Parallel compile workers (0 = auto)
+
+    /// Parallel per-file codegen threads WITHIN one suite (set by
+    /// compile_suites_parallel from the idle worker budget). With aggregated
+    /// suites (phase41a default: 25 files/EXE) a targeted run may have fewer
+    /// suites than workers; intra-suite threads keep codegen parallel while
+    /// staying inside the same global 8-thread envelope that suite-level
+    /// parallelism already exercises (each file has its own QueryContext).
+    int intra_suite_threads = 1;
 
     // Hybrid pipeline (phase13d): stage overrides propagated from --stage flag.
     // Empty = use default for each stage.

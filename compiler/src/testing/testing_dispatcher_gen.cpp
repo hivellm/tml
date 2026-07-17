@@ -356,20 +356,22 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  %ok_" << i << " = icmp eq i32 %rc_" << i << ", 0\n";
             ir << "  br i1 %ok_" << i << ", label %pass_" << i << ", label %fail_" << i << "\n\n";
 
-            // Pass
+            // Pass — event index MUST be the original test index (tidx), matching
+            // test_start: when files are skipped (compile failure) the dispatcher
+            // list has gaps, and the coordinator maps event indices to suite slots.
             ir << "pass_" << i << ":\n";
             ir << "  %tp_fmt_" << i << " = " << gep_test_pass << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %tp_fmt_" << i << ", i32 " << i << ", i64 %us_"
-               << i << ")\n";
+            ir << "  call i32 (i8*, ...) @printf(i8* %tp_fmt_" << i << ", i32 " << tidx
+               << ", i64 %us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
             ir << "  br label %exit_pass\n\n";
 
-            // Fail
+            // Fail — same original-index rule as pass
             ir << "fail_" << i << ":\n";
             ir << "  %tf_fmt_" << i << " = " << gep_test_fail << "\n";
             ir << "  %tf_name_" << i << " = " << gep_name << "\n";
             ir << "  %tf_file_" << i << " = " << gep_file << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %tf_fmt_" << i << ", i32 " << i
+            ir << "  call i32 (i8*, ...) @printf(i8* %tf_fmt_" << i << ", i32 " << tidx
                << ", i8* %tf_name_" << i << ", i8* %tf_file_" << i << ", i32 %rc_" << i
                << ", i64 %us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
@@ -507,20 +509,24 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  br i1 %at_ok_" << i << ", label %at_pass_" << i << ", label %at_fail_" << i
                << "\n\n";
 
-            // Pass branch
+            // Pass branch — event index MUST be the original test index (tidx),
+            // matching test_start: when files are skipped (compile failure) the
+            // dispatcher list has gaps and the coordinator maps event indices to
+            // suite slots. Using the sequential position here misattributed
+            // results to the wrong tests.
             ir << "at_pass_" << i << ":\n";
             ir << "  %at_tp_fmt_" << i << " = " << gep_test_pass << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %at_tp_fmt_" << i << ", i32 " << i
+            ir << "  call i32 (i8*, ...) @printf(i8* %at_tp_fmt_" << i << ", i32 " << tidx
                << ", i64 %at_us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
             ir << "  br label %done_" << i << "\n\n";
 
-            // Fail branch
+            // Fail branch — same original-index rule as pass
             ir << "at_fail_" << i << ":\n";
             ir << "  %at_tf_fmt_" << i << " = " << gep_test_fail << "\n";
             ir << "  %at_tf_name_" << i << " = " << gep_name << "\n";
             ir << "  %at_tf_file_" << i << " = " << gep_file << "\n";
-            ir << "  call i32 (i8*, ...) @printf(i8* %at_tf_fmt_" << i << ", i32 " << i
+            ir << "  call i32 (i8*, ...) @printf(i8* %at_tf_fmt_" << i << ", i32 " << tidx
                << ", i8* %at_tf_name_" << i << ", i8* %at_tf_file_" << i << ", i32 %at_rc_" << i
                << ", i64 %at_us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";

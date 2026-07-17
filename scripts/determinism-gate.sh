@@ -21,8 +21,12 @@ cd "$(dirname "$0")/.."
 RUNS="${1:-30}"
 
 echo "[gate] refreshing determinism corpus executables..."
-if ! ./build/debug/bin/tml.exe test compiler/tests/determinism >/dev/null 2>&1; then
-    echo "[gate] FAIL: corpus test suites do not compile (see 'tml test compiler/tests/determinism')" >&2
+# --no-suite: the corpus contract below runs ONE exe per repro file
+# (compiler_determinism_<name>.exe). Since phase41a `tml test` aggregates
+# multiple files per EXE by default, per-file mode must be forced here or the
+# corpus would execute stale per-file exes from older sessions.
+if ! ./build/debug/bin/tml.exe test compiler/tests/determinism --no-suite >/dev/null 2>&1; then
+    echo "[gate] FAIL: corpus test suites do not compile (see 'tml test compiler/tests/determinism --no-suite')" >&2
     exit 1
 fi
 

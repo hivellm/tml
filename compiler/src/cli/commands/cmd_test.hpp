@@ -19,7 +19,8 @@
 //! - `--bench`: Run benchmarks instead of tests
 //! - `--fuzz`: Run fuzz tests
 //! - `--profile`: Show detailed phase timings
-//! - `--suite-mode`: Bundle tests into DLLs (default: true)
+//! - `--suite-mode`: Aggregate test files into shared EXEs (default since phase41a)
+//! - `--no-suite`: Force one EXE per test file (the pre-phase41a default)
 
 #pragma once
 
@@ -167,7 +168,9 @@ struct TestOptions {
     std::string coverage_source_dir;   // Directory to write coverage reports
     bool profile = false;              // Show detailed phase timings
     std::string log_path;              // Custom log file path (--log=<path>)
-    bool suite_mode = false;           // Suite mode: multiple tests per EXE (default: 1 per file)
+    bool suite_mode = true; // Suite mode: aggregated EXEs, multiple test files per binary
+                            // (default since phase41a; --no-suite forces 1 EXE per file;
+                            // coverage always forces per-file)
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
     bool check_leaks = true;           // Memory leak detection (enabled by default)

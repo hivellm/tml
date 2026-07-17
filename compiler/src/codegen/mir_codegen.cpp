@@ -884,8 +884,13 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
             thunk_params += route.param_types[j].first + " %" + route.param_types[j].second;
         }
 
+        // Internal linkage in suite mode: every test .obj emits its own thunks;
+        // references are module-local, so internal avoids duplicate symbols when
+        // multiple test objects link into one aggregated EXE.
+        std::string thunk_linkage = options_.force_internal_linkage ? "internal " : "";
         emitln("; ABI trampoline: receives by-value structs, passes as ptr to real handler");
-        emitln("define " + ret_type + " " + thunk_name + "(" + thunk_params + ") {");
+        emitln("define " + thunk_linkage + ret_type + " " + thunk_name + "(" + thunk_params +
+               ") {");
         emitln("entry:");
 
         // For each aggregate parameter, spill to alloca and pass as ptr.
@@ -921,9 +926,13 @@ void MirCodegen::emit_route_registration(const mir::Module& module) {
 
     // Always emit __tml_register_routes — even if no routes exist (empty function).
     // This allows library code (app_listen) to unconditionally call it.
+    // Internal linkage in suite mode (see thunk comment above): all references
+    // are module-local, and external linkage causes LLD duplicate-symbol errors
+    // when multiple test .objs link into one aggregated EXE.
     emitln("; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
     emitln("; Inline registration: writes directly to the flat handler table (24 bytes/entry)");
-    emitln("define void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
+    emitln("define " + std::string(options_.force_internal_linkage ? "internal " : "") +
+           "void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
     emitln("entry:");
 
     if (routes.empty()) {

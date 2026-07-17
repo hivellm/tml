@@ -65,6 +65,16 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
     }
     num_threads = std::min(num_threads, static_cast<int>(suites.size()));
 
+    // phase41a: with aggregated suites a targeted run may have fewer suites
+    // than the 8-thread budget. Hand the idle budget to per-file codegen
+    // threads inside each suite so `tml test --suite=X` keeps its parallelism.
+    // Global concurrency stays <= 8 (num_threads * intra <= 8), the same
+    // envelope suite-level parallelism has always used. Full runs keep the
+    // historical 8 workers x 1 intra thread.
+    CompileConfig effective_config = config;
+    effective_config.intra_suite_threads =
+        std::max(1, std::min(4, 8 / std::max(1, num_threads)));
+
     std::atomic<int> next_suite{0};
 
     int total_suites = static_cast<int>(suites.size());
@@ -84,7 +94,7 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
             TML_LOG_INFO("test", "[compile] Building " << suite_name << ".exe (" << (idx + 1) << "/"
                                                        << total_suites << ")");
 
-            results[idx] = compile_suite_safe(suites[idx], config);
+            results[idx] = compile_suite_safe(suites[idx], effective_config);
 
             int done = completed.fetch_add(1, std::memory_order_relaxed) + 1;
             if (results[idx].success) {
@@ -101,8 +111,13 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
                 on_complete(idx, results[idx]);
             }
 
-            if (config.fail_fast &&
-                (!results[idx].success || !results[idx].per_file_errors.empty())) {
+            // Fail-fast on real compile errors. Link-stage failures of aggregated
+            // suites are recoverable (the coordinator splits the suite per-file),
+            // so they must not abort the whole run.
+            bool recoverable_link_failure =
+                results[idx].link_stage_failure && suites[idx].tests.size() > 1;
+            if (config.fail_fast && ((!results[idx].success && !recoverable_link_failure) ||
+                                     !results[idx].per_file_errors.empty())) {
                 should_stop.store(true, std::memory_order_relaxed);
             }
         }

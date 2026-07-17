@@ -705,6 +705,13 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
     // This allows library code (app_listen) to unconditionally call it without
     // worrying about whether the symbol exists.
     {
+        // In suite mode (force_internal_linkage), every test .obj in the suite
+        // emits its own __tml_register_routes/__tml_route_thunk_N definitions.
+        // All references are module-local (func.cpp skips the extern declaration
+        // because codegen always defines it in-module), so internal linkage is
+        // required to avoid LLD duplicate-symbol errors when linking multiple
+        // test objects into one aggregated EXE.
+        std::string route_linkage = options_.force_internal_linkage ? "internal " : "";
         emit_line("");
         emit_line(
             "; Route registration from @Get/@Post/@Put/@Delete/@Patch/@Head/@Options decorators");
@@ -733,7 +740,8 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
 
             emit_line("");
             emit_line("; ABI trampoline: receives by-value structs, passes first struct as ptr");
-            emit_line("define " + ret_type + " " + thunk_name + "(" + thunk_params + ") {");
+            emit_line("define " + route_linkage + ret_type + " " + thunk_name + "(" + thunk_params +
+                      ") {");
             emit_line("entry:");
 
             // For the first struct parameter, alloca + store to get a pointer.
@@ -784,7 +792,8 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         // Generate inline route registration (no dependency on app_register function)
         // This directly writes to the flat handler table: 24 bytes per entry
         // [method_ptr: i64, path_ptr: i64, handler_ptr: i64]
-        emit_line("define void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
+        emit_line("define " + route_linkage +
+                  "void @__tml_register_routes(i64 %table, ptr %count_ptr, i64 %trees) {");
         emit_line("entry:");
 
         if (route_functions.empty()) {

@@ -289,8 +289,11 @@ int run_test(int argc, char* argv[], bool verbose) {
     testing::TestConfig tc;
     tc.patterns = opts.patterns;
     tc.suite_filters = opts.suite_filters;
-    // In coverage mode, force 1 test per DLL to avoid suite-grouping crashes.
-    tc.max_per_suite = (opts.coverage || !opts.suite_mode) ? 1 : 10;
+    // Aggregated suites are the default (phase41a, F-005): 25 test files per EXE
+    // cuts full-run link steps ~12x (2066 -> ~176). Coverage forces 1 per EXE
+    // (internal-linkage stdlib + vtable references break multi-obj coverage
+    // links), and --no-suite restores the per-file mode explicitly.
+    tc.max_per_suite = (opts.coverage || !opts.suite_mode) ? 1 : 25;
     tc.compile_threads = opts.test_threads;
     // In coverage mode, limit to 2 concurrent test processes to avoid
     // resource exhaustion crashes (each EXE loads ~100MB of runtime DLLs).

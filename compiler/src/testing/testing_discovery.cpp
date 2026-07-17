@@ -203,13 +203,13 @@ std::vector<Suite> group_into_suites(const std::vector<TestFileInfo>& tests, siz
                       return a->file_path < b->file_path;
                   });
 
-        // Force individual mode for compiler tests — they define impl blocks
-        // on primitive types (e.g., impl I32 { const MIN... }) that produce
-        // external symbols which collide when multiple files are merged.
+        // phase41a: compiler/compiler tests aggregate like every other group.
+        // The old forced-per-file exception (impl blocks on primitive types
+        // producing colliding external symbols) is obsolete: test compiles set
+        // force_internal_linkage unconditionally (query_core.cpp), and any
+        // residual duplicate-symbol link failure triggers the coordinator's
+        // per-file fallback for that suite.
         size_t effective_max = max_per_suite;
-        if (key.find("compiler_compiler") != std::string::npos) {
-            effective_max = 1;
-        }
 
         // Split into chunks of max_per_suite
         size_t chunk_count = (file_ptrs.size() + effective_max - 1) / effective_max;

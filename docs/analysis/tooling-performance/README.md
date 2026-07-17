@@ -19,7 +19,7 @@ The tooling is slow for three compounding reasons:
 
 1. Wire MCP → daemon (or in-process warm handler) — turns repeated `check` from ~460 ms cold into ~22 ms. (F-017, F-016)
 2. Re-enable the stdlib codegen-state fast-path + stop embedding full stdlib per test obj (F-006, F-007).
-3. Make `--suite-mode`/`--unified` the default so full test runs do ~1–30 links instead of ~1339 (F-005).
+3. Make `--suite-mode`/`--unified` the default so full test runs do ~1–30 links instead of ~1339 (F-005). — **DONE (phase41a):** suite-mode default at 25 files/EXE, full-run 2066 → 176 links (**11.7×**); `--coverage`/`--no-suite` force per-file; compile-failure + crash/timeout isolation preserved, parity verified (`test_aggregation.sh` 16/16). See `04-test-framework-performance.md`.
 4. Ship a **release** (`-O2/-O3`) compiler for daily use (F-001). — **DONE (phase40b):** `scripts\build.bat release` → `build/release/bin/tml.exe`, measured 1.86–2.11× vs debug; MCP/daemon deliberately stay on debug (see `02-build-performance.md`).
 
 ## Index
