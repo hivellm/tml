@@ -215,3 +215,30 @@ Notes:
   `moved_out=1` for `l` (Copy) and, flag ON, emits 0 errors.
 - `scripts/fixtures/refcount_bleed_probe.tml`: all join lines `moved_out=0`
   (unchanged); `tml run` still exit 0.
+
+## Re-measurement (v0.3.64 — phase26f 1.6, after drop-flag elaboration)
+
+Item 1.5 (v0.3.64) added per-branch ownership snapshots + `conditionally_moved`
+at `if`/`when`/`loop`/`for` merges. This makes branch move-tracking MORE precise:
+the `else`/other-arm branch now starts from the pre-construct ownership (not the
+sticky-`Moved` leaked from the then-branch), so a use of a then-moved binding in a
+mutually-exclusive branch is **no longer** a false use-after-move. The change can
+therefore only REMOVE branch false positives, never add errors; `moved_out`
+(ever-moved) is unchanged, so after-construct uses flag identically.
+
+Re-swept the same four corpora with `TML_STRICT_MOVES=1 tml build <file>
+--emit-ir` (corpus grew 176 → **183 files** with the phase26f 1.3/1.4/1.5
+`scripts/fixtures/*` canaries added):
+
+| Metric | v0.3.61 | v0.3.64 (post-1.5) |
+|---|---|---|
+| Files compiled | 176 | **183** |
+| Files with ≥1 move error | 0 | **0** |
+| Total move-error lines | 0 | **0** |
+
+**Fallout: none.** Item 1.6 (migrate the fallout) is a **no-op** — there is no
+implicit-copy-and-reuse site left to migrate to `.duplicate()`/`ref`. (3 of the
+183 files hit the pre-existing, flaky module-path-resolution heap-corruption bug —
+"Module '::alloc::::' not found", nondeterministic, reproduced on the pre-1.5
+v0.3.63 binary; unrelated to move classification, counted separately as
+`corrupt_hits`, not move errors.)
