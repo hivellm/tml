@@ -197,3 +197,56 @@ sentinels are unaffected.
 proven above); F-012 landed with **zero result divergence** on the representative
 clean suites (pre-existing K001/flaky reproduce identically). Per-EXE size unchanged
 (~345 KB) because F-007 (decls-only) is gated behind the same phase27a work.
+
+---
+
+## phase41c — Test result cache revival + content-aware invalidation (2026-07-17, v0.3.72)
+
+Measured on the rebuilt compiler (this task's changes), clean suites, cold process
+each run (daemon bypassed) so cache effect is not masked by warm daemon state.
+
+**GATE (item 1.7) — second consecutive run is near-free (first run vs second run):**
+
+| Suite | Run 1 (cold compile) | Run 2 (cached) | Result (run1 → run2) |
+|---|---|---|---|
+| `core/hash` | 22.9 s | **1.84 s** | 14/14 → 14/14 |
+| `compiler/borrow` | 18.5 s | **1.86 s** | 12/12 → 12/12 |
+| `std/json` | 49.0 s | **1.85 s** | 23/23 → 23/23 |
+
+Run 2 logs `[cache] Suite … is cached (passed, skipping)` for every suite — zero
+recompilation, zero re-execution, zero result divergence. ~10–26× wall-clock drop.
+
+**F-014 content-aware invalidation — the headline fix (touch DLL = no behaviour
+change):**
+
+| Scenario | Before fix (mtime:size key) | After fix (VERSION + DLL content CRC) |
+|---|---|---|
+| `touch tml_compiler.dll`, rerun `compiler/borrow` | **17.1 s** — `Compiler/runtime changed — invalidating all cached EXEs` → full recompile | **1.9 s** — `Suite compiler_borrow is cached (passed, skipping)`, no invalidation |
+
+The old key changed on every relink/`touch` regardless of emitted bytes, so any
+compiler build (the dominant workflow) wiped the entire EXE cache. The new key is
+content-addressed (CRC32C of the DLL bytes + `tml::VERSION`, memoised once per
+process): a no-op relink / `touch` that yields byte-identical output keeps the cache
+warm, while any real codegen change still invalidates (correctness bias — content
+differs ⇒ invalidate).
+
+**F-014 persistence — `--no-cache` no longer wipes siblings:**
+
+| Action | Before fix | After fix |
+|---|---|---|
+| `tml test --suite=compiler/borrow --no-cache` with 3 suites cached | tests.json overwritten to **1 entry** (unloaded save) | loads 3, refreshes borrow, saves **3** — sibling `core/hash` still `is cached` (1.8 s) |
+
+`--no-cache` now always loads the existing cache (so `save()` preserves untouched
+suites) and only disables *using* it to skip work.
+
+**F-010 / F-013 / F-009:** correctness-preserving throughput cleanups (no user-visible
+result change); all clean-suite counts above are identical cold vs cached. F-013
+removes 2–3 redundant per-file source reads (single up-front `use`-scan threaded into
+both registry synthesis and package detection); F-010 collapses incr.bin writes from
+O(files) to O(suites) on `g_incr_cache_mutex`; F-009 replaces the 100 ms per-file
+codegen poll with a condition_variable (immediate wake, same 60 s deadline).
+
+**F-008 residual:** per-file codegen inside a suite stays single-threaded by default —
+LLVM global-state safety (`testing_compile.cpp` `intra_suite_threads`); phase41b
+deferred the codegen-state restructuring (F-006), so the blocker is unchanged. Not
+raised (correctness bias).

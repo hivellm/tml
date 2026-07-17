@@ -369,6 +369,17 @@ bool QueryContext::save_incremental_cache(const fs::path& build_dir) {
     return ok;
 }
 
+void QueryContext::merge_incremental_into(IncrCacheWriter& dest) const {
+    // phase41c / F-010: hand this context's recorded entries to a shared
+    // accumulator so the suite can flush incr.bin ONCE instead of once per file.
+    // The per-file IR/link-lib payloads were already written to the incr `ir/`
+    // directory during codegen_unit(); only the lightweight entry metadata is
+    // merged here.
+    if (incr_writer_) {
+        dest.merge_from_writer(*incr_writer_);
+    }
+}
+
 // ============================================================================
 // Green checking — incremental reuse
 // ============================================================================

@@ -10,10 +10,12 @@ TML_MODULE("test")
 #include "common/crc32c.hpp"
 #include "log/log.hpp"
 #include "testing/testing_coordinator.hpp"
+#include "version_generated.hpp" // tml::VERSION (content-aware compiler hash)
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <set>
 #include <sstream>
 
@@ -560,77 +562,105 @@ void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntr
 // ============================================================================
 
 std::string TestResultCache::compute_compiler_hash() {
-    std::error_code ec;
+    // phase41c / F-014: content-aware, computed ONCE per process.
+    //
+    // The old key was `mtime:size` of the compiler DLL. mtime changes on EVERY
+    // relink (and even a `touch`) regardless of whether the emitted bytes — and
+    // therefore codegen behaviour — actually changed, so any build wiped the
+    // whole EXE cache via the coordinator's invalidate_all_exes(). The dominant
+    // workflow here is compiler development (frequent rebuilds), so in practice
+    // the cache was cold on the first run after every build.
+    //
+    // The new key is the compiler VERSION string plus a CRC32C of the DLL's
+    // *content*. It changes iff the emitted bytes change, so a no-op relink or a
+    // `touch` that produces byte-identical output keeps the cache warm, while any
+    // real codegen change still invalidates (correctness bias: content differs →
+    // invalidate). Hashing the ~71 MB DLL costs ~tens of ms; we memoise so it
+    // happens exactly once per process (a long-lived daemon restarts on a DLL
+    // mtime change, so a memoised value never goes stale within one process).
+    static std::once_flag once;
+    static std::string cached_hash;
 
-    // Build candidate paths for the compiler binary/DLL
-    std::vector<fs::path> compiler_candidates;
+    std::call_once(once, []() {
+        std::error_code ec;
+
+        // Build candidate paths for the compiler binary/DLL
+        std::vector<fs::path> compiler_candidates;
 
 #ifdef _WIN32
-    char path[MAX_PATH];
-    DWORD len = GetModuleFileNameA(nullptr, path, MAX_PATH);
-    if (len > 0 && len < MAX_PATH) {
-        fs::path exe(std::string(path, len));
-        compiler_candidates.push_back(exe.parent_path() / "plugins" / "tml_compiler.dll");
-        compiler_candidates.push_back(exe);
-    }
+        char path[MAX_PATH];
+        DWORD len = GetModuleFileNameA(nullptr, path, MAX_PATH);
+        if (len > 0 && len < MAX_PATH) {
+            fs::path exe(std::string(path, len));
+            compiler_candidates.push_back(exe.parent_path() / "plugins" / "tml_compiler.dll");
+            compiler_candidates.push_back(exe);
+        }
 #else
-    auto exe_path = fs::read_symlink("/proc/self/exe", ec);
-    if (!ec) {
-        compiler_candidates.push_back(exe_path);
-    }
+        auto exe_path = fs::read_symlink("/proc/self/exe", ec);
+        if (!ec) {
+            compiler_candidates.push_back(exe_path);
+        }
 #endif
 
-    // Also try CWD-relative paths for both debug and release
-    auto cwd = fs::current_path(ec);
-    if (!ec) {
-        compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "plugins" /
-                                      "tml_compiler.dll");
-        compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "tml.exe");
-    }
-
-    // Helper lambda: compute "TIME:SIZE" fingerprint string for the first existing candidate
-    auto fingerprint_first_existing = [&](const std::vector<fs::path>& paths) -> std::string {
-        for (const auto& p : paths) {
-            if (!fs::exists(p, ec) || ec) {
-                continue;
-            }
-            auto fsize = fs::file_size(p, ec);
-            if (ec || fsize == 0) {
-                continue;
-            }
-            auto ftime = fs::last_write_time(p, ec);
-            if (ec) {
-                continue;
-            }
-            auto time_val = ftime.time_since_epoch().count();
-            return std::to_string(time_val) + ":" + std::to_string(fsize);
+        // Also try CWD-relative paths for both debug and release
+        auto cwd = fs::current_path(ec);
+        if (!ec) {
+            compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "plugins" /
+                                          "tml_compiler.dll");
+            compiler_candidates.push_back(cwd / "build" / "debug" / "bin" / "tml.exe");
         }
-        return "";
-    };
 
-    // Fingerprint the compiler binary
-    std::string compiler_fp = fingerprint_first_existing(compiler_candidates);
-    if (compiler_fp.empty()) {
-        TML_LOG_WARN("test", "[cache] Could not compute compiler hash from any candidate");
-        return "unknown";
-    }
+        // Helper: CRC32C the *content* of the first existing candidate.
+        auto content_hash_first_existing = [&](const std::vector<fs::path>& paths) -> std::string {
+            for (const auto& p : paths) {
+                if (!fs::exists(p, ec) || ec) {
+                    continue;
+                }
+                auto fsize = fs::file_size(p, ec);
+                if (ec || fsize == 0) {
+                    continue;
+                }
+                // crc32c_file streams the whole file — content-addressed, so an
+                // identical relink yields an identical hash (unlike mtime).
+                auto h = crc32c_file(p.string());
+                if (!h.empty()) {
+                    // Fold the size in too so a truncated/padded file can't collide.
+                    return h + ":" + std::to_string(fsize);
+                }
+            }
+            return "";
+        };
 
-    // Build candidate paths for the test runtime lib (debug and release)
-    std::vector<fs::path> runtime_candidates;
-    if (!ec) { // cwd is still valid
-        runtime_candidates.push_back(cwd / "build" / "debug" / "cache" / "tml_test_runtime.lib");
-        runtime_candidates.push_back(cwd / "build" / "release" / "cache" / "tml_test_runtime.lib");
-    }
+        // Content-hash the compiler binary
+        std::string compiler_fp = content_hash_first_existing(compiler_candidates);
+        if (compiler_fp.empty()) {
+            TML_LOG_WARN("test", "[cache] Could not compute compiler hash from any candidate");
+            cached_hash = "unknown";
+            return;
+        }
 
-    // Fingerprint the runtime lib (optional — not all builds produce it)
-    std::string runtime_fp = fingerprint_first_existing(runtime_candidates);
+        // Build candidate paths for the test runtime lib (debug and release).
+        // Content-hash it when present so a runtime change invalidates too.
+        std::vector<fs::path> runtime_candidates;
+        if (!ec) { // cwd is still valid
+            runtime_candidates.push_back(cwd / "build" / "debug" / "cache" /
+                                         "tml_test_runtime.lib");
+            runtime_candidates.push_back(cwd / "build" / "release" / "cache" /
+                                         "tml_test_runtime.lib");
+        }
+        std::string runtime_fp = content_hash_first_existing(runtime_candidates);
 
-    // Combine into a single string and hash it
-    std::string combined = "compiler:" + compiler_fp;
-    if (!runtime_fp.empty()) {
-        combined += "+runtime:" + runtime_fp;
-    }
-    return crc32c_hex(combined.data(), combined.size());
+        // Combine VERSION + content hashes into the final key.
+        std::string combined = "version:";
+        combined += tml::VERSION;
+        combined += "+compiler:" + compiler_fp;
+        if (!runtime_fp.empty()) {
+            combined += "+runtime:" + runtime_fp;
+        }
+        cached_hash = crc32c_hex(combined.data(), combined.size());
+    });
+
+    return cached_hash;
 }
 
 std::string TestResultCache::compute_flags_hash(const TestConfig& config) {

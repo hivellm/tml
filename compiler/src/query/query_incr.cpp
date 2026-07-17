@@ -415,6 +415,18 @@ void IncrCacheWriter::merge_from(const PrevSessionCache& prev) {
     }
 }
 
+void IncrCacheWriter::merge_from_writer(const IncrCacheWriter& other) {
+    // phase41c / F-010: fold another writer's recorded entries in, skipping any
+    // key we already hold. First-writer-wins on duplicate keys, matching the
+    // "entries not already recorded" policy of merge_from(PrevSessionCache).
+    for (const auto& entry : other.entries_) {
+        if (recorded_keys_.count(entry.key) == 0) {
+            recorded_keys_.insert(entry.key);
+            entries_.push_back(entry);
+        }
+    }
+}
+
 bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {
     try {
         fs::create_directories(cache_file.parent_path());

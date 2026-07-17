@@ -151,6 +151,20 @@ public:
     /// Save incremental cache for this session.
     bool save_incremental_cache(const std::filesystem::path& build_dir);
 
+    /// phase41c / F-010: fold this context's accumulated incremental-cache
+    /// entries into `dest` without touching disk. Lets the test path batch many
+    /// per-file writers into a single per-suite `incr.bin` flush, removing the
+    /// per-file global-mutex serialization (`g_incr_cache_mutex`). No-op when
+    /// incremental mode is inactive for this context.
+    void merge_incremental_into(IncrCacheWriter& dest) const;
+
+    /// The options hash computed for this context's incremental session. Valid
+    /// after load_incremental_cache(); needed to write a batched accumulator
+    /// with the correct session key.
+    [[nodiscard]] uint32_t incremental_options_hash() const {
+        return options_hash_;
+    }
+
     /// Check if incremental mode is active.
     [[nodiscard]] bool incremental_active() const {
         return incr_enabled_;

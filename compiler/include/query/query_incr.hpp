@@ -126,6 +126,13 @@ public:
     /// Merge entries from a previous session (entries not already recorded).
     void merge_from(const PrevSessionCache& prev);
 
+    /// phase41c / F-010: merge entries recorded by another writer (entries not
+    /// already recorded here). Used to fold many per-file test-compilation
+    /// writers into a single per-suite accumulator so the suite flushes
+    /// `incr.bin` once instead of once per file. Format-preserving — this does
+    /// not change the on-disk cache layout or red-green semantics.
+    void merge_from_writer(const IncrCacheWriter& other);
+
     /// Get number of recorded entries.
     [[nodiscard]] size_t entry_count() const {
         return entries_.size();

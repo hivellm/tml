@@ -25,6 +25,7 @@ TML_MODULE("test")
 #include "log/log.hpp"
 #include "query/query_context.hpp"
 #include "query/query_fingerprint.hpp"
+#include "query/query_incr.hpp"
 #include "query/query_key.hpp"
 #include "testing/testing_compile_internal.hpp"
 #include "testing/testing_dispatcher_gen.hpp"
@@ -593,6 +594,18 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
     std::vector<FileCompileResult> file_results(suite.tests.size());
     std::atomic<int> next_file{0};
+
+    // phase41c / F-010: per-suite incremental-cache accumulator. Instead of each
+    // file doing a global-mutex load-merge-write of the whole incr.bin (which
+    // serialized every suite worker on g_incr_cache_mutex), each file folds its
+    // recorded entries into this shared accumulator under a cheap suite-local
+    // lock, and the suite flushes incr.bin ONCE after the file loop. The heavy
+    // IR/link payloads are still written per file during codegen_unit(); only the
+    // lightweight entry metadata is accumulated here.
+    query::IncrCacheWriter suite_incr_accumulator;
+    std::mutex suite_incr_mtx;
+    uint32_t suite_incr_opts_hash = 0;
+    bool suite_incr_has_entries = false;
     // Per-file codegen threads within this suite. Historically hardcoded to 1
     // ("avoid LLVM global state corruption"), but suite-LEVEL parallelism has
     // always run up to 8 concurrent codegen threads (one per suite worker),
@@ -649,29 +662,46 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
 
             // Run codegen with a timeout to avoid hangs from LLVM global state
             // corruption after compiling many files in the same process.
+            //
+            // phase41c / F-009: wait on a condition_variable instead of polling a
+            // flag every 100 ms. Codegen almost always finishes in well under the
+            // deadline, and the old poll added up to 100 ms of dead latency per
+            // file (× thousands of files) between completion and the next poll
+            // tick. The cv wakes the worker the instant codegen signals done, and
+            // wait_until still enforces the hard deadline. The codegen still runs
+            // on its own thread: LLVM cannot be safely interrupted, so on timeout
+            // we abandon (detach) that thread — a shared timer wheel would not
+            // remove this per-file thread, only the (now-eliminated) polling.
             constexpr int CODEGEN_TIMEOUT_SECONDS = 60;
-            std::atomic<bool> codegen_done{false};
+            std::mutex cg_mtx;
+            std::condition_variable cg_cv;
+            bool codegen_done = false;
             query::CodegenUnitResult codegen_result;
 
             std::thread codegen_thread([&]() {
-                codegen_result = qctx.codegen_unit(file_path, module_name);
-                codegen_done.store(true, std::memory_order_release);
+                auto local_result = qctx.codegen_unit(file_path, module_name);
+                {
+                    std::lock_guard<std::mutex> lk(cg_mtx);
+                    codegen_result = std::move(local_result);
+                    codegen_done = true;
+                }
+                cg_cv.notify_one();
             });
 
             bool timed_out = false;
             {
                 const auto deadline = std::chrono::steady_clock::now() +
                                       std::chrono::seconds(CODEGEN_TIMEOUT_SECONDS);
-                while (!codegen_done.load(std::memory_order_acquire)) {
-                    if (std::chrono::steady_clock::now() >= deadline) {
-                        codegen_thread.detach();
-                        timed_out = true;
-                        break;
-                    }
-                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::unique_lock<std::mutex> lk(cg_mtx);
+                if (!cg_cv.wait_until(lk, deadline, [&] { return codegen_done; })) {
+                    timed_out = true;
                 }
-                if (!timed_out && codegen_thread.joinable())
+                lk.unlock();
+                if (timed_out) {
+                    codegen_thread.detach();
+                } else if (codegen_thread.joinable()) {
                     codegen_thread.join();
+                }
             }
 
             if (timed_out) {
@@ -709,12 +739,17 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
                 continue;
             }
 
-            // Save incremental cache (mutex protects concurrent suite workers
-            // from corrupting the shared incr.bin file)
+            // phase41c / F-010: fold this file's incremental entries into the
+            // per-suite accumulator (cheap, in-memory) instead of doing a
+            // per-file global-mutex load-merge-write of incr.bin. The suite
+            // flushes once after the file loop. suite_incr_mtx is suite-local, so
+            // concurrent intra-suite file workers no longer serialize on the
+            // global g_incr_cache_mutex during compilation.
             if (qopts.incremental) {
-                std::lock_guard<std::mutex> lock(g_incr_cache_mutex);
-                auto build_dir = cli::build::get_build_dir(false);
-                qctx.save_incremental_cache(build_dir);
+                std::lock_guard<std::mutex> lock(suite_incr_mtx);
+                qctx.merge_incremental_into(suite_incr_accumulator);
+                suite_incr_opts_hash = qctx.incremental_options_hash();
+                suite_incr_has_entries = true;
             }
 
             // Compile IR string to object
@@ -821,6 +856,27 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         for (auto& t : threads) {
             t.join();
         }
+    }
+
+    // phase41c / F-010: single per-suite incremental-cache flush. One
+    // load-merge-write of incr.bin per suite (under the global mutex, held once)
+    // replaces the previous per-file writes. This is the only point where a suite
+    // touches g_incr_cache_mutex, so cross-suite serialization collapses from
+    // O(files) to O(suites).
+    if (suite_incr_has_entries) {
+        std::lock_guard<std::mutex> lock(g_incr_cache_mutex);
+        auto build_dir = cli::build::get_build_dir(false);
+        auto incr_cache_dir = build_dir / "cache" / "incr";
+        auto cache_file = incr_cache_dir / "incr.bin";
+        std::error_code ec;
+        fs::create_directories(incr_cache_dir, ec);
+        // Merge existing on-disk entries (same session key) so parallel suites
+        // don't clobber each other's contributions, then write once.
+        query::PrevSessionCache existing;
+        if (existing.load(cache_file) && existing.options_hash() == suite_incr_opts_hash) {
+            suite_incr_accumulator.merge_from(existing);
+        }
+        suite_incr_accumulator.write(cache_file, suite_incr_opts_hash);
     }
 
     // Merge results from parallel compilation
@@ -947,6 +1003,46 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         registry = std::make_shared<types::ModuleRegistry>();
     }
 
+    // phase41c / F-013: scan each test file's `use` imports EXACTLY ONCE and
+    // reuse the result below for both (a) conditional-runtime registry synthesis
+    // and (b) external-package build.tml detection. Previously each test file was
+    // reopened and re-read 2-3× (first 30 lines for std-import synthesis, then the
+    // whole file for `use <pkg>::`). One pass over the file's lines feeds both.
+    struct TestImportScan {
+        std::vector<std::string> use_lines;  // full text of non-comment lines containing "use "
+        std::set<std::string> package_names; // first segment of non-std/core/test/compiler `use`
+    };
+    std::vector<TestImportScan> import_scans(suite.tests.size());
+    for (size_t ti = 0; ti < suite.tests.size(); ++ti) {
+        std::ifstream ifs(suite.tests[ti].file_path);
+        if (!ifs.is_open())
+            continue;
+        auto& scan = import_scans[ti];
+        std::string line;
+        while (std::getline(ifs, line)) {
+            // Skip comment/preprocessor lines (matches the old package scan).
+            if (line.empty() || line[0] == '/' || line[0] == '#')
+                continue;
+            auto upos = line.find("use ");
+            if (upos == std::string::npos)
+                continue;
+            scan.use_lines.push_back(line);
+            // Extract the first path segment for external-package detection.
+            std::string rest = line.substr(upos + 4);
+            size_t s = 0;
+            while (s < rest.size() && (rest[s] == ' ' || rest[s] == '\t'))
+                ++s;
+            auto sep = rest.find("::", s);
+            if (sep == std::string::npos)
+                continue;
+            std::string pkg = rest.substr(s, sep - s);
+            if (pkg.empty() || pkg == "core" || pkg == "std" || pkg == "test" ||
+                pkg == "compiler")
+                continue;
+            scan.package_names.insert(std::move(pkg));
+        }
+    }
+
     // When the registry is empty (e.g., due to incremental cache hits where typecheck
     // results aren't re-executed), we can't determine which conditional runtimes are needed.
     // In this case, register synthetic modules based on the suite's test file paths so that
@@ -984,25 +1080,19 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
             {"use std::crypto", "std::crypto"}, {"use std::file", "std::file"},
             {"use std::glob", "std::glob"},     {"use std::net::tls", "std::net::tls"},
         };
-        for (const auto& test : suite.tests) {
-            try {
-                std::ifstream file(test.file_path);
-                if (!file.is_open())
-                    continue;
-                std::string line;
-                int line_count = 0;
-                while (std::getline(file, line) && line_count < 30) {
-                    ++line_count;
-                    for (const auto& [import_prefix, mod_name] : import_module_map) {
-                        if (line.find(import_prefix) != std::string::npos &&
-                            !registry->has_module(mod_name)) {
-                            types::Module synth;
-                            synth.name = mod_name;
-                            registry->register_module(mod_name, synth);
-                        }
+        // phase41c / F-013: reuse the single up-front import scan instead of
+        // reopening each test file and re-reading its first 30 lines.
+        for (const auto& scan : import_scans) {
+            for (const auto& line : scan.use_lines) {
+                for (const auto& [import_prefix, mod_name] : import_module_map) {
+                    if (line.find(import_prefix) != std::string::npos &&
+                        !registry->has_module(mod_name)) {
+                        types::Module synth;
+                        synth.name = mod_name;
+                        registry->register_module(mod_name, synth);
                     }
                 }
-            } catch (...) {}
+            }
         }
     }
 
@@ -1212,41 +1302,16 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     link_opts.link_flags.push_back("/STACK:67108864");
 #endif
 
-    // Run build.tml scripts for external packages (e.g., postgresql)
-    // Scan source files for "use <pkg>::" imports to detect non-standard packages.
-    // This approach works on both the first run and subsequent cached runs because it
-    // reads from the source files directly, bypassing the registry (which may be null
-    // when the incremental cache GREEN path is taken).
+    // Run build.tml scripts for external packages (e.g., postgresql).
+    // phase41c / F-013: reuse the single up-front import scan (external package
+    // names already extracted from each test file's `use <pkg>::` lines) instead
+    // of reopening and re-reading every test file here. Works on both the first
+    // run and cached runs because the scan reads source directly, independent of
+    // the registry (which may be null on the incremental GREEN path).
     {
         std::set<std::string> packages_checked;
-        for (const auto& test : suite.tests) {
-            std::ifstream ifs(test.file_path);
-            if (!ifs.is_open())
-                continue;
-            std::string line;
-            while (std::getline(ifs, line)) {
-                // Skip empty lines and comments
-                if (line.empty() || line[0] == '/' || line[0] == '#')
-                    continue;
-                // Look for "use <pkg>::" pattern
-                auto pos = line.find("use ");
-                if (pos == std::string::npos)
-                    continue;
-                std::string rest = line.substr(pos + 4);
-                // Trim leading whitespace
-                while (!rest.empty() && (rest[0] == ' ' || rest[0] == '\t')) {
-                    rest = rest.substr(1);
-                }
-                // Extract package name (before first "::")
-                auto sep = rest.find("::");
-                if (sep == std::string::npos)
-                    continue;
-                std::string pkg_name = rest.substr(0, sep);
-                // Skip standard packages
-                if (pkg_name == "core" || pkg_name == "std" || pkg_name == "test" ||
-                    pkg_name == "compiler") {
-                    continue;
-                }
+        for (const auto& scan : import_scans) {
+            for (const auto& pkg_name : scan.package_names) {
                 if (packages_checked.count(pkg_name))
                     continue;
                 packages_checked.insert(pkg_name);

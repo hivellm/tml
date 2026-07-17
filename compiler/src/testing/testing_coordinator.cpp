@@ -1022,7 +1022,15 @@ TestRunResult run_tests(const TestConfig& config) {
     bool compiler_changed = false; // True if compiler/runtime changed since last run
     // Always set compiler hash so --no-cache runs write it to disk
     cache.set_compiler_hash(compiler_hash);
-    if (use_cache) {
+
+    // phase41c / F-014: ALWAYS load the existing cache — even in --no-cache mode
+    // and for filtered runs. `cache.save()` writes the whole in-memory map, so if
+    // we don't load first, a --no-cache run (or any run touching a subset of
+    // suites) overwrites tests.json with ONLY the suites it processed, discarding
+    // every other suite's cached result. `--no-cache` must disable *using* the
+    // cache to skip work (the partition step below is still gated on use_cache),
+    // not silently destroy siblings' entries.
+    {
         auto build_dir = fs::current_path() / "build" / "debug";
         auto cache_file = build_dir / "cache" / "tests.json";
         if (cache.load(cache_file.string())) {
