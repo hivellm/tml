@@ -7,6 +7,6 @@
 - [x] 1.6 GATE — MET: link reduction ≥10× (full-run 2066 files → 176 suites at 25/EXE = **11.7×**, computed in 1.3; **14×** measured on core/hash: 14 exes → 1); zero result divergence (test_aggregation parity 16/16 + core/hash 14/14 identical both modes; pre-existing K001/flaky reproduce identically); wall-clock: per-suite level recorded, full-run rigorous A/B blocked by the pre-flip-binary phase27c crash (documented, not introduced by this change)
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 2.1 Docs updated: `04-test-framework-performance.md` F-005 marked RESOLVED (11.7× link reduction, isolation/parity), F-011 status; README lever #3 marked done; `docs/patches/v0.3.69.md` + CHANGELOG + VERSION → 0.3.69
-- [x] 2.2 Test written: `compiler/tests/cli/test_aggregation.sh` — 16 checks (default aggregation, --no-suite per-file, --coverage per-file, compile-failure SKIP isolation, crash/timeout offender + sibling re-run, aggregated-vs-per-file parity)
-- [x] 2.3 Tests pass: `test_aggregation.sh` 16/16; `core/hash` parity 14/14 both modes
+- [x] 2.1 Update or create documentation covering the implementation — `04-test-framework-performance.md` F-005 marked RESOLVED (11.7× link reduction, isolation/parity) + F-008/F-011 status; README lever #3 marked done; `docs/patches/v0.3.69.md` + CHANGELOG + VERSION → 0.3.69; 01-measurements phase41a appendix
+- [x] 2.2 Write tests covering the new behavior — `compiler/tests/cli/test_aggregation.sh`: 16 checks (default aggregation, --no-suite per-file, --coverage per-file, compile-failure SKIP isolation, crash/timeout offender + sibling re-run, aggregated-vs-per-file parity)
+- [x] 2.3 Run tests and confirm they pass — `test_aggregation.sh` 16/16; `core/hash` parity 14/14 both modes; determinism gate 28/28
