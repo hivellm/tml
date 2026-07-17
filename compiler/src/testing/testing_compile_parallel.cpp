@@ -30,17 +30,28 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
-    // Pre-build stdlib codegen state once (skips emit_module_pure_tml_functions per file).
+    // Pre-build stdlib codegen state once (would skip emit_module_pure_tml_functions per file).
     // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
-    // DISABLED: cached state causes codegen issues:
-    //   - I32::duplicate redefinition (local impls conflict with cached library impls)
-    //   - i64/i32 type mismatches in range iterators
-    //   Needs: supplemental module processing that properly deduplicates against cached state.
-    //   The obj_cache hash has been fixed (full 32-char hash, no truncation).
-    //   The processed_module_paths tracking is in place for future supplemental pass.
-    // if (!g_stdlib_codegen_state && !config.coverage) {
-    //     build_stdlib_object(config);
-    // }
+    //
+    // STILL DISABLED after phase41b root-cause (reproduced with evidence — see
+    // docs/analysis/tooling-performance/04-test-framework-performance.md F-006).
+    // build_stdlib_object() drives the AST codegen in library_ir_only mode; a
+    // library-body call to a generic free function (concretely
+    // core::runtime::mem::replace[T], lib/core/src/runtime/mem.tml:205) is emitted
+    // as the UN-monomorphized template symbol `@...mem7replaceE_R1T1T` (literal T)
+    // with no matching define — "use of undefined value" in the shared object AND
+    // in every test object that restores the captured state. Root: generic module
+    // free-function calls have no call-site re-mangle+queue branch (generic
+    // Type::method calls do, call_user.cpp:595-632), so gen_call_generic_func's
+    // miss falls to the decl-name fallback at call_user.cpp:452. This is the SAME
+    // error as the pre-existing 5x core/str K001 failures (it breaks the slow path
+    // there too) — a phase27a K001-family generic-substitution root (frozen), plus
+    // the range-iterator i64/i32 width (K001 Class 2). Enabling here regresses
+    // clean suites (core/hash 14/14 -> 14 SKIP), violating the zero-divergence gate.
+    // Also blocked structurally: the monolithic test_bootstrap.tml imports ~12
+    // phantom `pub mod` modules (no source file) so typecheck aborts, and an eager
+    // all-stdlib object times out (>500s). See phase41b proposal (deferred to
+    // phase27a K001 + a per-suite-scoped shared-object redesign).
     if (g_stdlib_codegen_state) {
         TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
         // Clear obj_cache to prevent stale .obj files from runs without cached state.

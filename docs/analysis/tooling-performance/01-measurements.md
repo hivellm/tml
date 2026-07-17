@@ -150,3 +150,50 @@ Notes:
   threads only activate when suites < workers).
 - The obj-cache doubles in effective size: per-file entries (test index 0) and
   aggregated entries (positional index) have different IR fingerprints.
+
+## phase41b shared-stdlib root-cause + F-012 backend reuse (2026-07-17)
+
+Protocol: debug binary, cwd = repo root, `--no-suite` per-file for the parity
+table below is NOT used — these are the default aggregated suite runs,
+`--no-cache` (cold, cache invalidated by the compiler rebuild), wall = shell
+`date` seconds around the process.
+
+**F-006/F-007 shared-stdlib fast-path — reproduced blocker (NOT enabled).**
+Re-enabling `build_stdlib_object` on a scratch build engaged the fast path on a
+minimal 2-module bootstrap (state captured in **20.2 s**, 1235 KB IR); every test
+object *and the shared object itself* then failed with
+`use of undefined value '@tml_N4core7runtime3mem7replaceE_R1T1T'`
+(un-monomorphized `core::runtime::mem::replace[T]`). Same error as the pre-existing
+5× `core/str` K001 failures. An all-loadable-modules bootstrap **timed out >500 s**
+just building the shared object. Full enablement deferred (phase27a K001 +
+per-suite-scoped bootstrap redesign) — see `04-test-framework-performance.md` F-006.
+
+**F-012 LLVM backend reuse — landed. Per-EXE size + cache baseline (unchanged, since
+F-007 stays off):**
+
+| Metric | Value |
+|---|---|
+| Per single-test EXE (embeds internal-linkage stdlib) | ~345 KB (`compiler_borrow_closure_capture.exe` = 345 600 B) |
+| Cached test EXEs | 1518 files / 756 MB |
+| Aggregated `core_hash.exe` (14 tests) | 912 KB |
+
+**Clean-suite parity (F-012 build, fast-path OFF, `--no-cache` cold), zero divergence:**
+
+| Suite | Result | Wall (cold) | Note |
+|---|---|---|---|
+| `core/hash` | **14/14** | 22.4 s | parity |
+| `compiler/borrow` | **12/12** | 19 s | parity |
+| `core/str` | 27/32 (5 fail) | 54 s | the 5 fails are the pre-existing `mem::replace` K001s, byte-identical |
+| `core/alloc` | 43/44 | 63 s | the 1 miss `shared_sync_edge` is a pre-existing flaky concurrency test — passes 1/1 in isolation (2/2) |
+
+F-012 is behaviour-transparent (identical object bytes); it reuses one initialized
+`LLVMBackend`/`LLVMContext` per worker thread instead of constructing+`initialize()`
+per object compilation (was `object_compiler.cpp:269–274`). The win is the removed
+per-object `LLVMContextCreate`/`Dispose` churn across every test file and dispatcher
+in a run; it does not change codegen output, so suite results and the determinism
+sentinels are unaffected.
+
+**GATE (task phase41b, item 1.7):** shared-stdlib "emit once" NOT achieved (blocked,
+proven above); F-012 landed with **zero result divergence** on the representative
+clean suites (pre-existing K001/flaky reproduce identically). Per-EXE size unchanged
+(~345 KB) because F-007 (decls-only) is gated behind the same phase27a work.

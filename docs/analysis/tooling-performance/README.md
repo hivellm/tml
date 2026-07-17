@@ -18,7 +18,7 @@ The tooling is slow for three compounding reasons:
 ## Biggest levers (ranked by effort-adjusted payoff)
 
 1. Wire MCP → daemon (or in-process warm handler) — turns repeated `check` from ~460 ms cold into ~22 ms. (F-017, F-016)
-2. Re-enable the stdlib codegen-state fast-path + stop embedding full stdlib per test obj (F-006, F-007).
+2. Re-enable the stdlib codegen-state fast-path + stop embedding full stdlib per test obj (F-006, F-007). — **ROOT-CAUSED (phase41b), enablement DEFERRED:** reproduced with evidence that the shared-stdlib path emits an un-monomorphized generic free-function callee (`core::runtime::mem::replace[T]` → literal-`T` symbol) with no definition — a phase27a K001-family root (the same error as the 5 pre-existing `core/str` K001 failures) — and additionally needs a per-suite-scoped/complete bootstrap (the monolithic `test_bootstrap.tml` imports ~12 phantom `pub mod` modules) and the `generated_impl_methods_output_` dedup capture. Landed the safe in-scope slice: **F-012 (LLVM backend reuse) — DONE.** See `04-test-framework-performance.md`.
 3. Make `--suite-mode`/`--unified` the default so full test runs do ~1–30 links instead of ~1339 (F-005). — **DONE (phase41a):** suite-mode default at 25 files/EXE, full-run 2066 → 176 links (**11.7×**); `--coverage`/`--no-suite` force per-file; compile-failure + crash/timeout isolation preserved, parity verified (`test_aggregation.sh` 16/16). See `04-test-framework-performance.md`.
 4. Ship a **release** (`-O2/-O3`) compiler for daily use (F-001). — **DONE (phase40b):** `scripts\build.bat release` → `build/release/bin/tml.exe`, measured 1.86–2.11× vs debug; MCP/daemon deliberately stay on debug (see `02-build-performance.md`).
 

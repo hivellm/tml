@@ -47,6 +47,7 @@ TML_MODULE("compiler")
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -71,6 +72,33 @@ static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
                                                  const fs::path& output_file,
                                                  const std::string& clang_path,
                                                  const ObjectCompileOptions& options);
+
+#ifdef TML_HAS_LLVM_BACKEND
+/// F-012: returns a per-worker-thread initialized LLVM backend, created once and
+/// reused across every object compilation on that thread.
+///
+/// Previously `compile_ir_string_to_object`/`compile_ir_string_to_buffer`
+/// constructed a fresh `LLVMBackend` and called `initialize()` on every call —
+/// i.e. per test file and per dispatcher — which created and disposed a new
+/// `LLVMContext` each time. Target initialization is already process-global
+/// (`std::call_once` inside `initialize()`); the remaining per-call cost was the
+/// context lifecycle. An `LLVMContext` is safe to reuse across sequential module
+/// compilations on the same thread: each call parses its IR into a fresh module
+/// in the shared context and disposes that module after emitting the object, so
+/// no module state leaks between compilations. Returns nullptr if initialization
+/// fails (callers fall back to their error path).
+static backend::LLVMBackend* get_thread_local_llvm_backend() {
+    thread_local std::unique_ptr<backend::LLVMBackend> tls_backend;
+    if (!tls_backend) {
+        auto candidate = std::make_unique<backend::LLVMBackend>();
+        if (!candidate->initialize()) {
+            return nullptr;
+        }
+        tls_backend = std::move(candidate);
+    }
+    return tls_backend.get();
+}
+#endif
 
 /// Returns the platform-specific object file extension.
 std::string get_object_extension() {
@@ -266,10 +294,10 @@ ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
 #ifdef TML_HAS_LLVM_BACKEND
         TML_LOG_DEBUG("build", "[object_compiler] Using LLVM backend (in-memory IR)");
 
-        backend::LLVMBackend llvm_backend;
-        if (!llvm_backend.initialize()) {
-            result.error_message =
-                "Failed to initialize LLVM backend: " + llvm_backend.get_last_error();
+        // F-012: reuse one initialized backend/context per worker thread.
+        backend::LLVMBackend* llvm_backend = get_thread_local_llvm_backend();
+        if (!llvm_backend) {
+            result.error_message = "Failed to initialize LLVM backend";
             return result;
         }
 
@@ -282,7 +310,7 @@ ObjectCompileResult compile_ir_string_to_object(const std::string& ir_content,
         llvm_opts.verbose = options.verbose;
         llvm_opts.cpu = "native";
 
-        auto llvm_result = llvm_backend.compile_ir_to_object(ir_content, output_file, llvm_opts);
+        auto llvm_result = llvm_backend->compile_ir_to_object(ir_content, output_file, llvm_opts);
 
         if (!llvm_result.success) {
             result.error_message = "LLVM backend compilation failed: " + llvm_result.error_message;
@@ -340,10 +368,10 @@ ObjectCompileResult compile_ir_string_to_buffer(const std::string& ir_content,
     if (!CompilerOptions::use_external_tools && !options.lto && is_llvm_backend_available()) {
         TML_LOG_DEBUG("build", "[object_compiler] Using LLVM backend (in-memory buffer)");
 
-        backend::LLVMBackend llvm_backend;
-        if (!llvm_backend.initialize()) {
-            result.error_message =
-                "Failed to initialize LLVM backend: " + llvm_backend.get_last_error();
+        // F-012: reuse one initialized backend/context per worker thread.
+        backend::LLVMBackend* llvm_backend = get_thread_local_llvm_backend();
+        if (!llvm_backend) {
+            result.error_message = "Failed to initialize LLVM backend";
             return result;
         }
 
@@ -355,7 +383,7 @@ ObjectCompileResult compile_ir_string_to_buffer(const std::string& ir_content,
         llvm_opts.verbose = options.verbose;
         llvm_opts.cpu = "native";
 
-        auto llvm_result = llvm_backend.compile_ir_to_buffer(ir_content, llvm_opts);
+        auto llvm_result = llvm_backend->compile_ir_to_buffer(ir_content, llvm_opts);
 
         if (!llvm_result.success) {
             result.error_message =
