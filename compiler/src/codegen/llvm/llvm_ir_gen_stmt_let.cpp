@@ -143,6 +143,13 @@ static bool is_ref_expr(const parser::Expr& expr) {
 }
 
 void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
+    // phase26f 1.5: a plain `let b = a` where `a` is a conditionally-moved binding
+    // is a runtime move site — clear a's drop flag in the current block (no-op if
+    // `a` has no flag). Emitted before the copy so it lands on the taken path.
+    if (let.init.has_value() && let.init.value()->is<parser::IdentExpr>()) {
+        note_move_for_flag(let.init.value()->as<parser::IdentExpr>().name);
+    }
+
     // Handle tuple pattern destructuring: let (a, b): (T1, T2) = expr
     if (let.pattern->is<parser::TuplePattern>()) {
         if (!let.init.has_value()) {

@@ -54,6 +54,18 @@ tml_f022_destroy_releases: ./build/debug/cache/tests/compiler_determinism_f022_d
 # whose residual is only observable through the debug leak reporter, not an exit code.)
 tml_container_field_methodarg: ./build/debug/bin/tml.exe run scripts/fixtures/container_field_methodarg_probe.tml
 
+# phase26f 1.5 canaries (conditional-move drop-flag elaboration): a binding moved
+# on SOME control-flow paths but not all is now marked conditionally_moved by the
+# checker and guarded by a runtime drop flag instead of static suppression. Three
+# LEAK-direction shapes (the move's guard is false at runtime, so the binding must
+# still be dropped) + one DOUBLE-FREE-direction shape (the move IS taken, so the
+# binding must NOT be dropped again). All run via `tml run` (AST codegen — where
+# drop flags live). Correct = witness strong_count == 1 → exit 0.
+tml_condmove_branch: ./build/debug/bin/tml.exe run scripts/fixtures/condmove_branch_probe.tml
+tml_condmove_loop: ./build/debug/bin/tml.exe run scripts/fixtures/condmove_loop_probe.tml
+tml_condmove_when: ./build/debug/bin/tml.exe run scripts/fixtures/condmove_when_probe.tml
+tml_condmove_taken: ./build/debug/bin/tml.exe run scripts/fixtures/condmove_taken_probe.tml
+
 # ============================================================================
 # LEGACY (secondary) — cc_driver repros from the phase24 era
 # ============================================================================

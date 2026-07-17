@@ -65,6 +65,11 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 }
             }
         } else if (bin.left->is<parser::IdentExpr>()) {
+            // phase26f 1.5: reassigning a conditionally-moved binding re-arms its
+            // drop flag — the fresh value is live and must be dropped at scope
+            // exit even if a prior conditional move cleared the flag. Emitted in
+            // the current block (unconditional at this assignment point).
+            note_reinit_for_flag(bin.left->as<parser::IdentExpr>().name);
             // For variable assignments, also set expected type
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
             if (it != locals_.end()) {

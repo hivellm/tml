@@ -267,6 +267,13 @@ struct PlaceOwnershipFact {
     std::string name;        ///< Source variable name (secondary/debug key).
     bool moved_out = false;  ///< True if the place was moved out (OwnershipState::Moved).
     bool initialized = true; ///< Whether the place is initialized at end of function.
+    /// True if the place is moved on SOME control-flow paths but not all
+    /// (conditional / branch-dependent move). Computed at `if`/`when`/`loop`
+    /// merge points from per-branch ownership snapshots (phase26f 1.5). When set,
+    /// `moved_out` is also true (the monotonic "ever moved" verdict is a superset),
+    /// but the drop must be guarded by a runtime drop-flag rather than statically
+    /// suppressed — otherwise the path where the move did NOT happen leaks.
+    bool conditionally_moved = false;
 };
 
 // ============================================================================

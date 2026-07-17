@@ -1,0 +1,27 @@
+// Harness fixture (phase26f 1.5): conditional-move drop-flag — the WHEN shape.
+//
+// `a` is moved in ONE `when` arm but not the other; the not-moving arm is taken
+// at runtime. Moved-in-some-arms-but-not-all → the checker marks `a`
+// conditionally_moved (v0.3.64) and codegen guards its drop with a runtime flag.
+// Without the flag, moved_out suppressed `a`'s drop on every path → leak on the
+// arm that did not move it.
+//
+// Correct: witness strong_count stays 1 after the block → exit 0.
+use core::alloc::shared::Shared
+use std::os
+
+func main() {
+    let witness = Shared::new(7 as I64) // count 1
+    {
+        let a = witness.duplicate() // count 2
+        let sel = witness.strong_count() // == 2 at runtime
+        when sel {
+            2 => { let keep = a.get() }, // taken: does NOT move `a`
+            _ => { let b = a },          // not taken: would move `a`
+        }
+        // block exit: the `2 =>` arm ran → `a` not moved → dropped once (2 -> 1).
+    }
+    if witness.strong_count() != 1 {
+        os::process_exit(1)
+    }
+}

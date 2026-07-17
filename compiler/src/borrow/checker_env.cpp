@@ -329,4 +329,67 @@ void BorrowEnv::apply_init_state(const InitState& state) {
     }
 }
 
+auto BorrowEnv::save_ownership_state() const -> OwnershipSnapshot {
+    OwnershipSnapshot snap;
+    snap.reserve(places_.size());
+    for (const auto& [id, place] : places_) {
+        snap[id] = place.state;
+    }
+    return snap;
+}
+
+void BorrowEnv::restore_ownership_state(const OwnershipSnapshot& snap) {
+    for (const auto& [id, st] : snap) {
+        auto it = places_.find(id);
+        if (it != places_.end()) {
+            it->second.state = st;
+        }
+    }
+}
+
+void BorrowEnv::merge_ownership_branches(const OwnershipSnapshot& pre,
+                                         const std::vector<OwnershipSnapshot>& branches) {
+    if (branches.empty()) {
+        return;
+    }
+    // Consider every place that appears in `pre` (all places live before the
+    // construct). For each, decide whether it was moved within the construct and
+    // whether that move covered all branches or only some.
+    for (const auto& [id, pre_state] : pre) {
+        auto place_it = places_.find(id);
+        if (place_it == places_.end()) {
+            continue; // place went out of scope inside the construct
+        }
+        // A move already recorded before the construct is not "within" it.
+        const bool was_moved_before = (pre_state == OwnershipState::Moved);
+        if (was_moved_before) {
+            // Monotonic: stays Moved regardless of branch measurements.
+            place_it->second.state = OwnershipState::Moved;
+            continue;
+        }
+        bool moved_in_any = false;
+        bool moved_in_all = true;
+        for (const auto& branch : branches) {
+            auto b_it = branch.find(id);
+            const bool moved_here =
+                (b_it != branch.end() && b_it->second == OwnershipState::Moved);
+            moved_in_any = moved_in_any || moved_here;
+            moved_in_all = moved_in_all && moved_here;
+        }
+        if (!moved_in_any) {
+            // Not moved in any branch: restore the pre-construct ownership so a
+            // sticky Moved leaked from measuring one branch does not persist.
+            place_it->second.state = pre_state;
+            continue;
+        }
+        // Moved on at least one path → preserve the monotonic "ever moved"
+        // verdict so moved_out (phase26f 1.3) is unchanged.
+        place_it->second.state = OwnershipState::Moved;
+        if (!moved_in_all) {
+            // Some-but-not-all paths → runtime drop flag required.
+            place_it->second.conditionally_moved = true;
+        }
+    }
+}
+
 } // namespace tml::borrow

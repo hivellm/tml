@@ -1,0 +1,31 @@
+// Harness fixture (phase26f 1.5): conditional-move drop-flag — DOUBLE-FREE dir.
+//
+// The dual of condmove_branch_probe: the conditional move IS taken at runtime.
+// `a` is moved into `b` inside the `if`; `b` drops at the if-block exit. `a`'s
+// drop flag is cleared by the move, so the outer block exit must NOT drop `a`
+// again — otherwise the Shared control block is freed twice. Run under the
+// gate's poison+quarantine allocator a double-free becomes a crash (nonzero).
+//
+// Correct: `b` drops the handle once, `a` is flag-suppressed → witness
+// strong_count is 1 after the block → exit 0.
+use core::alloc::shared::Shared
+use std::os
+
+func main() {
+    let witness = Shared::new(7 as I64) // count 1
+    {
+        let a = witness.duplicate() // count 2
+        if witness.strong_count() < 100 {
+            // TRUE at runtime — the move executes and clears a's flag.
+            let b = a
+            if b.get() != 7 {
+                os::process_exit(2)
+            }
+            // `b` drops here (if-block exit) → count 2 -> 1.
+        }
+        // block exit: a's flag is cleared (moved) → `a` NOT dropped again.
+    }
+    if witness.strong_count() != 1 {
+        os::process_exit(1)
+    }
+}

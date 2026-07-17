@@ -1,0 +1,30 @@
+// Harness fixture (phase26f 1.5): conditional-move drop-flag — the BRANCH shape.
+//
+// `a` is moved only inside an `if` branch that is NOT taken at runtime. The
+// borrow checker reports `a` as moved_out (monotonic "ever moved") AND, since
+// v0.3.64, `conditionally_moved` (moved on some paths but not all). Before the
+// drop-flag elaboration, static suppression (phase26f 1.3) dropped `a`'s drop
+// unconditionally → on the not-taken path the live Shared handle leaked. With
+// the runtime drop flag, the not-taken path still drops `a` exactly once.
+//
+// Runs via `tml run` on purpose (AST codegen — where drop flags live).
+// Correct: witness strong_count stays 1 after the block → exit 0. Leak: 2.
+use core::alloc::shared::Shared
+use std::os
+
+func main() {
+    let witness = Shared::new(7 as I64) // count 1
+    {
+        let a = witness.duplicate() // count 2
+        if witness.strong_count() > 100 {
+            // FALSE at runtime — the conditional move is never executed.
+            let b = a
+            os::process_exit(9)
+        }
+        // block exit: `a` was NOT moved at runtime → its drop flag is still armed
+        // → `a` is dropped once (count 2 -> 1).
+    }
+    if witness.strong_count() != 1 {
+        os::process_exit(1)
+    }
+}

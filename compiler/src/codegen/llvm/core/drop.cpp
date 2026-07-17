@@ -109,6 +109,40 @@ static types::TypePtr parse_mangled_type_for_drop(const std::string& s) {
 
 void LLVMIRGen::mark_var_consumed(const std::string& var_name) {
     consumed_vars_.insert(var_name);
+    // phase26f 1.5: if this binding is conditionally moved, the syntactic consume
+    // site is also a runtime move site — clear its drop flag in the current block.
+    note_move_for_flag(var_name);
+}
+
+void LLVMIRGen::note_move_for_flag(const std::string& var_name) {
+    auto it = drop_flag_by_name_.find(var_name);
+    if (it == drop_flag_by_name_.end() || block_terminated_) {
+        return;
+    }
+    emit_line("  store i1 false, ptr " + it->second);
+}
+
+void LLVMIRGen::note_reinit_for_flag(const std::string& var_name) {
+    auto it = drop_flag_by_name_.find(var_name);
+    if (it == drop_flag_by_name_.end() || block_terminated_) {
+        return;
+    }
+    emit_line("  store i1 true, ptr " + it->second);
+}
+
+void LLVMIRGen::emit_conditional_drop(const DropInfo& info) {
+    // Guard the drop with the runtime flag: if (flag) { <drop> }.
+    std::string flagval = fresh_reg();
+    emit_line("  " + flagval + " = load i1, ptr " + info.flag_reg);
+    std::string drop_lbl = fresh_label("dropflag");
+    std::string cont_lbl = fresh_label("dropcont");
+    emit_line("  br i1 " + flagval + ", label %" + drop_lbl + ", label %" + cont_lbl);
+    emit_line(drop_lbl + ":");
+    block_terminated_ = false;
+    emit_drop_call(info);
+    emit_line("  br label %" + cont_lbl);
+    emit_line(cont_lbl + ":");
+    block_terminated_ = false;
 }
 
 void LLVMIRGen::mark_field_consumed(const std::string& var_name, const std::string& field_name) {
@@ -129,6 +163,13 @@ bool LLVMIRGen::has_consumed_fields(const std::string& var_name) const {
 }
 
 bool LLVMIRGen::drop_suppressed_by_move(const DropInfo& info) const {
+    // phase26f 1.5: conditionally-moved bindings are NEVER statically suppressed —
+    // their drop is guarded by a runtime flag (emit_conditional_drop). Returning
+    // false here ensures the caller reaches the flag path even if the binding was
+    // also added to consumed_vars_ by a syntactic move site inside a branch.
+    if (info.has_drop_flag) {
+        return false;
+    }
     // UNION of the syntactic consumed set and the borrow-checker move fact
     // (phase26f 1.3). See the header comment for why the union is required.
     //
@@ -317,6 +358,22 @@ void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string
         di.needs_field_drops = needs_field_drops;
         di.needs_enum_drop = needs_enum_drop;
         di.def_span = def_span; // join key into ownership facts (phase26b Step 2)
+
+        // phase26f 1.5: conditionally-moved bindings get a runtime drop flag.
+        // Allocate an i1 flag (init true = live) at the declaration site so it
+        // dominates both the later move site(s) and the scope-exit drop. The flag
+        // is stored false at each runtime move and consulted at scope exit.
+        if (!block_terminated_) {
+            auto own_it = ownership_by_span_.find(span_join_key(def_span));
+            if (own_it != ownership_by_span_.end() && own_it->second.conditionally_moved) {
+                std::string flag = fresh_reg();
+                emit_line("  " + flag + " = alloca i1");
+                emit_line("  store i1 true, ptr " + flag);
+                di.has_drop_flag = true;
+                di.flag_reg = flag;
+                drop_flag_by_name_[var_name] = flag;
+            }
+        }
         drop_scopes_.back().push_back(di);
 
         // For generic imported types, request Drop method instantiation
@@ -1225,10 +1282,10 @@ void LLVMIRGen::debug_prove_drop_join(const DropInfo& info, const char* site) co
     const bool agree = (fact.moved_out == consumed);
     std::fprintf(stderr,
                  "[DROP-JOIN] site=%s var=%s span=%u..%u MATCH fact_name=%s moved_out=%d "
-                 "consumed=%d init=%d %s\n",
+                 "cond_moved=%d consumed=%d init=%d %s\n",
                  site, info.var_name.c_str(), info.def_span.start.offset, info.def_span.end.offset,
-                 fact.name.c_str(), fact.moved_out ? 1 : 0, consumed ? 1 : 0,
-                 fact.initialized ? 1 : 0, agree ? "AGREE" : "DISAGREE-payoff");
+                 fact.name.c_str(), fact.moved_out ? 1 : 0, fact.conditionally_moved ? 1 : 0,
+                 consumed ? 1 : 0, fact.initialized ? 1 : 0, agree ? "AGREE" : "DISAGREE-payoff");
 }
 
 void LLVMIRGen::emit_scope_drops() {
@@ -1243,6 +1300,11 @@ void LLVMIRGen::emit_scope_drops() {
     for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
         // phase26b Step 2 join proof (debug-only, does NOT change the decision).
         debug_prove_drop_join(*it, "scope");
+        // phase26f 1.5: conditionally-moved binding → runtime-flag-guarded drop.
+        if (it->has_drop_flag) {
+            emit_conditional_drop(*it);
+            continue;
+        }
         // Skip if the whole variable was consumed OR moved out (phase26f 1.3 union).
         if (drop_suppressed_by_move(*it)) {
             continue;
@@ -1270,6 +1332,11 @@ void LLVMIRGen::emit_all_drops() {
         for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
             // phase26b Step 2 join proof (debug-only, does NOT change the decision).
             debug_prove_drop_join(*it, "all");
+            // phase26f 1.5: conditionally-moved binding → runtime-flag-guarded drop.
+            if (it->has_drop_flag) {
+                emit_conditional_drop(*it);
+                continue;
+            }
             // Skip if the whole variable was consumed OR moved out (phase26f 1.3 union).
             if (drop_suppressed_by_move(*it)) {
                 continue;

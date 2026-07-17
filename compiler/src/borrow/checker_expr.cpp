@@ -483,26 +483,39 @@ void BorrowChecker::check_if(const parser::IfExpr& if_expr) {
 
     // Save initialization state before entering branches
     auto pre_branch_state = env_.save_init_state();
+    // Snapshot ownership too (phase26f 1.5): moves mutate state.state in place and
+    // it is otherwise monotonic across branches, so per-branch measurement needs
+    // an explicit save/restore.
+    auto pre_own = env_.save_ownership_state();
 
     // Check then branch
     check_expr(*if_expr.then_branch);
     auto then_state = env_.save_init_state();
+    auto then_own = env_.save_ownership_state();
 
     if (if_expr.else_branch) {
         // Restore to pre-branch state before checking else
         env_.restore_init_state(pre_branch_state);
+        env_.restore_ownership_state(pre_own);
 
         // Check else branch
         check_expr(**if_expr.else_branch);
         auto else_state = env_.save_init_state();
+        auto else_own = env_.save_ownership_state();
 
         // Merge: variable is initialized only if initialized in BOTH branches
         auto merged = BorrowEnv::merge_init_states(then_state, else_state);
         env_.apply_init_state(merged);
+        // Merge ownership: moved in both arms → static Moved; moved in one arm →
+        // conditionally_moved (runtime drop flag).
+        env_.merge_ownership_branches(pre_own, {then_own, else_own});
     } else {
         // No else branch: variable is initialized only if it was initialized
         // BEFORE the if (because the then branch might not execute)
         env_.apply_init_state(pre_branch_state);
+        // Implicit not-taken path = pre_own (no moves). Any move in the then
+        // branch is therefore conditional.
+        env_.merge_ownership_branches(pre_own, {then_own, pre_own});
     }
 }
 
@@ -538,13 +551,17 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
 
     // Save state before any arms
     auto pre_when_state = env_.save_init_state();
+    auto pre_when_own = env_.save_ownership_state();
 
     // Track merged state across all arms
     std::optional<BorrowEnv::InitState> merged_state;
+    // Per-arm ownership snapshots for the drop-flag merge (phase26f 1.5).
+    std::vector<BorrowEnv::OwnershipSnapshot> arm_owns;
 
     for (const auto& arm : when.arms) {
         // Restore to pre-when state before checking each arm
         env_.restore_init_state(pre_when_state);
+        env_.restore_ownership_state(pre_when_own);
 
         // Each arm creates a new scope for pattern bindings
         env_.push_scope();
@@ -575,11 +592,20 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
         } else {
             merged_state = BorrowEnv::merge_init_states(*merged_state, arm_state);
         }
+        arm_owns.push_back(env_.save_ownership_state());
     }
 
     // Apply merged state (initialized only if initialized in ALL arms)
     if (merged_state) {
         env_.apply_init_state(*merged_state);
+    }
+    // Merge ownership across arms: moved in ALL arms → static Moved; moved in
+    // SOME arms → conditionally_moved (runtime drop flag). If the when is not
+    // exhaustive the checker reports elsewhere; for drops a non-exhaustive when
+    // still yields a sound flag (the implicit fall-through path is a not-moved
+    // path, captured because a scrutinee move would be recorded in pre_when_own).
+    if (!arm_owns.empty()) {
+        env_.merge_ownership_branches(pre_when_own, arm_owns);
     }
 }
 
@@ -595,11 +621,14 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
 void BorrowChecker::check_loop(const parser::LoopExpr& loop) {
     // Save pre-loop state
     auto pre_loop_state = env_.save_init_state();
+    auto pre_loop_own = env_.save_ownership_state();
 
     loop_depth_++;
     env_.push_scope();
 
     check_expr(*loop.body);
+
+    auto body_own = env_.save_ownership_state();
 
     drop_scope_places();
     env_.pop_scope();
@@ -607,6 +636,11 @@ void BorrowChecker::check_loop(const parser::LoopExpr& loop) {
 
     // Restore pre-loop initialization state (conservative: loop might not execute)
     env_.apply_init_state(pre_loop_state);
+    // A move inside a loop body is conditional: the body may execute zero times
+    // (the not-taken path = pre state). Model as two branches {body, pre}
+    // (phase26f 1.5) so any outer binding moved in the body becomes
+    // conditionally_moved — a runtime drop flag guards its scope-exit drop.
+    env_.merge_ownership_branches(pre_loop_own, {body_own, pre_loop_own});
 }
 
 /// Checks a for expression with dataflow analysis.
@@ -634,6 +668,7 @@ void BorrowChecker::check_for(const parser::ForExpr& for_expr) {
 
     // Save pre-loop state
     auto pre_loop_state = env_.save_init_state();
+    auto pre_loop_own = env_.save_ownership_state();
 
     loop_depth_++;
     env_.push_scope();
@@ -647,12 +682,17 @@ void BorrowChecker::check_for(const parser::ForExpr& for_expr) {
 
     check_expr(*for_expr.body);
 
+    auto body_own = env_.save_ownership_state();
+
     drop_scope_places();
     env_.pop_scope();
     loop_depth_--;
 
     // Restore pre-loop initialization state (conservative: loop might not execute)
     env_.apply_init_state(pre_loop_state);
+    // Body may execute zero times → a move of an outer binding in the body is
+    // conditional (phase26f 1.5); guard its drop with a runtime flag.
+    env_.merge_ownership_branches(pre_loop_own, {body_own, pre_loop_own});
 }
 
 /// Checks a return expression for dangling references.

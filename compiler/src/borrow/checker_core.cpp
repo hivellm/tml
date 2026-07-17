@@ -108,6 +108,9 @@ auto BorrowChecker::ownership_facts() const -> std::vector<PlaceOwnershipFact> {
         // to Step 4 and intentionally not folded into moved_out here.
         fact.moved_out = (st.state == OwnershipState::Moved);
         fact.initialized = st.is_initialized;
+        // phase26f 1.5: branch-dependent move → codegen guards the drop with a
+        // runtime drop flag instead of static suppression.
+        fact.conditionally_moved = st.conditionally_moved;
         facts.push_back(std::move(fact));
     }
     return facts;

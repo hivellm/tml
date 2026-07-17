@@ -1,0 +1,32 @@
+// Harness fixture (phase26f 1.5): conditional-move drop-flag — the LOOP shape.
+//
+// `a` is moved inside a loop body guarded by a condition that is false every
+// iteration (so the move never executes). A move inside a loop body is
+// conditional (the body may run zero times / the guarded branch may never be
+// taken), so the checker marks `a` conditionally_moved (v0.3.64) and codegen
+// guards its drop with a runtime flag. Without the flag, the monotonic
+// moved_out suppressed `a`'s drop unconditionally → leak.
+//
+// Correct: witness strong_count stays 1 after the block → exit 0.
+use core::alloc::shared::Shared
+use std::os
+
+func main() {
+    let witness = Shared::new(7 as I64) // count 1
+    {
+        let a = witness.duplicate() // count 2
+        var i: I64 = 0
+        loop (i < 3) {
+            if witness.strong_count() > 100 {
+                // FALSE every iteration — the move never runs.
+                let b = a
+                os::process_exit(9)
+            }
+            i = i + 1
+        }
+        // block exit: `a` never moved → dropped once (count 2 -> 1).
+    }
+    if witness.strong_count() != 1 {
+        os::process_exit(1)
+    }
+}

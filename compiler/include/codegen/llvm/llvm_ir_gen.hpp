@@ -543,6 +543,8 @@ public:
         bool needs_field_drops = false; ///< True if type needs recursive field-level drops.
         bool needs_enum_drop = false;   ///< True if this is an enum with droppable variant fields.
         SourceSpan def_span{}; ///< Binding definition span — join key into ownership facts.
+        bool has_drop_flag = false; ///< True if this binding is conditionally moved (phase26f 1.5).
+        std::string flag_reg;       ///< LLVM `ptr` to the i1 drop flag (when has_drop_flag).
     };
 
 private:
@@ -586,7 +588,29 @@ private:
     // method-arg safe-fallback (phase26f 1.2b) means by-value method args are
     // tracked only syntactically. The fact ADDS precise ident moves the syntactic
     // sites miss — notably plain `let b = a` let-init, which was double-dropped.
+    // Bindings with a runtime drop flag (phase26f 1.5, conditionally moved) are
+    // NEVER statically suppressed here — their drop is guarded at runtime instead.
     [[nodiscard]] bool drop_suppressed_by_move(const DropInfo& info) const;
+
+    // Drop-flag elaboration (phase26f 1.5). Maps a conditionally-moved binding's
+    // source name to the `ptr` of its i1 drop flag. Populated in register_for_drop
+    // when the ownership fact reports `conditionally_moved`. At each runtime move
+    // site the flag is stored `false`; at scope exit the drop is guarded by it.
+    std::unordered_map<std::string, std::string> drop_flag_by_name_;
+
+    // Emits `store i1 false` to a binding's drop flag if it has one — called at
+    // every runtime move site (mark_var_consumed + let-init ident moves) so the
+    // flag reflects the control-flow path actually taken. No-op for bindings
+    // without a flag (i.e. unconditional/never moved).
+    void note_move_for_flag(const std::string& var_name);
+
+    // Emits `store i1 true` to a binding's drop flag if it has one — called when
+    // a moved binding is re-initialised (`x = new_value`), re-arming its drop.
+    void note_reinit_for_flag(const std::string& var_name);
+
+    // Emits a runtime-flag-guarded drop for a conditionally-moved binding:
+    // `if (flag) { <drop> }`. Used by emit_scope_drops/emit_all_drops.
+    void emit_conditional_drop(const DropInfo& info);
 
     // Drop scope management
     void push_drop_scope();

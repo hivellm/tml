@@ -611,6 +611,13 @@ struct PlaceState {
 
     /// Location where a move occurred (for error reporting).
     std::optional<Location> move_location;
+
+    /// Whether this place is moved on SOME control-flow paths but not all
+    /// (conditional move). Set at `if`/`when`/`loop` merge points (phase26f 1.5).
+    /// Monotonic once set within a function (a place conditionally moved in any
+    /// construct stays conditional through end-of-function). Drives runtime
+    /// drop-flag elaboration in codegen instead of static drop suppression.
+    bool conditionally_moved = false;
 };
 
 /// The move state of a place with respect to partial moves.
@@ -814,6 +821,36 @@ public:
     /// Applies a merged initialization state to the environment.
     /// For variables that exist in the environment, updates their is_initialized flag.
     void apply_init_state(const InitState& state);
+
+    // ========================================================================
+    // Ownership State Tracking at branch merges (phase26f 1.5, drop flags)
+    // ========================================================================
+
+    /// Snapshot of each place's ownership `state` enum. Parallel to `InitState`
+    /// but for `OwnershipState` — needed because moves mutate `state.state` in
+    /// place and it is otherwise monotonic (never reset at branch boundaries).
+    using OwnershipSnapshot = std::unordered_map<PlaceId, OwnershipState>;
+
+    /// Saves the current ownership `state` for all places.
+    auto save_ownership_state() const -> OwnershipSnapshot;
+
+    /// Restores ownership `state` for all places from a snapshot. Only the
+    /// `state` enum is touched (move_location etc. are left intact).
+    void restore_ownership_state(const OwnershipSnapshot& snap);
+
+    /// Merges per-branch ownership snapshots at a control-flow join (phase26f 1.5).
+    /// `pre` is the state before the construct; `branches` are the post-branch
+    /// snapshots (one per if-branch / when-arm; an implicit not-taken path is the
+    /// caller's responsibility to include as `pre`). For each place moved within
+    /// the construct (Moved in a branch but not Moved in `pre`):
+    ///   - moved in ALL branches  → `state.state = Moved`, NOT conditional (static).
+    ///   - moved in SOME branches  → `state.state = Moved`, `conditionally_moved = true`.
+    /// Places not moved in any branch are restored to their `pre` state. The
+    /// monotonic `moved_out` (== Moved) verdict is preserved for every case, so
+    /// existing static suppression (phase26f 1.3) is unchanged; only the new
+    /// `conditionally_moved` bit is added.
+    void merge_ownership_branches(const OwnershipSnapshot& pre,
+                                  const std::vector<OwnershipSnapshot>& branches);
 
 private:
     /// Maps variable names to their PlaceIds (supports shadowing via vector).
