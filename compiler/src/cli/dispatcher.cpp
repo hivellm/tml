@@ -174,6 +174,19 @@ int tml_main(int argc, char* argv[]) {
         return run_parse(argv[2], verbose);
     }
 
+    // Daemon forwarding: if TML_DAEMON=1 is set and a daemon is running for
+    // this project directory, forward build/run/check requests to it.
+    // Falls through to direct compilation if no daemon is reachable.
+    // NOTE: this must run BEFORE the `check` handler below — it previously sat
+    // after it, which made daemon forwarding for `check` unreachable (phase40a).
+    if ((command == "build" || command == "run" || command == "check") &&
+        std::getenv("TML_DAEMON") != nullptr &&
+        std::string(std::getenv("TML_DAEMON")) == "1") {
+        int result = try_daemon_forward(argc, argv);
+        if (result >= 0) return result;
+        // Daemon not reachable — fall through to direct compilation
+    }
+
     if (command == "check") {
         if (argc < 3) {
             std::cerr << "Usage: tml check <file.tml> [--verbose]\n";
@@ -189,17 +202,6 @@ int tml_main(int argc, char* argv[]) {
             return 1;
         }
         return run_explain(argv[2], verbose);
-    }
-
-    // Daemon forwarding: if TML_DAEMON=1 is set and a daemon is running for
-    // this project directory, forward build/run/check requests to it.
-    // Falls through to direct compilation if no daemon is reachable.
-    if ((command == "build" || command == "run" || command == "check") &&
-        std::getenv("TML_DAEMON") != nullptr &&
-        std::string(std::getenv("TML_DAEMON")) == "1") {
-        int result = try_daemon_forward(argc, argv);
-        if (result >= 0) return result;
-        // Daemon not reachable — fall through to direct compilation
     }
 
     if (command == "build") {

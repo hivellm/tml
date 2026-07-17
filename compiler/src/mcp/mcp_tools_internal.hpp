@@ -44,7 +44,14 @@ auto strip_ansi(const std::string& input) -> std::string;
 auto read_source_file(const std::string& path) -> std::optional<std::string>;
 
 /// Executes a command and returns its output (ANSI-stripped) and exit code.
-auto execute_command(const std::string& cmd, int timeout_seconds = 120)
+///
+/// When `use_daemon` is true the child is launched with `TML_DAEMON=1` in its
+/// environment so the thin launcher forwards `check`/`build`/`run` to the warm
+/// compile daemon (~8 ms cache-hit vs ~450 ms cold start), and the daemon is
+/// auto-started (detached, throttled) if it is not running. Only pass true for
+/// commands whose output is a pure function of the source files (check, build,
+/// emit-ir, emit-mir) — never for `run` or `test`.
+auto execute_command(const std::string& cmd, int timeout_seconds = 120, bool use_daemon = false)
     -> std::pair<std::string, int>;
 
 /// Gets the path to the TML compiler executable.

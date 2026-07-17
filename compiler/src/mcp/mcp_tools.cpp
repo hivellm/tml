@@ -15,12 +15,16 @@ TML_MODULE("mcp")
 //! - `mcp_tools_docs_handlers.cpp` — docs/get, docs/list, docs/resolve handlers
 //! - `mcp_tools_project.cpp` — cache, project/build, coverage, explain, structure, etc.
 
+#include "common/crc32c.hpp"
 #include "doc/doc_model.hpp"
 #include "doc/extractor.hpp"
 #include "mcp_tools_internal.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
 #include <vector>
 
 namespace tml::mcp {
@@ -397,10 +401,136 @@ auto strip_ansi(const std::string& input) -> std::string {
 }
 
 // ============================================================================
+// Warm-Daemon Support (phase40a, F-016/F-017)
+// ============================================================================
+//
+// The thin launcher (main_launcher.cpp) forwards check/build/run over a named
+// pipe to the warm compile daemon — but only when TML_DAEMON=1 is set in the
+// child environment, and only when the daemon is actually running. These
+// helpers (1) probe daemon liveness via its PID file (same key scheme as
+// cmd_daemon.cpp: CRC32C of the CWD), (2) auto-start it detached when absent,
+// and (3) build a per-child environment block carrying TML_DAEMON=1 without
+// mutating the MCP server's own environment (tool handlers can overlap on
+// worker threads, so a process-wide _putenv_s would be racy).
+
+namespace {
+
+#ifdef _WIN32
+
+/// PID-file path for the compile daemon serving `cwd`.
+/// Must match cmd_daemon.cpp::pid_file_path().
+auto daemon_pid_file(const fs::path& cwd) -> fs::path {
+    uint32_t crc = tml::crc32c(cwd.string());
+    char hex[16];
+    snprintf(hex, sizeof(hex), "%08x", crc);
+    return fs::temp_directory_path() / (std::string("tml-daemon-") + hex + ".pid");
+}
+
+/// Reads the daemon PID via Win32 ReadFile. std::ifstream can block
+/// indefinitely on Windows when another process holds the file in certain
+/// states — same rationale as main_launcher.cpp's PID read.
+auto read_daemon_pid(const fs::path& pid_path) -> uint32_t {
+    char buf[32] = {};
+    HANDLE h = CreateFileW(pid_path.wstring().c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    DWORD nread = 0;
+    ReadFile(h, buf, sizeof(buf) - 1, &nread, nullptr);
+    CloseHandle(h);
+    return static_cast<uint32_t>(std::strtoul(buf, nullptr, 10));
+}
+
+/// True if the compile daemon for the current working directory is alive.
+auto daemon_is_running() -> bool {
+    std::error_code ec;
+    auto cwd = fs::current_path(ec);
+    if (ec) {
+        return false;
+    }
+    uint32_t pid = read_daemon_pid(daemon_pid_file(cwd));
+    if (pid == 0) {
+        return false;
+    }
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+    if (!h) {
+        return false;
+    }
+    DWORD code = STILL_ACTIVE;
+    bool alive = (GetExitCodeProcess(h, &code) != 0) && code == STILL_ACTIVE;
+    CloseHandle(h);
+    return alive;
+}
+
+/// Auto-start the compile daemon when it is not running: spawn
+/// `tml.exe daemon start` detached (fire-and-forget). The current request
+/// then falls through to direct compilation (correct, just cold once);
+/// subsequent requests hit the warm daemon. Spawn attempts are throttled to
+/// one per 10 s so overlapping tool calls do not start a daemon storm while
+/// the server process is still booting.
+void ensure_warm_daemon() {
+    if (daemon_is_running()) {
+        return;
+    }
+
+    {
+        static std::mutex throttle_mutex;
+        static std::chrono::steady_clock::time_point last_attempt{};
+        std::lock_guard<std::mutex> lock(throttle_mutex);
+        auto now = std::chrono::steady_clock::now();
+        if (last_attempt != std::chrono::steady_clock::time_point{} &&
+            now - last_attempt < std::chrono::seconds(10)) {
+            return;
+        }
+        last_attempt = now;
+    }
+
+    std::string cmd = "\"" + get_tml_executable() + "\" daemon start";
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    std::cerr << "[exec] Auto-starting compile daemon: " << cmd << std::endl;
+    if (CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                       DETACHED_PROCESS | CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+/// Copy of the current environment block with any TML_DAEMON entry replaced
+/// by TML_DAEMON=1. Double-NUL-terminated, suitable for CreateProcessA's
+/// lpEnvironment (ANSI, so no CREATE_UNICODE_ENVIRONMENT flag).
+auto make_daemon_env_block() -> std::string {
+    std::string block;
+    LPCH env = GetEnvironmentStringsA();
+    if (env != nullptr) {
+        for (const char* p = env; *p != '\0';) {
+            size_t len = std::strlen(p);
+            if (_strnicmp(p, "TML_DAEMON=", 11) != 0) {
+                block.append(p, len + 1); // keep the entry's NUL terminator
+            }
+            p += len + 1;
+        }
+        FreeEnvironmentStringsA(env);
+    }
+    block.append("TML_DAEMON=1");
+    block.push_back('\0');
+    block.push_back('\0'); // block terminator
+    return block;
+}
+
+#endif // _WIN32
+
+} // anonymous namespace
+
+// ============================================================================
 // Shared Helper: Execute Command and Capture Output
 // ============================================================================
 
-auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<std::string, int> {
+auto execute_command(const std::string& cmd, int timeout_seconds, bool use_daemon)
+    -> std::pair<std::string, int> {
     // Reject shell injection: pipe, grep, redirect, command chaining.
     // The MCP tools must NEVER pipe test output through grep/filter.
     // Use structured output mode instead.
@@ -425,6 +555,17 @@ auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<s
     // Windows: Use CreateProcess with explicit NUL stdin to prevent the child
     // from inheriting the parent's stdin pipe (MCP protocol), which causes hangs.
     {
+        // Warm-daemon path (phase40a): launch the child with TML_DAEMON=1 in a
+        // per-child environment block so the thin launcher forwards the command
+        // to the warm compile daemon; auto-start the daemon if absent.
+        std::string env_block;
+        LPVOID env_ptr = nullptr;
+        if (use_daemon) {
+            ensure_warm_daemon();
+            env_block = make_daemon_env_block();
+            env_ptr = env_block.data();
+        }
+
         SECURITY_ATTRIBUTES sa{};
         sa.nLength = sizeof(sa);
         sa.bInheritHandle = TRUE;
@@ -469,7 +610,7 @@ auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<s
 
         std::cerr << "[exec] CreateProcess: " << full_cmd << std::endl;
         BOOL ok = CreateProcessA(nullptr, full_cmd.data(), nullptr, nullptr, TRUE,
-                                 CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
+                                 CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, env_ptr, nullptr,
                                  &siex.StartupInfo, &pi);
 
         DeleteProcThreadAttributeList(attr_list);
@@ -573,8 +714,12 @@ auto execute_command(const std::string& cmd, int timeout_seconds) -> std::pair<s
         CloseHandle(pi.hThread);
     }
 #else
-    // Unix: Use popen/pclose
-    FILE* pipe = popen((cmd + " 2>&1").c_str(), "r");
+    // Unix: Use popen/pclose. The env prefix mirrors the Windows env block —
+    // it only takes effect once daemon forwarding is implemented for Unix in
+    // the thin launcher; until then the launcher ignores it and compiles
+    // directly (identical results, no daemon).
+    std::string unix_cmd = use_daemon ? ("TML_DAEMON=1 " + cmd) : cmd;
+    FILE* pipe = popen((unix_cmd + " 2>&1").c_str(), "r");
     if (pipe) {
         char buffer[4096];
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
@@ -668,8 +813,8 @@ auto handle_compile(const json::JsonValue& params) -> ToolResult {
         cmd << " --release";
     }
 
-    // Execute compilation
-    auto [output, exit_code] = execute_command(cmd.str());
+    // Execute compilation through the warm daemon (phase40a)
+    auto [output, exit_code] = execute_command(cmd.str(), 120, /*use_daemon=*/true);
 
     std::stringstream result;
     if (exit_code == 0) {
@@ -721,11 +866,12 @@ auto handle_check(const json::JsonValue& params) -> ToolResult {
     // Use subprocess execution — the in-process parse_and_check lacks full
     // module resolution context (query system, import paths, std/core libs)
     // which causes crashes. The tml.exe check command handles all of this.
+    // The warm daemon (phase40a) drops repeat checks from ~450 ms to ~8 ms.
     std::string tml_exe = get_tml_executable();
     std::stringstream cmd;
     cmd << tml_exe << " check " << file_path;
 
-    auto [output, exit_code] = execute_command(cmd.str());
+    auto [output, exit_code] = execute_command(cmd.str(), 120, /*use_daemon=*/true);
 
     // Strip ANSI escape codes from compiler output
     std::string clean_output = strip_ansi(output);
@@ -794,7 +940,9 @@ auto handle_run(const json::JsonValue& params) -> ToolResult {
         }
     }
 
-    // Execute
+    // Execute — deliberately NOT via the warm daemon: `run` executes the
+    // built program, and the daemon process holds NUL std handles, so the
+    // program's OS-level stdout/stderr would be lost inside the daemon.
     auto [output, exit_code] = execute_command(cmd.str());
 
     std::stringstream result;
@@ -855,8 +1003,8 @@ auto handle_build(const json::JsonValue& params) -> ToolResult {
         cmd << " --lib-type=" << lib_type_param->as_string();
     }
 
-    // Execute
-    auto [output, exit_code] = execute_command(cmd.str());
+    // Execute through the warm daemon (phase40a)
+    auto [output, exit_code] = execute_command(cmd.str(), 120, /*use_daemon=*/true);
 
     std::stringstream result;
     if (exit_code == 0) {

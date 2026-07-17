@@ -43,7 +43,10 @@ auto handle_emit_ir(const json::JsonValue& params) -> ToolResult {
         }
     }
 
-    auto [output, exit_code] = execute_command(cmd.str());
+    // Route through the warm daemon (phase40a) — `build --emit-ir` is
+    // forwardable and its result is cached by input mtime. The .ll artifact
+    // read back below is produced on the cache-miss run and persists on disk.
+    auto [output, exit_code] = execute_command(cmd.str(), 120, /*use_daemon=*/true);
 
     if (exit_code != 0) {
         return ToolResult::error("emit-ir failed (exit code " + std::to_string(exit_code) +
@@ -172,7 +175,8 @@ auto handle_emit_mir(const json::JsonValue& params) -> ToolResult {
     std::stringstream cmd;
     cmd << tml_exe << " build " << file_path << " --emit-mir";
 
-    auto [output, exit_code] = execute_command(cmd.str());
+    // Route through the warm daemon (phase40a) — same rationale as emit-ir.
+    auto [output, exit_code] = execute_command(cmd.str(), 120, /*use_daemon=*/true);
 
     if (exit_code != 0) {
         return ToolResult::error("emit-mir failed (exit code " + std::to_string(exit_code) +

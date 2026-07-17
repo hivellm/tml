@@ -289,6 +289,13 @@ static int try_daemon_forward_launcher(int argc, char* argv[]) {
     if (response.empty())
         return -1;
 
+    // Staleness safety (phase40a): when the compiler DLL was rebuilt while the
+    // daemon was running, the daemon answers with a restart notice and exits.
+    // Treat that as "daemon not available" and fall through to the direct DLL
+    // path instead of surfacing a spurious exit-1 to the caller.
+    if (response.find("compiler updated, restarting") != std::string::npos)
+        return -1;
+
     // Print captured output
     std::string out_str = json_get_str_field(response, "out");
     std::string err_str = json_get_str_field(response, "err");

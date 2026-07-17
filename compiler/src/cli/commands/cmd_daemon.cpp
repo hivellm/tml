@@ -1033,6 +1033,13 @@ auto try_daemon_forward(int argc, char* argv[]) -> int {
     std::string response(buf, static_cast<size_t>(n));
 #endif
 
+    // Staleness safety (phase40a): when the compiler DLL was rebuilt while the
+    // daemon was running, the daemon answers with a restart notice and exits.
+    // Treat that as "daemon not reachable" so the caller falls through to
+    // direct compilation instead of surfacing a spurious exit-1.
+    if (response.find("compiler updated, restarting") != std::string::npos)
+        return -1;
+
     // Parse response: extract exit, out, err
     int exit_code = json_get_int(response, "exit");
     std::string out_str = json_get_str(response, "out");
