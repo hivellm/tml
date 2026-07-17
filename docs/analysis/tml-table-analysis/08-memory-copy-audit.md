@@ -13,7 +13,7 @@ not heap-copied. Today they are copied, and the compiler chooses per-site betwee
 
 ---
 
-## Closure status (updated 2026-07-16, v0.3.62)
+## Closure status (updated 2026-07-16, v0.3.66)
 
 Every finding below has an owning task; the concrete bugs are **closed**, the model
 gaps are milestone work in flight. Statuses:
@@ -21,7 +21,7 @@ gaps are milestone work in flight. Statuses:
 | Finding | Status | Closed by |
 |---|---|---|
 | F-013 (refcount bleed, from doc 01) | **CLOSED** | v0.3.55 direct field reads + `tml_refcount_bleed_userpath` canary 100/100 |
-| F-015 no move semantics (ROOT) | **IN PROGRESS** — dataflow live | phase26f: `move_value` activated (v0.3.60), Copy classification blast-radius 53→0 (v0.3.61), fact-driven drop suppression (v0.3.62); remaining: leak special-case removal (1.4), drop flags (1.5) |
+| F-015 no move semantics (ROOT) | **CLOSED** (C++/pure-TML path) | phase26f milestone: `move_value` activated (v0.3.60), Rust-faithful Copy classification blast-radius 53→0 (v0.3.61), fact-driven drop suppression + `let b = a` double-drop fix (v0.3.62), container leak special-case removed (v0.3.63), **conditional-move drop flags** for branch/loop/when-dependent drops (v0.3.64), post-sweep fallout 0 (v0.3.65), milestone gates determinism 28/28 adversarial + leak-free (v0.3.66). Real move+init-state dataflow now drives drop emission; conditionally-moved bindings are runtime-flag-guarded. Deferred (documented, not blocking): projection-level conditional moves (whole-place flags only, mirrors `moved_projections` deferral) and the pre-existing drop-on-reassign-for-handle-structs gap. Frozen cc_driver C-frontend crashes (essential.c/c_essential_repro) are out-of-scope era0 debt. |
 | F-016 13 double-free/UAF read-out sites | **CLOSED** | v0.3.58 `ptr_read_clone` in iterators + `List::retain` rebuild + canaries `f016_*` |
 | F-017 broken move-outs (unconditional double-free) | **CLOSED** | v0.3.56 (stdlib sweep wave 1) |
 | F-018 `Sync::get` copying, no safe alternative | **CLOSED** | v0.3.56–58: `get` balanced-clone via field-0 ptr; `get_ref`/`get_clone` added |

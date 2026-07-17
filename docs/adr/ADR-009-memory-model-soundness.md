@@ -198,8 +198,10 @@ deferred steps 2.4/3.4/4 moved into, user decision #12):
 | — Move dataflow activation (prereq found by 2.3 join-proof: `move_value` was dead code) | checker invokes `move_value`/`move_projection` at let-init/args/struct-init/return/assign; strict diagnostics staged behind `TML_STRICT_MOVES=1` | v0.3.60 |
 | — Rust-faithful Copy classification | `PtrType` Copy, alias resolution, Copy/Drop mutual exclusion, stdlib `impl Copy` (Layout/Interval/Point); strict-moves blast radius **53 → 0** | v0.3.61 |
 | 2.4 Fact-driven drop suppression | UNION `consumed_vars_ OR moved_out` (method-arg safe-fallback makes facts under-report); fixed a real `let b = a` double-drop, canary `tml_let_move_double_drop` | v0.3.62 |
-| 3.4 Remove `drop.cpp` container leak special-case | phase26f 1.4 (in flight at time of writing) | v0.3.63 |
-| 4. Drop-flag elaboration (conditional drops) | phase26f 1.5 (pending) | — |
+| 3.4 Remove `drop.cpp` container leak special-case | phase26f 1.4 — removed entirely; leak `container_field_leak_probe` 1000→0, double-free canary `container_field_methodarg` adversarial clean; sync mutex/once_barrier timeouts proven pre-existing by round-trip | v0.3.63 |
+| 4. Drop-flag elaboration (conditional drops) | phase26f 1.5 — checker captures mixed ownership at `if`/`when`/`loop`/`for` merges (`save/restore_ownership_state` + `merge_ownership_branches`), exports `conditionally_moved`; codegen `alloca i1` flag armed at decl, cleared at each runtime move site, re-armed on reassign, scope-exit drop guarded by `if (flag)`. `moved_out` unchanged (1.3 static path preserved). Canaries `condmove_branch`/`_loop`/`_when`/`_taken` 30/30 adversarial. Deferred: projection-level conditional moves | v0.3.64 |
+| 4b. Post-drop-flag fallout re-sweep | phase26f 1.6 — `TML_STRICT_MOVES=1` blast radius still **0** over 183 files (no migration needed) | v0.3.65 |
+| 4c. Milestone gates | phase26f 1.7 — determinism adversarial 28/28 (0 regressions), K002 zero, libs at baseline, leak-free probes; cc `--emit=ast` honest floors (sig_alone 100/100; essential.c/c_essential_repro frozen cc_driver debt) | v0.3.66 |
 | 5. Band-aid reverts + raised gates | phase26c (pending) | — |
 
 Key mechanism discovered during Step 2.3 (decision-critical, recorded in the task):
