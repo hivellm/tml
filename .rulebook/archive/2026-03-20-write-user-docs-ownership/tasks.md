@@ -1,0 +1,5 @@
+- [x] Read existing ch05 and ch06 for style reference
+- [x] Create ch08-00-ownership.md — overview, stack vs heap, TML vs Rust summary
+- [x] Create ch08-01-ownership-rules.md — move semantics, Copy types, Drop, RAII, collections
+- [x] Create ch08-02-references.md — ref T, mut ref T, borrow rules, NLL, slices, patterns
+- [x] Create ch08-03-smart-pointers.md — Heap, Shared, Sync, Weak, Cell, RefCell, Drop, intrinsics

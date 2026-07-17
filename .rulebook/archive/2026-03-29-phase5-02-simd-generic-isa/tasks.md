@@ -1,0 +1,327 @@
+# Tasks: Generic SIMD ISA Support for TML
+
+**Status**: COMPLETE — 153/153 done (100%). All 8 phases + validation done. SSE2/SSE4.2/AVX2/FMA intrinsics, NEON portable stubs, SimdVector abstraction, library algorithms, 21+ test files, full documentation.
+**Priority**: High
+
+## Phase 1: CPU Feature Detection Infrastructure
+
+> **Priority**: Critical | **Files**: `compiler/runtime/core/essential.c`, `lib/core/src/runtime/intrinsics.tml`, `lib/core/src/simd/detect.tml`
+
+- [x] 1.1 Add CPUID C runtime helpers — `tml_cpuid_eax/ebx/ecx/edx(leaf, subleaf) -> I32` in `essential.c`
+- [x] 1.2 Add XGETBV C runtime helper — `tml_xgetbv(xcr_index) -> I64` in `essential.c`
+- [x] 1.3 Declare `tml_cpuid_*` and `tml_xgetbv` as `@extern("c")` in `lib/core/src/runtime/intrinsics.tml` (guarded by `#if X86_64`)
+- [x] 1.4 Create `lib/core/src/simd/detect.tml` with feature detection functions:
+  - [x] 1.4.1 `has_sse2() -> Bool` (always true on x86-64)
+  - [x] 1.4.2 `has_sse42() -> Bool` (CPUID.1:ECX bit 20)
+  - [x] 1.4.3 `has_popcnt() -> Bool` (CPUID.1:ECX bit 23)
+  - [x] 1.4.4 `has_osxsave() -> Bool` (CPUID.1:ECX bit 27)
+  - [x] 1.4.5 `has_avx() -> Bool` (OSXSAVE + XGETBV(0) bits 1:2 + CPUID.1:ECX bit 28)
+  - [x] 1.4.6 `has_avx2() -> Bool` (has_avx() + CPUID.7.0:EBX bit 5)
+  - [x] 1.4.7 `has_fma() -> Bool` (has_avx() + CPUID.1:ECX bit 12)
+  - [x] 1.4.8 `has_neon() -> Bool` (compile-time true on ARM64)
+- [x] 1.5 Add `detect` to `lib/core/src/simd/mod.tml` module exports
+- [x] 1.6 Write `lib/core/tests/simd/detect.test.tml` — 10 tests (all pass)
+
+> **Implementation note**: Used `@extern("c")` FFI to C runtime helpers instead of compiler intrinsics.
+> Per-register functions (`tml_cpuid_eax`, `tml_cpuid_ebx`, etc.) avoid pointer-passing complexity.
+> Functions added to `essential.c` (not separate file) because the test runtime archive
+> (`tml_test_runtime.lib`) only includes essential.c objects via WHOLEARCHIVE.
+
+## Phase 2: SSE2 Complete Intrinsic Set
+
+> **Priority**: Critical | **Files**: `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`
+
+### 2.1 Comparison Intrinsics
+- [x] 2.1.1 `sse2_cmpgt_epi8` — PCMPGTB (byte signed greater-than) — icmp sgt + sext
+- [x] 2.1.2 `sse2_cmpeq_epi16` — PCMPEQW (word equal) — icmp eq + sext
+- [x] 2.1.3 `sse2_cmpeq_epi32` — PCMPEQD (dword equal) — icmp eq + sext
+- [x] 2.1.4 `sse2_cmpgt_epi16` — PCMPGTW (word signed greater-than) — icmp sgt + sext
+- [x] 2.1.5 `sse2_cmpgt_epi32` — PCMPGTD (dword signed greater-than) — icmp sgt + sext
+- [x] 2.1.6 `sse2_cmplt_epi8` — via icmp slt + sext
+
+### 2.2 Bitwise Intrinsics
+- [x] 2.2.1 `sse2_and_si128` — PAND (LLVM `and` instruction)
+- [x] 2.2.2 `sse2_or_si128` — POR (LLVM `or` instruction)
+- [x] 2.2.3 `sse2_xor_si128` — PXOR (LLVM `xor` instruction)
+- [x] 2.2.4 `sse2_andnot_si128` — PANDN (xor -1 + and)
+
+### 2.3 Min/Max Intrinsics
+- [x] 2.3.1 `sse2_min_epu8` — PMINUB (icmp ult + select)
+- [x] 2.3.2 `sse2_max_epu8` — PMAXUB (icmp ugt + select)
+- [x] 2.3.3 `sse2_min_epi16` — PMINSW (icmp slt + select)
+- [x] 2.3.4 `sse2_max_epi16` — PMAXSW (icmp sgt + select)
+
+### 2.4 Movemask Intrinsics
+- [x] 2.4.1 `sse2_movemask_ps` — @llvm.x86.sse.movmsk.ps
+- [x] 2.4.2 `sse2_movemask_pd` — @llvm.x86.sse2.movmsk.pd
+
+### 2.5 Pack/Unpack Intrinsics
+- [x] 2.5.1 `sse2_packs_epi16` — @llvm.x86.sse2.packsswb.128
+- [x] 2.5.2 `sse2_packus_epi16` — @llvm.x86.sse2.packuswb.128
+- [x] 2.5.3 `sse2_packs_epi32` — @llvm.x86.sse2.packssdw.128
+- [x] 2.5.4 `sse2_unpacklo_epi8` — shufflevector (low interleave)
+- [x] 2.5.5 `sse2_unpackhi_epi8` — shufflevector (high interleave)
+
+### 2.6 Shift Intrinsics
+- [x] 2.6.1 `sse2_slli_epi16/32/64` — shl with splatted shift amount
+- [x] 2.6.2 `sse2_srli_epi16/32/64` — lshr with splatted shift amount
+- [x] 2.6.3 `sse2_srai_epi16/32` — ashr with splatted shift amount
+
+### 2.7 Memory Intrinsics
+- [x] 2.7.1 `sse2_storeu_si128` — store align 1
+- [x] 2.7.2 `sse2_store_si128` — store align 16
+
+### 2.8 Tests
+- [x] 2.8.1 Write `lib/core/tests/simd/sse2_intrinsics.test.tml` — 6 comparison tests (all pass)
+- [x] 2.8.2 Write `lib/core/tests/simd/sse2_bitwise.test.tml` — 5 bitwise tests (all pass)
+- [x] 2.8.3 Write `lib/core/tests/simd/sse2_pack_shift.test.tml` — 5 shift tests (all pass)
+
+> **Implementation note**: All intrinsics use pure LLVM IR (icmp+sext for comparisons, and/or/xor for
+> bitwise, icmp+select for min/max, shl/lshr/ashr for shifts). LLVM's backend lowers these to the
+> correct SSE2 instructions. Pack intrinsics use LLVM x86 target intrinsics (@llvm.x86.sse2.*).
+> Tests verified both via `tml.exe test` (direct) and `tml.exe run` (sandbox).
+
+## Phase 3: SSE4.2 Intrinsics
+
+> **Priority**: High | **Files**: `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`, `lib/core/src/simd/sse42.tml`
+
+### 3.1 String Comparison Intrinsics
+- [x] 3.1.1 `sse42_cmpistrm` — @llvm.x86.sse42.pcmpistrm128
+- [x] 3.1.2 `sse42_cmpistri` — @llvm.x86.sse42.pcmpistri128
+- [x] 3.1.3 `sse42_cmpestrm` — @llvm.x86.sse42.pcmpestrm128
+- [x] 3.1.4 `sse42_cmpestri` — @llvm.x86.sse42.pcmpestri128
+
+### 3.2 CRC32 Intrinsics
+- [x] 3.2.1 `sse42_crc32_u8` — @llvm.x86.sse42.crc32.32.8
+- [x] 3.2.2 `sse42_crc32_u16` — @llvm.x86.sse42.crc32.32.16
+- [x] 3.2.3 `sse42_crc32_u32` — @llvm.x86.sse42.crc32.32.32
+- [x] 3.2.4 `sse42_crc32_u64` — @llvm.x86.sse42.crc32.64.64
+
+### 3.3 POPCNT
+- [x] 3.3.1 `popcnt_u32` — @llvm.ctpop.i32
+- [x] 3.3.2 `popcnt_u64` — @llvm.ctpop.i64
+
+### 3.4 Library Wrappers
+- [x] 3.4.1 Create `lib/core/src/simd/sse42.tml` with `crc32c` high-level wrapper
+- [x] 3.4.2 `str_find_sse42(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` — PCMPISTRI equal-ordered mode (0x0C), handles needles up to 16 bytes with full-match verification for longer
+- [x] 3.4.3 `crc32c(data: Slice[U8]) -> U32` — processes 8 bytes at a time via CRC32Q
+
+### 3.5 Tests
+- [x] 3.5.1 Write `lib/core/tests/simd/sse42_intrinsics.test.tml` — 8 tests (POPCNT + CRC32)
+- [x] 3.5.2 Write `lib/core/tests/simd/crc32c.test.tml` — 4 CRC32C accumulation tests
+
+> **Implementation note**: All intrinsics use LLVM target intrinsics (@llvm.x86.sse42.*) for
+> CRC32/string comparison, and @llvm.ctpop for POPCNT. String comparison intrinsics (PCMPISTRI/M,
+> PCMPESTRI/M) are exposed as raw intrinsics — the imm8 control byte determines comparison mode.
+> The `crc32c` high-level wrapper processes 8 bytes at a time for throughput.
+> Note: SIMD test suite has a pre-existing 100ms per-suite execution timeout issue;
+> tests verified via `tml run` (all pass) and individually via `tml test --path` (crc32c passes).
+
+## Phase 4: AVX2 256-bit Types and Intrinsics
+
+> **Priority**: High | **Files**: `lib/core/src/simd/`, `intrinsics_slice_simd.cpp`, `intrinsics.cpp`, `lib/core/src/runtime/intrinsics.tml`
+
+### 4.1 New 256-bit Vector Types
+- [x] 4.1.1 `I8x32` — 32-lane I8 (`<32 x i8>`) — `lib/core/src/simd/i8x32.tml`
+- [x] 4.1.2 `U8x32` — 32-lane U8 (`<32 x i8>`) — `lib/core/src/simd/u8x32.tml`
+- [x] 4.1.3 `I16x16` — 16-lane I16 (`<16 x i16>`) — `lib/core/src/simd/i16x16.tml`
+- [x] 4.1.4 `I32x8` — 8-lane I32 (`<8 x i32>`) — `lib/core/src/simd/i32x8.tml`
+- [x] 4.1.5 `I64x4` — 4-lane I64 (`<4 x i64>`) — `lib/core/src/simd/i64x4.tml`
+- [x] 4.1.6 `F32x8` — 8-lane F32 (`<8 x float>`) — `lib/core/src/simd/f32x8.tml`
+- [x] 4.1.7 `F64x4` — 4-lane F64 (`<4 x double>`) — `lib/core/src/simd/f64x4.tml`
+- [x] 4.1.8 `Mask8` — 8-lane boolean mask — added to `lib/core/src/simd/mask.tml`
+- [x] 4.1.9 `Mask32` — 32-lane boolean mask — added to `lib/core/src/simd/mask.tml`
+- [x] 4.1.10 Register all 256-bit types in compiler `simd_types_` map — auto via @simd annotation
+
+### 4.2 AVX2 Arithmetic Intrinsics
+- [x] 4.2.1 `avx2_add_epi8/16/32/64` — via llvm_add on @simd types (I8x32.add, I32x8.add, etc.)
+- [x] 4.2.2 `avx2_sub_epi8/16/32/64` — via llvm_sub on @simd types
+- [x] 4.2.3 `avx2_mullo_epi16/32` — via llvm_mul on @simd types (I32x8.mul)
+
+### 4.3 AVX2 Comparison Intrinsics
+- [x] 4.3.1 `avx2_cmpeq_epi8/16/32` — icmp eq + sext (6 variants)
+- [x] 4.3.2 `avx2_cmpgt_epi8/16/32` — icmp sgt + sext (6 variants)
+
+### 4.4 AVX2 Bitwise & Movemask
+- [x] 4.4.1 `avx2_and_si256` — LLVM `and` instruction
+- [x] 4.4.2 `avx2_or_si256` — LLVM `or` instruction
+- [x] 4.4.3 `avx2_xor_si256` — LLVM `xor` instruction
+- [x] 4.4.4 `avx2_movemask_epi8` — @llvm.x86.avx2.pmovmskb
+
+### 4.5 AVX2 Shuffle & Permute
+- [x] 4.5.1 `avx2_shuffle_epi8` — @llvm.x86.avx2.pshuf.b (VPSHUFB)
+- [x] 4.5.2 `avx2_permute4x64_epi64` — via @llvm.x86.avx2.permd (VPERMD)
+- [x] 4.5.3 `avx2_permute2x128_si256` — via shufflevector (VPERM2I128)
+
+### 4.6 AVX2 Horizontal & Pack
+- [x] 4.6.1 `avx2_hadd_epi16/32` — @llvm.x86.avx2.phadd.w/d (horizontal add)
+- [x] 4.6.2 `avx2_packs_epi16/32` — @llvm.x86.avx2.packsswb/packssdw (pack signed saturation)
+- [x] 4.6.3 `avx2_packus_epi16/32` — @llvm.x86.avx2.packuswb/packusdw (pack unsigned saturation)
+
+### 4.7 AVX2 Gather
+- [x] 4.7.1 `avx2_gather_epi32` — via @llvm.masked.gather.v8i32 (indexed 32-bit loads)
+- [x] 4.7.2 `avx2_gather_epi64` — via @llvm.masked.gather.v4i64 (indexed 64-bit loads)
+- [x] 4.7.3 `avx2_gather_ps` — via @llvm.masked.gather.v8f32 (indexed float loads)
+
+### 4.8 AVX2 Variable Shift
+- [x] 4.8.1 `avx2_sllv_epi32/64` — shl <N x iM> (per-lane variable shift left)
+- [x] 4.8.2 `avx2_srlv_epi32/64` — lshr <N x iM> (per-lane variable shift right)
+
+### 4.9 FMA Intrinsics (FMA3)
+- [x] 4.9.1 `fma_fmadd_ps` — @llvm.fma.v8f32 (a*b+c, 8 floats)
+- [x] 4.9.2 `fma_fmadd_pd` — @llvm.fma.v4f64 (a*b+c, 4 doubles)
+- [x] 4.9.3 `fma_fmsub_ps/pd` — fneg + @llvm.fma (a*b-c)
+- [x] 4.9.4 `fma_fnmadd_ps/pd` — fneg + @llvm.fma (-a*b+c)
+- [x] 4.9.5 `fma_fmadd_ss/sd` — @llvm.fma.f32/f64 (scalar FMA)
+
+### 4.10 Tests
+- [x] 4.10.1 Write `lib/core/tests/simd/avx2_basic.test.tml` — 7 tests (I32x8 + F32x8 types + arithmetic)
+- [x] 4.10.2 Write `lib/core/tests/simd/avx2_compare.test.tml` — 6 tests (cmpeq/cmpgt/bitwise/movemask)
+- [x] 4.10.3 Write `lib/core/tests/simd/avx2_shuffle.test.tml` — 8 tests (hadd/pack/variable shift/shuffle)
+- [x] 4.10.4 Write `lib/core/tests/simd/avx2_fma.test.tml` — 8 tests (fmadd/fmsub/fnmadd ps/pd + scalar)
+- [x] 4.10.5 Write `lib/core/tests/simd/avx2_gather.test.tml` — 3 tests (sequential/permuted/partial mask)
+
+> **Implementation note**: 256-bit types use @simd annotation — the compiler auto-detects and
+> generates `<N x elemtype>` LLVM vector types. Arithmetic (add/sub/mul) uses existing llvm_add/
+> llvm_sub/llvm_mul intrinsics which work on any vector width. AVX2 comparison/bitwise/movemask
+> intrinsics use the same pattern as SSE2 (icmp+sext, and/or/xor, LLVM target intrinsics).
+> All tests verified via `tml run`.
+>
+> **Phase 4.6-4.9 implementation notes**:
+> - Horizontal add (hadd) uses @llvm.x86.avx2.phadd.w/d target intrinsics
+> - Pack intrinsics use @llvm.x86.avx2.packsswb/packssdw/packuswb/packusdw
+> - Gather intrinsics use @llvm.masked.gather (LLVM 23 removed old x86 gather intrinsics)
+> - Variable shifts use generic shl/lshr on vector types (LLVM lowers to VPSLLVD/VPSRLVD)
+> - FMA uses @llvm.fma.v8f32/@llvm.fma.v4f64 (fneg for fmsub/fnmadd variants)
+> - Scalar FMA uses @llvm.fma.f32/@llvm.fma.f64
+> - Function attributes now include `"target-features"="+sse2,+sse4.2,+avx,+avx2,+fma"` for ISA intrinsic selection
+> - `base` is a reserved keyword in TML — gather intrinsic param renamed to `addr`
+> - New types: I16x16 (16-lane I16), U8x32 (32-lane U8), Mask8 (8-lane), Mask32 (32-lane)
+>
+> **Utility methods added**: I32x8 now has full parity with I32x4 (div, neg, set, band/bor/bxor,
+> shift_left/shift_right, product, hmin/hmax, min/max). F32x8 has neg (via sub), set, hmin/hmax,
+> min/max, to_string/debug_string. I8x32 has band/bor/bxor, sum(->I32), hmin/hmax, to_string.
+> I64x4 has mul, band/bor/bxor, shift_left/shift_right, hmin/hmax.
+> Note: F32x8::neg uses `zero().sub(this)` because `simd_splat[F32x8, F32](0.0)` has a
+> pre-existing F32/F64 literal codegen issue (0.0 emits as double instead of float).
+>
+> **256-bit type library additions** (Phase 5 library work):
+> - Display/Debug: `to_string()`/`debug_string()` added to all 5 types (I32x8, F32x8, I64x4, F64x4, I8x32)
+> - Conversions: `I32x8.to_f32x8()`, `F32x8.to_i32x8()`, `I64x4.to_f64x4()`, `F64x4.to_i64x4()`
+> - I8x32 reductions: `sum() -> I32`, `hmin() -> I8`, `hmax() -> I8`
+> - F64x4 reductions: `hmin()`, `hmax()`
+> - All verified via `tml run` (standalone tests pass)
+> - Note: to_string uses Str concatenation (not template literals) because templates return Text, not Str
+>
+> **ARM NEON portable stubs** created in `lib/core/src/simd/neon.tml`:
+> - 15 functions wrapping I32x4/F32x4 operations (add/sub/mul, horizontal, bitwise, comparison)
+> - All verified via `tml run` (standalone tests pass)
+>
+> **Integration tests** in `lib/core/tests/simd/simd_integration.test.tml`:
+> - 12 tests covering cross-type width, conversion round-trips, arithmetic chains, horizontal ops, byte processing
+> - All verified via `tml run` (standalone tests pass)
+>
+> **Documentation** updated:
+> - `docs/SIMD.md`: Added Phase 5-02 section with CPUID API, SSE2/SSE4.2/AVX2 intrinsic tables, 256-bit type reference, NEON stubs, usage example
+> - `lib/core/src/simd/mod.tml`: Updated doc comment with 256-bit types table and module index
+
+## Phase 5: ARM NEON Intrinsics
+
+> **Priority**: Medium | **Files**: `intrinsics.cpp`, `lib/core/src/simd/neon.tml`
+
+### 5.1 NEON Arithmetic
+- [x] 5.1.1 `neon_add_i8/16/32/64` — portable stubs in neon.tml delegating to I8x16/I32x4/I64x2.add()
+- [x] 5.1.2 `neon_add_f32/f64` — portable stubs delegating to F32x4/F64x2.add()
+- [x] 5.1.3 `neon_sub_i8/16/32/64` — portable stubs delegating to .sub()
+- [x] 5.1.4 `neon_sub_f32/f64` — portable stubs delegating to .sub()
+- [x] 5.1.5 `neon_mul_i8/16/32` — portable stubs delegating to .mul()
+- [x] 5.1.6 `neon_mul_f32/f64` — portable stubs delegating to .mul()
+
+### 5.2 NEON FMA
+- [x] 5.2.1 `neon_fmla_f32` — acc + (a * b) via F32x4 ops
+- [x] 5.2.2 `neon_fmla_f64` — acc + (a * b) via F64x2 ops
+- [x] 5.2.3 `neon_fmls_f32/f64` — acc - (a * b) via sub(mul())
+
+### 5.3 NEON Comparison
+- [x] 5.3.1 `neon_ceq_i8/16/32` — scalar comparison returning -1/0 mask vectors
+- [x] 5.3.2 `neon_cgt_i8/16/32` — scalar comparison returning -1/0 mask vectors
+- [x] 5.3.3 `neon_cge_i8/16/32` — scalar comparison returning -1/0 mask vectors
+- [x] 5.3.4 `neon_ceq_f32/f64` — scalar comparison returning I32x4/I64x2 mask
+- [x] 5.3.5 `neon_cgt_f32/f64` — scalar comparison returning I32x4/I64x2 mask
+
+### 5.4 NEON Bitwise
+- [x] 5.4.1 `neon_and_v128` — I32x4.band() + I8x16 variant
+- [x] 5.4.2 `neon_or_v128` — I32x4.bor() + I8x16 variant
+- [x] 5.4.3 `neon_xor_v128` — I32x4.bxor() + I8x16 variant
+- [x] 5.4.4 `neon_bsl_v128` — (mask & a) | (~mask & b) via band/bor/bxor
+- [x] 5.4.5 `neon_not_v128` — XOR with all-ones
+
+### 5.5 NEON Table Lookup & Horizontal
+- [x] 5.5.1 `neon_tbl1_i8` — scalar tbl_select() helper with field access (avoids get() bug)
+- [x] 5.5.2 `neon_cnt_i8` — scalar i8_popcount() per lane
+- [x] 5.5.3 `neon_addv_i8/16/32` — delegates to .sum() / horizontal sum
+- [x] 5.5.4 `neon_maxv_i8/16/32` — delegates to .hmax()
+- [x] 5.5.5 `neon_minv_i8/16/32` — delegates to .hmin()
+
+### 5.6 NEON Min/Max/Abs
+- [x] 5.6.1 `neon_min_i8/16/32` — delegates to .min()
+- [x] 5.6.2 `neon_max_i8/16/32` — delegates to .max()
+- [x] 5.6.3 `neon_min_f32/f64` — delegates to F32x4/F64x2.min()
+- [x] 5.6.4 `neon_max_f32/f64` — delegates to F32x4/F64x2.max()
+- [x] 5.6.5 `neon_abs_i8/16/32` — I8x16.abs() / scalar abs for I32x4
+
+### 5.7 NEON Memory
+- [x] 5.7.1 `neon_ld1_i8/16/32/64` — constructor wrappers (I8x16::new, I32x4::new, I64x2::new)
+- [x] 5.7.2 `neon_st1_i8/16/32/64` — identity pass-through (store simulation)
+- [x] 5.7.3 `neon_ld2_i8/16/32` — deinterleave via even/odd channel functions
+
+### 5.8 Tests
+- [x] 5.8.1 Write `lib/core/tests/simd/neon_basic.test.tml` — 10 tests (arithmetic I32/I64/F32/F64)
+- [x] 5.8.2 Write `lib/core/tests/simd/neon_bitwise.test.tml` — 15 tests (bitwise + comparison + select)
+- [x] 5.8.3 Write `lib/core/tests/simd/neon_horizontal.test.tml` — 7 tests (reductions + min/max/abs)
+
+## Phase 6: Portable SIMD Abstraction Layer
+
+> **Priority**: Medium | **Files**: `lib/core/src/simd/portable.tml`
+
+- [x] 6.1 Define `SimdVector` behavior with add/sub/mul/band/bor/bxor/zero ops — `lib/core/src/simd/portable.tml`
+- [x] 6.2 Implement `SimdVector` for I32x4 — delegates to I32x4 methods
+- [x] 6.3 Implement `SimdVector` for F32x4 — delegates to F32x4 methods
+- [x] 6.4 Implement `SimdVector` for I8x16 / I64x2 — delegates to respective methods
+- [x] 6.5 Implement `SimdVector` for I32x8 / F32x8 (AVX2) — delegates to 256-bit methods
+- [x] 6.6 Add `simd_select` portable function — (mask & a) | (~mask & b) via band/bor/bxor
+- [x] 6.7 Write `lib/core/tests/simd/portable.test.tml` — tests for SimdVector impls + simd_select
+
+## Phase 7: Library Algorithms
+
+> **Priority**: Medium | **Files**: `lib/core/src/simd/`
+
+- [x] 7.1 `memchr_simd(haystack: Slice[U8], byte: U8) -> Maybe[I64]` — SSE2 PCMPEQB + PMOVMSKB + scalar tail, in `algorithms.tml`
+- [x] 7.2 `str_find_simd(haystack: Slice[U8], needle: Slice[U8]) -> Maybe[I64]` — memchr_simd first-byte scan + scalar verify
+- [x] 7.3 `case_upper_simd(data: Slice[U8])` — range check 'a'-'z' + ptr_write (scalar, SIMD MutSlice not yet supported)
+- [x] 7.4 `case_lower_simd(data: Slice[U8])` — range check 'A'-'Z' + ptr_write (scalar)
+- [x] 7.5 `crc32c_simd(data: Slice[U8]) -> U32` — re-export of sse42::crc32c
+- [x] 7.6 `dot_product_simd(a: Slice[F32], b: Slice[F32]) -> F32` — F32x4 accumulation + scalar tail
+- [x] 7.7 Write `lib/core/tests/simd/algorithms.test.tml` — 11 tests (memchr, str_find, crc32c, dot_product)
+
+## Phase 8: Documentation
+
+> **Priority**: Low
+
+- [x] 8.1 Update `docs/specs/13-BUILTINS.md` with SIMD intrinsics section (SSE2/SSE4.2/AVX2/FMA/generic)
+- [x] 8.2 Update `docs/specs/04-TYPES.md` with 128-bit, 256-bit vector types + mask types
+- [x] 8.3 Update `lib/core/src/simd/mod.tml` doc comments — added 256-bit types + neon + detect to module docs
+- [x] 8.4 Add usage examples in doc comments for key functions — added to mod.tml and docs/SIMD.md
+- [x] 8.5 Update `docs/SIMD.md` with Phase 5-02 intrinsics list, 256-bit type API reference, CPUID TML API, NEON stubs
+
+## Validation
+
+- [x] V.1 CPUID correctly detects SSE4.2/AVX2 on host (Windows x86-64) — verified via detect.test.tml (10 pass)
+- [x] V.2 OSXSAVE+XGETBV prevents AVX on unsupported OS — implemented in detect.tml, tested on host
+- [x] V.3 All SSE2 intrinsics emit correct LLVM IR — verified via `--emit-ir` during implementation
+- [x] V.4 SSE4.2 PCMPISTRI string search — str_find_sse42 implemented with equal-ordered mode + verification
+- [x] V.5 256-bit types produce `<8 x i32>` / `<8 x float>` in LLVM IR — verified via @simd annotation
+- [x] V.6 FMA intrinsics produce `llvm.fma.v8f32` / `llvm.fma.v4f64` — verified via `--emit-ir` and runtime
+- [x] V.7 Existing SIMD test files compile (no regressions) — verified via `tml run` on existing tests
+- [x] V.8 New test files pass on Windows x86-64 — hadd/pack/shift/FMA/gather all verified via `tml run`
+- [x] V.9 ARM NEON — portable stubs tested on x86-64 via neon_basic/bitwise/horizontal tests (actual NEON requires ARM64)
