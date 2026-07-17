@@ -1,0 +1,49 @@
+// Regression: `replace` free-function name collision (phase27e / K001).
+//
+// `core::str::replace` (3 params, non-generic) and
+// `core::runtime::mem::replace[T]` (2 params, generic) share the BARE name
+// "replace". The module registry stores functions by bare name, so a call to
+// `str::replace` (or an imported bare `replace`) used to mis-resolve to
+// core::runtime::mem::replace and emit a dangling, un-monomorphized callee
+// `@tml_N4core7runtime3mem7replaceE_R1T1T`, failing LLVM IR parse with K001.
+//
+// The fix makes the codegen module scan prefer the module whose FuncSig
+// matches the type-checked signature (same arity + generic-ness). These tests
+// exercise every form of the colliding call so the correct 3-param str::replace
+// is always selected.
+use test::{assert, assert_eq}
+use core::str
+use core::str::{replace}
+
+// Qualified call: str::replace(...)
+@test
+func test_qualified_replace() -> I32 {
+    let r: Str = str::replace("hello world", "world", "tml")
+    assert_eq(r, "hello tml", "str::replace qualified")
+    return 0
+}
+
+// Imported bare call: replace(...) — imported via `use core::str::{replace}`
+@test
+func test_bare_imported_replace() -> I32 {
+    let r: Str = replace("aaa", "a", "b")
+    assert_eq(r, "bbb", "bare imported replace")
+    return 0
+}
+
+// Method call: s.replace(...) — Str::replace method body calls str::replace
+@test
+func test_method_replace() -> I32 {
+    let s: Str = "abab"
+    let r: Str = s.replace("ab", "X")
+    assert_eq(r, "XX", "Str.replace method")
+    return 0
+}
+
+// No-match path still returns the original string unchanged.
+@test
+func test_replace_no_match() -> I32 {
+    let r: Str = str::replace("hello", "xyz", "abc")
+    assert_eq(r, "hello", "str::replace no match unchanged")
+    return 0
+}

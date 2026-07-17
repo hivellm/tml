@@ -210,7 +210,79 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
                     bare_fn_name = fn_name.substr(last_sep + 2);
                 }
             }
+            // Two-phase module selection to avoid bare-name collisions across
+            // modules. The module registry stores functions by BARE name, so a
+            // qualified call like `str::replace` (or an imported bare `replace`)
+            // can otherwise match an unrelated module's function of the same bare
+            // name — e.g. core::runtime::mem::replace[T] — and be mangled with the
+            // wrong module path + wrong (generic) parameter types, producing a
+            // dangling callee like @tml_N4core7runtime3mem7replaceE_R1T1T.
+            //
+            // Prefer the module whose FuncSig matches the type-checked signature
+            // (same arity + same generic-ness), then a module whose path matches
+            // the call's qualifier (or, for bare calls, the current module being
+            // generated); otherwise fall back to the first match (legacy order).
+            std::string fn_qualifier;
+            {
+                size_t last_sep = fn_name.rfind("::");
+                if (last_sep != std::string::npos) {
+                    fn_qualifier = fn_name.substr(0, last_sep);
+                }
+            }
+            auto module_path_matches_qualifier = [](const std::string& mpath,
+                                                    const std::string& qual) -> bool {
+                if (qual.empty()) {
+                    return false;
+                }
+                if (mpath == qual) {
+                    return true;
+                }
+                // mpath ends with "::" + qual on a segment boundary
+                if (mpath.size() > qual.size() + 2 &&
+                    mpath.compare(mpath.size() - qual.size(), qual.size(), qual) == 0 &&
+                    mpath[mpath.size() - qual.size() - 1] == ':' &&
+                    mpath[mpath.size() - qual.size() - 2] == ':') {
+                    return true;
+                }
+                return false;
+            };
+            std::string selected_mod_name;
+            std::string fallback_mod_name;
             for (const auto& [mod_name, mod] : all_modules) {
+                auto it = mod.functions.find(fn_name);
+                if (it == mod.functions.end())
+                    it = mod.functions.find(sanitized_name);
+                if (it == mod.functions.end() && !bare_fn_name.empty())
+                    it = mod.functions.find(bare_fn_name);
+                if (it == mod.functions.end())
+                    continue;
+                if (fallback_mod_name.empty())
+                    fallback_mod_name = mod_name;
+                // Strongest signal: the type-checked signature matches this
+                // module's function (same arity + same generic-ness). This
+                // disambiguates str::replace (3 params, non-generic) from
+                // core::runtime::mem::replace[T] (2 params, generic).
+                bool sig_matches = func_sig.has_value() &&
+                                   it->second.params.size() == func_sig->params.size() &&
+                                   it->second.type_params.empty() == func_sig->type_params.empty();
+                // Secondary: the module path matches the call qualifier, or (for
+                // bare calls) the current module being generated.
+                bool path_matches =
+                    fn_qualifier.empty()
+                        ? (!current_module_name_.empty() && mod_name == current_module_name_)
+                        : module_path_matches_qualifier(mod_name, fn_qualifier);
+                if (sig_matches || path_matches) {
+                    selected_mod_name = mod_name;
+                    break;
+                }
+            }
+            if (selected_mod_name.empty()) {
+                selected_mod_name = fallback_mod_name;
+            }
+            for (const auto& [mod_name, mod] : all_modules) {
+                // Only act on the module chosen by the selection pass above.
+                if (mod_name != selected_mod_name)
+                    continue;
                 // Try all name variants to find the function in this module
                 auto found_func_it = mod.functions.find(fn_name);
                 if (found_func_it == mod.functions.end())

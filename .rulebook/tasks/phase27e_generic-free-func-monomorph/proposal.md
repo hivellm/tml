@@ -1,5 +1,16 @@
 # Proposal: phase27e_generic-free-func-monomorph
 
+> **Resolution note (v0.3.71):** item 1.1's diagnostic disproved the monomorphization
+> hypothesis below for the 5 `core/str` failures — `func_sig->type_params` is **empty**
+> (the callee is the *non-generic* `core::str::replace`, 3 params). The actual root is a
+> **bare-name module-scan collision**: `core::str::replace` and
+> `core::runtime::mem::replace[T]` share bare `replace`, and the `unordered_map`-order
+> scan mangled the call with `mem`'s module path + generic params. Fixed by signature-aware
+> module selection in `call_user.cpp` (~213–303), not by the hypothesized Fix B (whose
+> `type_params` non-empty guard never fires here). The genuinely-generic free-function
+> monomorphization gap (Fix B) remains a distinct latent issue, only reproducible under the
+> disabled fast-path (F-006), documented for phase27a. core/str 27/32 → 33/33.
+
 ## Why
 Generic **module free-function** calls emit an un-monomorphized, declaration-mangled
 callee with no queued definition → `use of undefined value` at link/verify time. This
