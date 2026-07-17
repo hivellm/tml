@@ -13,9 +13,10 @@ Impact: **Very High** — redundant full-stdlib codegen multiplied by 1339. Conf
 Evidence: `testing_compile.cpp:995` ("each test .obj has full library defs (internal linkage)"); `testing_compile_parallel.cpp:219–224`. Consequence: every EXE ~345 KB with the whole stdlib duplicated, heavy per-EXE link, 837 MB cache. Rooted in the same LLD multiple-definition issue that blocks F-006.
 Impact: **High** (bloats link + disk, blocks shared-stdlib linking). Confidence: **High**.
 
-**F-008 — Per-file codegen inside a suite is forced single-threaded.**
-Evidence: `testing_compile.cpp:598` `int num_compile_threads = 1;` ("avoid LLVM global state corruption"). Parallelism only exists at suite level (≤8, `testing_compile_parallel.cpp:60–66`). LLVM global (non-thread-safe) state is the root blocker for finer parallelism.
-Impact: **Medium–High**. Confidence: **High**.
+**F-008 — Per-file codegen inside a suite is forced single-threaded. (PARTIALLY ADDRESSED, phase41a)**
+Evidence: `testing_compile.cpp` historically hardcoded `int num_compile_threads = 1;` ("avoid LLVM global state corruption"). Parallelism only existed at suite level (≤8, `testing_compile_parallel.cpp`).
+phase41a: `compile_suites_parallel` now hands its idle worker budget to intra-suite codegen threads (`CompileConfig::intra_suite_threads`, workers × intra ≤ 8 — the same global envelope suite-level parallelism always used). Targeted runs with few aggregated suites keep parallel codegen; full runs keep the historical 8×1. REMAINING: when suite-count ≥ worker-count, a 25-file chunk with heavy-generics files is a long serial critical path (measured: `std_stream_1` 779 s cold).
+Impact: **Medium**. Confidence: **High**.
 
 **F-009 — Each file spawns a detached watchdog thread with 60 s timeout + 100 ms polling.**
 Evidence: `testing_compile.cpp:645–668`. Thread create/detach per file plus coarse 100 ms poll granularity adds latency and thread churn across 1339 files.
@@ -25,9 +26,10 @@ Impact: **Low–Medium**. Confidence: **High**.
 Evidence: `testing_compile.cpp:58` `g_incr_cache_mutex`, used at `707–711` around `save_incremental_cache`. When the stdlib fast-path is off (the current default, F-006), incremental is ON and every file's cache write serializes the otherwise-parallel workers on `incr.bin` disk I/O.
 Impact: **Medium**. Confidence: **High**.
 
-**F-011 — Subprocess-per-suite execution; each test EXE loads ~100 MB of runtime DLLs.**
-Evidence: `testing_coordinator.cpp` exec loop; `cmd_test.cpp:296` ("each EXE loads ~100MB of runtime DLLs"). Windows process creation ≈21 ms × up to 1339, plus DLL load per process.
-Impact: **Medium–High** (prior doc: ~150 s spawn overhead full-suite). Confidence: **High**.
+**F-011 — Subprocess-per-suite execution; each test EXE loads ~100 MB of runtime DLLs. (MITIGATED by F-005 resolution, phase41a)**
+Evidence: `testing_coordinator.cpp` exec loop; `cmd_test.cpp` ("each EXE loads ~100MB of runtime DLLs"). Windows process creation ≈21 ms per spawn, plus DLL load per process.
+phase41a: full-run subprocess count drops with the link count (2066 → ~176 `--run-all` processes, +1 per crash/timeout re-run) — ~12× fewer spawns/DLL loads. The per-spawn cost itself (in-process execution, shared runtime) remains future work.
+Impact: was **Medium–High**, now **Low–Medium**. Confidence: **High**.
 
 **F-012 — LLVM backend re-initialized on every object compilation.**
 Evidence: `object_compiler.cpp:269–274` — `compile_ir_string_to_object` constructs a fresh `LLVMBackend` and calls `initialize()` each call, i.e., per test file (and per dispatcher).

@@ -102,3 +102,51 @@ speed up with `-O3`; the pure compile fraction improves more than the end-to-end
 
 **GATE (task phase40b, item 1.6): release-vs-debug delta recorded (1.86–2.11×),
 targeted suites green on the release binary — PASS.**
+
+## phase41a suite-mode aggregation default (2026-07-17)
+
+Protocol: same Python `perf_counter` wrapper, debug binary, cwd = repo root,
+`--no-cache --no-fail-fast`, JSON reporter snapshots compared mechanically
+(multiset of `(group, test, status)`; a compile-failed FILE in per-file mode
+equals a failed test record in aggregated mode). Full-run discovery =
+**2066 test files / 131 groups** (the "1339" in earlier docs was a stale cache
+count).
+
+**Link-step counts (warmth-independent — the F-005 gate):**
+
+| Scope | per-file EXEs/links | aggregated (25/EXE) | reduction |
+|---|---|---|---|
+| full corpus (2066 files) | 2066 | **176** initial suites (measured pre-fallback) | **11.7×** |
+| lib/core segment (801 files, completed run) | 801 | **81** (incl. 1 link-fallback → 6 per-file splits) | **9.9×** |
+| 49-file set (hash+borrow+json) | 49 | **3** | 16.3× |
+| core/str (32 files) | 32 | **2** | 16× |
+| core/hash (14 files) | 14 | **1** | 14× |
+| core/types (13 files) | 13 | **1** | 13× |
+
+**Wall-clock (same binary, before = `--no-suite`, after = default):**
+
+| Workload | per-file | aggregated | note |
+|---|---|---|---|
+| 49-set, warm obj/incr cache (n=2–3, median) | 11.0 s | **8.6 s** | 1.28× faster |
+| 49-set, cold (first run after rebuild) | 67.3 s | 92.0 s | aggregated SLOWER cold: per-file codegen inside one chunk is serial; the 23-file std/json chunk is the critical path |
+| core/str (5 pre-existing K001s) | 35.0 s | 47.3 s cold / **7.6 s** warm | identical 27 pass / 5 fail both modes |
+| full corpus, cold compile phase | (old-binary attempt crashed at 52%, 1383 s — pre-existing 0xC0000409 phase27c flake) | ~62 min at 99% (run externally killed at ~60 min) | cold wall is dominated by per-file stdlib IR re-emission (F-006), which aggregation does not change |
+
+**Result parity (the correctness gate):** IDENTICAL per-test multisets in every
+completed comparison — 49-set (49 pass), core/str (27/5, the 5 pre-existing
+K001 `mem::replace` compile errors appear identically), core/types (8/5,
+including the pre-existing `maybe_unzip` link failure), plus
+`compiler/tests/cli/test_aggregation.sh` 16/16 (crash/timeout offender
+attribution + never-started-sibling re-run + compile-failure isolation +
+coverage-stays-per-file).
+
+Notes:
+- Aggregation attacks LINK count and process count (F-005/F-011), not per-file
+  IR emission (F-006) — cold-compile wall-clock is roughly unchanged; warm
+  runs and full-suite runs win from ~1900 fewer LLD links + ~1900 fewer
+  process spawns (each test EXE loads ~100 MB of runtime DLLs).
+- Suites with heavy-generics files (std/stream, std/zlib) make 25-file chunks
+  a long serial critical path when suite-count ≥ worker-count (intra-suite
+  threads only activate when suites < workers).
+- The obj-cache doubles in effective size: per-file entries (test index 0) and
+  aggregated entries (positional index) have different IR fingerprints.
