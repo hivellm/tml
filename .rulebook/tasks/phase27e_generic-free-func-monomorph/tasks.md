@@ -1,0 +1,12 @@
+## 1. Implementation
+- [ ] 1.1 Confirm the exact call path with a temporary diagnostic: compile a minimal repro that calls a generic module free function (e.g. `core::runtime::mem::replace[T]`, or one of the 5 core/str K001 tests) and confirm control reaches `call_user.cpp:452` with `func_sig->type_params` non-empty + `free_func_type_subs` holding the concrete `T`. Capture the emitted mangled name (literal `T` → proves no instantiation queued). Evidence to `.sandbox/`
+- [ ] 1.2 Implement Fix B in `call_user.cpp`: after `free_func_type_subs` is built (~506-593), when `func_sig->type_params` non-empty AND all params resolve concrete, call `require_func_instantiation(bare, type_args)` and override the emitted `mangled` callee with the monomorphized name — mirror the `Type::method` block at `call_user.cpp:595-632`. Strict all-concrete guard (do not emit for still-generic contexts). Remove the temporary diagnostic
+- [ ] 1.3 Rebuild (`scripts\build.bat`); verify the 5 core/str K001 tests now PASS: `str_coverage2`, `str_advanced`, `str_transform`, `str_method`, `str_methods` (were failing with the identical `mem::replace`-class dangling ref). This is the primary gate
+- [ ] 1.4 Regression sweep: representative clean suites unchanged (core/hash 14/14, compiler/borrow 12/12, core/alloc, std/json); emit LLVM IR for a repro and confirm the callee is now a monomorphized define (no literal-`T` dangling); LLVM verifier clean
+- [ ] 1.5 Determinism gate: `scripts/determinism-gate.sh 10` — pure-TML sentinels stay at floor (re-run any flaky 10-run dip to confirm; legacy essential.c/c_essential_repro at documented floors, not this fix)
+- [ ] 1.6 GATE: 5 core/str K001s flip fail→pass; zero regression on clean suites; determinism sentinels at floor; IR shows monomorphized callee define. Record before/after K001 count
+
+## 2. Tail (docs + tests — check or waive with tailWaiver)
+- [ ] 2.1 Update or create documentation covering the implementation — phase27a K001 root-cause map (mark the generic-free-function class RESOLVED), CHANGELOG + VERSION bump + patch note; note in `04-test-framework-performance.md` F-006 that this prerequisite is landed
+- [ ] 2.2 Write tests covering the new behavior — a determinism/regression fixture exercising a generic module free-function call with a concrete type arg (the minimal repro from 1.1), plus the 5 core/str tests serve as the acceptance set
+- [ ] 2.3 Run tests and confirm they pass — 1.3 + 1.4 + 1.5
