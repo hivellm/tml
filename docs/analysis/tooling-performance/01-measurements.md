@@ -54,3 +54,51 @@ measured by driving `tml_mcp.exe` over stdio): warm `check` = **26–31 ms** per
 First request after a daemon (re)start is a cache-miss and costs the normal
 compile time (~405–620 ms observed) — it fills the daemon's mtime result cache;
 every subsequent identical request on unchanged inputs is a cache-hit.
+
+## phase40b debug vs release (2026-07-17)
+
+Protocol: same as phase40a — Python `time.perf_counter` around a `subprocess`
+invocation of the binary, cwd = repo root, **cold path** (no `TML_DAEMON` in the
+child env, daemon not running), warm OS cache, 1 discarded warm-up run, then
+n=7 interleaved runs per binary (D,R,D,R,…). Binaries built from the **same
+working tree** (debug rebuilt 01:13, release 01:37, both after the last source
+edit) — release is `scripts\build.bat release`, i.e. `-O3 -DNDEBUG` on all 40
+CMake targets (verified in the generated `build.ninja`: 0 objects without `-O3`).
+
+**`tml check` (cold subprocess):**
+
+| Workload | debug median (range) | release median (range) | speedup |
+|---|---|---|---|
+| trivial file (3 lines) | 396.3 ms (390.0–477.8) | **213.0 ms** (188.8–237.2) | **1.86×** |
+| `lib/core/src/task.tml` (714 lines, real module) | 5502.1 ms (5376.7–5719.5) | **2702.6 ms** (2633.4–2893.8) | **2.04×** |
+
+`check` diagnostics are **byte-identical** between the two binaries for both
+workloads (`diff` exit 0), including the exit codes.
+
+**Suite compile+run** (49 test files: `core/hash` 14 + `compiler/borrow` 12 +
+`std/json` 23; every run is a full fresh compile of all 49 test EXEs because the
+shared test cache fingerprints the running binary's `tml_compiler.dll` — each
+debug↔release alternation invalidates all cached EXEs; both binaries link the
+same cached `tml_test_runtime.lib`):
+
+| Run | debug wall | release wall |
+|---|---|---|
+| 1 | 73.37 s | 32.10 s |
+| 2 | 66.60 s | 31.43 s |
+| 3 | 65.62 s | 31.52 s |
+| **median** | **66.60 s** | **31.52 s** → **2.11×** |
+
+All 6 runs: **49/49 passed**, identical results debug vs release.
+
+Sanity divergence check: the pre-existing K001 failures in the working tree
+(4 × `core/str` tests, `cc_int_main`/`cc_with_stdio`) reproduce **byte-identically**
+under both binaries — same error, same generated-IR line:column (e.g.
+`ir:662:19`, `ir:4957:21`) — i.e. deterministic codegen, no optimization-induced
+miscompile observed.
+
+Note: the trivial-check floor includes ~50 ms of process + DLL load that does not
+speed up with `-O3`; the pure compile fraction improves more than the end-to-end
+1.86× suggests (the real-module workload shows the honest 2× compiler-work delta).
+
+**GATE (task phase40b, item 1.6): release-vs-debug delta recorded (1.86–2.11×),
+targeted suites green on the release binary — PASS.**
