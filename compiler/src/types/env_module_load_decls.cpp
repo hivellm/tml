@@ -379,9 +379,6 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
                     }
                 }
 
-                // Check if this is a behavior impl (has trait_type)
-                bool is_behavior_impl = impl_decl.trait_type != nullptr;
-
                 // Extract impl self-type args for specialized impls like impl[T] Pin[ref T].
                 // These patterns are needed to correctly map type params at call sites.
                 std::vector<types::TypePtr> impl_self_type_args;
@@ -398,15 +395,27 @@ void TypeEnv::extract_module_declarations(const std::string& module_path,
 
                 // Extract methods from impl block (methods is std::vector<FuncDecl>)
                 for (const auto& func : impl_decl.methods) {
-                    // Include ALL methods (public and private) from generic impl blocks.
-                    // Private methods must be registered so they can be found during
-                    // generic method instantiation (e.g., sort() calling quicksort()).
-                    // For non-generic impls, still skip non-public methods.
-                    bool is_generic_impl = !impl_decl.generics.empty();
-                    if (func.vis != parser::Visibility::Public && !is_behavior_impl &&
-                        !is_generic_impl) {
-                        continue;
-                    }
+                    // Include ALL methods (public and private) from EVERY impl block —
+                    // generic, behavior, and plain inherent alike. Private methods must be
+                    // registered so they can be found during generic method instantiation
+                    // (e.g. sort() calling quicksort()) AND so that a public method calling
+                    // a private sibling in the same inherent impl (e.g. HttpClient::send ->
+                    // send_once, lib/std/src/http/client/client.tml:128) can resolve that
+                    // sibling's FuncSig during library codegen.
+                    //
+                    // phase43a: the old filter skipped non-pub methods of non-generic,
+                    // non-behavior impls, so `HttpClient::send_once` never entered
+                    // Module::functions and try_gen_module_impl_method_call
+                    // (method_impl_module.cpp:272) bailed with "Unknown method: send_once",
+                    // aborting the whole stdlib pre-compile. It only surfaced under
+                    // library_ir_only=true, where impl.cpp:411 generates library method
+                    // bodies eagerly instead of on-reference — no ordinary test run ever
+                    // generates HttpClient::send's body, which is why this stayed latent.
+                    //
+                    // This mirrors the identical decisions already made for free functions
+                    // (see ~line 203) and for generic/behavior impls. Visibility for
+                    // user-facing imports is enforced by the type checker, not by this
+                    // registration table.
 
                     // Convert parameter types
                     std::vector<types::TypePtr> param_types;
