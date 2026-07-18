@@ -202,6 +202,13 @@ bool save_module_to_cache(const std::string& module_path, const Module& module,
 /// Returns the number of modules loaded.
 int preload_all_meta_caches();
 
+/// F-029: drop the process-level module state so the next `preload_all_meta_caches()`
+/// re-reads it from disk. Clears `GlobalModuleCache` and resets the one-time preload
+/// guard. A long-lived daemon calls this when it detects a lib/meta source change so
+/// it stops serving type interfaces from before the edit (the old `std::call_once`
+/// preload never revalidated for the life of the process).
+void reset_meta_caches();
+
 } // namespace tml::types
 
 #endif // TML_TYPES_MODULE_BINARY_HPP

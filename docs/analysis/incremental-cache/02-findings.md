@@ -68,6 +68,14 @@ re-deserialized on every call (bypasses the in-memory cache). Under-invalidation
 sidecar is manually deleted. Candidate contributor to "flaky module-path corruption" (phase27c).
 Impact: **High (correctness)**. Confidence: **High** (code path); Medium on how often `.ast.bin` files are actually present
 (produced by the TML frontend flow).
+**RESOLVED (phase42b, v0.3.73).** The sidecar fast-path moved into the `provide_parse_module` query provider
+(`query_core.cpp`), so it now (a) records the `ReadSource` dependency + fingerprint (red-green invalidates the parse when
+the source changes), (b) flows through the query cache instead of re-deserializing on every call, and (c) is used ONLY when
+the sidecar is at least as new as the source (mtime gate) — an edited source is never overridden. A corrupt/incompatible
+sidecar now falls through to a real parse instead of failing a valid compile. Content-hash validation is not possible
+(the `.ast.bin` format is written by the frozen TML frontend, `lib/std/src/serial/ast.tml`, and embeds no source hash), so
+mtime is the available freshness signal. Repro: `compiler/tests/cli/cache_staleness.sh` (F-027) — pre-fix a garbage sidecar
+broke a valid `build` with "ast.bin deserialization failed"; post-fix the newer source is parsed and that error never appears.
 
 **F-028 — Daemon result cache keys on argv `.tml` mtimes only: edits to imported modules are invisible → stale check/build/emit results.**
 Evidence: snapshot = `(path, mtime)` for each argv arg ending in `.tml` (`cmd_daemon.cpp:329-347`); hit requires only that
@@ -76,6 +84,13 @@ argv, so `edit lib/foo.tml; tml check main.tml` (daemon warm) returns the previo
 artifact-regeneration caveat (05-mcp-warm-state.md) but distinct: this one returns wrong *diagnostics*.
 Fix direction: reuse the query layer's transitive source set (cf. `collect_transitive_source_files`, `query_context.cpp:507-558`)
 or a lib-tree max-mtime probe. Impact: **Medium-High (correctness)**. Confidence: **High**.
+**RESOLVED (phase42b, v0.3.73).** The daemon result cache now stores a `universe_epoch` per entry = max mtime over the
+transitive source universe (the lib source tree + each argv file's sibling directory) and a warm hit is served only when
+BOTH the argv mtimes AND the universe epoch are unchanged (`cmd_daemon.cpp`). Editing an imported sibling module now
+invalidates the warm result. The lib-tree sweep (~2.3k files) is throttled to ≤1×/750ms to protect the phase40a warm-latency
+target; the argv-sibling scan is un-throttled so project-local imports are detected immediately. Repro:
+`compiler/tests/cli/cache_staleness.sh` (F-028) — pre-fix `edit sibling; TML_DAEMON=1 check app.tml` returned the previous
+exit code; post-fix it re-type-checks and reports the new error.
 
 **F-029 — Daemon never revalidates module metadata: `preload_all_meta_caches` is `call_once` per process, so a long-lived daemon serves types from before your lib edit.**
 Evidence: `std::call_once` + static result (`module_binary_read.cpp:1376-1379,1426-1428`); daemon handles requests by calling
@@ -86,6 +101,17 @@ type-checks against the stale preloaded interfaces of the edited library module.
 Impact: **Medium-High (correctness)** — exactly the class of staleness that makes users reach for manual invalidation.
 Confidence: **Medium** (module-load precedence traced through `load_native_module`/GlobalModuleCache, not runtime-verified;
 verification recipe: warm daemon → edit a lib signature → `TML_DAEMON=1 tml check` an importing file → expect stale pass/fail).
+**RESOLVED defensively (phase42b, v0.3.73) — see runtime-confirmation note.** Runtime confirmation showed F-029 does NOT
+affect PROJECT-LOCAL modules: those are re-loaded per compile with a source-hash check (`env_module_loading.cpp`), so a
+warm-daemon recompile after a sibling edit correctly re-reads them (verified — `cache_staleness.sh` F-029: a result-cache
+MISS re-type-checks against the edited sibling). The hole is therefore STDLIB-only: `preload_all_meta_caches` was
+`std::call_once`/process and `load_existing_meta_files` short-circuits once `GlobalModuleCache` is populated
+(`module_binary_read.cpp:1109`), so a lib edit under a live daemon would be missed until restart. A stale-RESULT divergence
+requires editing a `lib/` SOURCE signature under a warm daemon — out of scope here (lib/ is a shared tree; editing it is
+hazardous with concurrent sessions), so it was NOT independently runtime-reproduced. Fix (applied because the mechanism is
+confirmed and the F-028 lib-tree probe now exposes it): `preload_all_meta_caches` converted from `call_once` to a mutex +
+resettable guard, plus `types::reset_meta_caches()` (drops `GlobalModuleCache`, resets the guard); the daemon calls it on a
+per-request lib-epoch change (shared with the F-028 probe), so the recompile re-preloads fresh interfaces.
 
 **F-030 — `tml cache invalidate` (and `mcp__tml__cache_invalidate`) is a stub that neither invalidates the caches that matter nor frees space.**
 Evidence: MCP tool shells out to `tml cache invalidate` (`mcp_tools_project.cpp:34-93`). The command: (a) substring-matches
@@ -95,6 +121,17 @@ matches; (b) the "MIR cache" block iterates and sets `found_any` without deletin
 (d) it never touches `cache/incr/`, `cache/tests/obj_cache/`, or `.ast.bin` sidecars. `cache info`/`clean` only see
 `cache/run` (`cmd_cache.cpp:50-53`). The tool's existence is a symptom of F-027/F-028/F-029; its implementation violates
 the no-stubs rule. Impact: **Medium**. Confidence: **High**.
+**RESOLVED (phase42b, v0.3.73).** `run_cache_invalidate` (`cmd_cache.cpp`) now maps a source file to its artifacts across
+every deterministically-mappable layer and deletes them, reporting exactly what was removed (to stdout, so it is visible
+regardless of log level): (a) the `<source>.tml.ast.bin` sidecar; (b) its tests.json suite entries + suite EXEs, via a new
+`TestResultCache::invalidate_source()` that reverse-looks-up the phase-8.5 `source_paths` and drops matching suites WITHOUT
+touching `compiler_hash` (phase41c's global lever) then re-saves; (c) its incr.bin entries + `ir/*.ll|.libs|.search_paths`
+sidecars, by loading `PrevSessionCache`, filtering entries by `QueryKey.file_path`, deleting the IR files, and rewriting
+`incr.bin` with the survivors. The content-addressed `run/` and `obj_cache/` layers have no source→artifact backlink and are
+self-healing, so they are reported as reclaimable only via `cache clean --all` (documented, not silently skipped). `cache
+info`/`cache clean` now cover the whole cache tree (run/incr/tests/meta + loose files), not just `cache/run`. Verified:
+`cache invalidate <hash test>` removed 1 exe + 6 incr entries + 2 ir files; `cache_staleness.sh` (F-030) covers the sidecar
+class end-to-end.
 
 **F-031 — No eviction anywhere: the LRU evictor is dead code; ~4.3 GB and growing monotonically.**
 Evidence: `enforce_cache_limit()` implemented (`cmd_cache.cpp:285-362`) with **zero call sites** (grep: only header/comment).

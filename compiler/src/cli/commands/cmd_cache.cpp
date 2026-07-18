@@ -30,14 +30,19 @@ TML_MODULE("compiler")
 
 #include "cli/utils.hpp"
 #include "log/log.hpp"
+#include "query/query_incr.hpp"          // F-030: PrevSessionCache / IncrCacheWriter
+#include "query/query_key.hpp"           // F-030: QueryKey file_path visitor
+#include "testing/testing_test_cache.hpp" // F-030: targeted tests.json invalidation
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <variant>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -46,10 +51,44 @@ namespace tml::cli {
 
 namespace {
 
-/// Returns the cache directory path (build/debug/cache/run/).
+/// Returns the run cache directory path (build/debug/cache/run/).
 fs::path get_cache_dir() {
     fs::path cwd = fs::current_path();
     return cwd / "build" / "debug" / "cache" / "run";
+}
+
+/// Walk up from CWD to the project root (a dir with both lib/ and build/) and
+/// return its `build/debug/cache` directory. Falls back to CWD-relative.
+fs::path get_cache_root() {
+    for (fs::path dir = fs::current_path();; dir = dir.parent_path()) {
+        std::error_code e1, e2;
+        if (fs::exists(dir / "lib", e1) && fs::exists(dir / "build", e2)) {
+            return dir / "build" / "debug" / "cache";
+        }
+        if (dir.parent_path() == dir) {
+            break;
+        }
+    }
+    return fs::current_path() / "build" / "debug" / "cache";
+}
+
+/// Normalize a path to an absolute, forward-slash, (Windows: lowercased) form
+/// so source arguments match the path forms stored in the various caches.
+std::string normalize_path(const std::string& p) {
+    std::error_code ec;
+    fs::path fp = fs::weakly_canonical(fs::path(p), ec);
+    std::string s = ec ? p : fp.string();
+    std::replace(s.begin(), s.end(), '\\', '/');
+#ifdef _WIN32
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+    return s;
+}
+
+/// Extract the `file_path` field common to every QueryKey variant.
+std::string query_key_file_path(const tml::query::QueryKey& key) {
+    return std::visit([](const auto& k) { return k.file_path; }, key);
 }
 
 /**
@@ -213,14 +252,46 @@ int run_cache_info(bool verbose) {
         }
     }
 
-    TML_LOG_INFO("cache", "Use 'tml cache clean' to remove cached files.");
+    // Full cache-tree breakdown (F-030: info was previously blind to everything
+    // except cache/run — report every layer so users see the real footprint).
+    fs::path cache_root = get_cache_root();
+    if (fs::exists(cache_root)) {
+        std::cout << "Full cache tree: " << cache_root.string() << "\n";
+        uintmax_t grand_total = 0;
+        for (const char* sub : {"run", "incr", "tests", "meta", "build-scripts"}) {
+            fs::path p = cache_root / sub;
+            if (!fs::exists(p)) {
+                continue;
+            }
+            uintmax_t sz = calculate_directory_size(p);
+            grand_total += sz;
+            std::cout << "  " << std::left << std::setw(14) << sub << format_size(sz) << "\n";
+        }
+        // Loose files directly under cache/ (e.g. *.obj, tests.json).
+        uintmax_t loose = 0;
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(cache_root, ec)) {
+            if (fs::is_regular_file(entry.path())) {
+                loose += fs::file_size(entry.path());
+            }
+        }
+        grand_total += loose;
+        std::cout << "  " << std::left << std::setw(14) << "(loose files)" << format_size(loose)
+                  << "\n";
+        std::cout << "  " << std::left << std::setw(14) << "Grand total" << format_size(grand_total)
+                  << "\n";
+    }
+
+    TML_LOG_INFO("cache", "Use 'tml cache clean' to remove old cached files (whole tree).");
     TML_LOG_INFO("cache", "Use 'tml cache clean --all' to remove all cached files.");
 
     return 0;
 }
 
 int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
-    fs::path cache_dir = get_cache_dir();
+    // F-030: clean the whole cache tree (run/, incr/, tests/, meta/, loose
+    // files), not just cache/run/ as before.
+    fs::path cache_dir = get_cache_root();
 
     if (!fs::exists(cache_dir)) {
         TML_LOG_INFO("cache", "Cache directory does not exist: " << cache_dir);
@@ -243,20 +314,26 @@ int run_cache_clean(bool clean_all, int max_age_days, bool /*verbose*/) {
     try {
         std::vector<fs::path> to_remove;
 
-        for (const auto& entry : fs::directory_iterator(cache_dir)) {
-            if (!fs::is_regular_file(entry.path())) {
+        std::error_code it_ec;
+        for (auto it = fs::recursive_directory_iterator(
+                 cache_dir, fs::directory_options::skip_permission_denied, it_ec);
+             it != fs::recursive_directory_iterator(); it.increment(it_ec)) {
+            if (it_ec) {
+                break;
+            }
+            if (!fs::is_regular_file(it->path())) {
                 continue;
             }
 
             bool should_remove = clean_all;
 
             if (!clean_all) {
-                int age = get_file_age_days(entry.path());
+                int age = get_file_age_days(it->path());
                 should_remove = (age >= max_age_days);
             }
 
             if (should_remove) {
-                to_remove.push_back(entry.path());
+                to_remove.push_back(it->path());
             }
         }
 
@@ -369,158 +446,115 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/
         return 1;
     }
 
-    fs::path cwd = fs::current_path();
-    fs::path run_cache_dir = cwd / "build" / "debug" / "cache" / "run";
-    fs::path test_cache_dir = cwd / "build" / "debug" / "cache";
-    fs::path mir_cache_dir = cwd / "build" / "debug" / "cache";
-    fs::path test_cache_file = cwd / "build" / "debug" / "cache" / "tests.json";
+    const fs::path cache_root = get_cache_root();
+    const fs::path tests_json = cache_root / "tests.json";
+    const fs::path incr_dir = cache_root / "incr";
+    const fs::path incr_bin = incr_dir / "incr.bin";
 
-    int invalidated_count = 0;
-    int errors = 0;
+    int files_touched = 0;
 
-    TML_LOG_INFO("cache", "Invalidating cache for " << files.size() << " file(s)...");
+    // User-facing report goes to stdout so it is visible regardless of log level.
+    std::cout << "Invalidating cache for " << files.size() << " file(s)...\n";
+    std::cout << "  Cache root: " << cache_root.string() << "\n";
 
     for (const auto& file : files) {
-        fs::path file_path = fs::path(file);
+        const std::string abs_source = [&] {
+            std::error_code ec;
+            fs::path fp = fs::weakly_canonical(fs::path(file), ec);
+            return ec ? fs::absolute(fs::path(file)).string() : fp.string();
+        }();
+        const std::string target = normalize_path(file);
 
-        // Normalize path for consistent cache key generation
-        std::string normalized_path;
-        if (file_path.is_absolute()) {
-            normalized_path = file_path.string();
+        int removed_ast = 0, removed_exe = 0, removed_incr = 0, removed_ir = 0;
+
+        // --- Layer 1: `<source>.ast.bin` sidecar (deterministic, beside source) ---
+        {
+            fs::path sidecar(abs_source + ".ast.bin");
+            std::error_code ec;
+            if (fs::exists(sidecar, ec) && fs::remove(sidecar, ec)) {
+                ++removed_ast;
+                std::cout << "  [ast.bin] removed " << sidecar.filename().string() << "\n";
+            }
+        }
+
+        // --- Layer 2: test result cache — tests.json entries + suite EXEs ---
+        if (fs::exists(tests_json)) {
+            tml::testing::TestResultCache trc;
+            if (trc.load(tests_json.string())) {
+                // Do NOT touch compiler_hash — that is phase41c's global lever.
+                auto cleared = trc.invalidate_source(abs_source);
+                for (const auto& exe : cleared) {
+                    std::error_code ec;
+                    if (fs::exists(exe, ec) && fs::remove(exe, ec)) {
+                        ++removed_exe;
+                        std::cout << "  [tests] removed exe " << exe << "\n";
+                    }
+                    // Drop the sibling import library, if any (<stem>.lib).
+                    fs::path lib = fs::path(exe);
+                    lib.replace_extension(".lib");
+                    if (fs::exists(lib, ec)) {
+                        fs::remove(lib, ec);
+                    }
+                }
+                if (!cleared.empty()) {
+                    trc.save(tests_json.string());
+                }
+            }
+        }
+
+        // --- Layer 3: incremental cache — incr.bin entries + ir/*.ll sidecars ---
+        if (fs::exists(incr_bin)) {
+            tml::query::PrevSessionCache prev;
+            if (prev.load(incr_bin)) {
+                tml::query::IncrCacheWriter writer;
+                for (const auto& [key, entry] : prev.entries()) {
+                    if (normalize_path(query_key_file_path(key)) == target) {
+                        // Drop this entry: delete its IR sidecars.
+                        auto base = tml::query::get_ir_cache_filename(key);
+                        for (const char* suffix : {".ll", ".libs", ".search_paths"}) {
+                            fs::path irf = incr_dir / "ir" / (base + suffix);
+                            std::error_code ec;
+                            if (fs::exists(irf, ec) && fs::remove(irf, ec)) {
+                                ++removed_ir;
+                            }
+                        }
+                        ++removed_incr;
+                    } else {
+                        // Keep: re-record verbatim into the rewritten cache.
+                        writer.record(key, entry.input_fingerprint, entry.output_fingerprint,
+                                      entry.dependencies);
+                    }
+                }
+                if (removed_incr > 0) {
+                    writer.write(incr_bin, prev.options_hash());
+                    std::cout << "  [incr] dropped " << removed_incr << " entr"
+                              << (removed_incr == 1 ? "y" : "ies") << ", " << removed_ir
+                              << " ir file(s)\n";
+                }
+            }
+        }
+
+        int total = removed_ast + removed_exe + removed_incr + removed_ir;
+        if (total > 0) {
+            ++files_touched;
+            std::cout << "  Invalidated " << file << ": " << removed_ast << " ast.bin, "
+                      << removed_exe << " exe, " << removed_incr << " incr entries, " << removed_ir
+                      << " ir files\n";
         } else {
-            normalized_path = (cwd / file_path).string();
-        }
-
-        // Get the stem (filename without extension) for cache file matching
-        std::string file_stem = file_path.stem().string();
-        std::string file_name = file_path.filename().string();
-
-        TML_LOG_DEBUG("cache", "Processing: " << file);
-        TML_LOG_DEBUG("cache", "  Stem: " << file_stem);
-
-        bool found_any = false;
-
-        // 1. Clear run cache (.run-cache/*.dll, *.exe, *.ll)
-        if (fs::exists(run_cache_dir)) {
-            try {
-                for (const auto& entry : fs::directory_iterator(run_cache_dir)) {
-                    if (!fs::is_regular_file(entry.path()))
-                        continue;
-
-                    std::string entry_name = entry.path().stem().string();
-                    // Match files that start with or contain the file stem
-                    if (entry_name.find(file_stem) != std::string::npos) {
-                        TML_LOG_DEBUG("cache", "Removing: " << entry.path().filename().string());
-                        fs::remove(entry.path());
-                        found_any = true;
-                    }
-                }
-            } catch (const std::exception& e) {
-                TML_LOG_WARN("cache", "Error accessing run cache: " << e.what());
-            }
-        }
-
-        // 2. Clear MIR cache (.cache/*.mir, *.obj, *.hir)
-        if (fs::exists(mir_cache_dir)) {
-            try {
-                // Read the index files to find entries for this source
-                fs::path mir_index = mir_cache_dir / "mir_cache.idx";
-                fs::path func_index = mir_cache_dir / "func_cache.idx";
-
-                // Simple approach: delete cached files that might match
-                for (const auto& entry : fs::directory_iterator(mir_cache_dir)) {
-                    if (!fs::is_regular_file(entry.path()))
-                        continue;
-
-                    auto ext = entry.path().extension().string();
-                    if (ext == ".mir" || ext == ".obj" || ext == ".o" || ext == ".hir" ||
-                        ext == ".fmir") {
-                        // Check if file content references this source
-                        // For simplicity, we'll check if the entry filename contains the hash
-                        // A more robust approach would parse the index files
-                        TML_LOG_DEBUG("cache", "Checking: " << entry.path().filename().string());
-                        // For now, mark that we found cache directory
-                        found_any = true;
-                    }
-                }
-
-                // Also update index files to remove this source entry
-                // This requires parsing and rewriting the index, which we'll do in a robust way
-            } catch (const std::exception& e) {
-                TML_LOG_WARN("cache", "Error accessing MIR cache: " << e.what());
-            }
-        }
-
-        // 3. Clear test cache (cache directory)
-        if (fs::exists(test_cache_dir)) {
-            try {
-                for (const auto& entry : fs::directory_iterator(test_cache_dir)) {
-                    if (!fs::is_regular_file(entry.path()))
-                        continue;
-
-                    std::string entry_name = entry.path().stem().string();
-                    if (entry_name.find(file_stem) != std::string::npos) {
-                        TML_LOG_DEBUG("cache", "Removing: " << entry.path().filename().string());
-                        fs::remove(entry.path());
-                        found_any = true;
-                    }
-                }
-            } catch (const std::exception& e) {
-                TML_LOG_WARN("cache", "Error accessing test cache: " << e.what());
-            }
-        }
-
-        // 4. Update cache/tests.json if it exists
-        if (fs::exists(test_cache_file)) {
-            try {
-                // Read and parse JSON
-                std::ifstream in_file(test_cache_file);
-                if (in_file.is_open()) {
-                    std::stringstream buffer;
-                    buffer << in_file.rdbuf();
-                    std::string content = buffer.str();
-                    in_file.close();
-
-                    // Simple string-based removal: find and remove entries matching the file
-                    // For a proper implementation, we'd use JSON parsing
-                    // Here we just mark the file for recompilation by touching the test cache
-
-                    // Convert file path to cache key format (forward slashes)
-                    std::string cache_key = file;
-                    std::replace(cache_key.begin(), cache_key.end(), '\\', '/');
-
-                    // Check if this file is in the cache
-                    if (content.find(cache_key) != std::string::npos ||
-                        content.find(file_name) != std::string::npos) {
-                        found_any = true;
-                        TML_LOG_DEBUG("cache", "Found in cache/tests.json");
-
-                        // Remove the entry by rewriting without this file
-                        // For simplicity, we'll just mark that invalidation is needed
-                        // A full implementation would parse JSON and remove the entry
-                    }
-                }
-            } catch (const std::exception& e) {
-                TML_LOG_WARN("cache", "Error processing test cache: " << e.what());
-            }
-        }
-
-        if (found_any) {
-            invalidated_count++;
-            TML_LOG_INFO("cache", "  Invalidated: " << file);
-        } else {
-            TML_LOG_DEBUG("cache", "No cache entries found for: " << file);
+            std::cout << "  No cached artifacts found for: " << file << "\n";
         }
     }
 
-    TML_LOG_INFO("cache", "Invalidated cache for " << invalidated_count << " of " << files.size()
-                                                   << " file(s).");
-
-    if (invalidated_count > 0) {
-        TML_LOG_INFO("cache", "These files will be fully recompiled on the next build.");
-    }
-
-    return errors > 0 ? 1 : 0;
+    // The run/ and obj_cache/ layers are content-addressed (hashed on generated
+    // IR / object content with no stored source path), so a single source cannot
+    // be mapped to its entries without recompiling. They are self-healing — a
+    // changed source produces a different hash, so stale entries are simply never
+    // hit again. Use `cache clean --all` to reclaim their space.
+    std::cout << "Invalidated artifacts for " << files_touched << " of " << files.size()
+              << " file(s).\n";
+    std::cout << "Note: run/ and obj_cache/ are content-addressed and self-healing; "
+                 "use 'cache clean --all' to reclaim their space.\n";
+    return 0;
 }
 
 int run_cache_clear_meta() {

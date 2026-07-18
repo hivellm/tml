@@ -557,6 +557,48 @@ void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntr
     entries_[suite_name] = entry;
 }
 
+std::vector<std::string> TestResultCache::invalidate_source(const std::string& source_path) {
+    // Normalize to an absolute, forward-slash, (Windows: lowercased) form so a
+    // relative/backslash argument matches the absolute paths stored in
+    // `source_paths` regardless of slash direction or case.
+    auto norm = [](const std::string& p) {
+        std::error_code ec;
+        fs::path fp = fs::weakly_canonical(fs::path(p), ec);
+        std::string s = ec ? p : fp.string();
+        std::replace(s.begin(), s.end(), '\\', '/');
+#ifdef _WIN32
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+        return s;
+    };
+
+    const std::string target = norm(source_path);
+    std::vector<std::string> cleared_exes;
+    std::vector<std::string> to_erase;
+
+    for (const auto& [name, entry] : entries_) {
+        bool match = false;
+        for (const auto& sp : entry.source_paths) {
+            if (norm(sp) == target) {
+                match = true;
+                break;
+            }
+        }
+        if (match) {
+            if (!entry.exe_path.empty()) {
+                cleared_exes.push_back(entry.exe_path);
+            }
+            to_erase.push_back(name);
+        }
+    }
+
+    for (const auto& name : to_erase) {
+        entries_.erase(name);
+    }
+    return cleared_exes;
+}
+
 // ============================================================================
 // Static utility functions
 // ============================================================================

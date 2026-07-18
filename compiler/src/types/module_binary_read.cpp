@@ -1368,15 +1368,32 @@ static int generate_all_meta_from_source() {
     return total_generated;
 }
 
-int preload_all_meta_caches() {
-    // Thread-safe once-only initialization.
-    // Called from suite_execution.cpp (main thread) before parallel compilation,
-    // AND from compile_test_suite workers (multiple threads). std::call_once
-    // guarantees the heavy work runs exactly once with proper memory barriers.
-    static std::once_flag s_preload_flag;
-    static int s_preload_result = 0;
+// F-029: resettable one-time preload guard.
+// Called from suite_execution.cpp (main thread) before parallel compilation,
+// AND from compile_test_suite workers (multiple threads). We previously used
+// std::call_once, which can never be reset — so a long-lived daemon served
+// stale library interfaces after a lib edit. A mutex + bool gives the same
+// run-exactly-once-per-epoch guarantee while allowing reset_meta_caches() to
+// force a re-preload when the daemon detects a lib/meta change.
+static std::mutex s_preload_mutex;
+static bool s_preload_done = false;
+static int s_preload_result = 0;
 
-    std::call_once(s_preload_flag, []() {
+void reset_meta_caches() {
+    std::lock_guard<std::mutex> lock(s_preload_mutex);
+    s_preload_done = false;
+    s_preload_result = 0;
+    GlobalModuleCache::instance().clear();
+    TML_LOG_INFO("meta", "reset_meta_caches: dropped GlobalModuleCache; next preload will reload");
+}
+
+int preload_all_meta_caches() {
+    std::lock_guard<std::mutex> lock(s_preload_mutex);
+    if (s_preload_done) {
+        return s_preload_result;
+    }
+
+    {
         auto preload_start = std::chrono::steady_clock::now();
 
         auto build_root = find_build_root();
@@ -1403,7 +1420,8 @@ int preload_all_meta_caches() {
             TML_LOG_INFO("meta", "  Time: " << elapsed << "ms");
             TML_LOG_INFO("meta", "========================================");
             s_preload_result = loaded;
-            return;
+            s_preload_done = true;
+            return s_preload_result;
         }
 
         // Phase 2: No .tml.meta files found — generate them by parsing source files
@@ -1423,8 +1441,9 @@ int preload_all_meta_caches() {
         TML_LOG_INFO("meta", "========================================");
 
         s_preload_result = generated;
-    });
+    }
 
+    s_preload_done = true;
     return s_preload_result;
 }
 

@@ -22,3 +22,29 @@ Impact: **High**. Confidence: **High**.
 - A live `mcp__tml__*` session talks to the `tml_mcp.exe` that was running when the MCP
   client connected — after a compiler rebuild the MCP client must reconnect to pick up
   the new server binary (build.bat kills `tml_mcp.exe` when it is part of the build target).
+
+## Staleness correctness (phase42b, v0.3.73)
+
+The phase40a residual caveat "the daemon result cache stores stdout/stderr + exit code
+only" was correctness-safe for *artifacts* but had two *diagnostic* staleness holes that
+phase42b closed (see `docs/analysis/incremental-cache/02-findings.md` F-028/F-029):
+
+- **Imported-module edits are now seen (F-028).** The result cache previously keyed only on
+  argv `.tml` mtimes; editing a transitively-imported module returned the previous
+  diagnostics. The daemon now also checks a `universe_epoch` (max mtime over the lib source
+  tree + each argv file's sibling directory) before serving a warm hit.
+- **Library-source edits under a warm daemon (F-029).** A per-request lib-epoch probe drops
+  the process-level module caches (`GlobalModuleCache` + meta preload) when a lib source
+  changes, so a warm recompile type-checks against fresh interfaces instead of the ones
+  preloaded at daemon start.
+
+Residual caveat introduced by these fixes:
+
+- The lib source tree (~2.3k files) is swept for its max mtime at most **once per 750 ms**
+  (to protect the warm-request latency target). A library-source edit followed by a warm
+  `check`/`build`/`emit-ir` within that window can still see the pre-edit stdlib interface
+  for up to ~750 ms; the next request past the window picks up the change. Project-local
+  sibling edits are detected immediately (their scan is un-throttled). Restart the daemon to
+  force an immediate refresh.
+- The artifact-regeneration caveat above is unchanged: a cache-hit `build`/`emit-ir` still
+  does not re-produce on-disk artifacts deleted between identical invocations.

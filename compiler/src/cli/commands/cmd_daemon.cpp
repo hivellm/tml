@@ -16,6 +16,7 @@ TML_MODULE("compiler")
 #include "common/crc32c.hpp"
 #include "log/log.hpp"
 #include "plugin/loader.hpp"
+#include "types/module_binary.hpp" // F-029: reset_meta_caches()
 
 #include <atomic>
 #include <chrono>
@@ -307,6 +308,11 @@ struct CacheEntry {
     std::string err;
     /// (canonical_path, mtime) snapshot of every .tml file arg at compile time.
     std::vector<std::pair<std::string, fs::file_time_type>> mtimes;
+    /// F-028: max mtime over the TRANSITIVE source universe (lib tree + each
+    /// argv file's sibling directory) at compile time. Edits to imported modules
+    /// that never appear in argv move this value, so a warm hit is only served
+    /// when the whole transitive input set is unchanged.
+    uint64_t universe_epoch = 0;
 };
 
 /// Global cache — lives for the daemon's entire lifetime.
@@ -356,6 +362,116 @@ static auto mtimes_still_valid(const std::vector<std::pair<std::string, fs::file
             return false;
     }
     return true;
+}
+
+// ============================================================================
+// F-028/F-029: transitive source-universe probe
+//
+// The argv-only mtime snapshot (collect_mtimes) is blind to imported modules —
+// project-local siblings and library sources never appear in argv. These
+// probes close that hole: a lib-tree epoch (F-029 signal + F-028 stdlib
+// component) plus a shallow scan of each argv file's directory (F-028
+// project-local sibling component). The scans run only on cacheable requests.
+// ============================================================================
+
+/// Walk up from `start` to find the project root (a dir containing lib/ and
+/// build/). Returns empty if none is found.
+static auto find_project_root(const fs::path& start) -> fs::path {
+    std::error_code ec;
+    fs::path dir = fs::weakly_canonical(start, ec);
+    if (ec)
+        dir = start;
+    for (; !dir.empty(); dir = dir.parent_path()) {
+        std::error_code e1, e2;
+        if (fs::exists(dir / "lib", e1) && fs::exists(dir / "build", e2))
+            return dir;
+        if (dir.parent_path() == dir)
+            break;
+    }
+    return {};
+}
+
+/// Max last_write_time (raw tick count) over all `.tml` files under `dir`,
+/// recursively. 0 if the directory is missing/empty/unreadable.
+static auto tree_max_tml_mtime(const fs::path& dir) -> uint64_t {
+    uint64_t maxv = 0;
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || ec)
+        return 0;
+    for (auto it = fs::recursive_directory_iterator(
+             dir, fs::directory_options::skip_permission_denied, ec);
+         it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec)
+            break;
+        const auto& p = it->path();
+        if (p.extension() != ".tml")
+            continue;
+        std::error_code me;
+        auto t = fs::last_write_time(p, me);
+        if (me)
+            continue;
+        auto ticks = static_cast<uint64_t>(t.time_since_epoch().count());
+        if (ticks > maxv)
+            maxv = ticks;
+    }
+    return maxv;
+}
+
+/// Max mtime over the direct `.tml` children of `dir` (non-recursive).
+static auto shallow_max_tml_mtime(const fs::path& dir) -> uint64_t {
+    uint64_t maxv = 0;
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || ec)
+        return 0;
+    for (auto it = fs::directory_iterator(dir, ec); it != fs::directory_iterator();
+         it.increment(ec)) {
+        if (ec)
+            break;
+        const auto& p = it->path();
+        std::error_code fe;
+        if (!fs::is_regular_file(p, fe) || p.extension() != ".tml")
+            continue;
+        std::error_code me;
+        auto t = fs::last_write_time(p, me);
+        if (me)
+            continue;
+        auto ticks = static_cast<uint64_t>(t.time_since_epoch().count());
+        if (ticks > maxv)
+            maxv = ticks;
+    }
+    return maxv;
+}
+
+/// F-029 signal: max mtime over the lib source tree of the project owning `cwd`.
+/// When this moves, the daemon drops its process-level module caches.
+static auto compute_lib_epoch(const fs::path& cwd) -> uint64_t {
+    auto root = find_project_root(cwd);
+    if (root.empty())
+        return 0;
+    return tree_max_tml_mtime(root / "lib");
+}
+
+/// F-028 probe: the transitive source universe for `argv`. Combines the lib
+/// epoch (stdlib/package imports) with a shallow scan of each argv file's own
+/// directory (project-local sibling modules imported but absent from argv).
+static auto compute_universe_epoch(const std::vector<std::string>& argv,
+                                   const std::string& cwd_str, uint64_t lib_epoch) -> uint64_t {
+    uint64_t maxv = lib_epoch;
+    for (const auto& arg : argv) {
+        if (arg.size() >= 4 && arg.rfind(".tml") == arg.size() - 4) {
+            fs::path p(arg);
+            if (p.is_relative() && !cwd_str.empty())
+                p = fs::path(cwd_str) / p;
+            std::error_code ec;
+            p = fs::weakly_canonical(p, ec);
+            if (ec)
+                continue;
+            auto d = shallow_max_tml_mtime(p.parent_path());
+            if (d > maxv)
+                maxv = d;
+        }
+    }
+    return maxv;
 }
 
 /// Commands whose output is a pure function of the source files (safe to cache).
@@ -471,14 +587,51 @@ static auto handle_request(const std::string& request_json) -> std::string {
     bool cacheable = is_cacheable(argv_strs);
     std::string cache_key;
     std::vector<std::pair<std::string, fs::file_time_type>> snap;
+    uint64_t lib_epoch = 0;
+    uint64_t universe_epoch = 0;
 
     if (cacheable) {
+        // F-029: if the library source tree changed since the last request, drop
+        // the process-level module caches (GlobalModuleCache + meta preload) and
+        // the whole result cache, so this and future requests type-check against
+        // fresh stdlib interfaces instead of the ones preloaded at daemon start.
+        //
+        // The lib tree is large (~2.3k files), so the recursive mtime sweep is
+        // throttled to at most once per 750ms to protect the warm-request latency
+        // target (phase40a). Project-local sibling edits are caught immediately by
+        // the (cheap) shallow scan in compute_universe_epoch; only the stdlib
+        // component has this <=750ms detection window. Sequential request serving
+        // makes the plain statics here safe.
+        {
+            static uint64_t s_cached_lib_epoch = 0;
+            static std::chrono::steady_clock::time_point s_last_lib_scan{};
+            auto now = std::chrono::steady_clock::now();
+            if (s_last_lib_scan.time_since_epoch().count() == 0 ||
+                now - s_last_lib_scan > std::chrono::milliseconds(750)) {
+                s_cached_lib_epoch = compute_lib_epoch(fs::current_path());
+                s_last_lib_scan = now;
+            }
+            lib_epoch = s_cached_lib_epoch;
+        }
+        static uint64_t s_recorded_lib_epoch = 0;
+        static bool s_lib_epoch_init = false;
+        if (!s_lib_epoch_init) {
+            s_recorded_lib_epoch = lib_epoch;
+            s_lib_epoch_init = true;
+        } else if (lib_epoch != s_recorded_lib_epoch) {
+            TML_LOG_INFO("daemon", "library source changed — resetting module caches");
+            tml::types::reset_meta_caches();
+            s_result_cache.clear();
+            s_recorded_lib_epoch = lib_epoch;
+        }
+
         cache_key = argv_cache_key(argv_strs);
         snap = collect_mtimes(argv_strs, cwd_str);
+        universe_epoch = compute_universe_epoch(argv_strs, cwd_str, lib_epoch);
         auto it = s_result_cache.find(cache_key);
         if (it != s_result_cache.end() && it->second.mtimes == snap &&
-            mtimes_still_valid(it->second.mtimes)) {
-            // Cache hit — skip compilation entirely
+            it->second.universe_epoch == universe_epoch && mtimes_still_valid(it->second.mtimes)) {
+            // Cache hit — argv AND the transitive source universe are unchanged
             const auto& e = it->second;
             if (!cwd_str.empty() && !old_cwd.empty())
                 fs::current_path(old_cwd, ec);
@@ -522,7 +675,7 @@ static auto handle_request(const std::string& request_json) -> std::string {
 
     // --- Store result in cache for next identical request ---
     if (cacheable && !snap.empty()) {
-        s_result_cache[cache_key] = CacheEntry{exit_code, out_str, err_str, snap};
+        s_result_cache[cache_key] = CacheEntry{exit_code, out_str, err_str, snap, universe_epoch};
     }
 
     // Build JSON response

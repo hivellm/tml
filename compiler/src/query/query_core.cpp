@@ -320,6 +320,62 @@ std::any provide_parse_module(QueryContext& ctx, const QueryKey& key) {
         }
     }
 
+    // F-027: validated `<source>.ast.bin` sidecar fast-path.
+    // A sibling AST-binary cache (produced by the TML frontend) can skip
+    // lex+parse, but ONLY when it is at least as new as the source file — so an
+    // edited source is never silently overridden by a stale cached AST. The
+    // `.ast.bin` format is written by the frozen TML frontend
+    // (lib/std/src/serial/ast.tml) and embeds no source hash, so freshness is
+    // validated by mtime. The ReadSource dependency is recorded either way
+    // (via ctx.read_source) so red-green invalidation stays correct, and the
+    // result flows through the query cache instead of being re-deserialized on
+    // every call (the old QueryContext::parse_module short-circuit did both
+    // wrong). A corrupt/incompatible sidecar falls through to a real parse
+    // rather than breaking a valid compile.
+    {
+        const std::string cache_path = pk.file_path + ".ast.bin";
+        std::error_code ec_exist;
+        if (fs::exists(cache_path, ec_exist) && !ec_exist) {
+            auto src = ctx.read_source(pk.file_path); // records ReadSource dep + fingerprint
+            std::error_code ec_src, ec_bin;
+            auto src_mtime = fs::last_write_time(pk.file_path, ec_src);
+            auto bin_mtime = fs::last_write_time(cache_path, ec_bin);
+            const bool fresh = src.success && !ec_src && !ec_bin && src_mtime <= bin_mtime;
+            if (fresh) {
+                try {
+                    std::ifstream in(cache_path, std::ios::binary);
+                    if (in) {
+                        in.seekg(0, std::ios::end);
+                        const auto sz = static_cast<std::streamsize>(in.tellg());
+                        in.seekg(0, std::ios::beg);
+                        std::vector<uint8_t> bytes(static_cast<size_t>(sz));
+                        if (sz > 0) {
+                            in.read(reinterpret_cast<char*>(bytes.data()), sz);
+                        }
+                        // read_ast injects file_path into every SourceLocation::file
+                        // (a string_view); keep a stable copy alive for the module.
+                        auto path_storage = std::make_shared<std::string>(pk.file_path);
+                        parser::Module mod = serial::read_ast(bytes, *path_storage);
+                        result.module = std::shared_ptr<parser::Module>(
+                            new parser::Module(std::move(mod)),
+                            [path_storage](parser::Module* p) mutable {
+                                delete p;
+                                path_storage.reset();
+                            });
+                        result.success = true;
+                        return result;
+                    }
+                } catch (const std::exception& e) {
+                    TML_LOG_WARN("query", "ignoring unreadable .ast.bin sidecar for "
+                                              << pk.file_path << ": " << e.what());
+                }
+            } else if (src.success) {
+                TML_LOG_DEBUG("query", "stale .ast.bin sidecar ignored (source newer): "
+                                           << pk.file_path);
+            }
+        }
+    }
+
     // Force tokenization
     auto tok = ctx.tokenize(pk.file_path);
     if (!tok.success) {

@@ -119,6 +119,13 @@ public:
         }
     }
 
+    /// F-030: targeted invalidation. Remove every suite whose transitive
+    /// `source_paths` includes `source_path` (path-normalized), returning the
+    /// `exe_path`s that were referenced so the caller can delete them from disk.
+    /// Does NOT touch `compiler_hash` (that is the global phase41c lever).
+    /// Re-`save()` afterwards to persist the removal.
+    std::vector<std::string> invalidate_source(const std::string& source_path);
+
     // ========================================================================
     // Static utility functions
     // ========================================================================
