@@ -9,6 +9,6 @@
 - [x] 1.8 GATE — one-file touch: GREEN=13 RED=1 (only affected RED); warm unchanged GREEN=14 RED=0; incr I/O loads=4/saves=1 per suite (was per-file O(N)); ir/ bounded + GC'd (finding's 2.2 GB was pre-reduced); zero divergence (hash 14/14, borrow 12/12, json 23/23; core/alloc `sync_*` = unrelated phase27d mut-ref regression); determinism 28/28 at floor. Numbers in `02-findings.md` + `docs/patches/v0.3.74.md`.
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 2.1 Documentation — `02-findings.md` phase42a resolution (F-019..F-026), CHANGELOG 0.3.74 row, `docs/patches/v0.3.74.md`, VERSION 0.3.73→0.3.74. (ADR-002 has no standalone file; impl notes live in the findings doc.)
-- [x] 2.2 Tests — `compiler/tests/cli/incr_cache.sh` (key stability on suite-membership touch, warm GREEN reuse, telemetry present, content-hash sidecar, config partitioning).
-- [x] 2.3 Ran tests — `incr_cache.sh` 8/8 pass; clean suites pass; determinism 28/28.
+- [x] 2.1 Update or create documentation covering the implementation — `02-findings.md` phase42a resolution (F-019..F-026), CHANGELOG 0.3.74 row, `docs/patches/v0.3.74.md`, VERSION 0.3.73→0.3.74. (ADR-002 has no standalone file; impl notes in the findings doc.)
+- [x] 2.2 Write tests covering the new behavior — `compiler/tests/cli/incr_cache.sh` (key stability on suite-membership touch, warm GREEN reuse, telemetry, content-hash sidecar, partitioning).
+- [x] 2.3 Run tests and confirm they pass — `incr_cache.sh` 8/8; clean suites pass; determinism 28/28.
