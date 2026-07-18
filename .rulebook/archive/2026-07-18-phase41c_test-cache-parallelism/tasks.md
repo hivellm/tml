@@ -8,6 +8,6 @@
 - [x] 1.7 GATE: 2nd consecutive run near-free — core/hash 22.9s→1.84s, compiler/borrow 18.5s→1.86s, std/json 49.0s→1.85s (all `is cached (passed, skipping)`), zero result divergence (14/14, 12/12, 23/23 both runs). touch-DLL now stays cached. Numbers in `docs/analysis/tooling-performance/01-measurements.md`.
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 2.1 Docs: `04-test-framework-performance.md` F-008/F-009/F-010/F-013/F-014 statuses updated with numbers; measurements appended to `01-measurements.md`; VERSION 0.3.71→0.3.72, CHANGELOG row, `docs/patches/v0.3.72.md`.
-- [x] 2.2 Tests: `scripts/tests/phase41c_test_cache.sh` — second-run reuse + parity, content-aware invalidation (touch), --no-cache sibling preservation, std-import result transparency.
-- [x] 2.3 Ran tests: 4/4 pass (core/hash 14/14, compiler/borrow 12/12, std/json 23/23).
+- [x] 2.1 Update or create documentation covering the implementation — `04-test-framework-performance.md` F-008/F-009/F-010/F-013/F-014 statuses with numbers; `01-measurements.md`; VERSION 0.3.71→0.3.72, CHANGELOG, `docs/patches/v0.3.72.md`.
+- [x] 2.2 Write tests covering the new behavior — `scripts/tests/phase41c_test_cache.sh`: second-run reuse + parity, content-aware invalidation (touch), --no-cache sibling preservation, std-import transparency.
+- [x] 2.3 Run tests and confirm they pass — 4/4 pass (core/hash 14/14, compiler/borrow 12/12, std/json 23/23).

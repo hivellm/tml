@@ -8,6 +8,6 @@
 - [x] 1.7 GATE: repros fail pre-fix / pass post-fix (documented in patch note); `cache invalidate <hash test>` removed 1 exe + 6 incr entries + 2 ir files (≥1 of each mappable class); zero divergence on core/hash 14/14, std/json 23/23, compiler/borrow 12/12.
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 2.1 Updated `docs/analysis/incremental-cache/02-findings.md` (F-027..F-030 RESOLVED statuses), `05-mcp-warm-state.md` (staleness-correctness + residual-caveats section), CHANGELOG + VERSION 0.3.72→0.3.73 + `docs/patches/v0.3.73.md`.
-- [x] 2.2 Promoted the four repros to `compiler/tests/cli/cache_staleness.sh` (consolidated, repo-convention shell test).
-- [x] 2.3 Ran the CLI test — 6/6 pass.
+- [x] 2.1 Update or create documentation covering the implementation — `docs/analysis/incremental-cache/02-findings.md` (F-027..F-030 RESOLVED), `05-mcp-warm-state.md` (staleness + residual-caveats), CHANGELOG + VERSION 0.3.72→0.3.73 + `docs/patches/v0.3.73.md`.
+- [x] 2.2 Write tests covering the new behavior — promoted the four repros to `compiler/tests/cli/cache_staleness.sh`.
+- [x] 2.3 Run tests and confirm they pass — 6/6 pass.

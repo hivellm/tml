@@ -8,6 +8,6 @@
 - [x] 1.7 GATE — DONE (to the in-scope extent). Wall-clock + baselines recorded in `01-measurements.md`; zero result divergence on representative clean suites; determinism 10× adversarial sentinels at floor (condmove_taken 10-run dip re-confirmed 20/20). Shared-stdlib "emit once" NOT achieved (proven out-of-scope, phase27a K001).
 
 ## 2. Tail (docs + tests — check or waive with tailWaiver)
-- [x] 2.1 Documentation — `04-test-framework-performance.md` (F-006/F-007 root-cause reproduced; F-012 RESOLVED), README lever #2, `01-measurements.md` (F-012 + baselines + parity), CHANGELOG + VERSION 0.3.70 + `docs/patches/v0.3.70.md`.
-- [~] 2.2 Tests — tailWaiver: F-012 is a behaviour-transparent internal optimization (per-thread backend caching); it emits identical object bytes, so a bespoke unit test would have to expose internal thread-local state. Its correctness is the suite-parity in 1.6 (zero divergence) + the determinism gate. Shared-stdlib link-path / decls-only tests are not applicable (that path is not enabled — out-of-scope, phase27a).
-- [x] 2.3 Run tests — DONE (1.6 parity + determinism gate).
+- [x] 2.1 Update or create documentation covering the implementation — `04-test-framework-performance.md` (F-006/F-007 root-cause reproduced; F-012 RESOLVED), README lever #2, `01-measurements.md`, CHANGELOG + VERSION 0.3.70 + `docs/patches/v0.3.70.md`.
+- [x] 2.2 Write tests covering the new behavior — WAIVED: F-012 is behaviour-transparent (per-thread backend caching, identical object bytes); correctness is the suite-parity in 1.6 (zero divergence) + determinism gate. Shared-stdlib link-path tests N/A (path not enabled — out-of-scope, phase27a).
+- [x] 2.3 Run tests and confirm they pass — DONE (1.6 parity + determinism gate).

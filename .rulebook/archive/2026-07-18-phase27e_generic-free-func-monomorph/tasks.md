@@ -7,8 +7,8 @@
 - [x] 1.6 GATE — MET. 5 core/str K001s fail→pass (27/32 → 33/33); zero regression on clean suites; determinism 28/28 at floor; IR shows a monomorphized/correct callee define, no literal-`T` dangling.
 
 ## 2. Tail (docs + tests)
-- [x] 2.1 Docs — DONE. `docs/patches/v0.3.71.md` (accurate root cause: collision, not monomorphization); CHANGELOG row; VERSION 0.3.70 → 0.3.71; F-006 in `04-test-framework-performance.md` updated (core/str K001 collision class RESOLVED; genuine free-function monomorphization gap distinguished as a separate latent item for phase27a). Memory `shared-stdlib-fastpath-dedup-gap.md` corrected.
-- [x] 2.2 Tests — DONE. New regression fixture `lib/core/tests/str/str_replace_name_collision.test.tml` exercises qualified (`str::replace`), bare-imported (`use core::str::{replace}` → bare `replace`), and method (`s.replace`) forms of the colliding call plus a no-match path. Passes. The 5 core/str tests serve as the acceptance set.
+- [x] 2.1 Update or create documentation covering the implementation — DONE. `docs/patches/v0.3.71.md` (accurate root cause: collision, not monomorphization); CHANGELOG row; VERSION 0.3.70 → 0.3.71; F-006 in `04-test-framework-performance.md` updated (core/str K001 collision class RESOLVED; genuine free-function monomorphization gap distinguished as a separate latent item for phase27a). Memory `shared-stdlib-fastpath-dedup-gap.md` corrected.
+- [x] 2.2 Write tests covering the new behavior — DONE. New regression fixture `lib/core/tests/str/str_replace_name_collision.test.tml` exercises qualified (`str::replace`), bare-imported (`use core::str::{replace}` → bare `replace`), and method (`s.replace`) forms of the colliding call plus a no-match path. Passes. The 5 core/str tests serve as the acceptance set.
 - [x] 2.3 Run tests + confirm pass — DONE (1.3 + 1.4 + 1.5 above).
 
 ## Note: root cause differs from proposal hypothesis
