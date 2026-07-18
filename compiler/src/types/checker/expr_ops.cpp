@@ -37,6 +37,20 @@ static bool is_literal_zero(const parser::Expr& expr) {
 auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     auto left = check_expr(*binary.left);
 
+    // Auto-deref `ref`/`mut ref` operands in value context. A binary operator
+    // reads through a reference (e.g. `count + 1` where `count: mut ref I64`
+    // reads the pointee I64), mirroring unary deref (see check_unary) and the
+    // assignment-through-mut-ref allowance below. Returns the resolved inner
+    // type when `t` resolves to a RefType, otherwise `t` unchanged (PtrType is
+    // left intact so genuine pointer arithmetic keeps its pointer result).
+    auto deref_ref = [&](const TypePtr& t) -> TypePtr {
+        TypePtr resolved = env_.resolve(t);
+        if (resolved && resolved->is<RefType>()) {
+            return resolved->as<RefType>().inner;
+        }
+        return t;
+    };
+
     // For arithmetic AND comparison operators, propagate the left operand's
     // type as the expected type for the right operand. This allows unsuffixed
     // integer literals on the right-hand side to infer the correct type from
@@ -67,7 +81,9 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     case parser::BinaryOp::BitXor:
     case parser::BinaryOp::Shl:
     case parser::BinaryOp::Shr:
-        right = check_expr(*binary.right, left);
+        // Propagate the DEREF'd inner type when `left` is a ref, so a bare
+        // literal RHS infers the pointee type (I64), not `mut ref I64`.
+        right = check_expr(*binary.right, deref_ref(left));
         break;
     default:
         right = check_expr(*binary.right);
@@ -75,8 +91,9 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     }
 
     auto check_binary_types = [&](const char* op_name) {
-        TypePtr resolved_left = env_.resolve(left);
-        TypePtr resolved_right = env_.resolve(right);
+        // Compare through references: `mut ref I64` compares as `I64`.
+        TypePtr resolved_left = env_.resolve(deref_ref(left));
+        TypePtr resolved_right = env_.resolve(deref_ref(right));
         if (!types_compatible(resolved_left, resolved_right)) {
             error(std::string("Binary operator '") + op_name + "' requires matching types, found " +
                       type_to_string(resolved_left) + " and " + type_to_string(resolved_right),
@@ -114,7 +131,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
             }
         }
         check_binary_types("+");
-        return left;
+        return deref_ref(left);
     }
     case parser::BinaryOp::Sub: {
         // Pointer arithmetic: ptr - int = ptr, ptr - ptr = int
@@ -131,11 +148,11 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
             }
         }
         check_binary_types("-");
-        return left;
+        return deref_ref(left);
     }
     case parser::BinaryOp::Mul:
         check_binary_types("*");
-        return left;
+        return deref_ref(left);
     case parser::BinaryOp::Div:
     case parser::BinaryOp::Mod: {
         // Check for division by zero literal
@@ -143,7 +160,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
             error("Division by zero", binary.right->span, "T052");
         }
         check_binary_types(binary.op == parser::BinaryOp::Div ? "/" : "%");
-        return left;
+        return deref_ref(left);
     }
     case parser::BinaryOp::Lt:
     case parser::BinaryOp::Le:
@@ -161,7 +178,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     case parser::BinaryOp::BitXor:
     case parser::BinaryOp::Shl:
     case parser::BinaryOp::Shr:
-        return left;
+        return deref_ref(left);
     case parser::BinaryOp::Assign: {
         check_assignable();
         // For assignment through mutable references, check if LHS is mut ref T

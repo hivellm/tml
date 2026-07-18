@@ -1,0 +1,53 @@
+// Test: ref / mut ref I64 in value context — arithmetic, comparison, write-through
+//
+// Regression guard for phase27d: binary operators must auto-deref ref / mut ref
+// operands read in value context. Previously `count + 1` / `count >= N` where
+// `count: mut ref I64` failed with T001 "found mut ref I64 and I64" (+ T056),
+// even though assignment-through-mut-ref and unary deref were already handled.
+
+use test
+
+// Reads through mut ref in comparison + arithmetic, writes back through it.
+// Mirrors the std/http `app_register(count: mut ref I64)` idiom.
+func bump(count: mut ref I64, max: I64) -> I64 {
+    if count >= max {              // comparison through mut ref
+        return -1
+    }
+    let next: I64 = count + 1      // arithmetic through mut ref -> I64
+    count = next                   // write-through the mut ref
+    return next
+}
+
+// Immutable ref in value context — arithmetic + comparison read-only.
+func doubled_if_small(n: ref I64) -> I64 {
+    if n < 100 {
+        return n * 2      // arithmetic through ref
+    }
+    return n - 1          // arithmetic through ref
+}
+
+@test
+func test_mut_ref_write_through() -> I32 {
+    let mut c: I64 = 5
+    let r: I64 = bump(mut ref c, 10)
+    assert_eq(r, 6, "bump should return count + 1")
+    assert_eq(c, 6, "write-through mut ref should update caller")
+    return 0
+}
+
+@test
+func test_mut_ref_at_limit() -> I32 {
+    let mut c: I64 = 10
+    let r: I64 = bump(mut ref c, 10)
+    assert_eq(r, -1, "at limit returns sentinel")
+    assert_eq(c, 10, "count unchanged at limit")
+    return 0
+}
+
+@test
+func test_ref_value_context() -> I32 {
+    let n: I64 = 7
+    let d: I64 = doubled_if_small(ref n)
+    assert_eq(d, 14, "ref I64 arithmetic in value context")
+    return 0
+}

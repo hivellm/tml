@@ -503,6 +503,11 @@ private:
     std::string last_expr_type_ = "i32";
     bool last_expr_is_unsigned_ = false;          // Track if last expression was unsigned type
     bool suppress_mut_ref_auto_deref_ = false;    // Suppress auto-deref in gen_ident for mut ref
+    // Opt-in: also auto-deref IMMUTABLE `ref` primitives in gen_ident. Set only
+    // around direct-identifier binary operands (gen_binary_ops), which read
+    // through the reference in value context — mirrors the type checker's
+    // deref_ref in check_binary (types/checker/expr_ops.cpp). phase27d.
+    bool deref_ref_in_value_context_ = false;
     types::TypePtr last_semantic_type_ = nullptr; // Semantic type for deref assignments
 
     // Expected type context for enum constructors (used in gen_call_expr)

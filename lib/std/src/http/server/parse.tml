@@ -443,16 +443,16 @@ pub func app_get_header(headers_buf: I64, header_count: I64, name: Str) -> Str {
 
         if h_name_len == name_len {
             // Case-insensitive comparison
-            var match: Bool = true
+            var matched: Bool = true
             for j in 0 to name_len {
                 var a: I32 = rd(h_name_ptr, j)
                 var b: I32 = rd(name as I64, j)
                 // Lowercase: if A-Z (65-90), add 32
                 if a >= 65 and a <= 90 { a = a + 32 }
                 if b >= 65 and b <= 90 { b = b + 32 }
-                if a != b { match = false; break }
+                if a != b { matched = false; break }
             }
-            if match {
+            if matched {
                 // Return a null-terminated copy of the value
                 let vbuf: I64 = lowlevel { mem_alloc(h_val_len + 1) } as I64
                 lowlevel { copy_nonoverlapping(h_val_ptr as *Unit, vbuf as *Unit, h_val_len) }

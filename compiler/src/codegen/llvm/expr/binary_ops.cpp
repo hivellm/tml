@@ -27,9 +27,26 @@ TML_MODULE("codegen_x86")
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_binary_ops(const parser::BinaryExpr& bin) -> std::string {
-    std::string left = gen_expr(*bin.left);
+    // phase27d: binary operands are read in VALUE context, so a `ref`/`mut ref`
+    // operand must be dereferenced — matching the type checker's `deref_ref` in
+    // check_binary (types/checker/expr_ops.cpp), which now types `n + 1` as the
+    // pointee type. `mut ref` already derefs unconditionally in gen_ident; this
+    // opts IMMUTABLE `ref` in as well.
+    //
+    // Scoped to a DIRECT identifier operand so the flag cannot leak into nested
+    // expressions where the reference itself is the intended value (e.g.
+    // `this.eq(other) + 1` must still pass `other` to `eq` as a pointer).
+    auto gen_value_operand = [&](const parser::Expr& operand) -> std::string {
+        bool saved = deref_ref_in_value_context_;
+        deref_ref_in_value_context_ = operand.is<parser::IdentExpr>();
+        std::string v = gen_expr(operand);
+        deref_ref_in_value_context_ = saved;
+        return v;
+    };
+
+    std::string left = gen_value_operand(*bin.left);
     std::string left_type = last_expr_type_;
-    std::string right = gen_expr(*bin.right);
+    std::string right = gen_value_operand(*bin.right);
     std::string right_type = last_expr_type_;
     std::string result = fresh_reg();
 

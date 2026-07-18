@@ -223,15 +223,29 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             std::string reg = fresh_reg();
             emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
 
-            // For mut ref <primitive> parameters, the first load gets us the pointer.
-            // We need a second load to dereference and get the actual primitive value.
-            // e.g., `count: mut ref I64` → alloca holds ptr, ptr points to i64.
+            // For `ref` / `mut ref` <primitive> parameters, the first load gets us the
+            // pointer. We need a second load to dereference and get the actual primitive
+            // value. e.g., `count: mut ref I64` → alloca holds ptr, ptr points to i64.
             //   load ptr, ptr %alloca  → pointer to the i64
             //   load i64, ptr %ptr     → the actual i64 value
+            //
+            // An IMMUTABLE `ref` derefs only when the consumer opts in via
+            // `deref_ref_in_value_context_` (phase27d). Reading `n` as a binary
+            // operand (e.g. `n < 100`, `n * 2` where `n: ref I64`) must load the
+            // pointee to match the type checker's binary-operator auto-deref
+            // (check_binary/deref_ref in types/checker/expr_ops.cpp).
+            //
+            // The opt-in is required because, unlike `mut ref`, a bare `ref` local
+            // is routinely passed straight through to another `ref` parameter — e.g.
+            // PartialEq's default `ne(this, other: ref Self) = not this.eq(other)`.
+            // Those call sites want the POINTER, and the method-call argument path
+            // has no `local_is_ref` bypass (only call_user.cpp's free-function path
+            // does), so an unconditional deref there emits a bogus `inttoptr` for
+            // integers and invalid IR for floats.
             if (var.type == "ptr" && var.semantic_type && var.semantic_type->is<types::RefType>() &&
                 !suppress_mut_ref_auto_deref_) {
                 const auto& ref = var.semantic_type->as<types::RefType>();
-                if (ref.is_mut && ref.inner) {
+                if ((ref.is_mut || deref_ref_in_value_context_) && ref.inner) {
                     std::string inner_type = llvm_type_from_semantic(ref.inner);
                     // Only dereference for primitive types (i8, i16, i32, i64, float, etc.)
                     // Struct/enum refs should stay as ptr (used for GEP field access).

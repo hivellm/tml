@@ -1,5 +1,20 @@
 # Proposal: phase27d_mut-ref-i64-deref-regression
 
+> **CORRECTED PREMISE (investigated 2026-07-18).** The "Why" below is WRONG and is kept
+> only as the original filing record. This was **NOT a regression** and was **NOT caused
+> by the other session's uncommitted work**. The `mut ref I64` errors are TYPE-CHECKER
+> errors (T001/T056); the other session's uncommitted changes are CODEGEN
+> (`method_impl.cpp` / `method_static_dispatch.cpp`) plus parser precedence, and **codegen
+> does not run during `tml check`**. The failures reproduce on the committed binary with
+> none of that applied, and committed core files using `mut ref` do not show them.
+>
+> **Actual root cause:** a long-standing COMMITTED type-checker gap — binary operators
+> never auto-deref'd `ref`/`mut ref` operands, unlike unary deref (`check_unary`) and the
+> assignment-through-`mut ref` allowance sitting right beside it in the same file. The
+> `std/http` sources were correct all along. Fixing the checker alone merely MOVED the
+> error from check-time to compile-time, so a codegen counterpart (both the AST/legacy and
+> MIR paths) shipped with it — see task 1.6 and `docs/patches/v0.3.77.md`.
+
 ## Why
 A regression in the current working tree breaks the established `mut ref I64`
 implicit-deref idiom **globally** across the stdlib. Committed functions that take

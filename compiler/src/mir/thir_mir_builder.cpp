@@ -801,7 +801,16 @@ auto ThirMirBuilder::build_var(const thir::ThirVarExpr& var) -> Value {
     if (ctx_.mut_struct_vars.count(var.name) > 0 && result.type) {
         if (auto* ptr_type = std::get_if<MirPointerType>(&result.type->kind)) {
             MirTypePtr pointee = ptr_type->pointee;
-            if (pointee && (pointee->is_array() || pointee->is_struct())) {
+            // phase27d: scalars are loaded too. A primitive local becomes
+            // alloca-backed once its address is taken (`mut ref c` in
+            // build_unary), and every later read must observe writes made
+            // through that reference instead of the stale SSA binding.
+            // Guarded on the binding not itself being a `ref` — a `ref`/`mut ref`
+            // parameter holds the pointer as its value and must stay a pointer
+            // here (its value-context deref happens in build_binary).
+            bool binding_is_ref = var.type && var.type->is<types::RefType>();
+            if (pointee && !binding_is_ref &&
+                (pointee->is_array() || pointee->is_struct() || pointee->is_primitive())) {
                 LoadInst load;
                 load.ptr = result;
                 load.result_type = pointee;
@@ -836,9 +845,44 @@ auto ThirMirBuilder::build_binary(const thir::ThirBinaryExpr& bin) -> Value {
         return emit(std::move(inst), result_type, bin.span);
     }
 
-    auto left = build_expr(bin.left);
-    auto right = build_expr(bin.right);
-    auto result_type = convert_type(bin.type);
+    // phase27d: binary operands are read in VALUE context, so a `ref`/`mut ref`
+    // operand must be dereferenced. This mirrors the type checker's `deref_ref`
+    // in check_binary (types/checker/expr_ops.cpp), which types `count + 1`
+    // (count: mut ref I64) as the pointee I64 — without the load, codegen would
+    // pass the pointer where a scalar is expected (`icmp sge ptr %count, %max`).
+    //
+    // Only `RefType` is unwrapped; a raw `PtrType` is left intact so genuine
+    // pointer arithmetic keeps its pointer operand, matching the checker.
+    auto deref_ref_operand = [&](const thir::ThirExprPtr& operand_expr, Value val) -> Value {
+        auto ty = operand_expr->type();
+        if (!ty || !ty->is<types::RefType>()) {
+            return val;
+        }
+        const auto& inner = ty->as<types::RefType>().inner;
+        if (!inner) {
+            return val;
+        }
+        LoadInst load;
+        load.ptr = val;
+        load.result_type = convert_type(inner);
+        return emit(std::move(load), load.result_type, operand_expr->span());
+    };
+
+    auto left = deref_ref_operand(bin.left, build_expr(bin.left));
+    auto right = deref_ref_operand(bin.right, build_expr(bin.right));
+
+    // The RESULT of an arithmetic binary op is a value, never a reference — an
+    // arithmetic node whose THIR type is still `ref T` must produce `T`. This
+    // mirrors the checker's `return deref_ref(left)` for Add/Sub/Mul/Div/Mod/
+    // Bit*/Shl/Shr. It matters beyond this instruction: MergeReturnsPass types
+    // the unified-exit phi from InstructionData.type (merge_returns.cpp:76), so
+    // leaving `ref I64` here emits `phi ptr` for an `i64`-returning function.
+    auto result_thir_type = bin.type;
+    if (result_thir_type && result_thir_type->is<types::RefType>() &&
+        result_thir_type->as<types::RefType>().inner) {
+        result_thir_type = result_thir_type->as<types::RefType>().inner;
+    }
+    auto result_type = convert_type(result_thir_type);
 
     if (is_comparison_op(bin.op)) {
         auto cmp_op = convert_binop(bin.op);
@@ -860,6 +904,46 @@ auto ThirMirBuilder::build_binary(const thir::ThirBinaryExpr& bin) -> Value {
 }
 
 auto ThirMirBuilder::build_unary(const thir::ThirUnaryExpr& unary) -> Value {
+    // phase27d: `mut ref <local>` must yield the address OF THE VARIABLE, not of a
+    // fresh copy. The generic Ref path below allocas a temporary and stores the
+    // operand's current SSA value into it — writes through that reference would
+    // land in the temporary and the caller would never see them (`bump(mut ref c,
+    // 10)` left `c` at its old value).
+    //
+    // Instead, promote the variable to alloca-backed storage (mut_struct_vars) the
+    // first time its address is taken, and hand out that alloca. Membership in
+    // mut_struct_vars is also what makes the rest of the builder treat the binding
+    // as a stable pointer rather than a loop-invariant SSA constant — see the
+    // loop-condition invariance checks in thir_mir_builder_control.cpp.
+    if (unary.op == hir::HirUnaryOp::RefMut && unary.operand->is<thir::ThirVarExpr>()) {
+        const auto& var = unary.operand->as<thir::ThirVarExpr>();
+        Value existing = get_variable(var.name);
+        if (existing.id != INVALID_VALUE) {
+            if (ctx_.mut_struct_vars.count(var.name) > 0 && existing.type &&
+                std::holds_alternative<MirPointerType>(existing.type->kind)) {
+                // Already alloca-backed — its address is the alloca itself.
+                return existing;
+            }
+            if (existing.type && !existing.type->is_struct() && !existing.type->is_array()) {
+                auto ptr_type = make_pointer_type(existing.type, true);
+                AllocaInst alloca;
+                alloca.alloc_type = existing.type;
+                alloca.name = var.name;
+                Value alloca_val = emit_at_entry(std::move(alloca), ptr_type);
+
+                StoreInst store;
+                store.ptr = alloca_val;
+                store.value = existing;
+                store.value_type = existing.type;
+                emit_void(std::move(store), unary.span);
+
+                set_variable(var.name, alloca_val);
+                ctx_.mut_struct_vars.insert(var.name);
+                return alloca_val;
+            }
+        }
+    }
+
     auto operand = build_expr(unary.operand);
     auto result_type = convert_type(unary.type);
 

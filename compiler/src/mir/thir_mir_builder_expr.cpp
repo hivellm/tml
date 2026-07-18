@@ -461,6 +461,26 @@ auto ThirMirBuilder::build_assign(const thir::ThirAssignExpr& assign) -> Value {
     // Exception: alloca-backed struct vars need store to the alloca pointer.
     if (assign.target->is<thir::ThirVarExpr>()) {
         const auto& var = assign.target->as<thir::ThirVarExpr>();
+
+        // phase27d: assigning to a `mut ref T` binding writes THROUGH the
+        // reference — the variable holds the pointer, so `count = next` must
+        // store into the pointee, not rebind the SSA name. Without this the
+        // caller never observes the update (`bump(mut ref c, 10)` left c=5).
+        // Read-side deref for such bindings lives in build_binary; here the
+        // reference is the assignment TARGET, so we keep the pointer and store.
+        if (var.type && var.type->is<types::RefType>() &&
+            var.type->as<types::RefType>().is_mut) {
+            Value ref_ptr = get_variable(var.name);
+            if (ref_ptr.id != INVALID_VALUE) {
+                StoreInst store;
+                store.ptr = ref_ptr;
+                store.value = value;
+                store.value_type = value.type;
+                emit_void(std::move(store), assign.span);
+                return const_unit();
+            }
+        }
+
         if (ctx_.mut_struct_vars.count(var.name) > 0) {
             Value alloca_ptr = get_variable(var.name);
             if (alloca_ptr.type) {
