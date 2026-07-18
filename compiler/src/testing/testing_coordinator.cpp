@@ -719,6 +719,16 @@ TestRunResult run_tests(const TestConfig& config) {
     TML_ZONE("test::run_tests");
     TestRunResult result;
     auto total_start = Clock::now();
+
+    // phase42a: bound the incremental-cache session to this run. Reset telemetry
+    // now; on every exit path prune partitions, GC the ir/ store, drop the shared
+    // prev-session memo, and log the GREEN/RED summary (F-019/F-021/F-022/F-025).
+    incr_test_run_begin();
+    struct IncrRunGuard {
+        ~IncrRunGuard() {
+            incr_test_run_end();
+        }
+    } _incr_run_guard;
     // Redirect LLVM profraw from the main process to build/coverage/profraw/
     // Without this, LLVM's profiling runtime writes default.profraw to the project root.
     if (config.coverage) {

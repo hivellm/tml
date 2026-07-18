@@ -176,6 +176,78 @@ Confidence: **High**.
 
 ---
 
+## phase42a resolution — F-019..F-026 (v0.3.74)
+
+The incr.bin red-green cache was made a real cross-run cache. Measured on
+`core/hash` (14 units) with the rebuilt compiler:
+- **Before (per findings): GREEN ≈ 0** — F-023 index shifts + F-024 mtime made
+  every unit RED after any rebuild or membership change.
+- **After: GREEN=14 RED=0 (100%)** on an unchanged warm rerun; **GREEN=13 RED=1**
+  after touching ONE file (only the touched unit RED, 13 siblings reused).
+- Per-suite incr I/O: **loads=4, saves=1** (was a full incr.bin load+rewrite PER
+  FILE) — O(N²) read churn collapsed to ~O(1) per run via a shared load.
+- ir/ store bounded and GC'd to referenced keys at run teardown.
+- Determinism gate 28/28 at floor; clean-suite parity zero divergence
+  (core/hash 14/14, compiler/borrow 12/12, std/json 23/23).
+
+**F-019 — RESOLVED.** `IncrTelemetry` (`query_incr.hpp/.cpp`) counts GREEN/RED
+plus incr.bin load/save count+time and ir/ GC bytes; `incr_telemetry_report()`
+logs a per-run summary (`[incr] incr: GREEN=.. RED=.. (..% green) loads=.. saves=.. ir_gc=..`).
+Reset at run start / reported at run end (`incr_test_run_begin/end`,
+`testing_coordinator.cpp` run guard). (F-019's broader claim — that only
+CodegenUnit results persist and earlier stages recompute — is a structural item
+left as-is; this task instrumented and revived the CodegenUnit layer.)
+
+**F-020 — RESOLVED.** `get_shared_prev_session()` returns one shared, read-only
+`PrevSessionCache` per run, memoized by (path, mtime); every per-file
+QueryContext points at the one parsed copy instead of re-reading incr.bin. The
+per-file/per-suite whole-file load-merge-rewrite is gone (write side already
+batched per-suite in 41c; read side is now once-per-run). ~13 GB read + 13 GB
+write per full suite run → ~O(total).
+
+**F-021 — RESOLVED.** The hard `entry_count > 10000` load rejection (a silent
+total-reset cliff) is replaced by graceful session-recency aging at SAVE:
+`IncrCacheWriter::write(..., max_entries)` caps to `MAX_INCR_ENTRIES` (100k,
+current-session entries first). Load only guards against corruption (5M limit).
+
+**F-022 — RESOLVED.** `gc_ir_store()` deletes `ir/<stem>.ll|.libs|.search_paths`
+not referenced by any surviving key; run at teardown (`incr_run_teardown`) from
+the final on-disk partitions (safe after parallel per-suite writes). The GREEN
+path no longer re-saves identical IR/libs it just loaded
+(`try_mark_green_codegen`). The format bump (v2→v3) orphans all old v2 IR, which
+the first v3 teardown reclaims. (The finding's 2.2 GB was a point-in-time
+measurement; the store is now bounded to the run's working set + GC'd.)
+
+**F-023 — RESOLVED.** `test_entry_index` + `has_cached_library_state` removed
+from `CodegenUnitKey` identity. The index-dependent IR bits (the `s{id}_`
+internal-symbol prefix on the AST path; the `tml_test_N` entry wrapper on both
+paths) now derive from a FILE-STABLE id (`stable_test_symbol_id(file_path)`) in
+`query_core.cpp`; the NDJSON dispatcher declares/calls that same stable symbol
+(new `DispatcherTestInfo::symbol_id`, keeping `index` for --list/--test-index/
+event mapping), and the pre-link entry check uses it. `has_cached_library_state`
+moved into the session `options_hash` partition (it selects different IR, so it
+partitions rather than keys). Result: a suite membership change no longer REDs
+sibling files (GREEN=13/14 on a one-file touch, verified).
+
+**F-024 — RESOLVED.** `compiler_build_hash()` is the CRC32C of the compiler
+DLL/EXE *content*, streamed once and memoized in a `<binary>.bhash` sidecar
+keyed by (mtime,size). A no-op relink producing byte-identical output keeps the
+cache GREEN; behavior-changing relinks still invalidate. (Analogous to phase41c's
+content-aware fix for the tests.json result cache.)
+
+**F-025 — RESOLVED.** Cache files are config-partitioned: `incr.<options_hash>.bin`
+(`incr_cache_file_for`), with `options_hash` now including the cached-library-state
+bit. `prune_incr_partitions` keeps the newest `MAX_INCR_PARTITIONS` (4) and drops
+the legacy unpartitioned `incr.bin`. Alternating configs (coverage↔normal, O0↔O2,
+defines) no longer mutually evict.
+
+**F-026 — RESOLVED.** `fingerprint_source()` results are memoized process-globally,
+gated on (mtime,size) (`query_fingerprint.cpp`), so unchanged stdlib/.meta sources
+are read+hashed once per run instead of once per QueryContext (~1,339× → 1×). Both
+`compute_library_env_fingerprint` and GREEN ReadSource re-verification benefit.
+
+---
+
 ## Practical-effectiveness note (why GREEN rarely pays today)
 
 For test runs, the layers stack as: suite result cache (skip everything) → reusable EXE (skip compile) → incr GREEN

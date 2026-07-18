@@ -1552,6 +1552,9 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
     // Save incremental cache for next session
     if (qopts.incremental) {
         qctx.save_incremental_cache(build_dir);
+        // phase42a: single-context build — prune partitions + GC the ir/ store
+        // (F-021/F-022/F-025) now that this run's entries are flushed.
+        query::incr_run_teardown(build_dir / "cache" / "incr");
     }
 
     TML_LOG_INFO("build", "build: " << to_forward_slashes(exe_output.string()));

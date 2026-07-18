@@ -7,8 +7,35 @@ TML_MODULE("compiler")
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
+#include <unordered_map>
 
 namespace tml::query {
+
+// ============================================================================
+// F-026: session-level source-fingerprint memo
+// ============================================================================
+//
+// A 1,339-file test run previously re-read and re-hashed the same unchanged
+// stdlib/.meta sources ~1,339× (once per QueryContext). This process-global,
+// (mtime,size)-gated memo hashes each file's content once per run: subsequent
+// calls with an unchanged file return the cached fingerprint. Correctness rests
+// on last_write_time being high-resolution — an edit changes mtime, forcing a
+// re-hash (same freshness signal the phase42b .ast.bin sidecar relies on).
+namespace {
+struct FpMemoEntry {
+    uint64_t mtime = 0;
+    uint64_t size = 0;
+    Fingerprint fp;
+};
+std::mutex g_fp_memo_mtx;
+std::unordered_map<std::string, FpMemoEntry> g_fp_memo;
+} // namespace
+
+void reset_source_fingerprint_memo() {
+    std::lock_guard<std::mutex> lk(g_fp_memo_mtx);
+    g_fp_memo.clear();
+}
 
 std::string Fingerprint::to_hex() const {
     static constexpr char HEX[] = "0123456789abcdef";
@@ -58,6 +85,32 @@ Fingerprint fingerprint_combine(Fingerprint a, Fingerprint b) {
 
 Fingerprint fingerprint_source(const std::string& file_path) {
     try {
+        // F-026: (mtime,size)-gated memo. Stat first; on a hit return the cached
+        // fingerprint without reading the file. Stat is far cheaper than a full
+        // read+CRC of a stdlib source, and the same unchanged file is hashed
+        // once per run instead of once per QueryContext.
+        std::error_code ec;
+        auto fsize = std::filesystem::file_size(file_path, ec);
+        uint64_t mtime = 0;
+        bool have_stat = !ec;
+        if (have_stat) {
+            std::error_code ec2;
+            auto ft = std::filesystem::last_write_time(file_path, ec2);
+            if (!ec2) {
+                mtime = static_cast<uint64_t>(ft.time_since_epoch().count());
+            } else {
+                have_stat = false;
+            }
+        }
+        if (have_stat) {
+            std::lock_guard<std::mutex> lk(g_fp_memo_mtx);
+            auto it = g_fp_memo.find(file_path);
+            if (it != g_fp_memo.end() && it->second.mtime == mtime &&
+                it->second.size == static_cast<uint64_t>(fsize)) {
+                return it->second.fp;
+            }
+        }
+
         std::ifstream file(file_path, std::ios::binary | std::ios::ate);
         if (!file) {
             return {};
@@ -69,7 +122,13 @@ Fingerprint fingerprint_source(const std::string& file_path) {
         file.seekg(0);
         std::string content(static_cast<size_t>(size), '\0');
         file.read(content.data(), size);
-        return fingerprint_string(content);
+        auto fp = fingerprint_string(content);
+
+        if (have_stat) {
+            std::lock_guard<std::mutex> lk(g_fp_memo_mtx);
+            g_fp_memo[file_path] = FpMemoEntry{mtime, static_cast<uint64_t>(fsize), fp};
+        }
+        return fp;
     } catch (...) {
         return {};
     }

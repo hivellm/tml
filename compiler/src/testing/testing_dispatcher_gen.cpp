@@ -26,6 +26,7 @@ TML_MODULE("test")
 
 #include "testing/testing_dispatcher_gen.hpp"
 
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -199,9 +200,18 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     // External function declarations
     // ========================================================================
 
-    // Test functions (use original test indices, not sequential)
-    for (int i = 0; i < total_tests; ++i) {
-        ir << "declare i32 @tml_test_" << tests[i].index << "()\n";
+    // Test functions. F-023: the entry symbol is `tml_test_<symbol_id>` where
+    // symbol_id is the file-stable id (falls back to the suite index when unset,
+    // e.g. legacy callers). Declared once, deduplicated defensively.
+    {
+        std::set<uint32_t> declared;
+        for (int i = 0; i < total_tests; ++i) {
+            uint32_t sym = tests[i].symbol_id != 0 ? tests[i].symbol_id
+                                                   : static_cast<uint32_t>(tests[i].index);
+            if (declared.insert(sym).second) {
+                ir << "declare i32 @tml_test_" << sym << "()\n";
+            }
+        }
     }
     ir << "\n";
 
@@ -317,7 +327,9 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
         ir << "  ]\n\n";
 
         for (int i = 0; i < total_tests; ++i) {
-            int tidx = tests[i].index; // Original test index for tml_test_N
+            int tidx = tests[i].index; // suite position — NDJSON event index
+            uint32_t sym = tests[i].symbol_id != 0 ? tests[i].symbol_id
+                                                   : static_cast<uint32_t>(tests[i].index);
             auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
             auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
 
@@ -334,8 +346,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             // Record start time
             ir << "  %t0_" << i << " = call i64 @clock()\n";
 
-            // Call test function (use original index for tml_test_N)
-            ir << "  %rc_" << i << " = call i32 @tml_test_" << tidx << "()\n";
+            // Call test function (F-023: stable per-file symbol id)
+            ir << "  %rc_" << i << " = call i32 @tml_test_" << sym << "()\n";
 
             // Record end time
             ir << "  %t1_" << i << " = call i64 @clock()\n";
@@ -461,7 +473,9 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
         ir << "  br label %test_0\n\n";
 
         for (int i = 0; i < total_tests; ++i) {
-            int tidx = tests[i].index; // Original test index for tml_test_N
+            int tidx = tests[i].index; // suite position — NDJSON event index
+            uint32_t sym = tests[i].symbol_id != 0 ? tests[i].symbol_id
+                                                   : static_cast<uint32_t>(tests[i].index);
             auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
             auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
 
@@ -492,8 +506,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             // Record test start time
             ir << "  %at_t0_" << i << " = call i64 @clock()\n";
 
-            // Call test function (use original index for tml_test_N)
-            ir << "  %at_rc_" << i << " = call i32 @tml_test_" << tidx << "()\n";
+            // Call test function (F-023: stable per-file symbol id)
+            ir << "  %at_rc_" << i << " = call i32 @tml_test_" << sym << "()\n";
 
             // Record test end time
             ir << "  %at_t1_" << i << " = call i64 @clock()\n";

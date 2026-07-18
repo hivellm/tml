@@ -1008,8 +1008,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         // or tml_test_N entry for v3 test suites.
         codegen_opts.generate_exe_main = ctx.options().generate_exe_main;
         if (!ctx.options().generate_exe_main && ctx.options().test_entry_index >= 0) {
+            // F-023: name the entry from a FILE-STABLE id (not the suite
+            // position) so the emitted IR is identical regardless of where this
+            // file sits in the suite. The dispatcher computes the same id from
+            // the same file_path and declares/calls this symbol.
             codegen_opts.test_entry_name =
-                "tml_test_" + std::to_string(ctx.options().test_entry_index);
+                "tml_test_" + std::to_string(stable_test_symbol_id(ck.file_path));
         } else if (!ctx.options().generate_exe_main) {
             codegen_opts.test_entry_name = "tml_test_entry";
         }
@@ -1074,7 +1078,12 @@ std::any provide_codegen_unit(QueryContext& ctx, const QueryKey& key) {
         // v3 test system: generate tml_test_N entry instead of main
         if (!ctx.options().generate_exe_main) {
             llvm_gen_options.generate_dll_entry = true;
-            llvm_gen_options.suite_test_index = ctx.options().test_entry_index;
+            // F-023: the `s{id}_` internal-symbol prefix and the `tml_test_<id>`
+            // entry use a FILE-STABLE id (not the suite position), so the module
+            // body is position-independent and its CodegenUnit cache entry stays
+            // GREEN across suite membership changes.
+            llvm_gen_options.suite_test_index =
+                static_cast<int>(stable_test_symbol_id(ck.file_path));
             // Force internal linkage when compiling as part of a suite.
             // Multiple test files in the same suite each emit library function
             // definitions; internal linkage prevents duplicate symbol errors

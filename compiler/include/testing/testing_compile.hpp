@@ -85,6 +85,16 @@ struct CompileConfig {
 /// Must be called once before compile_suite().
 void init_compile_env();
 
+/// phase42a: mark the start of a test run's incremental-cache session — resets
+/// the GREEN/RED/load/save telemetry counters (F-019).
+void incr_test_run_begin();
+
+/// phase42a: run-teardown for the incremental cache (F-021/F-022/F-025). Prunes
+/// old config partitions, GCs the ir/ store to the surviving keys, drops the
+/// shared prev-session memo, and logs the telemetry summary. Call ONCE after all
+/// suites in a run have compiled.
+void incr_test_run_end();
+
 /// Compile a single suite to an executable.
 /// Uses QueryContext::codegen_unit() for each test file,
 /// generates NDJSON dispatcher IR, compiles to .obj, and links.

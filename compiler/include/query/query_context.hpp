@@ -146,6 +146,11 @@ public:
     // ========================================================================
 
     /// Load incremental cache from previous session.
+    ///
+    /// F-020: the previous-session cache is obtained through a process-global
+    /// shared registry (`get_shared_prev_session`), so all per-file contexts in
+    /// a run share one parsed copy loaded at most once per partition, instead of
+    /// each re-reading incr.bin from disk (the old O(N²) read churn).
     bool load_incremental_cache(const std::filesystem::path& build_dir);
 
     /// Save incremental cache for this session.
@@ -193,8 +198,10 @@ private:
     DependencyTracker deps_;
     QueryProviderRegistry providers_;
 
-    // Incremental compilation state
-    std::unique_ptr<PrevSessionCache> prev_session_;
+    // Incremental compilation state.
+    // F-020: prev_session_ is a SHARED read-only cache — many per-file contexts
+    // in a run point at one parsed copy loaded once (was a per-context load).
+    std::shared_ptr<const PrevSessionCache> prev_session_;
     std::unique_ptr<IncrCacheWriter> incr_writer_;
     std::unordered_map<QueryKey, QueryColor, QueryKeyHash, QueryKeyEqual> color_map_;
     Fingerprint lib_env_fp_;
@@ -202,6 +209,10 @@ private:
     bool incr_enabled_ = false;
     std::filesystem::path incr_cache_dir_;
     uint32_t options_hash_ = 0;
+
+    /// Compute this session's options hash (F-025): the base build-options hash
+    /// plus the cached-library-state bit that F-023 moved out of the key.
+    [[nodiscard]] uint32_t compute_session_options_hash() const;
 
     /// Compute input fingerprint for a query based on its dependencies.
     Fingerprint compute_input_fingerprint(const QueryKey& key, const std::vector<QueryKey>& deps);
@@ -237,6 +248,8 @@ template <typename ResultType> ResultType QueryContext::force(const QueryKey& ke
                 deps_.record_dependency(key);
                 return *green;
             }
+            // F-019: a CodegenUnit that could have been reused but wasn't = RED.
+            incr_telemetry().red_misses.fetch_add(1, std::memory_order_relaxed);
         }
     }
 

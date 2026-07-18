@@ -409,7 +409,13 @@ CompileResult compile_unified_binary(const std::vector<Suite>& suites, const Com
         }
         if (!had_error) {
             compiled_indices.insert(i);
-            dispatcher_infos.push_back({out_mapping[i].test_name, out_mapping[i].file_path, i});
+            DispatcherTestInfo info;
+            info.name = out_mapping[i].test_name;
+            info.file = out_mapping[i].file_path;
+            info.index = i;
+            // F-023: entry symbol is file-stable, matching codegen's tml_test_<id>.
+            info.symbol_id = query::stable_test_symbol_id(out_mapping[i].file_path);
+            dispatcher_infos.push_back(info);
         }
     }
 

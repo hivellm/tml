@@ -2,6 +2,7 @@ TML_MODULE("compiler")
 
 #include "query/query_context.hpp"
 
+#include "common/crc32c.hpp"
 #include "log/log.hpp"
 #include "parser/ast.hpp"
 #include "profiler.hpp"
@@ -168,10 +169,12 @@ MirBuildResult QueryContext::mir_build(const std::string& file_path,
 CodegenUnitResult QueryContext::codegen_unit(const std::string& file_path,
                                              const std::string& module_name) {
     TML_ZONE("query::codegen_unit");
-    return force<CodegenUnitResult>(
-        CodegenUnitKey{file_path, module_name, options_.optimization_level, options_.debug_info,
-                       options_.test_entry_index, options_.library_decls_only,
-                       options_.cached_library_state != nullptr});
+    // F-023: the key no longer carries test_entry_index or has_cached_library_state.
+    // Position-dependent IR bits derive from stable_test_symbol_id(file_path);
+    // has_cached_library_state is folded into the session options_hash instead.
+    return force<CodegenUnitResult>(CodegenUnitKey{file_path, module_name,
+                                                   options_.optimization_level, options_.debug_info,
+                                                   options_.library_decls_only});
 }
 
 void QueryContext::invalidate_file(const std::string& file_path) {
@@ -272,27 +275,16 @@ bool QueryContext::load_incremental_cache(const fs::path& build_dir) {
 
     incr_cache_dir_ = build_dir / "cache" / "incr";
 
-    // Compute options hash for this session
-    options_hash_ =
-        compute_options_hash(options_.optimization_level, options_.debug_info,
-                             options_.target_triple, options_.defines, options_.coverage);
+    // Compute options hash for this session.
+    options_hash_ = compute_session_options_hash();
 
     // Compute library environment fingerprint
     lib_env_fp_ = compute_library_env_fingerprint(build_dir);
 
-    // Load previous session cache
-    auto cache_file = incr_cache_dir_ / "incr.bin";
-    prev_session_ = std::make_unique<PrevSessionCache>();
-    if (!prev_session_->load(cache_file)) {
-        prev_session_.reset();
-        TML_LOG_DEBUG("incr", "No previous incremental cache found");
-    } else {
-        // Check if options changed
-        if (prev_session_->options_hash() != options_hash_) {
-            TML_LOG_DEBUG("incr", "Build options changed, invalidating incremental cache");
-            prev_session_.reset();
-        }
-    }
+    // F-020 + F-025: load the config-partitioned cache via the shared registry
+    // (loads at most once per run, per partition, across all contexts).
+    auto cache_file = incr_cache_file_for(incr_cache_dir_, options_hash_);
+    prev_session_ = get_shared_prev_session(cache_file, options_hash_);
 
     // Create writer for this session
     incr_writer_ = std::make_unique<IncrCacheWriter>();
@@ -301,9 +293,23 @@ bool QueryContext::load_incremental_cache(const fs::path& build_dir) {
     if (prev_session_) {
         TML_LOG_DEBUG("incr", "Incremental cache loaded: " << prev_session_->entry_count()
                                                            << " entries from previous session");
+    } else {
+        TML_LOG_DEBUG("incr", "No previous incremental cache found");
     }
 
     return prev_session_ != nullptr;
+}
+
+uint32_t QueryContext::compute_session_options_hash() const {
+    uint32_t h = compute_options_hash(options_.optimization_level, options_.debug_info,
+                                      options_.target_triple, options_.defines, options_.coverage);
+    // F-023/F-025: has_cached_library_state left the per-entry key and lives in
+    // the session partition instead — a run WITH cached stdlib state emits
+    // different IR than one without, so they must not share a cache file.
+    if (options_.cached_library_state != nullptr) {
+        h = tml::crc32c(std::to_string(h) + "|CLS");
+    }
+    return h;
 }
 
 bool QueryContext::save_incremental_cache(const fs::path& build_dir) {
@@ -317,15 +323,19 @@ bool QueryContext::save_incremental_cache(const fs::path& build_dir) {
         fs::create_directories(incr_cache_dir_);
     }
 
-    // Merge with existing cache entries so parallel/sequential QueryContexts
-    // don't overwrite each other's entries (each context only records its own).
-    auto cache_file = incr_cache_dir_ / "incr.bin";
-    PrevSessionCache existing;
-    if (existing.load(cache_file) && existing.options_hash() == options_hash_) {
-        incr_writer_->merge_from(existing);
+    // Merge in the entries carried by the previous session (already loaded once,
+    // shared) so this context's write doesn't drop unrelated entries. First-
+    // writer-wins on duplicate keys (see merge_from).
+    auto cache_file = incr_cache_file_for(incr_cache_dir_, options_hash_);
+    if (prev_session_ && prev_session_->options_hash() == options_hash_) {
+        incr_writer_->merge_from(*prev_session_);
     }
 
-    bool ok = incr_writer_->write(cache_file, options_hash_);
+    // F-021 aging: cap the written set (current-session entries first). Partition
+    // pruning and IR-store GC happen once at run teardown (incr_run_teardown),
+    // not here — this function is also called per-file in the unified test path,
+    // where a per-call GC would delete sibling files' freshly-written IR.
+    bool ok = incr_writer_->write(cache_file, options_hash_, MAX_INCR_ENTRIES);
 
     if (ok) {
         TML_LOG_DEBUG("incr",
@@ -381,13 +391,17 @@ std::optional<CodegenUnitResult> QueryContext::try_mark_green_codegen(const Quer
     cache_.insert<CodegenUnitResult>(key, result, prev->input_fingerprint, prev->output_fingerprint,
                                      prev->dependencies);
 
-    // Record in writer for next session
+    // Record in writer for next session. F-022: do NOT re-save the IR/libs — they
+    // are already on disk (that is what we just loaded), and the run-teardown GC
+    // keeps them because this surviving key references them. Re-writing identical
+    // IR on every GREEN hit was pure write amplification.
     if (incr_writer_) {
         incr_writer_->record(key, prev->input_fingerprint, prev->output_fingerprint,
                              prev->dependencies);
-        incr_writer_->save_ir(key, result.llvm_ir, incr_cache_dir_);
-        incr_writer_->save_link_libs(key, result.link_libs, incr_cache_dir_);
     }
+
+    // F-019 telemetry
+    incr_telemetry().green_hits.fetch_add(1, std::memory_order_relaxed);
 
     TML_LOG_INFO("incr", "GREEN: reusing cached codegen result (incremental)");
     TML_MESSAGE_L("cache:GREEN");

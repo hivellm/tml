@@ -111,14 +111,25 @@ struct MirBuildKey {
 };
 
 /// Key for generating LLVM IR from a compilation unit.
+///
+/// F-023 (phase42a): `test_entry_index` and `has_cached_library_state` were
+/// REMOVED from the identity. The entry index is a suite *position*, so
+/// embedding it turned every sibling file RED whenever a test was added,
+/// removed, or reordered — invalidating by membership rather than content. The
+/// index-dependent bits of the emitted IR (the `s{id}_` internal-symbol prefix
+/// and the `tml_test_N` wrapper) are now derived from a file-stable id
+/// (`stable_test_symbol_id`, keyed on file_path) instead of the position, so
+/// the module body is position-independent and this key is stable across suite
+/// membership changes. `has_cached_library_state` (a phase41b toggle that also
+/// flipped every key) moved into the session `options_hash` partition instead,
+/// where it belongs. `library_decls_only` stays here — it genuinely selects
+/// declarations-only vs full definitions in the emitted IR.
 struct CodegenUnitKey {
     std::string file_path;
     std::string module_name;
     int optimization_level = 0;
     bool debug_info = false;
-    int test_entry_index = -1;
     bool library_decls_only = false;
-    bool has_cached_library_state = false;
     bool operator==(const CodegenUnitKey&) const = default;
 };
 

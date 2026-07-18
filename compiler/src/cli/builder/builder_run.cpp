@@ -238,6 +238,8 @@ compile_via_queries(const std::string& path, bool coverage, bool no_cache,
     // Save incremental cache for next session
     if (qopts.incremental) {
         qctx.save_incremental_cache(cache_dir);
+        // phase42a: single-context run — prune partitions + GC the ir/ store.
+        query::incr_run_teardown(cache_dir / "cache" / "incr");
     }
 
     return result;

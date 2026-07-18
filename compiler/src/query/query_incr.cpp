@@ -16,11 +16,15 @@ TML_MODULE("compiler")
 #include "log/log.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -37,12 +41,73 @@ namespace tml::query {
 // Compiler Build Hash
 // ============================================================================
 
+// F-024: streaming CRC32C over a file's content, memoized in a `<file>.bhash`
+// sidecar keyed by (mtime,size). Returns the content CRC, or nullopt on I/O
+// error. The whole 100+MB module is read at most once per actual rebuild: after
+// a rebuild the sidecar's (mtime,size) no longer match, so we re-hash and
+// rewrite it; unchanged binaries hit the sidecar and skip the read entirely.
+static std::optional<uint32_t> content_hash_with_sidecar(const fs::path& binary_path) {
+    std::error_code ec;
+    auto size = fs::file_size(binary_path, ec);
+    if (ec)
+        return std::nullopt;
+    auto ftime = fs::last_write_time(binary_path, ec);
+    if (ec)
+        return std::nullopt;
+    auto mtime = static_cast<uint64_t>(ftime.time_since_epoch().count());
+
+    auto sidecar = binary_path;
+    sidecar += ".bhash";
+
+    // Fast path: sidecar records a CRC for this exact (mtime,size).
+    {
+        std::ifstream in(sidecar);
+        uint64_t s_mtime = 0, s_size = 0;
+        uint32_t s_crc = 0;
+        if (in >> s_mtime >> s_size >> s_crc && s_mtime == mtime &&
+            s_size == static_cast<uint64_t>(size)) {
+            return s_crc;
+        }
+    }
+
+    // Slow path: stream the content through CRC32C (Castagnoli).
+    std::ifstream f(binary_path, std::ios::binary);
+    if (!f)
+        return std::nullopt;
+    uint32_t crc = 0xFFFFFFFFu;
+    std::vector<char> buf(1u << 20); // 1 MiB chunks
+    while (f) {
+        f.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+        auto got = static_cast<size_t>(f.gcount());
+        for (size_t i = 0; i < got; ++i) {
+            crc = tml::CRC32C_TABLE[(crc ^ static_cast<uint8_t>(buf[i])) & 0xFF] ^ (crc >> 8);
+        }
+    }
+    crc ^= 0xFFFFFFFFu;
+
+    // Update the sidecar (atomic-ish: temp + rename). Racing processes write the
+    // same content, so a lost race is harmless.
+    {
+        auto tmp = sidecar;
+        tmp += ".tmp";
+        std::ofstream out(tmp, std::ios::trunc);
+        if (out) {
+            out << mtime << " " << static_cast<uint64_t>(size) << " " << crc << "\n";
+            out.close();
+            std::error_code rec;
+            fs::rename(tmp, sidecar, rec);
+            if (rec)
+                fs::remove(tmp, rec);
+        }
+    }
+    return crc;
+}
+
 uint32_t compiler_build_hash() {
-    // Use the compiler binary's last-write-time as the hash source.
-    // __DATE__/__TIME__ only change when THIS file is recompiled, which
-    // doesn't happen in incremental C++ builds when other codegen files
-    // change. The binary's mtime changes whenever ANY object file in the
-    // link changes, making it a reliable invalidation signal.
+    // F-024: hash the compiler binary's CONTENT (memoized by a sidecar), not its
+    // mtime. A relink that changes behavior changes the content → cache
+    // invalidated; a no-op relink that reproduces byte-identical output keeps
+    // the cache GREEN, where the old raw-mtime policy wiped it on every build.
     static const uint32_t hash = [] {
         std::error_code ec;
 #ifdef _WIN32
@@ -65,17 +130,68 @@ uint32_t compiler_build_hash() {
         }
 #endif
         if (!binary_path.empty() && fs::exists(binary_path, ec)) {
+            if (auto ch = content_hash_with_sidecar(binary_path)) {
+                return *ch;
+            }
+            // Content unreadable: fall back to mtime (still a valid invalidation
+            // signal, just coarser).
             auto ftime = fs::last_write_time(binary_path, ec);
             if (!ec) {
-                auto ns = ftime.time_since_epoch().count();
-                auto str = std::to_string(ns);
-                return tml::crc32c(str);
+                return tml::crc32c(std::to_string(ftime.time_since_epoch().count()));
             }
         }
         // Fallback to compile-time constants if binary path unavailable
         return tml::crc32c(std::string(__DATE__) + " " + __TIME__);
     }();
     return hash;
+}
+
+// ============================================================================
+// F-023: stable per-file symbol id
+// ============================================================================
+
+uint32_t stable_test_symbol_id(const std::string& file_path) {
+    // 31-bit, non-zero. Path-derived so it is identical across suite positions
+    // and (with overwhelming probability) distinct across files. Both codegen
+    // and the dispatcher generator call this on the same file_path.
+    uint32_t h = tml::crc32c(file_path) & 0x7FFFFFFFu;
+    return h == 0 ? 1u : h;
+}
+
+// ============================================================================
+// F-019: telemetry
+// ============================================================================
+
+IncrTelemetry& incr_telemetry() {
+    static IncrTelemetry t;
+    return t;
+}
+
+void reset_incr_telemetry() {
+    auto& t = incr_telemetry();
+    t.green_hits.store(0);
+    t.red_misses.store(0);
+    t.cache_loads.store(0);
+    t.cache_saves.store(0);
+    t.load_us.store(0);
+    t.save_us.store(0);
+    t.ir_bytes_gc.store(0);
+    t.ir_files_gc.store(0);
+}
+
+std::string incr_telemetry_report() {
+    auto& t = incr_telemetry();
+    uint64_t green = t.green_hits.load();
+    uint64_t red = t.red_misses.load();
+    uint64_t total = green + red;
+    double pct = total > 0 ? (100.0 * static_cast<double>(green) / static_cast<double>(total)) : 0.0;
+    std::ostringstream oss;
+    oss << "incr: GREEN=" << green << " RED=" << red << " (" << static_cast<int>(pct + 0.5)
+        << "% green) loads=" << t.cache_loads.load() << " (" << (t.load_us.load() / 1000)
+        << "ms) saves=" << t.cache_saves.load() << " (" << (t.save_us.load() / 1000)
+        << "ms) ir_gc=" << t.ir_files_gc.load() << " files/"
+        << (t.ir_bytes_gc.load() / (1024 * 1024)) << "MB";
+    return oss.str();
 }
 
 #ifdef __clang__
@@ -162,12 +278,15 @@ std::vector<uint8_t> serialize_query_key(const QueryKey& key) {
             if constexpr (std::is_same_v<T, ReadSourceKey> || std::is_same_v<T, TokenizeKey>) {
                 write_string(oss, k.file_path);
             } else if constexpr (std::is_same_v<T, CodegenUnitKey>) {
+                // F-023 (format v3): test_entry_index + has_cached_library_state
+                // are no longer part of the key identity, so they are not
+                // serialized. library_decls_only stays (it selects decls-only vs
+                // full-definition IR).
                 write_string(oss, k.file_path);
                 write_string(oss, k.module_name);
                 write_i32(oss, static_cast<int32_t>(k.optimization_level));
                 write_u8(oss, k.debug_info ? 1 : 0);
-                write_i32(oss, static_cast<int32_t>(k.test_entry_index));
-                write_u8(oss, k.has_cached_library_state ? 1 : 0);
+                write_u8(oss, k.library_decls_only ? 1 : 0);
             } else {
                 // ParseModuleKey, TypecheckModuleKey, BorrowcheckModuleKey,
                 // HirLowerKey, MirBuildKey all have file_path + module_name
@@ -237,22 +356,18 @@ std::optional<QueryKey> deserialize_query_key(const uint8_t* data, size_t len, Q
         return QueryKey{MirBuildKey{std::move(file_path), std::move(module_name)}};
     }
     case QueryKind::CodegenUnit: {
+        // F-023 (format v3): file_path, module_name, opt_level, debug_info,
+        // library_decls_only. No test_entry_index / has_cached_library_state.
         std::string file_path, module_name;
         int32_t opt_level = 0;
         uint8_t debug_info = 0;
-        int32_t test_entry_index = -1;
-        uint8_t has_cached_library_state = 0;
+        uint8_t library_decls_only = 0;
         if (!read_str(file_path) || !read_str(module_name) || !read_i32(iss, opt_level) ||
-            !read_u8(iss, debug_info))
+            !read_u8(iss, debug_info) || !read_u8(iss, library_decls_only))
             return std::nullopt;
-        // test_entry_index was added later; missing bytes = -1 (default)
-        read_i32(iss, test_entry_index);
-        // has_cached_library_state was added later; missing bytes = 0 (default)
-        read_u8(iss, has_cached_library_state);
         return QueryKey{CodegenUnitKey{std::move(file_path), std::move(module_name),
                                        static_cast<int>(opt_level), debug_info != 0,
-                                       static_cast<int>(test_entry_index), false,
-                                       has_cached_library_state != 0}};
+                                       library_decls_only != 0}};
     }
     default:
         return std::nullopt;
@@ -288,6 +403,18 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
     if (!in)
         return false;
 
+    auto _load_t0 = std::chrono::steady_clock::now();
+    incr_telemetry().cache_loads.fetch_add(1, std::memory_order_relaxed);
+    struct LoadTimer {
+        std::chrono::steady_clock::time_point t0;
+        ~LoadTimer() {
+            auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - t0)
+                          .count();
+            incr_telemetry().load_us.fetch_add(static_cast<uint64_t>(us), std::memory_order_relaxed);
+        }
+    } _lt{_load_t0};
+
     try {
         // Read header
         uint32_t magic = 0;
@@ -322,10 +449,15 @@ bool PrevSessionCache::load(const fs::path& cache_file) {
             return false;
         }
 
-        // Sanity check: a single compilation should not have more than 10K entries
-        if (entry_count > 10000) {
+        // F-021: the old hard `entry_count > 10000` rejection was a silent
+        // total-reset cliff — at 9,282 entries one wave from wiping the whole
+        // cache. Aging now happens gracefully at SAVE (write's max_entries cap),
+        // so here we only guard against obviously-corrupt headers with a much
+        // larger limit.
+        constexpr uint32_t CORRUPT_ENTRY_LIMIT = 5'000'000;
+        if (entry_count > CORRUPT_ENTRY_LIMIT) {
             TML_LOG_ERROR("query", "[Q002] Incremental cache read failed: entry count "
-                                       << entry_count << " exceeds sanity limit");
+                                       << entry_count << " exceeds corruption limit");
             return false;
         }
 
@@ -427,9 +559,29 @@ void IncrCacheWriter::merge_from_writer(const IncrCacheWriter& other) {
     }
 }
 
-bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {
+bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash, size_t max_entries) {
+    auto _save_t0 = std::chrono::steady_clock::now();
+    incr_telemetry().cache_saves.fetch_add(1, std::memory_order_relaxed);
+    struct SaveTimer {
+        std::chrono::steady_clock::time_point t0;
+        ~SaveTimer() {
+            auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - t0)
+                          .count();
+            incr_telemetry().save_us.fetch_add(static_cast<uint64_t>(us), std::memory_order_relaxed);
+        }
+    } _st{_save_t0};
+
     try {
         fs::create_directories(cache_file.parent_path());
+
+        // F-021 aging: cap the written set to the first `max_entries` (0 =
+        // unlimited). Recorded order is current-session-first, then merged
+        // previous-session entries, so this keeps the most-recently-used entries.
+        size_t write_count = entries_.size();
+        if (max_entries != 0 && write_count > max_entries) {
+            write_count = max_entries;
+        }
 
         // Write to temp file first, then rename (atomic)
         auto temp_file = cache_file;
@@ -444,7 +596,7 @@ bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {
             write_u32(out, INCR_CACHE_MAGIC);
             write_u16(out, INCR_CACHE_VERSION_MAJOR);
             write_u16(out, INCR_CACHE_VERSION_MINOR);
-            write_u32(out, static_cast<uint32_t>(entries_.size()));
+            write_u32(out, static_cast<uint32_t>(write_count));
 
             auto timestamp =
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -455,7 +607,10 @@ bool IncrCacheWriter::write(const fs::path& cache_file, uint32_t options_hash) {
             write_u32(out, compiler_build_hash());
 
             // Entries
+            size_t written = 0;
             for (const auto& entry : entries_) {
+                if (written++ >= write_count)
+                    break;
                 auto kind = query_kind(entry.key);
                 write_u8(out, static_cast<uint8_t>(kind));
 
@@ -680,6 +835,190 @@ std::string get_ir_cache_filename(const QueryKey& key) {
     // Include query kind in the name for debugging
     auto kind = query_kind(key);
     return std::string(query_kind_name(kind)) + "_" + fp.to_hex();
+}
+
+// ============================================================================
+// F-025: config-partitioned cache files
+// ============================================================================
+
+fs::path incr_cache_file_for(const fs::path& incr_dir, uint32_t options_hash) {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%08x", options_hash);
+    return incr_dir / ("incr." + std::string(buf) + ".bin");
+}
+
+size_t prune_incr_partitions(const fs::path& incr_dir, size_t keep_newest) {
+    size_t removed = 0;
+    try {
+        // Remove any legacy unpartitioned incr.bin (superseded by incr.<hash>.bin).
+        std::error_code ec;
+        auto legacy = incr_dir / "incr.bin";
+        if (fs::exists(legacy, ec)) {
+            if (fs::remove(legacy, ec))
+                ++removed;
+        }
+
+        // Collect incr.<hash>.bin partitions with their mtimes.
+        std::vector<std::pair<fs::file_time_type, fs::path>> parts;
+        for (const auto& e : fs::directory_iterator(incr_dir, ec)) {
+            if (ec)
+                break;
+            if (!e.is_regular_file())
+                continue;
+            auto name = e.path().filename().string();
+            if (name.rfind("incr.", 0) == 0 && e.path().extension() == ".bin" &&
+                name != "incr.bin") {
+                std::error_code tec;
+                auto t = fs::last_write_time(e.path(), tec);
+                parts.emplace_back(tec ? fs::file_time_type{} : t, e.path());
+            }
+        }
+        if (parts.size() <= keep_newest)
+            return removed;
+
+        // Newest first; delete everything past keep_newest.
+        std::sort(parts.begin(), parts.end(),
+                  [](const auto& a, const auto& b) { return a.first > b.first; });
+        for (size_t i = keep_newest; i < parts.size(); ++i) {
+            std::error_code rec;
+            if (fs::remove(parts[i].second, rec))
+                ++removed;
+        }
+    } catch (...) {}
+    return removed;
+}
+
+// ============================================================================
+// F-020: session-scoped shared previous-session cache
+// ============================================================================
+
+namespace {
+struct SharedPrevSlot {
+    std::shared_ptr<const PrevSessionCache> cache;
+    uint64_t mtime = 0;
+    uint32_t options_hash = 0;
+    bool loaded = false; ///< True once we've attempted a load for this mtime.
+};
+std::mutex g_shared_prev_mtx;
+std::unordered_map<std::string, SharedPrevSlot> g_shared_prev; ///< keyed by cache_file path
+} // namespace
+
+std::shared_ptr<const PrevSessionCache>
+get_shared_prev_session(const fs::path& cache_file, uint32_t options_hash) {
+    std::error_code ec;
+    uint64_t mtime = 0;
+    if (fs::exists(cache_file, ec)) {
+        auto ft = fs::last_write_time(cache_file, ec);
+        if (!ec)
+            mtime = static_cast<uint64_t>(ft.time_since_epoch().count());
+    }
+
+    std::lock_guard<std::mutex> lk(g_shared_prev_mtx);
+    auto key = cache_file.string();
+    auto& slot = g_shared_prev[key];
+    // Reuse the parsed copy if the file is unchanged and the options match. The
+    // options_hash guards against a partition rename; the mtime guards against a
+    // rewrite between runs.
+    if (slot.loaded && slot.mtime == mtime && slot.options_hash == options_hash) {
+        return slot.cache;
+    }
+
+    slot.loaded = true;
+    slot.mtime = mtime;
+    slot.options_hash = options_hash;
+    slot.cache.reset();
+
+    auto parsed = std::make_shared<PrevSessionCache>();
+    if (parsed->load(cache_file) && parsed->options_hash() == options_hash) {
+        slot.cache = parsed;
+    }
+    return slot.cache;
+}
+
+void reset_shared_prev_session() {
+    std::lock_guard<std::mutex> lk(g_shared_prev_mtx);
+    g_shared_prev.clear();
+}
+
+// ============================================================================
+// F-022: IR store garbage collection
+// ============================================================================
+
+uint64_t gc_ir_store(const fs::path& cache_dir,
+                     const std::unordered_set<std::string>& surviving_stems) {
+    uint64_t reclaimed = 0;
+    uint64_t files = 0;
+    try {
+        auto ir_dir = cache_dir / "ir";
+        std::error_code ec;
+        if (!fs::exists(ir_dir, ec))
+            return 0;
+
+        for (const auto& e : fs::directory_iterator(ir_dir, ec)) {
+            if (ec)
+                break;
+            if (!e.is_regular_file())
+                continue;
+            // Filename is `<stem>.ll` / `<stem>.libs` / `<stem>.search_paths`.
+            // The stem is everything before the FIRST extension we recognize.
+            auto path = e.path();
+            auto ext = path.extension().string();
+            if (ext != ".ll" && ext != ".libs" && ext != ".search_paths")
+                continue;
+            auto stem = path.stem().string(); // strips the final extension only
+            if (surviving_stems.count(stem) != 0)
+                continue;
+            std::error_code sec;
+            auto sz = fs::file_size(path, sec);
+            std::error_code rec;
+            if (fs::remove(path, rec)) {
+                if (!sec)
+                    reclaimed += sz;
+                ++files;
+            }
+        }
+    } catch (...) {}
+    incr_telemetry().ir_bytes_gc.fetch_add(reclaimed, std::memory_order_relaxed);
+    incr_telemetry().ir_files_gc.fetch_add(files, std::memory_order_relaxed);
+    return reclaimed;
+}
+
+uint64_t incr_run_teardown(const fs::path& incr_dir) {
+    std::error_code ec;
+    if (!fs::exists(incr_dir, ec))
+        return 0;
+
+    // F-025: keep only the newest partitions.
+    prune_incr_partitions(incr_dir, MAX_INCR_PARTITIONS);
+
+    // Collect the ir/ stems referenced by every surviving partition. The final
+    // on-disk cache is the source of truth — independent of any single writer,
+    // so this is safe after parallel per-suite writes.
+    std::unordered_set<std::string> surviving;
+    for (const auto& e : fs::directory_iterator(incr_dir, ec)) {
+        if (ec)
+            break;
+        if (!e.is_regular_file())
+            continue;
+        auto name = e.path().filename().string();
+        if (!(name.rfind("incr.", 0) == 0 && e.path().extension() == ".bin"))
+            continue;
+        PrevSessionCache part;
+        if (!part.load(e.path()))
+            continue;
+        for (const auto& [key, entry] : part.entries()) {
+            if (query_kind(key) == QueryKind::CodegenUnit) {
+                surviving.insert(get_ir_cache_filename(key));
+            }
+        }
+    }
+
+    // F-022: reclaim orphaned IR dumps.
+    uint64_t reclaimed = gc_ir_store(incr_dir, surviving);
+
+    // Next run in this process must re-read a freshly written cache.
+    reset_shared_prev_session();
+    return reclaimed;
 }
 
 } // namespace tml::query

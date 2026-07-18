@@ -28,7 +28,13 @@ namespace tml::testing {
 struct DispatcherTestInfo {
     std::string name; // e.g. "test_concat"
     std::string file; // e.g. "basic.test.tml"
-    int index = 0;    // 0-based test index
+    int index = 0;    // 0-based suite position — user-facing selection/event index.
+    // F-023: the compiled test object exports its entry as `tml_test_<symbol_id>`
+    // where symbol_id is a file-STABLE id (query::stable_test_symbol_id), NOT the
+    // suite position. The dispatcher declares/calls that stable symbol, but keeps
+    // `index` for --test-index selection, --list, and NDJSON event indices (which
+    // the coordinator maps to suite slots). Defaults to `index` when unset.
+    uint32_t symbol_id = 0;
 };
 
 /// Generate LLVM IR for a test dispatcher with NDJSON output.

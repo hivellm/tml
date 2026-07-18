@@ -41,6 +41,15 @@ struct Fingerprint {
 
 /// Compute a fingerprint for a source file (reads file, hashes content).
 /// Returns zero fingerprint on error.
+///
+/// F-026: results are memoized process-globally, gated on (mtime,size), so an
+/// unchanged file is read+hashed once per run instead of once per QueryContext.
 [[nodiscard]] Fingerprint fingerprint_source(const std::string& file_path);
+
+/// Clear the process-global source-fingerprint memo (F-026). Call between
+/// independent runs in a long-lived process (daemon) if source files may have
+/// changed with unchanged (mtime,size) — normally unnecessary since mtime is
+/// high-resolution.
+void reset_source_fingerprint_memo();
 
 } // namespace tml::query

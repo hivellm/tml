@@ -124,6 +124,19 @@ fs::path get_test_exe_cache_dir() {
     return cache_dir;
 }
 
+// phase42a: incremental-cache run boundaries (F-019 telemetry, F-021/F-022/F-025
+// teardown). Called once each by the coordinator's run_tests().
+void incr_test_run_begin() {
+    query::reset_incr_telemetry();
+}
+
+void incr_test_run_end() {
+    auto build_dir = cli::build::get_build_dir(false);
+    auto incr_dir = build_dir / "cache" / "incr";
+    query::incr_run_teardown(incr_dir);
+    TML_LOG_INFO("incr", query::incr_telemetry_report());
+}
+
 /// Ensure required vcpkg DLLs are next to compiled test executables.
 /// Without these, test exes that use zlib/brotli/zstd/sqlite crash at startup.
 void ensure_runtime_dlls(const fs::path& target_dir) {
@@ -867,16 +880,19 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
         std::lock_guard<std::mutex> lock(g_incr_cache_mutex);
         auto build_dir = cli::build::get_build_dir(false);
         auto incr_cache_dir = build_dir / "cache" / "incr";
-        auto cache_file = incr_cache_dir / "incr.bin";
+        // F-025: config-partitioned cache file (incr.<opts>.bin).
+        auto cache_file = query::incr_cache_file_for(incr_cache_dir, suite_incr_opts_hash);
         std::error_code ec;
         fs::create_directories(incr_cache_dir, ec);
         // Merge existing on-disk entries (same session key) so parallel suites
-        // don't clobber each other's contributions, then write once.
+        // don't clobber each other's contributions, then write once (F-021 cap).
+        // The IR store GC runs ONCE at run teardown (incr_run_teardown), not
+        // here — parallel suites must not delete each other's ir/ files mid-run.
         query::PrevSessionCache existing;
         if (existing.load(cache_file) && existing.options_hash() == suite_incr_opts_hash) {
             suite_incr_accumulator.merge_from(existing);
         }
-        suite_incr_accumulator.write(cache_file, suite_incr_opts_hash);
+        suite_incr_accumulator.write(cache_file, suite_incr_opts_hash, query::MAX_INCR_ENTRIES);
     }
 
     // Merge results from parallel compilation
@@ -909,7 +925,10 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     for (size_t i = 0; i < file_results.size(); ++i) {
         auto& fr = file_results[i];
         if (fr.success) {
-            std::string entry_name = "tml_test_" + std::to_string(i);
+            // F-023: the object exports its entry as tml_test_<stable-id>, not
+            // tml_test_<suite-position>.
+            std::string entry_name =
+                "tml_test_" + std::to_string(query::stable_test_symbol_id(fr.file_path));
             if (!object_defines_symbol(fr.object_file, entry_name)) {
                 fr.success = false;
                 fr.error_message = "Linking failed: compiled object does not define its test "
@@ -970,8 +989,13 @@ CompileResult compile_suite(const Suite& suite, const CompileConfig& config) {
     std::vector<DispatcherTestInfo> dispatcher_infos;
     dispatcher_infos.reserve(compiled_indices.size());
     for (size_t i : compiled_indices) {
-        dispatcher_infos.push_back(
-            {suite.tests[i].test_name, suite.tests[i].file_path, static_cast<int>(i)});
+        DispatcherTestInfo info;
+        info.name = suite.tests[i].test_name;
+        info.file = suite.tests[i].file_path;
+        info.index = static_cast<int>(i);
+        // F-023: entry symbol is file-stable, matching codegen's tml_test_<id>.
+        info.symbol_id = query::stable_test_symbol_id(suite.tests[i].file_path);
+        dispatcher_infos.push_back(info);
     }
     std::string dispatcher_ir = generate_ndjson_dispatcher_ir(dispatcher_infos, suite.name);
 
