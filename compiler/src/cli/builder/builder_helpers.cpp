@@ -17,7 +17,9 @@ TML_MODULE("compiler")
 #include "builder_internal.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
 #include "cli/builder/platform.hpp"
+#include "common/crc32c.hpp"           // F-032: content-addressed obj hashing
 #include "package/package_registry.hpp"
+#include "query/query_fingerprint.hpp" // F-032: shared 128-bit content hash
 
 namespace tml::cli::build {
 
@@ -122,34 +124,29 @@ std::string generate_cache_key(const std::string& path) {
 }
 
 std::string generate_content_hash(const std::string& content) {
-    std::hash<std::string> hasher;
-    size_t hash = hasher(content);
-
-    std::ostringstream oss;
-    oss << std::hex << std::setw(16) << std::setfill('0') << hash;
-    return oss.str();
+    // F-032: was `std::hash<std::string>` (64-bit, implementation-defined —
+    // stable per binary, not per toolchain). Use the shared 128-bit CRC32C-based
+    // content fingerprint so keys are deterministic across toolchains/builds.
+    return tml::query::fingerprint_string(content).to_hex();
 }
 
 std::string generate_exe_hash(const std::string& source_hash,
                               const std::vector<fs::path>& obj_files) {
-    std::hash<std::string> hasher;
-    size_t combined_hash = hasher(source_hash);
-
-    // Combine hashes of all object file paths and timestamps
+    // F-032: content-address the run/exe cache key. Previously each object file's
+    // *mtime* was mixed in, so a byte-identical relink produced a new key and
+    // missed the cache. Fold each object's CONTENT hash (streamed CRC32C) instead:
+    // an identical relink is a cache hit, while any real content change still
+    // invalidates. Object order is deterministic, so fingerprint_combine's
+    // non-commutativity is fine.
+    tml::query::Fingerprint fp = tml::query::fingerprint_string(source_hash);
     for (const auto& obj : obj_files) {
-        if (fs::exists(obj)) {
-            // Include file path and last write time
-            combined_hash ^=
-                hasher(obj.string()) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
-            auto ftime = fs::last_write_time(obj).time_since_epoch().count();
-            combined_hash ^= std::hash<decltype(ftime)>{}(ftime) + 0x9e3779b9 +
-                             (combined_hash << 6) + (combined_hash >> 2);
+        std::error_code ec;
+        if (fs::exists(obj, ec)) {
+            std::string obj_content = tml::crc32c_file(obj.string());
+            fp = tml::query::fingerprint_combine(fp, tml::query::fingerprint_string(obj_content));
         }
     }
-
-    std::ostringstream oss;
-    oss << std::hex << std::setw(16) << std::setfill('0') << combined_hash;
-    return oss.str();
+    return fp.to_hex();
 }
 
 // ============================================================================

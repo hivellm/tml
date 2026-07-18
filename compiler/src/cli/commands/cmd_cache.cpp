@@ -37,10 +37,12 @@ TML_MODULE("compiler")
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <variant>
 #include <vector>
@@ -436,6 +438,215 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool /*verbose*/) {
     }
 
     return removed_count;
+}
+
+namespace {
+
+/// Read a MB cap from an env var, falling back to `default_mb` when unset or
+/// unparseable. Lets ops tune caps without a rebuild (F-031 "configurable caps").
+uintmax_t cap_mb_from_env(const char* var, uintmax_t default_mb) {
+    const char* v = std::getenv(var);
+    if (!v || !*v) {
+        return default_mb;
+    }
+    try {
+        long long parsed = std::stoll(v);
+        if (parsed > 0) {
+            return static_cast<uintmax_t>(parsed);
+        }
+    } catch (...) {
+        // fall through to default
+    }
+    return default_mb;
+}
+
+/// One evictable unit: a primary file plus any siblings deleted with it.
+struct EvictUnit {
+    fs::path path;                  // primary file (the one whose ext we filter on)
+    uintmax_t size = 0;             // primary + sibling bytes
+    fs::file_time_type last_access; // LRU key (newest sibling wins below)
+    bool protected_ref = false;     // referenced by tests.json -> evict last
+    std::vector<fs::path> siblings; // removed together with `path`
+};
+
+/// Sibling extensions removed alongside a compiled `.exe` so eviction leaves no
+/// orphaned import-lib / debug-info / export files behind.
+const char* const kExeSiblingExts[] = {".lib", ".pdb", ".exp", ".ilk"};
+
+} // anonymous namespace
+
+/**
+ * LRU-evict files under `dir` until total tracked size <= `cap_mb` MB.
+ *
+ * @param dir          directory to sweep (must exist; no-op otherwise)
+ * @param cap_mb       size cap in megabytes
+ * @param recursive    walk subdirectories (obj_cache/run) vs top-level only (exes)
+ * @param ext_filter   when non-empty, only files with this extension are units
+ *                     (e.g. ".exe"); their siblings are folded into unit size
+ * @param protect      normalized absolute paths evicted LAST (referenced exes)
+ * @param label        human label for the one-line before->after log
+ * @return bytes reclaimed
+ */
+uintmax_t evict_dir_to_cap(const fs::path& dir, uintmax_t cap_mb, bool recursive,
+                           const std::string& ext_filter, const std::set<std::string>& protect,
+                           const char* label) {
+    std::error_code ec;
+    if (!fs::exists(dir, ec)) {
+        return 0;
+    }
+
+    const uintmax_t cap_bytes = cap_mb * 1024ull * 1024ull;
+    const bool exe_mode = !ext_filter.empty();
+
+    std::vector<EvictUnit> units;
+    uintmax_t total = 0;
+
+    auto consider_file = [&](const fs::path& p) {
+        if (!fs::is_regular_file(p, ec)) {
+            return;
+        }
+        if (!ext_filter.empty() && p.extension().string() != ext_filter) {
+            return; // non-primary files are folded in via sibling scan below
+        }
+        EvictUnit unit;
+        unit.path = p;
+        unit.size = fs::file_size(p, ec);
+        unit.last_access = fs::last_write_time(p, ec);
+
+        if (exe_mode) {
+            // Fold sibling artifacts (same stem) into this unit.
+            for (const char* sx : kExeSiblingExts) {
+                fs::path sib = p;
+                sib.replace_extension(sx);
+                if (fs::exists(sib, ec) && fs::is_regular_file(sib, ec)) {
+                    unit.size += fs::file_size(sib, ec);
+                    auto st = fs::last_write_time(sib, ec);
+                    if (st > unit.last_access) {
+                        unit.last_access = st;
+                    }
+                    unit.siblings.push_back(sib);
+                }
+            }
+            std::string norm = p.string();
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+#ifdef _WIN32
+            std::transform(norm.begin(), norm.end(), norm.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+            unit.protected_ref = protect.count(norm) > 0;
+        }
+
+        total += unit.size;
+        units.push_back(std::move(unit));
+    };
+
+    if (recursive) {
+        for (auto it = fs::recursive_directory_iterator(
+                 dir, fs::directory_options::skip_permission_denied, ec);
+             it != fs::recursive_directory_iterator(); it.increment(ec)) {
+            if (ec) {
+                break;
+            }
+            consider_file(it->path());
+        }
+    } else {
+        for (auto it = fs::directory_iterator(dir, fs::directory_options::skip_permission_denied,
+                                              ec);
+             it != fs::directory_iterator(); it.increment(ec)) {
+            if (ec) {
+                break;
+            }
+            consider_file(it->path());
+        }
+    }
+
+    if (total <= cap_bytes) {
+        return 0; // under cap, nothing to do
+    }
+
+    const uintmax_t before = total;
+
+    // Eviction order: unprotected first, then protected; within each group,
+    // least-recently-accessed first (LRU). Referenced/reusable exes thus survive
+    // longest and unreferenced orphans die first.
+    std::sort(units.begin(), units.end(), [](const EvictUnit& a, const EvictUnit& b) {
+        if (a.protected_ref != b.protected_ref) {
+            return !a.protected_ref; // unprotected sorts before protected
+        }
+        return a.last_access < b.last_access;
+    });
+
+    uintmax_t reclaimed = 0;
+    int removed = 0;
+    for (const auto& unit : units) {
+        if (total <= cap_bytes) {
+            break;
+        }
+        bool ok = fs::remove(unit.path, ec);
+        if (!ok) {
+            continue;
+        }
+        for (const auto& sib : unit.siblings) {
+            fs::remove(sib, ec);
+        }
+        total -= unit.size;
+        reclaimed += unit.size;
+        ++removed;
+    }
+
+    if (reclaimed > 0) {
+        TML_LOG_INFO("cache", "[evict] " << label << ": " << format_size(before) << " -> "
+                                         << format_size(total) << " (cap " << cap_mb << " MB, "
+                                         << removed << " evicted, " << format_size(reclaimed)
+                                         << " reclaimed)");
+    }
+    return reclaimed;
+}
+
+void enforce_cache_caps() {
+    const fs::path root = get_cache_root();
+    std::error_code ec;
+    if (!fs::exists(root, ec)) {
+        return;
+    }
+
+    const uintmax_t obj_cap = cap_mb_from_env("TML_CACHE_OBJ_CAP_MB", 256);
+    const uintmax_t tests_cap = cap_mb_from_env("TML_CACHE_TESTS_CAP_MB", 512);
+    const uintmax_t run_cap = cap_mb_from_env("TML_CACHE_RUN_CAP_MB", 128);
+
+    // Build the protected set: exe paths still referenced by tests.json. These
+    // are reusable across runs (source unchanged), so they are evicted last.
+    std::set<std::string> protected_exes;
+    {
+        fs::path tests_json = root / "tests.json";
+        if (fs::exists(tests_json, ec)) {
+            tml::testing::TestResultCache trc;
+            if (trc.load(tests_json.string())) {
+                for (const auto& exe : trc.referenced_exes()) {
+                    std::string norm = exe;
+                    std::replace(norm.begin(), norm.end(), '\\', '/');
+#ifdef _WIN32
+                    std::transform(norm.begin(), norm.end(), norm.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+                    protected_exes.insert(std::move(norm));
+                }
+            }
+        }
+    }
+
+    // 1. Backend object cache — content-addressed, recursive, no protected set.
+    evict_dir_to_cap(root / "tests" / "obj_cache", obj_cap, /*recursive=*/true,
+                     /*ext_filter=*/"", /*protect=*/{}, "tests/obj_cache");
+
+    // 2. Compiled suite EXEs — top-level `.exe` under tests/ (never descend into
+    //    obj_cache); unreferenced orphans first, referenced exes last.
+    evict_dir_to_cap(root / "tests", tests_cap, /*recursive=*/false, /*ext_filter=*/".exe",
+                     protected_exes, "tests/*.exe");
+
+    // 3. `tml run` output cache — content-addressed, self-healing.
+    evict_dir_to_cap(root / "run", run_cap, /*recursive=*/true, /*ext_filter=*/"", /*protect=*/{},
+                     "run");
 }
 
 int run_cache_invalidate(const std::vector<std::string>& files, bool /*verbose*/) {

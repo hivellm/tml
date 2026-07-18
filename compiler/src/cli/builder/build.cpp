@@ -30,6 +30,7 @@ TML_MODULE("compiler")
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
+#include "cli/commands/cmd_cache.hpp" // F-031: enforce_cache_caps() at build teardown
 #include "codegen/codegen_backend.hpp"
 #include "codegen/codegen_partitioner.hpp"
 #include "package/package_registry.hpp"
@@ -1556,6 +1557,9 @@ int run_build_with_queries(const std::string& path, const BuildOptions& options)
         // (F-021/F-022/F-025) now that this run's entries are flushed.
         query::incr_run_teardown(build_dir / "cache" / "incr");
     }
+
+    // F-031: bound the run/obj_cache/tests-exe caches after each build.
+    enforce_cache_caps();
 
     TML_LOG_INFO("build", "build: " << to_forward_slashes(exe_output.string()));
     return 0;

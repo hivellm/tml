@@ -15,10 +15,31 @@
 #define TML_CLI_CMD_CACHE_HPP
 
 #include <cstdint>
+#include <filesystem>
+#include <set>
 #include <string>
 #include <vector>
 
 namespace tml::cli {
+
+/**
+ * F-031: LRU-evict files under `dir` until total tracked size <= `cap_mb` MB.
+ * Exposed for unit testing; used internally by enforce_cache_caps().
+ *
+ * @param dir        directory to sweep (no-op if it does not exist)
+ * @param cap_mb     size cap in megabytes
+ * @param recursive  walk subdirectories vs top-level only
+ * @param ext_filter when non-empty (e.g. ".exe"), only files with this extension
+ *                   are eviction units; their siblings (.lib/.pdb/.exp/.ilk) are
+ *                   folded into unit size and removed together
+ * @param protect    normalized absolute paths evicted LAST (referenced artifacts
+ *                   survive longest; unreferenced orphans go first)
+ * @param label      human label for the one-line before->after log
+ * @return bytes reclaimed
+ */
+std::uintmax_t evict_dir_to_cap(const std::filesystem::path& dir, std::uintmax_t cap_mb,
+                                bool recursive, const std::string& ext_filter,
+                                const std::set<std::string>& protect, const char* label);
 
 /**
  * Display cache statistics and information
@@ -62,6 +83,29 @@ int run_cache_invalidate(const std::vector<std::string>& files, bool verbose = f
  * @return Number of files removed
  */
 int enforce_cache_limit(uintmax_t max_size_mb = 1024, bool verbose = false);
+
+/**
+ * F-031: LRU-evict the build-time cache dirs to their configured size caps.
+ *
+ * Called at the end of test/build/run to keep the cache bounded. Evicts, by
+ * least-recently-accessed order, three independent layers under
+ * `build/debug/cache`:
+ *   - `tests/obj_cache`   (default cap 256 MB) — content-addressed backend objs
+ *   - suite EXEs          (default cap 512 MB) — the `.exe` files directly under
+ *                         `tests`; entries still referenced by `tests.json` are
+ *                         evicted LAST so reusable EXEs survive longest
+ *                         (unreferenced orphans go first). Sibling
+ *                         `.lib/.pdb/.exp` are removed with the `.exe`.
+ *   - `run`               (default cap 128 MB) — `tml run` output cache
+ *
+ * All three layers are content-addressed / self-healing: a deleted artifact is
+ * simply regenerated on next use. Never touches source, `build/debug/bin`, or
+ * the incr/ir store (phase42a owns that). Caps are overridable via env vars
+ * `TML_CACHE_OBJ_CAP_MB`, `TML_CACHE_TESTS_CAP_MB`, `TML_CACHE_RUN_CAP_MB`.
+ *
+ * Logs a one-line before→after per layer that crossed its cap.
+ */
+void enforce_cache_caps();
 
 /**
  * Main cache command dispatcher

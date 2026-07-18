@@ -26,6 +26,7 @@ TML_MODULE("compiler")
 #include "builder_internal.hpp"
 #include "cli/builder/build_script.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
+#include "cli/commands/cmd_cache.hpp" // F-031: enforce_cache_caps() at run teardown
 #include "package/package_registry.hpp"
 #include "query/query_context.hpp"
 #include "types/module_binary.hpp"
@@ -241,6 +242,9 @@ compile_via_queries(const std::string& path, bool coverage, bool no_cache,
         // phase42a: single-context run — prune partitions + GC the ir/ store.
         query::incr_run_teardown(cache_dir / "cache" / "incr");
     }
+
+    // F-031: bound the run/obj_cache/tests-exe caches after each run.
+    enforce_cache_caps();
 
     return result;
 }

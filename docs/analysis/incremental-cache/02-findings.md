@@ -13,6 +13,15 @@ QueryContext at all — direct lex→parse→typecheck (`compiler/src/cli/comman
 HIR/THIR/MIR run from scratch every invocation even when 100% GREEN; a GREEN build only skips IR *generation*.
 Contrast: rustc/salsa persists every tracked query's result and replays diagnostics.
 Impact: **High** (structural ceiling on all warm paths). Confidence: **High**. Related: F-016/F-017 (daemon masks this for unchanged files only).
+**EVALUATED — REJECTED (phase42c, v0.3.75; ADR-010).** Routing `tml check` through `QueryContext` was investigated and
+rejected as document-blocked: (1) no cross-process typecheck persistence — `force<>` only reuses `CodegenUnitResult`, so a
+one-shot `check` recomputes parse+typecheck anyway (zero memo win); (2) no diagnostics replay + lossy result contract —
+`TypecheckResult` flattens errors to strings, drops cascading errors, and has NO warnings field (warnings are a transient
+`TML_LOG_WARN` side effect, `query_core.cpp:474-479`), so any cache-skip would silently drop diagnostics (unsafe for a
+diagnostics-only command); (3) redundant — the phase40a/42b daemon result cache already memoizes `check` by argv-mtime +
+`universe_epoch` and replays the LITERAL captured stdout/stderr/exit code (`cmd_daemon.cpp`), safely covering the realistic
+warm workflow that in-process memo (one-shot) cannot. Unlocking prerequisite if revisited: a persisted, diagnostics-carrying
+typecheck query — larger than a CLI re-route and still redundant with the daemon cache. See `docs/adr/ADR-010-check-query-routing.md`.
 
 **F-020 — incr.bin is loaded, merged, and fully rewritten once PER TEST FILE (O(N²) I/O, ~27 GB churn per full run).**
 Evidence: per-file worker loads the cache (`testing_compile.cpp:645-648`) and saves it (`:714-718` under `g_incr_cache_mutex`);
@@ -138,6 +147,17 @@ Evidence: `enforce_cache_limit()` implemented (`cmd_cache.cpp:285-362`) with **z
 `invalidate_all_exes()` clears JSON fields but never deletes the 1,516 EXE files (`testing_test_cache.hpp:115-120`).
 Measured: incr/ir 2.2 GB + obj_cache 609 MB + tests 1.4 GB + run 51 MB. Impact: **Medium** (disk, cache-scan latency).
 Confidence: **High**.
+**RESOLVED (phase42c, v0.3.75).** New `cli::enforce_cache_caps()` (`cmd_cache.cpp`) LRU-evicts three
+content-addressed layers to configurable caps at every test/build/run teardown (`incr_test_run_end`,
+`build.cpp`, `builder_run.cpp` — separate from phase42a's incr/ir GC): `tests/obj_cache` (256 MB),
+suite `*.exe` under `tests/` (512 MB), `cache/run` (128 MB); caps overridable via
+`TML_CACHE_{OBJ,TESTS,RUN}_CAP_MB`. The exe evictor evicts UNREFERENCED orphans first and files
+referenced by `tests.json` LAST (reusable EXEs survive longest), removing `.lib/.pdb/.exp/.ilk`
+siblings with each `.exe`. `TestResultCache::invalidate_all_exes()` now DELETES the stale EXE files
+(and siblings) it clears, not just the JSON fields (verified: a post-rebuild run deleted 14 referenced
+stale EXEs; a forced 100 MB cap evicted 890 orphan EXEs, 503→99.8 MB, referenced suite survived).
+Measured steady state under default caps across consecutive clean runs: obj_cache 39 MB, run 52 MB,
+suite EXEs ≤ 94 MB — all bounded. `cache clean --all` remains the manual full reclaim.
 
 **F-032 — Weak / timestamp-tainted cache keys in run + obj caches.**
 Evidence: (a) run exe hash mixes object-file **mtimes** (`builder_helpers.cpp:138-147`) — any runtime-obj relink misses even
@@ -145,6 +165,13 @@ with identical content; (b) `generate_content_hash` is `std::hash<std::string>` 
 implementation-defined (stable per binary, not per toolchain); (c) obj_cache/incr fingerprints are 2×CRC32C halves
 (`query_fingerprint.cpp:28-46`) — this family already produced real collisions at 16-hex truncation (comment
 `testing_compile.cpp:737-739`). Contrast: ccache→BLAKE3, rustc→SipHash-128. Impact: **Low-Medium**. Confidence: **High**.
+**RESOLVED (a)+(b) (phase42c, v0.3.75).** `generate_exe_hash` now folds each object's **content** hash (streamed
+`crc32c_file`) instead of its mtime, so a byte-identical relink is a cache HIT while any real content change still
+invalidates (`builder_helpers.cpp`). `generate_content_hash` was migrated off `std::hash<std::string>` to the shared 128-bit
+CRC32C content fingerprint (`query::fingerprint_string(...).to_hex()`), making keys deterministic across toolchains/builds.
+(c) The 2×CRC32C incr/obj fingerprint family is left as-is — it is the same `Fingerprint` helper now reused here, and
+widening it is a separate, higher-blast-radius change not needed for the touched sites. `generate_cache_key` still mixes the
+thread id (it is a temp-file disambiguator, not a content key — intentionally left).
 
 **F-033 — obj_cache can only ever skip the backend: its key is a hash of the generated IR, so the expensive frontend+stdlib emission must run before the cache can even be consulted.**
 Evidence: key computed from `codegen_result.llvm_ir` after `qctx.codegen_unit(...)` returns
@@ -173,6 +200,27 @@ them (`module_binary_read.cpp:1073-1157`). A validated *lazy* per-import loader 
 (`module_binary.cpp:34-56`). This is the tooling F-015 (03-check-performance.md) root, quantified: ~734 file reads + 367
 deserializations before the first user line is type-checked. Impact: **Medium-High** (constant tax on every cold command).
 Confidence: **High**.
+**PARTIALLY RESOLVED (phase42c, v0.3.75) — mtime fast path; full lazy REJECTED as non-parity.**
+The "replace eager with lazy" plan was investigated in depth and **rejected**: it cannot preserve byte-identical
+diagnostics. The type checker, borrow checker, and codegen resolve unqualified references (primitive impl methods with no
+`use` like `s.len()`; library behaviors in generic bounds like `[T: Hash]`; behavior-impls; type aliases) via **last-resort
+`GlobalModuleCache::instance().get_all()` scans over the WHOLE library** — `env_lookups.cpp:156-162` (`lookup_behavior`,
+comment: "populated by meta preload and contains all library modules"), `:190-196`, `:314-321` (`lookup_func` primitive
+impls), plus `expr_call_method.cpp:312/829/1235/1375/1397`, `checker_core.cpp:328`, and ~9 codegen sites. TML today lets a
+file reference anything defined anywhere in the ~367-module library without importing it, resolved through these full-cache
+scans. A lazy subset (only `use`d modules + transitive deps) would leave the cache partially warm → those scans miss modules
+→ diagnostics diverge. The parity set is effectively the whole library, not a stable <30-module prelude, so the "<30 modules
+for a prelude-only file" target is **unachievable without a large semantic change** (requiring explicit `use` for currently
+-implicit resolution) — which by definition is not byte-identical. Per the task's own precedence rule (byte-identical is the
+mandatory correctness gate), eager preload stays the default.
+Instead, the redundant-work half of the finding is fixed: a **directory-level mtime "nothing changed" fast path**
+(`compute_lib_source_signature` + a `.preload_stamp`, `module_binary_read.cpp`) stats (never reads) the lib source tree and,
+when the newest-mtime+file-count signature matches the last successful preload, SKIPS the per-module source read+CRC
+re-validation — eliding the ~734-file staleness tax while loading the identical meta set (byte-identical: same 366 modules end
+up in `GlobalModuleCache`). Measured on a prelude-only `check`: full-validation preload ~419 ms vs fast-path ~285 ms (~134 ms
+/ ~32% off the preload), 366 modules loaded both ways, 0 diagnostic divergences over a 25-file corpus (fast vs full).
+Override with `TML_NO_META_FASTPATH=1`. The stamp is written only after a full validation with nothing stale (insurance
+against a failed regen), and `load_native_module` + `reset_meta_caches` still re-validate on actual use / lib-epoch change.
 
 ---
 

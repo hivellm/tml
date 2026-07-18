@@ -3,9 +3,16 @@
 //         commands/cmd_lint.cpp, commands/cmd_format.cpp
 
 #include "cli/commands/cmd_build.hpp"
+#include "cli/commands/cmd_cache.hpp" // F-031: evict_dir_to_cap
 
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -137,4 +144,101 @@ TEST(StageOverrideTest, EmptyStageOverridesMeansQueryDefault) {
     // (the QueryOptions default is empty — TML default is enforced by CLI structs).
     EXPECT_TRUE(overrides.find("parser") == overrides.end())
         << "Empty stage_overrides correctly signals: use QueryOptions default";
+}
+
+// ============================================================================
+// F-031: LRU cache eviction (phase42c)
+// ============================================================================
+
+namespace {
+namespace fs = std::filesystem;
+
+void evict_write_file(const fs::path& p, size_t bytes) {
+    std::ofstream f(p, std::ios::binary);
+    std::string data(bytes, 'x');
+    f.write(data.data(), static_cast<std::streamsize>(data.size()));
+}
+
+std::string evict_norm(const fs::path& p) {
+    std::string s = p.string();
+    std::replace(s.begin(), s.end(), '\\', '/');
+#ifdef _WIN32
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+    return s;
+}
+
+uintmax_t evict_dir_total(const fs::path& dir) {
+    uintmax_t total = 0;
+    for (const auto& e : fs::directory_iterator(dir)) {
+        if (fs::is_regular_file(e.path())) {
+            total += fs::file_size(e.path());
+        }
+    }
+    return total;
+}
+} // namespace
+
+// Under the cap, eviction is a no-op and nothing is deleted.
+TEST(CacheEvictionTest, UnderCapNoOp) {
+    fs::path dir = fs::temp_directory_path() / "tml_evict_noop";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    evict_write_file(dir / "a.exe", 1024 * 1024);
+
+    auto reclaimed = tml::cli::evict_dir_to_cap(dir, /*cap_mb=*/100, /*recursive=*/false, ".exe", {},
+                                                "test");
+    EXPECT_EQ(reclaimed, 0u);
+    EXPECT_TRUE(fs::exists(dir / "a.exe"));
+    fs::remove_all(dir);
+}
+
+// Over the cap: evict oldest-first down to the cap; referenced (protected) files
+// survive even when they are the oldest, unreferenced orphans go first.
+TEST(CacheEvictionTest, RespectsCapAndProtectsReferenced) {
+    fs::path dir = fs::temp_directory_path() / "tml_evict_cap";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+
+    // 6 EXEs, 1 MB each = 6 MB. Distinct, increasing mtimes: s0 oldest .. s5 newest.
+    std::vector<fs::path> exes;
+    for (int i = 0; i < 6; ++i) {
+        fs::path p = dir / ("s" + std::to_string(i) + ".exe");
+        evict_write_file(p, 1024 * 1024);
+        fs::last_write_time(p, fs::file_time_type::clock::now() + std::chrono::seconds(i));
+        exes.push_back(p);
+    }
+
+    // Protect s0 — the OLDEST, i.e. the first that plain LRU would drop.
+    std::set<std::string> protect{evict_norm(exes[0])};
+
+    auto reclaimed = tml::cli::evict_dir_to_cap(dir, /*cap_mb=*/3, /*recursive=*/false, ".exe",
+                                                protect, "test");
+    EXPECT_GE(reclaimed, 3u * 1024 * 1024);
+    EXPECT_LE(evict_dir_total(dir), 3u * 1024 * 1024);
+
+    EXPECT_TRUE(fs::exists(exes[0])) << "protected (referenced) EXE must survive";
+    EXPECT_TRUE(fs::exists(exes[5])) << "newest EXE survives (oldest evicted first)";
+    EXPECT_FALSE(fs::exists(exes[1])) << "oldest unprotected EXE evicted first";
+    fs::remove_all(dir);
+}
+
+// Deleting an `.exe` unit also removes its sibling artifacts (.lib/.pdb/...).
+TEST(CacheEvictionTest, EvictsExeSiblings) {
+    fs::path dir = fs::temp_directory_path() / "tml_evict_sib";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+
+    // One 4 MB exe + a 1 MB sibling .lib; cap 1 MB forces eviction of the unit.
+    evict_write_file(dir / "old.exe", 4u * 1024 * 1024);
+    evict_write_file(dir / "old.lib", 1024 * 1024);
+
+    auto reclaimed = tml::cli::evict_dir_to_cap(dir, /*cap_mb=*/1, /*recursive=*/false, ".exe", {},
+                                                "test");
+    // Both exe (4 MB) and its .lib sibling (1 MB) are reclaimed as one unit.
+    EXPECT_GE(reclaimed, 5u * 1024 * 1024);
+    EXPECT_FALSE(fs::exists(dir / "old.exe"));
+    EXPECT_FALSE(fs::exists(dir / "old.lib")) << "sibling .lib removed with its .exe";
+    fs::remove_all(dir);
 }

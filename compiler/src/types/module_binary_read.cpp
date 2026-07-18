@@ -16,6 +16,7 @@ TML_MODULE("compiler")
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -1068,6 +1069,52 @@ static fs::path resolve_module_source_path(const std::string& module_path,
     return {};
 }
 
+// F-036: cheap "nothing changed" signature over the library source tree.
+//
+// The per-module staleness check in load_existing_meta_files reads AND CRC-hashes
+// every module's `.tml` source (directory modules hash every `.tml` in the dir),
+// i.e. ~the whole lib tree content, on every cold process — the ~734-file-read tax
+// finding F-036 quantified. This signature stats (never reads) each source file
+// and folds the newest mtime + file count into a string. If it matches the stamp
+// written on the last successful preload, no lib source changed, so the meta files
+// are known-fresh and the per-module hash re-validation can be skipped. Same
+// freshness signal (mtime) the phase42b daemon lib-epoch probe and `.ast.bin`
+// sidecar already rely on. Byte-identical: the SAME meta set is still loaded into
+// GlobalModuleCache — only the redundant re-hashing is elided.
+static std::string compute_lib_source_signature(const fs::path& lib_root) {
+    if (lib_root.empty()) {
+        return {};
+    }
+    int64_t max_mtime = 0;
+    uint64_t count = 0;
+    std::error_code ec;
+    for (const char* sub : {"core", "std", "test"}) {
+        fs::path src = lib_root / sub / "src";
+        if (!fs::exists(src, ec)) {
+            continue;
+        }
+        for (auto it = fs::recursive_directory_iterator(
+                 src, fs::directory_options::skip_permission_denied, ec);
+             it != fs::recursive_directory_iterator(); it.increment(ec)) {
+            if (ec) {
+                break;
+            }
+            if (!it->is_regular_file(ec) || it->path().extension() != ".tml") {
+                continue;
+            }
+            auto t = fs::last_write_time(it->path(), ec).time_since_epoch().count();
+            if (t > max_mtime) {
+                max_mtime = t;
+            }
+            ++count;
+        }
+    }
+    if (count == 0) {
+        return {};
+    }
+    return std::to_string(max_mtime) + ":" + std::to_string(count);
+}
+
 // Helper: load existing .tml.meta files from cache directory into GlobalModuleCache
 // Validates source hash for each module to detect stale caches.
 static int load_existing_meta_files(const fs::path& meta_dir) {
@@ -1078,6 +1125,29 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
 
     // Find lib root for source hash validation
     auto lib_root = find_lib_root_for_meta();
+
+    // F-036: "nothing changed" fast path. If the lib source signature matches the
+    // stamp from the last successful preload, no source changed since the meta
+    // files were validated, so skip the per-module read+CRC re-validation below.
+    // This elides the ~734-file-read staleness tax while loading the identical
+    // meta set (byte-identical diagnostics). Overridable via TML_NO_META_FASTPATH
+    // for debugging / forced full validation.
+    const fs::path stamp_path = meta_dir / ".preload_stamp";
+    const std::string cur_sig = compute_lib_source_signature(lib_root);
+    bool trust_cache = false;
+    if (!cur_sig.empty() && !std::getenv("TML_NO_META_FASTPATH")) {
+        std::ifstream stamp_in(stamp_path, std::ios::binary);
+        if (stamp_in) {
+            std::string stamped;
+            std::getline(stamp_in, stamped);
+            if (stamped == cur_sig) {
+                trust_cache = true;
+                TML_LOG_INFO("meta", "  [fastpath] lib sources unchanged (" << cur_sig
+                                                                            << ") — skipping "
+                                                                               "per-module re-hash");
+            }
+        }
+    }
 
     // Collect stale meta files to regenerate after loading valid ones
     std::vector<std::pair<std::string, fs::path>> stale_modules; // {module_path, source_path}
@@ -1110,8 +1180,9 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
             continue;
         }
 
-        // Validate source hash before loading
-        if (!lib_root.empty()) {
+        // Validate source hash before loading (skipped on the F-036 fast path,
+        // where the lib source signature proved nothing changed).
+        if (!trust_cache && !lib_root.empty()) {
             auto source_path = resolve_module_source_path(module_path, lib_root);
             if (!source_path.empty()) {
                 // Compute current source hash
@@ -1204,6 +1275,18 @@ static int load_existing_meta_files(const fs::path& meta_dir) {
     if (stale > 0) {
         TML_LOG_INFO("meta", "  Summary: " << loaded << " loaded, " << stale
                                            << " stale (regenerated from source)");
+    }
+
+    // F-036: certify the current lib source signature so the next cold preload can
+    // take the fast path. Only after a full (non-fast-path) validation, only when
+    // metas were actually loaded, and only when NOTHING was stale — if any module
+    // was stale this run, a subsequent full validation is cheap insurance against a
+    // failed regen leaving a stale meta trusted.
+    if (!trust_cache && stale == 0 && !cur_sig.empty() && loaded > 0) {
+        std::ofstream stamp_out(stamp_path, std::ios::binary | std::ios::trunc);
+        if (stamp_out) {
+            stamp_out << cur_sig << "\n";
+        }
     }
 
     return loaded;

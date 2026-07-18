@@ -20,6 +20,7 @@ TML_MODULE("test")
 #include "cli/builder/compiler_setup.hpp"
 #include "cli/builder/native_lib_resolver.hpp"
 #include "cli/builder/object_compiler.hpp"
+#include "cli/commands/cmd_cache.hpp" // F-031: enforce_cache_caps() at run teardown
 #include "codegen/llvm/llvm_ir_gen.hpp"
 #include "common.hpp"
 #include "log/log.hpp"
@@ -135,6 +136,10 @@ void incr_test_run_end() {
     auto incr_dir = build_dir / "cache" / "incr";
     query::incr_run_teardown(incr_dir);
     TML_LOG_INFO("incr", query::incr_telemetry_report());
+    // F-031: bound the obj_cache / suite-EXE / run caches after every full test
+    // run (separate from phase42a's incr/ir GC above). Reusable EXEs referenced
+    // by tests.json survive longest; unreferenced orphans are evicted first.
+    cli::enforce_cache_caps();
 }
 
 /// Ensure required vcpkg DLLs are next to compiled test executables.

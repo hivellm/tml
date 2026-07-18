@@ -109,15 +109,18 @@ public:
         }
     }
 
-    /// Fully invalidate all entries: clear all_passed AND exe_path.
-    /// Used when the runtime library changes — old EXEs have the old runtime baked in
-    /// and must be recompiled, not just re-run.
-    void invalidate_all_exes() {
-        for (auto& [name, entry] : entries_) {
-            entry.all_passed = false;
-            entry.exe_path.clear();
-        }
-    }
+    /// Fully invalidate all entries: clear all_passed AND exe_path, and DELETE
+    /// the stale EXE files (plus sibling .lib/.pdb/.exp/.ilk) from disk.
+    /// Used when the runtime library changes — old EXEs have the old runtime baked
+    /// in and must be recompiled, not just re-run. F-031: previously this only
+    /// cleared the JSON fields, orphaning ~1.5k EXE files on disk forever.
+    /// Returns the number of EXE files removed.
+    int invalidate_all_exes();
+
+    /// F-031: return every non-empty `exe_path` currently referenced by the
+    /// cache (across all entries). Used by the LRU evictor to protect reusable
+    /// EXEs (evict unreferenced orphans first).
+    std::vector<std::string> referenced_exes() const;
 
     /// F-030: targeted invalidation. Remove every suite whose transitive
     /// `source_paths` includes `source_path` (path-normalized), returning the

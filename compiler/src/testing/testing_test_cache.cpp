@@ -557,6 +557,43 @@ void TestResultCache::update(const std::string& suite_name, const SuiteCacheEntr
     entries_[suite_name] = entry;
 }
 
+int TestResultCache::invalidate_all_exes() {
+    // Sibling artifacts written next to each compiled suite EXE.
+    static const char* const sibling_exts[] = {".lib", ".pdb", ".exp", ".ilk"};
+    int removed = 0;
+    for (auto& [name, entry] : entries_) {
+        entry.all_passed = false;
+        if (!entry.exe_path.empty()) {
+            std::error_code ec;
+            fs::path exe(entry.exe_path);
+            if (fs::exists(exe, ec) && fs::remove(exe, ec)) {
+                ++removed;
+            }
+            for (const char* sx : sibling_exts) {
+                fs::path sib = exe;
+                sib.replace_extension(sx);
+                fs::remove(sib, ec); // best-effort; siblings may not exist
+            }
+        }
+        entry.exe_path.clear();
+    }
+    if (removed > 0) {
+        TML_LOG_INFO("test", "[cache] invalidate_all_exes: deleted " << removed
+                                                                     << " stale EXE file(s)");
+    }
+    return removed;
+}
+
+std::vector<std::string> TestResultCache::referenced_exes() const {
+    std::vector<std::string> out;
+    for (const auto& [name, entry] : entries_) {
+        if (!entry.exe_path.empty()) {
+            out.push_back(entry.exe_path);
+        }
+    }
+    return out;
+}
+
 std::vector<std::string> TestResultCache::invalidate_source(const std::string& source_path) {
     // Normalize to an absolute, forward-slash, (Windows: lowercased) form so a
     // relative/backslash argument matches the absolute paths stored in
