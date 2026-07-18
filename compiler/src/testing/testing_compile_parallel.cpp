@@ -33,25 +33,38 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
     // Pre-build stdlib codegen state once (would skip emit_module_pure_tml_functions per file).
     // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
     //
-    // STILL DISABLED after phase41b root-cause (reproduced with evidence — see
-    // docs/analysis/tooling-performance/04-test-framework-performance.md F-006).
-    // build_stdlib_object() drives the AST codegen in library_ir_only mode; a
-    // library-body call to a generic free function (concretely
-    // core::runtime::mem::replace[T], lib/core/src/runtime/mem.tml:205) is emitted
-    // as the UN-monomorphized template symbol `@...mem7replaceE_R1T1T` (literal T)
-    // with no matching define — "use of undefined value" in the shared object AND
-    // in every test object that restores the captured state. Root: generic module
-    // free-function calls have no call-site re-mangle+queue branch (generic
-    // Type::method calls do, call_user.cpp:595-632), so gen_call_generic_func's
-    // miss falls to the decl-name fallback at call_user.cpp:452. This is the SAME
-    // error as the pre-existing 5x core/str K001 failures (it breaks the slow path
-    // there too) — a phase27a K001-family generic-substitution root (frozen), plus
-    // the range-iterator i64/i32 width (K001 Class 2). Enabling here regresses
-    // clean suites (core/hash 14/14 -> 14 SKIP), violating the zero-divergence gate.
-    // Also blocked structurally: the monolithic test_bootstrap.tml imports ~12
-    // phantom `pub mod` modules (no source file) so typecheck aborts, and an eager
-    // all-stdlib object times out (>500s). See phase41b proposal (deferred to
-    // phase27a K001 + a per-suite-scoped shared-object redesign).
+    // STILL DISABLED after phase43a — but TWO of the four F-006 blockers are now
+    // FIXED in codegen (they land as standalone K001 fixes, safe with the fast-path
+    // off since they only fire on the miss/dedup paths):
+    //   [FIXED, phase43a] Blocker 1 — generic MODULE FREE FUNCTION monomorphization.
+    //     A library-body call to a generic free function (concretely
+    //     core::runtime::mem::replace[T], lib/core/src/runtime/mem.tml) was emitted
+    //     as the UN-monomorphized template symbol `@...mem7replaceE_R1T1T` (literal
+    //     T) with no matching define → "use of undefined value". Root: generic module
+    //     free-function calls had NO call-site re-mangle+queue branch (generic
+    //     Type::method calls do) so gen_call_generic_func's miss fell to the
+    //     decl-name fallback in call_user.cpp. FIX: after free_func_type_subs, when
+    //     func_sig->type_params is non-empty AND all concrete, re-mangle via
+    //     require_func_instantiation + override the callee (mirrors the Type::method
+    //     block). This is distinct from phase27e's bare-name collision fix (that was
+    //     the reproducible slow-path core/str case; this is the genuinely-generic one).
+    //   [FIXED, phase43a] Blocker 2 — dedup keyspace. CodegenLibraryState now captures
+    //     AND restores generated_impl_methods_ / generated_impl_methods_output_ (was
+    //     only generated_functions_), so a restored worker sees the library's already-
+    //     instantiated methods (e.g. I32::duplicate) as emitted → no redefinition.
+    //
+    // Two blockers REMAIN before this can be flipped on under the zero-divergence gate:
+    //   Blocker 3 — the range-iterator i64/i32 width (K001 Class 2): a LOCAL Range
+    //     value/iterator re-inferred as Range__I32 vs the cached library's Range__I64
+    //     → width mismatch at the restore boundary. Only reproducible under the
+    //     fast-path; needs the index width resolved from the registered signature,
+    //     not the i32 last_expr_type_ default.
+    //   Blocker 4 — the bootstrap + linking redesign: the monolithic test_bootstrap.tml
+    //     imports ~12 phantom `pub mod` modules (no source file) so its typecheck
+    //     aborts, and an eager all-stdlib object times out (>500s). Needs a per-suite-
+    //     scoped bootstrap (compile only the suite's transitive module set) plus the
+    //     F-007 decls-only / external-linkage shared-object linking. See phase43a
+    //     tasks.md 1.8 and docs/analysis/tooling-performance/04-test-framework-performance.md.
     if (g_stdlib_codegen_state) {
         TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
         // Clear obj_cache to prevent stale .obj files from runs without cached state.

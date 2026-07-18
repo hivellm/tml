@@ -703,6 +703,66 @@ auto LLVMIRGen::gen_call_user_function(const parser::CallExpr& call, const std::
         }
     }
 
+    // phase43a Fix B — generic MODULE FREE FUNCTION monomorphization.
+    // The Type::method block above re-mangles + queues an instantiation for generic
+    // static methods, but generic module free functions (e.g. core::runtime::mem::replace[T])
+    // had NO equivalent: when gen_call_generic_func misses (its pending_generic_funcs_ lookup
+    // fails under a partial/restored bootstrap), the fallback above emits the UN-monomorphized
+    // declaration mangling (literal `T`, `@..._R1T1T`) with no queued define → dangling ref.
+    // Here, when the callee is a generic free function whose type params ALL resolve to
+    // concrete types, re-mangle to the monomorphized name (mangle_func_name) and queue the
+    // instantiation (require_func_instantiation → pending_func_keys_), mirroring the
+    // Type::method path. Guarded strictly on all-concrete so still-generic contexts are
+    // untouched; only fires on the gen_call_generic_func miss path (dangling-ref territory).
+    {
+        size_t sep_pos_ff = fn_name.find("::");
+        bool is_type_method_ff =
+            sep_pos_ff != std::string::npos && !fn_name.empty() && std::isupper(fn_name[0]);
+        if (!is_type_method_ff && func_sig.has_value() && !func_sig->type_params.empty()) {
+            // Collect concrete type args in type-param order; bail if any is missing or
+            // still refers to an unresolved type parameter.
+            std::vector<types::TypePtr> ff_type_args;
+            std::unordered_set<std::string> tp_set(func_sig->type_params.begin(),
+                                                   func_sig->type_params.end());
+            bool all_concrete = true;
+            for (const auto& tp : func_sig->type_params) {
+                auto it = free_func_type_subs.find(tp);
+                if (it == free_func_type_subs.end() || !it->second) {
+                    all_concrete = false;
+                    break;
+                }
+                types::TypePtr resolved = it->second;
+                // Reject a substitution that is itself a bare type parameter.
+                if (resolved->is<types::GenericType>() &&
+                    tp_set.count(resolved->as<types::GenericType>().name)) {
+                    all_concrete = false;
+                    break;
+                }
+                if (resolved->is<types::NamedType>() &&
+                    resolved->as<types::NamedType>().type_args.empty() &&
+                    tp_set.count(resolved->as<types::NamedType>().name)) {
+                    all_concrete = false;
+                    break;
+                }
+                ff_type_args.push_back(resolved);
+            }
+            if (all_concrete && ff_type_args.size() == func_sig->type_params.size()) {
+                // Bare function name (strip any module qualification).
+                std::string bare_ff = fn_name;
+                size_t last_sep_ff = bare_ff.rfind("::");
+                if (last_sep_ff != std::string::npos) {
+                    bare_ff = bare_ff.substr(last_sep_ff + 2);
+                }
+                // Re-mangle to the monomorphized symbol and queue the instantiation.
+                // require_func_instantiation registers func_instantiations_[mangled] +
+                // pending_func_keys_ so generate_pending_instantiations emits the define
+                // with the SAME mangle_func_name — call and define names match by construction.
+                std::string mono = require_func_instantiation(bare_ff, ff_type_args);
+                mangled = "@" + mono;
+            }
+        }
+    }
+
     // Determine return type
     std::string ret_type = "i32"; // Default
     if (func_it != functions_.end()) {

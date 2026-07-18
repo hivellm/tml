@@ -269,6 +269,15 @@ struct CodegenLibraryState {
     // Generated function names (to avoid duplicates)
     std::unordered_set<std::string> generated_functions;
 
+    // Generic impl-method dedup sets (phase43a: previously only generated_functions
+    // was captured, leaving these two empty in each restored worker → the emission
+    // guard generated_impl_methods_output_.count(...) was blind to what the cached
+    // library already instantiated → I32::duplicate redefinition). Capture BOTH the
+    // REQUEST-dedup set and the EMISSION-dedup set so restored workers share the
+    // library's full generic-instance keyspace.
+    std::unordered_set<std::string> generated_impl_methods;        ///< REQUEST dedup
+    std::unordered_set<std::string> generated_impl_methods_output; ///< EMISSION dedup
+
     // String literals collected during library codegen (name -> value)
     std::vector<std::pair<std::string, std::string>> string_literals;
 

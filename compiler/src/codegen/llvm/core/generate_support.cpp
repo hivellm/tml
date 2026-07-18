@@ -621,6 +621,12 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     // Capture generated functions
     state->generated_functions = generated_functions_;
 
+    // Capture generic impl-method dedup sets (phase43a: both the REQUEST set and the
+    // EMISSION set, so restored workers don't re-emit library-instantiated methods
+    // like I32::duplicate — the emission guard reads generated_impl_methods_output_).
+    state->generated_impl_methods = generated_impl_methods_;
+    state->generated_impl_methods_output = generated_impl_methods_output_;
+
     // Capture string literals (needed when restoring full function definitions)
     state->string_literals = string_literals_;
 

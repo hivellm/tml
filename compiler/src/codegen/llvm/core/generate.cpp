@@ -705,6 +705,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
         for (const auto& name : state.generated_functions) {
             generated_functions_.insert(name);
         }
+        // Restore generic impl-method dedup sets so a restored worker treats the
+        // library's already-instantiated methods (e.g. I32::duplicate) as emitted
+        // and does NOT re-emit them → avoids "duplicate redefinition" (phase43a).
+        for (const auto& name : state.generated_impl_methods) {
+            generated_impl_methods_.insert(name);
+        }
+        for (const auto& name : state.generated_impl_methods_output) {
+            generated_impl_methods_output_.insert(name);
+        }
         // Restore declared externals to prevent duplicate declarations
         // when user code has @extern functions with the same symbol names
         for (const auto& name : state.declared_externals) {
