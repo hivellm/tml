@@ -2,6 +2,8 @@
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
+#include "types/checker.hpp"
+#include "types/module_registry.hpp"
 
 #include <gtest/gtest.h>
 #include <memory>
@@ -25,6 +27,51 @@ protected:
 
         BorrowChecker checker;
         return checker.check_module(std::get<parser::Module>(module));
+    }
+
+    // Type-aware borrow check: runs the type checker first so the borrow checker
+    // can resolve method signatures (needed for phase26e 1.2 interior-reference
+    // lifetime binding, which keys on a ref-returning `mut this` method). Mirrors
+    // the run_build flow (TypeChecker -> env -> BorrowChecker(env)).
+    auto check_typed(const std::string& code)
+        -> Result<bool, std::vector<BorrowError>> {
+        source_ = std::make_unique<Source>(Source::from_string(code));
+        Lexer lexer(*source_);
+        auto tokens = lexer.tokenize();
+        Parser parser(std::move(tokens));
+        auto module = parser.parse_module("test");
+        EXPECT_TRUE(is_ok(module)) << "Parse failed";
+        const auto& mod = std::get<parser::Module>(module);
+
+        types::TypeChecker tc;
+        tc.set_module_registry(std::make_shared<types::ModuleRegistry>());
+        auto tc_result = tc.check_module(mod);
+        EXPECT_TRUE(std::holds_alternative<types::TypeEnv>(tc_result)) << "Type check failed";
+        const auto& env = std::get<types::TypeEnv>(tc_result);
+
+        BorrowChecker checker(env);
+        return checker.check_module(mod);
+    }
+
+    void check_typed_ok(const std::string& code) {
+        auto result = check_typed(code);
+        EXPECT_TRUE(is_ok(result)) << "Borrow check failed (expected OK)";
+    }
+
+    void check_typed_error(const std::string& code, const std::string& expected_msg = "") {
+        auto result = check_typed(code);
+        EXPECT_TRUE(is_err(result)) << "Expected borrow error";
+        if (!expected_msg.empty() && is_err(result)) {
+            const auto& errors = std::get<std::vector<BorrowError>>(result);
+            bool found = false;
+            for (const auto& e : errors) {
+                if (e.message.find(expected_msg) != std::string::npos) {
+                    found = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(found) << "Expected error containing: " << expected_msg;
+        }
     }
 
     void check_ok(const std::string& code) {
@@ -531,4 +578,48 @@ TEST_F(BorrowCheckerTest, AssignNotMutableHasSuggestions) {
         }
     )",
                                 BorrowErrorCode::AssignNotMutable);
+}
+
+// ============================================================================
+// phase26e 1.2 — Interior-reference lifetime binding
+// (additive; require type_env_ so they use check_typed. The executable fixtures
+//  in compiler/tests/borrow/interior_ref/ + compiler/tests/cli/borrow_interior_ref.sh
+//  are the primary tests since the gtest harness does not build under Zig CC.)
+// ============================================================================
+
+TEST_F(BorrowCheckerTest, InteriorRefTwoMutRefConflict) {
+    // Two live `mut ref` interior references to the same receiver conflict.
+    check_typed_error(R"(
+        type Cell { v: I64 }
+        impl Cell {
+            pub func slot(mut this) -> mut ref I64 { return mut ref this.v }
+        }
+        func use_i(x: I64) -> I64 { return x }
+        func test() -> I32 {
+            var c: Cell = Cell { v: 1 as I64 }
+            let r1: mut ref I64 = c.slot()
+            let r2: mut ref I64 = c.slot()
+            return (use_i(*r1) + use_i(*r2)) as I32
+        }
+    )",
+                      "more than once");
+}
+
+TEST_F(BorrowCheckerTest, InteriorRefReleasedThenReborrowOk) {
+    // A `mut ref` released before the next is taken (NLL) is legal.
+    check_typed_ok(R"(
+        type Cell { v: I64 }
+        impl Cell {
+            pub func slot(mut this) -> mut ref I64 { return mut ref this.v }
+        }
+        func use_i(x: I64) -> I64 { return x }
+        func test() -> I32 {
+            var c: Cell = Cell { v: 1 as I64 }
+            let r1: mut ref I64 = c.slot()
+            let a: I64 = use_i(*r1)
+            let r2: mut ref I64 = c.slot()
+            let b: I64 = use_i(*r2)
+            return (a + b) as I32
+        }
+    )");
 }

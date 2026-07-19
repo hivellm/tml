@@ -1,0 +1,44 @@
+// Positive fixtures for phase26e 1.2 — interior-reference lifetime binding.
+// These are all LEGAL under NLL and MUST compile + run: the borrow-checker
+// wiring that rejects two conflicting live interior refs must not reject these.
+use test::{assert_eq}
+use std::collections::list::List
+
+// Two shared interior refs may coexist.
+@test
+func test_two_shared_get_ref_coexist() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(10 as I64)
+    arr.push(20 as I64)
+    let r1: ref I64 = arr.get_ref(0)
+    let r2: ref I64 = arr.get_ref(1)
+    assert_eq(*r1 + *r2, 30 as I64, "two shared refs read")
+    return 0
+}
+
+// A mut ref released (NLL) before the next mut ref is taken is legal.
+@test
+func test_mut_ref_released_then_reborrow() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(1 as I64)
+    let r1: mut ref I64 = arr.get_mut(0)
+    *r1 = 100 as I64
+    let a: I64 = *r1
+    // r1's last use is above; the borrow ends, so a fresh mut ref is legal.
+    let r2: mut ref I64 = arr.get_mut(0)
+    *r2 = a + 1 as I64
+    assert_eq(*r2, 101 as I64, "reborrow after last use")
+    return 0
+}
+
+// An interior ref used immediately (no binding outliving the mutation) is legal.
+@test
+func test_get_ref_immediate_then_push() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(7 as I64)
+    let first: I64 = *arr.get_ref(0)
+    arr.push(8 as I64)
+    assert_eq(first, 7 as I64, "immediate read before push")
+    assert_eq(arr.get(1), 8 as I64, "push succeeded")
+    return 0
+}

@@ -1299,6 +1299,22 @@ private:
 
     /// Maps reference places to the places they borrow from.
     std::unordered_map<PlaceId, PlaceId> ref_to_borrowed_;
+
+    /// phase26e 1.2 — interior-reference lifetime binding.
+    ///
+    /// When `check_method_call` CONFIDENTLY resolves a ref-returning method
+    /// (`c.get_ref(i) -> ref/mut ref T`) over a place receiver, it records the
+    /// receiver place here. The following `check_let` binds a borrow of that
+    /// receiver to the LHS ref so NLL keeps the container borrow live until the
+    /// ref's last use — making a subsequent mutating call (`c.push(x)`) a B009
+    /// conflict. Reset at the start of every `check_let` and `check_method_call`;
+    /// only consumed when the initializer is exactly the ref-returning call.
+    struct PendingRefReturn {
+        PlaceId place;      ///< Receiver base place borrowed by the interior ref.
+        Place full_place;   ///< Full receiver place (with projections).
+        BorrowKind kind;    ///< Shared for `ref T`, Mutable for `mut ref T`.
+    };
+    std::optional<PendingRefReturn> pending_ref_return_;
 };
 
 } // namespace tml::borrow

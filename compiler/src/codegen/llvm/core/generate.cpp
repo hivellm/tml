@@ -572,15 +572,32 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // definition is used instead of a library struct with the same simple name
     // but different fields (e.g., local Node{value: T} vs library Node{value: Maybe[T]}).
     local_generic_struct_names_.clear();
+    // ALL locally-defined type names (generic + non-generic structs, enums).
+    // A bare-name struct-layout collision between a test-local type and a
+    // same-named library type (e.g. a test's `type Row { payload: Shared[I64] }`
+    // vs `std::sqlite::Row { stmt_handle: ptr, ... }`) is silent per-file (local
+    // wins), but under the shared-stdlib codegen-state path the restore below
+    // injects the LIBRARY layout into struct_types_/struct_fields_ by bare name;
+    // gen_struct_decl's "already emitted" guard then makes the local definition
+    // inherit the wrong layout → K001 insertvalue type mismatch (or silent field
+    // corruption on the GEP path). The type checker keeps these distinct by
+    // module; codegen must not let a restored library entry shadow a name the
+    // CURRENT module actually defines. We collect those names and skip restoring
+    // any library registry entry that collides, so the local definition is the
+    // one that registers and emits.
+    std::unordered_set<std::string> local_type_decl_names;
     for (const auto& decl : module.decls) {
         if (decl->is<parser::StructDecl>()) {
             const auto& s = decl->as<parser::StructDecl>();
+            local_type_decl_names.insert(s.name);
             if (!s.generics.empty()) {
                 local_generic_struct_names_.insert(s.name);
                 // Pre-register so require_struct_instantiation uses local fields
                 pending_generic_structs_[s.name] = &s;
                 struct_decls_[s.name] = &s;
             }
+        } else if (decl->is<parser::EnumDecl>()) {
+            local_type_decl_names.insert(decl->as<parser::EnumDecl>().name);
         }
     }
 
@@ -589,8 +606,49 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // This skips emit_module_pure_tml_functions() entirely (~9 seconds for zlib).
         const auto& state = *options_.cached_library_state;
 
-        // Type definitions are the same regardless of library_decls_only
-        imported_type_defs = state.imported_type_defs;
+        // Type definitions are the same regardless of library_decls_only.
+        // Strip any `%struct./%union./%class./%enum.<Name> = type ...` line whose
+        // bare Name is redefined by the CURRENT module — otherwise the local
+        // definition emitted below collides with the restored library one
+        // ("redefinition of type"). The worker uses its OWN layout for that name;
+        // the library type of the same bare name is unreferenced here (the module
+        // that defines a local `Row` is, by construction, not using the library
+        // `Row`). Non-colliding names and generic instantiations (`Name__I32`,
+        // exact-match only) are preserved untouched.
+        if (local_type_decl_names.empty()) {
+            imported_type_defs = state.imported_type_defs;
+        } else {
+            std::ostringstream filtered;
+            std::istringstream tds(state.imported_type_defs);
+            std::string line;
+            while (std::getline(tds, line)) {
+                bool drop = false;
+                size_t p = line.find('%');
+                if (p != std::string::npos) {
+                    // Match "%<kind>.<Name> = type"
+                    static const char* kinds[] = {"%struct.", "%union.", "%class.", "%enum."};
+                    for (const char* kind : kinds) {
+                        if (line.compare(p, std::strlen(kind), kind) != 0) {
+                            continue;
+                        }
+                        size_t name_start = p + std::strlen(kind);
+                        size_t eq = line.find(" = type", name_start);
+                        if (eq == std::string::npos) {
+                            break;
+                        }
+                        std::string name = line.substr(name_start, eq - name_start);
+                        if (local_type_decl_names.count(name) > 0) {
+                            drop = true;
+                        }
+                        break;
+                    }
+                }
+                if (!drop) {
+                    filtered << line << "\n";
+                }
+            }
+            imported_type_defs = filtered.str();
+        }
 
         // For function IR: if library_decls_only is true, use pre-computed declarations.
         // If false, use the full definitions.
@@ -650,6 +708,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
         // Restore internal registries
         for (const auto& [k, v] : state.struct_types) {
+            // A type the CURRENT module defines shadows the library one — do NOT
+            // restore the library layout/guards for it, or the local definition
+            // inherits the wrong fields (bare-name collision, see above).
+            if (local_type_decl_names.count(k) > 0) {
+                continue;
+            }
             if (struct_types_.find(k) == struct_types_.end()) {
                 struct_types_[k] = v;
                 // Restore nullable_maybe_types_ for nullable Maybe types from cache
@@ -672,6 +736,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
             union_types_.insert(k);
         }
         for (const auto& [k, v] : state.enum_variants) {
+            // Locally-defined enum shadows the library one (see above).
+            if (local_type_decl_names.count(k) > 0) {
+                continue;
+            }
             if (enum_variants_.find(k) == enum_variants_.end()) {
                 enum_variants_[k] = v;
             }
@@ -682,6 +750,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
             }
         }
         for (const auto& [struct_name, fields] : state.struct_fields) {
+            // Locally-defined type shadows the library one (see above).
+            if (local_type_decl_names.count(struct_name) > 0) {
+                continue;
+            }
             if (struct_fields_.find(struct_name) == struct_fields_.end()) {
                 std::vector<FieldInfo> fi;
                 fi.reserve(fields.size());

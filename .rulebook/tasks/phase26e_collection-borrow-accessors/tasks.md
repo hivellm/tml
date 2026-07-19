@@ -11,7 +11,7 @@
 
 ## 1. Implementation
 - [x] 1.1 Interior-pointer codegen (2026-07-19, Cluster A): DONE via two complementary mechanisms on the AST path (MIR deferred per header note, matching the slice-intrinsic model). (a) Source-level: `ref (*typed_ptr)` is a zero-instruction pointer forward and `ref (*ptr).field` a single GEP (unary.cpp:124-132 / :185-211,531-536 — proven by Sync.get_ref + List::retain); accessors use these in pure TML. (b) Intrinsics for the type-erased buffers: `list_get_mut` (header pointer-math GEP), `ptr_as_ref[T]`/`ptr_as_mut[T]` (inttoptr) — all previously referenced-but-unimplemented (i32-default hole), now real. Caller-side chains fixed: C027 RefType unwrap (A2) + two-step verified working at HEAD (A3). IR-verified zero-copy (no alloca/memcpy).
-- [ ] 1.2 Borrow-checker lifetimes: bind the returned reference's lifetime to the container borrow so use-after-invalidation (get_ref then push/rehash) is a compile error; extend below the `lowlevel { *ptr }` boundary the checker is currently blind to
+- [~] 1.2 Borrow-checker lifetimes (2026-07-19, Cluster D): interior-reference lifetime binding WIRED in the NLL checker (borrow/checker_expr.cpp check_method_call + checker_stmt.cpp check_let). Narrow, confident-only method resolution (receiver type via place/get_expr_type → `Type::method` FuncSig): a ref-returning method over a place records a borrow of the receiver bound to the LHS ref (create_borrow_with_projection, ref_place=lhs); NLL extends it to the ref's last use. Conflicts fire ONLY against live interior-ref borrows THIS wiring created (ref_place != 0) — two `mut ref`s, or `mut ref` while a shared interior ref lives → B009. VERIFIED: negatives reject (compiler/tests/borrow/interior_ref/ + cli/borrow_interior_ref.sh), positives compile+run (lib/std/tests/collections/list_interior_ref.test.tml), blast-radius sweep ZERO new borrow errors (collections/alloc/str/hash/json/borrow + stdlib files), determinism 28/28. LIMITATION: `list.push(x)` invalidation is NOT caught — `List.push` is `this` (not `mut this`; handle-based), and making the whole mutator surface `mut this` has a massive type-level blast radius (immutable-collection mutation is pervasive: proven — 20+ std tests break). Catching push-class invalidation requires a separate coordinated mutator-signature change; the wiring already handles it the instant those methods become `mut this`. Not extended below `lowlevel { *ptr }` (callee bodies stay trusted — call-site rule only, per spec point 4).
 - [x] 1.3 Read accessors (2026-07-19, Cluster B): `List::get_ref(i) -> ref T` (bounds-panic + elem-ptr `ref (*ep)`), `HashMap::get_ref(k) -> Maybe[ref V]` (probe loop, `Just(ref (*val_ptr))`), `BTreeMap::get_ref(k) -> Maybe[ref V]` (find_index → `values.get_ref`), `Deque::get_ref(i) -> ref T` (bounds-panic + ring-slot math → `data.get_ref`). All zero-alloc, no clone (IR-verified on `List[Row].get_ref`: GEP + ptr return, no alloca-aggregate/memcpy/duplicate). Maybe[ref V] verified working end-to-end (concrete + generic).
 - [x] 1.4 Mut accessors (Cluster A + Cluster C, 2026-07-19): `list_get_mut` intrinsic + `IndexMut` sugar (Cluster A). `HashMap::get_mut(k) -> Maybe[mut ref V]` via `ptr_as_mut[V]`, `BTreeMap::get_mut -> Maybe[mut ref V]`, `Deque::get_mut(i) -> mut ref T`, `List::get_mut(i) -> mut ref T` — all write-through verified.
 - [ ] 1.5 Borrowing iterators: `iter_ref`/`values_ref` yielding `ref T`; make the existing by-value iterators either move-out (consuming) or delegate to the ref form so the F-019 asymmetry is resolved coherently
@@ -110,3 +110,30 @@ pre-existing environmental exit-127 flaky on the FROZEN C frontend `tml cc
 --emit=ast`, untouched by this work). shared_get_sound (prior task) still green.
 core/ptr suite has a pre-existing composition-sensitive "Unknown method: unwrap"
 (Maybe::unwrap in ptr.test.tml, passes standalone) — unrelated to this work.
+
+## Cluster D — struct-layout collision + borrow-lifetime wiring (2026-07-19)
+
+### D0 — bare-name struct-layout collision under shared-stdlib state (FIXED)
+A test-local `type Row { payload: Shared[I64], tag: I64 }` collided with
+`std::sqlite::Row { stmt_handle: ptr, num_columns: I32 }` by BARE NAME under the
+shared-stdlib codegen-state path. Root cause: `CodegenLibraryState.struct_types/
+struct_fields` are keyed by bare name; the restore in generate.cpp injects
+`sqlite::Row`'s layout, then gen_struct_decl's `if (struct_types_.find(name) !=
+end()) return;` guard makes the local `Row` INHERIT the library layout →
+`insertvalue %struct.Shared__I64` into a `ptr` slot (K001), or silent field
+corruption on the GEP path. (Proven with an import-sqlite + local-Row probe:
+`%struct.Row = type {ptr,i32}` used for the local Row.)
+Fix (generate.cpp): pre-scan the CURRENT module's struct/enum decl names; at
+restore, SKIP any library `struct_types/struct_fields/enum_variants/instantiation-
+guard` entry whose bare name the module redefines (local shadows library, mirrors
+the existing `local_generic_struct_names_` handling for generics), AND strip the
+shadowed `%struct./%union./%class./%enum.<Name> = type ...` line from the restored
+`imported_type_defs` text so the locally-emitted def does not collide
+("redefinition of type"). Regression test: lib/std/tests/collections/d0_row_collision.test.tml
+(un-renamed local `Row`, passes in the full collections suite where sqlite::Row is
+captured by test_bootstrap.tml).
+
+### D1 — see item 1.2 above.
+Diagnostic text produced (existing BorrowError messages, reused): "cannot borrow
+`c` as mutable more than once at a time" (two mut refs); "cannot borrow `c` as
+mutable because it is also borrowed as immutable" (mut ref while shared ref live).

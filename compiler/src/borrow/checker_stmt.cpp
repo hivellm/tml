@@ -115,6 +115,11 @@ void BorrowChecker::check_stmt(const parser::Stmt& stmt) {
 /// y = 10           // OK
 /// ```
 void BorrowChecker::check_let(const parser::LetStmt& let) {
+    // phase26e 1.2: clear any stale interior-ref record from a prior statement so
+    // only THIS let's initializer can leave one behind (an initializer that is not
+    // a ref-returning method call must not inherit a previous one).
+    pending_ref_return_.reset();
+
     // Check initializer first
     if (let.init) {
         check_expr(**let.init);
@@ -166,6 +171,25 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
             // Other patterns handled similarly
         },
         let.pattern->kind);
+
+    // phase26e 1.2: if the initializer was a CONFIDENTLY-resolved ref-returning
+    // method call over a place (e.g. `let r = c.get_ref(i)`), bind a borrow of
+    // the receiver to this LHS ref. NLL then keeps the receiver borrow live until
+    // the ref's last use, so a mutating call on the receiver while `r` is still
+    // live (`c.push(x); use(*r)`) is a B009 conflict. Only simple `let r = ...`
+    // ident bindings participate — destructuring an interior ref is not a shape
+    // we model, and skipping it is the safe (under-borrow) direction.
+    if (pending_ref_return_ && let.pattern->is<parser::IdentPattern>()) {
+        const auto& ident = let.pattern->as<parser::IdentPattern>();
+        auto lhs_place = env_.lookup(ident.name);
+        if (lhs_place) {
+            auto loc = current_location(let.span);
+            create_borrow_with_projection(pending_ref_return_->place,
+                                          pending_ref_return_->full_place,
+                                          pending_ref_return_->kind, loc, *lhs_place);
+        }
+    }
+    pending_ref_return_.reset();
 }
 
 /// Checks an expression statement.

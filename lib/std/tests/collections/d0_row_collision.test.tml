@@ -1,0 +1,16 @@
+use test::{assert_eq}
+use core::alloc::shared::Shared
+
+// Un-renamed local `Row` that collides with std::sqlite::Row by bare name.
+type Row {
+    payload: Shared[I64],
+    tag: I64,
+}
+
+@test
+func test_d0_local_row_construct() -> I32 {
+    let r: Row = Row { payload: Shared::new(7 as I64), tag: 3 as I64 }
+    assert_eq(r.tag, 3 as I64, "tag round-trips")
+    assert_eq(r.payload.get(), 7 as I64, "payload round-trips")
+    return 0
+}

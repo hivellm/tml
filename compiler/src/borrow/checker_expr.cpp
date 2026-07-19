@@ -366,6 +366,83 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
     }
     end_two_phase_borrow();
 
+    // phase26e 1.2: interior-reference lifetime binding (borrow-checker side of
+    // the zero-copy accessors). Narrow method resolution — under-borrow is the
+    // safe direction, so we act ONLY on a CONFIDENTLY resolved method and do
+    // nothing otherwise (an unresolved method must never manufacture a borrow, or
+    // legit code gets false B-errors).
+    pending_ref_return_.reset();
+    if (type_env_) {
+        auto recv_place = extract_place(*call.receiver);
+        // The receiver's static type: prefer the type recorded by the type
+        // checker on the expression node; fall back to the borrow env's place
+        // type (set from the binding's annotation) for a plain place receiver,
+        // which is the common `var c: List[T]` shape where the node type is not
+        // separately recorded.
+        types::TypePtr recv_type = type_env_->get_expr_type(call.receiver.get());
+        if (!recv_type && recv_place && recv_place->projections.empty()) {
+            recv_type = env_.get_state(recv_place->base).type;
+        }
+        if (recv_type && recv_type->is<types::RefType>()) {
+            recv_type = recv_type->as<types::RefType>().inner;
+        }
+        if (recv_type && recv_type->is<types::NamedType>()) {
+            const std::string& base = recv_type->as<types::NamedType>().name;
+            auto sig = type_env_->lookup_func(base + "::" + call.method);
+            if (sig && recv_place) {
+                bool ret_is_ref = sig->return_type && sig->return_type->is<types::RefType>();
+                bool ret_is_mut_ref =
+                    ret_is_ref && sig->return_type->as<types::RefType>().is_mut;
+                bool recv_is_mut_this = !sig->params.empty() && sig->params[0] &&
+                                        sig->params[0]->is<types::RefType>() &&
+                                        sig->params[0]->as<types::RefType>().is_mut;
+
+                (void)recv_is_mut_this;
+                if (ret_is_ref) {
+                    // An interior reference borrows the receiver (Shared for `ref T`,
+                    // Mutable for `mut ref T`). Conflict detection is deliberately
+                    // narrow: we only flag against a LIVE interior-ref borrow that
+                    // THIS wiring itself created (its `ref_place` is the bound ref
+                    // variable, i.e. non-zero). Transient `ref`-argument borrows
+                    // (created by check_unary with ref_place == 0) and other
+                    // machinery are intentionally excluded — the pre-existing NLL
+                    // does not release those precisely, so counting them would
+                    // produce false positives on long-legal code (e.g.
+                    // `f(ref x); x.mutate()`). Two `mut ref`s, or a `mut ref` while
+                    // a shared interior ref is live, conflict (B009); two shared
+                    // interior refs coexist. We then record the borrow so check_let
+                    // binds it to the LHS ref (NLL extends it to the ref's last use).
+                    BorrowKind kind =
+                        ret_is_mut_ref ? BorrowKind::Mutable : BorrowKind::Shared;
+                    const auto& st = env_.get_state(recv_place->base);
+                    for (const auto& b : st.active_borrows) {
+                        if (b.end || b.ref_place == 0) {
+                            continue; // released, or not one of our interior refs
+                        }
+                        bool conflicts = (kind == BorrowKind::Mutable) ||
+                                         (b.kind == BorrowKind::Mutable);
+                        if (!conflicts) {
+                            continue; // two shared interior refs coexist
+                        }
+                        auto loc = current_location(call.span);
+                        if (kind == BorrowKind::Mutable && b.kind == BorrowKind::Mutable) {
+                            errors_.push_back(
+                                BorrowError::double_mut_borrow(st.name, loc.span, b.start.span));
+                        } else if (kind == BorrowKind::Mutable) {
+                            errors_.push_back(BorrowError::mut_borrow_while_immut(
+                                st.name, loc.span, b.start.span));
+                        } else {
+                            errors_.push_back(BorrowError::immut_borrow_while_mut(
+                                st.name, loc.span, b.start.span));
+                        }
+                        break;
+                    }
+                    pending_ref_return_ = PendingRefReturn{recv_place->base, *recv_place, kind};
+                }
+            }
+        }
+    }
+
     // phase26f 1.2b: the receiver is a borrow (two-phase), never a move.
     //
     // Method arguments would move their by-value identifier operands, but the
