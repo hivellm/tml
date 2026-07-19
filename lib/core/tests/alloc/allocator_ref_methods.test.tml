@@ -22,8 +22,17 @@ impl Allocator for WrapAlloc {
     func grow_zeroed(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
         return this.grow(ptr, old_layout, new_layout)
     }
+    // NOTE: shrink must NOT delegate to grow. grow copies `old_layout.size()`
+    // bytes, which is correct only when the new block is at least as large.
+    // For a shrink (new < old) that overruns the new allocation — a real heap
+    // buffer overflow that corrupted the heap for whichever test allocated next
+    // (phase44b). Copy only what fits in the new block.
     func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
-        return this.grow(ptr, old_layout, new_layout)
+        let r = this.allocate(new_layout)
+        when r {
+            Ok(p) => { mem_copy(p, ptr, new_layout.size()); this.deallocate(ptr, old_layout); return Ok(p) }
+            Err(e) => return Err(e)
+        }
     }
 }
 

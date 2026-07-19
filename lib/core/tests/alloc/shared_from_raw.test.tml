@@ -7,20 +7,30 @@ use core::runtime::mem::{mem_alloc, mem_free, size_of}
 
 @test
 func test_shared_from_raw_via_alloc() -> I32 {
-    // We cannot import SharedInner directly, but we know its layout:
-    //   { value: T, strong_count: I32 }
-    // For T=I32, that's { I32, I32 } = 8 bytes
-    let size: I64 = 8
+    // We cannot import SharedInner directly, but we know its layout
+    // (lib/core/src/alloc/shared.tml):
+    //   { value: T, strong_count: I32, weak_count: I32 }
+    // For T=I32 that is { I32, I32, I32 } = 12 bytes.
+    //
+    // This size MUST match SharedInner or Shared's own accessors read and write
+    // outside the block. It said 8 here — stale from before `weak_count` was
+    // added — so every run overran the allocation by 4 bytes and corrupted the
+    // heap for whichever test allocated next (phase44b). Keep in sync with
+    // SharedInner.
+    let size: I64 = 12
     let raw: *Unit = mem_alloc(size)
     assert(raw != null, "allocation should succeed")
 
-    // Write value=42 at offset 0, strong_count=1 at offset 4
+    // Write value=42 at offset 0, strong_count=1 at offset 4, weak_count=0 at 8
     let val_ptr: *I32 = raw as *I32
     lowlevel { *val_ptr = 42 }
 
     // strong_count is 4 bytes after value
     let count_ptr: *I32 = (raw as I64 + 4) as *I32
     lowlevel { *count_ptr = 1 }
+
+    let weak_ptr: *I32 = (raw as I64 + 8) as *I32
+    lowlevel { *weak_ptr = 0 }
 
     // Now wrap with from_raw — the ptr type is *SharedInner[I32]
     // which is structurally { value: I32, strong_count: I32 }

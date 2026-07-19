@@ -54,8 +54,18 @@ impl Allocator for SimpleAllocator {
         return this.grow(ptr, old_layout, new_layout)
     }
 
+    // NOTE: shrink must NOT delegate to grow — grow copies `old_layout.size()`
+    // bytes, overrunning the smaller new block (phase44b heap corruption).
     func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
-        return this.grow(ptr, old_layout, new_layout)
+        let new_result = this.allocate(new_layout)
+        when new_result {
+            Ok(new_ptr) => {
+                mem_copy(new_ptr, ptr, new_layout.size())
+                this.deallocate(ptr, old_layout)
+                return Ok(new_ptr)
+            }
+            Err(e) => return Err(e)
+        }
     }
 }
 

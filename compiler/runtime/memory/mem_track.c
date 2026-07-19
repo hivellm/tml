@@ -234,6 +234,8 @@ int32_t tml_mem_track_free(void* ptr) {
 
     // Pointer not found - could be double-free or external allocation
     g_track.stats.invalid_frees++;
+    RT_WARN("memory", "INVALID FREE: %p (not tracked — double free or foreign alloc) test=%s", ptr,
+            g_track.current_test_name[0] ? g_track.current_test_name : "unknown");
     TML_MUTEX_UNLOCK(g_track.mutex);
     return 0;
 }
