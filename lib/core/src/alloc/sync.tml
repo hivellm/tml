@@ -155,9 +155,8 @@ impl[T] Sync[T] {
     ///
     /// Reads through `ptr_read_clone`, which auto-emits `T::duplicate()` when
     /// `T` contains nested refcounted handles (`Sync` / `Shared` / `Heap` /
-    /// `Str` …) so the returned value carries fresh refcounts — the bitwise
-    /// aliasing double-free (F-016/F-018, fixed phase26b step 3) cannot occur.
-    /// For primitive `T` it is a plain load (zero cost).
+    /// `Str` …) so the returned copy carries fresh refcounts. For primitive
+    /// `T` it is a plain load (zero cost).
     ///
     /// For a zero-copy read, prefer `get_ref(this) -> ref T`.
     ///
@@ -178,15 +177,11 @@ impl[T] Sync[T] {
 
     /// Returns a deep clone of the inner value via `T::duplicate()`.
     ///
-    /// Unlike `get` (which is a bitwise copy that aliases nested refcounted
-    /// fields without bumping their refcounts), `get_clone` invokes
-    /// `T::duplicate()` on the inner value, so every nested `Sync` / `Shared`
-    /// / `Heap` handle in the result carries its own fresh refcount bump — the
-    /// returned value's drop is harmless to storage owned by other `Sync`
-    /// references.
-    ///
-    /// **Always prefer `get_clone` over `get` when `T` contains nested
-    /// refcounted fields.**
+    /// Equivalent in safety to `get`, but requires `T: Duplicate` and always
+    /// deep-clones by invoking `T::duplicate()` on the inner value, so every
+    /// nested `Sync` / `Shared` / `Heap` handle in the result carries its own
+    /// fresh refcount bump. Kept for callers that want the clone explicit in
+    /// source.
     ///
     /// ## Examples
     ///
@@ -203,12 +198,11 @@ impl[T] Sync[T] {
 
     /// Returns a reference to the inner value WITHOUT loading it by value.
     ///
-    /// Unlike `get` (bitwise copy that aliases nested handles) and `get_clone`
-    /// (deep clone), `get_ref` returns a borrow into the allocation. No
-    /// bitwise temp is materialised, no drop-glue runs. This is the safe
-    /// pattern when the consumer wants to inspect the inner value without
-    /// taking ownership. Refcount semantics are unaffected — the original
-    /// `Sync` retains its strong reference.
+    /// `get_ref` returns a borrow into the allocation: no bitwise temp is
+    /// materialised, no drop-glue runs. This is the zero-copy pattern when
+    /// the consumer wants to inspect the inner value without taking
+    /// ownership. Refcount semantics are unaffected — the original `Sync`
+    /// retains its strong reference.
     ///
     /// The `value` field is at offset 0 of `SyncInner[T]`, so a borrow of the
     /// field aliases the allocation directly. This uses the same

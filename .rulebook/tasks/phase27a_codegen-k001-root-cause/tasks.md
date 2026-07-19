@@ -38,3 +38,47 @@
 - [ ] 2.1 Update or create documentation covering the implementation
 - [ ] 2.2 Write tests covering the new behavior
 - [ ] 2.3 Run tests and confirm they pass
+
+## Findings (2026-07-19) — specimen #3/#4 class: `ptr_read_clone` on handle-bearing aggregate
+
+`lib/core/tests/alloc/shared_get_sound.test.tml` `test_get_struct_nested_shared_bumps_and_restores`
+was NOT a Class-1 dedup/composition divergence. The codegen is **uniformly** wrong
+in both standalone and suite modes; the module IR is byte-identical (normalised)
+between the two. The apparent "standalone passes / suite fails" split was a
+**test-harness false-pass**: the standalone dispatcher emits `test_pass` even when
+the test body panics on an assertion (verified by running `core_alloc.exe --run-all`
+directly — it panics on `:39` yet reports `passed:1`). The suite's crash detection
+correctly surfaced the same panic (misattributed to a co-packed file).
+
+Root cause (AST codegen path, used by `tml test` for import-bearing files):
+- `ptr_read_clone[T]` (intrinsics.cpp) gated auto-clone on `has_duplicate_impl`
+  (explicit `impl Duplicate` / `@auto` / `@derive` only). A local
+  `type BoxedCounter { inner: Shared[I64], tag: I64 }` has none, so it hit the
+  POD bitwise fallback — the copy aliased the nested `Shared` handle, no refcount
+  bump. The detection never checked that `T` *transitively* owns handles.
+- Symmetric other half: `llvm_ir_gen_stmt_let.cpp` `suppress_field_drops` skipped
+  field-level drops for any method/call-initialised `let` lacking a DIRECT Drop
+  impl — so even once cloned, the copy was never dropped and the count stayed
+  inflated.
+
+Fix (mode-independent, symmetric with drop-glue):
+- New `LLVMIRGen::gen_structural_duplicate` + `struct_has_droppable_field`
+  (derive/duplicate.cpp) synthesise field-wise clone glue for a needs-drop
+  aggregate with no explicit Duplicate — deep-cloning each droppable field
+  (calling its `duplicate`, recursing for nested locals, Str via `Str::duplicate`)
+  and bitwise-copying genuine PODs.
+- `ptr_read_clone` now clones when `env_.type_needs_drop(T) ||
+  struct_has_droppable_field(T)` (falls back to bitwise for genuinely handle-free
+  PODs — conservative fallback preserved).
+- `suppress_field_drops` now still registers field-level drops when the read-out
+  type transitively owns handles, restoring the counts the clone bumped.
+
+Verification: standalone shared_get_sound passes (genuinely, no panic); `--suite=core/alloc`
+44/45 (shared_get_sound green — remaining failure is the pre-existing floating
+X003 heap-corruption flaky that changes victim every run: shared_get_sound /
+shared_getmut / sync_refcount, all green standalone); determinism-gate 10 → 28/28
+at floor; core/hash and compiler/borrow canaries clean.
+
+NOTE (separate latent bug, out of scope here): the standalone test dispatcher
+reports `test_pass` for a body that panics mid-run. This masks real failures and
+should be fixed in the test-dispatcher codegen (`testing_dispatcher_gen.cpp`).

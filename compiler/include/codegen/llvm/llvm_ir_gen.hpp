@@ -1131,6 +1131,23 @@ private:
     void gen_derive_duplicate_instantiation(const std::string& mangled_name);
     void gen_derive_duplicate_enum(const parser::EnumDecl& e);
 
+    /// Synthesize a structural `duplicate()` for a struct that has NO explicit
+    /// Duplicate impl / decorator but which transitively owns refcounted handles
+    /// (i.e. `type_needs_drop` is true). Field-wise and SYMMETRIC with drop-glue:
+    /// each droppable field is deep-cloned (its own `duplicate` is called, or a
+    /// nested structural duplicate is synthesized recursively), Str fields are
+    /// deep-copied, and genuinely handle-free POD fields are bitwise-copied.
+    /// Idempotent (guarded by `generated_functions_`). Returns false when no
+    /// field info is available so the caller can fall back to a bitwise read.
+    bool gen_structural_duplicate(const std::string& type_name);
+
+    /// True when a locally-registered struct (in `struct_fields_`) has at least
+    /// one field that owns a refcounted handle / needs drop (Str, a Drop-impl
+    /// type, or a generic instantiation whose base impls Drop). Mirrors the
+    /// local fallback scan the drop-glue emitter uses so read-out cloning and
+    /// drop synthesis agree on which aggregates are non-trivial.
+    bool struct_has_droppable_field(const std::string& type_name) const;
+
     // @derive(Hash) support
     void gen_derive_hash_struct(const parser::StructDecl& s);
     void gen_derive_hash_enum(const parser::EnumDecl& e);

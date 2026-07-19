@@ -1,0 +1,102 @@
+// Regression tests for the SOUND Shared::get / get_ref behavior.
+//
+// `Shared::get` reads through `ptr_read_clone`, which auto-emits the clone
+// glue for handle-bearing `T` so the returned copy carries FRESH refcounts.
+// This is the exact shape that previously double-freed: a value containing a
+// nested `Shared` handle, copied out by `get`, whose drop decremented a count
+// it never bumped. These tests pin the balanced (bump-on-get / restore-on-drop)
+// semantics and the zero-copy `get_ref` borrow.
+use test::{assert, assert_eq}
+use core::alloc::shared::Shared
+
+// A struct carrying a nested refcounted handle (the phase24 double-free shape).
+type BoxedCounter {
+    inner: Shared[I64],
+    tag: I64,
+}
+
+// An enum for the get_ref zero-copy borrow test.
+enum Shape {
+    Circle(I64),
+    Square,
+}
+
+// Test 1: get() on a struct with a nested Shared[I64] field must bump the
+// nested handle's refcount (fresh count in the copy); after the copy drops the
+// count restores, and the original allocation is still readable (no UAF).
+@test
+func test_get_struct_nested_shared_bumps_and_restores() -> I32 {
+    let inner: Shared[I64] = Shared::new(7 as I64)
+    // Store a duplicate inside the container: count = 2 (local `inner` + stored).
+    let container: Shared[BoxedCounter] =
+        Shared::new(BoxedCounter { inner: inner.duplicate(), tag: 100 as I64 })
+    assert_eq(inner.strong_count(), 2, "after storing a duplicate, count = 2")
+
+    {
+        // get() copies BoxedCounter; the copy's nested Shared must be a fresh
+        // reference, so the count bumps to 3.
+        let copy: BoxedCounter = container.get()
+        assert_eq(inner.strong_count(), 3, "get() must bump nested Shared to 3")
+        assert_eq(copy.inner.get(), 7 as I64, "copy inner value readable")
+        assert_eq(copy.tag, 100 as I64, "copy tag correct")
+        // `copy` drops at end of this block -> nested Shared decremented to 2.
+    }
+
+    assert_eq(inner.strong_count(), 2, "after copy drops, count restored to 2")
+
+    // Original container still valid after the copy dropped (no corruption).
+    let again: BoxedCounter = container.get()
+    assert_eq(again.inner.get(), 7 as I64, "original still readable after copy drop")
+    return 0
+}
+
+// Test 2: get() on a directly-nested handle `Shared[Shared[I64]]` must bump the
+// inner handle on the copy and restore it when the copy drops; source stays valid.
+@test
+func test_get_nested_handle_bumps_and_restores() -> I32 {
+    let inner: Shared[I64] = Shared::new(9 as I64)
+    // Store a duplicate inside the outer Shared: count = 2.
+    let outer: Shared[Shared[I64]] = Shared::new(inner.duplicate())
+    assert_eq(inner.strong_count(), 2, "after storing a duplicate, count = 2")
+
+    {
+        // get() returns a Shared[I64] copy: its Duplicate glue bumps to 3.
+        let copy: Shared[I64] = outer.get()
+        assert_eq(inner.strong_count(), 3, "get() must bump nested handle to 3")
+        assert_eq(copy.get(), 9 as I64, "copy reads value 9")
+        // `copy` drops here -> count back to 2.
+    }
+
+    assert_eq(inner.strong_count(), 2, "after copy drops, count restored to 2")
+
+    // Source still valid: a fresh get().get() reads through without UAF.
+    let final_val: I64 = outer.get().get()
+    assert_eq(final_val, 9 as I64, "source still readable after copy dropped")
+    return 0
+}
+
+// Test 3: get_ref() is a zero-copy borrow — it must NOT change the strong count,
+// the borrowed value pattern-matches correctly, and the source stays valid.
+@test
+func test_get_ref_zero_copy_no_bump() -> I32 {
+    let s: Shared[Shape] = Shared::new(Shape::Circle(5 as I64))
+    assert_eq(s.strong_count(), 1, "initial count = 1")
+
+    let r: ref Shape = s.get_ref()
+    assert_eq(s.strong_count(), 1, "get_ref must not change strong_count")
+    when *r {
+        Circle(v) => assert_eq(v, 5 as I64, "borrowed Circle payload = 5"),
+        Square => assert(false, "should be Circle"),
+    }
+
+    // Still unchanged after inspecting through the borrow.
+    assert_eq(s.strong_count(), 1, "count unchanged after pattern match")
+
+    // Source remains valid: re-borrow reads the same value.
+    when *s.get_ref() {
+        Circle(v) => assert_eq(v, 5 as I64, "still Circle after re-borrow"),
+        Square => assert(false, "should be Circle"),
+    }
+    assert_eq(s.strong_count(), 1, "get_ref never bumps the count")
+    return 0
+}

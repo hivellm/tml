@@ -652,10 +652,7 @@ impl[K, V] HashMapIter[K, V] {
         let esz: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 32) as *I64) }
 
         let val_ptr: *V = (entries_addr + cur_idx * esz + 8) as *V
-        // ptr_read_clone (not ptr_read): the map keeps owning the value — a
-        // bitwise read would alias nested handles and double-free on the
-        // returned value's drop (F-016, phase26b step 3; `get`/`get_opt` were
-        // already migrated in phase24n, the iterator had been missed).
+        // clone-read: the map retains ownership of the stored value.
         return lowlevel { ptr_read_clone[V](val_ptr) }
     }
 

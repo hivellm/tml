@@ -168,9 +168,7 @@ impl[T] List[T] {
         // Unchecked multiply avoids overflow branch that blocks vectorization
         let byte_offset: I64 = lowlevel { unchecked_mul(index, stride) }
         let elem_ptr: *T = lowlevel { ptr_offset(data, byte_offset) } as *T
-        // ptr_read_clone auto-emits T::duplicate when T contains nested
-        // refcounted handles (Shared / Heap / Str / etc.) — preventing the
-        // bitwise-alias double-free bug. For primitive T it is identity.
+        // clone-read: the list retains ownership of the stored value.
         lowlevel { ptr_read_clone[T](elem_ptr) }
     }
 
@@ -288,15 +286,10 @@ impl[T] List[T] {
         let p_data: *I64 = hdr as *I64
         let data_addr: I64 = lowlevel { ptr_read[I64](p_data) }
 
-        // Two-pointer compaction: write_idx tracks where to write next.
-        //
-        // F-016 (phase26b step 3): the old body bitwise-copied every slot into
-        // a local (`let elem: T = ptr_read`), whose drop at loop end aliased
-        // and double-freed the handles of KEPT elements. Now: the predicate
-        // borrows the slot (no copy, no drop-glue); kept elements that shift
-        // are moved byte-wise with no typed local; only REMOVED elements are
-        // read into an owning local — whose drop, exactly once, releases them
-        // (previously removal was the only accidentally-correct case).
+        // Two-pointer compaction: write_idx tracks where to write next. The
+        // predicate borrows each slot (no copy, no drop-glue); kept elements
+        // that shift are moved byte-wise with no typed local; only REMOVED
+        // elements are read into an owning local whose drop releases them once.
         var write_idx: I64 = 0
         for read_idx in 0 to cur_len {
             let elem_ptr: *T = (data_addr + read_idx * stride) as *T

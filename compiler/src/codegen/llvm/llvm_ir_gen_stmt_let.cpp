@@ -1268,17 +1268,35 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Only register direct Drop impl (not field-level drops)
         bool has_direct_drop = env_.type_implements(type_name, "Drop");
         // For generic types (List__I64), also check base type (List)
+        std::string base_type;
         if (!has_direct_drop) {
             auto sep = type_name.find("__");
             if (sep != std::string::npos) {
-                std::string base = type_name.substr(0, sep);
-                has_direct_drop = env_.type_implements(base, "Drop");
+                base_type = type_name.substr(0, sep);
+                has_direct_drop = env_.type_implements(base_type, "Drop");
             }
         }
-        if (has_direct_drop) {
+        // phase27a: a by-value read-out of a handle-bearing aggregate (a struct
+        // with no direct Drop impl but with fields that own refcounted handles,
+        // e.g. `type BoxedCounter { inner: Shared[I64], tag: I64 }`) is now a
+        // balanced CLONE: `ptr_read_clone` synthesizes field-wise duplicate glue
+        // that bumps every nested handle. Its field-level drops MUST therefore
+        // run at scope exit to restore the counts the clone bumped — symmetric
+        // with the read-out clone synthesis. Without this the copy leaks and the
+        // source's strong-count is never restored (the count stays inflated).
+        // Genuinely handle-free PODs and primitive read-outs need no drop, so
+        // the conservative suppression is preserved for them.
+        bool needs_field_drops = false;
+        if (!has_direct_drop) {
+            needs_field_drops = env_.type_needs_drop(type_name) ||
+                                (!base_type.empty() && env_.type_needs_drop(base_type)) ||
+                                struct_has_droppable_field(type_name);
+        }
+        if (has_direct_drop || needs_field_drops) {
             register_for_drop(var_name, alloca_reg, type_name, var_type, let.span);
         }
-        // Skip registration — no field drops for non-owning let bindings
+        // Otherwise skip registration — no field drops for non-owning,
+        // handle-free let bindings.
     } else {
         register_for_drop(var_name, alloca_reg, type_name, var_type, let.span);
     }

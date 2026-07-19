@@ -816,12 +816,40 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                 }
             }
 
+            // Whether we must synthesize a structural clone below (a
+            // needs-drop aggregate with no explicit Duplicate impl/derive).
+            bool synthesize_structural_clone = false;
             if (!has_duplicate_impl) {
-                // T is a pure POD aggregate — bitwise read is correct.
-                return raw;
+                // No explicit Duplicate. A bitwise read is only sound when T is
+                // GENUINELY handle-free. If T's drop-glue would decrement nested
+                // refcounted handles (Shared/Heap/Str/nested aggregate), then a
+                // bitwise read aliases those handles and the copy's later drop
+                // double-frees — the exact phase24 class this intrinsic exists
+                // to prevent. Detect this SYMMETRICALLY with the drop-glue
+                // predicate (mode-independent: no reliance on suite packing or
+                // restored library state) and synthesize a field-wise clone.
+                bool needs_clone = env_.type_needs_drop(type_name) ||
+                                   env_.type_needs_drop(base_type_for_lookup) ||
+                                   struct_has_droppable_field(type_name);
+                if (!needs_clone) {
+                    // T is a genuinely handle-free POD aggregate — bitwise read
+                    // is correct. (Conservative fallback preserved.)
+                    return raw;
+                }
+                synthesize_structural_clone = true;
             }
 
             std::string dup_func = "@" + mangle_impl_method(type_name, "duplicate");
+
+            // Synthesize the structural duplicate now so `dup_func` resolves at
+            // the call emitted below. If no field layout is available we cannot
+            // build a sound clone — fall back to a bitwise read rather than emit
+            // a call to an undefined symbol.
+            if (synthesize_structural_clone) {
+                if (!gen_structural_duplicate(type_name)) {
+                    return raw;
+                }
+            }
 
             // 4a-bis. For non-generic local/library structs and enums with
             //     @derive(Duplicate) / @auto(duplicate), drive the derive

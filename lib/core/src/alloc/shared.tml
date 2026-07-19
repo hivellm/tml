@@ -115,64 +115,43 @@ impl[T] Shared[T] {
         return Shared::new(T::default())
     }
 
-    /// Returns a bitwise copy of the inner value.
+    /// Returns a copy of the inner value.
     ///
-    /// ## Aliasing hazard for nested Shared / Heap fields
+    /// Reads through `ptr_read_clone`, which auto-emits `T::duplicate()` when
+    /// `T` contains nested refcounted handles (`Shared` / `Heap` / `Sync` /
+    /// `Str` …) so the returned copy carries fresh refcounts. For primitive
+    /// `T` it is a plain load (zero cost).
     ///
-    /// `get` is a **bitwise copy** of `(*this.ptr).value`. If `T` contains
-    /// nested `Shared[U]`, `Heap[U]`, or other refcounted handles as fields,
-    /// those handles are aliased into the returned value WITHOUT bumping
-    /// their refcounts. When the returned value drops, its drop-glue
-    /// decrements those nested refcounts — potentially freeing storage that
-    /// the original `Shared`'s allocation still expects to own. This is the
-    /// `Shared.get` aliasing class of bug (phase24k diagnosis).
-    ///
-    /// **Use `get` only when**:
-    /// - `T` is a primitive (`I32`, `Bool`, `Ptr`, etc.), OR
-    /// - `T` is a flat struct with NO nested refcounted fields, OR
-    /// - The returned value is consumed immediately and never dropped.
-    ///
-    /// **For all other cases**, prefer `get_clone(this) -> T where T:
-    /// Duplicate` which deep-clones via `T::duplicate()` and bumps every
-    /// nested refcount.
+    /// For a zero-copy read, prefer `get_ref(this) -> ref T`.
     ///
     /// ## Examples
     ///
     /// ```tml
     /// let shared = Shared::new(42)
-    /// assert_eq(shared.get(), 42)  // safe — I32 has no nested handles
+    /// assert_eq(shared.get(), 42)
     /// ```
     pub func get(this) -> T {
         if this.ptr == null {
             panic("Shared::get: null pointer")
         }
-        return (*this.ptr).value
+        // `value` is field 0 of SharedInner[T], so this.ptr doubles as *T.
+        let val_ptr: *T = this.ptr as *T
+        return lowlevel { ptr_read_clone[T](val_ptr) }
     }
 
     /// Returns a deep clone of the inner value via `T::duplicate()`.
     ///
-    /// Unlike `get` (which is a bitwise copy that aliases nested
-    /// refcounted fields without bumping their refcounts), `get_clone`
-    /// invokes `T::duplicate()` on the inner value. For types like `CType`
-    /// whose `Duplicate` impl walks each variant and calls `.duplicate()`
-    /// on every nested `Shared` field, this produces a result whose
-    /// nested handles each carry their own fresh refcount bump — so the
-    /// returned value's drop is harmless to the storage owned by other
-    /// `Shared` references.
-    ///
-    /// **Always prefer `get_clone` over `get` when `T` contains nested
-    /// `Shared[U]` / `Heap[U]` fields**. This is the safe lookup pattern
-    /// for `HashMap[K, Shared[T]]::get(k).get_clone()`.
+    /// Equivalent in safety to `get`, but requires `T: Duplicate` and always
+    /// deep-clones by invoking `T::duplicate()` on the inner value, so every
+    /// nested `Shared` / `Heap` / `Sync` handle in the result carries its own
+    /// fresh refcount bump. Kept for callers that want the clone explicit in
+    /// source.
     ///
     /// ## Examples
     ///
     /// ```tml
-    /// // Recursive enum with nested Shared payload:
-    /// //   pub enum Tree { Leaf, Node(Shared[Tree]) }
-    /// // env.trees.get(name).get_clone() yields a Tree whose nested Node
-    /// // Shareds have fresh refcounts; dropping it does not free env's
-    /// // backing storage.
-    /// let t: Tree = env.trees.get(name).get_clone()
+    /// let shared = Shared::new(42)
+    /// assert_eq(shared.get_clone(), 42)
     /// ```
     pub func get_clone(this) -> T where T: Duplicate {
         if this.ptr == null {
@@ -183,15 +162,18 @@ impl[T] Shared[T] {
 
     /// Returns a reference to the inner value WITHOUT loading it by value.
     ///
-    /// Unlike `get` (bitwise copy that aliases nested handles) and
-    /// `get_clone` (deep clone that materialises a bitwise temp before
-    /// calling `T::duplicate`), `get_ref` returns a borrow into the
-    /// allocation. No bitwise temp is materialised, no drop-glue runs.
+    /// `get_ref` returns a borrow directly into the allocation: no bitwise
+    /// temp is materialised and no drop-glue runs. This is the zero-copy
+    /// pattern when the consumer wants to inspect the inner value (e.g.
+    /// pattern-match on an enum) without taking ownership. Refcount semantics
+    /// are unaffected — the original `Shared` retains its strong reference.
     ///
-    /// This is the safe pattern when the consumer wants to inspect the
-    /// inner value (e.g. pattern-match on an enum) without taking
-    /// ownership. Refcount semantics are unaffected — the original
-    /// `Shared` retains its strong reference.
+    /// The `value` field is at offset 0 of `SharedInner[T]`, so a borrow of
+    /// the field aliases the allocation directly. This uses the same
+    /// `ref (*this.ptr).value` borrow pattern as `Deref::deref` (a GEP into
+    /// the inner, no aggregate load, no drop-glue) rather than the
+    /// `ptr_as_ref[T]` intrinsic, whose codegen currently mis-types the
+    /// return as `i32`.
     ///
     /// ## Examples
     ///
@@ -208,8 +190,9 @@ impl[T] Shared[T] {
         if this.ptr == null {
             panic("Shared::get_ref: null pointer")
         }
-        let addr: I64 = this.ptr as I64
-        return lowlevel { ptr_as_ref[T](addr) }
+        lowlevel {
+            return ref (*this.ptr).value
+        }
     }
 
     /// Returns the current reference count.
