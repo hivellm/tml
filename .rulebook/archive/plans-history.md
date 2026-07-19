@@ -563,3 +563,5 @@ longer exits non-zero on a non-existent output directory.
 - phase24_cc-cli-integration Phase 1 already done via phase0v; next
   tractable work is Phase 2 (cc_bridge FFI) + Phase 3 (cmd_cc.cpp).
 
+### 2026-04-18 (session 2) — phase24 Phase 2.3 + parser bug bisection
+
