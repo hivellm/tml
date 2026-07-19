@@ -153,6 +153,87 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
     }
 }
 
+auto LLVMIRGen::gen_container_index_via_method(const parser::IndexExpr& idx,
+                                               const char* method_name)
+    -> std::optional<std::string> {
+    // Only named collection types route through Index/IndexMut. Arrays, slices,
+    // and named slices are handled by the callers' dedicated paths.
+    types::TypePtr obj_type = infer_expr_type(*idx.object);
+    types::TypePtr recv = obj_type;
+    if (recv && recv->is<types::RefType>()) {
+        recv = recv->as<types::RefType>().inner;
+    }
+    if (!recv || !recv->is<types::NamedType>()) {
+        return std::nullopt;
+    }
+    const auto& named = recv->as<types::NamedType>();
+    // Require the impl method to exist so we never hijack unrelated `[]` usages.
+    if (!env_.lookup_func(named.name + "::" + std::string(method_name))) {
+        return std::nullopt;
+    }
+
+    // Build a synthetic receiver: reuse an existing local when the object is a
+    // plain identifier (preserves identity for `mut this`); otherwise
+    // materialize the container into a stack temp so the receiver has an address.
+    std::string recv_name;
+    bool made_temp_recv = false;
+    if (idx.object->is<parser::IdentExpr>() &&
+        locals_.count(idx.object->as<parser::IdentExpr>().name) > 0) {
+        recv_name = idx.object->as<parser::IdentExpr>().name;
+    } else {
+        std::string cval = gen_expr(*idx.object);
+        std::string cty = last_expr_type_;
+        std::string calloca = fresh_reg();
+        emit_line("  " + calloca + " = alloca " + cty);
+        emit_line("  store " + cty + " " + cval + ", ptr " + calloca);
+        recv_name = "__idx_recv_" + std::to_string(label_counter_++);
+        VarInfo v;
+        v.reg = calloca;
+        v.type = cty;
+        v.semantic_type = recv;
+        v.is_ptr_to_value = true;
+        locals_[recv_name] = v;
+        made_temp_recv = true;
+    }
+
+    // Materialize the index into a stack temp and reference it via a synthetic
+    // IdentExpr argument (the AST is unique_ptr-owned, so we cannot alias
+    // idx.index directly into the synthetic call).
+    std::string ival = gen_expr(*idx.index);
+    std::string ity = last_expr_type_;
+    std::string ialloca = fresh_reg();
+    emit_line("  " + ialloca + " = alloca " + ity);
+    emit_line("  store " + ity + " " + ival + ", ptr " + ialloca);
+    std::string idx_name = "__idx_arg_" + std::to_string(label_counter_++);
+    VarInfo iv;
+    iv.reg = ialloca;
+    iv.type = ity;
+    iv.semantic_type = infer_expr_type(*idx.index);
+    iv.is_ptr_to_value = true;
+    locals_[idx_name] = iv;
+
+    // Synthesize `recv.method(idx)` and dispatch through the normal method path.
+    parser::MethodCallExpr mc;
+    mc.method = method_name;
+    mc.span = idx.span;
+    auto recv_expr = std::make_unique<parser::Expr>();
+    recv_expr->kind = parser::IdentExpr{recv_name, idx.span};
+    recv_expr->span = idx.span;
+    mc.receiver = std::move(recv_expr);
+    auto arg_expr = std::make_unique<parser::Expr>();
+    arg_expr->kind = parser::IdentExpr{idx_name, idx.span};
+    arg_expr->span = idx.span;
+    mc.args.push_back(std::move(arg_expr));
+
+    std::string result = gen_method_call(mc);
+
+    locals_.erase(idx_name);
+    if (made_temp_recv) {
+        locals_.erase(recv_name);
+    }
+    return result;
+}
+
 auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
     // For fixed-size arrays: arr[i] -> GEP + load
     // For slices: slice[i] -> extract data ptr from fat pointer, GEP + load
@@ -362,6 +443,12 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
             last_expr_type_ = elem_type;
             return result;
         }
+    }
+
+    // Named collection types (List, Buffer, ...) express element reads through
+    // the `Index` behavior: `container[idx]` == `container.index(idx)`.
+    if (auto via_method = gen_container_index_via_method(idx, "index")) {
+        return *via_method;
     }
 
     // Fallback: generate both expressions and return the object value.

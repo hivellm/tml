@@ -91,6 +91,60 @@ auto LLVMIRGen::try_gen_intrinsic_slice_simd(const std::string& intrinsic_name,
         return "null";
     }
 
+    // list_get_mut(handle: *Unit, idx: I64) -> mut ref T
+    //
+    // Zero-copy mutable element access for `List[T]` (the IndexMut surface).
+    // `handle` points at the 32-byte List header:
+    //   {data ptr @0, len @8, cap @16, stride @24}
+    // Element address = load(data) + idx * load(stride). Byte-addressed GEP on
+    // i8 keeps this element-type-agnostic (mirrors List.get in list.tml). Result
+    // is a `ptr` (mut ref). No bounds check here — List.index_mut is called from
+    // TML which bounds-checks before the lowlevel block, exactly like slice_get_mut
+    // stays raw and defers bounds handling to the caller.
+    if (intrinsic_name == "list_get_mut") {
+        if (call.args.size() >= 2) {
+            std::string handle = gen_expr(*call.args[0]);
+            std::string handle_type = last_expr_type_;
+            // The header pointer may arrive as an i64 address — normalize to ptr.
+            if (handle_type == "i64") {
+                std::string conv = fresh_reg();
+                emit_line("  " + conv + " = inttoptr i64 " + handle + " to ptr");
+                handle = conv;
+            }
+
+            std::string index = gen_expr(*call.args[1]);
+            std::string index_type = last_expr_type_;
+            if (index_type == "i32") {
+                std::string ext = fresh_reg();
+                emit_line("  " + ext + " = sext i32 " + index + " to i64");
+                index = ext;
+            }
+
+            // data = load ptr, ptr %handle   (field @0)
+            std::string data = fresh_reg();
+            emit_line("  " + data + " = load ptr, ptr " + handle);
+
+            // stride = load i64, ptr (handle + 24)  (field @24)
+            std::string stride_ptr = fresh_reg();
+            emit_line("  " + stride_ptr + " = getelementptr inbounds i8, ptr " + handle +
+                      ", i64 24");
+            std::string stride = fresh_reg();
+            emit_line("  " + stride + " = load i64, ptr " + stride_ptr);
+
+            // byte_offset = idx * stride
+            std::string byte_offset = fresh_reg();
+            emit_line("  " + byte_offset + " = mul i64 " + index + ", " + stride);
+
+            // elem_ptr = data + byte_offset   (byte-addressed)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr inbounds i8, ptr " + data + ", i64 " +
+                      byte_offset);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
     // slice_set[T](data: mut ref T, index: I64, value: T)
     // Sets element at index to value
     if (intrinsic_name == "slice_set") {

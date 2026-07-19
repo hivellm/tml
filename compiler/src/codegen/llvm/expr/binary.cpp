@@ -140,6 +140,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
 
         std::string right = gen_expr(*bin.right);
+        // Capture the RHS LLVM type now — subsequent LHS codegen (e.g. index
+        // materialization) clobbers last_expr_type_.
+        std::string right_type = last_expr_type_;
 
         // Restore expected types
         expected_enum_type_ = saved_expected_enum_type;
@@ -849,6 +852,17 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         } else if (bin.left->is<parser::IndexExpr>()) {
             // Array index assignment: arr[i] = value
             const auto& idx_expr = bin.left->as<parser::IndexExpr>();
+
+            // Named collection types (List, Buffer, ...) express mutable element
+            // assignment through `IndexMut`: `container[idx] = v` lowers to
+            // `let slot = container.index_mut(idx); *slot = v`. index_mut returns
+            // a `mut ref T` (a raw ptr, computed via list_get_mut for List), so
+            // the store writes straight into the container's backing storage.
+            if (auto slot = gen_container_index_via_method(idx_expr, "index_mut")) {
+                emit_line("  store " + right_type + " " + right + ", ptr " + *slot);
+                last_expr_type_ = right_type;
+                return right;
+            }
 
             // Get the array pointer
             std::string arr_ptr;

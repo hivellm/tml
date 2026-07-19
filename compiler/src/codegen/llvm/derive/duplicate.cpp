@@ -345,18 +345,25 @@ bool LLVMIRGen::gen_structural_duplicate(const std::string& type_name) {
     const std::vector<FieldInfo>& fields = fields_it->second;
     std::string llvm_type = "%struct." + type_name;
 
-    type_defs_buffer_ << "; structural Duplicate (auto, symmetric with drop-glue) for " << type_name
-                      << "\n";
-    type_defs_buffer_ << "define internal " << llvm_type << " " << func_name << "(ptr %this) {\n";
-    type_defs_buffer_ << "entry:\n";
+    // Build the whole function into a LOCAL buffer. Field cloning may recurse
+    // (nested local aggregate) or queue a library duplicate — the recursion
+    // writes a COMPLETE nested `define` into type_defs_buffer_, so emitting the
+    // current body directly there would interleave the two functions (producing
+    // e.g. two `%ret` allocas in one define → invalid IR). Appending the local
+    // buffer only after the field loop keeps every `define` self-contained.
+    std::ostringstream body;
+    body << "; structural Duplicate (auto, symmetric with drop-glue) for " << type_name << "\n";
+    body << "define internal " << llvm_type << " " << func_name << "(ptr %this) {\n";
+    body << "entry:\n";
 
     if (fields.empty()) {
-        type_defs_buffer_ << "  ret " << llvm_type << " zeroinitializer\n";
-        type_defs_buffer_ << "}\n\n";
+        body << "  ret " << llvm_type << " zeroinitializer\n";
+        body << "}\n\n";
+        type_defs_buffer_ << body.str();
         return true;
     }
 
-    type_defs_buffer_ << "  %ret = alloca " << llvm_type << "\n";
+    body << "  %ret = alloca " << llvm_type << "\n";
 
     int temp_counter = 0;
     auto fresh = [&temp_counter]() -> std::string { return "%t" + std::to_string(temp_counter++); };
@@ -364,10 +371,10 @@ bool LLVMIRGen::gen_structural_duplicate(const std::string& type_name) {
     for (const auto& field : fields) {
         std::string src_ptr = fresh();
         std::string dst_ptr = fresh();
-        type_defs_buffer_ << "  " << src_ptr << " = getelementptr inbounds " << llvm_type
-                          << ", ptr %this, i32 0, i32 " << field.index << "\n";
-        type_defs_buffer_ << "  " << dst_ptr << " = getelementptr inbounds " << llvm_type
-                          << ", ptr %ret, i32 0, i32 " << field.index << "\n";
+        body << "  " << src_ptr << " = getelementptr inbounds " << llvm_type
+             << ", ptr %this, i32 0, i32 " << field.index << "\n";
+        body << "  " << dst_ptr << " = getelementptr inbounds " << llvm_type
+             << ", ptr %ret, i32 0, i32 " << field.index << "\n";
 
         std::string field_type_name;
         if (field.llvm_type.rfind("%struct.", 0) == 0) {
@@ -382,38 +389,59 @@ bool LLVMIRGen::gen_structural_duplicate(const std::string& type_name) {
             // tml_str_free the drop-glue emits for Str fields).
             std::string str_dup = "@" + mangle_impl_method("Str", "duplicate");
             std::string dup = fresh();
-            type_defs_buffer_ << "  " << dup << " = call ptr " << str_dup << "(ptr " << src_ptr
-                              << ")\n";
-            type_defs_buffer_ << "  store ptr " << dup << ", ptr " << dst_ptr << "\n";
+            body << "  " << dup << " = call ptr " << str_dup << "(ptr " << src_ptr << ")\n";
+            body << "  store ptr " << dup << ", ptr " << dst_ptr << "\n";
         } else if (owns_handle) {
-            // Ensure the field's own duplicate exists. Library handle types
-            // (Shared/Heap/Box/...) already emit an explicit Duplicate impl;
-            // a nested LOCAL aggregate without one gets a recursive synthesis.
-            std::string field_dup = "@" + mangle_impl_method(field_type_name, "duplicate");
-            if (generated_functions_.count(field_dup) == 0 &&
-                !env_.type_implements(field_type_name, "Drop") &&
-                struct_fields_.count(field_type_name) > 0) {
-                gen_structural_duplicate(field_type_name);
+            // Deep-clone the field so nested refcounted handles get fresh counts.
+            std::string field_dup_name = mangle_impl_method(field_type_name, "duplicate");
+            std::string field_dup = "@" + field_dup_name;
+            std::string base_type;
+            auto sep = field_type_name.find("__");
+            if (sep != std::string::npos) {
+                base_type = field_type_name.substr(0, sep);
+            }
+            bool is_library = !find_module_for_type(field_type_name).empty();
+
+            if (generated_functions_.count(field_dup) == 0) {
+                if (is_library) {
+                    // Library handle (Shared/Heap/Box/...) has an authoritative
+                    // Duplicate impl (e.g. increment_count) — synthesizing a
+                    // bitwise copy here would DROP the refcount bump. Queue the
+                    // real impl-method instantiation instead (mirrors the way
+                    // drop-glue queues the field `drop`).
+                    if (generated_impl_methods_.find(field_dup_name) ==
+                        generated_impl_methods_.end()) {
+                        std::string inst_base = base_type.empty() ? field_type_name : base_type;
+                        std::unordered_map<std::string, types::TypePtr> empty_subs;
+                        pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                            field_type_name, "duplicate", empty_subs, inst_base, "",
+                            /*is_library_type=*/true});
+                        generated_impl_methods_.insert(field_dup_name);
+                    }
+                } else if (struct_fields_.count(field_type_name) > 0) {
+                    // Local aggregate with no explicit Duplicate — synthesize its
+                    // structural clone recursively (writes a COMPLETE define to
+                    // type_defs_buffer_; our body stays in the local buffer).
+                    gen_structural_duplicate(field_type_name);
+                }
             }
             std::string dup = fresh();
-            type_defs_buffer_ << "  " << dup << " = call " << field.llvm_type << " " << field_dup
-                              << "(ptr " << src_ptr << ")\n";
-            type_defs_buffer_ << "  store " << field.llvm_type << " " << dup << ", ptr " << dst_ptr
-                              << "\n";
+            body << "  " << dup << " = call " << field.llvm_type << " " << field_dup << "(ptr "
+                 << src_ptr << ")\n";
+            body << "  store " << field.llvm_type << " " << dup << ", ptr " << dst_ptr << "\n";
         } else {
             // Primitive or genuinely handle-free POD aggregate — bitwise copy.
             std::string val = fresh();
-            type_defs_buffer_ << "  " << val << " = load " << field.llvm_type << ", ptr " << src_ptr
-                              << "\n";
-            type_defs_buffer_ << "  store " << field.llvm_type << " " << val << ", ptr " << dst_ptr
-                              << "\n";
+            body << "  " << val << " = load " << field.llvm_type << ", ptr " << src_ptr << "\n";
+            body << "  store " << field.llvm_type << " " << val << ", ptr " << dst_ptr << "\n";
         }
     }
 
     std::string result = fresh();
-    type_defs_buffer_ << "  " << result << " = load " << llvm_type << ", ptr %ret\n";
-    type_defs_buffer_ << "  ret " << llvm_type << " " << result << "\n";
-    type_defs_buffer_ << "}\n\n";
+    body << "  " << result << " = load " << llvm_type << ", ptr %ret\n";
+    body << "  ret " << llvm_type << " " << result << "\n";
+    body << "}\n\n";
+    type_defs_buffer_ << body.str();
     return true;
 }
 

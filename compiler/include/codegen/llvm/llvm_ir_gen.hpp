@@ -1266,6 +1266,16 @@ private:
     auto gen_field(const parser::FieldExpr& field) -> std::string;
     auto gen_array(const parser::ArrayExpr& arr) -> std::string;
     auto gen_index(const parser::IndexExpr& idx) -> std::string;
+
+    /// Desugar `container[idx]` for a named collection type (List, Buffer, ...)
+    /// into `container.<method>(idx)`, reusing the full method-dispatch and
+    /// generic-instantiation machinery. `method_name` is "index" for reads
+    /// (returns the element by value / `ref T`) or "index_mut" for the lvalue of
+    /// an assignment (returns a `mut ref T` = ptr). Returns std::nullopt when the
+    /// object is not a NamedType exposing that method, so array/slice/other
+    /// callers can fall through to their existing paths. Sets last_expr_type_.
+    auto gen_container_index_via_method(const parser::IndexExpr& idx, const char* method_name)
+        -> std::optional<std::string>;
     auto gen_path(const parser::PathExpr& path) -> std::string;
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
 

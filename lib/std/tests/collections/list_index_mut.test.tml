@@ -1,10 +1,53 @@
-// BLOCKED: List::index_mut via arr[i] = value syntax
-// Error: Binary operator '=' requires matching types, found () and I64
-// The index_mut method returns () instead of mut ref T (generic trait dispatch bug).
-use test::{assert}
+// Tests for List[T] IndexMut — `list[i] = value` mutable element assignment.
+//
+// phase26e: `list_get_mut` intrinsic + `check_index` element-type resolution +
+// codegen routing of `container[idx]`/`container[idx] = v` through the
+// Index/IndexMut behaviors. Previously blocked ("index_mut returns () instead
+// of mut ref T (generic trait dispatch bug)").
+use test::{assert_eq}
+use std::collections::list::List
 
 @test
-func test_list_index_mut_blocked() -> I32 {
-    assert(true, "blocked: IndexMut generic dispatch returns () instead of mut ref T")
+func test_list_index_mut_assign() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(10 as I64)
+    arr.push(20 as I64)
+    arr.push(30 as I64)
+
+    // Mutable element assignment via `[]` sugar (IndexMut -> list_get_mut).
+    arr[1 as I64] = 99 as I64
+
+    assert_eq(arr.get(0), 10 as I64, "element 0 unchanged")
+    assert_eq(arr.get(1), 99 as I64, "element 1 mutated to 99")
+    assert_eq(arr.get(2), 30 as I64, "element 2 unchanged")
+    return 0
+}
+
+@test
+func test_list_index_read() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(5 as I64)
+    arr.push(15 as I64)
+
+    // Element read via `[]` sugar (Index -> index()).
+    let a: I64 = arr[0 as I64]
+    let b: I64 = arr[1 as I64]
+    assert_eq(a, 5 as I64, "read element 0")
+    assert_eq(b, 15 as I64, "read element 1")
+    return 0
+}
+
+@test
+func test_list_index_mut_then_read() -> I32 {
+    var arr: List[I64] = List::new(3)
+    arr.push(1 as I64)
+    arr.push(2 as I64)
+    arr.push(3 as I64)
+
+    arr[0 as I64] = 100 as I64
+    arr[2 as I64] = 300 as I64
+
+    let sum: I64 = arr[0 as I64] + arr[1 as I64] + arr[2 as I64]
+    assert_eq(sum, 402 as I64, "100 + 2 + 300 = 402")
     return 0
 }

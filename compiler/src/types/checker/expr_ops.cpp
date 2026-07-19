@@ -590,6 +590,50 @@ auto TypeChecker::check_index(const parser::IndexExpr& idx) -> TypePtr {
         return resolved->as<SliceType>().element;
     }
 
+    // Named collection types (List, HashMap, Buffer, ...) express element access
+    // through the `Index`/`IndexMut` behaviors: `container[idx]` desugars to
+    // `container.index(idx)` (and `container[idx] = v` to `index_mut`). Resolve
+    // the element type from the registered `index` impl method so the `[]`
+    // syntax type-checks to the element type instead of `()` — the latter is
+    // what blocked `list[i] = v` (index_mut appeared to "return ()"). The
+    // element type is authoritative from the impl's own method signature
+    // (List::index -> T, HashMap::index -> V), substituting the receiver's
+    // concrete type args for the impl's type params.
+    {
+        TypePtr recv = resolved;
+        if (recv->is<RefType>()) {
+            recv = recv->as<RefType>().inner;
+        }
+        if (recv->is<NamedType>()) {
+            const auto& named = recv->as<NamedType>();
+            // Prefer `index` (returns the element by value / `ref Output`); fall
+            // back to `index_mut` (returns `mut ref Output`) for types that only
+            // register the mutable accessor. Either way we deref to the element.
+            for (const char* method : {"index", "index_mut"}) {
+                auto func = env_.lookup_func(named.name + "::" + method);
+                if (!func) {
+                    continue;
+                }
+                std::unordered_map<std::string, TypePtr> subs;
+                // Positional impl-type-param mapping: impl[T] Index for List[T]
+                // with receiver List[I64] gives T -> I64. (Specialized ref/nested
+                // patterns are not used by the Index impls in the stdlib.)
+                for (size_t i = 0;
+                     i < func->type_params.size() && i < named.type_args.size(); ++i) {
+                    subs[func->type_params[i]] = named.type_args[i];
+                }
+                TypePtr ret = substitute_type(func->return_type, subs);
+                // Unwrap `ref T` / `mut ref T` to the element type.
+                if (ret && ret->is<RefType>()) {
+                    ret = ret->as<RefType>().inner;
+                }
+                if (ret) {
+                    return ret;
+                }
+            }
+        }
+    }
+
     return make_unit();
 }
 

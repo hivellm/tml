@@ -697,6 +697,22 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             call_type = apply_type_substitutions(call_type, current_type_subs_);
         }
 
+        // A ref-returning call (`outer.get_ref() -> ref T`, phase27a Class 6a)
+        // lowers to a plain `ptr` that already points at T. Unwrap the
+        // RefType/PtrType wrapper so the NamedType-based struct resolution below
+        // matches — otherwise `call_type` stays a RefType, every `is<NamedType>()`
+        // check fails, and field access reports a spurious C027. This mirrors the
+        // Deref branch (which unwraps Ptr/Ref) and the ptr-struct branch. The
+        // returned ptr needs no extra load: it is the address of T.
+        if (call_type && call_type->is<types::RefType>()) {
+            call_type = call_type->as<types::RefType>().inner;
+        } else if (call_type && call_type->is<types::PtrType>()) {
+            call_type = call_type->as<types::PtrType>().inner;
+        }
+        if (call_type && !current_type_subs_.empty()) {
+            call_type = apply_type_substitutions(call_type, current_type_subs_);
+        }
+
         TML_DEBUG_LN("[GEN_FIELD] CallExpr/MethodCallExpr - field="
                      << field.field << " last_expr_type_=" << last_expr_type_
                      << " call_type=" << (call_type ? types::type_to_string(call_type) : "null"));

@@ -3,16 +3,27 @@ use test::{assert, assert_eq}
 use core::ptr::{RawPtr, RawMutPtr, NonNull}
 
 @test
-func test_non_null_as_ref_blocked() -> I32 {
-    // BLOCKED: ptr_as_ref returns i32 instead of ptr in LLVM IR
-    assert(true, "blocked: ptr_as_ref returns i32 instead of ptr in LLVM IR")
+func test_non_null_as_ref() -> I32 {
+    // phase26e: ptr_as_ref now lowers to inttoptr (a `ref T` = ptr), so as_ref
+    // returns a live borrow into the pointee.
+    let buf = mem_alloc(16)
+    let p: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(buf as I64))
+    p.write(42 as I64)
+    let r: ref I64 = p.as_ref()
+    assert_eq(*r, 42 as I64, "as_ref should read the pointee value")
     return 0
 }
 
 @test
-func test_non_null_as_mut_blocked() -> I32 {
-    // BLOCKED: ptr_as_mut returns i32 instead of ptr in LLVM IR
-    assert(true, "blocked: ptr_as_mut returns i32 instead of ptr in LLVM IR")
+func test_non_null_as_mut() -> I32 {
+    // phase26e: ptr_as_mut lowers to inttoptr (a `mut ref T` = ptr); writes
+    // through the returned reference mutate the pointee in place.
+    let buf = mem_alloc(16)
+    let p: NonNull[I64] = NonNull::new_unchecked(RawMutPtr::from_addr(buf as I64))
+    p.write(7 as I64)
+    let m: mut ref I64 = p.as_mut()
+    *m = 99 as I64
+    assert_eq(p.read(), 99 as I64, "as_mut write should mutate the pointee")
     return 0
 }
 

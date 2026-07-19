@@ -119,6 +119,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "transmute", "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
         "unchecked_mul", "unchecked_add", "unchecked_sub",
         "ptr_offset", "ptr_read", "ptr_read_clone", "ptr_write", "ptr_copy", "store_byte",
+        // Reference-from-address conversions (zero-copy borrow accessors)
+        "ptr_as_ref", "ptr_as_mut",
         "volatile_read",
         "volatile_write", "ptr_read_volatile", "ptr_write_volatile", "ptr_read_unaligned",
         "ptr_write_unaligned", "memcpy", "memmove", "memset", "atomic_load", "atomic_store",
@@ -126,6 +128,9 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         "atomic_xor", "fence", "compiler_fence", "black_box", "spin_loop_hint",
         // Slice intrinsics
         "slice_get", "slice_get_mut", "slice_set", "slice_swap", "slice_offset",
+        // List zero-copy mutable element access (IndexMut) — element math from the
+        // 32-byte List header {data@0, len@8, cap@16, stride@24}.
+        "list_get_mut",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc", "fma", "fabs",
         "copysign", "minnum", "maxnum",
@@ -1004,6 +1009,45 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             return dup_result;
         }
         return "0";
+    }
+
+    // ptr_as_ref[T](addr: I64) -> ref T
+    // ptr_as_mut[T](addr: I64) -> mut ref T
+    //
+    // Zero-copy borrow accessors: reinterpret a raw integer address as a
+    // reference. A `ref T` / `mut ref T` lowers to a plain `ptr` in LLVM, so the
+    // only work is `inttoptr` when the argument is an i64 (the common case —
+    // callers pass `this.ptr.addr()` / `this.ptr as I64`). If the argument is
+    // already a `ptr` (e.g. a pointer field), pass it through unchanged. The
+    // result is tagged `ptr` so downstream field/deref codegen treats it as a
+    // reference, NOT the silent i32-default the generic-call path would produce.
+    if (intrinsic_name == "ptr_as_ref" || intrinsic_name == "ptr_as_mut") {
+        if (!call.args.empty()) {
+            std::string addr = gen_expr(*call.args[0]);
+            std::string addr_type = last_expr_type_;
+            if (addr_type == "ptr") {
+                // Already a pointer — reference is the same value.
+                last_expr_type_ = "ptr";
+                return addr;
+            }
+            // Normalize any integer width to i64, then inttoptr.
+            if (addr_type != "i64") {
+                std::string ext = fresh_reg();
+                if (addr_type == "i32" || addr_type == "i16" || addr_type == "i8" ||
+                    addr_type == "i1") {
+                    emit_line("  " + ext + " = sext " + addr_type + " " + addr + " to i64");
+                    addr = ext;
+                } else if (addr_type == "i128") {
+                    emit_line("  " + ext + " = trunc i128 " + addr + " to i64");
+                    addr = ext;
+                }
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = inttoptr i64 " + addr + " to ptr");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
     }
 
     // ptr_write[T](ptr: Ptr[T], val: T)
