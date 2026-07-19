@@ -423,7 +423,8 @@ impl[T] List[T] {
     pub func contains(this, value: T) -> Bool {
         let n: I64 = this.len()
         for i in 0 to n {
-            if this.get(i) == value {
+            // Borrow-read (no clone): compare the element in place.
+            if *this.get_ref(i) == value {
                 return true
             }
         }
@@ -434,7 +435,8 @@ impl[T] List[T] {
     pub func index_of(this, value: T) -> Maybe[I64] {
         let n: I64 = this.len()
         for i in 0 to n {
-            if this.get(i) == value {
+            // Borrow-read (no clone): compare the element in place.
+            if *this.get_ref(i) == value {
                 return Just(i)
             }
         }
@@ -453,11 +455,12 @@ impl[T] List[T] {
         var hi: I64 = n
         loop (lo < hi) {
             let mid: I64 = lo + (hi - lo) / 2
-            let mid_val: T = this.get(mid)
-            if mid_val == value {
+            // Borrow-read (no clone): compare the probed element in place.
+            let mid_val: ref T = this.get_ref(mid)
+            if *mid_val == value {
                 return Ok(mid)
             }
-            if mid_val < value {
+            if *mid_val < value {
                 lo = mid + 1
             } else {
                 hi = mid
@@ -597,7 +600,9 @@ impl[T] List[T] {
         }
         var write_idx: I64 = 1
         for read_idx in 1 to n {
-            if this.get(read_idx) != this.get(write_idx - 1) {
+            // Borrow-read both operands (no clone) for the equality check; the
+            // compaction `set` below is a genuine move and stays a value copy.
+            if *this.get_ref(read_idx) != *this.get_ref(write_idx - 1) {
                 if write_idx != read_idx {
                     this.set(write_idx, this.get(read_idx))
                 }
@@ -674,11 +679,14 @@ impl[T] List[T] {
     // Internal quicksort with custom comparator
     func _quicksort_by(this, lo: I64, hi: I64, cmp: func(ref T, ref T) -> I32) {
         if lo < hi {
+            // Pivot is copied once (a stable snapshot: swaps below relocate
+            // elements, so a borrow into slot `hi` would be fragile). The
+            // per-element read is a zero-copy borrow passed straight into
+            // cmp's `ref T` parameter — no `let cur: T = get(j)` clone.
             let pivot_val: T = this.get(hi)
             var i: I64 = lo
             for j in lo to hi {
-                let cur: T = this.get(j)
-                if cmp(ref cur, ref pivot_val) <= 0 {
+                if cmp(this.get_ref(j), ref pivot_val) <= 0 {
                     this.swap(i, j)
                     i = i + 1
                 }
@@ -694,10 +702,12 @@ impl[T] List[T] {
     // Internal quicksort (ascending, uses PartialOrd <=)
     func _quicksort(this, lo: I64, hi: I64) {
         if lo < hi {
+            // Pivot copied once (stable under the swaps below); the per-element
+            // read is a zero-copy borrow compared in place — no get(j) clone.
             let pivot_val: T = this.get(hi)
             var i: I64 = lo
             for j in lo to hi {
-                if this.get(j) <= pivot_val {
+                if *this.get_ref(j) <= pivot_val {
                     this.swap(i, j)
                     i = i + 1
                 }

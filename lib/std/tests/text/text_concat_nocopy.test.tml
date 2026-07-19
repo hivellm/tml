@@ -1,0 +1,92 @@
+// Tests for concat/concat_str after the double-copy elimination (phase26e G2).
+// Verifies byte-correctness across the inline<->heap (SSO 23-byte) boundary.
+use test::{assert, assert_eq}
+use std::text::Text
+
+// inline + inline -> inline (total <= 23)
+@test
+func test_concat_inline_inline() -> I32 {
+    let a = Text::from("foo")
+    let b = Text::from("bar")
+    let c = a.concat(ref b)
+    assert_eq(c.as_str(), "foobar", "foo+bar")
+    assert_eq(c.len(), 6, "len 6")
+    a.drop()
+    b.drop()
+    c.drop()
+    return 0
+}
+
+// inline + inline -> heap (crosses the 23-byte boundary)
+@test
+func test_concat_cross_boundary() -> I32 {
+    let a = Text::from("twelve chars")          // 12
+    let b = Text::from("_and thirteen")         // 13  -> total 25 > 23 (heap)
+    let c = a.concat(ref b)
+    assert(c.len() > 23, "result is heap-backed")
+    assert_eq(c.as_str(), "twelve chars_and thirteen", "cross-boundary concat")
+    a.drop()
+    b.drop()
+    c.drop()
+    return 0
+}
+
+// heap + heap -> heap
+@test
+func test_concat_heap_heap() -> I32 {
+    let a = Text::from("this half is more than twenty-three bytes long")
+    let b = Text::from(" and so is this appended half for sure")
+    let c = a.concat(ref b)
+    assert_eq(c.as_str(), "this half is more than twenty-three bytes long and so is this appended half for sure", "heap+heap")
+    a.drop()
+    b.drop()
+    c.drop()
+    return 0
+}
+
+// exactly 23 bytes -> still inline
+@test
+func test_concat_exactly_23() -> I32 {
+    let a = Text::from("aaaaaaaaaaa")   // 11
+    let b = Text::from("bbbbbbbbbbbb")  // 12 -> total 23 (inline boundary)
+    let c = a.concat(ref b)
+    assert_eq(c.len(), 23, "len 23")
+    assert_eq(c.as_str(), "aaaaaaaaaaabbbbbbbbbbbb", "exactly-23 inline")
+    a.drop()
+    b.drop()
+    c.drop()
+    return 0
+}
+
+// concat_str variants (inline + heap)
+@test
+func test_concat_str() -> I32 {
+    let a = Text::from("hi ")
+    let c = a.concat_str("there")
+    assert_eq(c.as_str(), "hi there", "concat_str inline")
+
+    let d = Text::from("prefix that is quite long already")
+    let e = d.concat_str(" plus more appended to force heap")
+    assert_eq(e.as_str(), "prefix that is quite long already plus more appended to force heap", "concat_str heap")
+    a.drop()
+    c.drop()
+    d.drop()
+    e.drop()
+    return 0
+}
+
+// empty edges
+@test
+func test_concat_empty_edges() -> I32 {
+    let a = Text::from("abc")
+    let empty = Text::new()
+    let c = a.concat(ref empty)
+    assert_eq(c.as_str(), "abc", "abc + empty")
+    let d = empty.concat_str("xyz")
+    assert_eq(d.as_str(), "xyz", "empty + xyz")
+    a.drop()
+    empty.drop()
+    c.drop()
+    d.drop()
+    return 0
+}

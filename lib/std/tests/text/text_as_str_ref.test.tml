@@ -1,0 +1,49 @@
+// Tests for Text::as_str_ref — zero-copy borrow for heap-backed Text,
+// allocating fallback for inline (SSO). (phase26e Cluster G1)
+use test::{assert, assert_eq}
+use std::text::Text
+
+// Heap-backed (>23 bytes): as_str_ref borrows the internal NUL-terminated
+// buffer. Content correct, and the Text remains usable + drops cleanly (no
+// double-free from the borrow).
+@test
+func test_as_str_ref_heap() -> I32 {
+    let t = Text::from("this string is definitely longer than twenty-three bytes")
+    assert(t.len() > 23, "should be heap-backed")
+    assert_eq(t.as_str_ref(), "this string is definitely longer than twenty-three bytes", "heap borrow content")
+    // Original still usable after the borrow.
+    assert_eq(t.as_str(), "this string is definitely longer than twenty-three bytes", "original intact after borrow")
+    assert_eq(t.len(), 56, "len unchanged")
+    t.drop()
+    return 0
+}
+
+// Inline (<=23 bytes): falls back to the allocating path; content correct.
+@test
+func test_as_str_ref_inline() -> I32 {
+    let t = Text::from("short")
+    assert(t.len() <= 23, "should be inline")
+    assert_eq(t.as_str_ref(), "short", "inline fallback content")
+    t.drop()
+    return 0
+}
+
+// Empty Text -> "".
+@test
+func test_as_str_ref_empty() -> I32 {
+    let t = Text::new()
+    assert_eq(t.as_str_ref(), "", "empty -> empty string")
+    t.drop()
+    return 0
+}
+
+// After a mutation that promotes to heap, as_str_ref reflects the new content.
+@test
+func test_as_str_ref_after_push() -> I32 {
+    let t = Text::from("base")
+    t.push_str(" plus a long tail that pushes it onto the heap allocation")
+    assert(t.len() > 23, "should be heap-backed after push")
+    assert_eq(t.as_str_ref(), "base plus a long tail that pushes it onto the heap allocation", "reflects appended content")
+    t.drop()
+    return 0
+}

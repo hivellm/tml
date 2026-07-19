@@ -259,7 +259,9 @@ impl[K: Ord, V] BTreeMap[K, V] {
         var hi: I64 = this.length - 1
         loop (lo <= hi) {
             let mid: I64 = lo + (hi - lo) / 2
-            let mid_key: K = this.keys.get(mid)
+            // Borrow the probed key (no clone per binary-search step); `cmp`
+            // reads it through the receiver without taking ownership.
+            let mid_key: ref K = this.keys.get_ref(mid)
             when mid_key.cmp(key) {
                 Ordering::Equal => { return mid },
                 Ordering::Less => { lo = mid + 1 },

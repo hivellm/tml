@@ -253,6 +253,30 @@ func text_from_raw(data: *U8, len: I64) -> Text {
     Text { _w0: w0, _w1: w1, _w2: w2_data | text_inline_tag(len) }
 }
 
+// Build an inline Text (total <= 23) by packing bytes drawn from two sources
+// (src1[0..slen1) then src2[0..slen2)) directly into the SSO words — no heap
+// allocation, no scratch buffer. Little-endian, matching text_pack_word_from_ptr.
+func text_concat_inline(src1: *U8, slen1: I64, src2: *U8, slen2: I64, total: I64) -> Text {
+    var w0: I64 = 0
+    var w1: I64 = 0
+    var w2_data: I64 = 0
+    for i in 0 to total {
+        let b: I64 = if i < slen1 {
+            (text_byte_at_raw(src1, i)) as I64
+        } else {
+            (text_byte_at_raw(src2, i - slen1)) as I64
+        }
+        if i < 8 {
+            w0 = w0 | (b << (i * 8))
+        } else if i < 16 {
+            w1 = w1 | (b << ((i - 8) * 8))
+        } else {
+            w2_data = w2_data | (b << ((i - 16) * 8))
+        }
+    }
+    Text { _w0: w0, _w1: w1, _w2: w2_data | text_inline_tag(total) }
+}
+
 // Ensure a heap Text has enough capacity. Promotes inline to heap if needed.
 // Returns (new_w0, new_w1, new_w2) by mutating through the struct pointer.
 // self_ptr must be a mutable pointer to the Text struct.
@@ -505,6 +529,38 @@ impl Text {
         lowlevel { copy_nonoverlapping(data, buf, slen) }
         lowlevel { ptr_write[U8]((buf as I64 + slen) as *U8, 0 as U8) }
         return buf as Str
+    }
+
+    /// Returns the string data as a `Str`, borrowing the internal buffer when
+    /// possible (no alloc + copy).
+    ///
+    /// For **heap-backed** Text the data buffer is already NUL-terminated in
+    /// place (maintained by `push_str` / grow / clear), so this returns a
+    /// borrow of that buffer directly — zero-copy. For **inline (SSO)** Text
+    /// the bytes live inside the value and the 23-byte case carries no in-place
+    /// NUL terminator, so this falls back to the allocating `as_str()` path.
+    ///
+    /// # Invalidation
+    ///
+    /// A zero-copy (heap-backed) result borrows the Text's buffer and is valid
+    /// ONLY until the Text is dropped or mutated (`push_str` / `clear` / any
+    /// operation that reallocates). Using it afterward is undefined behavior.
+    /// When you need an owned, independently-lived string, use `as_str()`.
+    pub func as_str_ref(this) -> Str {
+        let w2: I64 = this._w2
+        if w2 < 0 {
+            // Inline: bytes live in the value; no stable in-place NUL for the
+            // full 23-byte case — return an owned copy.
+            return this.as_str()
+        }
+        // Heap-backed: buffer is NUL-terminated in place.
+        if this._w0 == 0 {
+            return ""
+        }
+        let self_ptr: *Unit = lowlevel { this as *Unit }
+        let self_addr: I64 = self_ptr as I64
+        let data: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        return data as Str
     }
 
     /// Clone this Text (deep copy)
@@ -1111,15 +1167,25 @@ impl Text {
         let slen2: I64 = text_sso_len(ow2, other._w1)
 
         let total: I64 = slen1 + slen2
+        if total <= 0 {
+            return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
+        }
         let src1: *U8 = text_data_ptr(self_addr, this._w0, w2)
         let src2: *U8 = text_data_ptr(other_addr, other._w0, ow2)
 
+        if total <= 23 {
+            // Inline result: pack both sources into the SSO words, no alloc.
+            return text_concat_inline(src1, slen1, src2, slen2, total)
+        }
+
+        // Heap result: allocate the result buffer ONCE and copy both sources
+        // straight into it — no scratch buffer + second copy (the old path did
+        // mem_alloc scratch, then text_from_raw allocated again and re-copied).
         let buf: *U8 = lowlevel { mem_alloc(total + 1) } as *U8
         text_copy_bytes(buf, 0, src1, 0, slen1)
         text_copy_bytes(buf, slen1, src2, 0, slen2)
-        let result: Text = text_from_raw(buf, total)
-        lowlevel { mem_free(buf as *Unit) }
-        result
+        lowlevel { ptr_write[U8]((buf as I64 + total) as *U8, 0 as U8) }
+        Text { _w0: buf as I64, _w1: total, _w2: total }
     }
 
     /// Concatenate with a string
@@ -1130,13 +1196,23 @@ impl Text {
         let slen1: I64 = text_sso_len(w2, this._w1)
         let slen2: I64 = text_str_len(s)
         let total: I64 = slen1 + slen2
+        if total <= 0 {
+            return Text { _w0: 0, _w1: 0, _w2: text_empty_tag() }
+        }
         let src: *U8 = text_data_ptr(self_addr, this._w0, w2)
+        let src2: *U8 = s as *U8
+
+        if total <= 23 {
+            // Inline result: pack both sources into the SSO words, no alloc.
+            return text_concat_inline(src, slen1, src2, slen2, total)
+        }
+
+        // Heap result: single allocation, both sources copied directly into it.
         let buf: *U8 = lowlevel { mem_alloc(total + 1) } as *U8
         text_copy_bytes(buf, 0, src, 0, slen1)
         text_copy_str_at(buf, slen1, s, slen2)
-        let result: Text = text_from_raw(buf, total)
-        lowlevel { mem_free(buf as *Unit) }
-        result
+        lowlevel { ptr_write[U8]((buf as I64 + total) as *U8, 0 as U8) }
+        Text { _w0: buf as I64, _w1: total, _w2: total }
     }
 
     // ========================================================================

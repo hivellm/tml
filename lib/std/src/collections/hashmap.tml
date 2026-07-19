@@ -728,6 +728,13 @@ impl[K, V] HashMapIter[K, V] {
     }
 
     /// Returns the value of the current entry.
+    /// Returns the current value by value (clone-read).
+    ///
+    /// This is the sound, documented default: the map keeps owning the stored
+    /// value, so `ptr_read_clone` gives the returned value fresh refcounts for
+    /// handle-bearing V (identity for primitive V). For zero-copy iteration
+    /// over handle-bearing values use `value_ref()`, which borrows the slot
+    /// and bumps no refcounts.
     pub func value(this) -> V {
         let iter_addr: I64 = this.handle as I64
         let cur_idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
@@ -742,6 +749,27 @@ impl[K, V] HashMapIter[K, V] {
         let val_ptr: *V = (entries_addr + cur_idx * esz + 8) as *V
         // clone-read: the map retains ownership of the stored value.
         return lowlevel { ptr_read_clone[V](val_ptr) }
+    }
+
+    /// Zero-copy sibling of `value()`: returns a borrow of the current value
+    /// instead of clone-reading it. No refcount bump, no drop-glue.
+    ///
+    /// Panics if the iterator is exhausted (guard with `has_next()`). The
+    /// returned reference is valid only until the next mutating operation on
+    /// the map.
+    pub func value_ref(this) -> ref V {
+        let iter_addr: I64 = this.handle as I64
+        let cur_idx: I64 = lowlevel { ptr_read[I64]((iter_addr + 8) as *I64) }
+        if cur_idx < 0 {
+            panic("HashMapIter::value_ref: iterator exhausted")
+        }
+
+        let map_handle_addr: I64 = lowlevel { ptr_read[I64](iter_addr as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](map_handle_addr as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((map_handle_addr + 32) as *I64) }
+
+        let val_ptr: *V = (entries_addr + cur_idx * esz + 8) as *V
+        return lowlevel { ref (*val_ptr) }
     }
 
     /// Destroys the iterator and frees all associated memory.

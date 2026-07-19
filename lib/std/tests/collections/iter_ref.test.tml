@@ -1,0 +1,83 @@
+// Borrowing-iterator tests (phase26e Cluster E).
+//
+// List.iter_ref() / HashMapIter.value_ref() borrow elements (no refcount bump),
+// while the by-value iter() / value() clone-read (bump). Refcount-probe model
+// mirrors shared_get_sound.test.tml.
+use test::{assert, assert_eq}
+use std::collections::list::List
+use std::collections::hashmap::HashMap
+use core::alloc::shared::Shared
+
+type IterRcRow {
+    payload: Shared[I64],
+    tag: I64,
+}
+
+// Iterating List[IterRcRow] via iter_ref() must NOT bump the nested handle.
+@test
+func test_list_iter_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(3 as I64)
+    var rows: List[IterRcRow] = List::new(4)
+    rows.push(IterRcRow { payload: h.duplicate(), tag: 1 as I64 })
+    rows.push(IterRcRow { payload: h.duplicate(), tag: 2 as I64 })
+    // count = 3: local `h` + 2 duplicates stored.
+    assert_eq(h.strong_count(), 3, "count = 3 after storing 2 duplicates")
+
+    var sum_tags: I64 = 0
+    var it = rows.iter_ref()
+    loop (true) {
+        when it.next() {
+            Just(r) => { sum_tags = sum_tags + r.tag },
+            Nothing => break,
+        }
+    }
+    assert_eq(sum_tags, 3 as I64, "iter_ref visited both rows (tags 1+2)")
+    // No copies were materialized, so the count is unchanged throughout.
+    assert_eq(h.strong_count(), 3, "iter_ref must NOT bump the nested handle")
+    return 0
+}
+
+// By-value iter() clone-reads: each yielded copy transiently bumps then drops.
+@test
+func test_list_iter_by_value_balances() -> I32 {
+    let h: Shared[I64] = Shared::new(9 as I64)
+    var rows: List[IterRcRow] = List::new(4)
+    rows.push(IterRcRow { payload: h.duplicate(), tag: 5 as I64 })
+    assert_eq(h.strong_count(), 2, "count = 2 after storing 1 duplicate")
+
+    var it = rows.iter()
+    loop (true) {
+        when it.next() {
+            Just(row) => {
+                // `row` is a clone-read copy: it holds a fresh reference here.
+                assert_eq(h.strong_count(), 3, "by-value iter bumps to 3 inside the copy's scope")
+                assert_eq(row.tag, 5 as I64, "value copy readable")
+            },
+            Nothing => break,
+        }
+    }
+    // Each copy dropped at the end of its arm, so the count restores.
+    assert_eq(h.strong_count(), 2, "count restored to 2 after copies drop")
+    return 0
+}
+
+// HashMapIter.value_ref() borrows the value (no bump); value() clone-reads.
+@test
+func test_hashmap_value_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(7 as I64)
+    var m: HashMap[I64, IterRcRow] = HashMap::new(8)
+    m.set(1 as I64, IterRcRow { payload: h.duplicate(), tag: 100 as I64 })
+    assert_eq(h.strong_count(), 2, "count = 2 after storing 1 duplicate")
+
+    var it = m.iter()
+    loop (it.has_next()) {
+        let r: ref IterRcRow = it.value_ref()
+        assert_eq(h.strong_count(), 2, "value_ref must NOT bump the nested handle")
+        assert_eq(r.tag, 100 as I64, "tag readable through the borrow")
+        assert_eq(r.payload.get(), 7 as I64, "nested payload readable through borrow")
+        it.next()
+    }
+    it.destroy()
+    assert_eq(h.strong_count(), 2, "count unchanged after value_ref iteration")
+    return 0
+}
