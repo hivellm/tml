@@ -52,6 +52,34 @@ size_t cstr_len(const std::string& s) {
     return len;
 }
 
+// Escape a string so it is safe inside a JSON string literal (RFC 8259).
+// Test `file` fields are absolute Windows paths full of backslashes; emitting
+// them raw produced unparseable NDJSON such as "file":"E:\HiveLLM\...".
+std::string json_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        unsigned char u = static_cast<unsigned char>(c);
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += c;
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\r') {
+            out += "\\r";
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (u < 0x20) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04X", u);
+            out += buf;
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
 // Escape a string for use inside LLVM IR string constants.
 // Handles: newline → \0A, double quote → \22, backslash → \5C, null → \00
 std::string ir_escape(const std::string& s) {
@@ -112,6 +140,18 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     std::ostringstream ir;
     int total_tests = static_cast<int>(tests.size());
 
+    // These are interpolated into JSON string fields, so they must be JSON-escaped
+    // once here and used consistently for both the constant definition and every
+    // GEP that references it (gep_str recomputes the byte length from the content).
+    std::string json_suite_name = json_escape(suite_name);
+    std::vector<std::string> json_names, json_files;
+    json_names.reserve(tests.size());
+    json_files.reserve(tests.size());
+    for (const auto& t : tests) {
+        json_names.push_back(json_escape(t.name));
+        json_files.push_back(json_escape(t.file));
+    }
+
     // ========================================================================
     // Module header
     // ========================================================================
@@ -137,7 +177,7 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
                          "ERROR: --run-all, --test-index=N, or --list required\n");
 
     // Suite name
-    emit_string_constant(ir, ".str.suite_name", suite_name);
+    emit_string_constant(ir, ".str.suite_name", json_suite_name);
 
     // NDJSON event format strings (each is a printf format)
     // suite_start: {"event":"suite_start","name":"<suite>","test_count":<N>,"file_count":<M>}
@@ -166,11 +206,13 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
         fmt += '\n';
         emit_string_constant(ir, ".fmt.test_pass", fmt);
     }
-    // test_fail: {"event":"test_fail","index":<I>,"name":"<name>","error":"non-zero
-    // exit","file":"<file>","line":0,"exit_code":<E>,"duration_us":<D>}
+    // test_fail: {"event":"test_fail","index":<I>,"name":"<name>","error":"<msg>",
+    // "file":"<file>","line":0,"exit_code":<E>,"duration_us":<D>}
+    // The error string comes from tml_test_error_json() so a panicking body
+    // reports its actual panic message rather than a generic "non-zero exit".
     {
         std::string fmt =
-            R"({"event":"test_fail","index":%d,"name":"%s","error":"non-zero exit","file":"%s","line":0,"exit_code":%d,"duration_us":%lld})";
+            R"({"event":"test_fail","index":%d,"name":"%s","error":"%s","file":"%s","line":0,"exit_code":%d,"duration_us":%lld})";
         fmt += '\n';
         emit_string_constant(ir, ".fmt.test_fail", fmt);
     }
@@ -180,8 +222,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
 
     // Per-test name and file string constants
     for (int i = 0; i < total_tests; ++i) {
-        emit_string_constant(ir, ".str.test_name_" + std::to_string(i), tests[i].name);
-        emit_string_constant(ir, ".str.test_file_" + std::to_string(i), tests[i].file);
+        emit_string_constant(ir, ".str.test_name_" + std::to_string(i), json_names[i]);
+        emit_string_constant(ir, ".str.test_file_" + std::to_string(i), json_files[i]);
     }
 
     // List mode string constants (must be global, not inside function bodies)
@@ -224,6 +266,7 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     ir << "declare i64 @clock() nounwind\n";
     ir << "declare i8* @getenv(i8*) nounwind\n";
     ir << "declare void @tml_coverage_write_file(i8*) nounwind\n";
+    ir << "declare i8* @tml_test_error_json() nounwind\n";
     ir << "\n";
 
     // ========================================================================
@@ -261,9 +304,9 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
     auto gep_test_fail = gep_str(
         ".fmt.test_fail",
         std::string(
-            R"({"event":"test_fail","index":%d,"name":"%s","error":"non-zero exit","file":"%s","line":0,"exit_code":%d,"duration_us":%lld})") +
+            R"({"event":"test_fail","index":%d,"name":"%s","error":"%s","file":"%s","line":0,"exit_code":%d,"duration_us":%lld})") +
             '\n');
-    auto gep_suite_name = gep_str(".str.suite_name", suite_name);
+    auto gep_suite_name = gep_str(".str.suite_name", json_suite_name);
 
     // ========================================================================
     // list_tests() — Emit test metadata as JSON array
@@ -287,8 +330,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
         auto gep_rest = gep_str(".fmt.list_rest", entry_fmt_rest);
 
         for (int i = 0; i < total_tests; ++i) {
-            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
-            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
+            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), json_names[i]);
+            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), json_files[i]);
 
             if (i == 0) {
                 ir << "  %lfmt_" << i << " = " << gep_first << "\n";
@@ -330,8 +373,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             int tidx = tests[i].index; // suite position — NDJSON event index
             uint32_t sym = tests[i].symbol_id != 0 ? tests[i].symbol_id
                                                    : static_cast<uint32_t>(tests[i].index);
-            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
-            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
+            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), json_names[i]);
+            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), json_files[i]);
 
             ir << "test_" << i << ":\n";
 
@@ -383,9 +426,10 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  %tf_fmt_" << i << " = " << gep_test_fail << "\n";
             ir << "  %tf_name_" << i << " = " << gep_name << "\n";
             ir << "  %tf_file_" << i << " = " << gep_file << "\n";
+            ir << "  %tf_err_" << i << " = call i8* @tml_test_error_json()\n";
             ir << "  call i32 (i8*, ...) @printf(i8* %tf_fmt_" << i << ", i32 " << tidx
-               << ", i8* %tf_name_" << i << ", i8* %tf_file_" << i << ", i32 %rc_" << i
-               << ", i64 %us_" << i << ")\n";
+               << ", i8* %tf_name_" << i << ", i8* %tf_err_" << i << ", i8* %tf_file_" << i
+               << ", i32 %rc_" << i << ", i64 %us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
             ir << "  br label %exit_fail\n\n";
         }
@@ -476,8 +520,8 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             int tidx = tests[i].index; // suite position — NDJSON event index
             uint32_t sym = tests[i].symbol_id != 0 ? tests[i].symbol_id
                                                    : static_cast<uint32_t>(tests[i].index);
-            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), tests[i].name);
-            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), tests[i].file);
+            auto gep_name = gep_str(".str.test_name_" + std::to_string(i), json_names[i]);
+            auto gep_file = gep_str(".str.test_file_" + std::to_string(i), json_files[i]);
 
             ir << "test_" << i << ":\n";
 
@@ -540,9 +584,10 @@ std::string generate_ndjson_dispatcher_ir(const std::vector<DispatcherTestInfo>&
             ir << "  %at_tf_fmt_" << i << " = " << gep_test_fail << "\n";
             ir << "  %at_tf_name_" << i << " = " << gep_name << "\n";
             ir << "  %at_tf_file_" << i << " = " << gep_file << "\n";
+            ir << "  %at_tf_err_" << i << " = call i8* @tml_test_error_json()\n";
             ir << "  call i32 (i8*, ...) @printf(i8* %at_tf_fmt_" << i << ", i32 " << tidx
-               << ", i8* %at_tf_name_" << i << ", i8* %at_tf_file_" << i << ", i32 %at_rc_" << i
-               << ", i64 %at_us_" << i << ")\n";
+               << ", i8* %at_tf_name_" << i << ", i8* %at_tf_err_" << i << ", i8* %at_tf_file_" << i
+               << ", i32 %at_rc_" << i << ", i64 %at_us_" << i << ")\n";
             ir << "  call void @fflush(i8* null)\n";
             ir << "  br label %done_" << i << "\n\n";
 

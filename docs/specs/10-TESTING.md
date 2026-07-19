@@ -452,15 +452,34 @@ Each test suite EXE emits one JSON object per line on stdout:
 
 ```json
 {"event":"suite_start","suite":"core/str/basic.test.tml","test_count":12}
-{"event":"test_start","name":"test_split_basic","index":0}
-{"event":"test_pass","name":"test_split_basic","duration_ms":0}
-{"event":"test_start","name":"test_split_empty","index":1}
-{"event":"test_fail","name":"test_split_empty","duration_ms":1,"message":"assertion failed: expected [] but got [\"\"]"}
+{"event":"test_start","index":0,"name":"test_split_basic","file":"lib/core/tests/str/basic.test.tml"}
+{"event":"test_pass","index":0,"duration_us":0}
+{"event":"test_start","index":1,"name":"test_split_empty","file":"lib/core/tests/str/basic.test.tml"}
+{"event":"test_fail","index":1,"name":"test_split_empty","error":"assertion failed at :7: expected [] but got [\"\"]","file":"lib/core/tests/str/basic.test.tml","line":0,"exit_code":-1,"duration_us":1203}
 {"event":"suite_end","passed":11,"failed":1,"duration_ms":23}
 ```
 
 Events: `suite_start`, `test_start`, `test_pass`, `test_fail`, `test_crash`,
 `test_timeout`, `test_skip`, `coverage`, `suite_end`
+
+**Failure contract (phase44a, v0.3.83).** A test body that panics MUST emit
+`test_fail` and the process MUST exit non-zero — identically in standalone
+(one EXE per file) and suite-packed modes. The generated test-entry wrapper
+records the first non-zero result from `tml_run_test_with_catch` and returns
+it; a discarded result is what produced the pre-v0.3.83 false-pass, where a
+panicking body printed `panic: …` to stderr and was still reported
+`test_pass`.
+
+`test_fail` carries `error` — the actual panic message, via
+`tml_test_error_json()` — not a generic "non-zero exit" string. `@should_panic`
+bodies run through the same catch path with `quiet=1`, so an expected panic
+emits no `FATAL [runtime] panic:` line and is not misread as a crash by the
+coordinator's stderr scan.
+
+All string fields (`name`, `file`, `error`, suite name) are JSON-escaped.
+Before v0.3.83 they were not, which made the stream invalid JSON for any
+Windows path (unescaped `\`). Consumers that parsed it leniently now receive
+strictly conformant input.
 
 ### 11.3 Test Cache (Go Model)
 

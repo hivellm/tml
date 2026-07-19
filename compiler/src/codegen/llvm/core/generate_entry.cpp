@@ -31,6 +31,10 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         bool slow_test = false;                 // @slow_test: use 10000ms timeout instead of 100ms
         std::string expected_panic_message;     // Empty means any panic is fine
         std::string expected_panic_message_str; // LLVM string constant reference
+        // LLVM return type of the test body ("void" when it declares no return
+        // type). tml_run_test_with_catch takes an i32(*)(), so a thunk normalises
+        // the signature; without it a unit-returning test yields a garbage i32.
+        std::string ret_llvm_type = "void";
     };
     std::vector<TestInfo> test_functions;
     std::vector<std::string> fuzz_functions;
@@ -209,6 +213,9 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                 info.should_panic = should_panic;
                 info.slow_test = slow_test;
                 info.expected_panic_message = expected_panic_message;
+                info.ret_llvm_type = func.return_type.has_value()
+                                         ? llvm_type(*func.return_type.value())
+                                         : std::string("void");
                 // Pre-register the expected message string BEFORE emit_string_constants
                 if (!expected_panic_message.empty()) {
                     info.expected_panic_message_str = add_string_literal(expected_panic_message);
@@ -526,6 +533,43 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         emit_line("; Environment variable name for coverage file (EXE mode)");
         emit_line("@.tml_cov_file_env = private constant [18 x i8] c\"TML_COVERAGE_FILE\\00\"");
 
+        // In suite mode, test functions have a prefix to avoid collisions
+        std::string test_suite_prefix = "";
+        if (options_.suite_test_index >= 0 && options_.force_internal_linkage) {
+            test_suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+        }
+
+        // Per-test thunks normalising each body's signature to i32() for
+        // tml_run_test_with_catch. Without them a unit-returning test yields a
+        // garbage i32 that would be misread as a failure. @should_panic tests go
+        // through tml_run_should_panic, which wants a void() pointer, so they are
+        // left alone. Emitted before the entry function — nested defines are not
+        // legal LLVM IR.
+        for (const auto& test_info : test_functions) {
+            if (test_info.should_panic) {
+                continue;
+            }
+            std::string test_fn = "@tml_" + test_suite_prefix + test_info.name;
+            std::string thunk = "@tml_test_thunk_" + test_suite_prefix + test_info.name;
+            emit_line("define internal i32 " + thunk + "() {");
+            emit_line("entry:");
+            if (test_info.ret_llvm_type == "void") {
+                emit_line("  call void " + test_fn + "()");
+                emit_line("  ret i32 0");
+            } else if (test_info.ret_llvm_type == "i32") {
+                // Test reports its own status: 0 = pass, non-zero = fail.
+                emit_line("  %r = call i32 " + test_fn + "()");
+                emit_line("  ret i32 %r");
+            } else {
+                // Any other result carries no pass/fail meaning — discard it.
+                // Failure still surfaces through panic/crash catching.
+                emit_line("  call " + test_info.ret_llvm_type + " " + test_fn + "()");
+                emit_line("  ret i32 0");
+            }
+            emit_line("}");
+            emit_line("");
+        }
+
         // For DLL entry, generate exported test entry function instead of main
         if (options_.generate_dll_entry) {
             // Determine entry function name (tml_test_entry or tml_test_N for suites)
@@ -546,11 +590,15 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         // Declare tml_set_test_timeout — called per-test below
         require_runtime_decl("tml_set_test_timeout");
 
-        // In suite mode, test functions have a prefix to avoid collisions
-        std::string test_suite_prefix = "";
-        if (options_.suite_test_index >= 0 && options_.force_internal_linkage) {
-            test_suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
-        }
+        // Failure code for this entry. tml_run_test_with_catch returns 0 on
+        // success, -1 when the body panicked, -2 when it crashed, or the test's
+        // own non-zero return value. Previously that result was computed and
+        // thrown away and the entry unconditionally returned 0, so the NDJSON
+        // dispatcher saw rc==0 and emitted `test_pass` for tests that had in fact
+        // panicked (phase44a). We now record the first non-zero result and return
+        // it, so the dispatcher emits `test_fail` and the process exits non-zero.
+        emit_line("  %fail_code = alloca i32");
+        emit_line("  store i32 0, ptr %fail_code");
 
         int test_idx = 0;
         std::string prev_block = "entry";
@@ -629,12 +677,28 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
                 // Regular test - wrap with tml_run_test_with_catch for timeout + crash protection
                 require_runtime_decl("tml_run_test_with_catch");
                 std::string catch_result = "%test_catch_" + idx_str;
-                emit_line("  " + catch_result + " = call i32 @tml_run_test_with_catch(ptr " +
-                          test_fn + ")");
+                emit_line("  " + catch_result + " = call i32 @tml_run_test_with_catch(ptr @" +
+                          ("tml_test_thunk_" + test_suite_prefix + test_info.name) + ")");
+                // Record the result and stop at the first failure. Storing
+                // unconditionally is safe: on success the value stored is 0.
+                emit_line("  store i32 " + catch_result + ", ptr %fail_code");
+                std::string ok_var = "%test_ok_" + idx_str;
+                emit_line("  " + ok_var + " = icmp eq i32 " + catch_result + ", 0");
+                emit_line("  br i1 " + ok_var + ", label %test_next_" + idx_str +
+                          ", label %tests_done");
+                emit_line("");
+                emit_line("test_next_" + idx_str + ":");
+                prev_block = "test_next_" + idx_str;
             }
 
             test_idx++;
         }
+
+        // Single exit path for the test sequence — reached either by falling out
+        // of the last test or by the fail-fast branch above.
+        emit_line("  br label %tests_done");
+        emit_line("");
+        emit_line("tests_done:");
 
         // Write coverage data to file for EXE mode subprocess communication
         // When running under EXE mode, write covered functions to file specified by env var
@@ -648,8 +712,9 @@ void LLVMIRGen::generate_main_and_test_harness(const parser::Module& module) {
         emit_line("");
         emit_line("cov_file_done:");
 
-        // All tests passed (if we got here, no assertion failed)
-        emit_line("  ret i32 0");
+        // Return the first non-zero test result (0 when every test passed).
+        emit_line("  %entry_rc = load i32, ptr %fail_code");
+        emit_line("  ret i32 %entry_rc");
         emit_line("}");
     } else if (has_user_main) {
         // Standard main wrapper for user-defined main

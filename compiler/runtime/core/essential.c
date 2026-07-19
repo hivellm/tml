@@ -723,22 +723,8 @@ typedef void (*tml_test_fn)(void);
  * @param test_fn The test function to execute.
  * @return 1 if the test panicked (success), 0 if it didn't (failure).
  */
-int32_t tml_run_should_panic(tml_test_fn test_fn) {
-    tml_panic_msg[0] = '\0';
-    tml_catching_panic = 1;
-
-    if (setjmp(tml_panic_jmp_buf) == 0) {
-        // First time through - run the test
-        test_fn();
-        // If we get here, test didn't panic
-        tml_catching_panic = 0;
-        return 0; // Failure - expected panic but didn't get one
-    } else {
-        // Got here via longjmp - panic was caught
-        tml_catching_panic = 0;
-        return 1; // Success - panic was caught
-    }
-}
+/* Defined below, next to tml_run_test_with_catch: both share one catch
+ * implementation so the panic/longjmp path has a single behaviour. */
 
 /**
  * @brief Gets the last panic message.
@@ -750,6 +736,50 @@ int32_t tml_run_should_panic(tml_test_fn test_fn) {
  */
 TML_EXPORT const char* tml_get_panic_message(void) {
     return tml_panic_msg;
+}
+
+/**
+ * @brief Describes the last test failure, escaped for embedding in JSON.
+ *
+ * The NDJSON test dispatcher writes this into the `"error"` field of a
+ * `test_fail` event. Panic messages routinely contain `"` and (on Windows)
+ * backslashes from source paths, which would produce unparseable NDJSON if
+ * emitted raw, so `"`, `\` and control characters are escaped per RFC 8259.
+ *
+ * When the test failed without panicking (it simply returned a non-zero code)
+ * there is no panic message, and a generic description is returned instead.
+ *
+ * @return A NUL-terminated JSON-safe failure description. Points to a static
+ *         buffer; valid until the next call.
+ */
+TML_EXPORT const char* tml_test_error_json(void) {
+    static char escaped[sizeof(tml_panic_msg) * 6 + 1];
+    if (tml_panic_msg[0] == '\0') {
+        return "non-zero exit";
+    }
+    size_t out = 0;
+    for (size_t i = 0; tml_panic_msg[i] != '\0' && out + 6 < sizeof(escaped); ++i) {
+        unsigned char c = (unsigned char)tml_panic_msg[i];
+        if (c == '"' || c == '\\') {
+            escaped[out++] = '\\';
+            escaped[out++] = (char)c;
+        } else if (c == '\n') {
+            escaped[out++] = '\\';
+            escaped[out++] = 'n';
+        } else if (c == '\r') {
+            escaped[out++] = '\\';
+            escaped[out++] = 'r';
+        } else if (c == '\t') {
+            escaped[out++] = '\\';
+            escaped[out++] = 't';
+        } else if (c < 0x20) {
+            out += (size_t)snprintf(escaped + out, sizeof(escaped) - out, "\\u%04X", c);
+        } else {
+            escaped[out++] = (char)c;
+        }
+    }
+    escaped[out] = '\0';
+    return escaped;
 }
 
 /**
@@ -1223,6 +1253,8 @@ static int32_t tml_test_timeout_ms = 0;
 static HANDLE g_wd_start_event = NULL; /* auto-reset: main signals "test starting" */
 static HANDLE g_wd_done_event = NULL;  /* auto-reset: main signals "test finished" */
 static volatile int32_t g_wd_timeout_ms = 0;
+/* 1 while a test is running with the watchdog armed; see tml_watchdog_cancel. */
+static volatile int32_t g_wd_armed = 0;
 
 static DWORD WINAPI persistent_watchdog_fn(LPVOID param) {
     (void)param;
@@ -1275,10 +1307,28 @@ static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
         return test_fn();
     }
     g_wd_timeout_ms = tml_test_timeout_ms;
+    g_wd_armed = 1;
     SetEvent(g_wd_start_event); /* start the watchdog timer */
     int32_t result = test_fn();
+    g_wd_armed = 0;
     SetEvent(g_wd_done_event); /* cancel the watchdog timer */
     return result;
+}
+
+/**
+ * @brief Cancel an armed watchdog after a non-local exit from the test.
+ *
+ * When a test panics or crashes, control leaves tml_run_with_timeout via
+ * longjmp, so the `SetEvent(g_wd_done_event)` above never runs. The watchdog
+ * would then fire on an already-handled failure and TerminateProcess(99),
+ * turning a clean `test_fail` into a bogus timeout kill. Every non-local exit
+ * path in tml_run_test_with_catch calls this.
+ */
+static void tml_watchdog_cancel(void) {
+    if (g_wd_armed && g_wd_done_event) {
+        g_wd_armed = 0;
+        SetEvent(g_wd_done_event);
+    }
 }
 
 #else /* non-Windows */
@@ -1299,18 +1349,38 @@ static int32_t tml_run_with_timeout(tml_test_entry_fn test_fn) {
 #endif
 
 static int32_t tml_run_test_seh(tml_test_entry_fn test_fn) {
-#ifdef _WIN32
-    __try {
-        return tml_run_with_timeout(test_fn);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return -2;
-    }
-#else
+    // NOTE: this deliberately does NOT wrap the call in `__try/__except`.
+    //
+    // Crashes are already fully handled by the VEH handler installed in
+    // tml_run_test_with_catch (VEH runs before any SEH frame handler and either
+    // longjmp(2)s or redirects via RtlRestoreContext). The old `__try/__except`
+    // was documented as a belt-and-suspenders fallback, but it actively broke the
+    // panic path: `panic()` longjmps back to the setjmp in tml_run_test_with_catch,
+    // and on Windows x64 longjmp unwinds via RtlUnwindEx. Crossing this SEH scope
+    // made that unwind fail with __fastfail(FAST_FAIL_INCORRECT_STACK)
+    // (STATUS_STACK_BUFFER_OVERRUN, 0xC0000409), killing the process instead of
+    // reporting a clean test failure.
+    //
+    // Note: tml_run_should_panic used to carry its own small setjmp frame and
+    // fastfailed the same way on a real panic; it now delegates here so there is
+    // exactly one panic/unwind path to keep working.
     return tml_run_with_timeout(test_fn);
-#endif
 }
 
-TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
+/**
+ * @brief Shared implementation behind tml_run_test_with_catch / tml_run_should_panic.
+ *
+ * @param quiet When non-zero, suppress the RT_FATAL report for a caught panic.
+ *              `@should_panic` tests expect the panic, so printing
+ *              "FATAL [runtime] panic: ..." there is noise — and worse, the test
+ *              coordinator scans subprocess stderr for that marker and would
+ *              misreport an expected panic as an X003 crash. Crash reports
+ *              (jmp_result 2 / context recovery) are always printed: a crash is
+ *              never an expected outcome, even for @should_panic.
+ * @return 0 on success, -1 if the body panicked, -2 if it crashed, or the body's
+ *         own non-zero return value.
+ */
+static int32_t tml_run_test_catch_impl(tml_test_entry_fn test_fn, int32_t quiet) {
     tml_panic_msg[0] = '\0';
     tml_catching_panic = 1;
 
@@ -1330,6 +1400,7 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         // We got here via RtlRestoreContext from the VEH handler (severe crash).
         // tml_panic_msg was already filled by the VEH handler.
         tml_recovery_context_valid = 0;
+        tml_watchdog_cancel();
         tml_remove_exception_filter();
         RT_FATAL("runtime", "%s",
                  tml_panic_msg[0] ? tml_panic_msg
@@ -1344,7 +1415,6 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         // Run the test. VEH handler intercepts crashes and either:
         // 1. longjmp directly (recoverable: null deref, arithmetic)
         // 2. RtlRestoreContext (severe: heap corruption, wild pointer)
-        // SEH __try/__except is kept as belt-and-suspenders fallback.
         int32_t result = tml_run_test_seh(test_fn);
         tml_catching_panic = 0;
 #ifdef _M_X64
@@ -1358,9 +1428,12 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
 #ifdef _M_X64
         tml_recovery_context_valid = 0;
 #endif
+        tml_watchdog_cancel();
         tml_remove_exception_filter();
-        RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
-        fflush(stderr);
+        if (!quiet) {
+            RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+            fflush(stderr);
+        }
         return -1;
     } else {
         // Got here via longjmp (jmp_result == 2) from VEH handler (recoverable crash)
@@ -1368,6 +1441,7 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
 #ifdef _M_X64
         tml_recovery_context_valid = 0;
 #endif
+        tml_watchdog_cancel();
         tml_remove_exception_filter();
         RT_FATAL("runtime", "%s", tml_panic_msg[0] ? tml_panic_msg : "CRASH: Unknown");
         fflush(stderr);
@@ -1389,8 +1463,10 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         // Got here via longjmp from panic()
         tml_catching_panic = 0;
         tml_restore_signal_handlers();
-        RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
-        fflush(stderr);
+        if (!quiet) {
+            RT_FATAL("runtime", "panic: %s", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+            fflush(stderr);
+        }
         return -1;
     } else {
         // Got here via longjmp from signal handler (jmp_result == 2)
@@ -1401,6 +1477,35 @@ TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
         return -2;
     }
 #endif
+}
+
+TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
+    return tml_run_test_catch_impl(test_fn, /*quiet=*/0);
+}
+
+/**
+ * @brief Runs a `@should_panic` test body and reports whether it panicked.
+ *
+ * Delegates to the same catch machinery as tml_run_test_with_catch instead of
+ * carrying its own setjmp/longjmp. The private copy used to fastfail with
+ * STATUS_STACK_BUFFER_OVERRUN (0xC0000409) when the body actually panicked:
+ * longjmp back into this small frame did not survive, while the identical
+ * panic unwinding into tml_run_test_with_catch's frame always worked. That
+ * defect went unnoticed because the repository contained no `@should_panic`
+ * test at all (see the note at lib/core/tests/convert/convert.test.tml:371,
+ * "These need @should_panic support"). Sharing one implementation means the
+ * panic path has exactly one behaviour to keep working.
+ *
+ * A crash (-2) does NOT satisfy `@should_panic` — only a real panic does.
+ *
+ * @param test_fn The test body to execute.
+ * @return 1 if the body panicked (success), 0 otherwise.
+ */
+int32_t tml_run_should_panic(tml_test_fn test_fn) {
+    // Cast is safe on every supported ABI: the callee's return value is simply
+    // ignored when the body is unit-returning.
+    int32_t rc = tml_run_test_catch_impl((tml_test_entry_fn)(void (*)(void))test_fn, /*quiet=*/1);
+    return rc == -1 ? 1 : 0;
 }
 
 /**

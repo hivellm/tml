@@ -744,6 +744,38 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
         return;
     }
 
+    // Per-test i32() thunks. tml_run_test_with_catch takes an `i32(*)()`, but a
+    // @test body may return unit or a non-i32 type, so each one gets a thunk that
+    // normalises the signature. Without this the MIR path called test bodies
+    // directly, with no panic/crash catching and no way to report a failure
+    // (phase44a) — a panicking body killed the process mid-suite instead of
+    // producing a `test_fail` event.
+    std::vector<std::string> thunk_names;
+    if (!test_funcs.empty()) {
+        for (const auto* tf : test_funcs) {
+            std::string thunk = "tml_test_thunk_" + tf->name;
+            thunk_names.push_back(thunk);
+            std::string ret_type = mir_type_to_llvm(tf->return_type);
+            emitln("define internal i32 @" + quote_func_name(thunk) + "() {");
+            emitln("entry:");
+            if (ret_type == "void" || ret_type == "{}") {
+                emitln("  call void @" + quote_func_name(tf->name) + "()");
+                emitln("  ret i32 0");
+            } else if (ret_type == "i32") {
+                emitln("  %r = call i32 @" + quote_func_name(tf->name) + "()");
+                emitln("  ret i32 %r");
+            } else {
+                // Non-i32 result: the value itself carries no pass/fail meaning,
+                // so discard it and report success. Failure still surfaces via
+                // panic/crash catching in tml_run_test_with_catch.
+                emitln("  call " + ret_type + " @" + quote_func_name(tf->name) + "()");
+                emitln("  ret i32 0");
+            }
+            emitln("}");
+            emitln();
+        }
+    }
+
     // Generate an i32-returning wrapper that the dispatcher can call.
     emitln("; Test entry wrapper — calls test functions, returns i32 for dispatcher");
     emitln("define dllexport i32 @" + quote_func_name(options_.test_entry_name) + "() {");
@@ -753,15 +785,22 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
     emitln("  call void @tml_set_test_timeout(i32 100)");
 
     if (!test_funcs.empty()) {
-        // Call each @test function sequentially
-        for (const auto* tf : test_funcs) {
-            std::string ret_type = mir_type_to_llvm(tf->return_type);
-            if (ret_type == "void" || ret_type == "{}") {
-                emitln("  call void @" + quote_func_name(tf->name) + "()");
-            } else {
-                emitln("  call " + ret_type + " @" + quote_func_name(tf->name) + "()");
-            }
+        // Record the first non-zero result and stop there, mirroring the AST path.
+        emitln("  %fail_code = alloca i32");
+        emitln("  store i32 0, ptr %fail_code");
+        for (size_t i = 0; i < thunk_names.size(); ++i) {
+            std::string idx = std::to_string(i);
+            emitln("  %tc_" + idx + " = call i32 @tml_run_test_with_catch(ptr @" +
+                   quote_func_name(thunk_names[i]) + ")");
+            emitln("  store i32 %tc_" + idx + ", ptr %fail_code");
+            emitln("  %tok_" + idx + " = icmp eq i32 %tc_" + idx + ", 0");
+            emitln("  br i1 %tok_" + idx + ", label %test_next_" + idx + ", label %tests_done");
+            emitln("");
+            emitln("test_next_" + idx + ":");
         }
+        emitln("  br label %tests_done");
+        emitln("");
+        emitln("tests_done:");
     } else if (main_func) {
         // Fallback: call main renamed to tml_main
         std::string main_ret = mir_type_to_llvm(main_func->return_type);
@@ -787,7 +826,12 @@ void MirCodegen::emit_test_entry_wrapper(const mir::Module& module) {
         emitln("cov_file_done:");
     }
 
-    emitln("  ret i32 0");
+    if (!test_funcs.empty()) {
+        emitln("  %entry_rc = load i32, ptr %fail_code");
+        emitln("  ret i32 %entry_rc");
+    } else {
+        emitln("  ret i32 0");
+    }
     emitln("}");
     emitln();
 }

@@ -249,6 +249,17 @@ int32_t tml_run_should_panic(tml_test_fn test_fn);
 const char* tml_get_panic_message(void);
 
 /**
+ * @brief Describes the last test failure, escaped for embedding in JSON.
+ *
+ * Used by the NDJSON test dispatcher to put the panic message in the `"error"`
+ * field of a `test_fail` event without producing invalid JSON. Falls back to a
+ * generic description when the test failed without panicking.
+ *
+ * @return A JSON-safe failure description (static buffer).
+ */
+const char* tml_test_error_json(void);
+
+/**
  * @brief Gets the backtrace from the last caught panic.
  *
  * Returns the formatted backtrace string captured at the panic site.
