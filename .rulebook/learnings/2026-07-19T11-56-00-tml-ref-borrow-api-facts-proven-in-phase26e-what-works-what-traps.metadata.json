@@ -1,0 +1,16 @@
+{
+  "id": "2026-07-19T11-56-00-tml-ref-borrow-api-facts-proven-in-phase26e-what-works-what-traps",
+  "title": "TML ref/borrow API facts proven in phase26e (what works, what traps)",
+  "content": "Proven-working ref patterns (AST path, use these): `ref (*typed_ptr)` = zero-instruction pointer forward; `ref (*ptr).field` = single GEP (Sync.get_ref pattern); `Maybe[ref V]` works end-to-end (construct Just(ref), pattern-match, read through) — safe to use in APIs; `ref T` locals support field access, method calls, `when *r`, write-through `mut ref`; `iter` structs can yield `Item = ref T`.\n\nTRAPS (verified 2026-07-19): (1) `ref` operands do NOT auto-deref in binary comparison ops — `c.get_ref(i) == v` K001s (ptr vs i64); write `*c.get_ref(i) == v`. The v0.3.77 auto-deref only covers direct-identifier operands. (2) A TML call to a referenced-but-unimplemented intrinsic does not error — it falls through to the generic call path with a silent i32-default return type (invalid IR or garbage). Before using any `lowlevel { some_intrinsic(...) }`, confirm it exists in compiler/src/codegen/intrinsic_table.cpp / intrinsics.cpp name set. ptr_as_ref/ptr_as_mut/list_get_mut were dead for months this way. (3) Standalone `tml check` false-positives \"undefined\" on lowlevel intrinsics (frontend-only checker doesn't model them) — the authoritative gate is the full compile via tml test/build. (4) CodegenLibraryState keyed struct layouts by bare name until v0.3.81 — a test-local type named like ANY library type (Row, Point...) inherited the library layout under the shared-stdlib restore path; fixed (local shadows library), but the by-name-cache family may have siblings.\n\nBorrow checker: interior-ref binding lands conflicts (B009) but push-class invalidation needs collection mutators to require unique access — `mut this` flip measured to break 20+ std tests; decision task phase26g.",
+  "source": "manual",
+  "relatedTask": "phase26e_collection-borrow-accessors",
+  "tags": [
+    "ref",
+    "borrow",
+    "intrinsics",
+    "codegen",
+    "phase26e",
+    "zero-cost"
+  ],
+  "createdAt": "2026-07-19T11:56:00.144Z"
+}

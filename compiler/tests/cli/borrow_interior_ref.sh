@@ -13,7 +13,9 @@
 set -uo pipefail
 
 TML="${TML:-./build/debug/bin/tml.exe}"
-DIR="compiler/tests/borrow/interior_ref"
+# Fixtures live under scripts/fixtures/ (NOT compiler/tests/) so the suite
+# runner never tries to compile these deliberately-failing files.
+DIR="scripts/fixtures/borrow"
 
 if [ ! -x "$TML" ]; then
     echo "FAIL: $TML not found (build first)" >&2
