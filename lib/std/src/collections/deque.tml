@@ -167,6 +167,41 @@ impl[T] Deque[T] {
         return this.data.get(actual)
     }
 
+    /// Returns a zero-copy borrow of the element at `index` (0 = front).
+    ///
+    /// Unlike `get` (which clone-reads), this forwards a borrow into the
+    /// ring buffer at the physical slot (a pure GEP) — no refcount bump, no
+    /// drop-glue. Panics if `index` is out of bounds.
+    ///
+    /// # Invalidation
+    ///
+    /// The reference is valid ONLY until the next mutating operation on the
+    /// deque (`push_*` / `pop_*` / `clear` / `grow`). Compile-time
+    /// enforcement lands in a later cluster.
+    pub func get_ref(this, index: I64) -> ref T {
+        if index < 0 or index >= this.length {
+            panic("Deque::get_ref index out of bounds")
+        }
+        let actual: I64 = (this.head + index) % this.capacity
+        return this.data.get_ref(actual)
+    }
+
+    /// Returns a zero-copy mutable borrow of the element at `index`.
+    ///
+    /// Writes through the borrow are visible on subsequent reads. No clone,
+    /// no drop-glue. Panics if `index` is out of bounds.
+    ///
+    /// # Invalidation
+    ///
+    /// Same rule as `get_ref`: valid only until the next mutating operation.
+    pub func get_mut(mut this, index: I64) -> mut ref T {
+        if index < 0 or index >= this.length {
+            panic("Deque::get_mut index out of bounds")
+        }
+        let actual: I64 = (this.head + index) % this.capacity
+        return this.data.get_mut(actual)
+    }
+
     /// Grows the capacity by copying elements into a fresh buffer.
     pub func grow(mut this) {
         let new_capacity: I64 = this.capacity * 2

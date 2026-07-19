@@ -1,0 +1,88 @@
+// Zero-copy accessor tests for BTreeMap + Deque — get_ref / get_mut (phase26e B3/B4).
+//
+// BTreeMap.get_ref -> Maybe[ref V] delegates to the parallel values-List borrow;
+// Deque.get_ref -> ref T borrows the ring slot (panics on OOB, like Deque.get).
+// No refcount bump on borrow; get_mut write-through visible on later reads.
+use test::{assert, assert_eq}
+use std::collections::BTreeMap
+use std::collections::Deque
+use core::alloc::shared::Shared
+
+type BtdRcRow {
+    payload: Shared[I64],
+    tag: I64,
+}
+
+// BTreeMap.get_ref borrows without bumping a nested handle; absent key -> Nothing.
+@test
+func test_btreemap_get_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(5 as I64)
+    var m: BTreeMap[I64, BtdRcRow] = BTreeMap[I64, BtdRcRow]::create()
+    m.insert(1 as I64, BtdRcRow { payload: h.duplicate(), tag: 9 as I64 })
+    assert_eq(h.strong_count(), 2, "count = 2 after storing a duplicate")
+
+    when m.get_ref(1 as I64) {
+        Just(r) => {
+            assert_eq(h.strong_count(), 2, "get_ref must NOT bump the nested handle")
+            assert_eq(r.tag, 9 as I64, "tag readable through the borrow")
+            assert_eq(r.payload.get(), 5 as I64, "nested payload readable through borrow")
+        },
+        Nothing => assert(false, "key 1 should be present"),
+    }
+    assert_eq(h.strong_count(), 2, "count unchanged after borrow")
+
+    when m.get_ref(999 as I64) {
+        Just(_) => assert(false, "absent key should be Nothing"),
+        Nothing => assert(true, "absent key -> Nothing"),
+    }
+    return 0
+}
+
+// BTreeMap.get_mut write-through visible on a subsequent get.
+@test
+func test_btreemap_get_mut_write_through() -> I32 {
+    var m: BTreeMap[I64, I64] = BTreeMap[I64, I64]::create()
+    m.insert(3 as I64, 30 as I64)
+    m.insert(7 as I64, 70 as I64)
+
+    when m.get_mut(3 as I64) {
+        Just(v) => { *v = 333 as I64 },
+        Nothing => assert(false, "key 3 should be present"),
+    }
+    assert_eq(m.get(3 as I64), 333 as I64, "get_mut write visible on later get")
+    assert_eq(m.get(7 as I64), 70 as I64, "other entry unchanged")
+    return 0
+}
+
+// Deque.get_ref borrows the ring slot without bumping a nested handle.
+@test
+func test_deque_get_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(8 as I64)
+    var d: Deque[BtdRcRow] = Deque::create[BtdRcRow]()
+    d.push_back(BtdRcRow { payload: h.duplicate(), tag: 21 as I64 })
+    assert_eq(h.strong_count(), 2, "count = 2 after storing a duplicate")
+
+    let r: ref BtdRcRow = d.get_ref(0 as I64)
+    assert_eq(h.strong_count(), 2, "get_ref must NOT bump the nested handle")
+    assert_eq(r.tag, 21 as I64, "tag readable through the borrow")
+    assert_eq(r.payload.get(), 8 as I64, "nested payload readable through borrow")
+    assert_eq(h.strong_count(), 2, "count unchanged after borrow")
+    return 0
+}
+
+// Deque.get_mut write-through visible on a subsequent get.
+@test
+func test_deque_get_mut_write_through() -> I32 {
+    var d: Deque[I64] = Deque::create[I64]()
+    d.push_back(10 as I64)
+    d.push_back(20 as I64)
+    d.push_back(30 as I64)
+
+    let m: mut ref I64 = d.get_mut(1 as I64)
+    *m = 99 as I64
+
+    assert_eq(d.get(0 as I64), 10 as I64, "front unchanged")
+    assert_eq(d.get(1 as I64), 99 as I64, "get_mut write visible on later get")
+    assert_eq(d.get(2 as I64), 30 as I64, "back unchanged")
+    return 0
+}

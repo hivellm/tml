@@ -1,0 +1,62 @@
+// Zero-copy accessor tests for HashMap[K,V] — get_ref / get_mut (phase26e B2/C1).
+//
+// get_ref -> Maybe[ref V] is a pure GEP borrow (no clone, no refcount bump);
+// get_mut -> Maybe[mut ref V] write-through is visible on later reads; absent
+// keys return Nothing. Refcount-probe model mirrors shared_get_sound.test.tml.
+use test::{assert, assert_eq}
+use std::collections::hashmap::HashMap
+use core::alloc::shared::Shared
+
+type MapRcRow {
+    payload: Shared[I64],
+    tag: I64,
+}
+
+// get_ref returns a borrow that does NOT bump a nested refcounted handle,
+// and fields are readable through it. Absent key -> Nothing.
+@test
+func test_hashmap_get_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(7 as I64)
+    var m: HashMap[I64, MapRcRow] = HashMap::new(8)
+    m.set(1 as I64, MapRcRow { payload: h.duplicate(), tag: 100 as I64 })
+    // count = 2: local `h` + the duplicate stored in the map.
+    assert_eq(h.strong_count(), 2, "count = 2 after storing a duplicate")
+
+    when m.get_ref(1 as I64) {
+        Just(r) => {
+            assert_eq(h.strong_count(), 2, "get_ref must NOT bump the nested handle")
+            assert_eq(r.tag, 100 as I64, "tag readable through the borrow")
+            assert_eq(r.payload.get(), 7 as I64, "nested payload readable through borrow")
+        },
+        Nothing => assert(false, "key 1 should be present"),
+    }
+    assert_eq(h.strong_count(), 2, "count unchanged after get_ref borrow")
+
+    when m.get_ref(999 as I64) {
+        Just(_) => assert(false, "absent key should be Nothing"),
+        Nothing => assert(true, "absent key -> Nothing"),
+    }
+    return 0
+}
+
+// get_mut write-through is visible on a subsequent get.
+@test
+func test_hashmap_get_mut_write_through() -> I32 {
+    var m: HashMap[I64, I64] = HashMap::new(8)
+    m.set(10 as I64, 111 as I64)
+    m.set(20 as I64, 222 as I64)
+
+    when m.get_mut(10 as I64) {
+        Just(v) => { *v = 999 as I64 },
+        Nothing => assert(false, "key 10 should be present"),
+    }
+
+    assert_eq(m.get(10 as I64), 999 as I64, "get_mut write visible on later get")
+    assert_eq(m.get(20 as I64), 222 as I64, "other entry unchanged")
+
+    when m.get_mut(777 as I64) {
+        Just(_) => assert(false, "absent key should be Nothing"),
+        Nothing => assert(true, "absent key -> Nothing"),
+    }
+    return 0
+}

@@ -1,0 +1,70 @@
+// Zero-copy accessor tests for List[T] — get_ref / get_mut (phase26e Cluster B1).
+//
+// `get(i)` clone-reads (bumps a nested refcounted handle); `get_ref(i)` is a
+// pure GEP borrow that must NOT bump; `get_mut(i)` is a mutable borrow whose
+// writes are visible on subsequent reads. Refcount-probe model mirrors
+// lib/core/tests/alloc/shared_get_sound.test.tml.
+use test::{assert, assert_eq}
+use std::collections::list::List
+use core::alloc::shared::Shared
+
+// A row carrying a nested refcounted handle so we can observe clone vs borrow.
+type ListRcRow {
+    payload: Shared[I64],
+    tag: I64,
+}
+
+// get(i) clone-reads: the nested Shared handle's refcount bumps on the copy
+// and restores when the copy drops.
+@test
+func test_list_get_clones_nested_handle() -> I32 {
+    let h: Shared[I64] = Shared::new(7 as I64)
+    var rows: List[ListRcRow] = List::new(4)
+    rows.push(ListRcRow { payload: h.duplicate(), tag: 1 as I64 })
+    // count = 2: local `h` + the duplicate stored in the list.
+    assert_eq(h.strong_count(), 2, "count = 2 after storing a duplicate")
+
+    {
+        let copy: ListRcRow = rows.get(0 as I64)
+        assert_eq(h.strong_count(), 3, "get() clone-read bumps nested handle to 3")
+        assert_eq(copy.payload.get(), 7 as I64, "copy payload readable")
+        // copy drops here -> back to 2
+    }
+    assert_eq(h.strong_count(), 2, "after copy drops, count restored to 2")
+    return 0
+}
+
+// get_ref(i) is a zero-copy borrow: it must NOT bump the nested handle, and
+// fields are readable through the borrow.
+@test
+func test_list_get_ref_no_bump() -> I32 {
+    let h: Shared[I64] = Shared::new(11 as I64)
+    var rows: List[ListRcRow] = List::new(4)
+    rows.push(ListRcRow { payload: h.duplicate(), tag: 42 as I64 })
+    assert_eq(h.strong_count(), 2, "count = 2 after storing a duplicate")
+
+    let r: ref ListRcRow = rows.get_ref(0 as I64)
+    assert_eq(h.strong_count(), 2, "get_ref must NOT bump the nested handle")
+    assert_eq(r.tag, 42 as I64, "tag readable through the borrow")
+    assert_eq(r.payload.get(), 11 as I64, "nested payload readable through the borrow")
+    // Still no bump after reading through the borrow.
+    assert_eq(h.strong_count(), 2, "count unchanged after reading through get_ref")
+    return 0
+}
+
+// get_mut(i) write-through is visible on a subsequent get.
+@test
+func test_list_get_mut_write_through() -> I32 {
+    var nums: List[I64] = List::new(4)
+    nums.push(10 as I64)
+    nums.push(20 as I64)
+    nums.push(30 as I64)
+
+    let m: mut ref I64 = nums.get_mut(1 as I64)
+    *m = 99 as I64
+
+    assert_eq(nums.get(0 as I64), 10 as I64, "element 0 unchanged")
+    assert_eq(nums.get(1 as I64), 99 as I64, "get_mut write visible on later get")
+    assert_eq(nums.get(2 as I64), 30 as I64, "element 2 unchanged")
+    return 0
+}

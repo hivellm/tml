@@ -297,6 +297,94 @@ impl[K, V] HashMap[K, V] {
         }
     }
 
+    /// Returns a zero-copy borrow of the value for `key`, or `Nothing`.
+    ///
+    /// Unlike `get` / `get_opt` (which clone-read the value), this forwards a
+    /// pointer into the map's entry slot (a pure GEP), so no refcount is
+    /// bumped and no drop-glue runs. Fields are readable through the borrow.
+    ///
+    /// # Invalidation
+    ///
+    /// The returned reference is valid ONLY until the next mutating operation
+    /// on the map (`insert` / `remove` / `clear` or any rehash/resize). Using
+    /// it afterward is undefined behavior; compile-time enforcement lands in a
+    /// later cluster.
+    pub func get_ref(this, key: K) -> Maybe[ref V] {
+        let hdr: I64 = this.handle as I64
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+        if cur_len == 0 {
+            return Nothing
+        }
+
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_typed(key)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
+        let start: I64 = h
+
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return Nothing }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
+                if HashMap[K, V].keys_equal(e_key, key) {
+                    let val_ptr: *V = (entries_addr + h * esz + 8) as *V
+                    return Just(lowlevel { ref (*val_ptr) })
+                }
+            }
+            h = (h + 1) & mask
+            if h == start { return Nothing }
+        }
+    }
+
+    /// Returns a zero-copy mutable borrow of the value for `key`, or `Nothing`.
+    ///
+    /// Forwards a pointer into the entry slot via `ptr_as_mut` (pure GEP).
+    /// Writes through the borrow are visible on subsequent reads. No clone,
+    /// no drop-glue.
+    ///
+    /// # Invalidation
+    ///
+    /// Same rule as `get_ref`: the reference is valid only until the next
+    /// mutating operation on the map.
+    pub func get_mut(mut this, key: K) -> Maybe[mut ref V] {
+        let hdr: I64 = this.handle as I64
+        let cur_len: I64 = lowlevel { ptr_read[I64]((hdr + 16) as *I64) }
+        if cur_len == 0 {
+            return Nothing
+        }
+
+        let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
+        let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
+        let entries_addr: I64 = lowlevel { ptr_read[I64](hdr as *I64) }
+        let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
+
+        let mask: I64 = cur_cap - 1
+        let hash: I64 = HashMap[K, V].hash_typed(key)
+        var h: I64 = hash & mask
+        let h2: I8 = HashMap[K, V].h2(hash)
+        let start: I64 = h
+
+        loop (true) {
+            let c: I8 = lowlevel { ptr_read[I8]((ctrl_addr + h) as *I8) }
+            if c == (-1 as I8) { return Nothing }
+            if c == h2 {
+                let e_key: I64 = lowlevel { ptr_read[I64]((entries_addr + h * esz) as *I64) }
+                if HashMap[K, V].keys_equal(e_key, key) {
+                    let val_addr: I64 = entries_addr + h * esz + 8
+                    return Just(lowlevel { ptr_as_mut[V](val_addr) })
+                }
+            }
+            h = (h + 1) & mask
+            if h == start { return Nothing }
+        }
+    }
+
     /// Returns `true` if the hashmap contains the given key.
     pub func has(this, key: K) -> Bool {
         let hdr: I64 = this.handle as I64
