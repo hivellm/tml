@@ -49,6 +49,16 @@ expect_borrow_error() {
 
 expect_borrow_error "neg_two_mut_ref.tml"
 expect_borrow_error "neg_shared_then_mut_ref.tml"
+# phase26g 1.4: get_ref held across a `mut this` mutation (push-class
+# invalidation) for collections whose get_ref returns `ref T` directly.
+expect_borrow_error "neg_get_ref_then_push.tml"
+expect_borrow_error "neg_get_ref_then_push_deque.tml"
+# phase26g 1.2: the HashMap/BTreeMap variant (get_ref -> Maybe[ref V]) — the
+# interior-ref borrow is now propagated through the `when Just(r)` pattern match
+# and `let Just(r) = ... else` destructuring, so a mutation held across the ref
+# is detected too.
+expect_borrow_error "neg_get_ref_then_insert_map.tml"
+expect_borrow_error "neg_get_ref_then_insert_btree.tml"
 
 printf '\n[borrow_interior_ref] pass=%d fail=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

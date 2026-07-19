@@ -1,0 +1,52 @@
+// Positive fixtures for phase26g 1.2 — interior-ref borrow propagation through
+// Maybe[ref V] pattern matching (HashMap/BTreeMap get_ref). All LEGAL: the
+// wiring that rejects a mutation held across a live interior ref must NOT reject
+// these.
+use test::{assert_eq}
+use std::collections::hashmap::HashMap
+
+// Read-only use of the interior ref inside the `when` arm, mutation AFTER the
+// when — the borrow ends with the arm, so the later mutation is legal.
+@test
+func test_when_get_ref_readonly_then_mutate_after() -> I32 {
+    var m: HashMap[I64, I64] = HashMap::new(8)
+    m.set(1 as I64, 10 as I64)
+    var seen: I64 = 0 as I64
+    when m.get_ref(1 as I64) {
+        Just(r) => { seen = *r },
+        Nothing => {}
+    }
+    m.set(2 as I64, 20 as I64)
+    assert_eq(seen, 10 as I64, "read interior ref in arm")
+    assert_eq(m.get_opt(2 as I64).unwrap_or(0 as I64), 20 as I64, "mutation after when")
+    return 0
+}
+
+// let-else: read the interior ref, THEN mutate after its last use — legal (NLL).
+@test
+func test_let_else_get_ref_read_then_mutate() -> I32 {
+    var m: HashMap[I64, I64] = HashMap::new(8)
+    m.set(1 as I64, 10 as I64)
+    let Just(r) = m.get_ref(1 as I64) else { return 1 }
+    let v: I64 = *r
+    // r's last use is above; a mutation now is legal.
+    m.set(3 as I64, 30 as I64)
+    assert_eq(v, 10 as I64, "value read before mutation")
+    return 0
+}
+
+// A plain Maybe VALUE result (`get`, not `get_ref`) carries no borrow, so a
+// mutation inside the arm is legal.
+@test
+func test_when_plain_maybe_value_mutate_in_arm() -> I32 {
+    var m: HashMap[I64, I64] = HashMap::new(8)
+    m.set(1 as I64, 10 as I64)
+    when m.get_opt(1 as I64) {
+        Just(v) => {
+            m.set(2 as I64, 20 as I64)
+            assert_eq(v, 10 as I64, "plain value unaffected by mutation")
+        },
+        Nothing => {}
+    }
+    return 0
+}

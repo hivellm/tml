@@ -42,3 +42,34 @@ func test_get_ref_immediate_then_push() -> I32 {
     assert_eq(arr.get(1), 8 as I64, "push succeeded")
     return 0
 }
+
+// phase26g: a shared interior ref whose LAST USE precedes the mutation is legal
+// (NLL releases the borrow before the `mut this` push).
+@test
+func test_get_ref_last_use_then_push() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(5 as I64)
+    let r: ref I64 = arr.get_ref(0)
+    let snapshot: I64 = *r  // r's last use is here
+    arr.push(6 as I64)      // legal: r is no longer live
+    assert_eq(snapshot, 5 as I64, "snapshot taken before push")
+    assert_eq(arr.get(1), 6 as I64, "push after last use succeeded")
+    return 0
+}
+
+// phase26g: a shared interior ref scoped to an inner block is released at block
+// exit, so a mutation after the block is legal.
+@test
+func test_get_ref_inner_block_then_push() -> I32 {
+    var arr: List[I64] = List::new(4)
+    arr.push(9 as I64)
+    var sum: I64 = 0
+    {
+        let r: ref I64 = arr.get_ref(0)
+        sum = sum + *r
+    }
+    arr.push(11 as I64)  // legal: r went out of scope with the block
+    assert_eq(sum, 9 as I64, "read inside inner block")
+    assert_eq(arr.get(1), 11 as I64, "push after block succeeded")
+    return 0
+}

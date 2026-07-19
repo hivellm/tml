@@ -105,7 +105,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Inserts a key-value pair into the hashmap.
     /// If the key already exists, the value is updated.
-    pub func set(this, key: K, value: V) {
+    pub func set(mut this, key: K, value: V) {
         let hdr: I64 = this.handle as I64
         let p_len: *I64 = (hdr + 16) as *I64
         let p_cap: *I64 = (hdr + 24) as *I64
@@ -418,7 +418,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Removes a key-value pair from the hashmap.
     /// Returns `true` if the key was found and removed.
-    pub func remove(this, key: K) -> Bool {
+    pub func remove(mut this, key: K) -> Bool {
         let hdr: I64 = this.handle as I64
         let p_len: *I64 = (hdr + 16) as *I64
         let cur_len: I64 = lowlevel { ptr_read[I64](p_len) }
@@ -460,7 +460,7 @@ impl[K, V] HashMap[K, V] {
     }
 
     /// Removes all key-value pairs from the hashmap.
-    pub func clear(this) {
+    pub func clear(mut this) {
         let hdr: I64 = this.handle as I64
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
         let ctrl_addr: I64 = lowlevel { ptr_read[I64]((hdr + 8) as *I64) }
@@ -576,7 +576,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Returns the value for the given key. If the key does not exist,
     /// inserts `default` and returns it.
-    pub func get_or_set(this, key: K, default: V) -> V {
+    pub func get_or_set(mut this, key: K, default: V) -> V {
         if this.has(key) {
             return this.get(key)
         }
@@ -586,7 +586,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Retains only the key-value pairs for which the predicate returns `true`.
     /// Entries for which `pred(key, value)` returns `false` are removed.
-    pub func retain(this, pred: func(K, V) -> Bool) {
+    pub func retain(mut this, pred: func(K, V) -> Bool) {
         let hdr: I64 = this.handle as I64
         let cur_cap: I64 = lowlevel { ptr_read[I64]((hdr + 24) as *I64) }
         let esz: I64 = lowlevel { ptr_read[I64]((hdr + 32) as *I64) }
@@ -613,7 +613,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Removes all entries from the hashmap, returning keys and values as separate lists.
     /// The hashmap is left empty.
-    pub func drain_keys(this) -> List[K] {
+    pub func drain_keys(mut this) -> List[K] {
         let k = this.keys()
         this.clear()
         k
@@ -621,7 +621,7 @@ impl[K, V] HashMap[K, V] {
 
     /// Removes all entries from the hashmap, returning values as a list.
     /// The hashmap is left empty.
-    pub func drain_values(this) -> List[V] {
+    pub func drain_values(mut this) -> List[V] {
         let v = this.values()
         this.clear()
         v
@@ -631,7 +631,7 @@ impl[K, V] HashMap[K, V] {
     /// `keys` and `values` must have the same length.
     /// Borrows both lists (F-020): the caller keeps ownership — previously the
     /// by-value params' drop-glue freed the caller's lists on return.
-    pub func extend_from(this, keys: ref List[K], values: ref List[V]) {
+    pub func extend_from(mut this, keys: ref List[K], values: ref List[V]) {
         let count: I64 = keys.len()
         for i in 0 to count {
             this.set(keys.get(i), values.get(i))

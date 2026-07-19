@@ -1315,6 +1315,19 @@ private:
         BorrowKind kind;    ///< Shared for `ref T`, Mutable for `mut ref T`.
     };
     std::optional<PendingRefReturn> pending_ref_return_;
+
+    /// phase26g 1.2: bind a `Variant(ident)` payload pattern (e.g. `Just(r)`) as a
+    /// place and tie a captured interior-ref receiver borrow to it, so a mutation
+    /// of the receiver while `r` is live is a B009 conflict. No-op unless the
+    /// pattern is exactly an enum variant with a single identifier payload
+    /// (under-borrow on other shapes is the safe direction). Used by `check_when`
+    /// arms and `check_let_else` for `Maybe[ref V]` accessor results.
+    void bind_interior_ref_payload(const parser::Pattern& pattern,
+                                   const PendingRefReturn& pending);
+
+    /// phase26g 1.2: borrow checking for `let Pattern = init else { diverge }`.
+    /// (check_stmt did not visit LetElseStmt at all before this.)
+    void check_let_else(const parser::LetElseStmt& let_else);
 };
 
 } // namespace tml::borrow

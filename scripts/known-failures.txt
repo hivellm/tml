@@ -13,9 +13,12 @@
 # Format: <suite-or-target> | <error-class> | <owning-task>
 
 # --- K001 / K002 invalid-IR class (owner: phase27a) ---
-std/collections/btreeset        | K001 | phase27a_codegen-k001-root-cause
-std/collections/btreemap        | K001 | phase27a_codegen-k001-root-cause
-std/collections/arraylist       | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: ir:773 '{i64,i64}' vs i32)
+# REMOVED 2026-07-19 (phase26c/26e verification): std/collections btreeset /
+# btreemap / arraylist — FIXED by the phase27a Class 2 declared-signature
+# coercion (d39333dd); consolidated std/collections suite verified green 3×
+# at three different HEADs (96/96, 96/96, 102/102). Any recurrence is a
+# regression, full stop.
+std/text/text_search_transform  | K001 | phase27a_codegen-k001-root-cause (catalogued 2026-07-19: ir:1646 '%t755' i64-vs-ptr, Class 2, in replace_all→repeat/replace buffer math; PATH-SENSITIVE — `tml build --emit-ir` emits valid IR, only the test-compile codegen_unit path trips; proven pre-existing at 84e3507e with pristine text.tml)
 std/sync/once_lock_get_or_init  | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: ir:1027 'void type only allowed for function results')
 std/sync/sync_barrier.consolidated | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...IsoDualMutexInner4dropE)
 std/sync/sync_isolation         | K001 | phase27a_codegen-k001-root-cause (verified identical at HEAD 2026-07-16: undefined @tml_...DualMutexInner4dropE — the mono-queueing class, specimen family #4)

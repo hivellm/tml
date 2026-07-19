@@ -56,6 +56,8 @@ void BorrowChecker::check_stmt(const parser::Stmt& stmt) {
             using T = std::decay_t<decltype(s)>;
             if constexpr (std::is_same_v<T, parser::LetStmt>) {
                 check_let(s);
+            } else if constexpr (std::is_same_v<T, parser::LetElseStmt>) {
+                check_let_else(s);
             } else if constexpr (std::is_same_v<T, parser::ExprStmt>) {
                 check_expr_stmt(s);
             } else if constexpr (std::is_same_v<T, parser::DeclPtr>) {
@@ -179,7 +181,20 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
     // live (`c.push(x); use(*r)`) is a B009 conflict. Only simple `let r = ...`
     // ident bindings participate — destructuring an interior ref is not a shape
     // we model, and skipping it is the safe (under-borrow) direction.
-    if (pending_ref_return_ && let.pattern->is<parser::IdentPattern>()) {
+    // phase26g 1.4: bind the interior-ref borrow to the LHS ONLY when the
+    // initializer is DIRECTLY the ref-returning method call (`let r =
+    // c.get_ref(i)`). If the ref is consumed by a wrapping expression before
+    // binding — e.g. `let first: I64 = *c.get_ref(i)` (deref to a value) — the
+    // ref does not escape into `first`, so no borrow of the receiver survives.
+    // Without this guard the stale `pending_ref_return_` (set by the inner
+    // get_ref call, never cleared by the deref) was bound to the value LHS,
+    // keeping a phantom borrow live and producing a false B009 on a later
+    // mutation. Under-binding on exotic shapes (block/if-expr yielding a ref)
+    // is the safe (under-borrow) direction already adopted by this wiring.
+    bool init_is_direct_call =
+        let.init && (*let.init)->is<parser::MethodCallExpr>();
+    if (pending_ref_return_ && init_is_direct_call &&
+        let.pattern->is<parser::IdentPattern>()) {
         const auto& ident = let.pattern->as<parser::IdentPattern>();
         auto lhs_place = env_.lookup(ident.name);
         if (lhs_place) {
@@ -190,6 +205,44 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
         }
     }
     pending_ref_return_.reset();
+}
+
+/// Checks a `let Pattern = init else { diverge }` binding.
+///
+/// phase26g 1.2: check_stmt previously did NOT visit LetElseStmt at all, so its
+/// initializer, else block, and pattern were entirely unchecked. This handler
+/// checks the initializer and else block, and — when the initializer is directly
+/// a method call returning an interior reference (`ref T` or `Maybe[ref V]` from
+/// get_ref/get_mut over a place receiver) matched by `Just(r)` — ties the
+/// receiver borrow to the payload `r`, so a mutation of the receiver while `r` is
+/// still live is a B009 conflict. Minimal by design: no move recording is added
+/// for let-else (staying at the prior no-op status quo for that), and only the
+/// confident interior-ref shape creates a borrow.
+void BorrowChecker::check_let_else(const parser::LetElseStmt& let_else) {
+    pending_ref_return_.reset();
+
+    // Initializer: also lets check_method_call record an interior-ref receiver
+    // borrow for a `Maybe[ref V]` / `ref T` accessor result.
+    check_expr(*let_else.init);
+    std::optional<PendingRefReturn> init_ref;
+    if (let_else.init->is<parser::MethodCallExpr>() && pending_ref_return_) {
+        init_ref = pending_ref_return_;
+    }
+    pending_ref_return_.reset();
+
+    // The else block diverges (return/panic/break/continue); its bindings never
+    // escape, so check it in a throwaway scope.
+    env_.push_scope();
+    check_expr(*let_else.else_block);
+    drop_scope_places();
+    env_.pop_scope();
+
+    // Bind the interior-ref payload into the CONTINUATION scope and link the
+    // receiver borrow. Non-ref results are left to existing machinery (the prior
+    // behaviour bound nothing here — under-borrow safe).
+    if (init_ref) {
+        bind_interior_ref_payload(*let_else.pattern, *init_ref);
+    }
 }
 
 /// Checks an expression statement.

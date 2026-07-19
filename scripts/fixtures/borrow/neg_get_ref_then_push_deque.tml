@@ -1,0 +1,12 @@
+// NEGATIVE (Deque): shared interior ref held across a push (mut this).
+use std::collections::deque::Deque
+func use_i(x: I64) -> I64 { return x }
+func main() -> I32 {
+    var d: Deque[I64] = Deque::create[I64]()
+    d.push_back(1 as I64)
+    d.push_back(2 as I64)
+    let r: ref I64 = d.get_ref(0 as I64)
+    d.push_back(3 as I64)
+    let z: I64 = use_i(*r)
+    return z as I32
+}

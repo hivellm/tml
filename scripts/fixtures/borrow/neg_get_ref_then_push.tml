@@ -1,0 +1,14 @@
+// NEGATIVE: a shared interior ref held across a mutation of the container.
+// `l.get_ref(0)` borrows the list; `l.push(x)` (now `mut this`) needs a unique
+// borrow of the same list while `r` is still live → B009-class conflict.
+use std::collections::list::List
+func use_i(x: I64) -> I64 { return x }
+func main() -> I32 {
+    var l: List[I64] = List::new(4)
+    l.push(1 as I64)
+    l.push(2 as I64)
+    let r: ref I64 = l.get_ref(0)
+    l.push(3 as I64)
+    let z: I64 = use_i(*r)
+    return z as I32
+}

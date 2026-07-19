@@ -1,0 +1,11 @@
+{
+  "id": 13,
+  "slug": "collection-mutators-require-unique-access-mut-this-rust-style-mutability-adopted",
+  "title": "Collection mutators require unique access (mut this) — Rust-style mutability adopted",
+  "status": "proposed",
+  "date": "2026-07-19",
+  "relatedTasks": [
+    "phase26g_collection-mutator-mut-this"
+  ],
+  "supersededBy": null
+}

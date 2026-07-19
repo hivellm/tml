@@ -36,6 +36,30 @@ TML_MODULE("compiler")
 
 namespace tml::borrow {
 
+/// phase26g 1.2: does a method-return type CARRY an interior reference, and if
+/// so, with what borrow kind? A direct `ref T` / `mut ref T` carries it; so does
+/// any generic wrapper whose type-args transitively contain a RefType — the
+/// zero-copy accessors return `Maybe[ref V]` / `Maybe[mut ref V]`. Returns the
+/// innermost RefType's kind (Mutable for `mut ref`, Shared otherwise), or
+/// nullopt when the type carries no reference (e.g. `Maybe[I64]` — a plain
+/// optional value that must NOT manufacture a borrow).
+static auto ref_kind_in_type(const types::TypePtr& t) -> std::optional<BorrowKind> {
+    if (!t) {
+        return std::nullopt;
+    }
+    if (t->is<types::RefType>()) {
+        return t->as<types::RefType>().is_mut ? BorrowKind::Mutable : BorrowKind::Shared;
+    }
+    if (t->is<types::NamedType>()) {
+        for (const auto& ta : t->as<types::NamedType>().type_args) {
+            if (auto k = ref_kind_in_type(ta)) {
+                return k;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 /// Dispatches expression checking to the appropriate handler.
 ///
 /// Uses `std::visit` to match on the expression variant and call the
@@ -390,14 +414,15 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
             const std::string& base = recv_type->as<types::NamedType>().name;
             auto sig = type_env_->lookup_func(base + "::" + call.method);
             if (sig && recv_place) {
-                bool ret_is_ref = sig->return_type && sig->return_type->is<types::RefType>();
-                bool ret_is_mut_ref =
-                    ret_is_ref && sig->return_type->as<types::RefType>().is_mut;
+                // The return carries an interior ref when it is a `ref T` OR a
+                // generic wrapper carrying one (`Maybe[ref V]` from get_ref/get_mut
+                // on HashMap/BTreeMap). The borrow kind is the innermost ref's.
+                auto ret_ref_kind = ref_kind_in_type(sig->return_type);
+                bool ret_is_ref = ret_ref_kind.has_value();
                 bool recv_is_mut_this = !sig->params.empty() && sig->params[0] &&
                                         sig->params[0]->is<types::RefType>() &&
                                         sig->params[0]->as<types::RefType>().is_mut;
 
-                (void)recv_is_mut_this;
                 if (ret_is_ref) {
                     // An interior reference borrows the receiver (Shared for `ref T`,
                     // Mutable for `mut ref T`). Conflict detection is deliberately
@@ -411,9 +436,10 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
                     // `f(ref x); x.mutate()`). Two `mut ref`s, or a `mut ref` while
                     // a shared interior ref is live, conflict (B009); two shared
                     // interior refs coexist. We then record the borrow so check_let
-                    // binds it to the LHS ref (NLL extends it to the ref's last use).
-                    BorrowKind kind =
-                        ret_is_mut_ref ? BorrowKind::Mutable : BorrowKind::Shared;
+                    // (or check_when / check_let_else for a `Maybe[ref V]` result
+                    // bound through a `Just(r)` pattern) binds it to the ref's place
+                    // (NLL extends it to the ref's last use).
+                    BorrowKind kind = *ret_ref_kind;
                     const auto& st = env_.get_state(recv_place->base);
                     for (const auto& b : st.active_borrows) {
                         if (b.end || b.ref_place == 0) {
@@ -438,6 +464,34 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
                         break;
                     }
                     pending_ref_return_ = PendingRefReturn{recv_place->base, *recv_place, kind};
+                } else if (recv_is_mut_this) {
+                    // phase26g 1.4: a `mut this` mutator that returns no ref
+                    // (push/pop/insert/remove/clear/...) takes a TRANSIENT
+                    // unique borrow of the receiver for the duration of the
+                    // call. That conflicts with any LIVE interior-ref borrow
+                    // this wiring created (a `get_ref`/`get_mut` result still
+                    // live under NLL) — this is the get_ref-then-push
+                    // invalidation. Same narrow scope as the ret_is_ref branch:
+                    // we only consider borrows with `ref_place != 0` (interior
+                    // refs) that are not yet released, so normal `l.push(1);
+                    // l.push(2)` with no live interior ref is unaffected. The
+                    // borrow is transient (nothing is returned to bind), so we
+                    // set no pending_ref_return_.
+                    const auto& st = env_.get_state(recv_place->base);
+                    for (const auto& b : st.active_borrows) {
+                        if (b.end || b.ref_place == 0) {
+                            continue; // released, or not one of our interior refs
+                        }
+                        auto loc = current_location(call.span);
+                        if (b.kind == BorrowKind::Mutable) {
+                            errors_.push_back(BorrowError::double_mut_borrow(
+                                st.name, loc.span, b.start.span));
+                        } else {
+                            errors_.push_back(BorrowError::mut_borrow_while_immut(
+                                st.name, loc.span, b.start.span));
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -623,8 +677,46 @@ void BorrowChecker::check_if(const parser::IfExpr& if_expr) {
 /// }
 /// let x = result   // OK: result initialized in all arms
 /// ```
+void BorrowChecker::bind_interior_ref_payload(const parser::Pattern& pattern,
+                                              const PendingRefReturn& pending) {
+    // Confident shape only: `Variant(ident)` with a SINGLE identifier payload
+    // (e.g. `Just(r)`). Anything else (multi-field payloads, nested patterns,
+    // no payload) is left unbound here — under-borrow is the safe direction.
+    if (!pattern.is<parser::EnumPattern>()) {
+        return;
+    }
+    const auto& ep = pattern.as<parser::EnumPattern>();
+    if (!ep.payload || ep.payload->size() != 1) {
+        return;
+    }
+    const auto& sub = (*ep.payload)[0];
+    if (!sub || !sub->is<parser::IdentPattern>()) {
+        return;
+    }
+    const auto& ident = sub->as<parser::IdentPattern>();
+    auto loc = current_location(pattern.span);
+    env_.define(ident.name, nullptr, ident.is_mut, loc);
+    auto rplace = env_.lookup(ident.name);
+    if (rplace) {
+        create_borrow_with_projection(pending.place, pending.full_place, pending.kind, loc,
+                                      *rplace);
+    }
+}
+
 void BorrowChecker::check_when(const parser::WhenExpr& when) {
     check_expr(*when.scrutinee);
+
+    // phase26g 1.2: if the scrutinee is DIRECTLY a method call returning an
+    // interior reference (`ref T`, or `Maybe[ref V]` from get_ref/get_mut over a
+    // place receiver), capture the receiver borrow it recorded. A `Just(r)` arm
+    // then binds that borrow to the payload `r`, so a mutation of the receiver
+    // WITHIN the arm while `r` is still live is a B009 conflict. Confident shape
+    // only (direct method-call scrutinee); under-borrow stays the safe direction.
+    std::optional<PendingRefReturn> when_ref;
+    if (when.scrutinee->is<parser::MethodCallExpr>() && pending_ref_return_) {
+        when_ref = pending_ref_return_;
+    }
+    pending_ref_return_.reset();
 
     // Save state before any arms
     auto pre_when_state = env_.save_init_state();
@@ -649,6 +741,11 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
             const auto& ident = arm.pattern->template as<parser::IdentPattern>();
             auto loc = current_location(arm.pattern->span);
             env_.define(ident.name, nullptr, ident.is_mut, loc);
+        } else if (when_ref) {
+            // phase26g 1.2: an interior-ref scrutinee matched by `Just(r)` — bind
+            // the single payload identifier and tie the captured receiver borrow
+            // to it. NLL extends the borrow to `r`'s last use within this arm.
+            bind_interior_ref_payload(*arm.pattern, *when_ref);
         }
 
         // Check guard if present

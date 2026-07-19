@@ -1,0 +1,14 @@
+// NEGATIVE (BTreeMap): a shared interior ref (Maybe[ref V]) held across a map
+// mutation. `t.get_ref(k)` borrows the tree; `t.insert(...)` (mut this) needs a
+// unique borrow while `r` is still live → B009-class conflict, propagated
+// through the `let Just(r) = ... else` destructuring.
+use std::collections::btreemap::BTreeMap
+func use_i(x: I64) -> I64 { return x }
+func main() -> I32 {
+    var t: BTreeMap[I64, I64] = BTreeMap::new()
+    t.insert(1 as I64, 10 as I64)
+    let Just(r) = t.get_ref(1 as I64) else { return 0 }
+    t.insert(2 as I64, 20 as I64)
+    let z: I64 = use_i(*r)
+    return z as I32
+}
