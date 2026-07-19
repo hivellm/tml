@@ -1,6 +1,9 @@
 # Codegen Debugger Memory
 
 ## Index
+- [fastpath-eager-library-emission.md](fastpath-eager-library-emission.md) - phase43a blocker 3: library_ir_only disables lazy deferral → eager emission of ALL library bodies; K001 ptr-vs-i32 is NOT a Range width issue (2026-07-18)
+- [shared-stdlib-fastpath-dedup-gap.md](shared-stdlib-fastpath-dedup-gap.md) - phase41b: CodegenLibraryState captures only generated_functions_, not generated_impl_methods_output_ → I32::duplicate redef + i64/i32 range-iter mismatch (2026-07-17)
+- [borrow-move-dataflow-dormant.md](borrow-move-dataflow-dormant.md) - NLL checker move_value() is dead code; OwnershipState::Moved never set; moved_out facts uniformly false (F-015 systemic) (2026-07-16)
 - [operator-overload-ast-codegen-fix.md](operator-overload-ast-codegen-fix.md) - AST codegen binary_ops.cpp had no operator overloading — struct operators treated as primitive ops (2026-04-11, FIXED)
 - [private-func-module-decls-fix.md](private-func-module-decls-fix.md) - Private functions excluded from module declarations caused ref-param ABI mismatch segfault during lazy codegen (2026-04-07, FIXED)
 - [tool-module-use-path-prefix-bug.md](tool-module-use-path-prefix-bug.md) - Tool module use-path prefix: absolute paths wrongly treated as relative in env_module_load_decls.cpp (2026-04-06, FIXED)
