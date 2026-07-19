@@ -171,6 +171,37 @@ void LLVMIRGen::emit_referenced_library_definitions() {
     std::string all_lazy_defs;
     std::unordered_set<std::string> generated;
 
+    // phase43a: pre-seed `generated` with every symbol already DEFINED in the
+    // current IR text. Under cached library state the pasted bootstrap code
+    // contains some real bodies (legit eager emissions + instantiation output);
+    // a pending-map entry can coexist for the same symbol (the same function
+    // deferred under another module identity). Without this seed the worklist
+    // would regenerate such a body — "invalid redefinition of function"
+    // (observed with @tml_json_parse under std/json).
+    {
+        size_t dp = 0;
+        while ((dp = original_ir.find("define ", dp)) != std::string::npos) {
+            if (dp != 0 && original_ir[dp - 1] != '\n') {
+                dp += 7;
+                continue;
+            }
+            size_t line_end = original_ir.find('\n', dp);
+            if (line_end == std::string::npos)
+                line_end = original_ir.size();
+            size_t at = original_ir.find('@', dp);
+            if (at != std::string::npos && at < line_end) {
+                size_t e = at + 1;
+                while (e < original_ir.size() &&
+                       (std::isalnum(static_cast<unsigned char>(original_ir[e])) ||
+                        original_ir[e] == '_' || original_ir[e] == '.')) {
+                    ++e;
+                }
+                generated.insert(original_ir.substr(at, e - at));
+            }
+            dp = line_end;
+        }
+    }
+
     while (!worklist.empty()) {
         std::unordered_set<std::string> next_worklist;
 
@@ -265,9 +296,38 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                     }
                 }
 
-                emit_line("; DEBUG LAZY type_name=" + info.type_name +
-                          " method=" + info.method->name);
                 gen_impl_method(info.type_name, *info.method);
+
+                // phase43a: the pending-map key (the symbol the IR references)
+                // and the symbol gen_impl_method just produced can DISAGREE —
+                // the same impl can be registered under two module identities
+                // (re-exported submodule, e.g. core::fmt vs core::fmt::rt), so
+                // the key was mangled under one identity while regeneration
+                // mangles under the other. The reference to `fn` would then
+                // dangle ("use of undefined value", observed with
+                // @vtable.FormatSpec.Debug). Bridge the divergence with an
+                // internal alias so the referenced name resolves to the emitted
+                // body, whichever identity produced it.
+                {
+                    std::string expected = "@" + mangle_impl_method(info.type_name,
+                                                                    info.method->name);
+                    if (expected != fn) {
+                        auto fi = functions_.find(info.type_name + "_" + info.method->name);
+                        if (fi != functions_.end() && !fi->second.llvm_func_type.empty()) {
+                            emit_line(fn + " = internal alias " + fi->second.llvm_func_type +
+                                      ", ptr " + expected);
+                            TML_LOG_DEBUG("codegen", "[LAZY_LIB] Aliased divergent symbol "
+                                                         << fn << " -> " << expected);
+                        } else {
+                            TML_LOG_WARN("codegen",
+                                         "[LAZY_LIB] Symbol divergence with no signature: "
+                                             << fn << " vs " << expected << " ("
+                                             << info.type_name << "::" << info.method->name
+                                             << ")");
+                        }
+                    }
+                }
+
                 current_type_subs_ = saved_type_subs;
                 current_const_generic_values_ = saved_const_generic_values;
                 options_.lazy_library_defs = true;
@@ -474,7 +534,9 @@ void LLVMIRGen::emit_referenced_library_definitions() {
     // generate_pending_instantiations() generated a method body that calls internal generic
     // type methods which weren't queued through the normal path.
     in_library_body_ = true; // Recovery needs library body mode
+    std::unordered_set<std::string> round_unresolved;
     for (int verify_round = 0; verify_round < 3; ++verify_round) {
+        round_unresolved.clear();
         std::string final_ir = output_.str();
         auto all_refs = collect_refs(final_ir);
 
@@ -631,9 +693,134 @@ void LLVMIRGen::emit_referenced_library_definitions() {
                                           "[LAZY_LIB] Recovery: emitted pending func " << ref);
                         }
                     }
-                } else if (!queued_recovery && verify_round == 2) {
-                    // Final round: genuinely unresolved reference
-                    TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED: " << ref);
+                } else {
+                    // phase43a: module-identity divergence. The ref was mangled
+                    // under a DIFFERENT module identity than any pending-map key
+                    // (re-exported submodule / prelude alias — e.g. a caller
+                    // references @tml_N4core2I87to_jsonE while the impl lives in
+                    // std::json::serialize), OR the method was never queued at
+                    // all because the restored functions_ index satisfied the
+                    // dispatch branch that would otherwise queue it (primitive
+                    // impl methods, method_impl.cpp:1249+). Demangle the ref
+                    // into its (…, Type, method) segments — those are
+                    // identity-independent — then (a) generate from a matching
+                    // pending entry and alias-bridge the name, or (b) queue a
+                    // PendingImplMethod for a registered impl so the recovery
+                    // flush emits it.
+                    bool bridged = false;
+                    std::vector<std::string> segs;
+                    if (ref.rfind("@tml_N", 0) == 0) {
+                        size_t ip = 6;
+                        while (ip < ref.size() &&
+                               std::isdigit(static_cast<unsigned char>(ref[ip]))) {
+                            size_t len = 0;
+                            while (ip < ref.size() &&
+                                   std::isdigit(static_cast<unsigned char>(ref[ip]))) {
+                                len = len * 10 + static_cast<size_t>(ref[ip] - '0');
+                                ++ip;
+                            }
+                            if (ip + len > ref.size()) {
+                                segs.clear();
+                                break;
+                            }
+                            segs.push_back(ref.substr(ip, len));
+                            ip += len;
+                        }
+                        if (ip >= ref.size() || ref[ip] != 'E') {
+                            segs.clear(); // trailing garbage — not a clean mangling
+                        }
+                    }
+                    if (segs.size() >= 2) {
+                        const std::string want_type = segs[segs.size() - 2];
+                        const std::string want_meth = segs[segs.size() - 1];
+
+                        // (a) pending entry under another identity
+                        for (auto& [pkey, pinfo] : pending_library_methods_) {
+                            if (pinfo.type_name != want_type || !pinfo.method ||
+                                pinfo.method->name != want_meth) {
+                                continue;
+                            }
+                            auto saved_prefix = current_module_prefix_;
+                            auto saved_name = current_module_name_;
+                            auto saved_sub = current_submodule_name_;
+                            current_module_prefix_ = pinfo.module_prefix;
+                            current_module_name_ = pinfo.module_name;
+                            current_submodule_name_ = pinfo.submodule_name;
+                            in_library_body_ = true;
+                            if (!generated.count(pkey)) {
+                                current_impl_type_ = want_type;
+                                gen_impl_method(want_type, *pinfo.method);
+                                current_impl_type_.clear();
+                                generated.insert(pkey);
+                            }
+                            std::string produced =
+                                "@" + mangle_impl_method(want_type, want_meth);
+                            current_module_prefix_ = saved_prefix;
+                            current_module_name_ = saved_name;
+                            current_submodule_name_ = saved_sub;
+                            if (produced != ref) {
+                                auto fi = functions_.find(want_type + "_" + want_meth);
+                                if (fi != functions_.end() &&
+                                    !fi->second.llvm_func_type.empty()) {
+                                    emit_line(ref + " = internal alias " +
+                                              fi->second.llvm_func_type + ", ptr " + produced);
+                                }
+                            }
+                            generated.insert(ref);
+                            queued_recovery = true;
+                            bridged = true;
+                            TML_LOG_DEBUG("codegen", "[LAZY_LIB] Bridged divergent ref "
+                                                         << ref << " via pending " << pkey);
+                            break;
+                        }
+
+                        // (b) no pending entry anywhere — queue an instantiation
+                        // from the registered impl (mirrors the queue the
+                        // dispatch branch skipped).
+                        if (!bridged) {
+                            for (const auto* reg_impl : pending_impls_) {
+                                if (!reg_impl->self_type ||
+                                    !reg_impl->self_type->is<parser::NamedType>()) {
+                                    continue;
+                                }
+                                const auto& sn =
+                                    reg_impl->self_type->as<parser::NamedType>();
+                                if (sn.path.segments.empty() ||
+                                    sn.path.segments.back() != want_type) {
+                                    continue;
+                                }
+                                bool has_m = false;
+                                for (const auto& m : reg_impl->methods) {
+                                    if (m.name == want_meth) {
+                                        has_m = true;
+                                        break;
+                                    }
+                                }
+                                if (!has_m) {
+                                    continue;
+                                }
+                                pending_impl_method_instantiations_.push_back(
+                                    PendingImplMethod{want_type, want_meth, {}, want_type, "",
+                                                      /*is_library_type=*/true});
+                                generated_impl_methods_.insert(
+                                    mangle_impl_method(want_type, want_meth));
+                                queued_recovery = true;
+                                bridged = true;
+                                TML_LOG_DEBUG("codegen",
+                                              "[LAZY_LIB] Queued skipped impl method "
+                                                  << want_type << "::" << want_meth << " for "
+                                                  << ref);
+                                break;
+                            }
+                        }
+                    }
+                    if (!bridged) {
+                        // Possibly-terminal: recorded and warned at loop exit.
+                        // (The old `verify_round == 2` WARN was dead code — the
+                        // loop breaks at round 0 when nothing queues recovery,
+                        // so genuinely-unresolved refs were silently dropped.)
+                        round_unresolved.insert(ref);
+                    }
                 }
             }
         }
@@ -726,6 +913,9 @@ void LLVMIRGen::emit_referenced_library_definitions() {
         }
         break; // No recovery needed, exit verification loop
     }
+    for (const auto& ref : round_unresolved) {
+        TML_LOG_WARN("codegen", "[LAZY_LIB] UNRESOLVED: " << ref);
+    }
 
     // Restore codegen state
     current_module_prefix_ = saved_module_prefix;
@@ -755,6 +945,31 @@ void LLVMIRGen::emit_referenced_library_declarations() {
         referenced.insert(current_ir.substr(start, pos - start));
     }
 
+    // Collect names ALREADY declared or defined in the current IR. Emitting a
+    // second `declare` (or a `declare` for something already `define`d) is an
+    // LLVM redefinition error. This matters since phase43a Option B: the
+    // restored `imported_func_decls` is now derived from the signature registry
+    // and is spliced into the output before this runs, so the two sources can
+    // name the same symbol.
+    std::unordered_set<std::string> already_in_ir;
+    {
+        std::istringstream pre_stream(current_ir);
+        std::string pre_line;
+        while (std::getline(pre_stream, pre_line)) {
+            if (pre_line.find("define ") == std::string::npos &&
+                pre_line.find("declare ") == std::string::npos) {
+                continue;
+            }
+            auto at_pos = pre_line.find("@tml_");
+            if (at_pos == std::string::npos)
+                continue;
+            size_t p = at_pos + 5;
+            while (p < pre_line.size() && (std::isalnum(pre_line[p]) || pre_line[p] == '_'))
+                ++p;
+            already_in_ir.insert(pre_line.substr(at_pos, p - at_pos));
+        }
+    }
+
     // Helper to emit a declare from FuncInfo
     auto emit_declare = [&](const FuncInfo& fi, std::ostringstream& out) -> bool {
         auto paren_pos = fi.llvm_func_type.find('(');
@@ -777,6 +992,8 @@ void LLVMIRGen::emit_referenced_library_declarations() {
     for (const auto& name : referenced) {
         // Skip if already declared or defined in the current IR
         if (already_declared.count(name))
+            continue;
+        if (already_in_ir.count(name))
             continue;
 
         bool found = false;

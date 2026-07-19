@@ -15,9 +15,11 @@ TML_MODULE("codegen_x86")
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
 
+#include <cctype>
 #include <filesystem>
 #include <iomanip>
 #include <set>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -575,11 +577,42 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     state->imported_func_code = cached_imported_func_code_;
     state->imported_type_defs = cached_imported_type_defs_;
 
-    // Generate declarations-only IR from the full library IR.
-    // Includes define->declare conversions AND non-preamble declare lines (FFI functions).
-    if (!full_ir.empty()) {
+    // Declaration-only IR for `library_decls_only` workers.
+    // phase43a Option B: bodies are deferred, so the IR text has no `define`
+    // lines to convert — derive the declarations from the signature registry
+    // (`functions_`), which is authoritative once bodies are no longer emitted.
+    // The legacy eager path still text-scrapes, since that also picks up FFI
+    // `declare` lines which never reach functions_.
+    {
         auto preamble_funcs = extract_preamble_func_names(cached_preamble_headers_);
-        state->imported_func_decls = generate_decls_from_ir(full_ir, preamble_funcs);
+        if (options_.library_skip_user_code) {
+            std::ostringstream decls;
+            decls << "; Declarations derived from library function signatures\n";
+            // functions_ is keyed by TML-level name and several keys can map to
+            // the same LLVM symbol, so dedup on llvm_name.
+            std::set<std::string> emitted;
+            for (const auto& [key, fi] : functions_) {
+                (void)key;
+                if (fi.is_extern)
+                    continue; // externs come from the preamble / FFI declare path
+                if (fi.llvm_name.empty() || fi.llvm_name[0] != '@')
+                    continue;
+                if (preamble_funcs.count(fi.llvm_name) > 0)
+                    continue;
+                if (!emitted.insert(fi.llvm_name).second)
+                    continue;
+                // llvm_func_type is "ret_type (param1, param2)" — everything from
+                // '(' onward already carries the closing ')'.
+                auto paren_pos = fi.llvm_func_type.find('(');
+                if (paren_pos == std::string::npos || fi.ret_type.empty())
+                    continue;
+                decls << "declare dso_local " << fi.ret_type << " " << fi.llvm_name << "("
+                      << fi.llvm_func_type.substr(paren_pos + 1) << "\n";
+            }
+            state->imported_func_decls = decls.str();
+        } else if (!full_ir.empty()) {
+            state->imported_func_decls = generate_decls_from_ir(full_ir, preamble_funcs);
+        }
     }
 
     // Capture struct types
@@ -618,14 +651,71 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
         state->trait_decl_names.insert(name);
     }
 
-    // Capture generated functions
-    state->generated_functions = generated_functions_;
-
-    // Capture generic impl-method dedup sets (phase43a: both the REQUEST set and the
-    // EMISSION set, so restored workers don't re-emit library-instantiated methods
-    // like I32::duplicate — the emission guard reads generated_impl_methods_output_).
-    state->generated_impl_methods = generated_impl_methods_;
-    state->generated_impl_methods_output = generated_impl_methods_output_;
+    // Capture the emission ledgers (generated_functions_ / generated_impl_methods_
+    // / generated_impl_methods_output_ — phase43a captures all three so restored
+    // workers don't re-emit library-instantiated methods like I32::duplicate).
+    //
+    // phase43a Option B INVARIANT: a captured ledger entry may only claim a
+    // symbol whose `define` is actually present in the captured text
+    // (cached_imported_func_code_). The bootstrap has emission phases whose
+    // output falls OUTSIDE the two capture snapshots (e.g. vtable-phase default
+    // methods emitted between the module-scan snapshot and the instantiation
+    // snapshot). Those bodies are marked "generated" but their text is
+    // discarded — capturing the mark verbatim makes every downstream dedup
+    // guard (gen_impl_method:170, the reference scan, vtable emission) believe
+    // a body exists that no worker can ever link. Observed concretely as
+    // @vtable.FormatSpec.Debug naming a never-captured body (K001 "use of
+    // undefined value"). Filter each ledger against the text: entries without a
+    // captured define are dropped, so workers regenerate those bodies on
+    // reference instead of trusting a lie.
+    if (options_.library_skip_user_code) {
+        std::unordered_set<std::string> defined_syms; // "@..." format
+        const std::string& text = cached_imported_func_code_;
+        size_t p = 0;
+        while ((p = text.find("define ", p)) != std::string::npos) {
+            if (p != 0 && text[p - 1] != '\n') {
+                p += 7;
+                continue;
+            }
+            size_t line_end = text.find('\n', p);
+            if (line_end == std::string::npos)
+                line_end = text.size();
+            size_t at = text.find('@', p);
+            if (at != std::string::npos && at < line_end) {
+                size_t e = at + 1;
+                while (e < text.size() &&
+                       (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_' ||
+                        text[e] == '.')) {
+                    ++e;
+                }
+                defined_syms.insert(text.substr(at, e - at));
+            }
+            p = line_end;
+        }
+        for (const auto& s : generated_functions_) {
+            if (defined_syms.count(s))
+                state->generated_functions.insert(s);
+        }
+        for (const auto& s : generated_impl_methods_) {
+            if (defined_syms.count("@" + s))
+                state->generated_impl_methods.insert(s);
+        }
+        for (const auto& s : generated_impl_methods_output_) {
+            if (defined_syms.count("@" + s))
+                state->generated_impl_methods_output.insert(s);
+        }
+        TML_LOG_INFO("codegen",
+                     "[LIB_STATE] Emission ledgers filtered to captured text: generated_functions "
+                         << state->generated_functions.size() << "/" << generated_functions_.size()
+                         << ", impl_methods " << state->generated_impl_methods.size() << "/"
+                         << generated_impl_methods_.size() << ", impl_methods_output "
+                         << state->generated_impl_methods_output.size() << "/"
+                         << generated_impl_methods_output_.size());
+    } else {
+        state->generated_functions = generated_functions_;
+        state->generated_impl_methods = generated_impl_methods_;
+        state->generated_impl_methods_output = generated_impl_methods_output_;
+    }
 
     // Capture string literals (needed when restoring full function definitions)
     state->string_literals = string_literals_;
@@ -672,6 +762,58 @@ auto LLVMIRGen::capture_library_state(const std::string& full_ir,
     // Capture SIMD type info (for @simd annotated structs)
     for (const auto& [name, info] : simd_types_) {
         state->simd_types[name] = {info.element_llvm_type, info.lane_count};
+    }
+
+    // ---- Deferred library bodies (phase43a Option B) ----------------------
+    // Capture the lazy-deferral maps so restored workers can run the same
+    // reference-driven emission the normal non-cached path runs.
+    //
+    // MEMORY SAFETY GATE (mandatory): each entry holds a raw `const FuncDecl*`.
+    // That pointer only outlives this generator when the owning module was
+    // parsed into the process-wide GlobalASTCache. Modules failing
+    // GlobalASTCache::should_cache() are parsed into the generator-local
+    // `imported_module_asts_` deque (see runtime_modules_tml.cpp:706-713) which
+    // is destroyed with this LLVMIRGen — capturing those would hand every worker
+    // thread a dangling pointer. Skip (never abort): the worker then falls back
+    // to normal per-file emission for that module.
+    {
+        size_t captured_methods = 0;
+        size_t captured_funcs = 0;
+        size_t skipped_methods = 0;
+        size_t skipped_funcs = 0;
+        std::set<std::string> skipped_modules;
+
+        for (const auto& [llvm_name, info] : pending_library_methods_) {
+            if (!GlobalASTCache::should_cache(info.module_name)) {
+                ++skipped_methods;
+                skipped_modules.insert(info.module_name);
+                continue;
+            }
+            state->pending_library_methods[llvm_name] = {info.type_name, info.method,
+                                                         info.module_prefix, info.module_name,
+                                                         info.submodule_name};
+            ++captured_methods;
+        }
+
+        for (const auto& [llvm_name, info] : pending_library_funcs_) {
+            if (!GlobalASTCache::should_cache(info.module_name)) {
+                ++skipped_funcs;
+                skipped_modules.insert(info.module_name);
+                continue;
+            }
+            state->pending_library_funcs[llvm_name] = {info.func, info.module_prefix,
+                                                       info.module_name, info.submodule_name};
+            ++captured_funcs;
+        }
+
+        TML_LOG_INFO("codegen", "[LIB_STATE] Deferred bodies captured: "
+                                    << captured_methods << " methods, " << captured_funcs
+                                    << " funcs; skipped (not AST-cached): " << skipped_methods
+                                    << " methods, " << skipped_funcs << " funcs across "
+                                    << skipped_modules.size() << " modules");
+        for (const auto& mod : skipped_modules) {
+            TML_LOG_INFO("codegen", "[LIB_STATE] SKIPPED non-AST-cached module: " << mod);
+        }
     }
 
     state->valid = true;

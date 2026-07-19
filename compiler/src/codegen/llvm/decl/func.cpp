@@ -644,7 +644,13 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // In lazy_library_defs mode, skip emitting the function entirely and store
     // for deferred generation. The define/declare will be emitted later only if
     // actually referenced. This applies to BOTH library_decls_only and full modes.
-    if (options_.lazy_library_defs && !options_.library_ir_only &&
+    //
+    // phase43a Option B: `library_ir_only` alone still means "eager" (legacy
+    // callers depend on that), but the stdlib bootstrap additionally sets
+    // `library_skip_user_code`, which re-enables deferral so the bootstrap emits
+    // ZERO bodies and only records them in pending_library_funcs_ for capture.
+    if (options_.lazy_library_defs &&
+        (!options_.library_ir_only || options_.library_skip_user_code) &&
         !current_module_prefix_.empty()) {
         pending_library_funcs_["@" + func_llvm_name] = {
             &func, current_module_prefix_, current_module_name_, current_submodule_name_};

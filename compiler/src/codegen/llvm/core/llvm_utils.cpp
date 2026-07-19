@@ -418,24 +418,34 @@ auto LLVMIRGen::find_module_for_type(const std::string& type_name) const -> std:
         }
     }
 
+    // phase43a: when a type is registered in MORE THAN ONE module (re-exported
+    // submodule — e.g. Json in both std::json and std::json::types, FormatSpec
+    // in core::fmt and core::fmt::rt), the module chosen here becomes part of
+    // the mangled symbol name. `all_modules` is an unordered_map, so "first
+    // match wins" made the choice NON-DETERMINISTIC across LLVMIRGen instances
+    // — the shared-stdlib bootstrap deferred a body under one identity while a
+    // worker's call site mangled the other, producing "use of undefined value"
+    // K001s for symbols that existed under the sibling name. Collect ALL
+    // matches and pick the lexicographically smallest module path: arbitrary
+    // but STABLE, so every instance (bootstrap, worker, slow path) mangles the
+    // same type to the same symbol.
     const auto& all_modules = env_.module_registry()->get_all_modules();
+    std::string best;
     for (const auto& [mod_name, mod] : all_modules) {
-        if (mod.structs.find(type_name) != mod.structs.end() ||
-            mod.structs.find(base_name) != mod.structs.end()) {
-            return mod_name;
+        bool has = mod.structs.find(type_name) != mod.structs.end() ||
+                   mod.structs.find(base_name) != mod.structs.end() ||
+                   mod.internal_structs.find(type_name) != mod.internal_structs.end() ||
+                   mod.internal_structs.find(base_name) != mod.internal_structs.end() ||
+                   mod.enums.find(type_name) != mod.enums.end() ||
+                   mod.enums.find(base_name) != mod.enums.end() ||
+                   mod.classes.find(type_name) != mod.classes.end() ||
+                   mod.classes.find(base_name) != mod.classes.end();
+        if (has && (best.empty() || mod_name < best)) {
+            best = mod_name;
         }
-        if (mod.internal_structs.find(type_name) != mod.internal_structs.end() ||
-            mod.internal_structs.find(base_name) != mod.internal_structs.end()) {
-            return mod_name;
-        }
-        if (mod.enums.find(type_name) != mod.enums.end() ||
-            mod.enums.find(base_name) != mod.enums.end()) {
-            return mod_name;
-        }
-        if (mod.classes.find(type_name) != mod.classes.end() ||
-            mod.classes.find(base_name) != mod.classes.end()) {
-            return mod_name;
-        }
+    }
+    if (!best.empty()) {
+        return best;
     }
 
     // Fallback: check pending_generic_structs_ which may have been populated from

@@ -720,6 +720,33 @@ auto LLVMIRGen::generate(const parser::Module& module)
             declared_externals_.insert(name);
         }
 
+        // Restore the deferred library bodies (phase43a Option B).
+        // The bootstrap emitted ZERO bodies; it recorded every library
+        // method/function here instead. With these maps populated, the already
+        // wired-up call to emit_referenced_library_definitions() below emits
+        // exactly the bodies THIS compilation unit references — the same
+        // reference-driven set the normal non-cached path emits.
+        //
+        // Every captured entry was gated on GlobalASTCache::should_cache() at
+        // capture time, so the AST pointers below point into the process-wide
+        // AST cache and stay valid for the life of the process.
+        for (const auto& [llvm_name, info] : state.pending_library_methods) {
+            if (pending_library_methods_.find(llvm_name) == pending_library_methods_.end()) {
+                pending_library_methods_[llvm_name] = PendingLibraryMethod{
+                    info.type_name, info.method, info.module_prefix, info.module_name,
+                    info.submodule_name};
+            }
+        }
+        for (const auto& [llvm_name, info] : state.pending_library_funcs) {
+            if (pending_library_funcs_.find(llvm_name) == pending_library_funcs_.end()) {
+                pending_library_funcs_[llvm_name] = PendingLibraryFunc{
+                    info.func, info.module_prefix, info.module_name, info.submodule_name};
+            }
+        }
+        TML_DEBUG_LN("[CODEGEN] Restored deferred library bodies: "
+                     << state.pending_library_methods.size() << " methods, "
+                     << state.pending_library_funcs.size() << " funcs");
+
         // Restore class types (class_name -> LLVM type name)
         for (const auto& [k, v] : state.class_types) {
             if (class_types_.find(k) == class_types_.end()) {
@@ -889,6 +916,44 @@ auto LLVMIRGen::generate(const parser::Module& module)
         if (!state.loop_metadata.empty()) {
             loop_metadata_ = state.loop_metadata;
             loop_metadata_counter_ = state.loop_metadata_counter;
+        }
+
+        // phase43a: SUPPLEMENTAL MODULE SCAN — the safety net processed_module_paths
+        // was captured for but never had. The bootstrap only scans modules its
+        // typecheck actually loaded; module loading is use-driven and
+        // test_bootstrap.tml uses nothing, so re-exported submodules (observed:
+        // std::json::serialize) can be entirely absent from the captured state.
+        // A worker whose test DOES use them then references symbols with no
+        // pending entry and no define — K001 "use of undefined value"
+        // (@tml_N4core3F647to_jsonE). Run the module scan restricted to modules
+        // NOT covered by the bootstrap: for a fully-covered worker this is a
+        // no-op; otherwise it defers the missing modules' bodies into the
+        // pending maps so reference-driven emission picks them up like any
+        // other.
+        if (!state.processed_module_paths.empty()) {
+            std::string saved_out = output_.str();
+            output_.str("");
+            output_.clear();
+            std::string pre_types = type_defs_buffer_.str();
+
+            emit_module_pure_tml_functions(state.processed_module_paths);
+
+            std::string supp_code = output_.str();
+            output_.str("");
+            output_.clear();
+            output_ << saved_out;
+            std::string all_types = type_defs_buffer_.str();
+            if (all_types.size() > pre_types.size()) {
+                imported_type_defs += all_types.substr(pre_types.size());
+                type_defs_buffer_.str("");
+                type_defs_buffer_.clear();
+                type_defs_buffer_ << pre_types;
+            }
+            if (!supp_code.empty()) {
+                imported_func_code +=
+                    "\n; Supplemental modules (not covered by cached bootstrap)\n";
+                imported_func_code += supp_code;
+            }
         }
 
         TML_DEBUG_LN("[CODEGEN] Restored library state: "

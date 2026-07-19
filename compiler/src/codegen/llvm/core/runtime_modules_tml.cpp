@@ -183,9 +183,6 @@ static std::string try_extract_const_value(const parser::Expr* expr, const parse
 
 void LLVMIRGen::emit_module_pure_tml_functions(
     const std::unordered_set<std::string>& skip_modules) {
-    // FORCED DEBUG: unconditional print to verify function is entered at all
-    std::fprintf(stderr, "[FORCE-TRACE] emit_module_pure_tml_functions BODY ENTER\n");
-    std::fflush(stderr);
     hang_trace("emit_module_pure_tml_functions ENTER");
     // Emit LLVM IR for pure TML functions from imported modules
     if (!env_.module_registry()) {
@@ -194,8 +191,6 @@ void LLVMIRGen::emit_module_pure_tml_functions(
     }
 
     auto registry = env_.module_registry();
-    std::fprintf(stderr, "[FORCE-TRACE] emit_module_pure_tml_functions got registry\n");
-    std::fflush(stderr);
 
     // Ensure essential library modules are in the ModuleRegistry even if not
     // explicitly imported.  The type checker handles List[T] as a builtin type,

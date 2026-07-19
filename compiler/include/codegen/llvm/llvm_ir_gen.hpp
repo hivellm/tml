@@ -323,6 +323,40 @@ struct CodegenLibraryState {
     // Used to detect when a test imports a module not covered by the cached state.
     std::unordered_set<std::string> processed_module_paths;
 
+    // ---- Deferred (lazy) library bodies — phase43a Option B ----------------
+    // The bootstrap pass emits ZERO function bodies; instead every library
+    // method/function is deferred into LLVMIRGen::pending_library_{methods,funcs}_.
+    // Capturing those maps here lets a restored worker run the SAME
+    // reference-driven emission (`emit_referenced_library_definitions()`) that
+    // the normal non-cached path runs, so only bodies the worker actually
+    // references are ever compiled.
+    //
+    // MEMORY SAFETY: the AST pointers below are only valid across LLVMIRGen
+    // instances when the owning module lives in the process-wide GlobalASTCache.
+    // Modules that fail GlobalASTCache::should_cache() are parsed into the
+    // generator-local `imported_module_asts_` deque, which dies with the
+    // bootstrap generator — capturing those would leave workers holding
+    // dangling pointers. capture_library_state() therefore SKIPS such entries;
+    // they simply fall back to normal per-file emission in the worker.
+    struct PendingLibraryMethodData {
+        std::string type_name;
+        const parser::FuncDecl* method = nullptr;
+        std::string module_prefix;
+        std::string module_name;
+        std::string submodule_name;
+    };
+    /// Key: LLVM function name (e.g., "@tml_RawSocket_close")
+    std::unordered_map<std::string, PendingLibraryMethodData> pending_library_methods;
+
+    struct PendingLibraryFuncData {
+        const parser::FuncDecl* func = nullptr;
+        std::string module_prefix;
+        std::string module_name;
+        std::string submodule_name;
+    };
+    /// Key: LLVM function name (e.g., "@tml_core_str_trim")
+    std::unordered_map<std::string, PendingLibraryFuncData> pending_library_funcs;
+
     bool valid = false; ///< True if state has been captured
 };
 
@@ -340,6 +374,23 @@ struct LLVMGenOptions {
     bool library_decls_only = false;     ///< Only emit declarations for library functions.
     bool library_ir_only = false;        ///< Generate ONLY library IR (no user code).
     bool lazy_library_defs = false;      ///< Defer library definitions, emit only when referenced.
+
+    /// Skip user code generation but KEEP lazy deferral active (phase43a Option B).
+    ///
+    /// `library_ir_only` historically conflated two independent meanings:
+    ///   (1) "do not generate user code", and
+    ///   (2) "disable lazy deferral, emit every library body eagerly".
+    /// Meaning (2) made the stdlib bootstrap compile ~5000 library bodies that
+    /// nothing had ever exercised, surfacing codegen defects in never-compiled
+    /// code — and it ran them with `in_library_body_ == false`, enabling Phase 4b
+    /// Str-temp auto-free inside library bodies (a use-after-free hazard).
+    ///
+    /// This flag provides meaning (1) ALONE: user code is skipped, but the
+    /// deferral guards in gen_impl_method/gen_func_decl stay active, so the
+    /// bootstrap emits ZERO bodies and instead fills
+    /// pending_library_{methods,funcs}_ for capture into CodegenLibraryState.
+    /// Callers that want the legacy eager behaviour keep using `library_ir_only`.
+    bool library_skip_user_code = false;
     int debug_level = 2;                 ///< Debug level: 1=minimal, 2=standard, 3=full.
     int suite_test_index = -1;           ///< Suite test index (-1 = tml_test_entry).
     int suite_total_tests = -1;          ///< Total tests in suite (for coverage aggregation).

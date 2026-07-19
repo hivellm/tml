@@ -31,6 +31,10 @@ TML_MODULE("codegen_x86")
 
 #include "codegen/llvm/llvm_ir_gen.hpp"
 
+#include <cctype>
+#include <cstring>
+#include <unordered_set>
+
 namespace tml::codegen {
 
 // ============ Vtable Support ============
@@ -107,6 +111,52 @@ auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& beha
 }
 
 void LLVMIRGen::emit_vtables() {
+    // phase43a Option B: a vtable entry may only name a method symbol whose body
+    // is genuinely available in this compilation unit — either already emitted
+    // into the IR text (define/declare), or pending lazy emission (the reference
+    // scan in emit_referenced_library_definitions runs AFTER emit_vtables and
+    // will emit any pending body the vtable text references). The functions_
+    // index alone is NOT sufficient evidence: under cached library state it is
+    // restored from the bootstrap, where the same impl can be registered under
+    // two module identities (e.g. re-exported submodule: core::fmt vs
+    // core::fmt::rt) with only ONE variant's body captured. Trusting the index
+    // then emits a vtable naming a body that exists nowhere -> K001 "use of
+    // undefined value". Scan the text once; entries not covered fall through to
+    // the existing imported-module skip / default-method generation logic.
+    std::unordered_set<std::string> available_syms;
+    {
+        const std::string cur = output_.str();
+        for (const char* kw : {"define ", "declare "}) {
+            size_t p = 0;
+            const size_t kwlen = std::strlen(kw);
+            while ((p = cur.find(kw, p)) != std::string::npos) {
+                // Only match at line starts to avoid hits inside string constants.
+                if (p != 0 && cur[p - 1] != '\n') {
+                    p += kwlen;
+                    continue;
+                }
+                size_t line_end = cur.find('\n', p);
+                if (line_end == std::string::npos)
+                    line_end = cur.size();
+                size_t at = cur.find('@', p);
+                if (at != std::string::npos && at < line_end) {
+                    size_t e = at + 1;
+                    while (e < cur.size() && (std::isalnum(static_cast<unsigned char>(cur[e])) ||
+                                              cur[e] == '_' || cur[e] == '.')) {
+                        ++e;
+                    }
+                    available_syms.insert(cur.substr(at, e - at));
+                }
+                p = line_end;
+            }
+        }
+    }
+    auto method_body_available = [&](const std::string& llvm_name) {
+        return available_syms.count(llvm_name) > 0 ||
+               pending_library_methods_.count(llvm_name) > 0 ||
+               pending_library_funcs_.count(llvm_name) > 0;
+    };
+
     // For each registered impl block, generate a vtable
     for (const auto* impl : pending_impls_) {
         if (!impl->trait_type)
@@ -215,6 +265,15 @@ void LLVMIRGen::emit_vtables() {
             if (method_it == functions_.end() && !get_suite_prefix().empty()) {
                 std::string prefixed_key = get_suite_prefix() + method_lookup_key;
                 method_it = functions_.find(prefixed_key);
+            }
+
+            // phase43a: the index hit is only trustworthy if the named body is
+            // actually available in this unit (see available_syms above). A
+            // restored index entry whose body was never captured must fall
+            // through to the imported-module/default-method logic below.
+            if (method_it != functions_.end() &&
+                !method_body_available(method_it->second.llvm_name)) {
+                method_it = functions_.end();
             }
             std::string func_name;
 

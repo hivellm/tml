@@ -295,69 +295,23 @@ std::string build_runtime_archive(const CompileConfig& config) {
 // Stdlib pre-compiled object cache
 // ============================================================================
 
-/// Build a pre-compiled stdlib object containing all TML library function
-/// definitions. This runs the AST codegen path with library_ir_only=true
-/// on a minimal test file, then compiles the resulting IR to a .obj file.
-/// The captured CodegenLibraryState is stored globally so compile_suite()
-/// workers can skip emit_module_pure_tml_functions() entirely.
+/// Run the stdlib bootstrap codegen pass and capture `CodegenLibraryState`
+/// globally, so compile_suite() workers can skip emit_module_pure_tml_functions()
+/// entirely.
 ///
-/// Returns the path to the cached .obj file, or empty string on failure.
+/// phase43a Option B: this pass emits ZERO function bodies. It runs with
+/// `library_skip_user_code`, which keeps lazy deferral active, so its whole job
+/// is to build the semantic index plus the two pending-body maps. There is no
+/// longer any stdlib `.obj`: unified suite mode links `library_decls_only=false`
+/// per-test objects that carry their own internal-linkage library definitions
+/// (see testing_compile_parallel.cpp), so the object was written and never read.
+///
+/// Returns a non-empty marker on success, or empty string on failure. The return
+/// value is only used as a success flag — `g_stdlib_obj_path` has no reader.
 std::string build_stdlib_object(const CompileConfig& config) {
     init_compile_env();
 
-    fs::path cache_dir =
-        fs::absolute(fs::path("build") / (config.optimization_level > 0 ? "release" : "debug") /
-                     "cache" / "tests");
-    fs::create_directories(cache_dir);
-
-    // Cache key includes coverage mode (coverage instruments functions differently)
-    std::string suffix = config.coverage ? "_cov" : "";
-    fs::path obj_path = cache_dir / ("stdlib_precompiled" + suffix + ".obj");
-
-    // Check if cached .obj is up-to-date: newer than all lib/ .meta files and compiler binary
-    bool cache_valid = false;
-    if (fs::exists(obj_path)) {
-        auto obj_time = fs::last_write_time(obj_path);
-        cache_valid = true;
-
-        // Check all library .meta files
-        for (const auto& lib_dir : {"lib/core/src", "lib/std/src", "lib/test/src"}) {
-            if (!fs::exists(lib_dir))
-                continue;
-            for (const auto& entry : fs::recursive_directory_iterator(lib_dir)) {
-                if (entry.is_regular_file()) {
-                    auto ext = entry.path().extension().string();
-                    if (ext == ".meta" || ext == ".tml") {
-                        if (entry.last_write_time() > obj_time) {
-                            cache_valid = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (!cache_valid)
-                break;
-        }
-
-        // Check compiler binary
-        if (cache_valid) {
-            auto exe_path = fs::path("build") /
-                            (config.optimization_level > 0 ? "release" : "debug") / "bin" /
-                            "tml.exe";
-            if (fs::exists(exe_path) && fs::last_write_time(exe_path) > obj_time) {
-                cache_valid = false;
-            }
-        }
-    }
-
-    if (cache_valid) {
-        // We still need the CodegenLibraryState even with a cached .obj.
-        // We have to regenerate it (can't serialize/deserialize easily).
-        // But this is fast compared to compiling to .obj.
-        TML_LOG_INFO("test", "Stdlib .obj is up-to-date, regenerating codegen state...");
-    } else {
-        TML_LOG_INFO("test", "Building pre-compiled stdlib object...");
-    }
+    TML_LOG_INFO("test", "Capturing stdlib codegen state (no bodies emitted)...");
 
     auto start = Clock::now();
 
@@ -431,19 +385,28 @@ std::string build_stdlib_object(const CompileConfig& config) {
         return "";
     }
 
-    // Generate library IR using the AST codegen path with library_ir_only=true.
+    // Generate library IR using the AST codegen path.
     codegen::LLVMGenOptions lib_opts;
     lib_opts.coverage_enabled = config.coverage;
     lib_opts.library_ir_only = true;
-    // Use lazy mode to avoid the hang that occurs when emitting all 5000+ functions
-    // from 287 stdlib modules at once (lazy_library_defs=false hung for minutes).
-    // With library_decls_only=false in unified mode, the stdlib.obj is no longer
-    // linked for symbol resolution — each test .obj has its own internal-linkage
-    // library definitions. The primary purpose of build_stdlib_object() is now to
-    // capture CodegenLibraryState (via capture_library_state()) for fast per-file
-    // codegen. Lazy mode produces the complete set of function signatures needed for
-    // state capture without hanging on full-body emission.
     lib_opts.lazy_library_defs = true;
+    // phase43a Option B: emit ZERO function bodies.
+    //
+    // `library_ir_only` alone ALSO disabled lazy deferral (see decl/impl.cpp and
+    // decl/func.cpp), which made this pass eagerly compile ~5000 library bodies
+    // that nothing had ever exercised — surfacing latent codegen defects in
+    // never-compiled code (an unfixable treadmill: each patched body exposed the
+    // next), and doing so with `in_library_body_ == false`, which enables Phase 4b
+    // Str-temp auto-free inside library bodies (use-after-free hazard).
+    //
+    // `library_skip_user_code` decouples the two meanings: user code is still
+    // skipped, but deferral stays ON, so every library method/function lands in
+    // pending_library_{methods,funcs}_ and is captured into CodegenLibraryState.
+    // Each worker then restores those maps and emits ONLY the bodies it actually
+    // references, via the already-wired emit_referenced_library_definitions() —
+    // the same reference-driven set the normal non-cached path emits, and it runs
+    // with in_library_body_ == true.
+    lib_opts.library_skip_user_code = true;
     lib_opts.emit_comments = config.verbose;
 #ifdef _WIN32
     lib_opts.target_triple = "x86_64-pc-windows-msvc";
@@ -479,31 +442,14 @@ std::string build_stdlib_object(const CompileConfig& config) {
                                                              << " (IR: " << lib_ir.size() / 1024
                                                              << "KB)");
 
-    if (cache_valid) {
-        // .obj is up-to-date, we only needed the codegen state
-        return obj_path.string();
-    }
-
-    // Compile the library IR to a .obj file
-    cli::ObjectCompileOptions obj_opts;
-    obj_opts.optimization_level = config.optimization_level;
-    obj_opts.verbose = config.verbose;
-    obj_opts.coverage = config.coverage;
-
-    auto obj_result = cli::compile_ir_string_to_object(lib_ir, obj_path, g_clang_path, obj_opts);
-
-    if (!obj_result.success) {
-        TML_LOG_ERROR("test",
-                      "Failed to compile stdlib IR to object: " << obj_result.error_message);
-        return "";
-    }
-
-    auto end = Clock::now();
-    auto total_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    TML_LOG_INFO("test", "Pre-compiled stdlib object built in " << (total_us / 1000)
-                                                                << "ms: " << obj_path.string());
-
-    return obj_path.string();
+    // phase43a Option B: no stdlib .obj is produced any more. Under
+    // `library_skip_user_code` the bootstrap emits zero bodies, so the object
+    // would contain nothing linkable — and unified suite mode never linked it
+    // anyway (`library_decls_only=false`: each test object carries its own
+    // internal-linkage library definitions). `g_stdlib_obj_path`, the only
+    // consumer of this return value, is assigned once and never read; the value
+    // below is a success marker, not a path.
+    return "stdlib-codegen-state";
 }
 
 // ============================================================================

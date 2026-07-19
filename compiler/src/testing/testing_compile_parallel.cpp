@@ -10,6 +10,8 @@ TML_MODULE("test")
 #include "cli/builder/native_lib_resolver.hpp"
 #include "testing/testing_compile_internal.hpp"
 
+#include <cstdlib>
+
 namespace tml::testing {
 
 // ============================================================================
@@ -30,84 +32,67 @@ std::vector<CompileResult> compile_suites_parallel(const std::vector<Suite>& sui
         TML_LOG_INFO("test", "All suites will link against cached runtime archive");
     }
 
-    // Pre-build stdlib codegen state once (would skip emit_module_pure_tml_functions per file).
+    // Pre-build stdlib codegen state once, so each per-file compile can skip
+    // emit_module_pure_tml_functions() (~9s of library scanning per file).
+    //
+    // ENABLED as of phase43a Option B. The bootstrap pass now emits ZERO function
+    // bodies: it runs with `library_skip_user_code`, which keeps lazy deferral
+    // active while skipping user code. Its output is the semantic index plus the
+    // two pending-body maps (pending_library_methods_/funcs_), both captured into
+    // CodegenLibraryState. Each worker restores them and calls the already-wired
+    // emit_referenced_library_definitions(), which emits ONLY the bodies that
+    // worker actually references — the same reference-driven set the normal
+    // non-cached path emits, and it runs with in_library_body_ == true.
+    //
+    // This is what unblocked the fast path. Previously the bootstrap set
+    // `library_ir_only`, which ALSO disabled the deferral guards, so it eagerly
+    // compiled ~5000 library bodies that nothing had ever exercised. That surfaced
+    // latent codegen defects in never-compiled code as an unfixable treadmill —
+    // each patched body exposed the next (three runs, three different K001s in
+    // three different unexercised bodies) — and it ran with in_library_body_ ==
+    // false, enabling Phase 4b Str-temp auto-free inside library bodies (a
+    // use-after-free hazard). Emitting nothing eliminates the entire class:
+    // a body that is never referenced is never compiled.
+    //
+    // Also fixed under phase43a and required for this to work:
+    //   - generic module free-function monomorphization (un-monomorphized `T`
+    //     template symbols escaping from library bodies);
+    //   - dedup keyspace: generated_impl_methods_ / generated_impl_methods_output_
+    //     are captured and restored, not just generated_functions_, so a restored
+    //     worker does not re-emit library-instantiated methods (I32::duplicate);
+    //   - test_bootstrap.tml import paths (12 modules named by non-existent paths
+    //     aborted the bootstrap typecheck, leaving g_stdlib_codegen_state null);
+    //   - private-method visibility for non-generic, non-behavior impl blocks.
+    //
+    // TRAP (still true): state capture is independent of any object compilation,
+    // so "fast path enabled" below only means the state exists.
+    //
     // Skip for coverage: coverage instrumentation makes stdlib codegen very slow.
     //
-    // STILL DISABLED after phase43a — but TWO of the four F-006 blockers are now
-    // FIXED in codegen (they land as standalone K001 fixes, safe with the fast-path
-    // off since they only fire on the miss/dedup paths):
-    //   [FIXED, phase43a] Blocker 1 — generic MODULE FREE FUNCTION monomorphization.
-    //     A library-body call to a generic free function (concretely
-    //     core::runtime::mem::replace[T], lib/core/src/runtime/mem.tml) was emitted
-    //     as the UN-monomorphized template symbol `@...mem7replaceE_R1T1T` (literal
-    //     T) with no matching define → "use of undefined value". Root: generic module
-    //     free-function calls had NO call-site re-mangle+queue branch (generic
-    //     Type::method calls do) so gen_call_generic_func's miss fell to the
-    //     decl-name fallback in call_user.cpp. FIX: after free_func_type_subs, when
-    //     func_sig->type_params is non-empty AND all concrete, re-mangle via
-    //     require_func_instantiation + override the callee (mirrors the Type::method
-    //     block). This is distinct from phase27e's bare-name collision fix (that was
-    //     the reproducible slow-path core/str case; this is the genuinely-generic one).
-    //   [FIXED, phase43a] Blocker 2 — dedup keyspace. CodegenLibraryState now captures
-    //     AND restores generated_impl_methods_ / generated_impl_methods_output_ (was
-    //     only generated_functions_), so a restored worker sees the library's already-
-    //     instantiated methods (e.g. I32::duplicate) as emitted → no redefinition.
-    //
-    //   [FIXED, phase43a] Bootstrap typecheck abort — test_bootstrap.tml named 12
-    //     modules by paths that do not exist (`use core::mem` where the module is
-    //     `core::runtime::mem`, etc). The FIRST such import aborted the typecheck, so
-    //     build_stdlib_object returned "" and g_stdlib_codegen_state stayed null. This
-    //     is why blockers 3+4 were never observable: nothing behind it ever ran.
-    //   [FIXED, phase43a] "Unknown method: send_once" — private methods of NON-generic,
-    //     NON-behavior impl blocks were skipped by the visibility filter in
-    //     env_module_load_decls.cpp, so a public method calling a private sibling
-    //     (HttpClient::send -> send_once) had no FuncSig and
-    //     try_gen_module_impl_method_call bailed. Latent GENERAL bug, not a fast-path
-    //     bug: normal compilation defers library bodies until referenced and no test
-    //     calls HttpClient::send, so it never surfaced. Fix mirrors the identical
-    //     decisions already made for free functions and generic/behavior impls.
-    //
-    // ONE blocker REMAINS, and it is ARCHITECTURAL — blockers 3 and 4 turned out to be
-    // THE SAME PROBLEM (phase43a, verified by reproduction):
-    //   Blocker 3+4 — eager emission of unexercised library bodies. With
-    //     library_ir_only=true the lazy-deferral guards at decl/impl.cpp:411 and
-    //     decl/func.cpp:647 are disabled, so the stdlib pass abandons reference-driven
-    //     emission and eagerly compiles ~5000 library bodies that NOTHING has ever
-    //     exercised. Codegen defects in never-compiled code surface only here. Current
-    //     symptom: K001 `'%tNNNNN' defined with type 'ptr' but expected 'i32'` inside
-    //     the shared library text (identical error in the stdlib obj and in all 14
-    //     per-file objs — one bug, not fourteen).
-    //
-    //     DISPROVEN: the earlier "Range__I32 vs cached Range__I64 width" hypothesis is
-    //     wrong — the actual mismatch is ptr-vs-i32, not i64-vs-i32. Also note the
-    //     register name is NOT stable across builds (was %t9030, now %t11353); do not
-    //     treat it as an identifier.
-    //
-    //     Patching the one offending body is a treadmill — the next unexercised body
-    //     fails right behind it. The durable fix is to make the stdlib pass emit the
-    //     same reference-driven set the normal path emits, i.e. the per-suite-scoped
-    //     bootstrap (compile only the suite's transitive module set) plus F-007
-    //     decls-only / external-linkage linking.
-    //
-    //     RELATED LATENT DEFECT (not the cause of this K001, but real): these eager
-    //     emissions run with in_library_body_ == false, which enables Phase 4b Str-temp
-    //     auto-free inside library bodies — exactly what that flag exists to prevent
-    //     (see llvm_ir_gen.hpp: "Auto-freeing those temps causes use-after-free").
-    //
-    //     TREADMILL DEMONSTRATED (3 runs, each clearing the then-current blocker,
-    //     each surfacing a DIFFERENT K001 in a different never-exercised body):
-    //       full set          -> "Unknown method: send_once"            (fixed)
-    //       http excluded     -> '%t11353' ptr vs i32
-    //       full + send_once  -> '%t4937'  i64 vs %struct.RawThread
-    //     Different module sets surface different latent defects; each fix exposes
-    //     the next body behind it. Body-by-body patching cannot converge.
-    //
-    //     TRAP: the codegen STATE is captured and this code logs "fast path enabled"
-    //     even when the stdlib OBJECT failed to compile — capture is independent of
-    //     object compilation. Do not read that log line as "the shared object is ok".
-    //
-    //     Measured: eager bootstrap = 968s with std::http, 449s without. See phase43a
-    //     tasks.md and docs/analysis/tooling-performance/04-test-framework-performance.md.
+    // AMORTIZATION HEURISTIC: the bootstrap costs ~30s per PROCESS and its state
+    // cannot be persisted to disk (the pending-body maps hold AST pointers into
+    // the in-process GlobalASTCache). A small targeted run (one short suite)
+    // would pay 30s to save less than that, so only bootstrap when the run has
+    // enough files to amortize. TML_STDLIB_FASTPATH=1 forces it on (used by the
+    // zero-divergence gate); =0 forces it off.
+    {
+        int total_files_for_fastpath = 0;
+        for (const auto& s : suites) {
+            total_files_for_fastpath += static_cast<int>(s.tests.size());
+        }
+        const char* fp_env = std::getenv("TML_STDLIB_FASTPATH");
+        bool force_on = fp_env && std::string(fp_env) == "1";
+        bool force_off = fp_env && std::string(fp_env) == "0";
+        bool want_fastpath =
+            !config.coverage && !force_off && (force_on || total_files_for_fastpath >= 32);
+        if (!g_stdlib_codegen_state && want_fastpath) {
+            build_stdlib_object(config);
+        } else if (!g_stdlib_codegen_state) {
+            TML_LOG_INFO("test", "Stdlib fast-path skipped ("
+                                     << total_files_for_fastpath
+                                     << " files < 32; set TML_STDLIB_FASTPATH=1 to force)");
+        }
+    }
     if (g_stdlib_codegen_state) {
         TML_LOG_INFO("test", "All suites will use cached stdlib codegen state");
         // Clear obj_cache to prevent stale .obj files from runs without cached state.

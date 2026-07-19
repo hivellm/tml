@@ -914,11 +914,26 @@ void LLVMIRGen::emit_runtime_decls() {
     // Compute which optional categories are needed based on imports.
     // In library_ir_only mode (shared library for test suites), emit everything
     // because the shared lib is linked against multiple workers with varying imports.
-    bool needs_sync_atomics = options_.library_ir_only;
+    //
+    // phase43a Option B: a worker restoring cached library state must emit the
+    // conditional runtime TYPES (RawThread/RawPtr/HashMapIter below) regardless
+    // of its own imports. The bootstrap runs with library_ir_only=true, so it
+    // emits these defs into ITS OWN headers and registers them in struct_types_
+    // — which is captured. In any later scan gen_struct_decl then early-returns
+    // on the struct_types_ hit, so the textual def never enters type_defs_buffer_
+    // and is NOT part of the captured imported_type_defs. A worker whose import
+    // scan doesn't independently enable the category would then paste restored
+    // library code referencing e.g. %struct.RawThread (the FFI declare
+    // @tml_thread_join) with the type nowhere defined -> K001 "invalid type for
+    // function argument". Function DECLARES self-heal via
+    // scan_for_runtime_refs(); types do not, hence this mirror.
+    bool has_cached_lib =
+        options_.cached_library_state && options_.cached_library_state->valid;
+    bool needs_sync_atomics = options_.library_ir_only || has_cached_lib;
     bool needs_logging = options_.library_ir_only;
     bool needs_console = options_.library_ir_only;
-    bool needs_collections = options_.library_ir_only;
-    bool needs_thread = options_.library_ir_only;
+    bool needs_collections = options_.library_ir_only || has_cached_lib;
+    bool needs_thread = options_.library_ir_only || has_cached_lib;
 
     if (!options_.library_ir_only) {
         const auto& imports = env_.all_imports();

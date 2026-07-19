@@ -54,6 +54,19 @@ namespace tml::backend {
 // ============================================================================
 
 /// Convert LLVM error message to string and dispose it.
+// Debugging facility: when TML_DUMP_FAILING_IR is set to a file path, write the
+// exact IR text that failed to parse there. The in-process backend otherwise
+// never touches disk, which makes K001 parse errors (line/column against an
+// invisible buffer) undiagnosable.
+static void dump_failing_ir(const std::string& ir_content) {
+    if (const char* dump_path = std::getenv("TML_DUMP_FAILING_IR")) {
+        std::ofstream dbg(dump_path, std::ios::binary);
+        if (dbg) {
+            dbg.write(ir_content.data(), static_cast<std::streamsize>(ir_content.size()));
+        }
+    }
+}
+
 static std::string consume_error_message(char* error) {
     if (error == nullptr) {
         return "";
@@ -264,6 +277,7 @@ auto LLVMBackend::compile_ir_to_object(const std::string& ir_content, const fs::
 
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
         std::string llvm_error = consume_error_message(error);
+        dump_failing_ir(ir_content);
         result.error_message =
             "[K001] Failed to parse LLVM IR: " + llvm_error +
             "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +
@@ -494,6 +508,7 @@ auto LLVMBackend::compile_ir_to_buffer(const std::string& ir_content,
 
     if (LLVMParseIRInContext(ctx, buffer, &module, &error) != 0) {
         std::string llvm_error = consume_error_message(error);
+        dump_failing_ir(ir_content);
         result.error_message =
             "[K001] Failed to parse LLVM IR: " + llvm_error +
             "\n\nDEBUG: This usually indicates a codegen bug in the TML compiler.\n" +

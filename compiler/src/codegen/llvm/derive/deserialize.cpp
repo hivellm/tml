@@ -116,26 +116,41 @@ void LLVMIRGen::gen_derive_deserialize_struct(const parser::StructDecl& s) {
     }
     type_defs_buffer_ << "\n";
 
-    // Emit JSON runtime declarations once (guard with static flag)
+    // Emit JSON runtime declarations once (guard with static flag).
+    // Handle-based JSON runtime API:
+    // tml_json_parse(ptr) -> i64 handle (-1 on error)
+    // tml_json_free(i64 handle) -> void
+    // tml_json_object_get_i64(i64 handle, ptr key) -> i64 value
+    // tml_json_object_get_f64(i64 handle, ptr key) -> double value
+    // tml_json_object_get_string(i64 handle, ptr key) -> ptr (static buffer)
+    // tml_json_object_get_bool(i64 handle, ptr key) -> i32 (1/0)
+    // tml_json_object_get(i64 handle, ptr key) -> i64 sub-handle
+    // tml_json_to_string(i64 handle) -> ptr (static buffer)
+    //
+    // phase43a: each declare is guarded on declared_externals_ and written as
+    // `dso_local` — std::json declares the same symbols via @extern, and under
+    // cached library state those declares arrive as pasted text with the worker
+    // unaware of them via this flag alone. A second declare is legal only if
+    // TEXTUALLY compatible; the old non-dso_local form collided with the pasted
+    // `declare dso_local ...` ("invalid redefinition of function
+    // 'tml_json_parse'", std/json deserialize tests under the fast path).
     if (!json_runtime_declared_) {
         json_runtime_declared_ = true;
-        // Handle-based JSON runtime API:
-        // tml_json_parse(ptr) -> i64 handle (-1 on error)
-        // tml_json_free(i64 handle) -> void
-        // tml_json_object_get_i64(i64 handle, ptr key) -> i64 value
-        // tml_json_object_get_f64(i64 handle, ptr key) -> double value
-        // tml_json_object_get_string(i64 handle, ptr key) -> ptr (static buffer)
-        // tml_json_object_get_bool(i64 handle, ptr key) -> i32 (1/0)
-        // tml_json_object_get(i64 handle, ptr key) -> i64 sub-handle
-        // tml_json_to_string(i64 handle) -> ptr (static buffer)
-        type_defs_buffer_ << "declare i64 @tml_json_parse(ptr)\n";
-        type_defs_buffer_ << "declare void @tml_json_free(i64)\n";
-        type_defs_buffer_ << "declare i64 @tml_json_object_get_i64(i64, ptr)\n";
-        type_defs_buffer_ << "declare ptr @tml_json_object_get_string(i64, ptr)\n";
-        type_defs_buffer_ << "declare double @tml_json_object_get_f64(i64, ptr)\n";
-        type_defs_buffer_ << "declare i32 @tml_json_object_get_bool(i64, ptr)\n";
-        type_defs_buffer_ << "declare i64 @tml_json_object_get(i64, ptr)\n";
-        type_defs_buffer_ << "declare ptr @tml_json_to_string(i64)\n";
+        auto decl_rt = [&](const char* name, const char* rest) {
+            if (declared_externals_.count(name)) {
+                return;
+            }
+            declared_externals_.insert(name);
+            type_defs_buffer_ << "declare dso_local " << rest << "\n";
+        };
+        decl_rt("tml_json_parse", "i64 @tml_json_parse(ptr)");
+        decl_rt("tml_json_free", "void @tml_json_free(i64)");
+        decl_rt("tml_json_object_get_i64", "i64 @tml_json_object_get_i64(i64, ptr)");
+        decl_rt("tml_json_object_get_string", "ptr @tml_json_object_get_string(i64, ptr)");
+        decl_rt("tml_json_object_get_f64", "double @tml_json_object_get_f64(i64, ptr)");
+        decl_rt("tml_json_object_get_bool", "i32 @tml_json_object_get_bool(i64, ptr)");
+        decl_rt("tml_json_object_get", "i64 @tml_json_object_get(i64, ptr)");
+        decl_rt("tml_json_to_string", "ptr @tml_json_to_string(i64)");
         type_defs_buffer_ << "\n";
     }
 

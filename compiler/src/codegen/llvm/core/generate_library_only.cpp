@@ -144,7 +144,16 @@ auto LLVMIRGen::generate_library_only_ir(const parser::Module& module)
     // extract `declare` stubs for worker threads (library_decls_only mode).
     // In library_ir_only mode there is no user code to scan for references,
     // so we emit everything unconditionally.
-    if (options_.lazy_library_defs) {
+    //
+    // phase43a Option B: under `library_skip_user_code` this eager flush MUST NOT
+    // run. It emits every library body — including thousands nothing has ever
+    // exercised — and it does so with `in_library_body_ == false`, which enables
+    // Phase 4b Str-temp auto-free inside library bodies (use-after-free hazard;
+    // note the flush below never sets that flag, unlike
+    // emit_referenced_library_definitions() which sets it at entry). Under Option B
+    // the pending maps are captured into CodegenLibraryState instead, and each
+    // worker emits only the bodies it actually references.
+    if (options_.lazy_library_defs && !options_.library_skip_user_code) {
         auto saved_module_prefix = current_module_prefix_;
         auto saved_module_name = current_module_name_;
         auto saved_submodule = current_submodule_name_;
