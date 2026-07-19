@@ -1389,7 +1389,14 @@ auto LLVMIRGen::try_gen_impl_method_call(const parser::MethodCallExpr& call,
         // Function/closure parameters now use fat pointer { ptr, ptr } — no coercion needed
         // The fat pointer preserves the env_ptr for capturing closures
         std::string actual_type = last_expr_type_;
-        std::string expected_type = "i32";
+        // phase27a Class 2: seed the expected type with the argument's own LLVM
+        // type rather than a hardcoded "i32". When neither func_sig nor the
+        // registered FuncInfo (functions_) covers this parameter, defaulting to
+        // i32 silently coerced non-i32 arguments (i64/struct/ptr) to i32,
+        // corrupting the ABI. Seeding with actual_type means "no coercion when
+        // the callee signature is unknown"; the registered signature below is
+        // still the source of truth whenever it is available.
+        std::string expected_type = actual_type;
         types::TypePtr param_type_resolved;
         // Determine parameter index: func_sig may or may not include 'this' at index 0.
         // Use param_offset (computed earlier) for consistent indexing.

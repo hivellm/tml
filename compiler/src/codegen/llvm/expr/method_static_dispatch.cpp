@@ -92,16 +92,43 @@ static types::TypePtr parse_mangled_type_string(const std::string& s) {
             return t;
         }
     }
+    // phase27a Class 2 (item 4): parse ALL top-level type arguments, not just
+    // the first. The previous single-arg version grouped everything after the
+    // first "__" into one nested inner type, mis-grouping multi-arg generics
+    // such as HashMap__I64__Shared__I64 (should be HashMap[I64, Shared[I64]],
+    // not HashMap[I64[Shared[I64]]]). This mirrors the multi-arg tokenizer in
+    // generic_instantiate_impl.cpp::parse_mangled_type_string so both
+    // translation units reconstruct mangled names identically.
     auto delim = s.find("__");
     if (delim != std::string::npos) {
         std::string base = s.substr(0, delim);
         std::string arg_str = s.substr(delim + 2);
-        auto inner = parse_mangled_type_string(arg_str);
-        if (inner) {
-            auto t = std::make_shared<types::Type>();
-            t->kind = types::NamedType{base, "", {inner}};
-            return t;
+
+        std::vector<types::TypePtr> type_args;
+        size_t pos = 0;
+        while (pos < arg_str.size()) {
+            auto next_delim = arg_str.find("__", pos);
+            std::string arg_part;
+            if (next_delim == std::string::npos) {
+                arg_part = arg_str.substr(pos);
+                pos = arg_str.size();
+            } else {
+                arg_part = arg_str.substr(pos, next_delim - pos);
+                pos = next_delim + 2;
+            }
+            auto arg_type = parse_mangled_type_string(arg_part);
+            if (arg_type) {
+                type_args.push_back(arg_type);
+            } else {
+                auto nt = std::make_shared<types::Type>();
+                nt->kind = types::NamedType{arg_part, "", {}};
+                type_args.push_back(nt);
+            }
         }
+
+        auto t = std::make_shared<types::Type>();
+        t->kind = types::NamedType{base, "", std::move(type_args)};
+        return t;
     }
     auto t = std::make_shared<types::Type>();
     t->kind = types::NamedType{s, "", {}};
@@ -253,12 +280,77 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                     }
                     std::string ret_type = llvm_type_from_semantic(return_type);
 
-                    // Generate arguments
+                    // phase27a Class 2 (item 2): the declared class-method
+                    // signature (m.sig) and the registered FuncInfo are the ABI
+                    // source of truth. Prefer the registered return type, and
+                    // coerce each argument to its declared parameter type instead
+                    // of trusting last_expr_type_ (the argument expression's
+                    // inferred type), which silently defaults integer literals to
+                    // i32 and mis-lowers by-value aggregates — the arraylist
+                    // {i64,i64}-vs-i32 mechanism.
+                    std::string static_func_key = type_name + mangled_type_suffix + "_" + method;
+                    auto static_fn_it = functions_.find(static_func_key);
+                    if (static_fn_it != functions_.end() &&
+                        !static_fn_it->second.ret_type.empty()) {
+                        ret_type = static_fn_it->second.ret_type;
+                    }
+
+                    // Resolve declared parameter LLVM types (with substitution)
+                    // as the coercion targets when no registered signature exists.
+                    std::vector<std::string> expected_param_types;
+                    for (const auto& p : m.sig.params) {
+                        types::TypePtr pt = p;
+                        if (pt && !type_subs_local.empty()) {
+                            pt = types::substitute_type(pt, type_subs_local);
+                        }
+                        expected_param_types.push_back(llvm_type_from_semantic(pt));
+                    }
+
+                    auto is_int_ty = [](const std::string& t) {
+                        if (t.size() < 2 || t[0] != 'i' || t == "i1")
+                            return false;
+                        for (size_t k = 1; k < t.size(); ++k)
+                            if (t[k] < '0' || t[k] > '9')
+                                return false;
+                        return true;
+                    };
+
+                    // Generate arguments, coercing to the declared/registered
+                    // parameter type.
                     std::vector<std::string> args;
                     std::vector<std::string> arg_types;
-                    for (const auto& arg : call.args) {
-                        args.push_back(gen_expr(*arg));
-                        arg_types.push_back(last_expr_type_);
+                    for (size_t ai = 0; ai < call.args.size(); ++ai) {
+                        std::string val = gen_expr(*call.args[ai]);
+                        std::string actual = last_expr_type_;
+                        std::string expected = actual;
+                        if (static_fn_it != functions_.end() &&
+                            ai < static_fn_it->second.param_types.size()) {
+                            expected = static_fn_it->second.param_types[ai];
+                        } else if (ai < expected_param_types.size()) {
+                            expected = expected_param_types[ai];
+                        }
+                        if (expected != actual) {
+                            if (is_int_ty(actual) && is_int_ty(expected)) {
+                                int ab = std::stoi(actual.substr(1));
+                                int eb = std::stoi(expected.substr(1));
+                                if (ab != eb) {
+                                    std::string c = fresh_reg();
+                                    emit_line("  " + c + " = " + (eb > ab ? "sext " : "trunc ") +
+                                              actual + " " + val + " to " + expected);
+                                    val = c;
+                                    actual = expected;
+                                }
+                            } else if (expected == "ptr" && (actual.rfind("%struct.", 0) == 0 ||
+                                                             actual.rfind("%enum.", 0) == 0)) {
+                                std::string tmp = fresh_reg();
+                                emit_line("  " + tmp + " = alloca " + actual);
+                                emit_line("  store " + actual + " " + val + ", ptr " + tmp);
+                                val = tmp;
+                                actual = "ptr";
+                            }
+                        }
+                        args.push_back(val);
+                        arg_types.push_back(actual);
                     }
 
                     // Generate call
@@ -1199,9 +1291,17 @@ auto LLVMIRGen::gen_method_static_dispatch(const parser::MethodCallExpr& call,
                         args_str += typed_args[i].first + " " + typed_args[i].second;
                     }
 
-                    // Assume ptr return type for constructor-like methods (new, etc.)
-                    // This is a heuristic but covers most cases for internal structs
+                    // phase27a Class 2 (item 3): prefer the registered FuncInfo
+                    // return type over the "ptr" constructor heuristic. The
+                    // heuristic mis-typed by-value struct/enum returns as ptr,
+                    // producing 'ptr' vs '%struct...' K001 verifier errors
+                    // (specimen #5 shape). Only fall back to "ptr" when no
+                    // registered signature is available.
                     std::string ret_type = "ptr";
+                    if (fallback_method_it != functions_.end() &&
+                        !fallback_method_it->second.ret_type.empty()) {
+                        ret_type = fallback_method_it->second.ret_type;
+                    }
                     std::string result = fresh_reg();
                     emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
                               args_str + ")");

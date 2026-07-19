@@ -52,26 +52,30 @@ namespace tml::parser {
 ///
 /// Used by the Pratt parser to determine which operators bind more tightly.
 namespace precedence {
-constexpr int NONE = 0;       ///< No precedence (initial value).
-constexpr int ASSIGN = 1;     ///< `=`, `+=`, etc. (right-associative).
-constexpr int PIPE = 2;       ///< `|>` pipe forward (left-associative).
-constexpr int TERNARY = 3;    ///< `? :` ternary operator.
-constexpr int OR = 4;         ///< `or` / `||` logical OR.
-constexpr int AND = 5;        ///< `and` / `&&` logical AND.
-constexpr int COMPARISON = 6; ///< `==`, `!=`, `<`, `>`, `<=`, `>=`.
-constexpr int BITOR = 7;      ///< `|` bitwise OR.
-constexpr int BITXOR = 8;     ///< `^` / `xor` bitwise XOR.
-constexpr int BITAND = 9;     ///< `&` bitwise AND.
-constexpr int SHIFT = 10;     ///< `<<`, `>>` / `shl`, `shr`.
-constexpr int TERM = 11;      ///< `+`, `-` addition/subtraction.
-constexpr int FACTOR = 12;    ///< `*`, `/`, `%` multiplication/division.
-// RANGE is placed BELOW CAST so that `0 as I64 to n as I64` parses as
-// `(0 as I64) to (n as I64)` rather than `(0 as (I64 to n)) as I64`. This
-// matches Rust's precedence (Range is very low there; ours is higher to
-// allow `a + b to c` = `(a + b) to c` without forcing the TERM < RANGE
-// Rust behaviour, but still below CAST so the idiomatic cast-inside-range
-// works without parens).
-constexpr int RANGE = 13;     ///< `to`, `through` ranges.
+constexpr int NONE = 0;   ///< No precedence (initial value).
+constexpr int ASSIGN = 1; ///< `=`, `+=`, etc. (right-associative).
+constexpr int PIPE = 2;   ///< `|>` pipe forward (left-associative).
+constexpr int TERNARY = 3; ///< `? :` ternary operator.
+// phase27a: RANGE is placed LOW (just above the ternary/assignment tier and
+// BELOW every arithmetic/comparison/logical operator), matching Rust. The old
+// placement (above TERM/FACTOR) made `to`/`through` bind TIGHTER than `-`, so
+// the idiomatic `for i in a to n - 1` mis-parsed as `(a to n) - 1` — building
+// a Range struct `{i64,i64}` and then subtracting `1` from it, which the
+// codegen lowered as an i32 op on the aggregate (K001 `{i64,i64}` vs `i32`,
+// the arraylist/btree remove_at family). With RANGE below TERM, both endpoints
+// greedily consume arithmetic: `a to n - 1` => `a to (n - 1)` and `a - 1 to n`
+// => `(a - 1) to n`. CAST stays ABOVE RANGE so `0 as I64 to n as I64` still
+// parses as `(0 as I64) to (n as I64)`.
+constexpr int RANGE = 4;      ///< `to`, `through` ranges.
+constexpr int OR = 5;         ///< `or` / `||` logical OR.
+constexpr int AND = 6;        ///< `and` / `&&` logical AND.
+constexpr int COMPARISON = 7; ///< `==`, `!=`, `<`, `>`, `<=`, `>=`.
+constexpr int BITOR = 8;      ///< `|` bitwise OR.
+constexpr int BITXOR = 9;     ///< `^` / `xor` bitwise XOR.
+constexpr int BITAND = 10;    ///< `&` bitwise AND.
+constexpr int SHIFT = 11;     ///< `<<`, `>>` / `shl`, `shr`.
+constexpr int TERM = 12;      ///< `+`, `-` addition/subtraction.
+constexpr int FACTOR = 13;    ///< `*`, `/`, `%` multiplication/division.
 constexpr int CAST = 14;      ///< `as` type casting.
 constexpr int UNARY = 15;     ///< `-`, `not`, `~`, `ref`, `*`.
 constexpr int CALL = 16;      ///< `()`, `[]`, `.` call and access.
