@@ -11,5 +11,6 @@ members = [
     "lib/std",
     "lib/test",
     "lib/coverage",
-    "compiler-tml",
+    # "compiler-tml",  # temporarily excluded: frozen during era0 stabilization
+    #                  # (re-add when self-hosting work resumes)
 ]

@@ -74,16 +74,20 @@ tml_condmove_taken: ./build/debug/bin/tml.exe run scripts/fixtures/condmove_take
 # through the frozen compiler-tml C frontend. NOT the primary gate; nothing
 # new is built on compiler-tml. Fixtures live in
 # compiler/tests/determinism/legacy-cc/ (except the two committed originals).
+#
+# TEMPORARILY DISABLED: compiler-tml is frozen during era0 stabilization and
+# excluded from all gates/mapping (workspace member also commented out in
+# tml.toml). Uncomment this block when self-hosting work resumes.
 
-essential.c: ./build/debug/bin/tml.exe cc compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast
-c_essential_repro: ./build/debug/bin/tml.exe cc compiler-tml/tests/native/c_essential_repro.c --emit=ast
-sig_alone: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/sig_alone.c --emit=ast
-int_p: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/int_p.c --emit=ast
-funcptr_typedef: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/funcptr_typedef.c --emit=ast
-macro_r0: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0.c --emit=ast
-macro_r0a: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0a.c --emit=ast
-macro_r1: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r1.c --emit=ast
-macro_r2: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r2.c --emit=ast
-macro_r3: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r3.c --emit=ast
-macro_r4: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r4.c --emit=ast
-macro_r5: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r5.c --emit=ast
+# essential.c: ./build/debug/bin/tml.exe cc compiler/runtime/core/essential.c -I compiler/runtime/include/c-stdlib --emit=ast
+# c_essential_repro: ./build/debug/bin/tml.exe cc compiler-tml/tests/native/c_essential_repro.c --emit=ast
+# sig_alone: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/sig_alone.c --emit=ast
+# int_p: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/int_p.c --emit=ast
+# funcptr_typedef: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/funcptr_typedef.c --emit=ast
+# macro_r0: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0.c --emit=ast
+# macro_r0a: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r0a.c --emit=ast
+# macro_r1: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r1.c --emit=ast
+# macro_r2: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r2.c --emit=ast
+# macro_r3: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r3.c --emit=ast
+# macro_r4: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r4.c --emit=ast
+# macro_r5: ./build/debug/bin/tml.exe cc compiler/tests/determinism/legacy-cc/macro_r5.c --emit=ast
