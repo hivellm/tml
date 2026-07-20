@@ -336,6 +336,16 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
 }
 
 auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
+    // phase44b: a scrutinee produced by a call/method-call is a TEMPORARY that
+    // owns its payload with no other binding aliasing it (e.g. `when it.next()`
+    // where `next()` clone-reads the element and returns `Maybe[T]`). Unlike a
+    // named enum variable — whose payload the scrutinee itself will drop later —
+    // a temporary's payload has no other owner, so an arm binding extracted from
+    // it MUST be dropped at arm exit to balance the clone-read bump. Without this
+    // the yielded copy leaks and the source's strong-count is never restored.
+    bool scrutinee_is_temporary = when.scrutinee->is<parser::MethodCallExpr>() ||
+                                  when.scrutinee->is<parser::CallExpr>();
+
     // Evaluate scrutinee
     std::string scrutinee = gen_expr(*when.scrutinee);
     std::string scrutinee_type = last_expr_type_;
@@ -1268,10 +1278,14 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 if (info.type.starts_with("%struct.")) {
                     type_name = info.type.substr(8); // Strip "%struct."
                 }
-                // Without move semantics, arm bindings from enum scrutinees
-                // are aliases into the scrutinee's payload. Dropping them
-                // independently causes double-free with the scrutinee's drop.
-                if (!scrutinee_is_enum) {
+                // Without move semantics, arm bindings from a NAMED enum
+                // variable are aliases into the scrutinee's payload; dropping
+                // them independently double-frees with the scrutinee's own drop.
+                // A TEMPORARY enum scrutinee (a call/method-call result) has no
+                // other owner, so its arm binding is the sole owner of the
+                // payload and MUST be dropped at arm exit — symmetric with the
+                // clone-read that produced it (phase44b 1.3c).
+                if (!scrutinee_is_enum || scrutinee_is_temporary) {
                     if (!type_name.empty()) {
                         register_for_drop(name, info.reg, type_name, info.type);
                     } else if (info.type == "ptr" && info.semantic_type) {

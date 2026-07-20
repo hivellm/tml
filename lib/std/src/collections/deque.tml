@@ -257,10 +257,15 @@ impl[T] Drop for Deque[T] {
 /// Forward iterator over a snapshot of a [`Deque[T]`].
 ///
 /// Created by [`Deque::iter`]. Iterates elements from front to back.
+///
+/// The iterator owns a fresh, logically-ordered `snapshot` of the deque's
+/// elements (mirroring `HeapIter`/`BTreeMapIter`), NOT an alias of the deque's
+/// backing buffer. A `List[T]` is move-only (it has `Drop` but no `Duplicate`),
+/// so a bitwise `data: this.data` copy would share the deque's buffer and its
+/// drop-glue would double-free it once the deque is later dropped or destroyed.
+/// Copying into an owned snapshot keeps the iterator's drop balanced.
 pub type DequeIter[T] {
-    data: List[T],
-    head: I64,
-    capacity: I64,
+    snapshot: List[T],
     length: I64,
     index: I64,
 }
@@ -271,8 +276,7 @@ impl[T] DequeIter[T] {
         if this.index >= this.length {
             return Nothing
         }
-        let actual: I64 = (this.head + this.index) % this.capacity
-        let val: T = this.data.get(actual)
+        let val: T = this.snapshot.get(this.index)
         this.index = this.index + 1
         return Just(val)
     }
@@ -334,11 +338,17 @@ impl[T] Deque[T] {
     }
 
     /// Returns a forward iterator over the elements (front to back).
+    ///
+    /// Non-consuming: builds an owned, logically-ordered snapshot of the
+    /// current elements so the iterator's lifetime is independent of the deque.
     pub func iter(this) -> DequeIter[T] {
+        var snapshot: List[T] = List[T].new(this.length)
+        for i in 0 to this.length {
+            let actual: I64 = (this.head + i) % this.capacity
+            snapshot.push(this.data.get(actual))
+        }
         return DequeIter {
-            data: this.data,
-            head: this.head,
-            capacity: this.capacity,
+            snapshot: snapshot,
             length: this.length,
             index: 0,
         }
@@ -392,7 +402,18 @@ impl[T] Deque[T] {
         if steps == 0 {
             return
         }
-        this.head = (this.head + steps) % this.capacity
+        // The live elements occupy slots [head, head + length) mod capacity.
+        // Advancing `head` alone slides that window onto `steps` slots that hold
+        // no element, so the tail read back as uninitialised memory and the
+        // first `steps` elements were lost. That is only harmless in the special
+        // case capacity == length, where the window wraps exactly onto itself.
+        // Move the elements instead (phase44b).
+        var moved: I64 = 0
+        loop (moved < steps) {
+            let Just(front) = this.pop_front() else { break }
+            this.push_back(front)
+            moved = moved + 1
+        }
     }
 
     /// Rotates the deque right by `n` positions.
@@ -406,7 +427,14 @@ impl[T] Deque[T] {
         if steps == 0 {
             return
         }
-        this.head = (this.head - steps + this.capacity) % this.capacity
+        // Same defect as rotate_left: moving `head` backwards slides the live
+        // window onto slots that hold no element whenever capacity > length.
+        var moved: I64 = 0
+        loop (moved < steps) {
+            let Just(back) = this.pop_back() else { break }
+            this.push_front(back)
+            moved = moved + 1
+        }
     }
 }
 

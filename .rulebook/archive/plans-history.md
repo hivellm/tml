@@ -565,3 +565,10 @@ longer exits non-zero on a non-existent output directory.
 
 ### 2026-04-18 (session 2) — phase24 Phase 2.3 + parser bug bisection
 
+### Next session starter
+
+Active task: `phase0x_heap-decl-codegen-crash`. Start at item 1.1 —
+land the minimal `heap_decl_var_repro.test.tml` fixture and confirm it
+crashes on a clean checkout. Item 2.1 (`emit-ir` on the fixture) is
+where the actual codegen bug becomes visible.
+
