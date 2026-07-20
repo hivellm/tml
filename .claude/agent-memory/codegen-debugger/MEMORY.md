@@ -1,6 +1,9 @@
 # Codegen Debugger Memory
 
 ## Index
+- [test-entry-wrapper-false-pass.md](test-entry-wrapper-false-pass.md) - phase44a: panicking @test reported test_pass — entry wrapper discarded tml_run_test_with_catch result + unconditional `ret i32 0`; also SEH/longjmp fastfail, watchdog leak, invalid NDJSON (2026-07-19, FIXED)
+- [borrow-maybe-ref-and-provenance-bisect.md](borrow-maybe-ref-and-provenance-bisect.md) - interior-ref borrow propagation through Maybe[ref V] when/let-else (ref_kind_in_type recursion, check_stmt didn't visit LetElseStmt at all); + source-swap provenance bisect to prove regression-vs-pre-existing without a compiler rebuild (2026-07-19)
+- [bare-name-struct-layout-collision.md](bare-name-struct-layout-collision.md) - test-local struct (Row) inherits same-named LIBRARY struct's layout under shared-stdlib codegen-state restore; gen_struct_decl's "already emitted" guard + bare-name CodegenLibraryState keys. Fix = skip restoring library types shadowed by local decls + strip type-def text (2026-07-19, FIXED)
 - [ptr-read-clone-needs-drop-symmetry.md](ptr-read-clone-needs-drop-symmetry.md) - shared_get_sound: ptr_read_clone POD fallback for handle-bearing aggregate + suppress_field_drops; "standalone pass" was a test-harness false-pass (identical IR both modes). Fix = gen_structural_duplicate + type_needs_drop gate + drop symmetry (2026-07-19, FIXED)
 - [fastpath-eager-library-emission.md](fastpath-eager-library-emission.md) - phase43a blocker 3: library_ir_only disables lazy deferral → eager emission of ALL library bodies; K001 ptr-vs-i32 is NOT a Range width issue (2026-07-18)
 - [shared-stdlib-fastpath-dedup-gap.md](shared-stdlib-fastpath-dedup-gap.md) - phase41b: CodegenLibraryState captures only generated_functions_, not generated_impl_methods_output_ → I32::duplicate redef + i64/i32 range-iter mismatch (2026-07-17)
