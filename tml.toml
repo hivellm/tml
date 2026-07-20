@@ -5,12 +5,15 @@ name = "tml"
 version = "0.1.0"
 edition = "2025"
 
+# NOTE: "compiler-tml" is temporarily removed from workspace members: it is
+# frozen during era0 stabilization and must not be mapped by tests, docs,
+# coverage, or package discovery. Re-add it when self-hosting work resumes.
+# (Do NOT put this comment inside the array — SimpleTomlParser does not
+# handle comments within arrays.)
 [workspace]
 members = [
     "lib/core",
     "lib/std",
     "lib/test",
     "lib/coverage",
-    # "compiler-tml",  # temporarily excluded: frozen during era0 stabilization
-    #                  # (re-add when self-hosting work resumes)
 ]

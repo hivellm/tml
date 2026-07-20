@@ -338,17 +338,27 @@ std::vector<std::string> SimpleTomlParser::parse_string_array() {
     skip_whitespace();
 
     while (!is_eof() && peek() != ']') {
+        size_t iter_start = pos_;
         skip_whitespace();
+        skip_comment();
 
         if (peek() == '"') {
             result.push_back(parse_string());
         }
 
         skip_whitespace();
+        skip_comment();
 
         if (peek() == ',') {
             advance();
             skip_whitespace();
+        }
+
+        // Any character we cannot consume (stray token, lone '#'-less junk)
+        // must not stall the loop forever.
+        if (pos_ == iter_start && !is_eof() && peek() != ']') {
+            set_error("Unexpected character in array");
+            return result;
         }
     }
 
